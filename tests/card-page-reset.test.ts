@@ -51,7 +51,10 @@ describe('the card page shows the one link', () => {
 
   it('says which version this is, in words, and replaces the link through the board\'s own dialog', () => {
     expect(src).toContain('versionWord(detail.current_version_number)')
-    expect(src).toMatch(/import \{ LinkDialog, SendBackDialog \} from '[^']*board\/BoardDialogs'/)
+    // the board's dialogs, whichever of them this page opens — the list has
+    // grown ("Hand to…") and will again; what matters is that they come from
+    // the board rather than being rebuilt here
+    expect(src).toMatch(/import \{[^}]*\bLinkDialog\b[^}]*\bSendBackDialog\b[^}]*\} from '[^']*board\/BoardDialogs'/)
     expect(src).toContain('Replace the link')
     expect(src).toContain('Earlier versions')
   })

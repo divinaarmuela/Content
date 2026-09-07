@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/select'
 import {
   ArrowLeft, Upload, Send, CheckCircle2, CircleDashed, ExternalLink, MoreHorizontal, Trash2,
-  Link2, Maximize2, ChevronsRight, Pencil,
+  Link2, Maximize2, ChevronsRight, Pencil, UserPlus,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -79,7 +79,7 @@ import { ClaimButton } from '../ClaimButton'
 import { actionFor, initialsOf, moveTargets, type BoardViewCard, type CardAction } from '../../../lib/board-view-core'
 import { BOARD_COLUMNS, columnOf } from '../../../lib/board-core'
 import { linkLabel, versionWord } from '../../../lib/card-link-core'
-import { LinkDialog, SendBackDialog } from '../../board/BoardDialogs'
+import { HandToDialog, LinkDialog, SendBackDialog } from '../../board/BoardDialogs'
 import { KindDialog } from '../../board/BoardDialogs'
 import type { Role } from '../../../lib/identity-core'
 import PageTitle from '../../ui/PageTitle'
@@ -265,6 +265,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   /** the board's own two dialogs — replace the link, send back with words */
   const [linkOpen, setLinkOpen] = useState(false)
   const [sendBackOpen, setSendBackOpen] = useState(false)
+  /** hand this card to somebody, with what you want them to do */
+  const [handToOpen, setHandToOpen] = useState(false)
 
   // type-to-confirm for deletion — a destructive click must be deliberate
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -907,6 +909,11 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   const canEditTitle = isTeam && (canManage || detail.owner_id === viewer.id)
   const canEditDue = canEditTitle
   const canEditKind = isTeam && !editingClosed && (canManage || detail.owner_id === viewer.id)
+  /** may this person hand the card on — exactly the rule the PATCH route
+   *  applies to a general field edit (`canEditItemFields`): a manager, the
+   *  person holding it, or whoever holds its scheduling */
+  const canHandOver = isTeam
+    && (canManage || detail.owner_id === viewer.id || schedulerIds.includes(viewer.id))
   const kindRows = workKinds.map(k => ({ id: k.id, name: k.name, slug: k.slug, color: k.color, active: k.active }))
   const saveTitle = () => {
     const v = titleDraft.trim()
@@ -1184,6 +1191,9 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
       <SendBackDialog card={sendBackOpen ? boardCard : null} viewer={viewer}
         onClose={() => setSendBackOpen(false)} onSent={() => void load()} />
       <KindDialog card={kindOpen ? boardCard : null} kinds={kindRows} onClose={() => setKindOpen(false)} onSaved={() => void load()} />
+      {/* the same one dialog the board opens — one place to change it */}
+      <HandToDialog card={handToOpen ? boardCard : null} viewer={viewer} viewerName={nameOf(viewer.id)}
+        onClose={() => setHandToOpen(false)} onHanded={() => void load()} />
 
       {/* about to reach the client — say who, and what they will see */}
       <Dialog open={clientSend !== null} onOpenChange={o => !o && busy === null && setClientSend(null)}>
@@ -1237,7 +1247,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
       </div>
     )
     const iconBtn = 'h-11 w-11 shrink-0 rounded-full text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
-    const hasMore = moreMoves.length > 0 || menuMoves.length > 0 || canEditLink || canEditKind || canManage
+    const hasMore = moreMoves.length > 0 || menuMoves.length > 0 || canEditLink || canEditKind || canHandOver || canManage
 
     return (
       <div className="flex h-full min-h-0 flex-col">
@@ -1299,7 +1309,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                       ))}
                     </>
                   )}
-                  {(canEditLink || canEditKind) && (
+                  {(canEditLink || canEditKind || canHandOver) && (
                     <>
                       <DropdownMenuSeparator />
                       {canEditLink && (
@@ -1310,6 +1320,11 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                       {canEditKind && (
                         <DropdownMenuItem className="min-h-11" onClick={() => setKindOpen(true)}>
                           Change the kind of work
+                        </DropdownMenuItem>
+                      )}
+                      {canHandOver && (
+                        <DropdownMenuItem className="min-h-11" onClick={() => setHandToOpen(true)}>
+                          <UserPlus className="h-4 w-4" /> Hand to…
                         </DropdownMenuItem>
                       )}
                     </>

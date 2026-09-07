@@ -19,7 +19,7 @@ import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
-  DeleteDialog, KindDialog, LinkDialog, SendBackDialog, type KindRow,
+  DeleteDialog, HandToDialog, KindDialog, LinkDialog, SendBackDialog, type KindRow,
 } from './BoardDialogs'
 
 /**
@@ -111,6 +111,7 @@ export function Board({
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
+  const [handToFor, setHandToFor] = useState<BoardCardRow | null>(null)
   const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
   /** a drag is not a press: browsers do not fire click after a drop, but a
    *  drag that ends where it began can — so a card that was just dragged
@@ -262,6 +263,9 @@ export function Board({
                 onMove={act}
                 onLink={setLinkFor}
                 onKind={setKindFor}
+                // handing a card over is an edit of it — same right as the
+                // link and the kind, and the PATCH route says so too
+                onHandTo={canEdit(c) ? setHandToFor : undefined}
                 // the DELETE route is manager-only, so the menu entry is too —
                 // a person never sees a button the server would refuse
                 canDelete={isManager}
@@ -323,6 +327,9 @@ export function Board({
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
       <KindDialog card={kindFor} kinds={kinds} onClose={() => setKindFor(null)} />
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} />
+      {/* the live listener repaints Who the moment the row lands */}
+      <HandToDialog card={handToFor} viewer={viewer} viewerName={names.get(viewer.id) ?? null}
+        onClose={() => setHandToFor(null)} />
       {/* the live listener drops the row once the server has removed it */}
       <DeleteDialog card={deleteFor} onClose={() => setDeleteFor(null)} />
     </div>

@@ -8,7 +8,7 @@ import type {
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
-import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
+import { logActivity, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
 import { canEditItemFields } from '../../../../lib/item-edit-core'
 import { stateAfterPostEdit } from '../../../../lib/posting-approval-core'
@@ -189,6 +189,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Only the person scheduling this may edit the caption' }, { status: 403 })
     }
 
+    // "Hand to…" — a deliberate handover rather than a silent change of the
+    // Who dropdown. It is NOT a stored field: it only decides which
+    // notification goes out and what it says. The words themselves are
+    // appended to `brief` in the same PATCH, where the receiver will look.
+    const handOver = body?.hand_over === true || typeof body?.hand_over === 'string'
+    const handNote = typeof body?.hand_over === 'string' ? body.hand_over : ''
+
     const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
@@ -256,9 +263,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         action: 'posting_approval_reset', detail: 'caption changed after approval',
       })
     }
-    // (re)assignment is a handoff: email the editor their job pack
+    // (re)assignment is a handoff: email the editor their job pack.
+    // A DELIBERATE hand-over says so instead, in the words that came with
+    // it — one message, never both, so the receiver hears once.
     if ('owner_id' in patch && patch.owner_id) {
-      notifyJobAssigned(user, data as unknown as Parameters<typeof notifyJobAssigned>[1])
+      if (handOver) {
+        notifyHandedOver(user, data as unknown as Parameters<typeof notifyHandedOver>[1], handNote)
+      } else {
+        notifyJobAssigned(user, data as unknown as Parameters<typeof notifyJobAssigned>[1])
+      }
     }
     // every new file lands in the item's Drive folder too — queued, never
     // awaited: a slow Drive must not slow a save

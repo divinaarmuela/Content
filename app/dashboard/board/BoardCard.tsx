@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, MoreHorizontal, Trash2 } from 'lucide-react'
+import { ExternalLink, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -81,7 +81,7 @@ export function CompactCard({ card, today, onOpen }: {
   )
 }
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, canDelete, onDelete, stats,
+  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
   statsHref,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
@@ -98,6 +98,9 @@ export function BoardCard({
   onMove: (card: BoardViewCard, action: CardAction) => void
   onLink: (card: BoardViewCard) => void
   onKind: (card: BoardViewCard) => void
+  /** hand the card to somebody, with what you want them to do — the same
+   *  right as any other edit: the holder or a manager */
+  onHandTo?: (card: BoardViewCard) => void
   /** may this person delete the card — a manager, matching the route */
   canDelete?: boolean
   onDelete?: (card: BoardViewCard) => void
@@ -252,6 +255,11 @@ export function BoardCard({
                   <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
                     Change the kind of work
                   </DropdownMenuItem>
+                  {onHandTo && (
+                    <DropdownMenuItem className="min-h-11" onClick={() => onHandTo(card)}>
+                      <UserPlus className="h-4 w-4" /> Hand to…
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
               {mayDelete && (

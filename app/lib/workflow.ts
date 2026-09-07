@@ -34,6 +34,7 @@ import {
 } from './brief-task-core'
 import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape } from './task-kind-core'
 import { needsNewVersion } from './claim-core'
+import { handoverSubject, tidyNote } from './hand-over-core'
 // pure, no I/O — the one question "does this client sign every post off"
 import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
@@ -192,6 +193,55 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
       ),
     })
   })().catch(e => console.error('job-assigned notification error:', e))
+}
+
+/**
+ * "Divina handed you 'Hero reel' — cut a 30s version for Reels."
+ *
+ * A HANDOVER, not a reassignment. Changing the Who dropdown says only that a
+ * card moved; handing it over carries the words that came with it, so the
+ * bell and the email say in one sentence who wants what. Team-facing, so
+ * `PAUSE_CLIENT_NOTIFICATIONS` never holds it back (`toClient` is not set) —
+ * that switch is for the client's side of the wall.
+ *
+ * Exactly one person hears: the person it was handed TO. Handing a card to
+ * yourself tells nobody. The route calls this INSTEAD of
+ * `notifyJobAssigned`, never as well, so a handover is one message.
+ */
+export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: string | null) {
+  if (!item.owner_id || item.owner_id === actor.id) return
+  void (async () => {
+    const row = await table<TeamUserRow>('team_users').get(item.owner_id!)
+    if (!row || !row.active_status || row.role === 'client') return
+    const by = actor.name || actor.email
+    const words = tidyNote(note)
+    const subject = handoverSubject(by, item.title, words)
+    await notify({
+      actorName: actor.name,
+      actorEmail: actor.email,
+      actorClerkId: actor.clerk_user_id,
+      eventType: 'handed_over',
+      entityType: 'content_item',
+      // keyed on this handover: the same card handed to the same person
+      // again — a second round, new words — is a second message
+      entityId: `${item.id}#handed#${item.owner_id}#${item.updated_at ?? new Date().toISOString()}`,
+      recipientId: row.id,
+      recipientEmail: row.email,
+      subject,
+      bodyHtml: renderEmail(
+        subject,
+        `<p><strong>${escapeHtml(item.title)}</strong> is now yours. ${escapeHtml(by)} handed it to you.</p>`
+        + (words
+          ? `<p><strong>What they want you to do:</strong></p>`
+            + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(words)}</blockquote>`
+          : '')
+        + (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : '')
+        + `<p>It is on your board now — open it to see everything on the card.</p>`,
+        OPEN_ITEM_CTA,
+        `${DASHBOARD_URL}/dashboard/production/${item.id}`,
+      ),
+    })
+  })().catch(e => console.error('handed-over notification error:', e))
 }
 
 /**

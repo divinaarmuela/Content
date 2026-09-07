@@ -14,8 +14,14 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { useTable } from '@/lib/db-client'
+import type { TeamUser } from '@/lib/db-types'
+import {
+  briefAfterHandover, handToGroups, personLabel, type HandTo,
+} from '../../lib/hand-over-core'
+import { roleLabel } from '../../lib/identity-core'
 import { linkKindOf } from '../../lib/card-link-core'
 import { findKindByName, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
@@ -286,6 +292,134 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
         <DialogFooter>
           <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
             {busy ? 'Sending…' : 'Send back'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * HAND TO… — giving a card to somebody on purpose.
+ *
+ * Changing the Who dropdown moves a card silently. This is the deliberate
+ * act: pick the person, say what you want them to do, press one button. The
+ * words are APPENDED to the card's "what needs doing" — never written over
+ * what is already there — so the person who takes it reads them on the board
+ * card, in the side panel and in the email, without anybody having to repeat
+ * themselves.
+ *
+ * The picker is everyone who can carry a card, grouped by what they do, with
+ * the role beside the name: a scheduler is an ordinary choice here, which is
+ * how work reaches the Scheduler page. It opens on nobody, so nothing is
+ * handed over by an accidental press of Enter.
+ *
+ * One PATCH: `owner_id` and the new `brief` together, with `hand_over`
+ * telling the route this was a handover, so the receiver hears about it in
+ * those words rather than getting the ordinary "assigned to you".
+ */
+export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
+  card: BoardViewCard | null
+  viewer: BoardViewer
+  /** the person handing it over, as the note will sign it */
+  viewerName?: string | null
+  onClose: () => void
+  onHanded?: () => void
+}) {
+  const open = card !== null
+  const [to, setTo] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  // the people who can carry a card, live off the same table the pages read.
+  // Only while the dialog is open: a listener nobody is looking at is cost
+  // without a reader.
+  const { rows: team } = useTable<TeamUser>('team_users', { enabled: open })
+
+  useEffect(() => { setTo(''); setNote('') }, [card])
+
+  const people: HandTo[] = team
+    .filter(u => u.active_status !== false && u.role !== 'client')
+    .map(u => ({ id: u.id, name: u.name || u.email, email: u.email, role: u.role }))
+  const groups = handToGroups(people)
+  const chosen = people.find(p => p.id === to) ?? null
+
+  const hand = async () => {
+    if (!card || !chosen) return
+    setBusy(true)
+    try {
+      const words = note.trim()
+      const brief = briefAfterHandover(
+        card.brief ?? null,
+        personLabel({ name: viewerName ?? null }),
+        words,
+        new Date().toISOString(),
+      )
+      const res = await fetch(`/api/production/items/${card.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          owner_id: chosen.id,
+          // no words typed is not an empty brief — the field is left alone
+          ...(brief === null ? {} : { brief }),
+          hand_over: words || true,
+        }),
+      })
+      if (!res.ok) throw new Error(await readError(res, 'Could not hand it over'))
+      toast.success(`Handed to ${personLabel(chosen)}.`)
+      onHanded?.()
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not hand it over')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o && !busy) onClose() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Hand this to someone</DialogTitle>
+          <DialogDescription>
+            They become the person on it, and they are told — with whatever you write here.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="hand-to-who">Who</Label>
+            <Select value={to} onValueChange={v => v && setTo(v)}>
+              <SelectTrigger id="hand-to-who" className={field}>
+                <SelectValue placeholder="Pick a person" />
+              </SelectTrigger>
+              <SelectContent>
+                {groups.map(g => (
+                  <SelectGroup key={g.role}>
+                    <SelectLabel>{g.label}</SelectLabel>
+                    {g.people.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.id === viewer.id ? 'Me' : personLabel(p)} · {roleLabel(p.role)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+            {groups.length === 0 && (
+              <p className="text-[13px] text-muted-foreground">Nobody to hand it to yet.</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="hand-to-note">What you want them to do (optional)</Label>
+            <Textarea id="hand-to-note" rows={4} value={note} onChange={e => setNote(e.target.value)}
+              placeholder="What you want them to do — cut a 30s version for Reels…"
+              className="rounded-[20px] border-border bg-surface px-4 py-3" />
+            <p className="text-[13px] text-muted-foreground">
+              This is added to “what needs doing” on the card. Nothing already there is replaced.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button disabled={busy || !chosen} onClick={hand} className={primary}>
+            {busy ? 'Handing over…' : 'Hand it over'}
           </Button>
         </DialogFooter>
       </DialogContent>

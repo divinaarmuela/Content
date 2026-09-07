@@ -35,6 +35,7 @@ export function splitTransition(rest: string): { from: ItemStatus; to: ItemStatu
 /** Fixed events, in the recipient's words rather than the system's. */
 const PLAIN: Record<string, string> = {
   job_assigned: 'Assigned to you',
+  handed_over: 'Handed to you — with what they want done',
   schedule_handoff: 'Ready for you to schedule',
   publish_queued: 'Queued to go out',
   client_comment: 'The client left a comment',
