@@ -485,7 +485,10 @@ export default function ProductionPage() {
           {!b.owner_id && assignMenu(b.id)}
         </>}
       />
-      {isManager && shoot && rowMenu(b.title, () => setToDelete(shoot))}
+      {/* a plan whose shoot the page can see deletes the shoot (one job, one
+          card); a plan whose shoot it cannot match still gets a menu, and
+          deletes itself — a row with no way to remove it is a dead end */}
+      {isManager && rowMenu(b.title, () => shoot ? setToDelete(shoot) : setCardToDelete(b))}
       </div>
     )
   }
