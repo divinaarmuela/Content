@@ -121,23 +121,15 @@ describe('resolveNav by role', () => {
     }
   })
 
-  it("puts Files on the managers' ladders and on no client", () => {
-    for (const role of ['account_manager', 'super_admin'] as const) {
-      expect(seen(role), role).toContain('/dashboard/files')
-    }
-    for (const role of ['editor', 'scheduler'] as const) {
+  it('keeps Files off every rail for now (9 Sep 2026)', () => {
+    for (const role of ['account_manager', 'super_admin', 'editor', 'scheduler', 'client'] as const) {
       expect(seen(role), role).not.toContain('/dashboard/files')
     }
-    expect(seen('client')).not.toContain('/dashboard/files')
-    // and a grant cannot hand it to one either — `client` is refused outright
-    expect(seen('client', ['/dashboard/files'])).toEqual([])
   })
 
-  it('draws Files under General, between Clients and Audience', () => {
+  it('Files is off the rail for now, but its page still has a title (9 Sep 2026)', () => {
     const general = GROUPS.find(g => g.label === 'General')!.hrefs
-    expect(general).toContain('/dashboard/files')
-    expect(general.indexOf('/dashboard/files'))
-      .toBe(general.indexOf('/dashboard/clients') + 1)
+    expect(general).not.toContain('/dashboard/files')
     expect(pageTitle('/dashboard/files')).toBe('Files')
   })
 

@@ -905,8 +905,16 @@ async function writeMediaVersion(
   versions: AssetVersion[],
   fresh: Slide[],
 ): Promise<AddMediaResult> {
-  const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
-  if (shapeProblem) throw new ComposeError([shapeProblem])
+  /* THE SHAPE RULE IS FOR A VERSION, NOT FOR A POST. A carousel piece must
+   * hold at least two files — but a POST made from it may take one: the
+   * owner, 9 Sep 2026, "I changed my mind from 4 to posting individually,
+   * it doesn't allow me to apply that, it locks me in the modal". An edit of
+   * the post's own selection (nothing new uploaded) is judged only as
+   * non-empty; the piece's files are untouched. */
+  if (fresh.length > 0) {
+    const shapeProblem = slidesSatisfyType(item.content_type as string, slides)
+    if (shapeProblem) throw new ComposeError([shapeProblem])
+  }
 
   const postId = input.post_id ? String(input.post_id) : null
   const stamp = nowIso()

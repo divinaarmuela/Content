@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, CalendarDays, Search, FolderOpen,
+  CalendarClock, CalendarDays, Search,
 } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -39,9 +39,9 @@ export const NAV_MAIN: NavItem[] = [
   { href: '/dashboard',            label: 'Overview',         icon: LayoutGrid },
   { href: '/dashboard/leads',      label: 'Leads',            icon: Inbox },
   { href: '/dashboard/clients',    label: 'Clients',          icon: Users },
-  // the agency's filing cabinet, as Google Drive holds it — under General
-  // because it belongs to everyone, not to one stage of the work
-  { href: '/dashboard/files',      label: 'Files',            icon: FolderOpen },
+  // the agency's filing cabinet, as Google Drive holds it — HIDDEN from the
+  // rail for now (the owner, 9 Sep 2026: "can you hide the files page for
+  // now"); the page and its routes stay, reachable by address
   { href: '/dashboard/audience',   label: 'Audience',         icon: Megaphone },
   { href: '/dashboard/social',     label: 'Social channels',  icon: Share2 },
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
@@ -95,7 +95,7 @@ export const NAV_TOOLS: NavItem[] = [
  *  in NAV_MAIN or NAV_TOOLS that is in no group and is not the pinned one is
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
-  { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/files', '/dashboard/audience'] },
+  { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },

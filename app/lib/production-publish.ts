@@ -58,7 +58,9 @@ export function contentTypeToKind(contentType: string, media: MediaItem[]): Post
   switch (contentType) {
     case 'reel':     return 'reel'
     case 'story':    return 'story'
-    case 'carousel': return 'carousel'
+    // one file out of a carousel piece is a single post, not a one-slide
+    // carousel (posted in parts, 9 Sep 2026)
+    case 'carousel': return media.length > 1 ? 'carousel' : (media[0]?.type === 'video' ? 'reel' : 'feed')
     case 'static':   return 'feed'
     default:         return media.length > 1 ? 'carousel' : undefined
   }

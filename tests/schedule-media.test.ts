@@ -456,12 +456,18 @@ describe('addMediaVersion, called directly', () => {
     })
 
     it('is left alone when the piece already holds it', async () => {
-      // one card is not a carousel, so this is refused — with a file the
-      // client already approved named in it. The tidy-up must not touch it.
-      await expect(lib.addMediaVersion(SCHEDULER as never, {
-        item_id: ITEM, files: [APPROVED[0]],
-      })).rejects.toThrow()
-      expect(h.deleted).toEqual([])
+      // the save falls over on the NEW file — with a file the client already
+      // approved named beside it. The tidy-up must not touch the approved one.
+      // (A one-card edit of a carousel post is no longer a refusal, 9 Sep 2026.)
+      const undo = failWritesNaming('new.jpg')
+      try {
+        await expect(lib.addMediaVersion(SCHEDULER as never, {
+          item_id: ITEM, files: [APPROVED[0], uploaded('new.jpg')],
+        })).rejects.toThrow()
+      } finally {
+        undo()
+      }
+      expect(h.deleted).toEqual([KEY('new.jpg')])
       expect(versions()).toHaveLength(1)
     })
 
@@ -644,5 +650,18 @@ describe('what More options collects reaches the provider', () => {
         }),
       })))
     expect(body.post.per_channel['acc-1'].locationId).toBeUndefined()
+  })
+})
+
+/* ── a post may take ONE file out of a carousel piece (9 Sep 2026) ──────── */
+
+describe('posting a carousel piece in parts', () => {
+  it('an edit of the post down to one file is allowed — the piece keeps its files', async () => {
+    // the default seed IS a carousel piece with two approved files
+    const { status, body } = await saveMedia({ item_id: ITEM, files: [APPROVED[0]] })
+    expect(status).toBe(200)
+    expect(body.created).toBe(false)
+    expect(versions()).toHaveLength(1)
+    expect(item().status).toBe('approved_for_scheduling')
   })
 })
