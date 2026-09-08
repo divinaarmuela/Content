@@ -107,12 +107,10 @@ describe('one flow, not two', () => {
   })
 })
 
-describe('one primary button in the Scheduler header', () => {
-  it('the header holds exactly one <Button>, and it is New post', () => {
+describe('the Post approval header (8 Sep 2026)', () => {
+  it('holds no <Button> of its own', () => {
     const src = code(LAYOUT)
-    const buttons = src.match(/<Button\b/g) ?? []
-    expect(buttons).toHaveLength(0)
-    expect(src.match(/<NewPostButton\s*\/>/g) ?? []).toHaveLength(1)
+    expect(src.match(/<Button/g) ?? []).toHaveLength(0)
   })
 
   it('the board under it offers no second button of its own', () => {
