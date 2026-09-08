@@ -50,3 +50,14 @@ describe('which files have gone, and which are free', () => {
     expect(readPostedSlides(null)).toBeNull()
   })
 })
+
+describe('posted by hand carries when and where (9 Sep 2026)', () => {
+  it('keeps the hand map through progress and reads it back', () => {
+    const hand = { b: { at: '2026-09-08T09:30:00.000Z', link: 'https://www.instagram.com/p/x/' } }
+    const p = postedProgress(S, new Set(['a']), ['b'], hand)
+    expect(p).toEqual({ urls: ['a', 'b'], posted: 2, total: 4, hand })
+    expect(readPostedSlides(JSON.parse(JSON.stringify(p)))).toEqual(p)
+    // rubbish in the map is dropped, the count is kept
+    expect(readPostedSlides({ urls: ['a'], posted: 1, total: 2, hand: { a: { at: 5 } } })).toEqual({ urls: ['a'], posted: 1, total: 2 })
+  })
+})

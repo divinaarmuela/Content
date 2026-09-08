@@ -455,5 +455,5 @@ export async function postedSlidesFor(
   const slides = slidesOf(latest)
   const publishedJobs = new Set(jobs.filter(j => String(j.status) === 'published').map(j => j.id))
   const prev = readPostedSlides(row.posted_slides)
-  return postedProgress(slides, publishedSlideUrls(socialPosts, publishedJobs), prev?.urls ?? [])
+  return postedProgress(slides, publishedSlideUrls(socialPosts, publishedJobs), prev?.urls ?? [], prev?.hand)
 }

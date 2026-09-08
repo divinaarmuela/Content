@@ -220,6 +220,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const postedUrls = new Set(postedSlides?.urls ?? [])
   const [handOn, setHandOn] = useState<number | null>(null)
   const [handLink, setHandLink] = useState('')
+  /** when it went out — a `datetime-local` value, defaulting to now */
+  const [handAt, setHandAt] = useState('')
+  const localNow = () => {
+    const d = new Date(); d.setSeconds(0, 0)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
   const mayMarkPosted = ['approved_for_scheduling', 'scheduled'].includes(String(item?.status ?? ''))
   const markPosted = async () => {
     if (!item || handOn === null) return
@@ -228,7 +235,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     try {
       const res = await fetch(`/api/production/items/${item.id}/posted-slide`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: s.url, live_url: handLink.trim() || null }),
+        body: JSON.stringify({ url: s.url, live_url: handLink.trim() || null, posted_at: handAt ? new Date(handAt).toISOString() : null }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not mark it posted'))
@@ -236,7 +243,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       toast.success(p && p.posted !== undefined && p.total !== undefined && p.posted < p.total
         ? `Marked posted — ${p.posted} of ${p.total} now out`
         : 'Marked posted — every file is out, the card is in Posted')
-      setHandOn(null); setHandLink('')
+      setHandOn(null); setHandLink(''); setHandAt('')
       if (p && p.posted !== undefined && p.total !== undefined && p.posted >= p.total) onClose()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not mark it posted')
@@ -363,9 +370,18 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     <Trash2 className="h-3.5 w-3.5" /> Remove
                   </Button>
                 )}
-                {postedUrls.has(s.url) && <Chip tone="green">Posted</Chip>}
+                {postedUrls.has(s.url) && (
+                  <Chip tone="green">
+                    {postedSlides?.hand?.[s.url]
+                      ? `Posted by hand · ${new Date(postedSlides.hand[s.url].at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
+                      : 'Posted'}
+                  </Chip>
+                )}
+                {postedSlides?.hand?.[s.url]?.link && (
+                  <a href={postedSlides.hand[s.url].link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
+                )}
                 {mayMarkPosted && !postedUrls.has(s.url) && handOn !== i && (
-                  <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink('') }}>
+                  <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink(''); setHandAt(localNow()) }}>
                     Posted by hand
                   </Button>
                 )}
@@ -382,7 +398,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               )}
               {handOn === i && (
                 <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-                  <p className="text-[13px]">This file went out by hand or through another tool. Paste the link to the live post if there is one.</p>
+                  <p className="text-[13px]">This file went out by hand or through another tool. Say when, and paste the link if there is one.</p>
+                  <label className="flex flex-col gap-1 text-[12px] font-semibold">
+                    When did it go out?
+                    <input type="datetime-local" value={handAt} max={localNow()} onChange={e => setHandAt(e.target.value)}
+                      className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
+                  </label>
                   <input value={handLink} onChange={e => setHandLink(e.target.value)} placeholder="https://www.instagram.com/p/… (optional)"
                     className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]" />
                   <div className="flex items-center gap-2">

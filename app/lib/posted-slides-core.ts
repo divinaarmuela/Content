@@ -21,6 +21,10 @@ export type PostedSlides = {
   urls: string[]
   posted: number
   total: number
+  /** the files marked posted BY HAND: when it went out, and the live link if
+   *  there was one (the owner, 9 Sep 2026: "how can I mark or put the time
+   *  it posted and log it?") */
+  hand?: Record<string, { at: string; link: string | null }>
 }
 
 const urlsOf = (p: PostLike): string[] =>
@@ -66,10 +70,13 @@ export function postedProgress(
   slides: readonly SlideLike[],
   published: ReadonlySet<string>,
   byHand: readonly string[] = [],
+  hand: PostedSlides['hand'] = undefined,
 ): PostedSlides {
   const done = new Set<string>([...published, ...byHand])
   const urls = slides.map(s => s.url).filter(u => done.has(u))
-  return { urls, posted: urls.length, total: slides.length }
+  const out: PostedSlides = { urls, posted: urls.length, total: slides.length }
+  if (hand && Object.keys(hand).length > 0) out.hand = hand
+  return out
 }
 
 export function fullyPosted(p: PostedSlides | null | undefined): boolean {
@@ -84,7 +91,16 @@ export function readPostedSlides(v: unknown): PostedSlides | null {
   const total = Number(o.total ?? 0)
   const posted = Number(o.posted ?? urls.length)
   if (!Number.isFinite(total) || !Number.isFinite(posted)) return null
-  return { urls, posted, total }
+  const rawHand = (o as { hand?: unknown }).hand
+  const hand: PostedSlides['hand'] = {}
+  if (rawHand && typeof rawHand === 'object') {
+    for (const [u, v] of Object.entries(rawHand as Record<string, unknown>)) {
+      if (v && typeof v === 'object' && typeof (v as { at?: unknown }).at === 'string') {
+        hand[u] = { at: (v as { at: string }).at, link: typeof (v as { link?: unknown }).link === 'string' ? (v as { link: string }).link : null }
+      }
+    }
+  }
+  return Object.keys(hand).length > 0 ? { urls, posted, total, hand } : { urls, posted, total }
 }
 
 /** the card's line — only while it is part-way: "2 of 4 posted" */
