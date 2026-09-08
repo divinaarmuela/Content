@@ -101,6 +101,7 @@ describe('resolveNav by role', () => {
     expect(seen('scheduler').sort()).toEqual([
       '/dashboard',
       '/dashboard/notifications',
+      '/dashboard/scheduler',
       '/dashboard/settings',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')

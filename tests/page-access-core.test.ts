@@ -82,11 +82,11 @@ describe('defaultAllows — one page per role', () => {
     }
   })
 
-  it('keeps a scheduler on Schedule — the Scheduler board is the manager’s (8 Sep 2026)', () => {
+  it('keeps a scheduler on Scheduler and Schedule', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
+    expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
     for (const href of [
-      '/dashboard/scheduler',
       '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
       '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',
     ]) {
@@ -150,7 +150,7 @@ describe('the Social children ride on Social — and Schedule stands on its own'
     expect(canSeePage('editor', SCHEDULE_PAGE, ['/dashboard/social'])).toBe(true)
   })
   it('a scheduler holds Schedule without holding Social', () => {
-    expect(canSeePage('scheduler', SCHEDULE_PAGE, [])).toBe(true)
+    expect(canSeePage('scheduler', '/dashboard/scheduler', [])).toBe(true)
     expect(canSeePage('scheduler', '/dashboard/social', [])).toBe(false)
     expect(canSeePage('scheduler', '/dashboard/social/inbox', [])).toBe(false)
   })
