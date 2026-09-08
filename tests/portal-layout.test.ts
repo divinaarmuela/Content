@@ -121,7 +121,7 @@ describe('the board comes with the plan', () => {
   let fake: ReturnType<typeof seedDb>
   afterEach(() => fake?.restore())
 
-  it('a shared shoot carries its board on the main page whatever share_board says', async () => {
+  it('a shared shoot carries its board unless the switch was turned off', async () => {
     fake = seedDb({
       clients: [{ id: 'client-1', name: 'ZZ TEST', timezone: 'Australia/Melbourne' }] as unknown as Row[],
       team_users: [], team_user_clients: [], work_kinds: [], content_items: [], batch_comments: [],
@@ -137,12 +137,15 @@ describe('the board comes with the plan', () => {
     })
     const data = (await getPortalData('client-1'))!
     const by = (id: string) => data.cards.find(c => c.kind === 'shoot' && c.id === id)!.shoot!
-    expect(by('b-off').canvas_cards.map(c => c.id)).toEqual(['n1'])
+    // switched OFF on purpose: the plan is shared, the canvas is not — that is
+    // where rates, margins and honest opinions get typed
+    expect(by('b-off').canvas_cards).toEqual([])
     expect(by('b-off').board_name).toBe('The plan')
-    expect(by('b-off').board_cards).toBe(1)
+    expect(by('b-off').board_cards).toBe(0)
+    // never set: on by default, which is the owner's rule
     expect(by('b-none').canvas_cards.map(c => c.id)).toEqual(['n2'])
     // an unshared shoot still shows nothing of its working detail
     expect(by('b-private').canvas_cards).toEqual([])
-    expect(data.shoots.find(s => s.id === 'b-off')!.canvas_cards).toHaveLength(1)
+    expect(data.shoots.find(s => s.id === 'b-off')!.canvas_cards).toHaveLength(0)
   })
 })

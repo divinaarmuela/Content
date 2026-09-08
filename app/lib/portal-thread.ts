@@ -181,9 +181,10 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
   ])
   const brief = (briefRows as unknown as { id: string; status: string; work_kinds: { slug?: string } | null }[])
     .find(r => (r.work_kinds as { slug?: string } | null)?.slug === 'shoot_brief')
-  // the board goes with the plan (the owner's rule): a shared shoot shows its
-  // board, whatever the old `share_board` flag on the row says
-  const canvasCards = sanitiseCanvasCards(b.canvas_cards)
+  // the board goes with the plan BY DEFAULT, but a shoot whose switch was
+  // deliberately turned off keeps it off — see portal-data.ts
+  const canvasCards = (b as { share_board?: boolean | null }).share_board !== false
+    ? sanitiseCanvasCards(b.canvas_cards) : []
   const asComment = toComment(client.name)
 
   return {

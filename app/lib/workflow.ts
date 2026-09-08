@@ -815,6 +815,17 @@ export async function performTransition(
           people = await resolveAudience('schedulers', item)
         }
       }
+      // A client has no login, so their email has to carry THEIR link — the
+      // share token, read once for the whole loop rather than per recipient.
+      let clientShareToken: string | null = null
+      if (audience === 'client_users' && item.client_id) {
+        try {
+          const row = await table<{ id: string; share_token?: string | null }>('clients')
+            .get(String(item.client_id))
+          const token = typeof row?.share_token === 'string' ? row.share_token.trim() : ''
+          clientShareToken = token || null
+        } catch { /* no token found — the fallback link still works for a login */ }
+      }
       for (const person of people) {
         if (actorId && person.id === actorId) continue // don't notify yourself
         const label = audience === 'client_users' ? CLIENT_LABELS[to] : check.rule.label
@@ -856,11 +867,11 @@ export async function performTransition(
               ? isBriefTask
                 // the plan and the piece are different things to a client, and
                 // the portal shows each in its own place
-                ? `<p>Your shoot plan for <strong>${item.title}</strong> is ready for you to look over.</p>` +
+                ? `<p>Your shoot plan for <strong>${escapeHtml(item.title)}</strong> is ready for you to look over.</p>` +
                   `<p>Open your portal to approve it or tell us what to change — it&rsquo;s under Shoot plans.</p>`
                 // a piece coming BACK from approved carries a different
                 // sentence: they already said yes to the old version once
-                : `<p><strong>${item.title}</strong> — ${clientArrivalLine(from)}</p>`
+                : `<p><strong>${escapeHtml(item.title)}</strong> — ${clientArrivalLine(from)}</p>`
               // the raw status is a database value, not a sentence — every
               // human-facing surface says the same plain words, and a shoot
               // brief says them its own way ("Shoot booked", not "Published")
@@ -875,8 +886,15 @@ export async function performTransition(
             // a client account cannot open the team dashboard — send them to
             // their portal; the team gets the item itself
             audience === 'client_users' ? 'Open your portal' : OPEN_ITEM_CTA,
+            // A CLIENT HAS NO LOGIN. /client is Clerk-gated, so the one email
+            // that says "your work is ready" used to land a restaurant owner
+            // on a sign-in screen and stop. Their share link is the portal
+            // they actually have; /client stays as the fallback for a client
+            // account that does have a login.
             audience === 'client_users'
-              ? `${DASHBOARD_URL}/client`
+              ? (clientShareToken
+                  ? `${DASHBOARD_URL}/portal/${clientShareToken}`
+                  : `${DASHBOARD_URL}/client`)
               : `${DASHBOARD_URL}/dashboard/production/${item.id}`
           ),
         })

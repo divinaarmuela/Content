@@ -78,7 +78,7 @@ beforeEach(() => {
     asset_versions: [], schedule_entries: [], item_comments: [], workflow_activity: [],
     batches: [{
       id: 'b-1', client_id: 'client-1', title: 'Golf Day', status: 'brief', shared_with_client: true,
-      share_board: false, owner_id: 'creator-1', canvas_cards: CARDS, created_at: '2026-09-01T00:00:00.000Z',
+      share_board: true, owner_id: 'creator-1', canvas_cards: CARDS, created_at: '2026-09-01T00:00:00.000Z',
     }, {
       id: 'b-private', client_id: 'client-1', title: 'Private', status: 'brief', shared_with_client: false,
       owner_id: 'creator-1', canvas_cards: CARDS,
@@ -208,11 +208,11 @@ describe('the client comments on a card of their board', () => {
     expect((await portal({ token: TOKEN, kind: 'shoot', id: 'b-private', card_id: 'c1', body: 'x' })).status).toBe(404)
   })
 
-  it('shows on the client’s own board card, with the card named, however share_board was set', async () => {
+  it('shows on the client’s own board card, with the card named', async () => {
     await portal({ token: TOKEN, kind: 'shoot', id: 'b-1', card_id: 'c1', body: 'Love this one', author_name: 'Dana' })
     const data = (await getPortalData('client-1'))!
     const shoot = data.cards.find(c => c.kind === 'shoot' && c.id === 'b-1')!
-    // the board is there, share_board: false notwithstanding
+    // the board is there — shared, and not switched off
     expect(shoot.shoot?.canvas_cards.map(c => c.id)).toEqual(expect.arrayContaining(['c1', 'n1', 'b1']))
     expect(shoot.shoot?.board_name ?? null).toBeNull()
     expect(shoot.comments).toHaveLength(1)

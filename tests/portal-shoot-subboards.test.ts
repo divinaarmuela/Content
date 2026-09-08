@@ -66,16 +66,16 @@ describe('the client’s view of boards inside the shoot board', () => {
     expect(boardTrail(d.shoot.canvas_cards, 'day2').map(c => c.name)).toEqual(['Shoot brief', 'Concepts', 'Day two'])
   })
 
-  it('the board goes with the plan: an old `share_board: false` row still shows its board', async () => {
-    // the owner's rule — "the Milanote board is shown by default" — and there
-    // is no longer a switch to hide it. Rows written while the switch existed
-    // still parse; the flag simply no longer hides anything.
+  it('a shoot whose board was switched off keeps it off — the canvas is where rates and opinions live', async () => {
+    // the owner's rule is "shown BY DEFAULT" — on unless somebody said no.
+    // A shoot whose switch was deliberately turned off keeps it off: the
+    // canvas is where the team types rates, margins and honest opinions.
     seed(false)
     const d = (await getPortalShootDetail(TOKEN, 'b-1'))!
-    expect(d.shoot.canvas_cards.map(c => c.id)).toEqual(expect.arrayContaining(['concepts', 'c1', 'day2', 'd1']))
+    expect(d.shoot.canvas_cards).toEqual([])
   })
 
-  it('…and a row that never had the flag shows it too', async () => {
+  it('…and a row that never had the flag shows it, because default is on', async () => {
     seed(null)
     const d = (await getPortalShootDetail(TOKEN, 'b-1'))!
     expect(d.shoot.canvas_cards.length).toBeGreaterThan(0)

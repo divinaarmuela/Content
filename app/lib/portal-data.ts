@@ -483,10 +483,12 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       board_name: shared ? b.board_name ?? null : null,
       planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
       shot_list: shared ? sanitiseShotList(b.shot_list) : [],
-      // the board goes with the plan, by the owner's rule: a shared shoot
-      // shows its planning board, open, always. `share_board` stays on the
-      // row so old data still parses; it no longer hides anything.
-      canvas_cards: shared ? sanitiseCanvasCards(b.canvas_cards) : [],
+      // The board goes with the plan BY DEFAULT — the owner's rule — but a
+      // shoot whose switch was deliberately turned off keeps it off. The
+      // canvas is where the team types rates, margins and honest opinions;
+      // "on unless someone said no" is the default, never "on regardless".
+      canvas_cards: shared && b.share_board !== false
+        ? sanitiseCanvasCards(b.canvas_cards) : [],
       details_shared: shared,
       // only a shared plan can be decided on — approving something you were
       // never shown is not a decision
@@ -619,7 +621,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // the board each shoot shares, read once — a pinned comment names its card
   const boardByShoot = new Map<string, CanvasCard[]>()
   for (const b of shootRows) {
-    boardByShoot.set(b.id, b.shared_with_client === true ? sanitiseCanvasCards(b.canvas_cards) : [])
+    // shared AND not deliberately switched off — the same gate as above, so a
+    // booked shoot's board cannot leak by the other door
+    boardByShoot.set(b.id,
+      b.shared_with_client === true && (b as { share_board?: boolean | null }).share_board !== false
+        ? sanitiseCanvasCards(b.canvas_cards) : [])
   }
   const commentsByShoot = new Map<string, PortalCardComment[]>()
   for (const r of shootCommentRows as unknown as CommentRow[]) {
