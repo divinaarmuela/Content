@@ -7,15 +7,11 @@ import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  approveWithoutClientQuestion, matchesChannel, mayEditNote, nowLineTop,
-  onOneOfDays, scheduleWeekGrid, type SuggestedTime,
+  matchesChannel, mayEditNote, nowLineTop, onOneOfDays, scheduleWeekGrid,
 } from '@/app/lib/social-schedule-core'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
-import { readLocations } from '@/app/lib/schedule-compose-core'
-import {
-  refusedFilesLine, usableUploadFiles, type UploadedPostSummary,
-} from '@/app/lib/schedule-upload-core'
+import { refusedFilesLine, usableUploadFiles } from '@/app/lib/schedule-upload-core'
 import type { Slide } from '@/app/lib/version-files-core'
 import { uploadFiles } from '../../uploadQueue'
 import { useRole } from '../../useRole'
@@ -23,14 +19,11 @@ import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
 import type { ScheduleNote } from '@/lib/db-types'
-import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
 import NoteEditor from './NoteEditor'
 import { useDragSchedule } from './useDragSchedule'
 import EditMediaLauncher from './EditMediaLauncher'
-import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
-import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
-import NewPostSources from './NewPostSources'
+import { CLIENT_KEY, useComposeFlow, useSuggestedTimes } from './useComposeFlow'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
@@ -62,7 +55,6 @@ import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
  * a calendar that stops half way down the screen looks broken.
  */
 
-const CLIENT_KEY = 'md-schedule-client'
 const VIEW_KEY = 'md-schedule-view'
 
 export default function SchedulePage() {
@@ -96,26 +88,22 @@ export default function SchedulePage() {
 
   const data = useSchedulePosts(viewer, clientId)
 
+  /** the channel the profiles bar is filtering to, as the core reads it */
+  const selected = useMemo(
+    () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
+
+  const suggested = useSuggestedTimes(
+    clientId, selected?.platform ?? data.accounts[0]?.platform ?? 'instagram', data.tz)
+
   /**
-   * The composer.
+   * THE COMPOSER, THE MEDIA CHOOSER AND THE IMAGE EDITOR — the shared flow.
    *
-   * Held as "which piece, and which post" rather than as a copy of the post:
-   * the row itself is looked up in the LIVE list every render, so an approval
-   * landing in another tab changes the window's pill and its button without
-   * anything here refetching.
+   * `useComposeFlow` owns all three windows and the state behind them, so the
+   * Scheduler page's one button runs THIS flow rather than a second copy of
+   * it. Everything below is an opener: the rail, an empty slot, a suggested
+   * time, a tile, a piece dragged onto a day, a file dropped on one.
    */
-  const [composing, setComposing] = useState<
-    { itemId: string; postId: string | null; at: string | null } | null>(null)
-  /**
-   * "New post" with nothing chosen yet.
-   *
-   * NOTHING IS PICKED FOR ANYBODY. This used to load whichever approved piece
-   * sorted first, media and all, so a click on Thursday 10am meaning "put
-   * something here" opened a finished-looking composition nobody had chosen —
-   * one reflex press away from queueing the wrong piece. The time the click
-   * meant is carried into the chooser and on into the composer.
-   */
-  const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
+  const flow = useComposeFlow({ clientId, data, role: me?.role ?? null, suggested })
 
   /** …and the piece that link named, opened once the page knows about it */
   const arrivedOn = useRef<string | null>(
@@ -130,19 +118,9 @@ export default function SchedulePage() {
     if (!data.posts.some(p => p.item_id === itemId)
       && !data.media.some(m => m.itemId === itemId)) return
     arrivedOn.current = null
-    setComposing({ itemId, postId: null, at: null })
-  }, [data.posts, data.media])
+    flow.openItem(itemId)
+  }, [data.posts, data.media, flow.openItem])
 
-  /**
-   * A POST THAT WAS A FILE ON SOMEBODY'S LAPTOP A SECOND AGO.
-   *
-   * The rail and the calendar are live, so the piece and the post an upload
-   * just made arrive here by themselves — but not instantly, and a window that
-   * does not open is indistinguishable from a press that did nothing. So the
-   * server's own answer is held and the composer opens on THAT; the live rows
-   * take over the moment they land.
-   */
-  const [pending, setPending] = useState<UploadedPostSummary | null>(null)
   /** what is happening to a file dropped straight onto the calendar */
   const [uploadNote, setUploadNote] = useState<string | null>(null)
 
@@ -259,22 +237,6 @@ export default function SchedulePage() {
   const mayRemoveNote = (note: ScheduleNote | null): boolean =>
     Boolean(note) && mayChangeNote(note)
 
-  const openNew = (media: RailMedia, at: string | null) => {
-    if (!media.ok) return
-    setChoosing(null)
-    // one post per piece: a second "new post" on a piece that has one opens
-    // the one that exists, which is what the server would insist on anyway
-    const existing = data.posts.find(p => p.item_id === media.itemId) ?? null
-    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at })
-  }
-
-  /** the upload became a post — open the composer on it */
-  const openMade = (made: UploadedPostSummary, at: string | null) => {
-    setChoosing(null)
-    setPending(made)
-    setComposing({ itemId: made.itemId, postId: made.postId || null, at })
-  }
-
   /**
    * A FILE DRAGGED OFF THE DESKTOP ONTO A DAY OR A TIME.
    *
@@ -312,7 +274,7 @@ export default function SchedulePage() {
         return
       }
       setUploadNote(null)
-      openMade({
+      flow.openMade({
         itemId: String(json.item_id),
         postId: String(json.post?.id ?? ''),
         title: String(json.item_title ?? 'Post'),
@@ -325,113 +287,14 @@ export default function SchedulePage() {
     }
   }
 
-  /** open an existing post in the composer */
-  const openPost = (post: SchedulePostRow) =>
-    setComposing({ itemId: post.item_id, postId: post.id, at: null })
-
-  /** an empty slot, a suggested slot, or the rail's button: ask what goes in
-   *  it, holding on to the time that was clicked */
-  const openAt = (at: string | null) => setChoosing({ at })
-
-  // The Scheduler page's "New post" opens THIS composer, not a second one —
-  // two composers meant two sets of platform rules to keep in step, and the
-  // one on that page was the older wizard. It asks; this answers.
+  // The Scheduler page opens the SAME flow in place now — it no longer sends
+  // anybody here to write a post. The listener stays for any older link or
+  // tab still asking this page to open its composer.
   useEffect(() => {
-    const open = () => setChoosing({ at: null })
+    const open = () => flow.openAt(null)
     window.addEventListener('mdm:new-post', open)
     return () => window.removeEventListener('mdm:new-post', open)
-  }, [])
-
-  /**
-   * "Approve without client" — the manager's own sign-off, from here.
-   *
-   * One question first, because it skips the client. The move itself is the
-   * EXISTING transition to `approved_for_scheduling`: the same edge, the same
-   * refusals and the same activity trail as the item page, so nobody gains a
-   * right by being on this screen. The rail updates itself — the item is
-   * live — so nothing here refetches.
-   */
-  const [approving, setApproving] = useState<RailMedia | null>(null)
-  const [approveNote, setApproveNote] = useState<string | null>(null)
-  const [approveBusy, setApproveBusy] = useState(false)
-
-  const approveWithoutClient = async (m: RailMedia) => {
-    setApproveBusy(true)
-    setApproveNote(null)
-    try {
-      const res = await fetch(`/api/production/items/${m.itemId}/transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: 'approved_for_scheduling' }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setApproveNote(friendlyError(String(json?.error ?? ''), 'Schedule'))
-        return
-      }
-      setApproving(null)
-    } catch {
-      setApproveNote(loadFailedMessage('that approval'))
-    } finally {
-      setApproveBusy(false)
-    }
-  }
-
-  // Escape closes the question, like every other window on this page. A
-  // dialog that only the mouse can dismiss is one somebody gets stuck in.
-  useEffect(() => {
-    if (!approving) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setApproving(null) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [approving])
-
-  /**
-   * ONE IMAGE EDITOR, TWO WAYS IN.
-   *
-   * The week's "Edit media" chooser and the composer's own "Edit image" button
-   * both hand a picture to this, rather than each keeping an editor of its
-   * own: two copies would drift, and one opened over the other is a window
-   * nobody can get out of.
-   */
-  const [editing, setEditing] = useState<ImageEditorTarget | null>(null)
-  const [editSaved, setEditSaved] = useState<string | null>(null)
-
-  // a note about a save clears itself: it is a receipt, not a state
-  useEffect(() => {
-    if (!editSaved) return
-    const id = window.setTimeout(() => setEditSaved(null), 8000)
-    return () => window.clearTimeout(id)
-  }, [editSaved])
-
-  const target: ComposerTarget | null = useMemo(() => {
-    if (!composing) return null
-    const media = data.media.find(m => m.itemId === composing.itemId)
-    const post = composing.postId
-      ? data.posts.find(p => p.id === composing.postId) ?? null
-      : data.posts.find(p => p.item_id === composing.itemId) ?? null
-    // the upload's own answer, until the live rows carry it
-    const fresh = pending && pending.itemId === composing.itemId ? pending : null
-    if (!media && !post && !fresh) return null
-    return {
-      itemId: composing.itemId,
-      title: media?.title ?? post?.item_title ?? fresh?.title ?? 'Post',
-      contentType: media?.contentType ?? String(post?.item_type ?? fresh?.contentType ?? ''),
-      approved: media?.slides ?? fresh?.slides ?? [],
-      knownUrls: media?.knownUrls ?? (fresh ? fresh.slides.map(s => s.url) : []),
-      coverUrl: media?.coverUrl ?? null,
-      versionNumber: post?.version_number ?? null,
-      needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
-      // a post made from an upload a moment ago was never the client's to approve
-      clientApproved: media?.clientApproved ?? false,
-      itemStatus: media?.status
-        ?? (fresh
-          ? (fresh.needsApproval ? 'internal_review' : 'approved_for_scheduling')
-          : 'approved_for_scheduling'),
-      post,
-      at: composing.at,
-    }
-  }, [composing, data.media, data.posts, pending])
+  }, [flow.openAt])
 
   // the client picked last time, then the first one this person works for —
   // a page that opens on "pick a client" every morning is a page with a step
@@ -451,14 +314,6 @@ export default function SchedulePage() {
   }
 
   const tz = data.tz
-  /** the places this client tags Instagram posts at — saved on their Social
-   *  page, because Instagram wants a Facebook Page id and has no search */
-  const locations = useMemo(
-    () => readLocations((data.client as { instagram_locations?: unknown } | null)?.instagram_locations),
-    [data.client])
-  /** the client has a Drive folder we can read — no folder, no Drive tab */
-  const driveAvailable = Boolean(
-    String((data.client as { drive_folder_id?: string | null } | null)?.drive_folder_id ?? '').trim())
   const todayKey = dayKeyInZone(now, tz)
   // keyed on the DAY, not the minute: the clock ticking must not rebuild the
   // week under every memo that reads it
@@ -467,10 +322,6 @@ export default function SchedulePage() {
     [anchor, todayKey, tz])
   const monthView = view === 'Month'
   const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
-
-  /** the channel the profiles bar is filtering to, as the core reads it */
-  const selected = useMemo(
-    () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
 
   /**
    * The posts, with a move that has just been made shown where it was
@@ -509,28 +360,6 @@ export default function SchedulePage() {
 
   const stories = useMemo(
     () => inWeek.filter(p => String(p.item_type ?? '').toLowerCase() === 'story'), [inWeek])
-
-  /**
-   * Good times to post.
-   *
-   * The one thing on this page that is fetched rather than subscribed: it is
-   * ninety days of results averaged into three hours a day, it changes when a
-   * post lands and not before, and the rule that computes it needs analytics
-   * rows this page has no other reason to hold.
-   */
-  const [suggested, setSuggested] = useState<SuggestedTime[]>([])
-  const network = selected?.platform ?? data.accounts[0]?.platform ?? 'instagram'
-  useEffect(() => {
-    if (!clientId) { setSuggested([]); return }
-    let cancelled = false
-    const url = `/api/social/schedule/suggested?clientId=${encodeURIComponent(clientId)}`
-      + `&network=${encodeURIComponent(network)}&tz=${encodeURIComponent(tz)}`
-    fetch(url)
-      .then(r => (r.ok ? r.json() : { times: [] }))
-      .then(json => { if (!cancelled) setSuggested((json.times ?? []) as SuggestedTime[]) })
-      .catch(() => { /* a missing suggestion is a missing hint, not a broken week */ })
-    return () => { cancelled = true }
-  }, [clientId, network, tz])
 
   /** a slot is a hint about an EMPTY time — one within the hour of a post
    *  already there is noise */
@@ -574,9 +403,9 @@ export default function SchedulePage() {
       loading={data.loading}
       role={me?.role ?? null}
       postWithoutApproval={data.postWithoutApproval}
-      onNew={() => openAt(weekSlots[0]?.iso ?? null)}
-      onPick={m => openNew(m, null)}
-      onApprove={m => { setApproveNote(null); setApproving(m) }}
+      onNew={() => flow.openAt(weekSlots[0]?.iso ?? null)}
+      onPick={m => flow.openNew(m, null)}
+      onApprove={flow.approve}
     />
   )
 
@@ -666,7 +495,7 @@ export default function SchedulePage() {
                 media={data.media}
                 posts={data.posts}
                 mayApprove={data.postWithoutApproval}
-                onEdit={setEditing}
+                onEdit={flow.edit}
                 className="hidden md:flex"
               />
               <Link
@@ -702,7 +531,7 @@ export default function SchedulePage() {
                       media={data.media}
                       posts={data.posts}
                       mayApprove={data.postWithoutApproval}
-                      onEdit={setEditing}
+                      onEdit={flow.edit}
                     />
                     <Link
                       href="/dashboard/social/schedule/access"
@@ -737,11 +566,11 @@ export default function SchedulePage() {
                   suggested={weekSlots}
                   todayKey={todayKey}
                   nowTop={nowTop}
-                  onSlot={openAt}
-                  onOpen={openPost}
+                  onSlot={flow.openAt}
+                  onOpen={flow.openPost}
                   onDropItem={(itemId, iso) => {
                     const media = data.media.find(m => m.itemId === itemId)
-                    if (media) openNew(media, iso)
+                    if (media) flow.openNew(media, iso)
                   }}
                   onDropFiles={(files, iso) => void createFromFiles(files, iso)}
                   drag={drag}
@@ -769,7 +598,7 @@ export default function SchedulePage() {
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={openPost} />
+                <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -778,26 +607,26 @@ export default function SchedulePage() {
               posts={channelPosts}
               tz={tz}
               todayKey={todayKey}
-              onOpen={openPost}
+              onOpen={flow.openPost}
               drag={drag}
               defaultTime={defaultPostTime}
               onDropItem={(itemId, iso) => {
                 const media = data.media.find(m => m.itemId === itemId)
-                if (media) openNew(media, iso)
+                if (media) flow.openNew(media, iso)
               }}
               onDropFiles={(files, iso) => void createFromFiles(files, iso)}
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={openPost} />
+              <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost} />
+              <PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <StoriesView posts={stories} tz={tz} onOpen={openPost} />
+              <StoriesView posts={stories} tz={tz} onOpen={flow.openPost} />
             </div>
           )}
         </main>
@@ -825,80 +654,10 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {approving && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Approve without the client"
-          onMouseDown={e => { if (e.target === e.currentTarget) setApproving(null) }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
-        >
-          <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-card bg-surface p-4 shadow-xl">
-            <h2 className="text-section-title">
-              {approveWithoutClientQuestion(approving.versionNumber)}
-            </h2>
-            <p className="text-[13px] text-muted-foreground">
-              {`“${approving.title}” is signed off in your name and can be posted. `}
-              The client is not asked.
-            </p>
-            {approveNote && (
-              <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
-                {approveNote}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setApproving(null)}
-                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
-              >
-                Not yet
-              </button>
-              <button
-                type="button"
-                disabled={approveBusy}
-                onClick={() => void approveWithoutClient(approving)}
-                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
-              >
-                {approveBusy ? 'Approving…' : 'Approve without client'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {choosing && (
-        <NewPostSources
-          clientId={clientId}
-          media={data.media}
-          at={choosing.at}
-          tz={tz}
-          role={me?.role ?? null}
-          postWithoutApproval={data.postWithoutApproval}
-          clientSignsOff={data.clientSignsOff}
-          driveAvailable={driveAvailable}
-          onPick={m => openNew(m, choosing.at)}
-          onApprove={m => { setApproveNote(null); setApproving(m) }}
-          onCreated={made => openMade(made, choosing.at)}
-          onClose={() => setChoosing(null)}
-        />
-      )}
-
-      {target && (
-        <NewPostDialog
-          target={target}
-          tz={tz}
-          accounts={data.accounts}
-          suggested={suggested.slice(0, 3)}
-          role={me?.role ?? null}
-          clientSignsOff={data.clientSignsOff}
-          locations={locations}
-          clientName={(data.client as { name?: string | null } | null)?.name ?? null}
-          onClose={() => { setComposing(null); setPending(null) }}
-          onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
-          onEditMedia={setEditing}
-        />
-      )}
+      {/* The media chooser, the composer with its per-network preview, the
+          manager's own sign-off and the image editor: the SHARED flow, the
+          same one the Scheduler page's single button opens in place. */}
+      {flow.windows}
 
       {/* a file dropped straight onto the calendar says where it got to */}
       {uploadNote && (
@@ -918,26 +677,6 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {editSaved && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-50 max-w-[440px] -translate-x-1/2 rounded-card border border-border bg-popover px-4 py-3 text-[13px] font-medium shadow-xl"
-        >
-          {editSaved}
-        </div>
-      )}
-
-      {editing && (
-        <ImageEditor
-          target={editing}
-          mayApprove={data.postWithoutApproval}
-          onClose={() => setEditing(null)}
-          onSaved={message => {
-            setEditSaved(message)
-            setEditing(null)
-          }}
-        />
-      )}
     </div>
   )
 }

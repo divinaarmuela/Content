@@ -21,7 +21,7 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Board',
     icon: Kanban,
-    blurb: 'Every card, Draft to Posted — what needs doing and where the work lives. Post it on the Schedule page, then mark the card Booked in, then Posted.',
+    blurb: 'Every card, Draft to Posted — what needs doing and where the work lives. New post adds the media, shows you the preview and sends it for approval, right here.',
   },
 ]
 
@@ -58,8 +58,10 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
             </Link>
           </nav>
 
-          {/* posting is decided here, so starting one belongs here — the same
-              composer the Social page opens, not a second one to keep in step */}
+          {/* THE one button on this page: it opens the media chooser, the
+              preview and "Send for approval" over this board — the Schedule
+              page's own flow, not a second one to keep in step, and not a
+              trip to another page */}
           <NewPostButton />
         </>}
       />

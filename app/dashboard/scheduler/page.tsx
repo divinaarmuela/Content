@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
 import type { ScheduleEntry } from '@/lib/db-types'
 import { pageCards, type BoardViewer } from '../../lib/board-view-core'
@@ -25,10 +23,14 @@ import WaitingOnYou from './WaitingOnYou'
  * lanes; everything before them (Draft, Internal check, With client) is
  * folded into one narrow "Coming up" lane, so what is coming is visible
  * before it is ready without three columns sitting empty. Each card
- * carries the link to the work and what needs doing. The scheduler
- * takes those and posts on the Schedule page — one pill away in the header
- * — or wherever they post; back here the card just moves, Ready to post →
- * Posted. The card never asks for a channel, a time or a live link.
+ * carries the link to the work and what needs doing. Back here the card just
+ * moves, Ready to post → Posted; it never asks for a channel, a time or a
+ * live link.
+ *
+ * Writing the post itself is the ONE button in the header (`NewPostButton`),
+ * and it happens HERE: files or the client's Drive folder, the preview, and
+ * "Send for approval" — the Schedule page's own flow (`useComposeFlow`),
+ * opened over this board rather than on another page.
  *
  * Above the board sits "Waiting on you" (`WaitingOnYou` / `waiting-core`):
  * every one of those cards that somebody is actually held up by — a post

@@ -1,95 +1,45 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
-
 /**
- * Start a post from the Scheduler.
+ * THE ONE BUTTON ON THE SCHEDULER PAGE.
  *
- * The Scheduler is where posting is decided, and until now the only way to
- * make a post was to leave it: over to Social, find the client, open the
- * composer there. Every ad-hoc post — the reactive one, the story that has to
- * go out this afternoon — meant navigating away from the queue you were
- * working, and coming back to find your place again.
+ * The owner, more than once, in their words: "ONE BUTTON… IT SHOULD BE ONE
+ * ACTION WHERE I CAN PUT FILES OR DRIVE TO SEND TO MY AM FOR APPROVAL" — and
+ * "where is this preview feature in the Scheduler page? my New post is still
+ * taking me to the Schedule page."
  *
- * The composer itself is the one on the Social page, not a second one. A
- * second composer is a second set of platform rules to keep in step, and they
- * would not stay in step.
+ * It used to `router.push('/dashboard/social/schedule?new=1')`. That is the
+ * thing they said not to do: the composer opened on the other page, and coming
+ * back meant finding your place in the queue again.
  *
- * Two things it will not do:
+ * So this navigates NOWHERE. Pressing it opens, over this page:
  *
- *  - Appear for someone who cannot publish. `/api/social/publish` requires the
- *    scheduler role and would refuse them; offering the button anyway is a
- *    button that exists to say no.
- *  - Open an empty composer. Clients and channels are fetched on the click and
- *    the dialog opens once they are in hand, because a composer that opens
- *    with no channels in it looks exactly like a client with none connected.
+ *   1. who the post is for, when this person holds more than one client;
+ *   2. the media — drop files, or take them out of the client's Google Drive
+ *      folder (read only, trap 13), or pick a piece already approved;
+ *   3. the composer, with the per-network preview on its own tab;
+ *   4. the answer — "Send for approval" for somebody who needs one, or
+ *      scheduling and posting for an account manager or a super admin who does
+ *      not (`mayPostWithoutApproval`). Nobody is offered a button the server
+ *      would refuse.
+ *
+ * Steps 2 to 4 are the Schedule page's OWN flow (`useComposeFlow`), not a copy
+ * of it: one composer, one preview, one approval route.
+ *
+ * It does not appear for somebody who cannot publish — `/api/social/publish`
+ * requires the scheduler role and would refuse them, and a button that exists
+ * to say no is not a button.
  */
 
-import { useCallback, useRef, useState } from 'react'
-import { toast } from 'sonner'
-import { Loader2, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { NotSetUp } from '../NotSetUp'
 import { useRole } from '../useRole'
-import { SCHEDULE_PAGE } from '../../lib/page-access-core'
-import { notifyProductionChange } from '../production/useProductionLive'
-import { friendlyError } from '../../lib/support-core'
-
-type Client = { id: string; name: string; status?: string | null }
-type Account = {
-  id: string; client_id: string | null; platform: string
-  provider_account_id: string; username: string | null; name: string | null; active: boolean
-}
+import SchedulerCompose from './SchedulerCompose'
 
 export default function NewPostButton() {
   const { can, loading: roleLoading } = useRole()
-  const router = useRouter()
-  const path = usePathname()
-  const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
-  const [clients, setClients] = useState<Client[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
-  /** the publishing provider is not configured for this workspace */
-  const [notSetUp, setNotSetUp] = useState<string | null>(null)
-  /** fetched once per page — channels change rarely, and a second click
-   *  should open the composer immediately rather than pause again */
-  const fetched = useRef(false)
-
-  const load = useCallback(async () => {
-    const [cRes, aRes] = await Promise.all([
-      fetch('/api/website/clients'),
-      fetch('/api/social/accounts', { cache: 'no-store' }),
-    ])
-
-    if (!cRes.ok) {
-      throw new Error((await cRes.json().catch(() => ({}))).error ?? 'Could not load clients')
-    }
-    const clientRows = await cRes.json() as Client[]
-
-    const accountBody = await aRes.json().catch(() => ({})) as { accounts?: Account[]; error?: string }
-    if (!aRes.ok) {
-      // 503 is the provider being switched off, not a failure of this click
-      if (aRes.status === 503) { setNotSetUp(accountBody.error ?? null); return false }
-      throw new Error(accountBody.error ?? 'Could not load the connected channels')
-    }
-
-    setClients((Array.isArray(clientRows) ? clientRows : []).filter(c => c.status !== 'archived'))
-    setAccounts(accountBody.accounts ?? [])
-    fetched.current = true
-    return true
-  }, [])
-
-  const start = () => {
-    // ONE composer. This page used to open its own four-step wizard, which
-    // meant two sets of platform rules to keep in step and no live preview.
-    // The Schedule page owns the good one; this asks it to open.
-    if (path === SCHEDULE_PAGE) {
-      window.dispatchEvent(new CustomEvent('mdm:new-post'))
-      return
-    }
-    router.push(`${SCHEDULE_PAGE}?new=1`)
-  }
 
   // the role is still arriving: render nothing rather than a button that may
   // be about to disappear
@@ -98,24 +48,14 @@ export default function NewPostButton() {
   return (
     <>
       <Button
-        className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60"
-        onClick={start} disabled={loading}>
-        {loading
-          ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening…</>
-          : <><Plus className="h-4 w-4" /> New post</>}
+        className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+        onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" /> New post
       </Button>
 
-      {/* the provider is off for this workspace — say so once, properly,
-          instead of opening a composer with nowhere to send anything */}
-      <Dialog open={notSetUp !== null} onOpenChange={o => { if (!o) setNotSetUp(null) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Posting is not switched on yet</DialogTitle>
-          </DialogHeader>
-          <NotSetUp feature="Publishing" detail={notSetUp} />
-        </DialogContent>
-      </Dialog>
-
+      {/* mounted only while it is open — the listeners behind it belong to a
+          post being written, not to a board being looked at */}
+      {open && <SchedulerCompose onClose={() => setOpen(false)} />}
     </>
   )
 }
