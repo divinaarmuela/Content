@@ -576,14 +576,18 @@ describe('the encode ladder', () => {
   })
 
   it('keeps 60 fps only where the channel says it takes it', () => {
-    // read out of each platform's own specification, not assumed: YouTube
-    // serves 60, and Instagram Reels documents "Frame rate: 23-60 FPS"
-    for (const platform of ['youtube', 'instagram'] as const) {
+    // Read out of each platform's own specification on 2026-09-08, never
+    // assumed and never copied from a neighbour — docs/PLATFORM_VIDEO_SPECS.md
+    // carries the page and the quote for every one of these.
+    const READ_AND_ALLOWS_60 = ['youtube', 'instagram', 'facebook', 'threads', 'tiktok'] as const
+    for (const platform of READ_AND_ALLOWS_60) {
       expect(PLATFORM_ENCODE[platform].maxFps).toBe(60)
     }
-    for (const platform of PLATFORMS.filter(p => p !== 'youtube' && p !== 'instagram')) {
-      expect(PLATFORM_ENCODE[platform].maxFps).toBe(30)
-    }
+    // LinkedIn on evidence (it re-encodes to 720p30 regardless); X, Pinterest,
+    // Bluesky and Reddit because nobody has read their specification yet
+    const rest = PLATFORMS.filter(p => !(READ_AND_ALLOWS_60 as readonly string[]).includes(p))
+    expect(rest).toEqual(['linkedin', 'twitter', 'pinterest', 'bluesky', 'reddit'])
+    for (const platform of rest) expect(PLATFORM_ENCODE[platform].maxFps).toBe(30)
   })
 
   it('has a ladder for every channel there is', () => {

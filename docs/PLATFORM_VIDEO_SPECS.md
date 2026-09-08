@@ -23,11 +23,11 @@ the encoder runs `-crf 20`, so an easy clip spends far less.
 |---|---|---|---|---|
 | instagram | **60** | 10 Mbps | 160 kbps | 1920×1080 |
 | youtube | 60 | 12 Mbps | 160 kbps | 1920×1080 |
-| facebook | 30 | 10 Mbps | 160 kbps | 1920×1080 |
-| tiktok | 30 | 12 Mbps | 160 kbps | 1920×1080 |
+| facebook | **60** | 10 Mbps | 160 kbps | 1920×1080 |
+| tiktok | **60** | 12 Mbps | 160 kbps | 1920×1080 |
+| threads | **60** | 8 Mbps | 160 kbps | 1920×1080 |
 | linkedin | 30 | 10 Mbps | 160 kbps | 1920×1080 |
 | twitter | 30 | 8 Mbps | 160 kbps | 1920×1080 |
-| threads | 30 | 8 Mbps | 160 kbps | 1920×1080 |
 | pinterest | 30 | 8 Mbps | 160 kbps | 1920×1080 |
 | bluesky | 30 | 8 Mbps | 160 kbps | 1920×1080 |
 | reddit | 30 | 8 Mbps | 160 kbps | 1920×1080 |
@@ -58,7 +58,7 @@ Meta, Video API → Reels publishing.
 - Audio: AAC-LC, 128 kbps or higher
 - File size: not stated on that page
 
-**Ours is stricter than it needs to be.** 30 fps against a documented 60.
+**Now matches.** Raised 30 → 60 on 8 Sep 2026.
 
 ### Threads — VERIFIED
 Meta, Threads → Posts.
@@ -69,9 +69,12 @@ Meta, Threads → Posts.
 - Resolution: maximum 1920 horizontal pixels
 - Bitrate: video VBR, 100 Mbps maximum; audio 128 kbps
 
-**Ours is stricter than it needs to be.** 30 fps against a documented 60.
-Note the audio line: Threads states 128 kbps and we send 160. Worth reading
-again to learn whether that is a maximum or a recommendation.
+**Now matches.** Raised 30 → 60 on 8 Sep 2026.
+
+On the audio line: Threads states a flat "Audio Bitrate: 128 kbps" with no
+qualifier, which read alone could be a ceiling. Facebook Reels settles it —
+that page says "128 kbps or higher". 128 is the standard Meta publishes, not
+a limit, so our 160 stays.
 
 ### YouTube — VERIFIED
 Google, "Recommended upload encoding settings".
@@ -101,16 +104,19 @@ LinkedIn returns is shaped `mp4-720p-30fp-crf28`. LinkedIn re-encodes to
 720p30 regardless of what is sent. **So 30 fps here is right**, and sending
 60 would only be thrown away.
 
-### TikTok — NOT VERIFIED
-TikTok, Content Posting API.
+### TikTok — VERIFIED
+TikTok, Content Posting API → Media Transfer Guide. (The Upload reference
+page carries none of this; the Media Transfer Guide is the one to read.)
 
+- Frame rate: **"Minimum of 23 FPS"**, **"Maximum of 60 FPS"**
+- File size: **4 GB maximum**
+- Duration: developers may send up to **10 minutes**; creators' own accounts
+  allow 3, 5 or 10 minutes and TikTok trims to the account's limit
 - Format: MP4 + H.264
-- Max post duration in the API docs: **300 s** — our rule says 10 minutes.
-  These disagree and ours is the looser one. Read again before trusting it.
-- Frame rate: **not published** in the API documentation. Third-party guides
-  say 23–60 and recommend 30; that is not a source to encode against.
 
-**Leave at 30 until somebody reads TikTok's own words.**
+**Now matches**, and the duration disagreement reported earlier was mine, not
+theirs — read off the wrong page. `maxMB: 4096` and `maxSeconds: 10 * 60` are
+both right.
 
 ### X / Twitter — NOT VERIFIED
 X Developer Platform. The specification pages returned 402/404 to an
@@ -129,14 +135,21 @@ downscaled by X for non-subscribers regardless.
 Official specification pages were not reachable on 8 Sep 2026 (404s and
 redirects). None of the three has been read. **All stay at 30 fps.**
 
-## What to do next
+## Settled on 8 September 2026
 
-1. **Facebook 30 → 60** and **Threads 30 → 60**. Both are documented, both are
-   Meta pages of the same quality as the Instagram one already acted on.
-2. **Check the audio rate.** Meta states 128 kbps for Threads and "128 kbps or
-   higher" for Facebook Reels; we send 160 everywhere.
-3. **Check TikTok's duration.** Their API says 300 s; `media-fit-core` says
-   600 s. If theirs is right, a 7-minute post fails at publish time rather
-   than being caught in the composer.
-4. **Leave LinkedIn at 30** — evidence says they re-encode to 720p30 anyway.
-5. **Read X, Pinterest, Bluesky and Reddit** before touching their rows.
+- Instagram, Facebook, Threads and TikTok raised 30 → 60 fps, each on its own
+  documentation. YouTube was already 60.
+- Audio stays at 160 kbps: Facebook Reels' "128 kbps or higher" shows Meta's
+  128 is a standard, not a ceiling.
+- TikTok's duration and size rules were already right; the mismatch reported
+  earlier came from reading the wrong TikTok page.
+- LinkedIn stays at 30 on evidence of its own re-encoding.
+
+## Still open
+
+1. **Read X, Pinterest, Bluesky and Reddit.** Four rows sit at 30 fps purely
+   because nobody has read them. Their pages 402'd and 404'd unauthenticated
+   on 8 Sep 2026 — they need a real look, not another search.
+2. **X's 720p recommendation.** Their guidance names 1280×720 and says 1080p
+   playback is for subscribed accounts. We send 1080p to everyone. Worth
+   knowing whether that is downscaled on the way in.

@@ -910,26 +910,44 @@ export type EncodeLadder = {
  * asks for. Nothing here is a target — a still, easy clip at CRF 20 spends
  * far less — it is the most a hard one may spend.
  *
- * 60 fps where the channel's own documentation says it takes it — YouTube,
- * and Instagram, whose Reels specification reads "Frame rate: 23-60 FPS"
- * (developers.facebook.com, Instagram Platform → Media, read 2026-09-08).
- * Instagram sat at 30 on the belief that "the platform would do that anyway";
- * that was never checked, and it is wrong. A 50 fps master posted through
- * this app lost two frames in five for nothing — measured on a real post
- * (C0584.MP4, 1080p50 in, 1080p30 out). The rest stay at 30 because nobody
- * has read THEIR specification yet; each one moves when somebody does, not
- * because Instagram moved.
+ * 60 fps where the channel's OWN DOCUMENTATION says it takes it, and 30
+ * everywhere else — see docs/PLATFORM_VIDEO_SPECS.md for the page and the
+ * date behind every row. Read on 2026-09-08:
+ *
+ *   Instagram  "Frame rate: 23-60 FPS"                 Instagram Platform → Media
+ *   Facebook   "24 to 60 frames per second"            Video API → Reels
+ *   Threads    "23-60 FPS"                             Threads → Posts
+ *   TikTok     "Minimum of 23 FPS … Maximum of 60 FPS" Media Transfer Guide
+ *   YouTube    match the source; 24-60 named           upload encoding settings
+ *
+ * All five sat at 30 on the belief that "the platform would do that anyway".
+ * Nobody had checked, and it was wrong: a 50 fps master lost two frames in
+ * five for nothing — measured on a real post (C0584.MP4, 1080p50 in,
+ * 1080p30 out, 29 MB against a 300 MB allowance, so not a budget decision
+ * either).
+ *
+ * LinkedIn STAYS at 30 on evidence, not silence: the playback URL their own
+ * API hands back is shaped `mp4-720p-30fp-crf28`, so they re-encode to
+ * 720p30 whatever we send and the extra frames would be thrown away.
+ *
+ * X, Pinterest, Bluesky and Reddit stay at 30 because their specifications
+ * have NOT been read (their pages 402'd and 404'd on 2026-09-08). Each moves
+ * when somebody reads it, never because a different platform moved.
+ *
+ * On audio: Meta states "Audio Bitrate: 128 kbps" for Threads and "128 kbps
+ * or higher" for Facebook Reels. The second is what settles the first — 128
+ * is the standard they publish, not a ceiling — so 160 stays.
  */
 export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
   instagram: { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
-  facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
-  tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
+  tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   twitter:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   youtube:   { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   // no published guidance of their own; 8 Mbps is the conservative end of the
   // same band, and none of these four is a channel a 2 GB master goes to
-  threads:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  threads:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   pinterest: { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   bluesky:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   reddit:    { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
