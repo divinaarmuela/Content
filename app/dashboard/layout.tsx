@@ -213,7 +213,10 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
         ) : children}
       </Shell>
 
-      <Toaster />
+      {/* sonner defaults to LIGHT. On the dashboard's dark ground that put
+          near-invisible text on a pale card, and a black block bottom-right
+          where the toast should be. It follows the dashboard's own choice. */}
+      <Toaster theme={dark ? 'dark' : 'light'} />
       <UploadTray />
     </>
   )
