@@ -3,7 +3,7 @@ import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { loadPostPage } from '../../../../../lib/post-page'
 import { followersEnabled } from '../../../../../lib/follower-source'
-import { readPostInteractors } from '../../../../../lib/post-interactors'
+import { crossFollowersWithPosts, readPostInteractors } from '../../../../../lib/post-interactors'
 
 /**
  * POST → read who liked and who commented on this post NOW.
@@ -34,7 +34,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const result = await readPostInteractors(row.id, { force: true })
       if (result.status === 'failed') return NextResponse.json({ error: result.reason ?? 'Could not read the people.' }, { status: 502 })
       if (result.status === 'skipped') return NextResponse.json({ error: result.reason ?? 'A read is already under way.' }, { status: 409 })
-      return NextResponse.json({ ok: true, likers: result.likers ?? 0, commenters: result.commenters ?? 0 })
+      // …and the cross — who of these FOLLOWED after the post went out — is
+      // recomputed now too, rather than waiting for the next followers look
+      const accountId = String((row as { account_id?: unknown }).account_id ?? '')
+      const crossed = accountId ? await crossFollowersWithPosts(accountId).catch(() => null) : null
+      return NextResponse.json({
+        ok: true, likers: result.likers ?? 0, commenters: result.commenters ?? 0,
+        followed: crossed?.followed ?? null,
+      })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
