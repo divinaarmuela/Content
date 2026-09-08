@@ -339,11 +339,16 @@ async function recordQueuedSchedule(
  * Idempotent: an item already past "Approved" returns null and moves nothing.
  * Best-effort: a failed status change must never make a queued post look
  * un-queued — the post is real either way.
+ *
+ * The plan is narrowed to the two things this needs — what was sent where, and
+ * when — so the OTHER path that hands a post to the provider (the composer's
+ * "book it in", which plans its own targets) records the same fact through
+ * this same function instead of growing a second copy of it.
  */
 export async function markScheduledAfterQueue(
   actor: TeamUser,
   item: ContentItem,
-  plan: ItemPublishPlan,
+  plan: Pick<ItemPublishPlan, 'targets' | 'scheduledFor'>,
   publishNow: boolean,
 ): Promise<ItemStatus | null> {
   await recordQueuedSchedule(item.id, plan.targets, publishNow ? null : plan.scheduledFor)

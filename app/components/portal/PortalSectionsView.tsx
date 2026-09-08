@@ -34,7 +34,7 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
   const work = data.cards.filter(c => c.kind === 'work')
   const shoots = data.cards.filter(c => c.kind === 'shoot')
   const sections = portalSections(work)
-  const counts = heroCounts(data.cards)
+  const counts = heroCounts(data.cards, data.post_approvals)
   const plansWaiting = shoots.filter(c => c.actions.approve)
   const posted = data.published_totals?.posts ?? 0
 

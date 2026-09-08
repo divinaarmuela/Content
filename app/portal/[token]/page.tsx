@@ -55,7 +55,7 @@ export default async function SharedPortalPage({ params, searchParams }: {
   const sp = (await searchParams) ?? {}
   const initialCard = typeof sp.card === 'string' ? sp.card : null
 
-  const counts = heroCounts(data.cards)
+  const counts = heroCounts(data.cards, data.post_approvals)
   const hero = heroMedia(data.cards)
   const words = data.client.name.trim().split(/\s+/)
   const lastWord = words.length > 1 ? words.pop()! : null

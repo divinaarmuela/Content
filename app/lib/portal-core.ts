@@ -309,10 +309,30 @@ export function sectionCounts<T extends { column: PortalColumnKey; actions: Port
  * count only where it matters: a plan waiting on the client is a thing
  * waiting on the client, and "Needs your review 00" over a plan asking to
  * be approved would be the page contradicting itself.
+ *
+ * A FINISHED POST waiting on the client is the same contradiction, and it was
+ * left in. The post sits at the very top of the page under "A post waiting on
+ * you", while the piece behind it is approved or booked — so it was counted
+ * under "Approved & scheduled" and the review counter said 00 over it. It is
+ * counted ONCE now: added to review, and taken out of whichever pile its own
+ * card was sitting in, so the four numbers still add up to the page.
  */
-export function heroCounts<T extends { kind: 'work' | 'shoot'; column: PortalColumnKey; actions: PortalActions }>(cards: T[]): Record<PortalSectionKey, number> {
-  const counts = sectionCounts(cards.filter(c => c.kind === 'work'))
+export function heroCounts<T extends { kind: 'work' | 'shoot'; id: string; column: PortalColumnKey; actions: PortalActions }>(
+  cards: T[],
+  /** the pieces whose finished post is waiting on the client (`post_approvals`) */
+  postApprovals: readonly { id: string }[] = [],
+): Record<PortalSectionKey, number> {
+  const work = cards.filter(c => c.kind === 'work')
+  const counts = sectionCounts(work)
   counts.review += cards.filter(c => c.kind === 'shoot' && c.actions.approve).length
+
+  const waiting = new Set(postApprovals.map(p => p.id))
+  if (waiting.size > 0) {
+    for (const s of portalSections(work)) {
+      counts[s.key] -= s.cards.filter(c => waiting.has(c.id)).length
+    }
+  }
+  counts.review += waiting.size
   return counts
 }
 

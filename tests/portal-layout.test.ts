@@ -40,7 +40,7 @@ describe('the hero and the strip', () => {
 
   it('shows the four counters, in the same four words as the section headings', () => {
     for (const w of ['Needs your review', 'In production', 'Approved & scheduled', 'Published']) expect(page).toContain(w)
-    expect(page).toMatch(/heroCounts\(data\.cards\)/)
+    expect(page).toMatch(/heroCounts\(data\.cards, data\.post_approvals\)/)
   })
 
   it('has the sticky strip with the client’s name once scrolled', () => {
@@ -98,8 +98,9 @@ describe('approving is one tap, with no note — ever', () => {
 })
 
 describe('the four piles, from the five columns', () => {
-  const c = (kind: 'work' | 'shoot', column: string, approve = false) =>
-    ({ kind, column, actions: { approve, askForChange: approve, comment: true } }) as never
+  let n = 0
+  const c = (kind: 'work' | 'shoot', column: string, approve = false, id = `card-${++n}`) =>
+    ({ kind, id, column, actions: { approve, askForChange: approve, comment: true } }) as never
 
   it('folds the columns into the four sections a client reads', () => {
     const cards = [
@@ -114,6 +115,32 @@ describe('the four piles, from the five columns', () => {
   it('a plan waiting on the client counts as needing their review; other shoots count nowhere', () => {
     const cards = [c('work', 'making'), c('shoot', 'your_review', true), c('shoot', 'approved'), c('shoot', 'posted')]
     expect(heroCounts(cards)).toEqual({ review: 1, production: 1, approved: 0, published: 0 })
+  })
+
+  /**
+   * The post waiting on the client sits at the top of the page, above the
+   * review section, while its own card is already approved or booked. Counted
+   * where its card sits, the review counter read “00” over a post asking to be
+   * approved — the page contradicting itself, exactly as it once did for shoots.
+   */
+  it('a post waiting on the client counts once, under review and nowhere else', () => {
+    const approvedCard = c('work', 'approved', false, 'item-1')
+    const cards = [approvedCard, c('work', 'making', false, 'item-2'), c('work', 'posted', false, 'item-3')]
+    expect(heroCounts(cards)).toEqual({ review: 0, production: 1, approved: 1, published: 1 })
+
+    const counts = heroCounts(cards, [{ id: 'item-1' }])
+    expect(counts).toEqual({ review: 1, production: 1, approved: 0, published: 1 })
+    // the four counters still add up to the three cards on the page
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(cards.length)
+  })
+
+  it('counts a booked post waiting on the client once, not twice', () => {
+    const cards = [c('work', 'posted', false, 'item-9')]
+    expect(heroCounts(cards, [{ id: 'item-9' }])).toEqual({ review: 1, production: 0, approved: 0, published: 0 })
+  })
+
+  it('a post approval with no card of its own still counts as waiting on them', () => {
+    expect(heroCounts([], [{ id: 'gone' }])).toEqual({ review: 1, production: 0, approved: 0, published: 0 })
   })
 })
 

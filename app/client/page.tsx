@@ -68,7 +68,7 @@ export default function ClientPortalPage() {
     )
   }
 
-  const counts = heroCounts(data.cards)
+  const counts = heroCounts(data.cards, data.post_approvals)
 
   return (
     <div className="portal-legible flex flex-col gap-8" style={DASH_TOKENS}>

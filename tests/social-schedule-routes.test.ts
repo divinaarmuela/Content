@@ -131,6 +131,7 @@ function seed(
       id: `${u.id}__${CLIENT}`, team_user_id: u.id, client_id: CLIENT,
     })) as unknown as Row[],
     social_posts: [],
+    schedule_entries: [],
     schedule_notes: [],
     publish_jobs: [],
     claim_locks: [],
@@ -266,6 +267,47 @@ describe('a planned post, end to end', () => {
     expect(gone.status).toBe(200)
     expect(gone.body.post.status).toBe('cancelled')
     expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
+  })
+
+  /**
+   * BOOKING A POST IS SCHEDULING THE PIECE.
+   *
+   * The tile said “scheduled” while the piece stayed at “Approved” with no
+   * schedule row, so the board and the client’s own card were told nothing:
+   * the client read “we’ll book a posting time” until the post appeared live.
+   * Booking writes both now — through the SAME call the older publish route
+   * uses — and writes them once.
+   */
+  it('booking a post writes the schedule the client reads, and moves the piece', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+
+    const when = row(id).scheduled_for as string
+    expect((await bookIn(id)).status).toBe(200)
+
+    const entries = fake.rows('schedule_entries') as any[]
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ item_id: ITEM, platform: 'instagram', scheduled_at: when })
+    expect((fake.rows('content_items')[0] as any).status).toBe('scheduled')
+  })
+
+  it('re-booking the same post never doubles the schedule row or the move', async () => {
+    const id = (await create()).body.post.id as string
+    await post(id)
+    as(AM)
+    await approve('approve')
+    as(SCHEDULER)
+
+    await bookIn(id)
+    // the second click loses the claim, exactly as it did before
+    expect((await bookIn(id)).status).toBe(409)
+    // …and a move re-queues the job without a second schedule row
+    await moveTo(id, IN_THREE_DAYS())
+    expect(fake.rows('schedule_entries')).toHaveLength(1)
+    expect((fake.rows('content_items')[0] as any).status).toBe('scheduled')
   })
 
   it('moves a post nobody has handed over yet with one write', async () => {
@@ -495,7 +537,9 @@ describe('an account manager posts media the client has not signed off', () => {
 
     // the MEDIA went the ordinary way: the item moved on the workflow edge…
     const item = fake.rows('content_items')[0] as any
-    expect(item.status).toBe('approved_for_scheduling')
+    // …through approved_for_scheduling and on to scheduled, because booking a
+    // post IS scheduling the piece — the trail below records both moves
+    expect(item.status).toBe('scheduled')
     // …and the post's own approval is the ordinary one on top of it
     expect(item.posting_approval_state).toBe('approved')
     expect(jobs()).toHaveLength(1)

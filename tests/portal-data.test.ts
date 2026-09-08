@@ -35,6 +35,7 @@ const moved = (id: string, from: string, to: string, at: string) => ({
 /** the fixture, rebuilt per test so a test can edit it before loading */
 let item: Record<string, unknown>
 let activity: Record<string, unknown>[]
+let schedule: Record<string, unknown>[]
 let fake: ReturnType<typeof seedDb>
 
 beforeEach(() => {
@@ -44,6 +45,7 @@ beforeEach(() => {
     updated_at: '2026-08-27T02:00:00.000Z', batch_id: null, work_kind_id: null,
   }
   activity = []
+  schedule = []
 })
 afterEach(() => fake?.restore())
 
@@ -55,7 +57,7 @@ const load = async () => {
     monthly_commitments: [],
     client_brand: [],
     batches: [],
-    schedule_entries: [],
+    schedule_entries: schedule as unknown as Row[],
     workflow_activity: activity as unknown as Row[],
     content_items: [item] as unknown as Row[],
     asset_versions: [{
@@ -134,5 +136,35 @@ describe('the portal payload — where a piece sits', () => {
     item.status = 'internal_review'
     const data = await load()
     expect(data.in_production[0].progress_line).toBeNull()
+  })
+})
+
+/**
+ * A BOOKED POST SAYS WHEN IT GOES OUT.
+ *
+ * The card’s sentence comes from the item’s status and the schedule row the
+ * booking writes. Booking through the composer wrote neither, so the client
+ * read “Approved — we’ll book a posting time.” for as long as the post sat in
+ * the provider’s scheduler, then watched it jump straight to live. With the row
+ * written, the card says the hour — in the client’s own zone.
+ */
+describe('a booked post tells the client when it goes out', () => {
+  it('shows the booked time on the card, in the client’s zone', async () => {
+    item.status = 'scheduled'
+    schedule = [{
+      id: 's-1', item_id: 'item-1', platform: 'instagram',
+      scheduled_at: '2026-09-10T08:00:00.000Z', live_url: null, publish_status: 'scheduled',
+    }]
+    const data = await load()
+    const card = data.cards.find(c => c.id === 'item-1')!
+    // 8am UTC is 6pm in Melbourne — the client’s own clock, not ours
+    expect(card.line).toBe('Going out Thu 10 Sept, 6:00 pm.')
+    expect(card.line).not.toMatch(/book a posting time/)
+  })
+
+  it('falls back to plain words when the hour is not recorded', async () => {
+    item.status = 'scheduled'
+    const data = await load()
+    expect(data.cards.find(c => c.id === 'item-1')!.line).toBe('Booked in — the posting time is set.')
   })
 })

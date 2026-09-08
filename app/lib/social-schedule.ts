@@ -37,6 +37,7 @@ import {
   normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
 } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
+import { markScheduledAfterQueue } from './production-publish'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { askForCopiesAhead } from './encode-ahead'
 import { previewVideos } from './stream'
@@ -1333,13 +1334,14 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
    * its Thursday, held by the provider's own scheduler exactly as before.
    */
   const rightNow = isPostingNow(post.scheduled_for, Date.now())
+  const targets = targetsFor(post, accounts, versions)
 
   const queued = await queuePublishJob({
     clientId: item.client_id,
     contentItemId: item.id,
     caption: String(post.caption ?? ''),
     media: mediaOf(post.slides),
-    targets: targetsFor(post, accounts, versions),
+    targets,
     scheduledFor: rightNow ? null : post.scheduled_for,
     timezone: post.timezone,
     createdBy: user.email,
@@ -1359,6 +1361,24 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
     publish_job_ids: [queued.id] as unknown as SocialPost['publish_job_ids'],
     updated_at: nowIso(),
   })
+
+  /**
+   * BOOKING A POST IS SCHEDULING THE PIECE.
+   *
+   * The tile said "scheduled" while the piece itself stayed at "Approved" with
+   * no schedule row, so every screen that reads those two — the board, and the
+   * client's own card, which went on saying "we'll book a posting time" until
+   * the post appeared live — was told nothing. The older publish route already
+   * writes both; this is the same call, not a second copy of it, so a schedule
+   * row and the status move exactly once (both are claims: a platform that
+   * already carries a time keeps it, and an item already past "Approved"
+   * moves nowhere). Best-effort, like the route's: a booked post is booked
+   * whether or not the bookkeeping lands.
+   */
+  await markScheduledAfterQueue(user, item as never, {
+    targets, scheduledFor: post.scheduled_for,
+  }, rightNow).catch(e =>
+    console.error('could not record the schedule for a booked post:', (e as Error).message))
   // the provider holds the schedule; the event only makes the hand-over
   // immediate, and a dropped one is picked up by the next dispatcher pass
   await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
