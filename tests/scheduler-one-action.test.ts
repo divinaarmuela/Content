@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs'
  */
 
 const BUTTON = 'app/dashboard/scheduler/NewPostButton.tsx'
-const COMPOSE = 'app/dashboard/scheduler/SchedulerCompose.tsx'
+const COMPOSE = 'app/dashboard/scheduler/SendForApprovalDialog.tsx'
 const LAYOUT = 'app/dashboard/scheduler/layout.tsx'
 const BOARD = 'app/dashboard/scheduler/page.tsx'
 const FLOW = 'app/dashboard/social/schedule/useComposeFlow.tsx'
@@ -52,20 +52,30 @@ describe('the Scheduler page never sends anybody to the Schedule page to post', 
     }
   })
 
-  it('the button opens the flow in place instead', () => {
+  it('the button opens the one window in place instead', () => {
     const src = code(BUTTON)
-    expect(src).toMatch(/import SchedulerCompose from '\.\/SchedulerCompose'/)
-    expect(src).toMatch(/\{open && <SchedulerCompose/)
+    expect(src).toMatch(/import SendForApprovalDialog from '\.\/SendForApprovalDialog'/)
+    expect(src).toMatch(/\{open && <SendForApprovalDialog/)
   })
 })
 
-describe('the one action: the media, the preview, the approval', () => {
+describe('the one window: the files and the decision, nothing else (8 Sep 2026)', () => {
   const src = code(COMPOSE)
 
-  it('renders the media chooser and the composer itself, through the shared flow', () => {
-    expect(src).toMatch(/useComposeFlow/)
-    expect(src).toMatch(/\{flow\.windows\}/)
-    expect(src).toMatch(/flow\.openAt\(null\)/)
+  it('is NOT the composer: no caption, no channels, no network options, no time', () => {
+    expect(src).not.toMatch(/useComposeFlow|NewPostDialog|NewPostSources|per_channel|scheduled_for/)
+    expect(src).toMatch(/\/api\/social\/schedule\/from-upload/)
+    expect(src).toMatch(/decision/)
+  })
+
+  it('offers the three decisions to the right people', () => {
+    // somebody who needs an approval picks who
+    expect(src).toMatch(/Who approves it\?/)
+    expect(src).toMatch(/send\('ask'\)/)
+    // a manager approves, or sends it to the client — the "send to client thing"
+    expect(src).toMatch(/send\('approve'\)/)
+    expect(src).toMatch(/send\('client'\)/)
+    expect(src).toMatch(/Send to \$\{client\?\.name/)
   })
 
   it('asks which client first, in the same window', () => {

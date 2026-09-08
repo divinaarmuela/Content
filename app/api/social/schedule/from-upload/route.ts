@@ -36,6 +36,9 @@ export async function POST(req: Request) {
         scheduled_for: body.scheduled_for ?? null,
         timezone: body.timezone ?? null,
         title: body.title ?? null,
+        decision: body.decision === 'ask' || body.decision === 'approve' || body.decision === 'client' ? body.decision : null,
+        reviewer_ids: body.reviewer_ids,
+        note: body.note ?? null,
       })
       return NextResponse.json({
         post: result.post,

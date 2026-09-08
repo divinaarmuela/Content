@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  approveWithoutClientQuestion, type SuggestedTime,
+  approveWithoutClientQuestion, mayPostWithoutApproval, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { readLocations } from '@/app/lib/schedule-compose-core'
@@ -242,7 +242,10 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
           clientSignsOff={data.clientSignsOff}
           driveAvailable={driveAvailable}
           // Schedule offers approved pieces only; Post approval's window uploads
-          allowUploads={reviewOnly === true}
+          // the owner, 8 Sep 2026: "an AM or super admin can go directly to the
+          // Schedule page to post there without approval — upload files and
+          // automatically do it there". Everybody else books approved pieces.
+          allowUploads={mayPostWithoutApproval(role, data.clientSignsOff)}
           onPick={m => openNew(m, choosing.at)}
           onApprove={approve}
           onCreated={made => openMade(made, choosing.at)}

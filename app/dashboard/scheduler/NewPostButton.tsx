@@ -12,19 +12,13 @@
  * thing they said not to do: the composer opened on the other page, and coming
  * back meant finding your place in the queue again.
  *
- * So this navigates NOWHERE. Pressing it opens, over this page:
- *
- *   1. who the post is for, when this person holds more than one client;
- *   2. the media — drop files, or take them out of the client's Google Drive
- *      folder (read only, trap 13), or pick a piece already approved;
- *   3. the composer, with the per-network preview on its own tab;
- *   4. the answer — "Send for approval" for somebody who needs one, or
- *      scheduling and posting for an account manager or a super admin who does
- *      not (`mayPostWithoutApproval`). Nobody is offered a button the server
- *      would refuse.
- *
- * Steps 2 to 4 are the Schedule page's OWN flow (`useComposeFlow`), not a copy
- * of it: one composer, one preview, one approval route.
+ * So this navigates NOWHERE. Pressing it opens ONE small window over this
+ * page (`SendForApprovalDialog`, 8 Sep 2026 — the owner: "make it simple",
+ * "why is the modal there when it's an approval stage"): the client, the
+ * files, a name for the piece, and the one decision — send it to a manager,
+ * or (a manager) approve it or send it to the client. No caption, no
+ * channels, no network options: those are the Schedule page's, where an
+ * approved piece is booked in.
  *
  * It does not appear for somebody who cannot publish — `/api/social/publish`
  * requires the scheduler role and would refuse them, and a button that exists
@@ -35,7 +29,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRole } from '../useRole'
-import SchedulerCompose from './SchedulerCompose'
+import SendForApprovalDialog from './SendForApprovalDialog'
 
 export default function NewPostButton() {
   const { can, loading: roleLoading } = useRole()
@@ -55,7 +49,7 @@ export default function NewPostButton() {
 
       {/* mounted only while it is open — the listeners behind it belong to a
           post being written, not to a board being looked at */}
-      {open && <SchedulerCompose onClose={() => setOpen(false)} />}
+      {open && <SendForApprovalDialog onClose={() => setOpen(false)} />}
     </>
   )
 }

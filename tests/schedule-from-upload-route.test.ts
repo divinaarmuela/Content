@@ -355,3 +355,42 @@ describe('the files are checked before anything is written', () => {
     expect(items()).toHaveLength(0)
   })
 })
+
+/* ── the Post approval page's one window (8 Sep 2026): the upload decides ── */
+
+describe('an upload that carries its decision', () => {
+  it('a scheduler asks a named manager: Internal check, and only they are asked', async () => {
+    as(SCHEDULER)
+    const made = await upload({ decision: 'ask', reviewer_ids: [AM.id], note: 'Two options, pick one' })
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('internal_review')
+    expect(items()[0].asked_ids).toEqual([AM.id])
+    expect(made.body.message).toContain('Sent for approval')
+  })
+  it('a scheduler asking nobody is told to pick someone', async () => {
+    as(SCHEDULER)
+    const made = await upload({ decision: 'ask', reviewer_ids: [] })
+    expect(made.status).toBe(400)
+    expect(String(made.body.error)).toContain('Pick who')
+  })
+  it('a scheduler cannot approve it or send it to the client here', async () => {
+    as(SCHEDULER)
+    expect((await upload({ decision: 'approve' })).status).toBe(403)
+    expect((await upload({ decision: 'client' })).status).toBe(403)
+    expect(items()).toHaveLength(0)
+  })
+  it('a manager approves on the spot: Ready to post', async () => {
+    as(AM)
+    const made = await upload({ decision: 'approve', title: 'Doors' })
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('approved_for_scheduling')
+    expect(made.body.message).toContain('Schedule page')
+  })
+  it('a manager sends it to the client: With client', async () => {
+    as(AM)
+    const made = await upload({ decision: 'client', note: 'Have a look' })
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('client_review')
+    expect(made.body.message).toContain('With client')
+  })
+})

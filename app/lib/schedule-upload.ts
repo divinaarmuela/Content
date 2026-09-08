@@ -68,6 +68,20 @@ export type UploadPostInput = {
   timezone?: string | null
   /** what to call the piece; derived from the file name when absent */
   title?: string | null
+  /**
+   * WHAT HAPPENS TO THE PIECE THE MOMENT IT IS UPLOADED (Post approval page,
+   * 8 Sep 2026 — "make it simple"):
+   *   'ask'     → Internal check, the named people are asked (anybody)
+   *   'approve' → Ready to post, in this person's name (managers only)
+   *   'client'  → With client (managers only)
+   *   absent    → a manager's is approved as before; anybody else's waits in
+   *               Draft for them to send it from the composer
+   */
+  decision?: 'ask' | 'approve' | 'client' | null
+  /** who is asked, for 'ask' */
+  reviewer_ids?: unknown
+  /** a line for whoever is asked, or for the client */
+  note?: string | null
 }
 
 export type UploadPostResult = {
@@ -229,6 +243,17 @@ export async function createPostFromFiles(
   const shapeProblem = slidesSatisfyType(contentType, slides)
   if (shapeProblem) throw new ComposeError([shapeProblem])
 
+  // a decision this person may not make is refused before a single row is
+  // written — a piece nobody wanted is worse than a refusal
+  if (input.decision === 'approve' || input.decision === 'client') {
+    if (!await mayPostStraightOut(user, { client_id: clientId } as ContentItem)) {
+      throw new AuthzError('Only an account manager or a super admin can approve a piece here — send it to one instead', 403)
+    }
+  }
+  if (input.decision === 'ask' && !(Array.isArray(input.reviewer_ids) && input.reviewer_ids.length > 0)) {
+    throw new ComposeError(['Pick who should approve it'])
+  }
+
   const title = titleForUpload({
     fileName: slides[0]?.name ?? null,
     caption: input.title ? String(input.title) : (input.caption ?? null),
@@ -273,16 +298,32 @@ export async function createPostFromFiles(
    * scheduler had chosen one. */
   const straightOut = mayPostWithoutApproval(
     actingRoles({ id: user.id, role: user.role }, current), signsOff)
-  if (straightOut) {
+  const reviewerIds = (Array.isArray(input.reviewer_ids) ? input.reviewer_ids : [])
+    .map(x => String(x ?? '')).filter(Boolean).slice(0, 20)
+  const note = String(input.note ?? '').trim().slice(0, 2000) || undefined
+  const decision = input.decision ?? (straightOut ? 'approve' : null)
+  if (decision) {
     try {
       current = await performTransition(user, item as never, 'internal_review', {
-        note: UPLOAD_ADHOC_REASON,
+        note: decision === 'ask' ? note : UPLOAD_ADHOC_REASON,
+        // 'ask': the "ready for review" note goes to the people named, not to
+        // every manager of the client
+        reviewerIds: decision === 'ask' ? reviewerIds : undefined,
+        // the manager is about to answer it themselves in the next line
+        skipAudiences: decision === 'ask' ? undefined : ['account_managers'],
       }) as unknown as ContentItem
     } catch (e) {
       // the media is saved either way; a piece that stayed at draft is a piece
       // somebody can still submit by hand, and losing the upload would not be
       // recoverable
       console.error('upload post — could not submit the new piece for review:', e)
+    }
+  }
+  if (decision === 'client' && String(current.status) === 'internal_review') {
+    try {
+      current = await performTransition(user, current as never, 'client_review', { note }) as unknown as ContentItem
+    } catch (e) {
+      console.error('upload post — could not send the new piece to the client:', e)
     }
   }
 
@@ -295,10 +336,10 @@ export async function createPostFromFiles(
    * piece waits at `internal_review` for the manager's check, which is what it
    * did before this change too.
    */
-  if (straightOut && String(current.status) === 'internal_review') {
+  if (decision === 'approve' && String(current.status) === 'internal_review') {
     try {
       current = await performTransition(user, current as never, 'approved_for_scheduling', {
-        note: UPLOAD_ADHOC_REASON,
+        note: note ?? UPLOAD_ADHOC_REASON,
         // the "ready for review" note went to the same people one line ago,
         // about a piece this person has just signed off themselves
         skipAudiences: ['account_managers'],
@@ -323,9 +364,13 @@ export async function createPostFromFiles(
     version_number: versionNumber,
     needs_approval: needsApproval,
     message: !needsApproval
-      ? 'Saved. This post can go out — nothing is waiting on anybody.'
-      : signsOff
-        ? 'Saved. Write the caption, pick the time, then send it to the client — they sign off every post.'
-        : 'Saved. Write the caption, pick the time, then send it to your account manager to approve.',
+      ? 'Approved — it is on the Schedule page, ready to book in.'
+      : decision === 'ask'
+        ? 'Sent for approval. It is in Internal check until they answer.'
+        : decision === 'client'
+          ? `Sent to ${client.name} — it is in With client until they answer.`
+          : signsOff
+            ? 'Saved. Write the caption, pick the time, then send it to the client — they sign off every post.'
+            : 'Saved. Write the caption, pick the time, then send it to your account manager to approve.',
   }
 }
