@@ -47,6 +47,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       // what the manager last sent back, so the card can show it beside the thread
       change_note: (item as { change_note?: string | null }).change_note ?? null,
       change_note_at: (item as { change_note_at?: string | null }).change_note_at ?? null,
+      // …and the post gate’s own note: the manager’s reason, or the words with the yes
+      posting_approval_state: (item as { posting_approval_state?: string | null }).posting_approval_state ?? null,
+      posting_approval_note: (item as { posting_approval_note?: string | null }).posting_approval_note ?? null,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

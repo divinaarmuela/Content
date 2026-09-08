@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { NETWORK_LABEL } from '../../lib/publish-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -676,5 +677,104 @@ export function DeleteDialog({ card, onClose, onDeleted }: {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+
+/**
+ * POSTED ELSEWHERE — a piece that went out by hand, marked so on the board.
+ *
+ * Owner, 8 Sep 2026: "sometimes approved assets don't post through here, it's
+ * posted through a different source — make sure it can be tagged and posted,
+ * and once things are posted the column should be updated too."
+ *
+ * The board's "Posted" move used to go straight to the transition, which
+ * refuses unless a platform is already marked posted ("Add a live link, or
+ * mark a platform posted in-app, before publishing") — so the press that
+ * looked like the answer was a dead end. This asks the two things the
+ * machine needs first: which network, and the link if there is one (a Story
+ * has none), writes the platform row through the same schedule route the
+ * item page uses, and THEN makes the move. Card lands in Posted.
+ */
+export function PostedElsewhereDialog({ card, onClose, onPosted }: {
+  card: BoardViewCard | null
+  onClose: () => void
+  onPosted?: () => void
+}) {
+  const [platform, setPlatform] = useState('instagram')
+  const [link, setLink] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { setLink(''); setPlatform('instagram') }, [card])
+
+  const post = async () => {
+    if (!card) return
+    setBusy(true)
+    try {
+      const url = link.trim()
+      const entry = await fetch(`/api/production/items/${card.id}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform,
+          scheduled_at: new Date().toISOString(),
+          ...(url ? { live_url: url } : { mark_posted: true }),
+        }),
+      })
+      if (!entry.ok) throw new Error(await readError(entry, 'Could not record where it went out'))
+      const moved = await fetch(`/api/production/items/${card.id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'published' }),
+      })
+      if (!moved.ok) throw new Error(await readError(moved, 'Could not mark it posted'))
+      toast.success(`Marked posted on ${NETWORK_LABEL[platform] ?? platform} — now in Posted`)
+      onClose()
+      onPosted?.()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not mark it posted')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>It went out — where?</DialogTitle>
+          <DialogDescription>
+            For a piece posted by hand or through another tool. Pick the network and paste the link if there is one; a Story has none, and that is fine.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="posted-platform">Network</Label>
+            <select
+              id="posted-platform"
+              value={platform}
+              onChange={e => setPlatform(e.target.value)}
+              className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]"
+            >
+              {Object.entries(NETWORK_LABEL).filter(([k]) => k !== 'x').map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="posted-link">Link to the live post <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id="posted-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://www.instagram.com/p/…"
+              className="rounded-inner border-border bg-surface" />
+            <p className="text-[12px] text-muted-foreground">
+              With a link, the post’s numbers and who liked it are read the same way as one we posted ourselves.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button disabled={busy} onClick={post} className={primary}>
+            {busy ? 'Marking…' : 'It’s posted'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

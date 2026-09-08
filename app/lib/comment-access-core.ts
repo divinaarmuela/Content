@@ -32,7 +32,10 @@ const FULL_ACCESS: Role[] = ['account_manager', 'super_admin']
  * sent back with the card. A client reads their own thread, of course.
  */
 export function canReadClientComments(role: Role | null | undefined): boolean {
-  return role === 'account_manager' || role === 'super_admin'
+  // …and the scheduler (8 Sep 2026): they sent the post, the client answered
+  // it, and "the scheduler should be able to see that". The item's own access
+  // rule still decides WHICH items they reach.
+  return role === 'account_manager' || role === 'super_admin' || role === 'scheduler'
 }
 
 /** The client-visible rows of a thread, for someone allowed to read them —

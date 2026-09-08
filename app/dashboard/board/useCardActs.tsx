@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { BOARD_COLUMNS, columnOf } from '../../lib/board-core'
 import type { BoardViewCard, BoardViewer, CardAction } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
-import { PostChangesDialog, SendBackDialog } from './BoardDialogs'
+import { PostChangesDialog, PostedElsewhereDialog, SendBackDialog } from './BoardDialogs'
 
 /**
  * ANSWERING A CARD — the one place the three answers are performed.
@@ -31,6 +31,7 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
   const [busyId, setBusyId] = useState<string | null>(null)
   const [sendBackFor, setSendBackFor] = useState<T | null>(null)
   const [postChangesFor, setPostChangesFor] = useState<T | null>(null)
+  const [postedFor, setPostedFor] = useState<T | null>(null)
 
   /** one move through the ordinary transition route */
   const transition = useCallback(async (card: T, to: string, label: string) => {
@@ -84,7 +85,11 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
         if (action.to === 'request_changes') setPostChangesFor(card)
         else void approvePost(card)
         return
-      case 'transition': void transition(card, action.to, action.label)
+      case 'transition':
+        // "Posted" needs to know where it went out before the machine will
+        // take the move — asked in a dialog, then moved (see BoardDialogs)
+        if (action.to === 'published') { setPostedFor(card); return }
+        void transition(card, action.to, action.label)
     }
   }, [transition, approvePost])
 
@@ -92,6 +97,7 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
     <>
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} onSent={onDone} />
       <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
+      <PostedElsewhereDialog card={postedFor} onClose={() => setPostedFor(null)} onPosted={onDone} />
     </>
   )
 

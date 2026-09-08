@@ -190,6 +190,20 @@ export default function NewPostDialog({
    * who could not answer. Only fetched for someone who has to ask.
    */
   const [approvers, setApprovers] = useState<{ id: string; name: string }[]>([])
+  /**
+   * WHAT WAS SAID about this post — the manager’s note when they sent it
+   * back, and the client’s comments from the portal. The scheduler who sent
+   * it used to have to find the item page to read either; the answer arrives
+   * where the question was asked. Re-read whenever the post’s status or the
+   * window’s own note changes, which is every time somebody answers.
+   */
+  type Said = {
+    change_note: string | null
+    posting_approval_state: string | null
+    posting_approval_note: string | null
+    comments: { id: string; body: string; author_name: string | null; created_at: string }[]
+  }
+  const [said, setSaid] = useState<Said | null>(null)
   const [approverId, setApproverId] = useState<string>('')
   /** a question that has to be answered before something is thrown away */
   const [confirm, setConfirm] = useState<'close' | 'delete' | null>(null)
@@ -374,6 +388,17 @@ export default function NewPostDialog({
   // …OR the pieces came through the board: approved there, posted here, no
   // second approval — the owner's rule of 8 Sep 2026
   const mayApprove = mayPostWithoutApproval(role, clientSignsOff) || target.boardApproved
+
+  useEffect(() => {
+    if (!target.post) { setSaid(null); return }
+    let cancelled = false
+    fetch(`/api/production/items/${encodeURIComponent(target.itemId)}/client-comments`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((json: Said | null) => { if (!cancelled) setSaid(json) })
+      .catch(() => { if (!cancelled) setSaid(null) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.itemId, target.post?.id, status, note])
 
   const clientIdOfPost = accounts[0]?.client_id ?? null
   useEffect(() => {
@@ -1216,6 +1241,27 @@ export default function NewPostDialog({
         {/* ── the answer, when this post is waiting on the person reading it ──
              The same gate as the item page, the same route, the same emails:
              one question, answered wherever it was found. */}
+        {/* ── what was said ── */}
+        {said && (said.posting_approval_note || said.change_note || said.comments.length > 0) && (
+          <div className="mx-3.5 mt-3.5 flex flex-col gap-2 rounded-inner border border-border bg-paper p-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What was said</p>
+            {said.posting_approval_note && (
+              <p className="text-[13px]">
+                <span className="font-semibold">{said.posting_approval_state === 'changes' ? 'Change asked for: ' : 'Note: '}</span>
+                {said.posting_approval_note}
+              </p>
+            )}
+            {said.change_note && said.change_note !== said.posting_approval_note && (
+              <p className="text-[13px]"><span className="font-semibold">Sent back: </span>{said.change_note}</p>
+            )}
+            {said.comments.slice(-5).map(c => (
+              <p key={c.id} className="text-[13px]">
+                <span className="font-semibold">{c.author_name ?? clientName ?? 'The client'}: </span>{c.body}
+              </p>
+            ))}
+          </div>
+        )}
+
         {status === 'pending' && mayApprove && (
           <div className="mx-3.5 mt-3.5 flex flex-col gap-2.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-3">
             <p className="text-[13px] font-semibold">
