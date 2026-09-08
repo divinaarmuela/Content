@@ -759,8 +759,12 @@ export default function NewPostDialog({
         // scroll to — so the panel scrolls inside itself instead
         className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[720px] flex-col overflow-y-auto overscroll-contain rounded-card bg-surface shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)]"
       >
-        {/* ── header ── */}
-        <div className="flex flex-wrap items-center gap-2.5 border-b border-border p-3.5">
+        {/* ── header ──
+            One row on anything wider than a phone. It used to wrap, and on a
+            laptop the close button landed alone on a second line with a blank
+            band above it — and the time chip, the one control people go
+            looking for, sat at the wrap point where it was easy to lose. */}
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-border p-3.5 sm:flex-nowrap">
           <Dropdown
             label={(
               <>
@@ -838,7 +842,7 @@ export default function NewPostDialog({
 
           {!reviewOnly && (
             <>
-              <span className="text-[13px] text-muted-foreground">on</span>
+              <span className="shrink-0 text-[13px] text-muted-foreground">on</span>
               <TimePicker
                 value={state.scheduledFor}
                 tz={tz}
@@ -851,7 +855,7 @@ export default function NewPostDialog({
             type="button"
             onClick={requestClose}
             aria-label="Close"
-            className="ml-auto flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
+            className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted"
           >
             <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
