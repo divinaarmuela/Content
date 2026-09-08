@@ -508,7 +508,13 @@ export default function WeekGrid({
                         role="dialog"
                         aria-label={`${o.count} more posts at this time`}
                         onClick={e => e.stopPropagation()}
-                        className="absolute right-0 top-6 z-30 flex w-[240px] flex-col gap-1 rounded-inner border border-border bg-popover p-1.5 shadow-lg"
+                        // opens UPWARD for anything in the evening: the grid clips at its
+                        // bottom edge, and a list that opened downward from an 8 pm post was
+                        // cut off after one row — seen on the live calendar, 8 Sep 2026
+                        className={cn(
+                          'absolute right-0 z-30 flex w-[240px] flex-col gap-1 rounded-inner border border-border bg-popover p-1.5 shadow-lg',
+                          o.top > 320 ? 'bottom-7' : 'top-6',
+                        )}
                       >
                         {hidden.map(p => (
                           <button
