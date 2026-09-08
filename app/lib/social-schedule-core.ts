@@ -1341,6 +1341,16 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     }
   }
 
+  // NO TIME MEANS PUBLISH NOW, further down (`buildPostBody` sets
+  // `publishNow`). The button above it says "Schedule", and the time pill
+  // still reads "Pick a time" — so a press meant to book something in put it
+  // straight on a client's live account. Deliberately posting now is its own
+  // menu item, and that path sets a real time (a minute out) before it gets
+  // here, so this guard never stands in its way.
+  if (!input.scheduledFor) {
+    problems.push('Pick a time — this post has none')
+  }
+
   if (input.scheduledFor) {
     const when = new Date(input.scheduledFor).getTime()
     const now = new Date(input.now as string).getTime()

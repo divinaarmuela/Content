@@ -595,8 +595,12 @@ describe('validateComposition', () => {
     expect(r.problems).toContain('That time has already gone — pick a later one')
   })
 
-  it('accepts a post with no time yet', () => {
-    expect(validateComposition({ ...good, scheduledFor: null }).ok).toBe(true)
+  it('refuses a post with no time — no time means publish NOW further down', () => {
+    // the button says "Schedule" and the pill says "Pick a time"; without this
+    // guard the press put the post straight on the client's live account
+    const r = validateComposition({ ...good, scheduledFor: null })
+    expect(r.ok).toBe(false)
+    expect(r.problems).toContain('Pick a time — this post has none')
   })
 
   it('asks for words where the channel is built on them', () => {
@@ -812,7 +816,9 @@ describe('the composer refuses what the publisher would refuse', () => {
     version: null,
     slides: [img(1)],
     caption: 'Some words',
-    scheduledFor: null,
+    // a real time: these cases are about the CHANNELS' own rules, and a post
+    // with no time is refused on its own account (see validateComposition)
+    scheduledFor: '2026-09-05T00:00:00.000Z',
     now: '2026-09-04T00:00:00.000Z',
   }
 
