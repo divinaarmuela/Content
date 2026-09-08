@@ -52,5 +52,11 @@ primary_region = "syd"
     path = "/health"
 
 [[vm]]
-  size = "shared-cpu-2x"
-  memory = "2gb"
+  # 4K is the agency's normal footage, and a 4K HDR master needs its colour
+  # converted before it can be posted — the slow part. On two SHARED cores a
+  # long one ran past the 45-minute limit and the person waited the full 45
+  # to be told nothing. Four dedicated cores cut that to roughly a quarter,
+  # and the machine still sleeps between jobs, so it is billed by the minute
+  # it works rather than by the hour it exists.
+  size = "performance-4x"
+  memory = "8gb"

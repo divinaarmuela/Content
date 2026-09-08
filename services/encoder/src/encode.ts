@@ -28,8 +28,13 @@ import {
 
 /** A source that will not download in ten minutes is not going to. */
 export const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000
-/** 45 minutes covers a 10-minute master at roughly 1.5x realtime, twice over. */
-export const ENCODE_TIMEOUT_MS = 45 * 60 * 1000
+/** 90 minutes. The old 45 assumed a 1080p master at roughly 1.5x realtime;
+ *  this agency shoots 4K, often HDR, where the colour conversion dominates
+ *  and a long clip could run past 45 and be killed with nothing to show for
+ *  the wait. The machine is four dedicated cores now, so 90 is generous
+ *  rather than routine — it exists to free the queue from a stuck ffmpeg,
+ *  not to cut an honest encode short. */
+export const ENCODE_TIMEOUT_MS = 90 * 60 * 1000
 /** The upload is one PUT of a file we already have; it should not need long. */
 export const UPLOAD_TIMEOUT_MS = 20 * 60 * 1000
 
