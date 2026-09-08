@@ -216,8 +216,17 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       {/* sonner defaults to LIGHT. On the dashboard's dark ground that put
           near-invisible text on a pale card, and a black block bottom-right
           where the toast should be. It follows the dashboard's own choice. */}
-      <Toaster theme={dark ? 'dark' : 'light'} />
-      <UploadTray />
+      {/* BOTH OF THESE LIVE OUTSIDE THE SHELL, and the Shell's root is where
+          `text-foreground` is set. Left as bare siblings they took the
+          marketing site's ink-on-cream text colour while their `bg-surface`
+          followed the dashboard's dark mode — dark text on a dark tray, the
+          "0 of 1 file · 3%" nobody could read on 8 Sep 2026. The wrapper
+          gives them the dashboard's own scope and colour; it is not
+          positioned, so the fixed panels inside it sit where they did. */}
+      <div className="dbx text-foreground">
+        <Toaster theme={dark ? 'dark' : 'light'} />
+        <UploadTray />
+      </div>
     </>
   )
 }
