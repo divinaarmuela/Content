@@ -107,13 +107,20 @@ export function hikerSource(key: string, base: string = BASE): FollowerSource {
     },
     async likers(mediaId) {
       const r = await get('/v1/media/likers', { id: mediaId })
-      if (!r.ok) return r
+      // NOBODY is an answer, not an error: see `commenters`
+      if (!r.ok) return r.error === 'http_404' ? { ok: true, value: [] } : r
       const list = parseLikers(r.value)
       return list ? { ok: true, value: list } : { ok: false, error: 'bad_likers' }
     },
     async commenters(mediaId, cursor) {
       const r = await get('/v1/media/comments/chunk', cursor ? { id: mediaId, max_id: cursor } : { id: mediaId })
-      if (!r.ok) return r
+      /* A POST WITH NO COMMENTS IS A 404 HERE. Read on 8 Sep 2026 against the
+       * reel that went out at 20:16: by/url 200, likers 200 (one liker),
+       * comments/chunk 404 `{"detail":"Entries not found"}` — three times in
+       * a row, while a post WITH comments answered 200. The whole read was
+       * marked failed and the post page said "http_404" for an evening. An
+       * empty page is the truth. */
+      if (!r.ok) return r.error === 'http_404' ? { ok: true, value: { people: [], next: null } } : r
       const page = parseCommentsChunk(r.value)
       return page ? { ok: true, value: page } : { ok: false, error: 'bad_comments' }
     },
