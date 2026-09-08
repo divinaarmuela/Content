@@ -539,8 +539,8 @@ describe('the encode ladder', () => {
   })
 
   it('spends the channel ceiling on a clip short enough to afford it', () => {
-    // a 20-second reel: 10 Mbps for 20s is 25 MB, nowhere near Instagram's 300
-    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(10_000)
+    // a 20-second reel: 20 Mbps for 20s is 50 MB, nowhere near Instagram's 300
+    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(20_000)
     expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(12_000)
     expect(encodeTargetFor('twitter', undefined, 20)!.maxrateKbps).toBe(8_000)
   })

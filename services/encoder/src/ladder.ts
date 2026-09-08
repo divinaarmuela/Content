@@ -271,7 +271,7 @@ export function targetProblem(target: Partial<EncodeTarget> | null | undefined):
 /**
  * Everything ffmpeg is told, in order.
  *
- * `-crf 18` with a `-maxrate` ceiling is constrained quality: an easy clip
+ * `-crf 16` with a `-maxrate` ceiling is constrained quality: an easy clip
  * spends less than the ceiling, a hard one is held at it, and neither
  * overruns the channel's size limit because the ceiling was derived from it.
  *
@@ -283,7 +283,14 @@ export function targetProblem(target: Partial<EncodeTarget> | null | undefined):
  * with the ceiling nowhere near binding — so the number holding quality
  * down was this one, and nothing else. 18 costs roughly 40 MB on the same
  * clip, still a seventh of what Instagram takes, and buys margin exactly
- * where 20 gets caught out: grain, dark gradients, and fast motion.
+ * where 20 gets caught out: grain, dark gradients, and fast motion. It went
+ * again to 16 the same evening, for the same reason and with better evidence:
+ * a 4K event clip encoded at 18 came out at 9,909 kbps against a 10,000
+ * ceiling — pressed against the wall, so quality was being decided by OUR
+ * limit rather than by the quality target. Nothing here can overflow the
+ * channel: `budgetedMaxrateKbps` derives the ceiling from the channel's own
+ * size limit and the clip's real length, so the worst case stays under
+ * 255 MB against Instagram's 300 whatever CRF asks for.
  *
  * `-g` is two seconds of frames — the keyframe interval every platform's
  * re-encoder is happiest with — and `-sc_threshold 0` stops libx264 adding
@@ -310,9 +317,19 @@ export function ffmpegArgs(input: {
     // -- picture ---------------------------------------------------------
     '-c:v', 'libx264',
     '-profile:v', 'high',
-    '-level', '4.1',
-    '-preset', 'medium',
-    '-crf', '18',
+    /* THE LEVEL MUST FOLLOW THE FRAME RATE. Level 4.1 does not cover 1080p
+     * above 30 fps — 1080p50 and 1080p60 need 4.2. It was hard-coded 4.1
+     * while everything was capped at 30, which was correct; the moment the
+     * cap went to 60 (8 Sep 2026) every 50 fps copy carried a label saying
+     * "30 fps maximum". Instagram accepted one anyway, but a strict decoder
+     * is entitled to refuse it. */
+    '-level', fps > 30 ? '4.2' : '4.1',
+    // `slow` over `medium`: the same CRF and the same size, spent better —
+    // libx264 simply looks harder for the cheap way to describe each frame.
+    // It costs encode TIME, and no one is waiting: copies are made when the
+    // media is attached, days before the posting time.
+    '-preset', 'slow',
+    '-crf', '16',
     '-maxrate', `${Math.round(target.maxrateKbps)}k`,
     '-bufsize', `${Math.round(target.bufsizeKbps)}k`,
     // lanczos because a 4K master downscaled with the default filter looks

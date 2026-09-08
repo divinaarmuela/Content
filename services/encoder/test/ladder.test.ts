@@ -97,15 +97,29 @@ describe('the ffmpeg arguments', () => {
     source: { width: 3840, height: 2160, fps: 25, durationSec: 20 },
   })
 
-  it('is H.264 High at level 4.1, never HEVC', () => {
+  it('is H.264 High at level 4.1 for 30 fps and under, never HEVC', () => {
     expect(arg(args, '-c:v')).toBe('libx264')
     expect(arg(args, '-profile:v')).toBe('high')
     expect(arg(args, '-level')).toBe('4.1')
     expect(args).not.toContain('libx265')
   })
 
+  it('moves to level 4.2 above 30 fps, which 4.1 does not cover', () => {
+    // 1080p50 and 1080p60 are outside Level 4.1. Labelling one 4.1 is a lie a
+    // strict decoder may refuse — and every copy carried it for the hours
+    // between raising the frame-rate cap and noticing.
+    const fast = ffmpegArgs({
+      inputPath: '/tmp/x/source',
+      outputPath: '/tmp/x/instagram.mp4',
+      target: { ...instagram, maxFps: 60 },
+      source: { width: 1920, height: 1080, fps: 50, durationSec: 20 },
+    })
+    expect(arg(fast, '-r')).toBe('50')
+    expect(arg(fast, '-level')).toBe('4.2')
+  })
+
   it('is constrained quality, not a fixed bitrate', () => {
-    expect(arg(args, '-crf')).toBe('18')
+    expect(arg(args, '-crf')).toBe('16')
     expect(arg(args, '-maxrate')).toBe('10000k')
     expect(arg(args, '-bufsize')).toBe('20000k')
     expect(args).not.toContain('-b:v')

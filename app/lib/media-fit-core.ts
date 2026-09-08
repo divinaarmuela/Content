@@ -907,8 +907,20 @@ export type EncodeLadder = {
  *
  * 8-12 Mbps is where a 1080p H.264 delivery file stops looking obviously
  * compressed on a phone, and it is roughly what each platform's own guidance
- * asks for. Nothing here is a target — a still, easy clip at CRF 20 spends
+ * asks for. Nothing here is a target — a still, easy clip at CRF 16 spends
  * far less — it is the most a hard one may spend.
+ *
+ * INSTAGRAM IS 20, AND THAT IS DELIBERATE. A 4K event clip at CRF 18 came
+ * out at 9,909 kbps against the old 10,000 ceiling on 8 Sep 2026 — the
+ * encoder wanted about 12.4 and was stopped, so the picture was being
+ * decided by this number instead of by the quality target, which is exactly
+ * backwards. Instagram publishes no bitrate limit at all, only 300 MB, and
+ * 300 MB over that clip's 108 seconds affords about 18.7 Mbps. At 20 the
+ * ceiling effectively never binds and CRF alone decides, which is the whole
+ * point of constrained quality. Nothing can overflow: `encodeTargetFor`
+ * takes the SMALLER of this and what the channel's size limit affords over
+ * the clip's real length, so a long clip is clamped far below it (a
+ * ten-minute Reel gets 3.2 Mbps either way).
  *
  * 60 fps where the channel's OWN DOCUMENTATION says it takes it, and 30
  * everywhere else — see docs/PLATFORM_VIDEO_SPECS.md for the page and the
@@ -939,7 +951,7 @@ export type EncodeLadder = {
  * is the standard they publish, not a ceiling — so 160 stays.
  */
 export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
-  instagram: { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
+  instagram: { maxrateCapKbps: 20_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
