@@ -163,6 +163,19 @@ docs/PROJECT_STATE.md  current status — read this
 
 ## Conventions
 
+- **NEVER ASSUME. CHECK, THEN SAY.** Every claim about how this system behaves
+  is read out of the code, the database, the live API or the logs BEFORE it is
+  said — never from memory, never from what the comment says, never from what
+  a subagent reported. Say which check was run and what came back; where a
+  thing was not checked, say so plainly instead of rounding it up to certainty.
+  This has already cost real quality: the encoder's `videoKbps: 1745` was taken
+  as normal for two days, until the `encode_jobs` row was actually read and its
+  `target_source: "fallback"` and `duration_sec: 121.92` proved a two-minute
+  video had been budgeted as a fifteen-minute one. A comment in
+  `link-preview-core.ts` claiming Meta's oEmbed needed no token was wrong the
+  same way — one real request returned "Provide valid app ID". The code lies,
+  the comments lie, memory lies; the running system does not.
+
 - **Business logic lives in pure functions** (`workflow-core.ts` is the model:
   no I/O, fully unit-tested). Wrappers do the database work.
 - **Race conditions are designed out, not retried around.** Three patterns in use:
