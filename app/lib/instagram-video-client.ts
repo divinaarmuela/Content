@@ -63,11 +63,31 @@ export function useInstagramVideo(url: string | undefined, wanted: boolean, toke
       p = ask(url, token, force)
       answers.set(code, p)
     }
-    p.then(a => {
+    /* THE FIRST ASK TAKES HALF A MINUTE. Fetching the video is a real piece
+     * of work, and the first answer for a post is usually "not yet". The card
+     * used to take that as final: it showed the still, dropped the sound
+     * control (there being no video to unmute), and never looked again — so
+     * the post sat there looking silent until somebody reloaded the page.
+     * It waits instead, quietly, for about a minute. `answers` is cleared for
+     * this post on a miss so the next look asks again rather than replaying
+     * the same "not yet". */
+    let tries = 0
+    const settle = (a: VideoAnswer) => {
       if (cancelled) return
-      setVideo(a.video)
-      setSettled(true)
-    })
+      if (a.video !== null) { setVideo(a.video); setSettled(true); return }
+      // 'off' means the feature is not switched on, 'not_video' means there is
+      // nothing to play — neither improves by asking again
+      if (a.reason !== 'unavailable' || tries >= 12) { setSettled(true); return }
+      tries += 1
+      answers.delete(code)
+      window.setTimeout(() => {
+        if (cancelled) return
+        const next = ask(url, token, false)
+        answers.set(code, next)
+        next.then(settle)
+      }, 5000)
+    }
+    p.then(settle)
     return () => { cancelled = true }
   }, [code, url, wanted, token, tick])
 
