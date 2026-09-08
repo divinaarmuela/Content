@@ -120,7 +120,9 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
   if (role === 'scheduler') {
-    return [...PERSONAL_PAGES, '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
+    // Schedule, not Scheduler: a scheduler uploads and sends from Schedule;
+    // the Scheduler board is where a MANAGER answers (8 Sep 2026)
+    return [...PERSONAL_PAGES, SCHEDULE_PAGE].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable

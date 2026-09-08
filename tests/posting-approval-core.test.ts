@@ -92,8 +92,8 @@ describe('the hat checks', () => {
     expect(maySendPostApproval(['super_admin'])).toBe(true)
     expect(maySendPostApproval(['account_manager', 'scheduler'])).toBe(true)
   })
-  it('an account manager holding no scheduling — and a client — may NOT send', () => {
-    expect(maySendPostApproval(['account_manager'])).toBe(false)
+  it('an account manager may send too — on to the client, after their review (8 Sep 2026); a client may not', () => {
+    expect(maySendPostApproval(['account_manager'])).toBe(true)
     expect(maySendPostApproval(['client'])).toBe(false)
     expect(maySendPostApproval([])).toBe(false)
   })

@@ -1005,7 +1005,7 @@ export const APPROVAL_LINE: Record<SocialPostStatus, string> = {
  * could post straight out still gets it under the arrow, because wanting a
  * second pair of eyes is not the same as needing permission.
  */
-export const SEND_FOR_REVIEW = 'Send for review'
+export const SEND_FOR_REVIEW = 'Send for approval'
 
 /**
  * The footer pill, for the person actually looking at it.

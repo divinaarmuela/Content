@@ -49,12 +49,11 @@ export const NAV_MAIN: NavItem[] = [
   // am I planning, what is mine to edit, what is mine to post
   { href: '/dashboard/production', label: 'Production',       icon: Camera },
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
-  // THE SCHEDULER PAGE IS OFF THE SIDEBAR (owner's decision, 8 Sep 2026).
-  // It was the approval step, and there is no approval step any more: anyone
-  // who can reach the dashboard schedules straight from Social -> Schedule.
-  // The ROUTE still answers, because /dashboard/scheduler/calendar is linked
-  // from the Overview, Analytics, the Inbox and the getting-started list, and
-  // the board itself is still reachable by anyone holding a direct link.
+  // THE SCHEDULER PAGE IS THE MANAGER'S APPROVAL BOARD: what schedulers have
+  // sent, waiting on a yes. It is on a manager's sidebar and NOT on a
+  // scheduler's — theirs is Schedule, where they upload and send
+  // (page-access-core decides who sees it).
+  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
 ]
@@ -97,7 +96,7 @@ export const NAV_TOOLS: NavItem[] = [
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/files', '/dashboard/audience'] },
-  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
+  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },
 ]

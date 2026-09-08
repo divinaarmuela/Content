@@ -235,23 +235,25 @@ describe('a planned post, end to end', () => {
     expect((await bookIn(id)).status).toBe(409)
     expect(jobs()).toHaveLength(0)
 
-    // approve through the EXISTING item route, as the account manager
+    // approve through the EXISTING item route, as the account manager —
+    // and THE YES BOOKS IT IN (8 Sep 2026): the post carries a time, so the
+    // approval hands it to the provider at that time with nothing else to
+    // press. The provider is stubbed by PUBLISH_DRY_RUN.
     as(AM)
     const answered = await approve('approve')
     expect(answered.status).toBe(200)
     expect(answered.body.posting_approval_state).toBe('approved')
-    // …and the calendar tile followed it without anybody touching the post
-    expect(row(id).status).toBe('approved')
-
-    // book it in — the provider is stubbed by PUBLISH_DRY_RUN
-    as(SCHEDULER)
-    const booked = await bookIn(id)
-    expect(booked.status).toBe(200)
-    expect(booked.body.post.status).toBe('scheduled')
+    expect(row(id).status).toBe('scheduled')
     expect(jobs()).toHaveLength(1)
     expect(jobs()[0].content_item_id).toBe(ITEM)
     expect(jobs()[0].targets[0]).toMatchObject({ platform: 'instagram', accountId: 'prov-1' })
-    expect(booked.body.post.publish_job_ids).toEqual([jobs()[0].id])
+    expect(row(id).publish_job_ids).toEqual([jobs()[0].id])
+
+    // a second Schedule press is told it is already on its way
+    as(SCHEDULER)
+    const again = await bookIn(id)
+    expect(again.status).toBe(409)
+    expect(jobs()).toHaveLength(1)
 
     // move it: the provider is holding this one, so the old job is pulled back
     const later = IN_THREE_DAYS()
@@ -285,8 +287,9 @@ describe('a planned post, end to end', () => {
     await approve('approve')
     as(SCHEDULER)
 
+    // the approval above booked it in; nothing else was pressed
     const when = row(id).scheduled_for as string
-    expect((await bookIn(id)).status).toBe(200)
+    expect(row(id).status).toBe('scheduled')
 
     const entries = fake.rows('schedule_entries') as any[]
     expect(entries).toHaveLength(1)
@@ -334,13 +337,16 @@ describe('a planned post, end to end', () => {
     await approve('approve')
     as(SCHEDULER)
 
+    // the yes booked it in (8 Sep 2026), and a booked post is not edited in
+    // place: the press is refused and the approval it carries is untouched.
+    // Take it off the calendar first, then change it, then send it again.
     const edited = await json(one.PATCH(
       new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: 'A different line' }) }),
       params(id),
     ))
-    expect(edited.status).toBe(200)
-    expect(edited.body.post.status).toBe('pending')
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('pending')
+    expect(edited.status).toBe(409)
+    expect(row(id).status).toBe('scheduled')
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
   })
 
   // THE CLICK THAT USED TO COST A CLIENT'S APPROVAL.
@@ -380,8 +386,10 @@ describe('a planned post, end to end', () => {
       params(id),
     ))
 
-    expect(unchanged.status).toBe(200)
-    expect(unchanged.body.post.status).toBe('approved')
+    // the yes booked it in (8 Sep 2026); a booked post is not re-saved, and
+    // the press must not cost the approval or a single field
+    expect(unchanged.status).toBe(409)
+    expect(row(id).status).toBe('scheduled')
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
     // …and nothing was quietly lost on the way through, either
     expect(row(id).caption).toBe('Hello everyone')
@@ -402,8 +410,10 @@ describe('a planned post, end to end', () => {
       new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: '' }) }),
       params(id),
     ))
-    expect(cleared.status).toBe(200)
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('pending')
+    // booked in by the yes (8 Sep 2026): refused rather than re-approved
+    expect(cleared.status).toBe(409)
+    expect(row(id).caption).toBe('Hello everyone')
+    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
   })
 
   it('keeps the approval when only the time moves', async () => {
@@ -414,7 +424,8 @@ describe('a planned post, end to end', () => {
     as(SCHEDULER)
     await moveTo(id, IN_THREE_DAYS())
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-    expect(row(id).status).toBe('approved')
+    // booked by the yes, and still booked after the move
+    expect(row(id).status).toBe('scheduled')
   })
 
   it('mirrors "changes requested" onto the tile', async () => {
@@ -618,13 +629,15 @@ describe('two people booking the same post', () => {
     await approve('approve')
     as(SCHEDULER)
 
-    const [a, b] = await Promise.all([bookIn(id), bookIn(id)])
-    const wins = [a, b].filter(r => r.status === 200)
-    expect(wins).toHaveLength(1)
+    // the yes booked it (8 Sep 2026): one set of jobs exists before anybody
+    // presses anything, and every press after is told plainly
     expect(jobs()).toHaveLength(1)
-    const loser = [a, b].find(r => r.status !== 200)!
-    expect(loser.status).toBe(409)
-    expect(String(loser.body.error)).toMatch(/already/i)
+    const [a, b] = await Promise.all([bookIn(id), bookIn(id)])
+    expect(jobs()).toHaveLength(1)
+    for (const r of [a, b]) {
+      expect(r.status).toBe(409)
+      expect(String(r.body.error)).toMatch(/already/i)
+    }
   })
 
   it('starts one post per item, however many times the button is pressed', async () => {
@@ -790,11 +803,13 @@ describe('cancelling a post', () => {
     // the yes belonged to that post, and that post is gone
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('draft')
 
+    // the job the yes made goes with it
+    expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
     // …so the ad-hoc door is shut again for this item
     const adHoc = await adhocFor()
     expect(adHoc.status).toBe(409)
     expect(adHoc.body.error).toBe('Send the post for approval first')
-    expect(jobs()).toHaveLength(0)
+    expect(jobs().filter(j => j.status !== 'cancelled')).toHaveLength(0)
   })
 
   it('leaves the item alone when the post was never sent', async () => {
@@ -869,7 +884,8 @@ describe('roles', () => {
     const booked = await bookIn(id)
     expect(booked.status).toBe(403)
     expect(booked.body.error).toBe('Only a scheduler or an account manager can book a post to go out')
-    expect(jobs()).toHaveLength(0)
+    // the one job there is was made by the manager's yes, not by the editor
+    expect(jobs()).toHaveLength(1)
   })
 
   it('refuses a client outright', async () => {
@@ -1081,10 +1097,9 @@ describe('the cover picture reaches the provider', () => {
     const id = made.body.post.id as string
     await post(id)
     as(AM)
-    await approve('approve')
+    await approve('approve')          // the yes books it in (8 Sep 2026)
     as(SCHEDULER)
-    const booked = await bookIn(id)
-    expect(booked.status).toBe(200)
+    expect(row(id).status).toBe('scheduled')
     return (jobs()[0] as any).targets as any[]
   }
 

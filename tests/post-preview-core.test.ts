@@ -486,7 +486,10 @@ describe('the composer previews the post it is about to send', () => {
   it('sends for review through the approval that already exists', () => {
     expect(src).toContain('/send')
     expect(src).toContain("mode: what === 'direct' ? 'direct' : 'approval'")
-    expect(src).toContain('client_too: clientSignsOff')
+    // the client is asked by the MANAGER after their review, never straight
+    // from a scheduler's send (8 Sep 2026)
+    expect(src).toContain('client_too: false')
+    expect(src).toContain('reviewer_ids: [approverId]')
     // and answers through the item's own posting-approval route
     expect(src).toContain('/posting-approval')
   })

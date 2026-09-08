@@ -92,6 +92,13 @@ export type PostingApprovalInput = {
   /** send only: also route it to the client's portal for their sign-off */
   client_too?: boolean
   /**
+   * send only: WHO is being asked — "AM or whoever they tag". These people
+   * are written on the card as `asked_ids`, so the card is on their Overview
+   * and their Scheduler board and nobody else's, and they are the ones
+   * emailed. Empty means the old default: every manager on the client.
+   */
+  reviewer_ids?: string[]
+  /**
    * send only: this person is CLEARING the post themselves — the owner's
    * "schedule without approval".
    *
@@ -137,7 +144,7 @@ async function previewFacts(item: ApprovableItem): Promise<{
 }
 
 /** the client's assigned account managers (super admins included), active only */
-async function clientManagers(clientId: string): Promise<{ id: string; email: string; name: string }[]> {
+export async function clientManagers(clientId: string): Promise<{ id: string; email: string; name: string }[]> {
   const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
   const joined = await attachOne(links, 'team_user_id', 'team_users',
     ['id', 'email', 'name', 'role', 'active_status'])
@@ -145,6 +152,14 @@ async function clientManagers(clientId: string): Promise<{ id: string; email: st
     .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean } | null)
     .filter((u): u is { id: string; email: string; name: string; role: string; active_status: boolean } =>
       !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status)
+}
+
+/** named people, by id — the reviewers a scheduler picked */
+async function peopleById(ids: readonly string[]): Promise<{ id: string; email: string; name: string }[]> {
+  const want = ids.map(String).filter(Boolean).slice(0, 20)
+  if (want.length === 0) return []
+  return table<TeamUserRow>('team_users')
+    .list({ where: u => want.includes(u.id) && u.active_status })
 }
 
 /** the people holding the scheduling of this item, plus its owner */
@@ -223,6 +238,13 @@ export async function actOnPostingApproval(
     patch.posting_approved_at = null
     patch.posting_approval_note = null
     if (input.client_too !== undefined) patch.posting_client_required = input.client_too === true
+    // asking somebody is assigning them (asked-core): the named reviewers go
+    // on the card in the same write, so it is theirs and nobody else's
+    const reviewers = (input.reviewer_ids ?? []).map(String).filter(Boolean).slice(0, 20)
+    if (reviewers.length > 0) {
+      patch.asked_ids = reviewers
+      patch.asked_at = new Date().toISOString()
+    }
   }
   if (input.action === 'approve') {
     patch.posting_approved_by = actor.id
@@ -294,9 +316,11 @@ export async function actOnPostingApproval(
     const facts = await previewFacts(item)
     const stamp = new Date().toISOString()
     if (input.action === 'send') {
-      // the approver is the client's account manager; client_too additionally
-      // surfaces it on the portal, where portal-data reads the same columns
-      const managers = await clientManagers(item.client_id)
+      // the approver is whoever was named, else the client's account
+      // managers; client_too additionally surfaces it on the portal, where
+      // portal-data reads the same columns
+      const named = (input.reviewer_ids ?? []).filter(Boolean)
+      const managers = named.length > 0 ? await peopleById(named) : await clientManagers(item.client_id)
       for (const m of managers) {
         if (m.id === actor.id) continue
         await notify({

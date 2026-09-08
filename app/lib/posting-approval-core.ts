@@ -126,7 +126,10 @@ export function stateAfterPostEdit(current: unknown): PostingApprovalState | nul
  *  handed it, whatever their title), the item's owner (who wears 'editor'),
  *  or a super admin. */
 export function maySendPostApproval(hats: readonly Role[]): boolean {
-  return hats.includes('scheduler') || hats.includes('editor') || hats.includes('super_admin')
+  // …and the account manager: after reviewing a scheduler's post they send
+  // it ON to the client (`client_too`), which is a send
+  return hats.includes('scheduler') || hats.includes('editor')
+    || hats.includes('account_manager') || hats.includes('super_admin')
 }
 
 /** May these hats APPROVE the post (or ask for changes)? The client's account

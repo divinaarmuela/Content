@@ -179,6 +179,15 @@ export default function NewPostDialog({
   /** the reviewer's box, when this person is being asked to decide */
   const [changeNote, setChangeNote] = useState('')
   const [asking, setAsking] = useState(false)
+  /**
+   * WHO IS ASKED. A scheduler sends the post to a named account manager —
+   * "AM or whoever they tag" — picked here, defaulting to the client's first
+   * manager. The list is the people the server will accept a yes from
+   * (`/api/social/schedule/approvers`), so the picker cannot name somebody
+   * who could not answer. Only fetched for someone who has to ask.
+   */
+  const [approvers, setApprovers] = useState<{ id: string; name: string }[]>([])
+  const [approverId, setApproverId] = useState<string>('')
   /** a question that has to be answered before something is thrown away */
   const [confirm, setConfirm] = useState<'close' | 'delete' | null>(null)
   const card = useRef<HTMLDivElement>(null)
@@ -360,6 +369,23 @@ export default function NewPostDialog({
   // approval before it can post" and "Send for review" beside a server that
   // would have let them post straight out.
   const mayApprove = mayPostWithoutApproval(role, clientSignsOff)
+
+  const clientIdOfPost = accounts[0]?.client_id ?? null
+  useEffect(() => {
+    if (mayApprove || !clientIdOfPost) return
+    let cancelled = false
+    fetch(`/api/social/schedule/approvers?clientId=${encodeURIComponent(clientIdOfPost)}`)
+      .then(r => (r.ok ? r.json() : { people: [] }))
+      .then((json: { people?: { id: string; name: string }[] }) => {
+        if (cancelled) return
+        const list = json.people ?? []
+        setApprovers(list)
+        setApproverId(cur => (cur && list.some(pp => pp.id === cur) ? cur : (list[0]?.id ?? '')))
+      })
+      .catch(() => { if (!cancelled) setApprovers([]) })
+    return () => { cancelled = true }
+  }, [mayApprove, clientIdOfPost])
+
   const canPublish = role ? roleMayPublish(role) : false
   /**
    * "Schedule" or "Post now" — the words have to match what pressing it does.
@@ -622,17 +648,23 @@ export default function NewPostDialog({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: what === 'direct' ? 'direct' : 'approval',
-            // a client who signs every post off is one of the people this
-            // review is FOR — the same flag the item page sends, so the
-            // portal shows it in their "waiting on you" pile
-            ...(what === 'send' ? { client_too: clientSignsOff } : {}),
+            // the client is asked by the MANAGER, after their own review —
+            // never straight from a scheduler's send
+            ...(what === 'send' ? { client_too: false } : {}),
+            // the person this is sent to — "AM or whoever they tag"
+            ...(what === 'send' && approverId ? { reviewer_ids: [approverId] } : {}),
           }),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new ComposeProblem(json)
         setNote(what === 'direct'
           ? 'Approved by you and booked in with the channel.'
-          : sentForReviewLine(clientSignsOff ? (clientName || 'the client') : null))
+          : (() => {
+              const who = approvers.find(pp => pp.id === approverId)?.name
+              return who
+                ? `Sent to ${who}. Once they approve it, it is booked in for the time you chose — nothing else to press.`
+                : sentForReviewLine(null)
+            })())
         return
       }
       if (what === 'now') {
@@ -663,6 +695,28 @@ export default function NewPostDialog({
    * a second gate. The pill above the button is live, so a yes given here
    * changes it without a refresh — and so does a yes given anywhere else.
    */
+  /** the manager's third answer: pass it to the client for THEIR yes. The
+   *  post stays pending; the client sees it on the portal and can approve
+   *  or leave a comment, and their yes books it in. */
+  const sendToClient = async () => {
+    if (!state.postId) return
+    setBusy(true); setProblems([]); setNote(null)
+    try {
+      const res = await fetch(`/api/social/schedule/${state.postId}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'approval', client_too: true }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new ComposeProblem(json)
+      setNote(`Sent to ${clientName || 'the client'}. They can approve it or leave a comment on their portal; their yes books it in.`)
+    } catch (e) {
+      setProblems(problemsOf(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const decide = async (action: 'approve' | 'request_changes') => {
     const words = changeNote.trim()
     if (action === 'request_changes' && !words) {
@@ -681,7 +735,9 @@ export default function NewPostDialog({
       setChangeNote('')
       setAsking(false)
       setNote(action === 'approve'
-        ? 'Approved. Whoever built this post has been told, and it can be booked in now.'
+        ? (state.scheduledFor
+          ? `Approved — booked in for ${formatInZone(state.scheduledFor, tz, 'full') ?? clockPillLabel(state.scheduledFor, tz)}. Whoever built it has been told.`
+          : 'Approved. Whoever built this post has been told.')
         : 'Sent back with your note. Whoever built this post has been told.')
     } catch (e) {
       setProblems(problemsOf(e))
@@ -1158,7 +1214,10 @@ export default function NewPostDialog({
         {status === 'pending' && mayApprove && (
           <div className="mx-3.5 mt-3.5 flex flex-col gap-2.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-3">
             <p className="text-[13px] font-semibold">
-              This post is waiting on you. Look at it above, then say yes or say what to change.
+              This post is waiting on you. Look at it above, then approve it, send it to the client, or say what to change.
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              Approve and it is booked in for {state.scheduledFor ? (formatInZone(state.scheduledFor, tz, 'full') ?? clockPillLabel(state.scheduledFor, tz)) : 'the chosen time'} — nothing else to press.
             </p>
             {asking ? (
               <>
@@ -1197,6 +1256,14 @@ export default function NewPostDialog({
                 >
                   <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden />
                   Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !state.postId}
+                  onClick={() => void sendToClient()}
+                  className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold disabled:opacity-60"
+                >
+                  Send to {clientName || 'the client'}
                 </button>
                 <button
                   type="button"
@@ -1240,7 +1307,20 @@ export default function NewPostDialog({
             <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>
           )}
 
-          <div className="ml-auto flex items-center">
+          <div className="ml-auto flex items-center gap-2">
+            {primary.key === 'send' && !mayApprove && approvers.length > 0 && (
+              <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                <span>Ask</span>
+                <select
+                  value={approverId}
+                  onChange={e => setApproverId(e.target.value)}
+                  aria-label="Who approves this post"
+                  className="min-h-11 max-w-[180px] rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-foreground"
+                >
+                  {approvers.map(pp => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                </select>
+              </label>
+            )}
             {primary.key === 'none' ? (
               <span className="text-[13px] font-semibold text-muted-foreground">{primary.label}</span>
             ) : (

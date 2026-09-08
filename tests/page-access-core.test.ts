@@ -82,11 +82,11 @@ describe('defaultAllows — one page per role', () => {
     }
   })
 
-  it('keeps a scheduler on Scheduler and Schedule', () => {
+  it('keeps a scheduler on Schedule — the Scheduler board is the manager’s (8 Sep 2026)', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
-    expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
     for (const href of [
+      '/dashboard/scheduler',
       '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
       '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',
     ]) {
@@ -174,7 +174,7 @@ describe('canSeePage — a grant is per person and only ever adds', () => {
 
   it('cannot take away what the ladder already gave', () => {
     expect(canSeePage('editor', '/dashboard/editor', [])).toBe(true)
-    expect(canSeePage('scheduler', '/dashboard/scheduler', [])).toBe(true)
+    expect(canSeePage('scheduler', SCHEDULE_PAGE, [])).toBe(true)
     expect(canSeePage('account_manager', '/dashboard/clients', [])).toBe(true)
   })
 

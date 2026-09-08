@@ -31,6 +31,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         note: typeof body.note === 'string' ? body.note : undefined,
         client_too: typeof body.client_too === 'boolean' ? body.client_too : undefined,
         mode: body.mode === 'direct' ? 'direct' : 'approval',
+        reviewer_ids: Array.isArray(body.reviewer_ids)
+          ? (body.reviewer_ids as unknown[]).map(String).filter(Boolean).slice(0, 20)
+          : undefined,
       })
       return NextResponse.json({ post })
     } catch (e) {

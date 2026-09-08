@@ -28,7 +28,6 @@
  */
 
 import { publishBlockReason, parseApprovalState } from './posting-approval-core'
-import { TEAM_ROLES } from './identity-core'
 import {
   LIVE_JOB_STATUSES, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
   type Platform, type PostKind, type PostOptions,
@@ -145,22 +144,25 @@ export function mayPostWithoutApproval(
   who: string | null | undefined | readonly string[],
   clientSignsOff: boolean | null | undefined,
 ): boolean {
-  /* NO APPROVAL STEP. The owner's decision on 8 Sep 2026: "anyone that has
-   * access to dashboard can schedule it for now — no approval whatsoever."
+  /* THE PROPER ONE (owner, 8 Sep 2026, after a false start the same evening):
    *
-   * This used to be the gate: only an account manager or a super admin could
-   * post without asking, and a client marked `client_approval_required` put
-   * everyone back on the full flow. BOTH are gone. Every team role posts
-   * straight out, and the client's sign-off flag no longer blocks anyone —
-   * it stays on the record, and "Send for review" stays in the menu for
-   * anybody who wants a second pair of eyes, but nothing requires it.
+   *   scheduler   -> uploads the pieces on Schedule and SENDS them to an
+   *                  account manager — "make sure they ask for approval to
+   *                  AM or whoever they tag". Never posts straight out.
+   *   AM / admin  -> reviews, then either approves (it is booked in at the
+   *                  scheduler's chosen time, nothing else to press) or sends
+   *                  it on to the client for their yes.
+   *   client      -> on the portal: approve, or leave a comment. Their yes
+   *                  is asked for BY the manager — `clientSignsOff` is not a
+   *                  gate on the manager any more, which is why it is read
+   *                  and ignored here. It is kept in the signature because
+   *                  the composer still says it out loud.
    *
-   * `clientSignsOff` is kept in the signature deliberately, not deleted: it
-   * is still read all over the composer for what it SAYS, and reinstating the
-   * gate is one line here rather than a hunt through five files. */
+   * So the answer is the hat: an account manager or a super admin posts
+   * without asking; everyone else asks. */
   void clientSignsOff
   const hats = typeof who === 'string' ? [who] : Array.isArray(who) ? who.map(String) : []
-  return hats.some(h => (TEAM_ROLES as readonly string[]).includes(h))
+  return hats.includes('account_manager') || hats.includes('super_admin')
 }
 
 /**

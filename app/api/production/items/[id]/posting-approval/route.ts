@@ -35,9 +35,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // the calendar's tile is the same approval seen from the other side —
     // mirror it there before answering, so a person watching Schedule sees
     // the tile change as the approval lands rather than on the next refresh
-    const { syncFromItem } = await import('../../../../../lib/social-schedule')
+    const { syncFromItem, bookApprovedPosts } = await import('../../../../../lib/social-schedule')
     await syncFromItem(item.id).catch(e =>
       console.error('schedule mirror failed:', (e as Error).message))
+    // a yes books the post in at its time — nothing else to press
+    if (action === 'approve') {
+      await bookApprovedPosts(item.id, user).catch(e =>
+        console.error('booking after approval failed:', (e as Error).message))
+    }
     return NextResponse.json({
       ok: true,
       posting_approval_state: updated.posting_approval_state ?? null,

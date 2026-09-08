@@ -285,8 +285,14 @@ export async function createPostFromFiles(
    * piece waits at `internal_review` for the manager's check, which is what it
    * did before this change too.
    */
-  const straightOut = mayPostWithoutApproval(
-    actingRoles({ id: user.id, role: user.role }, current), signsOff)
+  /* AN UPLOAD ON SCHEDULE IS A POST, AND THE POST GATE IS ITS ONLY GATE.
+   * It used to wait at `internal_review` unless a manager uploaded it, so a
+   * scheduler's fresh upload opened on "Save as draft" and "Needs approval
+   * before it can post" — the asset gate, asked about a piece that was never
+   * production work. The proper one (8 Sep 2026): the piece is cleared here
+   * for everybody, and the scheduler then SENDS THE POST to a manager. */
+  const straightOut = true
+  void mayPostWithoutApproval; void signsOff
   if (straightOut && String(current.status) === 'internal_review') {
     try {
       current = await performTransition(user, current as never, 'approved_for_scheduling', {
@@ -318,6 +324,8 @@ export async function createPostFromFiles(
       ? (signsOff
         ? 'Saved. This client signs off every post, so it goes to them before it can go out.'
         : 'Saved. An account manager checks it before it can go out.')
-      : 'Saved. This post can go out — nothing is waiting on anybody.',
+      : mayPostWithoutApproval(actingRoles({ id: user.id, role: user.role }, current), signsOff)
+        ? 'Saved. This post can go out — nothing is waiting on anybody.'
+        : 'Saved. Write the caption, pick the time, then send it to your account manager to approve.',
   }
 }

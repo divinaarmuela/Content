@@ -657,15 +657,22 @@ import { approvalLine as pillLine, footerActions as footer } from '@/app/lib/sch
 import { mayPostWithoutApproval as mayPost } from '@/app/lib/social-schedule-core'
 
 describe('a scheduler on the Schedule page', () => {
-  it('gets Schedule as the button and "yours to post" as the pill, not a review request', () => {
+  it('gets "Send for approval" as the button — they ask, a manager answers', () => {
     // exactly how NewPostDialog composes it: role -> mayApprove -> footer + pill.
-    // Tested as a SCHEDULER on purpose: the super admin path never hit the bug.
+    // Tested as a SCHEDULER on purpose: the super admin path never hits this.
     const mayApprove = mayPost('scheduler', false)
-    expect(mayApprove).toBe(true)
+    expect(mayApprove).toBe(false)
+    const f = footer({ status: 'draft', mayApprove, mayPublish: true, clientSignsOff: false })
+    expect(f.primary.key).toBe('send')
+    expect(f.primary.label).toBe('Send for approval')
+    expect(f.menu.map(m => m.key)).not.toContain('direct')
+    expect(pillLine('draft', { mayApprove, clientSignsOff: false })).toBe('Needs approval before it can post')
+  })
+
+  it('a manager gets Schedule, and "yours to post"', () => {
+    const mayApprove = mayPost('account_manager', false)
     const f = footer({ status: 'draft', mayApprove, mayPublish: true, clientSignsOff: false })
     expect(f.primary.key).toBe('direct')
-    expect(f.primary.label).toBe('Schedule')
-    expect(f.menu.map(m => m.key)).toContain('send')
     expect(pillLine('draft', { mayApprove, clientSignsOff: false })).toBe('Not sent to anyone — yours to post')
   })
 })

@@ -718,30 +718,25 @@ describe('Approve without client', () => {
 /* ── posting with no approval step in the way (5 Sep 2026) ───────────────── */
 
 describe('who may post without approval', () => {
-  // The gate was removed on 8 Sep 2026 (owner: "anyone that has access to
-  // dashboard can schedule it for now — no approval whatsoever"). It used to
-  // be account managers and super admins only, and a client who signed every
-  // post off stopped even them.
-  it('is every team role now, by role or by hat', () => {
-    for (const who of ['scheduler', 'editor', 'account_manager', 'super_admin']) {
-      expect(mayPostWithoutApproval(who, false), String(who)).toBe(true)
-    }
+  // The proper model, 8 Sep 2026: a scheduler uploads and SENDS to a manager;
+  // a manager or a super admin posts without asking, and chooses whether the
+  // client is asked. The client flag is no longer a gate on the manager.
+  it('is the account manager and the super admin, by role or by hat', () => {
+    expect(mayPostWithoutApproval('account_manager', false)).toBe(true)
+    expect(mayPostWithoutApproval('super_admin', false)).toBe(true)
     expect(mayPostWithoutApproval(['editor', 'account_manager'], false)).toBe(true)
-    expect(mayPostWithoutApproval(['scheduler'], false)).toBe(true)
   })
 
-  it('is still nobody outside the team', () => {
-    for (const who of ['client', '', null, undefined]) {
+  it('is nobody else — a scheduler asks', () => {
+    for (const who of ['scheduler', 'editor', 'client', '', null, undefined]) {
       expect(mayPostWithoutApproval(who, false), String(who)).toBe(false)
     }
+    expect(mayPostWithoutApproval(['scheduler'], false)).toBe(false)
   })
 
-  it('no longer stops for a client who signs every post off', () => {
-    // the flag is still recorded and still SAID in the composer; it simply
-    // does not block anyone any more
+  it('does not stop a manager for a client who signs every post off — the manager sends it on', () => {
     expect(mayPostWithoutApproval('account_manager', true)).toBe(true)
-    expect(mayPostWithoutApproval('scheduler', true)).toBe(true)
-    expect(mayPostWithoutApproval('client', true)).toBe(false)
+    expect(mayPostWithoutApproval('scheduler', true)).toBe(false)
   })
 
   it('reads the CLIENT row, and only an explicit yes', () => {

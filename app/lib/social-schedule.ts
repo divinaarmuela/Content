@@ -935,16 +935,18 @@ async function writeMediaVersion(
   // schedule window, by them. Sending the piece to the client would only
   // have parked it where the one-press path refuses to pick it up ("With
   // the client now").
-  let status = String(item.status)
-  if (status === 'approved_for_scheduling' && !(await mayPostStraightOut(user, item))) {
-    try {
-      // `auto: true` -- this edge is the app's own move; nobody may press it
-      const moved = await performTransition(user, item as never, 'client_review', { auto: true })
-      status = String((moved as { status?: string }).status ?? status)
-    } catch (e) {
-      console.error('new media on an approved piece — could not send it back:', e)
-    }
-  }
+  //
+  // THE PROPER FLOW (8 Sep 2026) DOES NOT BOUNCE THE PIECE TO THE CLIENT.
+  // New media on a post is a change to the POST, and the post's own gate
+  // handles it: `stateAfterPostEdit` below takes an approved post back to
+  // pending, so it goes through the manager again, and the manager decides
+  // whether the client is asked. Sending the ITEM to `client_review` here
+  // put it in front of the client before the manager had looked — the one
+  // order of events the owner ruled out ("scheduler sends to AM; AM reviews
+  // and sends to client"). `performTransition` and `mayPostStraightOut`
+  // stay imported for the other edges in this file.
+  const status = String(item.status)
+  void performTransition; void mayPostStraightOut
 
   // the final-post sign-off was given to media that is no longer the media
   const resetTo = stateAfterPostEdit(
@@ -1018,7 +1020,7 @@ async function claimPostSlides(
  */
 export async function sendForApproval(
   user: TeamUser, id: string,
-  opts: { note?: string; client_too?: boolean; mode?: 'approval' | 'direct' } = {},
+  opts: { note?: string; client_too?: boolean; mode?: 'approval' | 'direct'; reviewer_ids?: string[] } = {},
 ): Promise<PlannedPost> {
   if (opts.mode === 'direct') return scheduleWithoutApproval(user, id, opts.note)
   const { post, item } = await loadPostForUser(user, id)
@@ -1041,6 +1043,7 @@ export async function sendForApproval(
     action: 'send',
     note: opts.note,
     client_too: opts.client_too,
+    reviewer_ids: opts.reviewer_ids,
   })
 
   // ONLY a post still sitting where this person saw it. The condition used to
@@ -1228,6 +1231,44 @@ export async function syncFromItem(itemId: string): Promise<void> {
 }
 
 /* ── booking it in ──────────────────────────────────────────────────────── */
+
+/**
+ * AN APPROVAL BOOKS THE POST IN — nothing else to press.
+ *
+ * The owner's words, 8 Sep 2026: "once AM or super admin approves, it will
+ * appear in Schedule under there." Before this, a yes moved the post to
+ * `approved` and it then sat until somebody found it and pressed Schedule —
+ * the second press nobody knew they owed.
+ *
+ * So after a yes (a manager's on the dashboard, or the client's on the
+ * portal) every post on the item that carries a time is handed to the
+ * provider at that time. The person the booking is recorded against is the
+ * approver when they may publish; a client cannot, so their yes is booked in
+ * the name of whoever built the post. A booking that fails leaves the post
+ * at `approved` — exactly where it was — and is logged, never thrown: the
+ * approval already happened and must not be undone by a provider hiccup.
+ */
+export async function bookApprovedPosts(itemId: string, actor: TeamUser | null): Promise<string[]> {
+  await syncFromItem(itemId).catch(() => {})
+  const rows = await posts().list({ where: p => p.item_id === itemId && p.status === 'approved' }).catch(() => [])
+  const booked: string[] = []
+  for (const row of rows) {
+    if (!row.scheduled_for) continue
+    let as: TeamUser | null = actor && mayPublish(actor.role) ? actor : null
+    if (!as && row.created_by) {
+      const u = await table<TeamUser>('team_users').get(String(row.created_by)).catch(() => null)
+      if (u && u.active_status && mayPublish(u.role)) as = u
+    }
+    if (!as) continue
+    try {
+      await schedulePost(as, row.id)
+      booked.push(row.id)
+    } catch (e) {
+      console.error(`bookApprovedPosts ${row.id}:`, e instanceof Error ? e.message : e)
+    }
+  }
+  return booked
+}
 
 /** The provider payload for one post: one target per channel, each carrying
  *  its own caption, kind and slides where the composer set them. */
