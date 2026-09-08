@@ -4,6 +4,8 @@ import {
   COLUMN_EMPTY, LANE_EMPTY, OLDER_POSTS_NOTE, POSTED_DAYS,
   applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, initialsOf, isAssignedTo,
   laneOf, moveTargets, overviewTiles, pageCards, pageLanes, reachableLanes, recentlyPosted, shortDate,
+  postApprovalOffer, postWaitingLine,
+  POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE, POST_WAITING_MANAGER,
   type BoardPage, type BoardViewCard, type BoardViewer,
 } from '../app/lib/board-view-core'
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../app/lib/board-core'
@@ -534,5 +536,71 @@ describe('a post made on the Schedule page is not production work', () => {
       const ids = pageCards(page, rows, viewer).map(c => c.id)
       expect(ids, page).toEqual(['work'])
     }
+  })
+})
+
+/* ── a post waiting on somebody ─────────────────────────────────── */
+
+/**
+ * `posting_approval_state === 'pending'` used to be reachable from the bell
+ * and the email and nowhere else — the card drew nothing and the side panel
+ * deliberately drew nothing. An account manager who works from the board was
+ * holding somebody up with nothing on any screen to press.
+ */
+describe('a post waiting on somebody, said on the card', () => {
+  const waiting = (over: Partial<BoardViewCard> = {}) => card({
+    status: 'approved_for_scheduling', posting_approval_state: 'pending', ...over,
+  })
+
+  it('says nothing at all when no post is waiting', () => {
+    expect(postWaitingLine(card(), manager)).toBeNull()
+    expect(postApprovalOffer(card(), manager)).toBeNull()
+    expect(postWaitingLine(waiting({ posting_approval_state: 'approved' }), manager)).toBeNull()
+  })
+
+  it('tells the person who can answer that it is theirs, and offers the two answers', () => {
+    expect(postWaitingLine(waiting(), manager)).toBe(POST_WAITING_LINE)
+    expect(POST_WAITING_LINE).toBe('A post is waiting on your OK')
+    const offer = postApprovalOffer(waiting(), manager)
+    expect(offer?.primary).toEqual({ kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL })
+    expect(offer?.changes).toEqual({ kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL })
+    expect(postApprovalOffer(waiting(), admin)).not.toBeNull()
+  })
+
+  it('tells everybody else whose wait it is, and offers them nothing to press', () => {
+    expect(postWaitingLine(waiting(), scheduler)).toBe(POST_WAITING_MANAGER)
+    expect(postApprovalOffer(waiting(), scheduler)).toBeNull()
+    const withClient = waiting({ posting_client_required: true })
+    expect(postWaitingLine(withClient, scheduler)).toBe(POST_WAITING_CLIENT)
+    expect(POST_WAITING_CLIENT).toBe('A post is waiting on the client')
+  })
+
+  it('is the card\'s primary action for the person who may answer, with the ordinary move behind it', () => {
+    const { primary, more } = cardActions(waiting(), manager)
+    expect(primary).toEqual({ kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL })
+    expect(more).toContainEqual({ kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL })
+    // nothing is taken away: the move the card had is still offered
+    const plain = cardActions(card({ status: 'approved_for_scheduling' }), manager)
+    if (plain.primary) expect(more).toContainEqual(plain.primary)
+  })
+
+  it('changes nobody else\'s card', () => {
+    expect(cardActions(waiting(), scheduler))
+      .toEqual(cardActions(card({ status: 'approved_for_scheduling' }), scheduler))
+  })
+
+  /**
+   * Media uploaded straight onto the Schedule page keeps its card off all
+   * three boards (`adhoc_post`). A post on such a card waiting on THIS
+   * person is the one exception, and only on the Scheduler board — nobody
+   * should be asked for an answer they have no way to give.
+   */
+  it('brings an ad-hoc post back to the Scheduler board only while it waits on this person', () => {
+    const adhoc = waiting({ id: 'ad1', adhoc_post: true })
+    expect(pageCards('scheduler', [adhoc], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
+    expect(pageCards('scheduler', [adhoc], scheduler, TODAY)).toEqual([])
+    expect(pageCards('production', [adhoc], manager, TODAY)).toEqual([])
+    const answered = waiting({ id: 'ad1', adhoc_post: true, posting_approval_state: 'approved' })
+    expect(pageCards('scheduler', [answered], manager, TODAY)).toEqual([])
   })
 })

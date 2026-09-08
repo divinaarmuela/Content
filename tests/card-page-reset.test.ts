@@ -77,7 +77,7 @@ describe('the card page uses the board\'s words', () => {
   const src = code(read(PAGE))
 
   it('routes every move through actionFor', () => {
-    expect(src).toMatch(/import \{ actionFor,[^}]*\} from '[^']*board-view-core'/)
+    expect(src).toMatch(/import \{\s*actionFor,[\s\S]*?\} from '[^']*board-view-core'/)
     expect(src).toContain('actionFor(t.to, t.label, hats)')
   })
 
@@ -116,14 +116,31 @@ describe('the card page does no posting', () => {
     expect(src).not.toContain('posting-approval-core')
   })
 
-  it('has no caption box, no "Who posts this?", no reviewer picker, no final-post approval', () => {
+  it('has no caption box, no "Who posts this?", no reviewer picker, no posting of its own', () => {
     expect(src).not.toContain('Caption')
     expect(src).not.toContain('Who posts this')
     expect(src).not.toContain('Who should review this')
-    expect(src).not.toContain('posting-approval')
     expect(src).not.toContain('/publish')
     expect(src).not.toContain('/schedule`')
     expect(src).not.toContain('/handoff')
+  })
+
+  /**
+   * The one exception, added 8 Sep 2026: a post waiting on THIS viewer.
+   * `posting_approval_state === 'pending'` used to be reachable only from the
+   * bell, so a manager working from the card had nothing to press. The panel
+   * answers it on the SAME route the composer uses — one gate, one set of
+   * words (`board-view-core`), never a second approval flow.
+   */
+  it('answers a waiting post on the composer\'s own route, and says it in the board\'s words', () => {
+    expect(src).toContain('/api/production/items/${detail.id}/posting-approval')
+    expect(src).toContain('POST_APPROVE_LABEL')
+    expect(src).toContain('POST_CHANGES_LABEL')
+    // the decision is the pure layer's, not an `if` in the panel
+    expect(src).toContain('postApprovalOffer(boardCard, viewer)')
+    expect(src).toContain('postWaitingLine(boardCard, viewer)')
+    // and no second gate: the words and the state still come from one place
+    expect(src).not.toContain('posting-approval-core')
   })
 
   it('a move is one tap — no notify_ids or scheduler_ids ride the transition', () => {
@@ -132,9 +149,16 @@ describe('the card page does no posting', () => {
     expect(src).not.toContain('{ scheduler_ids:')
   })
 
-  it('keeps one plain "Open in Schedule" link for the people who post', () => {
+  /** Both layouts link to the piece, never to a bare week: a bare
+   *  /dashboard/social/schedule falls back to whichever client was picked
+   *  last time, which is somebody else's calendar. */
+  it('keeps "Open in Schedule" once per layout, carrying the client and the item', () => {
     expect(src).toContain('Open in Schedule')
-    expect(src).toContain('href="/dashboard/social/schedule"')
+    expect(src).not.toContain('href="/dashboard/social/schedule"')
+    const linked = src.match(
+      /\/dashboard\/social\/schedule\?client=\$\{encodeURIComponent\(detail\.client_id\)\}&item=\$\{encodeURIComponent\(detail\.id\)\}/g,
+    ) ?? []
+    expect(linked.length).toBe(2)
   })
 
   it('keeps the approve/move call exactly where it was', () => {

@@ -6,6 +6,8 @@ import {
   to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
   CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
   SEND_FOR_REVIEW, sentForReviewLine,
+  composerWait, mediaApprovalBadge, WAITING_ON_MANAGER,
+  CLIENT_APPROVED_BADGE, NEW_MEDIA_BADGE, NOT_CLIENT_SIGNED_BADGE, TEAM_APPROVED_BADGE,
 } from '@/app/lib/schedule-compose-core'
 import { isPageId, kindTakesLocation, toPlatformData } from '@/app/lib/publish-core'
 import { SOCIAL_POST_STATUSES } from '@/app/lib/social-schedule-core'
@@ -575,5 +577,76 @@ describe('durationWords', () => {
     expect(durationWords(600)).toBe('10 minutes')
     expect(durationWords(45)).toBe('45 seconds')
     expect(durationWords(7260)).toBe('2 hours 1 minute')
+  })
+})
+
+/* ── waiting on somebody else ─────────────────────────────────── */
+
+/**
+ * A scheduler who drops their own file on the calendar had the piece moved
+ * to `internal_review` (the manager already told) and was then shown "Still
+ * being made" in red over that file, under a button `!check.ok` had already
+ * disabled. Nothing was wrong and nothing could be pressed.
+ */
+describe('the window says the calm truth when it is waiting on somebody else', () => {
+  it('names the wait, and names the problem sentence it replaces', () => {
+    const wait = composerWait({ itemStatus: 'internal_review', mayApprove: false })
+    expect(wait?.line).toBe(WAITING_ON_MANAGER)
+    expect(WAITING_ON_MANAGER).toMatch(/account manager/)
+    expect(WAITING_ON_MANAGER).toMatch(/been told/)
+    // the sentence it replaces is validateComposition's own, never a copy
+    expect(wait?.replaces).toBe('Still being made')
+  })
+
+  it('is not the manager\'s window — they are the person being waited on', () => {
+    expect(composerWait({ itemStatus: 'internal_review', mayApprove: true })).toBeNull()
+    // …unless this client signs every post off, when nobody skips the client
+    expect(composerWait({ itemStatus: 'internal_review', mayApprove: true, clientSignsOff: true }))
+      .not.toBeNull()
+  })
+
+  it('is only this one wait: a piece with the client, or still being made, is said as before', () => {
+    for (const status of ['client_review', 'revision_required', 'draft_uploaded', 'approved_for_scheduling']) {
+      expect(composerWait({ itemStatus: status, mayApprove: false })).toBeNull()
+    }
+  })
+
+  it('offers only what is possible: save the draft, and nothing under the arrow', () => {
+    const { primary, menu } = footerActions({
+      status: 'draft', mayApprove: false, mayPublish: true, waiting: true,
+    })
+    expect(primary).toEqual({ key: 'draft', label: 'Save as draft' })
+    expect(menu).toEqual([])
+    // a dead "Send for review" is exactly what it replaces
+    expect(primary.label).not.toBe(SEND_FOR_REVIEW)
+  })
+})
+
+/* ── who signed the media off ────────────────────────────────── */
+
+describe('the badge over the picture says who actually signed it off', () => {
+  const at = (over: Partial<Parameters<typeof mediaApprovalBadge>[0]> = {}) => mediaApprovalBadge({
+    clientApproved: false, allFromApprovedVersion: true, itemStatus: 'approved_for_scheduling', ...over,
+  })
+
+  it('says the client only when the client said yes', () => {
+    expect(at({ clientApproved: true })).toEqual({ label: CLIENT_APPROVED_BADGE, tone: 'green' })
+    expect(CLIENT_APPROVED_BADGE).toBe('Client approved')
+  })
+
+  it('a manager\'s own sign-off says so, and never wears the client\'s name', () => {
+    const badge = at({ clientApproved: false })
+    expect(badge).toEqual({ label: TEAM_APPROVED_BADGE, tone: 'amber' })
+    expect(badge.label).not.toContain('Client')
+  })
+
+  it('a piece nobody has signed off is said plainly', () => {
+    expect(at({ itemStatus: 'internal_review' }))
+      .toEqual({ label: NOT_CLIENT_SIGNED_BADGE, tone: 'amber' })
+  })
+
+  it('a file from outside the approved version is covered by no sign-off at all', () => {
+    expect(at({ clientApproved: true, allFromApprovedVersion: false }))
+      .toEqual({ label: NEW_MEDIA_BADGE, tone: 'amber' })
   })
 })

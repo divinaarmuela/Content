@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { statusesIn, columnOf } from '../../lib/board-core'
 import {
-  cardActions, cardLines, initialsOf, moveTargets,
+  cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
   type BoardViewCard, type BoardViewer, type CardAction,
 } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
@@ -115,6 +115,9 @@ export function BoardCard({
   const [briefOpen, setBriefOpen] = useState(false)
   const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
   const { primary, more } = cardActions(card, viewer)
+  /** a post built from this piece is waiting on somebody — said on the card,
+   *  because the bell was the only place it was ever said */
+  const postWaiting = postWaitingLine(card, viewer)
   const targets = moveTargets(card, viewer)
   const column = columnOf(card.status)
   // the column already names the stage; the chip earns its place only where
@@ -170,6 +173,9 @@ export function BoardCard({
           ) : (
             <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{stats}</span>
           )
+        )}
+        {postWaiting && (
+          <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{postWaiting}</span>
         )}
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>

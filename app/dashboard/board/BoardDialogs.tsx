@@ -26,7 +26,7 @@ import { linkKindOf } from '../../lib/card-link-core'
 import { findKindByName, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
-import type { BoardViewCard, BoardViewer } from '../../lib/board-view-core'
+import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
 
 /**
  * THE FEW THINGS A CARD ASKS FOR.
@@ -292,6 +292,67 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
         <DialogFooter>
           <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
             {busy ? 'Sending…' : 'Send back'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * ASK FOR A CHANGE TO THE POST — the second of the two answers.
+ *
+ * The SAME route the composer and the item page use
+ * (`/api/production/items/[id]/posting-approval`) and the same words
+ * (`board-view-core`): this is one gate seen from a third place, not a
+ * second approval flow. "Approve" needs nothing typed and so needs no
+ * dialog; asking for a change needs the words, which the server refuses
+ * without.
+ */
+export function PostChangesDialog({ card, onClose }: {
+  card: BoardViewCard | null
+  onClose: () => void
+}) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { setNote('') }, [card])
+
+  const send = async () => {
+    if (!card || !note.trim()) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/production/items/${card.id}/posting-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'request_changes', note }),
+      })
+      if (!res.ok) throw new Error(await readError(res, 'Could not send it back'))
+      toast.success('Sent back with your note — whoever built this post has been told')
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send it back')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{POST_CHANGES_LABEL}</DialogTitle>
+          <DialogDescription>
+            Say what should change before this post goes out. Whoever built it is told, in your words.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="post-changes-note">What should change</Label>
+          <Textarea id="post-changes-note" value={note} onChange={e => setNote(e.target.value)}
+            rows={4} autoFocus className="rounded-inner border-border bg-surface" />
+        </div>
+        <DialogFooter>
+          <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
+            {busy ? 'Sending…' : 'Send it back'}
           </Button>
         </DialogFooter>
       </DialogContent>

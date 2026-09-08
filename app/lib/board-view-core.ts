@@ -23,6 +23,9 @@ import {
 import { linkLabel, versionWord } from './card-link-core'
 import { askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
+import {
+  awaitsClientPostApproval, mayApprovePost, parseApprovalState,
+} from './posting-approval-core'
 import type { Role } from './identity-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
@@ -57,6 +60,13 @@ export type BoardViewCard = {
   updated_at?: string | null
   /** when the status last changed, on rows that record it separately */
   status_changed_at?: string | null
+  /** the FINAL POST's gate (`posting-approval-core`) — a post built from this
+   *  piece may be sitting at 'pending' waiting on somebody's yes. It is the
+   *  item's own column, so the card gets it for free off a '*' row. */
+  posting_approval_state?: unknown
+  /** …and whether the CLIENT was the one asked, which decides whose wait the
+   *  card names when the viewer is not the one deciding */
+  posting_client_required?: unknown
 }
 
 export type BoardViewer = { id: string; role: Role }
@@ -167,6 +177,66 @@ export function cardLines(
 export type CardAction =
   | { kind: 'transition'; to: ItemStatus; label: string }
   | { kind: 'send_back'; to: 'revision_required'; label: string }
+  | { kind: 'post_approval'; to: 'approve' | 'request_changes'; label: string }
+
+/**
+ * A POST WAITING ON THIS PERSON, SAID WHERE THEY ALREADY ARE.
+ *
+ * `posting_approval_state === 'pending'` used to be reachable only through
+ * the email and the bell: the board card and the side panel both drew
+ * nothing, so an account manager who came to their work any other way never
+ * learnt there was a post to answer. These are the same two answers the
+ * composer offers, worded once, and they hit the same route.
+ */
+export const POST_WAITING_LINE = 'A post is waiting on your OK'
+export const POST_APPROVE_LABEL = 'Approve the post'
+export const POST_CHANGES_LABEL = 'Ask for a change'
+/** …and the same wait, seen by somebody who is not the one deciding. */
+export const POST_WAITING_CLIENT = 'A post is waiting on the client'
+export const POST_WAITING_MANAGER = 'A post is waiting on an account manager'
+
+/**
+ * The one line a card says about a post waiting on somebody — whoever is
+ * looking. Null when no post on this card is waiting on anyone.
+ */
+export function postWaitingLine(
+  card: BoardViewCard, viewer: BoardViewer,
+): string | null {
+  if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
+  if (mayApprovePost(actingRoles(viewer, card))) return POST_WAITING_LINE
+  return awaitsClientPostApproval({
+    status: card.status,
+    posting_approval_state: card.posting_approval_state,
+    posting_client_required: card.posting_client_required,
+  }) ? POST_WAITING_CLIENT : POST_WAITING_MANAGER
+}
+
+export type PostApprovalOffer = {
+  /** the plain line naming what is waiting */
+  line: string
+  /** say yes */
+  primary: CardAction
+  /** …and ask for a change, which needs words with it */
+  changes: CardAction
+}
+
+/**
+ * Is a post on this card waiting on THIS viewer, and what may they do?
+ *
+ * Null for everybody else — including the people who sent it, who are
+ * waiting rather than deciding.
+ */
+export function postApprovalOffer(
+  card: BoardViewCard, viewer: BoardViewer,
+): PostApprovalOffer | null {
+  if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
+  if (!mayApprovePost(actingRoles(viewer, card))) return null
+  return {
+    line: POST_WAITING_LINE,
+    primary: { kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL },
+    changes: { kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL },
+  }
+}
 
 export const SEND_BACK_LABEL = 'Send back for changes'
 /** the editor hands a card on: the machine says "Submit for review", the
@@ -215,8 +285,15 @@ export function cardActions(
   })
   const all: CardAction[] = []
   const push = (a: CardAction) => { if (!all.some(b => sameAction(a, b))) all.push(a) }
-  const first = primary ? actionFor(primary.to, primary.label, hats) : null
+  // a post waiting on THIS person outranks any move: it is the one thing on
+  // the card that somebody else is held up by
+  const waiting = postApprovalOffer(card, viewer)
+  const first = waiting
+    ? waiting.primary
+    : primary ? actionFor(primary.to, primary.label, hats) : null
   if (first) push(first)
+  if (waiting) push(waiting.changes)
+  if (waiting && primary) push(actionFor(primary.to, primary.label, hats))
   for (const s of secondary) push(actionFor(s.to, s.label, hats))
   return { primary: first, more: all.filter(a => a !== first) }
 }
@@ -332,10 +409,19 @@ export function pageCards<T extends BoardViewCard>(
   page: BoardPage, cards: readonly T[], viewer: BoardViewer, today?: string | null,
 ): T[] {
   const mine = (c: T) => isAssignedTo(c, viewer.id)
-  // media uploaded straight onto the Schedule page to be posted is a POST,
-  // not production work — it keeps its card for the file and the numbers,
-  // and stays off all three boards
+  /**
+   * Media uploaded straight onto the Schedule page to be posted is a POST,
+   * not production work — it keeps its card for the file and the numbers,
+   * and stays off all three boards.
+   *
+   * ONE EXCEPTION, and only on the Scheduler board: a post on such a card
+   * that is waiting on THIS person's yes. The gate is reachable from the
+   * bell and the email, and from nowhere else; a manager who works from the
+   * board would otherwise be holding somebody up with nothing on any screen
+   * to press. It leaves again the moment they answer.
+   */
   const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
+    || (page === 'scheduler' && postApprovalOffer(c, viewer) !== null)
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
     if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))

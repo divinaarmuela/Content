@@ -30,7 +30,9 @@ import {
   type CommercialContentType, type Platform, type PostKind, type PostOptions,
   type TikTokPrivacy, type TrialGraduation, type YoutubeVisibility,
 } from './publish-core'
-import { NETWORK_LABEL, type SocialPostStatus } from './social-schedule-core'
+import {
+  postingEligibility, NETWORK_LABEL, type SocialPostStatus,
+} from './social-schedule-core'
 import { reorder, type Slide, type SlideSource } from './version-files-core'
 import { fromZonedInput, wallTimeIn } from './timezone-core'
 
@@ -1004,6 +1006,98 @@ export function sentForReviewLine(clientName: string | null | undefined): string
     : 'Sent to the account manager. You will be told when they answer.'
 }
 
+/* ── waiting on somebody else ─────────────────────────────────── */
+
+/**
+ * THE CALM TRUTH, INSTEAD OF A DEAD BUTTON.
+ *
+ * A scheduler who drops their own file on the calendar has the piece moved
+ * to `internal_review` and the account manager told, by the upload itself
+ * (`schedule-upload`). The composer then opened on a piece it judged
+ * unpostable and said so in red — "Still being made" — over media the person
+ * had uploaded thirty seconds earlier, under a "Send for review" button that
+ * `!check.ok` had already disabled. Nothing was wrong, nothing could be
+ * pressed, and the one fact that mattered (somebody has been told) was the
+ * one thing not said.
+ *
+ * So the window has a THIRD state beside "ready" and "wrong": waiting on
+ * somebody else. It is not an error, it draws no red, and the footer offers
+ * only what is actually possible — save the draft, or close.
+ */
+export const WAITING_ON_MANAGER =
+  'Waiting on an account manager’s check — they have been told.'
+
+export type ComposerWait = {
+  /** the quiet line the window shows in place of the red box */
+  line: string
+  /** the composition problem this wait REPLACES — the same sentence
+   *  `validateComposition` states, so the window drops exactly that one and
+   *  keeps every other thing that is genuinely wrong */
+  replaces: string
+}
+
+/**
+ * Is this window waiting on somebody else's check?
+ *
+ * Only `internal_review`, and only for somebody who cannot end that wait
+ * themselves. A manager (on a client who does not sign every post off) is
+ * the person being waited ON — their window is unchanged. A piece still
+ * being MADE, or one in front of the client right now, is not this: those
+ * are said as they always were.
+ */
+export function composerWait(input: {
+  itemStatus: string
+  /** may this person approve the final post */
+  mayApprove: boolean
+  /** this client signs every post off, so nobody skips them */
+  clientSignsOff?: boolean
+}): ComposerWait | null {
+  if (input.itemStatus !== 'internal_review') return null
+  if (input.mayApprove && input.clientSignsOff !== true) return null
+  const elig = postingEligibility({ status: input.itemStatus }, [], false)
+  if (elig.ok) return null
+  return { line: WAITING_ON_MANAGER, replaces: elig.reason }
+}
+
+/* ── the media badge ────────────────────────────────────────── */
+
+/**
+ * WHO ACTUALLY SIGNED THIS MEDIA OFF.
+ *
+ * The badge over the picture used to read "Client approved" whenever every
+ * slide belonged to the approved version — which is version membership, not
+ * consent. A piece a manager cleared with "Approve without client" wore the
+ * client's name on somebody else's decision, in the one window where the
+ * irreversible press happens.
+ *
+ * `clientApproved` is the field that means what the badge says (the rail
+ * computes it, `useSchedulePosts`), and a post carrying a file from outside
+ * the approved version is not covered by any sign-off at all.
+ */
+export const CLIENT_APPROVED_BADGE = 'Client approved'
+export const TEAM_APPROVED_BADGE = 'Approved by the team'
+export const NOT_CLIENT_SIGNED_BADGE = 'Not signed off by the client'
+export const NEW_MEDIA_BADGE = 'New media — not signed off'
+
+/** The statuses that mean somebody has signed the WORK off. */
+const SIGNED_OFF: string[] = ['approved_for_scheduling', 'scheduled', 'published']
+
+export function mediaApprovalBadge(input: {
+  /** the client said yes to this piece's approved media */
+  clientApproved: boolean
+  /** every file in the post comes from that approved version */
+  allFromApprovedVersion: boolean
+  /** where the piece is in the funnel */
+  itemStatus: string
+}): { label: string; tone: 'green' | 'amber' } {
+  if (!input.allFromApprovedVersion) return { label: NEW_MEDIA_BADGE, tone: 'amber' }
+  if (input.clientApproved) return { label: CLIENT_APPROVED_BADGE, tone: 'green' }
+  if (SIGNED_OFF.includes(input.itemStatus)) {
+    return { label: TEAM_APPROVED_BADGE, tone: 'amber' }
+  }
+  return { label: NOT_CLIENT_SIGNED_BADGE, tone: 'amber' }
+}
+
 export type FooterActionKey = 'send' | 'draft' | 'direct' | 'schedule' | 'now' | 'none'
 
 export type FooterAction = { key: FooterActionKey; label: string }
@@ -1043,6 +1137,10 @@ export function footerActions(input: {
   clientSignsOff?: boolean
   /** the time on the post is now, so "Schedule" would read as a lie */
   postingNow?: boolean
+  /** the piece is waiting on somebody else's check (`composerWait`) — there
+   *  is nothing here for this person to send, and a disabled "Send for
+   *  review" over a red box was the whole of the dead end */
+  waiting?: boolean
 }): { primary: FooterAction; menu: FooterAction[] } {
   const { status, mayApprove, mayPublish } = input
   const clientSignsOff = input.clientSignsOff === true
@@ -1056,6 +1154,12 @@ export function footerActions(input: {
   if (status === 'scheduled' || status === 'published'
     || status === 'failed' || status === 'cancelled') {
     return { primary: { key: 'none', label: APPROVAL_LINE[status] }, menu: [] }
+  }
+
+  // waiting on somebody else: the only thing this person can do is keep
+  // their work, so that is the only thing offered
+  if (input.waiting === true) {
+    return { primary: { key: 'draft', label: 'Save as draft' }, menu: [] }
   }
 
   const send: FooterAction = {

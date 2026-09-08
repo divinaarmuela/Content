@@ -7,9 +7,9 @@ import {
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
-  APPROVAL_LINE, clockPillLabel, composerReducer, footerActions, groupOptions, isPostingNow,
-  initialComposer, moreOptionsFor, optionsFromExtras, readPerChannel, PAGE_ID_HELP,
-  sentForReviewLine,
+  APPROVAL_LINE, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
+  isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
+  readPerChannel, PAGE_ID_HELP, sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
@@ -311,8 +311,18 @@ export default function NewPostDialog({
    * over a minute that has just arrived.
    */
   const postingNow = isPostingNow(state.scheduledFor, Date.now())
+  /**
+   * WAITING ON SOMEBODY ELSE is not an error.
+   *
+   * A scheduler's own upload sits at `internal_review` with the account
+   * manager already told. The window used to say "Still being made" in red
+   * over their file and disable the only button on it; now it says the calm
+   * truth and offers the one thing that is actually possible.
+   */
+  const wait = composerWait({ itemStatus: target.itemStatus, mayApprove, clientSignsOff })
   const { primary, menu: menuItems } = footerActions({
     status, mayApprove, mayPublish: canPublish, clientSignsOff, postingNow,
+    waiting: wait !== null,
   })
 
   const check = useMemo(() => validateComposition({
@@ -338,6 +348,12 @@ export default function NewPostDialog({
     state.slides, state.caption, state.scheduledFor, state.perChannel,
     chosen, target.contentType,
   ])
+
+  /** everything genuinely wrong, minus the one sentence the quiet wait line
+   *  says better ("Still being made" over media uploaded a minute ago) */
+  const shownChecks = wait
+    ? check.problems.filter(p => p !== wait.replaces)
+    : check.problems
 
   /**
    * THE POST AS EACH NETWORK WILL SHOW IT.
@@ -376,6 +392,11 @@ export default function NewPostDialog({
   const approvedUrls = useMemo(
     () => new Set(target.approved.map(s => s.url)), [target.approved])
   const allApproved = state.slides.length > 0 && state.slides.every(s => approvedUrls.has(s.url))
+  const badge = mediaApprovalBadge({
+    clientApproved: target.clientApproved,
+    allFromApprovedVersion: allApproved,
+    itemStatus: target.itemStatus,
+  })
 
   /* ── the header's post type ───────────────────────────────────────────── */
 
@@ -816,12 +837,15 @@ export default function NewPostDialog({
                   {picked + 1}/{state.slides.length}
                 </span>
               )}
+              {/* WHO signed this off, not which version it came from — a piece
+                  a manager cleared without the client used to wear the
+                  client's name */}
               <span className={cn(
                 'absolute bottom-2 left-2 rounded-full px-2 py-1 text-[11px] font-bold',
-                allApproved ? 'bg-tint-green' : 'bg-tint-amber',
+                badge.tone === 'green' ? 'bg-tint-green' : 'bg-tint-amber',
               )}
               >
-                {allApproved ? 'Client approved' : 'Waiting for approval'}
+                {badge.label}
               </span>
             </div>
 
@@ -992,9 +1016,17 @@ export default function NewPostDialog({
         </div>
 
         {/* ── what is wrong, and what just happened ── */}
-        {(problems.length > 0 || check.problems.length > 0 || note) && (
+        {/* the wait, said quietly — never in the red box, because nothing is
+            wrong and there is nothing to fix */}
+        {wait && (
+          <p className="mx-3.5 mt-3.5 rounded-inner border border-border bg-paper px-3 py-2 text-[12px] font-medium text-muted-foreground">
+            {wait.line}
+          </p>
+        )}
+
+        {(problems.length > 0 || shownChecks.length > 0 || note) && (
           <div className="flex flex-col gap-1.5 px-3.5">
-            {[...problems, ...(problems.length === 0 ? check.problems : [])].map(p => (
+            {[...problems, ...(problems.length === 0 ? shownChecks : [])].map(p => (
               <p key={p} className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
                 {p}
               </p>
@@ -1128,7 +1160,7 @@ export default function NewPostDialog({
             ) : (
               <SplitButton
                 label={busy ? 'Working…' : primary.label}
-                disabled={busy || !check.ok}
+                disabled={busy || (wait ? shownChecks.length > 0 : !check.ok)}
                 onPrimary={() => void run(primary.key)}
                 items={menuItems.map(m => ({ key: m.key, label: m.label }))}
                 onPick={k => void run(k as FooterActionKey)}

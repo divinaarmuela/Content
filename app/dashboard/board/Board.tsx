@@ -19,7 +19,7 @@ import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
-  DeleteDialog, HandToDialog, KindDialog, LinkDialog, SendBackDialog, type KindRow,
+  DeleteDialog, HandToDialog, KindDialog, LinkDialog, PostChangesDialog, SendBackDialog, type KindRow,
 } from './BoardDialogs'
 
 /**
@@ -111,6 +111,7 @@ export function Board({
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
   const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
+  const [postChangesFor, setPostChangesFor] = useState<BoardCardRow | null>(null)
   const [handToFor, setHandToFor] = useState<BoardCardRow | null>(null)
   const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
   /** a drag is not a press: browsers do not fire click after a drop, but a
@@ -189,14 +190,41 @@ export function Board({
     }
   }, [])
 
+  /** the yes on a post that was waiting — nothing to type, so no dialog */
+  const approvePost = useCallback(async (card: BoardCardRow) => {
+    setBusyId(card.id)
+    try {
+      const res = await fetch(`/api/production/items/${card.id}/posting-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(friendlyError(body.error ?? 'Could not approve the post', 'this page'))
+      }
+      toast.success('Approved — whoever built this post has been told, and it can be booked in now')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not approve the post')
+    } finally {
+      setBusyId(null)
+    }
+  }, [])
+
   /** every press on a card comes through here — a plain move, or the one
    *  dialog that asks what needs changing */
   const act = useCallback((card: BoardCardRow, action: CardAction) => {
     switch (action.kind) {
       case 'send_back': setSendBackFor(card); return
+      // the post's own gate, answered from the board — the same route the
+      // composer and the item page use, never a second one
+      case 'post_approval':
+        if (action.to === 'request_changes') setPostChangesFor(card)
+        else void approvePost(card)
+        return
       case 'transition': void transition(card, action.to, action.label)
     }
-  }, [transition])
+  }, [transition, approvePost])
 
   const drop = (laneKey: PageLaneKey) => {
     const card = dragging
@@ -327,6 +355,7 @@ export function Board({
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
       <KindDialog card={kindFor} kinds={kinds} onClose={() => setKindFor(null)} />
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} />
+      <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
       {/* the live listener repaints Who the moment the row lands */}
       <HandToDialog card={handToFor} viewer={viewer} viewerName={names.get(viewer.id) ?? null}
         onClose={() => setHandToFor(null)} />
