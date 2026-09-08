@@ -333,6 +333,15 @@ export default function SchedulePage() {
    *  it, holding on to the time that was clicked */
   const openAt = (at: string | null) => setChoosing({ at })
 
+  // The Scheduler page's "New post" opens THIS composer, not a second one —
+  // two composers meant two sets of platform rules to keep in step, and the
+  // one on that page was the older wizard. It asks; this answers.
+  useEffect(() => {
+    const open = () => setChoosing({ at: null })
+    window.addEventListener('mdm:new-post', open)
+    return () => window.removeEventListener('mdm:new-post', open)
+  }, [])
+
   /**
    * "Approve without client" — the manager's own sign-off, from here.
    *

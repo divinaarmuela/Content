@@ -14,6 +14,7 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
+import { NewCardDialog } from '../board/BoardDialogs'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { useTeamMembers } from '../production/workHooks'
 
@@ -42,6 +43,9 @@ export default function SchedulerPage() {
   // columns say what each card is
   const live = useWorkRows(viewer, { schedulerPostFilter: false })
   const { column, show, clearShow } = useBoardParams()
+  // a scheduler raises their own work here too — trend research, a caption
+  // pass — so the board they live on can make a card without leaving it
+  const [newOpen, setNewOpen] = useState(false)
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   // the card that is open beside the board, named in the address
@@ -98,6 +102,14 @@ export default function SchedulerPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {viewer && (
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={() => setNewOpen(true)}
+            className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold">
+            <Plus className="h-4 w-4" /> New card
+          </Button>
+        </div>
+      )}
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
 
       {!ready ? (
@@ -123,6 +135,16 @@ export default function SchedulerPage() {
       )}
       {/* the card, beside the board — the board stays live behind it */}
       <CardSheet id={sheet.cardId} onClose={sheet.close} />
+      {viewer && (
+        <NewCardDialog
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          clients={live.clients.map(c => ({ id: c.id, name: c.name }))}
+          kinds={live.tables.workKinds.rows}
+          team={team}
+          viewer={{ ...viewer, name: me?.name }}
+        />
+      )}
     </div>
   )
 }

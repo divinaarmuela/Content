@@ -1,5 +1,7 @@
 'use client'
 
+import { usePathname, useRouter } from 'next/navigation'
+
 /**
  * Start a post from the Scheduler.
  *
@@ -28,9 +30,9 @@ import { toast } from 'sonner'
 import { Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import ComposeDialog from '../social/ComposeDialog'
 import { NotSetUp } from '../NotSetUp'
 import { useRole } from '../useRole'
+import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 import { notifyProductionChange } from '../production/useProductionLive'
 import { friendlyError } from '../../lib/support-core'
 
@@ -42,6 +44,8 @@ type Account = {
 
 export default function NewPostButton() {
   const { can, loading: roleLoading } = useRole()
+  const router = useRouter()
+  const path = usePathname()
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
@@ -76,18 +80,15 @@ export default function NewPostButton() {
     return true
   }, [])
 
-  const start = async () => {
-    if (fetched.current) { setOpen(true); return }
-    setLoading(true)
-    try {
-      if (await load()) setOpen(true)
-    } catch (e) {
-      const raw = e instanceof Error ? e.message : ''
-      // never put a developer string on screen — support-core decides
-      toast.error(friendlyError(raw, 'Scheduler'))
-    } finally {
-      setLoading(false)
+  const start = () => {
+    // ONE composer. This page used to open its own four-step wizard, which
+    // meant two sets of platform rules to keep in step and no live preview.
+    // The Schedule page owns the good one; this asks it to open.
+    if (path === SCHEDULE_PAGE) {
+      window.dispatchEvent(new CustomEvent('mdm:new-post'))
+      return
     }
+    router.push(`${SCHEDULE_PAGE}?new=1`)
   }
 
   // the role is still arriving: render nothing rather than a button that may
@@ -115,15 +116,6 @@ export default function NewPostButton() {
         </DialogContent>
       </Dialog>
 
-      <ComposeDialog
-        open={open}
-        onOpenChange={setOpen}
-        clients={clients}
-        accounts={accounts}
-        // the queue and the calendar both refetch on this, so a post made here
-        // appears where it belongs without waiting for the poll
-        onPublished={notifyProductionChange}
-      />
     </>
   )
 }
