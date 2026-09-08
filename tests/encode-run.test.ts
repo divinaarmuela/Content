@@ -103,7 +103,7 @@ describe('asking for one copy', () => {
 
     expect(asked).toHaveLength(1)
     expect(asked[0].jobId).toBe(row.id)
-    expect(asked[0].target.maxrateKbps).toBe(10_000)
+    expect(asked[0].target.maxrateKbps).toBe(20_000)
     expect(asked[0].target.maxSeconds).toBe(20)
   })
 
@@ -119,7 +119,7 @@ describe('asking for one copy', () => {
     await runEncodeRequest({ sourceUrl: SOURCE, platform: 'instagram', seconds: 20 })
     await runEncodeRequest({ sourceUrl: SOURCE, platform: 'twitter', seconds: 20 })
     expect(rows()).toHaveLength(2)
-    expect(asked.map(a => a.target.maxrateKbps)).toEqual([10_000, 8_000])
+    expect(asked.map(a => a.target.maxrateKbps)).toEqual([20_000, 8_000])
   })
 
   it('does not race itself when two events arrive together', async () => {
@@ -216,7 +216,7 @@ describe('the key never moves', () => {
     expect(rows()[0].attempts).toBe(2)
     // and at the SAME bitrate: the row's own kind and length, not the blind
     // fallback a forgotten kind would have produced
-    expect(asked[0].target.maxrateKbps).toBe(10_000)
+    expect(asked[0].target.maxrateKbps).toBe(20_000)
     expect(rows()[0].target_source).toBe('measured')
   })
 
@@ -280,7 +280,7 @@ describe('settling copies nobody is going to finish', () => {
     expect(row.output_key).toBe('key-original-copy-instagram.mp4')
     // the same copy that was asked for the first time — the row carries the
     // kind and the measured length precisely so a retry cannot downgrade it
-    expect(asked[0].target.maxrateKbps).toBe(10_000)
+    expect(asked[0].target.maxrateKbps).toBe(20_000)
     expect(row.target_source).toBe('measured')
   })
 

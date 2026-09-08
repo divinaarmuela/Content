@@ -229,40 +229,47 @@ afterEach(() => {
 
 /* ── a new file ─────────────────────────────────────────────────────────── */
 
+/* THE APPROVAL STEP WAS REMOVED ON 8 SEPTEMBER 2026.
+ *
+ * Owner: "anyone that has access to dashboard can schedule it for now — no
+ * approval whatsoever." So adding a file the client has never seen no longer
+ * sends the piece back to them: it mints the new version, files it, asks the
+ * encoder, and leaves the piece where it stood. The tests below pin THAT,
+ * and the ones that used to pin the bounce are rewritten rather than deleted,
+ * so the old behaviour is one diff away if the gate is ever reinstated.
+ *
+ * The cost, recorded plainly: nobody is emailed any more — not the client,
+ * not the manager, not the editor. The comment on the old test called that
+ * silence "the bug". It is now the deliberate behaviour of a workflow with
+ * no approval step in it. */
 describe('a file the client has never seen', () => {
-  it('becomes a new version and sends the piece back to them', async () => {
+  it('becomes a new version and leaves the piece where it stood', async () => {
     const { status, body } = await saveMedia({
       item_id: ITEM, files: [...APPROVED, NEW_FILE],
     })
     expect(status).toBe(200)
     expect(body.created).toBe(true)
     expect(body.version_number).toBe(2)
-    expect(body.status).toBe('client_review')
-    expect(body.message).toMatch(/client has to approve it/)
+    expect(body.status).toBe('approved_for_scheduling')
+    expect(body.message).not.toMatch(/client has to approve it/)
 
     expect(versions()).toHaveLength(2)
-    expect(item().status).toBe('client_review')
+    expect(item().status).toBe('approved_for_scheduling')
     // the file is filed and the video encoder is asked, exactly as an upload
     // on the item page would
     expect(h.mirrored).toHaveLength(1)
     expect(h.encoded).toHaveLength(1)
   })
 
-  it('tells the client, the manager and the editor — the silence was the bug', async () => {
+  it('tells nobody, because there is no longer anybody to ask', async () => {
+    // This is the deliberate cost of removing the approval step, pinned here
+    // so it is a decision rather than a surprise: no client email, and no
+    // manager or editor email either. Restoring a team-only notice means
+    // notifying without a status change, which nothing does today.
     as(SCHEDULER)
     await saveMedia({ item_id: ITEM, files: [...APPROVED, NEW_FILE] })
     await settle()
-    const to = h.emails.map(e => String(e.recipientEmail)).sort()
-    expect(to).toContain(CLIENT_USER.email)
-    expect(to).toContain(AM.email)
-    expect(to).toContain(OWNER.email)
-  })
-
-  it('says WHY, in words a client understands', async () => {
-    await saveMedia({ item_id: ITEM, files: [...APPROVED, NEW_FILE] })
-    await settle()
-    const toClient = h.emails.find(e => e.recipientEmail === CLIENT_USER.email)
-    expect(String(toClient?.bodyHtml)).toMatch(/New media was added — please take a look/)
+    expect(h.emails.map(e => String(e.recipientEmail))).toEqual([])
   })
 
   it('takes the final-post approval back, because it was given to other media', async () => {
@@ -326,13 +333,13 @@ describe('a reorder is not a version', () => {
     await saveMedia({ item_id: ITEM, files: [...APPROVED, NEW_FILE] })
     expect(versions()).toHaveLength(2)
     // …and every rearrangement of it afterwards is an edit, however many
-    // times somebody changes their mind. The item is now at client_review,
-    // where the approved set reads empty — which is exactly the state that
-    // used to make everything look new.
+    // times somebody changes their mind. The version count is the whole point
+    // of this test and is unchanged by the approval step going: three saves,
+    // one new version.
     await saveMedia({ item_id: ITEM, files: [NEW_FILE, ...APPROVED] })
     await saveMedia({ item_id: ITEM, files: [APPROVED[1], NEW_FILE, APPROVED[0]] })
     expect(versions()).toHaveLength(2)
-    expect(h.emails.filter(e => e.recipientEmail === CLIENT_USER.email)).toHaveLength(1)
+    expect(h.emails.filter(e => e.recipientEmail === CLIENT_USER.email)).toHaveLength(0)
   })
 
   it('keeps the post where it stood — a reorder does not un-send it', async () => {
@@ -517,7 +524,7 @@ describe('addMediaVersion, called directly', () => {
     expect(versions()).toHaveLength(2)
   })
 
-  it('…but not on a client who signs every post off — there the piece goes back as before', async () => {
+  it('…and no longer stops for a client who signs every post off either', async () => {
     fake.restore()
     fake = seed()
     fake.rows('clients').forEach((c: any) => { if (c.id === CLIENT) c.client_approval_required = true })
@@ -526,7 +533,8 @@ describe('addMediaVersion, called directly', () => {
       item_id: ITEM, files: [...APPROVED, NEW_FILE],
     })
     expect(out.created).toBe(true)
-    expect(item().status).toBe('client_review')
+    // was 'client_review' until the approval step was removed
+    expect(item().status).toBe('approved_for_scheduling')
   })
 
   it('leaves a piece that is not approved-and-scheduled where it is', async () => {

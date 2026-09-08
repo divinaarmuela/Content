@@ -7,7 +7,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { SocialAccount } from '@/lib/db-types'
 import {
-  APPROVAL_LINE, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
+  approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
   readPerChannel, PAGE_ID_HELP, sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
@@ -1162,7 +1162,7 @@ export default function NewPostDialog({
             title={STATUS_WORDS[status]}
           >
             <span className={cn('inline-block h-2 w-2 rounded-full', DOT_CLASS[tileTone(status)])} />
-            {APPROVAL_LINE[status]}
+            {approvalLine(status, { mayApprove, clientSignsOff })}
           </span>
 
           {state.dirty && (

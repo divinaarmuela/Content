@@ -28,6 +28,7 @@
  */
 
 import { publishBlockReason, parseApprovalState } from './posting-approval-core'
+import { TEAM_ROLES } from './identity-core'
 import {
   LIVE_JOB_STATUSES, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
   type Platform, type PostKind, type PostOptions,
@@ -144,9 +145,22 @@ export function mayPostWithoutApproval(
   who: string | null | undefined | readonly string[],
   clientSignsOff: boolean | null | undefined,
 ): boolean {
-  if (clientSignsOff === true) return false
+  /* NO APPROVAL STEP. The owner's decision on 8 Sep 2026: "anyone that has
+   * access to dashboard can schedule it for now — no approval whatsoever."
+   *
+   * This used to be the gate: only an account manager or a super admin could
+   * post without asking, and a client marked `client_approval_required` put
+   * everyone back on the full flow. BOTH are gone. Every team role posts
+   * straight out, and the client's sign-off flag no longer blocks anyone —
+   * it stays on the record, and "Send for review" stays in the menu for
+   * anybody who wants a second pair of eyes, but nothing requires it.
+   *
+   * `clientSignsOff` is kept in the signature deliberately, not deleted: it
+   * is still read all over the composer for what it SAYS, and reinstating the
+   * gate is one line here rather than a hunt through five files. */
+  void clientSignsOff
   const hats = typeof who === 'string' ? [who] : Array.isArray(who) ? who.map(String) : []
-  return hats.includes('account_manager') || hats.includes('super_admin')
+  return hats.some(h => (TEAM_ROLES as readonly string[]).includes(h))
 }
 
 /**

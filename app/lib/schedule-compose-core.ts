@@ -975,6 +975,13 @@ export const PICKER_LIBRARY_HELP =
 /** The plain sentence on the footer's state pill. */
 export const APPROVAL_LINE: Record<SocialPostStatus, string> = {
   draft: 'Needs approval before it can post',
+  /* ^ TRUE FOR MOST PEOPLE, AND A FLAT CONTRADICTION FOR THE ONES WHO CAN
+   * POST. Read `approvalLine` below rather than this map directly: an
+   * account manager or super admin on a client who does not sign every post
+   * off was being shown "Needs approval before it can post" beside a button
+   * reading "Schedule" — the pill said no while the button said yes, in the
+   * same six inches of screen. The pill was keyed on the post's status alone
+   * and never asked WHO was looking at it. */
   pending: 'Waiting for approval',
   approved: 'Approved — ready to go out',
   changes: 'Changes asked for',
@@ -994,6 +1001,25 @@ export const APPROVAL_LINE: Record<SocialPostStatus, string> = {
  * second pair of eyes is not the same as needing permission.
  */
 export const SEND_FOR_REVIEW = 'Send for review'
+
+/**
+ * The footer pill, for the person actually looking at it.
+ *
+ * A draft means "nobody has signed this off yet". What that MEANS depends on
+ * who is reading: for somebody who cannot approve it, it is a thing waiting
+ * on someone else; for somebody who can, there is nothing in the way at all
+ * and saying "needs approval" is simply false. Every other status says the
+ * same thing to everybody, so only the draft line moves.
+ */
+export function approvalLine(
+  status: SocialPostStatus,
+  input: { mayApprove?: boolean; clientSignsOff?: boolean } = {},
+): string {
+  if (status === 'draft' && input.mayApprove === true && input.clientSignsOff !== true) {
+    return 'Not sent to anyone — yours to post'
+  }
+  return APPROVAL_LINE[status]
+}
 
 /**
  * What a person is told once it has gone — who has it, and what happens next.

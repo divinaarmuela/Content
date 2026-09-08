@@ -207,7 +207,7 @@ describe('how long the clip is', () => {
 
     // …and 20 seconds is what buys the full ceiling
     const { encodeTargetFor } = await import('../app/lib/media-fit-core')
-    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(10_000)
+    expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(20_000)
     // where budgeting for the channel's whole 15 minutes would not
     expect(encodeTargetFor('instagram', 'reel')!.maxrateKbps).toBeLessThan(3_000)
   })

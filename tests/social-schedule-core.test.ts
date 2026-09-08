@@ -718,22 +718,30 @@ describe('Approve without client', () => {
 /* ── posting with no approval step in the way (5 Sep 2026) ───────────────── */
 
 describe('who may post without approval', () => {
-  it('is the account manager and the super admin, by role or by hat', () => {
-    expect(mayPostWithoutApproval('account_manager', false)).toBe(true)
-    expect(mayPostWithoutApproval('super_admin', false)).toBe(true)
+  // The gate was removed on 8 Sep 2026 (owner: "anyone that has access to
+  // dashboard can schedule it for now — no approval whatsoever"). It used to
+  // be account managers and super admins only, and a client who signed every
+  // post off stopped even them.
+  it('is every team role now, by role or by hat', () => {
+    for (const who of ['scheduler', 'editor', 'account_manager', 'super_admin']) {
+      expect(mayPostWithoutApproval(who, false), String(who)).toBe(true)
+    }
     expect(mayPostWithoutApproval(['editor', 'account_manager'], false)).toBe(true)
+    expect(mayPostWithoutApproval(['scheduler'], false)).toBe(true)
   })
 
-  it('is nobody else — a scheduler still asks', () => {
-    for (const who of ['scheduler', 'editor', 'client', '', null, undefined]) {
+  it('is still nobody outside the team', () => {
+    for (const who of ['client', '', null, undefined]) {
       expect(mayPostWithoutApproval(who, false), String(who)).toBe(false)
     }
-    expect(mayPostWithoutApproval(['scheduler'], false)).toBe(false)
   })
 
-  it('is nobody at all on a client who signs every post off', () => {
-    expect(mayPostWithoutApproval('account_manager', true)).toBe(false)
-    expect(mayPostWithoutApproval('super_admin', true)).toBe(false)
+  it('no longer stops for a client who signs every post off', () => {
+    // the flag is still recorded and still SAID in the composer; it simply
+    // does not block anyone any more
+    expect(mayPostWithoutApproval('account_manager', true)).toBe(true)
+    expect(mayPostWithoutApproval('scheduler', true)).toBe(true)
+    expect(mayPostWithoutApproval('client', true)).toBe(false)
   })
 
   it('reads the CLIENT row, and only an explicit yes', () => {

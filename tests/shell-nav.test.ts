@@ -77,7 +77,9 @@ describe('resolveNav by role', () => {
     expect(list).not.toContain('/dashboard/audience')
     expect(list).toContain('/dashboard/clients')
     expect(list).toContain('/dashboard/reports')
-    for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/social']) {
+    // NOT '/dashboard/scheduler': taken off the sidebar on 8 Sep 2026 when
+    // the approval step it existed for was removed
+    for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/social']) {
       expect(list, h).toContain(h)
     }
   })
@@ -91,11 +93,13 @@ describe('resolveNav by role', () => {
     ].sort())
   })
 
-  it('gives a scheduler Scheduler and Schedule — and Schedule is drawn without Social', () => {
+  it('gives a scheduler the Schedule page, drawn without Social', () => {
+    // The Scheduler board is off the sidebar (8 Sep 2026). A scheduler's rail
+    // is now Overview, Schedule, Notifications, Settings — and Schedule is a
+    // Social CHILD, so it is not in `allowed`; it is drawn in Social's place.
     expect(seen('scheduler').sort()).toEqual([
       '/dashboard',
       '/dashboard/notifications',
-      '/dashboard/scheduler',
       '/dashboard/settings',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')

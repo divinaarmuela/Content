@@ -64,8 +64,8 @@ describe('asking the encoder', () => {
     expect((calls[0].init.headers as Record<string, string>).authorization).toBe('Bearer bearer-token')
     const body = JSON.parse(String(calls[0].init.body))
     expect(body.jobId).toBe('job-1')
-    expect(body.target.maxrateKbps).toBe(10_000)
-    expect(body.target.bufsizeKbps).toBe(20_000)
+    expect(body.target.maxrateKbps).toBe(20_000)
+    expect(body.target.bufsizeKbps).toBe(40_000)
     expect(body.uploadUrl).toBe('https://r2.example.com/put?sig=1')
   })
 
