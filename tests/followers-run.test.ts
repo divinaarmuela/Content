@@ -108,14 +108,14 @@ describe('one look per account per day', () => {
     expect(c.status).toBe('running')
   })
 
-  it('a "Refresh now" within the hour stands down; an hour later it runs', async () => {
+  it('a "Refresh now" within ten minutes stands down; later it runs', async () => {
     const source = scripted({ pages: [[person('1', 'ann')]] })
     await runSnapshot({ accountId: ACC, mode: 'top', trigger: 'scheduled', now: DAY1, source })
-    const soon = await beginSnapshot({ accountId: ACC, mode: 'top', trigger: 'manual', now: new Date(DAY1.getTime() + 20 * 60_000), source })
+    const soon = await beginSnapshot({ accountId: ACC, mode: 'top', trigger: 'manual', now: new Date(DAY1.getTime() + 3 * 60_000), source })
     expect(soon).toEqual({ status: 'skipped', reason: 'too_soon' })
     const later = await beginSnapshot({ accountId: ACC, mode: 'top', trigger: 'manual', now: new Date(DAY1.getTime() + 61 * 60_000), source })
     expect(later.status).toBe('running')
-    expect((later as { id: string }).id).toBe('acc-1:top:2026-09-01T11')
+    expect((later as { id: string }).id).toBe('acc-1:top:2026-09-01T1100')
   })
 })
 

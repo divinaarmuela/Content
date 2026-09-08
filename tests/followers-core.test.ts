@@ -76,7 +76,7 @@ describe('days and buckets', () => {
     const at = new Date('2026-09-06T15:30:00Z')   // 01:30 on 7 Sep in Melbourne
     expect(dayKey(at)).toBe('2026-09-07')
     expect(snapshotBucket('scheduled', at)).toBe('2026-09-07')
-    expect(snapshotBucket('manual', at)).toBe('2026-09-07T01')
+    expect(snapshotBucket('manual', at)).toBe('2026-09-07T0130')
     expect(snapshotId(ACC, 'top', '2026-09-07')).toBe('acc-1:top:2026-09-07')
     expect(shiftDay('2026-03-01', -1)).toBe('2026-02-28')
   })
@@ -168,12 +168,12 @@ describe('when a full read may say somebody left', () => {
 
 describe('guards', () => {
   const at = '2026-09-07T00:00:00.000Z'
-  it('a refresh is honoured once an hour, and never while a look runs', () => {
+  it('a refresh is honoured once every ten minutes, and never while a look runs', () => {
     expect(refreshAllowed(null, new Date(at))).toEqual({ ok: true })
-    const soon = new Date(Date.parse(at) + 10 * 60_000)
+    const soon = new Date(Date.parse(at) + 3 * 60_000)
     expect(refreshAllowed({ status: 'done', taken_at: at }, soon)).toMatchObject({ ok: false, reason: 'too_soon' })
     expect(refreshAllowed({ status: 'running', taken_at: at }, soon)).toMatchObject({ ok: false, reason: 'running' })
-    expect(refreshAllowed({ status: 'done', taken_at: at }, new Date(Date.parse(at) + 61 * 60_000))).toEqual({ ok: true })
+    expect(refreshAllowed({ status: 'done', taken_at: at }, new Date(Date.parse(at) + 11 * 60_000))).toEqual({ ok: true })
   })
 
   it('the cost note is money for the row, never for a screen', () => {

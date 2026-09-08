@@ -11,7 +11,7 @@ import { refreshAllowed, snapshotBucket, snapshotId } from '../../../../../../li
  * "Refresh now" — look at this account's newest followers again, today.
  *
  * An account manager or a super admin, on a client they are on. Once an
- * hour per account: the verdict here is the polite refusal with a time, and
+ * ten minutes per account: the verdict here is the polite refusal with a time, and
  * the snapshot row's hour bucket (claimed by the job) is the guard that
  * holds when two people press it at once. `{ full: true }` asks for the
  * whole list instead — the same read the monthly look does.
@@ -40,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({
           error: verdict.reason === 'running'
             ? 'A look is already under way. Give it a few minutes.'
-            : 'Looked at less than an hour ago. Try again a little later.',
+            : 'Looked at a few minutes ago. Try again shortly.',
           retryAt: verdict.retryAt,
         }, { status: 429 })
       }

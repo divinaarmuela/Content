@@ -22,7 +22,9 @@ import {
 } from '@/app/lib/publish-core'
 import { copiesToPrepare } from '@/app/lib/encode-ahead-core'
 import { copyAheadWords } from '@/app/lib/shrink-core'
-import { PLATFORM_MEDIA } from '@/app/lib/media-fit-core'
+import { PLATFORM_MEDIA, type AssetProbe } from '@/app/lib/media-fit-core'
+import { isMeasured, measureUrl } from '@/app/lib/measure-media-client'
+import AssetCheck from '../AssetCheck'
 import {
   buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO,
 } from '@/app/lib/post-preview-core'
@@ -265,6 +267,53 @@ export default function NewPostDialog({
     () => accounts.filter(a => state.channels.includes(a.id)), [accounts, state.channels])
   const platforms = useMemo(
     () => [...new Set(chosen.map(a => String(a.platform)))], [chosen])
+
+  /**
+   * WHAT THE FILES ACTUALLY ARE, and what each channel will do to them.
+   *
+   * The rules — cropped to 9:16, over the size limit, longer than a Story
+   * takes — were written and tested long before this window read them: a
+   * slide arrived as a URL and a byte count, and a rule cannot judge a shape
+   * it cannot see. So a slide the picker did not measure is measured here,
+   * off the stored file (an image's natural size, a video's header), and the
+   * answer is written back onto the slide so it is measured once, not on
+   * every open. `AssetCheck` then says, per channel, exactly what will
+   * happen — before anything is scheduled, while the file can still be
+   * swapped.
+   */
+  useEffect(() => {
+    const todo = state.slides.filter(sl => !isMeasured(sl))
+    if (todo.length === 0) return
+    let cancelled = false
+    void Promise.all(todo.map(async sl => [sl.url, await measureUrl(sl.url, sl.type)] as const)).then(found => {
+      if (cancelled) return
+      const by = new Map(found.filter(([, m]) => m.width && m.height))
+      if (by.size === 0) return
+      dispatch({
+        type: 'measured',
+        slides: state.slides.map(sl => (by.has(sl.url) ? { ...sl, ...by.get(sl.url) } : sl)),
+      })
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.slides.map(sl => sl.url).join('|')])
+
+  const probes = useMemo<AssetProbe[]>(() => state.slides.map(sl => ({
+    url: sl.url, type: sl.type,
+    ...(sl.bytes ? { bytes: sl.bytes } : {}),
+    ...(sl.width && sl.height ? { width: sl.width, height: sl.height } : {}),
+    ...(sl.seconds ? { seconds: sl.seconds } : {}),
+  })), [state.slides])
+  const checkPlatforms = useMemo(() => platforms.filter(isPlatform), [platforms])
+  const checkKinds = useMemo(() => {
+    const out: Partial<Record<Platform, PostKind>> = {}
+    for (const a of chosen) {
+      const p = String(a.platform)
+      const k = state.perChannel[a.id]?.kind
+      if (isPlatform(p) && k) out[p] = k as PostKind
+    }
+    return out
+  }, [chosen, state.perChannel])
 
   /**
    * THE COPY THAT IS ALREADY BEING MADE.
@@ -925,6 +974,12 @@ export default function NewPostDialog({
             {preparingCopy && (
               <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>
             )}
+
+            {/* what each channel will do with these files — said here, where
+                the file can still be swapped, not in a client's feed */}
+            {state.slides.length > 0 && checkPlatforms.length > 0 && (
+              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} compact />
+            )}
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3.5">
@@ -1039,7 +1094,14 @@ export default function NewPostDialog({
           </p>
         )}
 
-        {(problems.length > 0 || shownChecks.length > 0 || note) && (
+        {/* THE BOTTOM OF THE WINDOW IS ONE THING, NOT A PILE. The problems,
+            the "close anyway?" question, the approval box and the footer used
+            to stack in the scrolling body, and on a short screen they landed on
+            top of each other and under the button's own menu. Now: the footer
+            sticks to the bottom and is always visible, and only one message
+            sits above it — a question you are being asked wins over a problem
+            you already know about. */}
+        {!confirm && (problems.length > 0 || shownChecks.length > 0 || note) && (
           <div className="flex flex-col gap-1.5 px-3.5">
             {[...problems, ...(problems.length === 0 ? shownChecks : [])].map(p => (
               <p key={p} className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
@@ -1140,7 +1202,7 @@ export default function NewPostDialog({
         )}
 
         {/* ── footer ── */}
-        <div className="flex flex-wrap items-center gap-3 border-t border-border p-3.5">
+        <div className="sticky bottom-0 z-20 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-surface p-3.5">
           <button
             type="button"
             onClick={() => (state.postId ? setConfirm('delete') : requestClose())}

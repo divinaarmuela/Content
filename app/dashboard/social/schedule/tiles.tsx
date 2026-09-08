@@ -76,9 +76,23 @@ export function Thumb({ slide, className, label }: {
     )
   }
   if (slide.type === 'video') {
+    // A frame from the clip, not a film icon. `#t=0.5` asks the browser to
+    // seek half a second in, so a fade-from-black master does not show as a
+    // black square; `preload="metadata"` reads only the header and that one
+    // frame. The icon stays underneath for the moment before it paints and
+    // for a file the browser cannot decode.
     return (
-      <div className={cn('flex items-center justify-center bg-ink text-cream', className)}>
+      <div className={cn('relative flex items-center justify-center overflow-hidden bg-ink text-cream', className)}>
         <Film className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        <video
+          src={`${slide.url}#t=0.5`}
+          muted
+          playsInline
+          preload="metadata"
+          aria-hidden
+          tabIndex={-1}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        />
         <span className="sr-only">{label ?? slide.name}</span>
       </div>
     )

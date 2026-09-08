@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MAX_FPS, MIN_MAXRATE_KBPS, budgetedMaxrateKbps, ffmpegArgs, ffprobeArgs,
   fitsBudget, outputFps, outputSeconds, parseFrameRate, parseProbe, targetDimensions,
-  targetForSource, targetProblem, toneMapNeeded, videoKbpsOf,
+  targetForSource, targetProblem, toneMapNeeded, verifyOutput, videoKbpsOf,
   worstCaseMB, TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE,
   type EncodeTarget,
 } from '../src/ladder.js'
@@ -193,7 +193,7 @@ describe('reading what ffprobe says', () => {
         { codec_type: 'audio' },
         { codec_type: 'video', width: 1080, height: 1920, avg_frame_rate: '30/1' },
       ],
-    })).toEqual({ width: 1080, height: 1920, fps: 30, durationSec: 19.98 })
+    })).toEqual({ width: 1080, height: 1920, fps: 30, durationSec: 19.98, hasAudio: true })
   })
 
   it('says no when there is no picture in the file', () => {
@@ -288,7 +288,7 @@ describe('an HDR master is converted, not relabelled', () => {
       }],
     })).toEqual({
       width: 1080, height: 1920, fps: 30, durationSec: 20,
-      colorTransfer: 'arib-std-b67', colorPrimaries: 'bt2020',
+      colorTransfer: 'arib-std-b67', colorPrimaries: 'bt2020', hasAudio: false,
     })
   })
 
@@ -404,5 +404,49 @@ describe('the trim', () => {
       source: { width: 1080, height: 1920, fps: 30, durationSec: 21.4 },
     })
     expect(arg(args, '-t')).toBe('22')
+  })
+})
+
+
+describe('the finished file is checked before it is called ready', () => {
+  const src = { width: 3840, height: 2160, fps: 25, durationSec: 107.88, hasAudio: true }
+  const probe = (over: Record<string, unknown> = {}, audio = true) => ({
+    format: { duration: '107.9' },
+    streams: [
+      { codec_type: 'video', width: 1920, height: 1080, avg_frame_rate: '25/1', ...over },
+      ...(audio ? [{ codec_type: 'audio' }] : []),
+    ],
+  })
+  const target = { maxSeconds: 900, maxFps: 60 }
+  const dims = { width: 1920, height: 1080 }
+
+  it('passes a copy that is what was asked for', () => {
+    expect(verifyOutput(probe(), src, target, dims)).toMatchObject({ ok: true })
+  })
+  it('refuses a copy with no picture', () => {
+    expect(verifyOutput({ streams: [{ codec_type: 'audio' }] }, src, target, dims))
+      .toMatchObject({ ok: false, error: expect.stringContaining('no video') })
+  })
+  it('refuses a copy that lost its sound', () => {
+    expect(verifyOutput(probe({}, false), src, target, dims))
+      .toMatchObject({ ok: false, error: expect.stringContaining('sound') })
+  })
+  it('refuses the wrong frame size', () => {
+    expect(verifyOutput(probe({ width: 1280, height: 720 }), src, target, dims))
+      .toMatchObject({ ok: false, error: expect.stringContaining('1280x720') })
+  })
+  it('refuses a frame rate over the cap', () => {
+    expect(verifyOutput(probe({ avg_frame_rate: '120/1' }), src, { maxSeconds: 900, maxFps: 60 }, dims))
+      .toMatchObject({ ok: false, error: expect.stringContaining('fps') })
+  })
+  it('refuses a copy cut short, but forgives a trailing frame', () => {
+    expect(verifyOutput({ ...probe(), format: { duration: '60.0' } }, src, target, dims))
+      .toMatchObject({ ok: false, error: expect.stringContaining('short') })
+    expect(verifyOutput({ ...probe(), format: { duration: '107.4' } }, src, target, dims))
+      .toMatchObject({ ok: true })
+  })
+  it('expects only what the channel ceiling allowed — a trimmed Story is not short', () => {
+    expect(verifyOutput({ ...probe(), format: { duration: '60.0' } }, src, { maxSeconds: 60, maxFps: 60 }, dims))
+      .toMatchObject({ ok: true })
   })
 })

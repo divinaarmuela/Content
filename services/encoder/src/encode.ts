@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import {
-  TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE, ffmpegArgs, ffprobeArgs,
+  TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE, ffmpegArgs, ffprobeArgs, verifyOutput,
   outputSeconds, parseProbe, targetDimensions, targetForSource, toneMapNeeded,
   videoKbpsOf,
   type EncodeTarget, type SourceInfo,
@@ -248,6 +248,21 @@ export async function runEncode(req: EncodeRequest): Promise<EncodeResult> {
 
       const { size } = await stat(output)
       const dims = targetDimensions(source, target)
+
+      // the finished file is read back and judged before anyone is told it is
+      // ready — see `verifyOutput` for the ways a "successful" encode lies
+      const checked = await run('ffprobe', ffprobeArgs(output), 60_000)
+      let outProbe: unknown = null
+      try { outProbe = JSON.parse(checked.stdout) } catch { outProbe = null }
+      const verdict = verifyOutput(outProbe, source, target, dims)
+      if (!verdict.ok) {
+        log('copy failed its check', { error: verdict.error })
+        return { ...empty, error: `the copy failed its check: ${verdict.error}` }
+      }
+      log('verified', {
+        width: verdict.info.width, height: verdict.info.height, fps: verdict.info.fps,
+        seconds: verdict.info.durationSec, audio: verdict.info.hasAudio,
+      })
       // what the COPY runs for, which is the clip trimmed to the channel's
       // ceiling — the master's own length would misreport the bitrate and
       // send a retry off budgeting for footage that is no longer in the file

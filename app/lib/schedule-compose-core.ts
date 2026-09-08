@@ -173,6 +173,9 @@ export type ComposerAction =
   | { type: 'loaded'; state: Partial<ComposerState> }
   | { type: 'caption'; caption: string }
   | { type: 'slides'; slides: Slide[] }
+  /** a measurement landing on the slides — a fact about the files, not an
+   *  edit to the post, so it never makes the window "unsaved" */
+  | { type: 'measured'; slides: Slide[] }
   | { type: 'channel'; id: string; on: boolean }
   | { type: 'time'; iso: string | null }
   | { type: 'extra'; channel: string; patch: ChannelExtras }
@@ -334,6 +337,8 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
         : { ...state, caption: action.caption, dirty: true }
     case 'slides':
       return { ...state, slides: [...action.slides], dirty: true }
+    case 'measured':
+      return { ...state, slides: [...action.slides] }
     case 'channel': {
       const has = state.channels.includes(action.id)
       if (has === action.on) return state

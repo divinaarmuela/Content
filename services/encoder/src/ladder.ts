@@ -64,6 +64,8 @@ export type SourceInfo = {
   colorTransfer?: string
   /** ffprobe's `color_primaries` — `bt2020` on almost anything HDR */
   colorPrimaries?: string
+  /** the source carries a sound track — so the copy must too */
+  hasAudio?: boolean
 }
 
 export const DEFAULT_SHORT_SIDE = 1080
@@ -434,7 +436,46 @@ export function parseProbe(json: unknown): SourceInfo | null {
     ...(Number.isFinite(durationRaw) && durationRaw > 0 ? { durationSec: durationRaw } : {}),
     ...(video.color_transfer ? { colorTransfer: String(video.color_transfer) } : {}),
     ...(video.color_primaries ? { colorPrimaries: String(video.color_primaries) } : {}),
+    hasAudio: streams.some(s => s?.codec_type === 'audio'),
   }
+}
+
+/**
+ * THE FINISHED FILE IS CHECKED BEFORE IT IS CALLED READY.
+ *
+ * Until 8 Sep 2026 the encoder trusted ffmpeg's exit code and the byte count.
+ * That is not a check: ffmpeg exits 0 on a file with the picture and no
+ * sound, on a file cut short, and on one whose frame rate quietly fell back.
+ * Each would have been handed to Instagram as "the copy", and the first
+ * anybody heard was the client.
+ *
+ * So the output is probed the same way the source was, and judged against
+ * what was asked for. The rules are few and each names a way a copy has
+ * actually gone wrong: no picture, sound lost, wrong frame size, frame rate
+ * over the cap, or a clip shorter than it should be (by a whole second, so
+ * a trailing-frame rounding never fails a good copy).
+ */
+export function verifyOutput(
+  probe: unknown,
+  source: SourceInfo,
+  target: Pick<EncodeTarget, 'maxSeconds' | 'maxFps'>,
+  expected: { width: number; height: number },
+): { ok: true; info: SourceInfo } | { ok: false; error: string } {
+  const info = parseProbe(probe)
+  if (!info) return { ok: false, error: 'the copy has no video in it' }
+  if (info.width !== expected.width || info.height !== expected.height) {
+    return { ok: false, error: `the copy came out ${info.width}x${info.height}, not ${expected.width}x${expected.height}` }
+  }
+  if (source.hasAudio && !info.hasAudio) return { ok: false, error: 'the copy lost its sound' }
+  const cap = target.maxFps ?? DEFAULT_MAX_FPS
+  if (info.fps !== undefined && info.fps > cap + 0.01) {
+    return { ok: false, error: `the copy is ${info.fps.toFixed(2)} fps, over the ${cap} allowed` }
+  }
+  const wanted = Math.min(source.durationSec ?? Infinity, target.maxSeconds)
+  if (Number.isFinite(wanted) && info.durationSec !== undefined && info.durationSec < wanted - 1) {
+    return { ok: false, error: `the copy runs ${info.durationSec.toFixed(1)}s, short of the ${wanted.toFixed(1)}s expected` }
+  }
+  return { ok: true, info }
 }
 
 /** The bitrate a finished file actually came out at, for the callback. */

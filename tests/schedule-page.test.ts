@@ -331,11 +331,12 @@ describe('overlapping tiles share the column', () => {
     expect(placed.map(p => p.lanes)).toEqual([1, 1])
   })
 
-  it('counts the ones past the third rather than hiding them silently', () => {
+  it('names the ones past the second rather than hiding them silently', () => {
+    // two lanes, not three: the third of a laptop's day column is a sliver
     const { placed, overflow } = layoutLanes(
       [0, 1, 2, 3, 4].map(i => ({ id: `p${i}`, top: 100 })))
-    expect(placed).toHaveLength(3)
-    expect(overflow).toEqual([{ top: 100, count: 2 }])
+    expect(placed).toHaveLength(2)
+    expect(overflow).toEqual([{ top: 100, count: 3, ids: ['p2', 'p3', 'p4'] }])
   })
 
   it('reuses a lane once its tile has finished', () => {

@@ -29,8 +29,11 @@ export const COMPLETE_RATIO = 0.9
 export const PAGE_SIZE = 50
 /** what one provider request costs — kept server-side, never rendered */
 export const REQUEST_COST_USD = 0.001
-/** a "Refresh now" is honoured once an hour per account */
-export const REFRESH_MIN_GAP_MS = 60 * 60 * 1000
+/** a "Refresh now" is honoured once every ten minutes per account. It was an
+ *  hour, which read as "broken until 9:30" to the person pressing it — and a
+ *  'top' look reads only the newest fifty, so the guard is against a stuck
+ *  finger, not against cost. */
+export const REFRESH_MIN_GAP_MS = 10 * 60 * 1000
 /** a "new this week" / "left this week" pile looks back this far */
 export const WEEK_DAYS = 7
 
@@ -112,12 +115,15 @@ export function snapshotId(accountId: string, mode: SnapshotMode, bucket: string
   return `${accountId}:${mode}:${bucket}`
 }
 
-/** a scheduled look is bucketed by day; a "Refresh now" by the hour */
+/** a scheduled look is bucketed by day; a "Refresh now" by the ten-minute
+ *  slot — the same width as REFRESH_MIN_GAP_MS, because the bucket IS the
+ *  claim: an hourly bucket quietly turned the ten-minute gap back into an
+ *  hour, since the second press in the same hour got the same id and lost. */
 export function snapshotBucket(trigger: SnapshotTrigger, now: Date, tz: string = MELBOURNE): string {
   const day = dayKey(now, tz)
   if (trigger === 'scheduled') return day
-  const hour = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).slice(0, 2)
-  return `${day}T${hour}`
+  const [hour, minute] = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).split(':')
+  return `${day}T${hour}${minute.slice(0, 1)}0`
 }
 
 /** shift a `YYYY-MM-DD` by whole days (UTC arithmetic on the calendar) */

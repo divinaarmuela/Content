@@ -271,6 +271,8 @@ export default function WeekGrid({
    *  minute from the thing in their hand */
   const [railAt, setRailAt] = useState<string | null>(null)
   const columns = useRef<(HTMLDivElement | null)[]>([])
+  /** which "+N more" list is open, as `dayIndex:top`; one at a time */
+  const [moreOpen, setMoreOpen] = useState<string | null>(null)
 
   /** the time a pointer at `clientY` is over, in the client's zone */
   const timeAt = (el: HTMLElement, dayIndex: number, clientY: number): string | null => {
@@ -485,15 +487,52 @@ export default function WeekGrid({
                 )
               })}
 
-              {overflow.map(o => (
-                <span
-                  key={`more-${o.top}`}
-                  style={{ top: o.top + TILE_PX - 18 }}
-                  className="absolute right-1.5 rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold text-background"
-                >
-                  +{o.count}
-                </span>
-              ))}
+              {overflow.map(o => {
+                const key = `${day.index}:${o.top}`
+                const hidden = o.ids.map(id => dayPosts.find(p => p.id === id)).filter((p): p is SchedulePostRow => !!p)
+                return (
+                  <div key={`more-${o.top}`} className="absolute inset-x-1.5" style={{ top: o.top + TILE_PX - 22 }}>
+                    {/* THE ONES THAT DID NOT FIT, AS A BUTTON. A badge that
+                        said "+3" and did nothing was the calendar hiding
+                        three posts behind a number. This opens them. */}
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setMoreOpen(m => (m === key ? null : key)) }}
+                      aria-expanded={moreOpen === key}
+                      className="ml-auto flex h-5 items-center rounded-full bg-foreground px-2 text-[10px] font-bold text-background shadow-sm hover:opacity-90"
+                    >
+                      +{o.count} more
+                    </button>
+                    {moreOpen === key && (
+                      <div
+                        role="dialog"
+                        aria-label={`${o.count} more posts at this time`}
+                        onClick={e => e.stopPropagation()}
+                        className="absolute right-0 top-6 z-30 flex w-[240px] flex-col gap-1 rounded-inner border border-border bg-popover p-1.5 shadow-lg"
+                      >
+                        {hidden.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => { setMoreOpen(null); onOpen(p) }}
+                            className="flex items-center gap-2 rounded-tile px-1.5 py-1 text-left hover:bg-muted"
+                          >
+                            <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-9 w-9 shrink-0 rounded-tile" />
+                            <span className="flex min-w-0 flex-1 flex-col">
+                              <span className="truncate text-[12px] font-semibold">{p.item_title ?? 'Post'}</span>
+                              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <StatusDot tone={p.tone} className="h-1.5 w-1.5" />
+                                {clockLabel(p.scheduled_for, tz)} · {STATUS_WORDS[p.live_status]}
+                              </span>
+                            </span>
+                            {p.platforms[0] && <PlatformIcon platform={p.platforms[0]} size={14} className="shrink-0 rounded-full" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {movePos && movePos.dayIndex === day.index && moveTo && (
                 <DropSlot top={movePos.top} iso={moveTo} tz={tz} offGrid={movePos.offGrid} />

@@ -26,6 +26,13 @@ export type Slide = {
   type: SlideType
   /** file size, when the uploader knew it — display only */
   bytes?: number
+  /** what the browser measured when the file was picked, or what the composer
+   *  read off the stored file later: the picture's pixels and, for video, its
+   *  length. This is what lets the composer say "this will be cropped" or
+   *  "too long for a Story" BEFORE anything is scheduled. */
+  width?: number
+  height?: number
+  seconds?: number
   /**
    * WHERE THIS FILE CAME FROM, and the one value that changes behaviour.
    *
@@ -105,9 +112,14 @@ export function normaliseSlides(input: unknown): Slide[] {
     // version stores it, and the mirror reads it to know not to copy the file
     // back into the folder it was picked out of
     const driveId = String(row.drive_file_id ?? '').trim()
+    const dim = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined }
+    const width = dim(row.width), height = dim(row.height)
+    const seconds = Number(row.seconds)
     out.push({
       url, name, type,
       ...(Number.isFinite(bytes) && bytes > 0 ? { bytes: Math.floor(bytes) } : {}),
+      ...(width && height ? { width, height } : {}),
+      ...(Number.isFinite(seconds) && seconds > 0 ? { seconds: Math.round(seconds * 100) / 100 } : {}),
       ...(row.source === 'drive' || row.source === 'upload'
         ? { source: row.source as SlideSource }
         : {}),

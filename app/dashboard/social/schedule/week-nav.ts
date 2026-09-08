@@ -45,7 +45,7 @@ export function rangeLabel(days: readonly LabelDay[]): string {
 
 export type LaneItem = { id: string; top: number }
 export type LanePlacement = { id: string; lane: number; lanes: number }
-export type LaneOverflow = { top: number; count: number }
+export type LaneOverflow = { top: number; count: number; ids: string[] }
 
 /**
  * Where overlapping tiles sit, side by side.
@@ -53,8 +53,14 @@ export type LaneOverflow = { top: number; count: number }
  * A client posting to Instagram and TikTok at 12:00 on Wednesday is two
  * posts, not an edge case — stacked at the same `top` the second one is
  * invisible and unclickable. Overlapping tiles share the column instead: up
- * to `maxLanes` of them side by side, and anything past that is counted so
- * the day can say "+2 more" rather than swallowing them.
+ * to `maxLanes` of them side by side, and anything past that is NAMED so the
+ * day can offer "+2 more" as a button that opens them.
+ *
+ * Two lanes, not three: a day column is ~180px on a laptop, and a third of
+ * that is a 60px sliver — the thumbnail, the time and the network no longer
+ * fit and the tile reads as a smear. The owner's words, 8 Sep 2026: "the
+ * calendar just doesn't show that it's here". Two tiles stay legible; the
+ * rest are one press away.
  *
  * Pure: it takes tops and gives back lanes, so the rule can be tested without
  * a calendar around it.
@@ -62,7 +68,7 @@ export type LaneOverflow = { top: number; count: number }
 export function layoutLanes(
   items: readonly LaneItem[],
   tileHeight = 80,
-  maxLanes = 3,
+  maxLanes = 2,
 ): { placed: LanePlacement[]; overflow: LaneOverflow[] } {
   const sorted = [...items].sort((a, b) => a.top - b.top || a.id.localeCompare(b.id))
   const placed: LanePlacement[] = []
@@ -81,12 +87,12 @@ export function layoutLanes(
       lanes.push(lane)
     }
     const used = Math.min(Math.max(...lanes) + 1, maxLanes)
-    let hidden = 0
+    const hidden: string[] = []
     cluster.forEach((item, i) => {
-      if (lanes[i] >= maxLanes) { hidden++; return }
+      if (lanes[i] >= maxLanes) { hidden.push(item.id); return }
       placed.push({ id: item.id, lane: lanes[i], lanes: used })
     })
-    if (hidden > 0) overflow.push({ top: cluster[0].top, count: hidden })
+    if (hidden.length > 0) overflow.push({ top: cluster[0].top, count: hidden.length, ids: hidden })
     cluster = []
   }
 

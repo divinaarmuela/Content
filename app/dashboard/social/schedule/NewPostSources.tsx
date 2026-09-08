@@ -10,6 +10,7 @@ import {
   type NewPostSourceKey, type UploadedPostSummary,
 } from '@/app/lib/schedule-upload-core'
 import { friendlyError } from '@/app/lib/support-core'
+import { measureFile } from '@/app/lib/measure-media-client'
 import { formatInZone } from '@/app/lib/timezone-core'
 import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
 import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
@@ -90,6 +91,10 @@ export default function NewPostSources({
     if (keep.length === 0) return
     try {
       const { done } = uploadFiles(keep as unknown as File[], { group, purpose: 'social' })
+      // measured off the local file while it uploads, so the size verdict is
+      // ready the moment the upload is — never a second round trip
+      const measured = await Promise.all((keep as unknown as File[]).map(f => measureFile(f)))
+      const byName = new Map((keep as unknown as File[]).map((f, i) => [f.name + f.size, measured[i]] as const))
       const landed = await done
       setChosen(prev => [...prev, ...landed.map(({ file, url }) => ({
         url,
@@ -97,6 +102,7 @@ export default function NewPostSources({
         type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
         bytes: file.size,
         source: 'upload' as const,
+        ...(byName.get(file.name + file.size) ?? {}),
       }))])
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
@@ -272,6 +278,9 @@ export default function NewPostSources({
                 <Upload className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} aria-hidden />
                 <span className="text-[14px] font-semibold">Drop photos or video here</span>
                 <span className="text-[12px] text-muted-foreground">or browse your computer</span>
+                <span className="mt-1 max-w-[360px] text-[12px] leading-snug text-muted-foreground">
+                  One photo or one video is one post. <b className="font-semibold text-foreground">Two to ten photos together make a carousel</b> — one post people swipe through. Drop them all at once, or add more below.
+                </span>
                 <input
                   ref={fileInput}
                   type="file"
@@ -440,11 +449,25 @@ function ChosenStrip({ files, onRemove }: {
   onRemove: (index: number) => void
 }) {
   if (files.length === 0) return null
+  const images = files.filter(f => f.type === 'image').length
+  const videos = files.length - images
+  // what these files ADD UP TO, in the words the platforms use — so a person
+  // knows they are making a carousel before the composer tells them
+  const shape = videos > 0 && images > 0
+    ? 'Photos and a video together: Instagram posts them as a carousel; TikTok and YouTube take the video only.'
+    : videos > 1
+      ? 'Several videos: Instagram takes up to ten in a carousel; most other channels take one video per post.'
+      : videos === 1
+        ? 'One video — posts as a Reel on Instagram.'
+        : images === 1
+          ? 'One photo. Add more to make a carousel (up to ten).'
+          : `${images} photos — this posts as a carousel people swipe through.`
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[12px] font-semibold">
         In this post · {files.length}
       </span>
+      <span className="text-[12px] text-muted-foreground">{shape}</span>
       <div className="flex flex-wrap gap-2">
         {files.map((f, i) => (
           <div
@@ -452,6 +475,11 @@ function ChosenStrip({ files, onRemove }: {
             className="relative h-[72px] w-[72px] overflow-hidden rounded-tile border border-border bg-foreground/[0.06]"
           >
             <Thumb slide={f} label={f.name} className="h-full w-full" />
+            {f.width && f.height && (
+              <span className="absolute inset-x-0 bottom-0 bg-ink/70 px-1 py-0.5 text-center text-[9px] font-semibold leading-tight text-cream">
+                {f.width}×{f.height}{f.seconds ? ` · ${Math.round(f.seconds)}s` : ''}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => onRemove(i)}
