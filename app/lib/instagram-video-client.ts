@@ -41,6 +41,9 @@ async function ask(url: string, token: string | null, force: boolean): Promise<V
 export type InstagramVideoState = {
   /** the mp4 to play, once known */
   video: string | null
+  /** the sound, which Instagram serves as a SEPARATE file — the mp4 above
+   *  carries the picture only, so the card plays the two together */
+  audio: string | null
   /** true once the server has answered, video or not */
   settled: boolean
   /** playback failed on the stored URL — ask once more */
@@ -50,6 +53,7 @@ export type InstagramVideoState = {
 export function useInstagramVideo(url: string | undefined, wanted: boolean, token: string | null): InstagramVideoState {
   const code = url ? instagramShortcode(url) : null
   const [video, setVideo] = useState<string | null>(null)
+  const [audio, setAudio] = useState<string | null>(null)
   const [settled, setSettled] = useState(false)
   const refreshed = useRef(false)
   const [tick, setTick] = useState(0)
@@ -74,7 +78,7 @@ export function useInstagramVideo(url: string | undefined, wanted: boolean, toke
     let tries = 0
     const settle = (a: VideoAnswer) => {
       if (cancelled) return
-      if (a.video !== null) { setVideo(a.video); setSettled(true); return }
+      if (a.video !== null) { setVideo(a.video); setAudio(a.audio); setSettled(true); return }
       // 'off' means the feature is not switched on, 'not_video' means there is
       // nothing to play — neither improves by asking again
       if (a.reason !== 'unavailable' || tries >= 12) { setSettled(true); return }
@@ -92,11 +96,12 @@ export function useInstagramVideo(url: string | undefined, wanted: boolean, toke
   }, [code, url, wanted, token, tick])
 
   const refresh = () => {
-    if (refreshed.current) { setVideo(null); return }
+    if (refreshed.current) { setVideo(null); setAudio(null); return }
     refreshed.current = true
     setVideo(null)
+    setAudio(null)
     setTick(t => t + 1)
   }
 
-  return { video, settled, refresh }
+  return { video, audio, settled, refresh }
 }

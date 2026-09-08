@@ -61,7 +61,9 @@ export async function POST(req: Request) {
         if (current && Date.parse(current.fetched_at) > now - 60_000 && current.last_error === 'running') return null
         return {
           id: code,
-          video: current?.video ?? null, poster: current?.poster ?? null, caption: current?.caption ?? null,
+          video: current?.video ?? null, audio: current?.audio ?? null,
+          audio_known: current?.audio_known ?? false,
+          poster: current?.poster ?? null, caption: current?.caption ?? null,
           author: current?.author ?? null, duration: current?.duration ?? null,
           expires_at: current?.expires_at ?? null,
           fetched_at: stamp, fail_count: current?.fail_count ?? 0, last_error: 'running',
@@ -81,7 +83,7 @@ export async function POST(req: Request) {
       const result = await runActor(apiToken, postUrl)
       if (result.ok) {
         const row: InstagramVideoRow = {
-          id: code, ...result.value,
+          id: code, ...result.value, audio_known: true,
           fetched_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + VIDEO_TTL_MS).toISOString(),
           fail_count: 0, last_error: null,
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
         return NextResponse.json(answerOf(row))
       }
       await videos.upsert({
-        id: code, video: null, poster: null, caption: null, author: null, duration: null, expires_at: null,
+        id: code, video: null, audio: null, audio_known: true, poster: null, caption: null, author: null, duration: null, expires_at: null,
         fetched_at: new Date().toISOString(), fail_count: prevFails + 1, last_error: result.error,
       })
       return NextResponse.json({ video: null, reason: result.error === 'not_video' ? 'not_video' : 'unavailable' } satisfies VideoAnswer)
@@ -102,7 +104,10 @@ export async function POST(req: Request) {
 }
 
 function answerOf(row: InstagramVideoRow): VideoAnswer {
-  return { video: row.video as string, poster: row.poster, caption: row.caption, author: row.author, duration: row.duration }
+  return {
+    video: row.video as string, audio: row.audio,
+    poster: row.poster, caption: row.caption, author: row.author, duration: row.duration,
+  }
 }
 
 async function runActor(apiToken: string, postUrl: string): Promise<

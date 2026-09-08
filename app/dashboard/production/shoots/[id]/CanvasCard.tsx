@@ -221,6 +221,7 @@ function CanvasCardInner({
   // not, and the one tap it needs is Instagram's own play button.
   const frameRef = React.useRef<HTMLDivElement>(null)
   const videoRef = React.useRef<HTMLVideoElement>(null)
+  const audioRef = React.useRef<HTMLAudioElement>(null)
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const reducedMotion = useReducedMotion()
   const autoKind = autoplayKindFor(src ?? card)
@@ -268,12 +269,50 @@ function CanvasCardInner({
   const toggleSound = () => {
     const on = !soundOn
     const v = videoRef.current
+    const a = audioRef.current
     if (v && !playing) {
       v.muted = !on
       if (on) v.play().catch(() => { v.muted = true; onSound?.(false) })
     }
+    // the sound file, started in the same click for the same reason
+    if (a) {
+      if (on) { if (v) a.currentTime = v.currentTime; a.play().catch(() => { /* the badge stays */ }) }
+      else a.pause()
+    }
     onSound?.(on)
   }
+
+  /* INSTAGRAM'S SOUND IS A SECOND FILE, PLAYED ALONGSIDE. Their mp4 carries
+   * the picture only, so this <audio> is the post's sound and the two are
+   * kept together: started and stopped with the clip, and nudged back into
+   * line whenever they drift more than a quarter of a second (a seek, a
+   * stall, the loop coming round). It is silent and idle until somebody
+   * asks for sound, so a board of clips costs nothing extra. */
+  const wantsSound = soundOn || playing
+  React.useEffect(() => {
+    const v = videoRef.current
+    const a = audioRef.current
+    if (!v || !a) return
+    const follow = () => {
+      if (!wantsSound) { if (!a.paused) a.pause(); return }
+      if (Math.abs(a.currentTime - v.currentTime) > 0.25) a.currentTime = v.currentTime
+      if (v.paused) { if (!a.paused) a.pause() }
+      else if (a.paused) a.play().catch(() => { /* needs a tap; the badge is there */ })
+    }
+    follow()
+    const timer = window.setInterval(follow, 1000)
+    for (const e of ['play', 'pause', 'seeked', 'waiting', 'playing']) v.addEventListener(e, follow)
+    return () => {
+      window.clearInterval(timer)
+      for (const e of ['play', 'pause', 'seeked', 'waiting', 'playing']) v.removeEventListener(e, follow)
+      a.pause()
+    }
+  }, [wantsSound, ig.audio])
+
+  /** the post's sound, when Instagram served it as its own file */
+  const soundTrack = ig.audio ? (
+    <audio ref={audioRef} src={ig.audio} preload={auto.load ? 'metadata' : 'none'} loop={!playing} className="hidden" />
+  ) : null
 
   // where the player's origin is stated to YouTube, so it will listen to us
   const origin = typeof window !== 'undefined' ? window.location.origin : undefined
@@ -478,6 +517,7 @@ function CanvasCardInner({
             preload={auto.load ? 'metadata' : 'none'} onError={() => { if (ig.video) ig.refresh() }}
             className="absolute inset-0 h-full w-full select-none object-cover" style={{ pointerEvents: 'none' }} />
         )}
+        {soundTrack}
         {/* Instagram's frame comes only behind the tap — inside a mock-up
             the picture is the face, and their frame (with its own header,
             and its own "Watch on Instagram" overlay) is what the tap opens */}
@@ -936,6 +976,7 @@ function CanvasCardInner({
               style={{ pointerEvents: playing ? 'auto' : 'none' }}
             />
           )}
+          {soundTrack}
           {autoFrame}
           {/* a badge that plays where we can, and opens the post where we
               cannot — never one that does nothing. A clip already moving

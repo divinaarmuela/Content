@@ -212,6 +212,15 @@ const GHOST_TABLES = {
   instagram_videos: [
     ['id', col('string', false)],
     ['video', col('string', true)],
+    // Instagram hands out DASH: the mp4 in `video` carries the PICTURE ONLY
+    // (probed 2026-09-08: one trak, handler `vide`, no `soun`, no `mp4a`),
+    // and the sound is a second file. Both are kept, and the card plays them
+    // together.
+    ['audio', col('string', true)],
+    // whether this row was written by a build that knows about `audio` at
+    // all — a row cached before that has no sound and no way to say so,
+    // since a null column reads back the same as a missing one
+    ['audio_known', col('boolean', false)],
     ['poster', col('string', true)],
     ['caption', col('string', true)],
     ['author', col('string', true)],

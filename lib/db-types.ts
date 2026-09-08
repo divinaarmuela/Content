@@ -710,6 +710,8 @@ export interface InboxTouch {
 export interface InstagramVideo {
   id: string
   video: string | null
+  audio: string | null
+  audio_known: boolean
   poster: string | null
   caption: string | null
   author: string | null
@@ -1244,7 +1246,7 @@ export const TABLE_COLUMNS = {
   follower_snapshots: ['id', 'account_id', 'client_id', 'platform', 'mode', 'trigger', 'day', 'taken_at', 'count', 'seen', 'requests', 'limit', 'cursor', 'user_pk', 'seeded', 'source', 'cost_note', 'status', 'error', 'created_at', 'updated_at'],
   followers: ['id', 'account_id', 'client_id', 'pk', 'username', 'full_name', 'profile_pic', 'is_private', 'is_verified', 'first_seen_at', 'last_seen_at', 'gone_at', 'position_last', 'updated_at'],
   inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
-  instagram_videos: ['id', 'video', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
+  instagram_videos: ['id', 'video', 'audio', 'audio_known', 'poster', 'caption', 'author', 'duration', 'fetched_at', 'expires_at', 'fail_count', 'last_error', 'updated_at'],
   intake_files: ['id', 'created_at', 'form_id', 'block_id', 'filename', 'url', 'size_bytes'],
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
@@ -1324,7 +1326,7 @@ export const NULLABLE_COLUMNS = {
   follower_snapshots: ['count', 'cursor', 'user_pk', 'cost_note', 'error'],
   followers: ['full_name', 'profile_pic', 'first_seen_at', 'gone_at', 'position_last'],
   inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
-  instagram_videos: ['video', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
+  instagram_videos: ['video', 'audio', 'poster', 'caption', 'author', 'duration', 'expires_at', 'last_error'],
   intake_files: [],
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],

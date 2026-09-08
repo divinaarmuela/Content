@@ -32,6 +32,10 @@ export const FORCE_MIN_AGE_MS = 15 * 60 * 1000
 export type InstagramVideoRow = {
   id: string
   video: string | null
+  audio: string | null
+  /** false on a row cached before the sound file was ever asked for — a
+   *  null `audio` cannot say whether the post has none or nobody looked */
+  audio_known?: boolean
   poster: string | null
   caption: string | null
   author: string | null
@@ -43,7 +47,8 @@ export type InstagramVideoRow = {
   updated_at?: string
 }
 
-/** Only an https mp4 on Instagram's own CDN is ever played. */
+/** Only an https mp4 on Instagram's own CDN is ever played. The sound file
+ *  is the same shape and is checked the same way. */
 export function isInstagramVideoUrl(url: unknown): url is string {
   return typeof url === 'string' && isInstagramCdnUrl(url) && isPlayableFile(url)
 }
@@ -57,6 +62,9 @@ export function cacheDecision(
   if (!row) return 'fetch'
   const fetched = Date.parse(row.fetched_at)
   if (row.video && row.expires_at) {
+    // a row from before the sound file existed is served without it, and
+    // would stay silent for its whole TTL: ask again instead, once
+    if (!row.audio_known) return 'fetch'
     const fresh = Date.parse(row.expires_at) > now
     if (fresh && !(force && now - fetched > FORCE_MIN_AGE_MS)) return 'serve'
     return 'fetch'
@@ -70,6 +78,7 @@ export function cacheDecision(
 export type ActorItem = {
   type?: string
   videoUrl?: string
+  audioUrl?: string
   displayUrl?: string
   caption?: string
   ownerUsername?: string
@@ -82,6 +91,12 @@ export function fromActorItem(item: unknown): Omit<InstagramVideoRow, 'id' | 'fe
   if (!isInstagramVideoUrl(it.videoUrl)) return null
   return {
     video: it.videoUrl,
+    /* THE PICTURE AND THE SOUND ARE TWO FILES. Instagram serves DASH, so
+     * `videoUrl` is a video-only rendition — probed on a real post
+     * (DSFZPrNks17) on 2026-09-08: one track, handler `vide`, zero `soun`
+     * and zero `mp4a` atoms; the `audioUrl` beside it has `soun` + `mp4a`
+     * and no video. Unmuting the <video> alone can only ever be silent. */
+    audio: isInstagramVideoUrl(it.audioUrl) ? it.audioUrl : null,
     poster: typeof it.displayUrl === 'string' && /^https:\/\//.test(it.displayUrl) ? it.displayUrl : null,
     caption: typeof it.caption === 'string' ? it.caption.slice(0, 2200) : null,
     author: typeof it.ownerUsername === 'string' ? it.ownerUsername.slice(0, 80) : null,
@@ -96,5 +111,5 @@ export function actorInput(postUrl: string): Record<string, unknown> {
 
 /** What the browser is told. Never the token, never the service. */
 export type VideoAnswer =
-  | { video: string; poster: string | null; caption: string | null; author: string | null; duration: number | null }
+  | { video: string; audio: string | null; poster: string | null; caption: string | null; author: string | null; duration: number | null }
   | { video: null; reason: 'off' | 'not_video' | 'unavailable' }
