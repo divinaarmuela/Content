@@ -36,7 +36,14 @@ const MAX_BYTES = Math.floor(4.995 * 1024 * 1024 * 1024)
  */
 export async function POST(req: Request) {
   return withRequestCache(async () => {
-    const denied = await guard('editor')
+    // THE TEAM FLOOR, NOT 'editor'. `TEAM_ROLES` puts scheduler BELOW editor
+    // (identity-core.ts), so guarding on 'editor' refused every scheduler —
+    // and a scheduler uploading the media they are about to post is the whole
+    // point of the Scheduler page's one action. They met "Insufficient
+    // permissions" on a 960 MB file and it read like a size problem.
+    // Nothing privileged is reachable here: the storage key is minted
+    // server-side, and no client role satisfies a team role.
+    const denied = await guard('scheduler')
     if (denied) return denied
 
     if ((req.headers.get('content-type') ?? '').includes('application/json')) {
