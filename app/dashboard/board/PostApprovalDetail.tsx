@@ -18,6 +18,8 @@ import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-cor
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { readPostedSlides } from '../../lib/posted-slides-core'
 import { uploadFiles } from '../uploadQueue'
+import BrandCard from '../production/BrandCard'
+import CollapsibleCard from '../CollapsibleCard'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -404,6 +406,18 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         <input ref={addInput} type="file" multiple accept="image/*,video/*" className="hidden"
           onChange={e => { void onAddPicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
       </div>
+
+      {/* ── the brand: colours, fonts, voice, logo files — for the editor and
+          the scheduler as much as the manager (the owner, 9 Sep 2026: "make
+          sure brand assets are shown … editor or scheduler can see it in the
+          card, the brand guidelines, and account manager") ── */}
+      {item.client_id && (
+        <div className="border-b border-border px-5 py-4">
+          <CollapsibleCard title="Brand" summary={`${client?.name ?? 'the client'}’s colours, fonts, voice and logo files`}>
+            <BrandCard clientId={item.client_id} />
+          </CollapsibleCard>
+        </div>
+      )}
 
       {/* ── 4. what was said ── */}
       <div className="flex flex-col gap-3 px-5 py-4">

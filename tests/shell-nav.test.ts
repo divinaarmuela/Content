@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   GROUPS, NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS, PINNED_BOTTOM,
   activeNavHref, pageTitle, resolveNav,
@@ -233,5 +235,12 @@ describe('pageTitle', () => {
 
   it('says "Dashboard" only when the path is not the dashboard at all', () => {
     expect(pageTitle('/somewhere/else')).toBe('Dashboard')
+  })
+})
+
+describe('the rail does not prefetch (9 Sep 2026)', () => {
+  it('every nav link is prefetch={false}', () => {
+    const src = readFileSync(join(process.cwd(), 'app/dashboard/ui/Shell.tsx'), 'utf8')
+    expect(src).toMatch(/prefetch=\{false\}/)
   })
 })

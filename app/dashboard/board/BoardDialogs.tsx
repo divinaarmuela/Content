@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { NETWORK_LABEL } from '../../lib/publish-core'
+import BrandCard from '../production/BrandCard'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -580,6 +581,9 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               </SelectContent>
             </Select>
           </div>
+          {/* the client's brand, the moment they are picked — so the card is
+              made with the colours, fonts and voice in view (9 Sep 2026) */}
+          {clientId && <BrandCard clientId={clientId} />}
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-title">Title</Label>
             <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Spring reel 2" className={field} autoFocus />

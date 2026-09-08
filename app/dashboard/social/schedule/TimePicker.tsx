@@ -29,7 +29,13 @@ import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
  * in dark mode.
  */
 
-const dayCell = 'h-10 w-10 rounded-tile text-center text-[13px] p-0 relative text-foreground'
+/* EVERY CELL IS 40px, AND SO IS ITS BUTTON. The grid used to be `w-full`
+ * with flex rows, so the cells took whatever width the panel gave them while
+ * the buttons stayed 40px: on a narrower layout the cells came out at ~29px
+ * and each 40px button spilled over the next cell — hover "15", and "14"
+ * lit up (the owner, 9 Sep 2026). A fixed 280px grid (7 × 40) centred in
+ * the panel cannot do that. */
+const dayCell = 'h-10 w-10 shrink-0 rounded-tile text-center text-[13px] p-0 relative text-foreground'
 
 /** 'YYYY-MM-DD' → the Date react-day-picker wants, read as a plain day (UTC,
  *  so no zone can shift it onto the day before). */
@@ -78,11 +84,16 @@ export default function TimePicker({
       })
     }
     place()
-    window.addEventListener('scroll', place, true)
-    window.addEventListener('resize', place)
+    // once per frame: a scroll fires many times a frame, and re-placing (and
+    // re-rendering the month) on each was part of the lag
+    let raf = 0
+    const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; place() }) }
+    window.addEventListener('scroll', later, true)
+    window.addEventListener('resize', later)
     return () => {
-      window.removeEventListener('scroll', place, true)
-      window.removeEventListener('resize', place)
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', later, true)
+      window.removeEventListener('resize', later)
     }
   }, [open])
   useEffect(() => {
@@ -162,12 +173,12 @@ export default function TimePicker({
                 'absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
               button_next:
                 'absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
-              month_grid: 'w-full border-collapse',
+              month_grid: 'mx-auto w-[280px] border-collapse table-fixed',
               weekdays: 'flex',
-              weekday: 'w-10 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
-              week: 'mt-1 flex w-full',
+              weekday: 'h-6 w-10 shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
+              week: 'mt-1 flex',
               day: dayCell,
-              day_button: 'h-10 w-10 rounded-tile font-medium hover:bg-muted',
+              day_button: 'block h-10 w-10 rounded-tile font-medium hover:bg-muted',
               selected: '[&>button]:bg-foreground [&>button]:text-background',
               today: '[&>button]:font-bold [&>button]:text-accent-blue',
               outside: 'opacity-40',

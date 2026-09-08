@@ -1,5 +1,6 @@
 'use client'
 
+import BrandCard from './BrandCard'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -247,6 +248,8 @@ export default function NewShootPlanDialog({
             </Select>
             <p className="text-[12px] text-muted-foreground">Any client, not only the ones you run.</p>
           </div>
+          {/* the brand, the moment a client is picked (9 Sep 2026) */}
+          {draft.client_id && <div className="sm:col-span-2"><BrandCard clientId={draft.client_id} /></div>}
           {/* a plan belongs to a shoot. Without this picker "New shoot plan"
               silently created a SECOND shoot beside the one already there. */}
           <div className="grid gap-1.5">

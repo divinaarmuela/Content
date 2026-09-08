@@ -885,7 +885,7 @@ export default function NewPostDialog({
             laptop the close button landed alone on a second line with a blank
             band above it — and the time chip, the one control people go
             looking for, sat at the wrap point where it was easy to lose. */}
-        <div className="flex flex-wrap items-center gap-2.5 border-b border-border p-3.5 sm:flex-nowrap">
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2.5 border-b border-border bg-surface p-3.5 sm:flex-nowrap">
           <Dropdown
             label={(
               <>

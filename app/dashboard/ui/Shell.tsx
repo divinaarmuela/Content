@@ -225,6 +225,12 @@ function NavLinks({ nav, onNavigate, part }: {
       <Link
         key={item.href}
         href={item.href}
+        // NO PREFETCH (9 Sep 2026). With it on, every page load fetched the
+        // RSC payload of every page in the rail — 100+ requests, three per
+        // route — and the main thread stalled for seconds parsing them:
+        // the Schedule page could not even be screenshotted. The owner: "it
+        // is currently laggy". A page is fetched when it is pressed.
+        prefetch={false}
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
         // 44px tall: a nav row is a thumb target on a tablet, not a word
