@@ -127,6 +127,27 @@ export function cleanCopyWords(platformLabel: string): string {
   return `Making a clean copy for ${platformLabel} — usually a few minutes`
 }
 
+/**
+ * What a person is told when the copy is asked for AS THEY ATTACH THE MEDIA.
+ *
+ * The same event, a different moment, and so a different promise. At publish
+ * time somebody is waiting and the honest thing to say is how long it takes
+ * (`cleanCopyWords`). In the composer nobody is waiting: the post is for next
+ * Tuesday and the copy will have been sitting ready for days. Saying "usually
+ * a few minutes" there reads as "your post is stuck", which is the opposite
+ * of what has just happened.
+ *
+ * No number, because there is no number worth honouring: the wait that
+ * matters to this person is zero.
+ */
+export function copyAheadWords(platformLabels: readonly string[]): string | null {
+  if (platformLabels.length === 0) return null
+  const names = platformLabels.length === 1
+    ? platformLabels[0]
+    : `${platformLabels.slice(0, -1).join(', ')} and ${platformLabels[platformLabels.length - 1]}`
+  return `Preparing a copy for ${names} — this is ready long before your posting time`
+}
+
 /** The one line on the channel's row while this is happening. */
 export function copyWords(platformLabel: string, state: CopyState | undefined): string {
   if (!state) return `Making a smaller copy for ${platformLabel}…`
