@@ -563,6 +563,9 @@ export const mediaEncode = inngest.createFunction(
         assetId: data.assetId ? String(data.assetId) : null,
         versionId: data.versionId ? String(data.versionId) : null,
         slideIndex: typeof data.slideIndex === 'number' ? data.slideIndex : null,
+        // only the attach path asks for this: a copy that gave up may be
+        // asked for again when the clip is put on a post afresh
+        reopen: data.reopen === true,
       })
     })
   })

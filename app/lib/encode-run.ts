@@ -2,7 +2,7 @@ import 'server-only'
 import type { EncodeJob } from '@/lib/db-types'
 import {
   GAVE_UP_MESSAGE, MAX_ENCODE_ATTEMPTS, claimEncodeJob, markEncodeRunning,
-  reclaimEncodeJob, settleEncodeJob, staleEncodeJobs,
+  reclaimEncodeJob, reopenEncodeJob, settleEncodeJob, staleEncodeJobs,
 } from './encode-jobs'
 import { callbackUrl, requestEncode } from './encoder'
 import { encodeTargetFor, type EncodeTarget } from './media-fit-core'
@@ -58,6 +58,15 @@ export type EncodeRunInput = {
   assetId?: string | null
   versionId?: string | null
   slideIndex?: number | null
+  /**
+   * The media was attached afresh, so a copy that gave up may be asked for
+   * again.
+   *
+   * Only the attach path sets this. The publish path must NOT: a post that is
+   * due reads a `failed` row and tells the person in plain words, and quietly
+   * restarting the encode there would park the post for another hour instead.
+   */
+  reopen?: boolean
 }
 
 export type EncodeRunResult =
@@ -167,6 +176,15 @@ export async function runEncodeRequest(input: EncodeRunInput): Promise<EncodeRun
 
   if (claimed.at === 'existing') {
     const row = claimed.row
+    // A copy that gave up is not a copy that can never be made. When the clip
+    // is attached afresh, a row that spent its attempts on something a retry
+    // could have fixed is handed them back — otherwise one bad morning at the
+    // encoder fails every future post of that clip for good.
+    if (input.reopen && row.status === 'failed') {
+      const reopened = await reopenEncodeJob(row.id)
+      const again = reopened.row ? targetFor(reopened.row) : null
+      if (reopened.reopened && reopened.row && again) return askEncoder(reopened.row, again)
+    }
     // A `queued` row that has gone cold means an earlier ask was lost. Take
     // it back — atomically, so the step's retry and the sweep cannot both —
     // and ask again with the SAME key and the SAME target the row records.

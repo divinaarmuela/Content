@@ -255,3 +255,116 @@ describe('handing waiting posts back when a copy lands', () => {
     expect(await jobsWaitingOnCopy('')).toEqual([])
   })
 })
+
+
+/**
+ * A COPY THAT DOES NOT FIT THE CHANNEL IS NOT A COPY.
+ *
+ * `ready` used to be enough on its own. But ffmpeg was never told to stop at
+ * the channel's length ceiling, so a four-minute master posted as an
+ * Instagram Story came out at four minutes and about 305 MB against the
+ * 100 MB Stories take — and this path took it at its word.
+ */
+describe('a copy that came out too big for the channel', () => {
+  const storyJob = (id: string): Row => ({
+    ...publishJob(id),
+    targets: [{ platform: 'instagram', accountId: 'acc-1', options: { kind: 'story' } }],
+  }) as unknown as Row
+
+  it('is refused, in words, instead of being sent', async () => {
+    fake = seedDb({
+      publish_jobs: [storyJob('j1')],
+      encode_jobs: [encodeJob({
+        kind: 'story', status: 'done', output_key: 'copy-instagram.mp4',
+        bytes: 305 * 1024 * 1024, width: 1080, height: 1920, duration_sec: 240,
+      })],
+    })
+    expect(await runPublishJob('j1')).toBe('failed')
+    expect(published).toEqual([])
+    const after = await row('j1')
+    expect(after!.error).toMatch(/only takes 100 MB/)
+  })
+
+  it('takes one that fits', async () => {
+    fake = seedDb({
+      publish_jobs: [storyJob('j1')],
+      encode_jobs: [encodeJob({
+        kind: 'story', status: 'done', output_key: 'copy-instagram.mp4',
+        bytes: 60 * 1024 * 1024, width: 1080, height: 1920, duration_sec: 60,
+      })],
+    })
+    expect(await runPublishJob('j1')).toBe('published')
+  })
+})
+
+/**
+ * THE MASTER STOPS TRAVELLING ONCE EVERY CHANNEL HAS ITS OWN FILE.
+ *
+ * `job.media` was relayed regardless: a 900 MB master pushed through a
+ * function capped at 300 seconds, attached to the post as shared media that
+ * no channel was ever going to use. It did not finish, the job never settled,
+ * and the reclaim sweep started the identical transfer every fifteen minutes.
+ */
+describe('when every channel is holding its own copy', () => {
+  const soloJob = (id: string): Row => ({
+    ...publishJob(id),
+    targets: [{ platform: 'instagram', accountId: 'acc-1', options: { kind: 'reel' } }],
+  }) as unknown as Row
+
+  it('the master is not sent at all', async () => {
+    fake = seedDb({
+      publish_jobs: [soloJob('j1')],
+      encode_jobs: [encodeJob({
+        status: 'done', output_key: 'copy-instagram.mp4', bytes: 120 * 1024 * 1024,
+        width: 1080, height: 1920, duration_sec: 20,
+      })],
+    })
+    expect(await runPublishJob('j1')).toBe('published')
+    expect(published[0].media).toEqual([])
+    const targets = published[0].targets as { options?: { media?: { url: string }[] } }[]
+    expect(targets[0].options?.media).toEqual([{ url: 'https://zernio.com/copy-instagram.mp4', type: 'video' }])
+    // and the row says so, so a retry does not go and fetch it again
+    expect((await row('j1'))!.media).toEqual([])
+  })
+
+  it('but a channel taking the master still gets it', async () => {
+    fake = seedDb({
+      publish_jobs: [publishJob('j1')],           // instagram + tiktok
+      encode_jobs: [encodeJob({
+        status: 'done', output_key: 'copy-instagram.mp4', bytes: 120 * 1024 * 1024,
+        width: 1080, height: 1920, duration_sec: 20,
+      })],
+    })
+    expect(await runPublishJob('j1')).toBe('published')
+    expect(published[0].media).toEqual([{ url: 'https://zernio.com/master.mp4', type: 'video' }])
+  })
+})
+
+/**
+ * A FILE TOO BIG TO CARRY IS REFUSED, NOT RETRIED FOR EVER.
+ *
+ * The relay is one serial transfer inside a 300-second function. A 900 MB
+ * master is killed part-way with no error, so the job never settles and the
+ * reclaim sweep pushes exactly the same bytes again a quarter of an hour
+ * later, for ever.
+ */
+describe('a master beyond what the function can carry', () => {
+  it('fails the post with a plain sentence rather than going round again', async () => {
+    const smallFile = globalThis.fetch
+    // the same fake response, but honest about how big the file is
+    vi.stubGlobal('fetch', async () => new Response('fake-bytes', {
+      status: 200,
+      headers: { 'content-type': 'video/mp4', 'content-length': String(900 * 1024 * 1024) },
+    }))
+    // no encoder: nothing to wait for, so the master is what would be relayed
+    delete process.env.ENCODER_URL
+    delete process.env.ENCODER_TOKEN
+    fake = seedDb({ publish_jobs: [publishJob('j1')], encode_jobs: [] })
+
+    expect(await runPublishJob('j1')).toBe('failed')
+    expect(published).toEqual([])
+    const after = await row('j1')
+    expect(after!.error).toMatch(/too big to send as it is/)
+    vi.stubGlobal('fetch', smallFile)
+  })
+})
