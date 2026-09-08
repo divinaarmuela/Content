@@ -7,7 +7,7 @@ import { itemPath } from '../app/lib/workflow-core'
 
 describe('itemPath — where a link to a piece lands', () => {
   it('a post uploaded for approval opens on the Post approval board', () => {
-    expect(itemPath({ id: 'x', adhoc_post: true })).toBe('/dashboard/scheduler')
+    expect(itemPath({ id: 'x', adhoc_post: true })).toBe('/dashboard/scheduler?item=x')
   })
   it('production work keeps its card page', () => {
     expect(itemPath({ id: 'x' })).toBe('/dashboard/production/x')
@@ -33,5 +33,13 @@ describe('the Production card page sends an uploaded post to the Post approval b
       expect(src, f).not.toMatch(/dashboard\/production\/\$\{item\.id\}/)
       expect(src, f).toMatch(/itemPath\(item\)/)
     }
+  })
+})
+
+describe('the Post approval board opens the card the address names', () => {
+  it('reads ?item= once the cards have arrived', () => {
+    const src = readFileSync(join(process.cwd(), 'app/dashboard/scheduler/page.tsx'), 'utf8')
+    expect(src).toContain(".get('item')")
+    expect(src).toMatch(/sheet\.open\(wanted\)/)
   })
 })

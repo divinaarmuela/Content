@@ -606,3 +606,15 @@ describe('a post waiting on somebody, said on the card', () => {
     expect(pageCards('scheduler', [answered], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
   })
 })
+
+/* ── an uploaded post is a "Post" on the card (8 Sep 2026) ─────────────── */
+
+describe('the kind word on an uploaded post', () => {
+  it('says Post, not the kind the upload was filed under', () => {
+    const lines = cardLines({
+      id: 'x', title: 'T', status: 'internal_review', adhoc_post: true,
+      work_kinds: { name: 'Video edit' },
+    } as never, { today: '2026-09-08' })
+    expect(lines.kind).toBe('Post')
+  })
+})

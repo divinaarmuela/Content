@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTable } from '@/lib/db-client'
 import type { ScheduleEntry } from '@/lib/db-types'
@@ -99,6 +100,23 @@ export default function SchedulerPage() {
     return pageCards('scheduler', rows, viewer, today)
   }, [live.items, viewer, today])
   const ready = viewer !== null && !live.loading && today !== null
+
+  /**
+   * `?item=<id>` — the card an email or the bell points at. Opened once the
+   * cards have arrived, and only once: closing it must not reopen it. The
+   * owner, 8 Sep 2026: "the email when a scheduler sends is wrong — make sure
+   * it takes them to the right place." The right place is the card, open.
+   */
+  const openedFromAddress = useRef(false)
+  useEffect(() => {
+    if (!ready || openedFromAddress.current) return
+    let wanted: string | null = null
+    try { wanted = new URLSearchParams(window.location.search).get('item') } catch { /* no address */ }
+    if (!wanted) return
+    openedFromAddress.current = true
+    if (cards.some(c => c.id === wanted)) sheet.open(wanted)
+    else toast.error('That piece is not on this board any more — it may have been deleted.')
+  }, [ready, cards, sheet])
 
   if (noAccount) return <AccountUnavailable />
 

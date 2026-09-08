@@ -139,6 +139,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
       drive_url: latest?.drive_url ?? null,
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
+      adhoc_post: (item as { adhoc_post?: unknown }).adhoc_post === true,
       slide_count: slides.length,
       progress_line: progressLine(status, lastMove),
       schedule: [],

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import CardDetail from '../production/[id]/CardDetail'
+import PostApprovalDetail from './PostApprovalDetail'
+import { useRow } from '@/lib/db-client'
+import type { ContentItem } from '@/lib/db-types'
 import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-sheet-core'
 
 /**
@@ -26,6 +29,10 @@ export function CardSheet({ id, onClose }: {
   // the swipe: where the touch began, how far it has come
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
+  // a post uploaded for approval gets its own drawer (8 Sep 2026); production
+  // work keeps the card. Decided from the row, so it is right the first time.
+  const { row: opened, loading: openedLoading } = useRow<ContentItem>('content_items', id)
+  const adhoc = (opened as { adhoc_post?: unknown } | null)?.adhoc_post === true
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY }
@@ -61,7 +68,9 @@ export function CardSheet({ id, onClose }: {
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">Card</SheetTitle>
-        {id && <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />}
+        {id && !openedLoading && (adhoc
+          ? <PostApprovalDetail key={id} id={id} onClose={onClose} />
+          : <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />)}
       </SheetContent>
     </Sheet>
   )

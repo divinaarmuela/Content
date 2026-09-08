@@ -62,6 +62,9 @@ export type PortalItem = {
    *  pieces carry exactly one entry; a piece with no client-facing media
    *  carries none. */
   slides: { url: string; type: 'image' | 'video'; name: string }[]
+  /** a post uploaded for approval (Post approval page), not production work:
+   *  the client comments on each asset, and the manager decides */
+  adhoc_post: boolean
   slide_count: number
   /** one sentence about where this piece actually is, when the status word
    *  alone would leave the client wondering — a piece pulled back out of their
@@ -156,6 +159,9 @@ export type PortalCard = {
   pdf: boolean
   preview_url: string | null
   slides: PortalItem['slides']
+  /** see `PortalItem.adhoc_post` — on such a card the client is asked for
+   *  comments on each asset, not for a decision (8 Sep 2026) */
+  adhoc_post: boolean
   updated_at: string
   /** the booked posting time, in the client's words, for a scheduled post */
   posted_when: string | null
@@ -430,6 +436,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       drive_url: clientFacing ? latest?.drive_url || null : null,
       preview_slides: slides.slice(0, 3).map(s => ({ url: s.url, type: s.type })),
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
+      adhoc_post: (i as { adhoc_post?: unknown }).adhoc_post === true,
       slide_count: slides.length,
       progress_line: progressLine(status, lastChangeByItem.get(i.id) ?? null),
       schedule: scheduleByItem.get(i.id) ?? [],
@@ -653,7 +660,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       kind: 'work',
       id: p.id,
       title: p.title,
-      word: row.work_kinds?.name?.trim() || kindWord(p.content_type),
+      // an uploaded post is a "Post" to the client, whatever kind the upload
+      // was filed under
+      word: p.adhoc_post ? 'Post' : (row.work_kinds?.name?.trim() || kindWord(p.content_type)),
       caption: facing && typeof row.caption === 'string' && row.caption.trim() ? row.caption.trim() : null,
       column: portalColumnFor(p.status),
       tone: portalCardTone(p.status),
@@ -662,6 +671,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       pdf: false,
       preview_url: p.preview_url,
       slides: p.slides,
+      adhoc_post: p.adhoc_post,
       updated_at: p.updated_at,
       posted_when: postedWhen,
       live_url: live,
@@ -699,6 +709,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       pdf: shared,
       preview_url: null,
       slides: [],
+      adhoc_post: false,
       updated_at: (b as { updated_at?: string }).updated_at ?? b.created_at ?? '',
       posted_when: null,
       live_url: null,

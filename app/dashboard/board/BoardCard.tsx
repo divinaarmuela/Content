@@ -191,7 +191,7 @@ export function BoardCard({
           >
             {lines.link.label} <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
           </a>
-        ) : canEdit ? (
+        ) : (card as { adhoc_post?: unknown }).adhoc_post === true ? null : canEdit ? (
           <Button variant="outline" disabled={busy}
             onClick={e => { e.preventDefault(); onLink(card) }}
             className="h-11 rounded-full border-dashed border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">

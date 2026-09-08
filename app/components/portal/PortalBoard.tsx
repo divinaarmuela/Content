@@ -13,6 +13,7 @@ import type { PortalCard } from '../../lib/portal-data'
 import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
 import { portalPostHref } from '../../lib/post-page-core'
 import { onCardLine } from '../../lib/canvas-comments-core'
+import { commentsBySlide, slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import {
   APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, approveConsequence, changesSentToast,
 } from '../../lib/portal-words'
@@ -78,9 +79,21 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
     try { setName(localStorage.getItem(NAME_KEY) ?? '') } catch { /* private mode */ }
   }, [])
 
-  const canApprove = card.actions.approve && !acted && !!card.act_item_id
-  const canAsk = card.actions.askForChange && !acted && !!card.act_item_id
+  /* AN UPLOADED POST IS NOT THE CLIENT'S TO DECIDE (the owner, 8 Sep 2026:
+   * "not approve or something — it's up to the AM or super admin what to
+   * do"). They look at every asset and say what they think of each; the
+   * manager reads it and moves the card. Production work keeps its one-tap
+   * approve. */
+  const decides = !card.adhoc_post
+  const canApprove = decides && card.actions.approve && !acted && !!card.act_item_id
+  const canAsk = decides && card.actions.askForChange && !acted && !!card.act_item_id
   const canComment = card.actions.comment && !!card.comment_target
+  /** every asset, at full size, each with its own comment — the one image,
+   *  cropped, was "terrible with these assets" */
+  const assets = card.kind === 'work' && canComment ? card.slides : []
+  /** which asset the comment box is about — null is the post as a whole */
+  const [onSlide, setOnSlide] = useState<number | null>(null)
+  const perSlide = commentsBySlide(comments)
 
   const refresh = () => {
     router.refresh()
@@ -138,9 +151,10 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
   }
 
   const sendComment = async () => {
-    const text = draft.trim()
+    const slide = onSlide !== null ? assets[onSlide] : null
+    const text = tagComment(draft, slide ? slideTag(onSlide as number, assets.length, slide.type) : null)
     const target = card.comment_target
-    if (!text || busy || !target) return
+    if (!draft.trim() || busy || !target) return
     const who = name.trim().slice(0, 60)
     try { localStorage.setItem(NAME_KEY, who) } catch { /* fine */ }
     setBusy('comment')
@@ -177,6 +191,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         author_name: 'You', from_team: false, card_id: null,
       }])
       setDraft('')
+      setOnSlide(null)
       toast.success(`Sent to ${amPhrase(amName)}.`)
       refresh()
     } catch (e) {
@@ -242,9 +257,36 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           dx ? 'duration-0' : 'duration-200',
         )}
       >
-        {card.preview_url && (
+        {assets.length === 0 && card.preview_url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.preview_url} alt="" loading="lazy" className="h-[120px] w-full rounded-tile object-cover" />
+        )}
+        {assets.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {assets.map((s, i) => {
+              const n = perSlide.get(i) ?? 0
+              return (
+                <figure key={s.url} className="flex flex-col gap-1.5">
+                  <div className={cn('overflow-hidden rounded-tile', ink ? 'bg-cream/10' : 'bg-foreground/[0.06]')}>
+                    {s.type === 'video'
+                      ? <video src={s.url} controls playsInline preload="metadata" className="max-h-[520px] w-full object-contain" />
+                      // eslint-disable-next-line @next/next/no-img-element
+                      : <img src={s.url} alt={s.name} loading="lazy" className="max-h-[520px] w-full object-contain" />}
+                  </div>
+                  <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className={cn('text-[12px] font-semibold uppercase tracking-[0.02em]', muted)}>
+                      {s.type === 'video' ? 'Video' : 'Photo'} {i + 1} of {assets.length}
+                    </span>
+                    {n > 0 && <span className={cn('text-[12px]', muted)}>{n} {n === 1 ? 'comment' : 'comments'}</span>}
+                    <button type="button" onClick={() => { setOnSlide(i); setOpen(true) }}
+                      className="inline-flex min-h-9 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
+                      <MessageCircle className="h-3.5 w-3.5" /> Comment on this one
+                    </button>
+                  </figcaption>
+                </figure>
+              )
+            })}
+          </div>
         )}
         <div className="flex items-center gap-2">
           {card.word && (
@@ -263,7 +305,11 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         ) : (
           <span className="text-[16px] font-semibold leading-[1.25]">{card.title}</span>
         )}
-        <p className={cn('text-[14px]', muted)}>{line}</p>
+        <p className={cn('text-[14px]', muted)}>
+          {card.adhoc_post && canComment && card.status === 'client_review'
+            ? `Have a look at each one and say what you think — ${amPhrase(amName)} will take it from there.`
+            : line}
+        </p>
         {card.caption && (
           <p className={cn('whitespace-pre-line text-[14px] leading-[1.45]', muted)}>{card.caption}</p>
         )}
@@ -422,8 +468,11 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                       {onCardLine(c.card_label) && (
                         <span className="italic">{onCardLine(c.card_label)}</span>
                       )}
+                      {splitSlideTag(c.body).label && (
+                        <span className="italic">on {splitSlideTag(c.body).label!.toLowerCase()}</span>
+                      )}
                     </p>
-                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{c.body}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{splitSlideTag(c.body).rest}</p>
                   </div>
                 ))}
                 {token && (
@@ -435,6 +484,12 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                     maxLength={60}
                     className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
                   />
+                )}
+                {onSlide !== null && assets[onSlide] && (
+                  <p className={cn('flex items-center gap-2 text-[13px]', muted)}>
+                    About {assets[onSlide].type === 'video' ? 'video' : 'photo'} {onSlide + 1} of {assets.length}
+                    <button type="button" onClick={() => setOnSlide(null)} className="underline underline-offset-4">the whole post instead</button>
+                  </p>
                 )}
                 <div className="flex items-end gap-2">
                   <textarea

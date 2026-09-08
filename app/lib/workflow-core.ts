@@ -483,5 +483,5 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
  * card page.
  */
 export function itemPath(item: { id: string; adhoc_post?: unknown }): string {
-  return item.adhoc_post === true ? '/dashboard/scheduler' : `/dashboard/production/${item.id}`
+  return item.adhoc_post === true ? `/dashboard/scheduler?item=${item.id}` : `/dashboard/production/${item.id}`
 }

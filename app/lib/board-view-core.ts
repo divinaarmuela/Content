@@ -142,7 +142,10 @@ export function cardLines(
   return {
     client: card.clients?.name ?? '—',
     title: card.title,
-    kind: card.work_kinds?.name ?? null,
+    // an uploaded post is a "Post", whatever kind the upload was filed under
+    // — the owner, 8 Sep 2026: "I'm just doing something to get approved,
+    // what is this tag Video edit doing there"
+    kind: (card as { adhoc_post?: unknown }).adhoc_post === true ? 'Post' : (card.work_kinds?.name ?? null),
     link: card.link_url ? { url: card.link_url, label: linkLabel(card.link_kind) } : null,
     brief: card.brief?.trim() ? card.brief.trim() : null,
     assignee,
