@@ -427,13 +427,12 @@ export function pageCards<T extends BoardViewCard>(
   // all: not in Draft, not in Internal check, not in anyone's list. It shows
   // while it waits, and leaves again the moment it is answered.
   //
-  // NO LONGER (8 Sep 2026). A post is answered on SCHEDULE — the composer,
-  // with the frames — "they can only start approving or not approving on the
-  // schedule page, not the scheduler page". So a post uploaded there never
-  // sits in these columns at all: the Overview's "Waiting on you" carries it
-  // and its link opens the composer. `page` is still read by the Editor
-  // rule below.
-  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
+  // THE FINAL SHAPE (8 Sep 2026): a piece uploaded for posting lives on the
+  // POST APPROVAL board — every column, from the scheduler's Draft through
+  // the manager's Internal check and the client's With client to Ready to
+  // post and Posted — and on no other board. Production and Editor are for
+  // production work, which it is not.
+  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true || page === 'scheduler'
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
     if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))

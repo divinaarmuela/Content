@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Only Instagram says who liked a post.' }, { status: 400 })
       }
       const result = await readPostInteractors(row.id, { force: true })
-      if (result.status === 'failed') return NextResponse.json({ error: result.reason ?? 'Could not read the people.' }, { status: 502 })
+      if (result.status === 'failed') return NextResponse.json({ error: peopleReadError(result.reason) }, { status: 502 })
       if (result.status === 'skipped') return NextResponse.json({ error: result.reason ?? 'A read is already under way.' }, { status: 409 })
       // …and the cross — who of these FOLLOWED after the post went out — is
       // recomputed now too, rather than waiting for the next followers look
@@ -47,4 +47,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error }, { status })
     }
   })
+}
+
+/**
+ * The reader's own error codes, in words. `http_404` is the one seen in
+ * anger: the reel at 20:16 on 8 Sep 2026 was asked about minutes after it
+ * went out and the provider had not indexed it yet — the same request an
+ * hour later returned 200 with the likers. So it is "not yet", not "broken".
+ */
+export function peopleReadError(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'http_404': return 'Instagram has not made this post readable yet — it usually takes a little while after it goes out. Try again in a few minutes.'
+    case 'http_401': case 'http_403': return 'The follower reader refused the key — check HIKER_API_KEY.'
+    case 'http_429': return 'The follower reader is rate-limited right now — try again in a minute.'
+    case 'bad_media': case 'bad_likers': case 'bad_comments': return 'The follower reader answered in a shape the app does not understand.'
+    default: return reason ? `Could not read the people (${reason}).` : 'Could not read the people.'
+  }
 }

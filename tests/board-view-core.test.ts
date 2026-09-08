@@ -531,11 +531,12 @@ describe('a post made on the Schedule page is not production work', () => {
     { id: 'work', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1', title: 'Work', client_id: 'c1', due_date: null },
     { id: 'adhoc', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1', title: 'Post', client_id: 'c1', due_date: null, adhoc_post: true },
   ]
-  it('keeps its card but stays off every board', () => {
-    for (const page of ['production', 'editor', 'scheduler'] as const) {
+  it('keeps its card, stays off Production and Editor, and lives on Post approval (8 Sep 2026)', () => {
+    for (const page of ['production', 'editor'] as const) {
       const ids = pageCards(page, rows, viewer).map(c => c.id)
       expect(ids, page).toEqual(['work'])
     }
+    expect(pageCards('scheduler', rows, viewer).map(c => c.id)).toEqual(['work', 'adhoc'])
   })
 })
 
@@ -595,14 +596,13 @@ describe('a post waiting on somebody, said on the card', () => {
    * person is the one exception, and only on the Scheduler board — nobody
    * should be asked for an answer they have no way to give.
    */
-  it('keeps an ad-hoc post off every board, even while it waits — it is answered on Schedule (8 Sep 2026)', () => {
-    // "they can only start approving or not approving on the schedule page,
-    // not the scheduler page": the Overview's "Waiting on you" carries the
-    // post and its link opens the composer, with the frames in front of them
+  it('keeps an ad-hoc piece on the Post approval board, every column, and off the other two (8 Sep 2026)', () => {
     const adhoc = waiting({ id: 'ad1', adhoc_post: true })
-    expect(pageCards('scheduler', [adhoc], manager, TODAY)).toEqual([])
-    expect(pageCards('scheduler', [adhoc], scheduler, TODAY)).toEqual([])
+    expect(pageCards('scheduler', [adhoc], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
+    expect(pageCards('scheduler', [adhoc], scheduler, TODAY).map(c => c.id)).toEqual(['ad1'])
     expect(pageCards('production', [adhoc], manager, TODAY)).toEqual([])
     expect(pageCards('editor', [adhoc], manager, TODAY)).toEqual([])
+    const answered = waiting({ id: 'ad1', adhoc_post: true, posting_approval_state: 'approved' })
+    expect(pageCards('scheduler', [answered], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
   })
 })

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Kanban, Send } from 'lucide-react'
+import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 
@@ -20,7 +21,7 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Board',
     icon: Kanban,
-    blurb: 'Every piece, Draft to Posted — where each one stands and who has it. Once a piece reaches Ready to post it is on Schedule to book in; posts themselves are approved on Schedule.',
+    blurb: 'Every piece, Draft to Posted. New post uploads a piece and sends it to an account manager; they approve it, send it to the client, or send it back — and once it is approved it is on Schedule to book in.',
   },
 ]
 
@@ -56,6 +57,7 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
               <Send className="h-4 w-4" strokeWidth={1.8} /> Schedule
             </Link>
           </nav>
+          <NewPostButton />
 
           {/* THE one button on this page: it opens the media chooser, the
               preview and "Send for approval" over this board — the Schedule

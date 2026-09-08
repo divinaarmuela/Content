@@ -37,7 +37,7 @@ import type { RailMedia } from './useSchedulePosts'
  * check, exactly as it does today.
  */
 export default function NewPostSources({
-  clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable,
+  clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable, allowUploads = true,
   onPick, onApprove, onCreated, onClose,
 }: {
   clientId: string | null
@@ -50,6 +50,9 @@ export default function NewPostSources({
   postWithoutApproval: boolean
   /** …unless this client signs every post off themselves */
   clientSignsOff: boolean
+  /** may a file be uploaded / brought from Drive here — false on Schedule,
+   *  which is for APPROVED pieces only (8 Sep 2026) */
+  allowUploads?: boolean
   /** the client has a Drive folder we can read — no folder, no tab */
   driveAvailable: boolean
   onPick: (media: RailMedia) => void
@@ -59,7 +62,7 @@ export default function NewPostSources({
   onClose: () => void
 }) {
   const sources = useMemo(
-    () => newPostSources({ driveAvailable, approvedCount: media.length }),
+    () => newPostSources({ driveAvailable, approvedCount: media.length, uploads: allowUploads }),
     [driveAvailable, media.length])
   const [source, setSource] = useState<NewPostSourceKey>(() => firstSource(sources))
   const [q, setQ] = useState('')
@@ -180,6 +183,7 @@ export default function NewPostSources({
         contentType: String(json.content_type ?? ''),
         slides: (json.post?.slides ?? chosen) as Slide[],
         needsApproval: Boolean(json.needs_approval),
+        itemStatus: String(json.item_status ?? ''),
       })
     } catch {
       setProblem(friendlyError('', 'Schedule'))

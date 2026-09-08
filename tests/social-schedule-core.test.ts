@@ -993,8 +993,9 @@ describe('assets approved on the board', () => {
     expect(assetsApprovedOnBoard({ status: 'approved_for_scheduling' })).toBe(true)
     expect(assetsApprovedOnBoard({ status: 'scheduled', adhoc_post: false })).toBe(true)
   })
-  it('is never a file uploaded straight onto Schedule, whatever its status', () => {
-    expect(assetsApprovedOnBoard({ status: 'approved_for_scheduling', adhoc_post: true })).toBe(false)
+  it('is an uploaded piece too, once a manager has cleared it', () => {
+    expect(assetsApprovedOnBoard({ status: 'approved_for_scheduling', adhoc_post: true })).toBe(true)
+    expect(assetsApprovedOnBoard({ status: 'internal_review', adhoc_post: true })).toBe(false)
   })
   it('is not a piece still on its way', () => {
     for (const status of ['draft_uploaded', 'internal_review', 'client_review', 'client_changes_requested']) {
@@ -1002,9 +1003,10 @@ describe('assets approved on the board', () => {
     }
     expect(assetsApprovedOnBoard(null)).toBe(false)
   })
-  it('lets a scheduler post such a piece without asking — and still makes them ask for an upload', () => {
+  it('lets a scheduler post an approved piece without asking — and not one still being checked', () => {
     expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling' })).toBe(true)
-    expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(false)
-    expect(mayPostPiece('account_manager', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(true)
+    expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(true)
+    expect(mayPostPiece('scheduler', false, { status: 'internal_review', adhoc_post: true })).toBe(false)
+    expect(mayPostPiece('account_manager', false, { status: 'internal_review', adhoc_post: true })).toBe(true)
   })
 })

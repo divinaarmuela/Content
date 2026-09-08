@@ -515,16 +515,15 @@ describe('schedule without approval', () => {
     expect(String(item.posting_approval_note)).toMatch(/board/i)
   })
 
-  it('still refuses a scheduler on a file uploaded straight onto Schedule', async () => {
+  it('an uploaded piece the manager cleared posts like any other (8 Sep 2026, final)', async () => {
     fake.restore()
-    fake = seed({ adhoc_post: true })
+    fake = seed({ adhoc_post: true })   // approved_for_scheduling in the seed
     const id = (await create()).body.post.id as string
     as(SCHEDULER)
     const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(403)
-    expect(direct.body.error).toBe('Only an account manager (or the client) can approve the final post')
-    expect(jobs()).toHaveLength(0)
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBeFalsy()
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.approval_mode).toBe('assets')
+    expect(jobs()).toHaveLength(1)
   })
 
   it('refuses an editor on their own item too', async () => {

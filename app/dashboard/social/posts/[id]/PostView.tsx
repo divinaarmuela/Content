@@ -101,11 +101,6 @@ export default function PostView({ data }: { data: PostPageData }) {
       <PageTitle
         title={item.title}
         summary={status.detail ?? 'Everything about this post, in one place.'}
-        actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/dashboard/production/${item.id}`}>Open the card</Link>
-          </Button>
-        }
       />
 
       {/* ── where it went, and where it got to ─────────────────────────── */}
@@ -199,16 +194,24 @@ export default function PostView({ data }: { data: PostPageData }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle>People</CardTitle>
-          {/* the morning look reads these once a day at 6 am; a manager can
-              ask for them now instead of being told to come back tomorrow */}
-          {data.may_read_people && main && String(main.platform) === 'instagram' && (
-            <ReadPeopleButton
-              postId={post.id}
-              analyticsId={main.id}
-              running={interactors?.status === 'running'}
-              readBefore={Boolean(interactors)}
-            />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* who the post brought in — judged against the follower list and the Inbox */}
+            {main && String(main.platform) === 'instagram' && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/social/posts/${encodeURIComponent(post.id)}/leads`}>Who it brought in</Link>
+              </Button>
+            )}
+            {/* the morning look reads these once a day at 6 am; a manager can
+                ask for them now instead of being told to come back tomorrow */}
+            {data.may_read_people && main && String(main.platform) === 'instagram' && (
+              <ReadPeopleButton
+                postId={post.id}
+                analyticsId={main.id}
+                running={interactors?.status === 'running'}
+                readBefore={Boolean(interactors)}
+              />
+            )}
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-5 pt-0">
           <Commented p={performance} />

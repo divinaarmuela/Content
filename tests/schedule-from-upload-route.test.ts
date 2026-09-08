@@ -251,8 +251,11 @@ describe('a scheduler uploads the same file', () => {
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(true)
-    expect(made.body.message).toContain('account manager checks it')
-    expect(items()[0].status).toBe('internal_review')
+    // 8 Sep 2026: the upload lands in Draft on the Post approval page and
+    // stays there until the scheduler presses "Send for approval" — it is not
+    // put in front of a manager by the upload itself
+    expect(made.body.message).toContain('send it to your account manager')
+    expect(items()[0].status).toBe('draft_uploaded')
     expect(items()[0].owner_id).toBe(SCHEDULER.id)
     expect(made.body.post.status).toBe('draft')
   })
@@ -295,7 +298,9 @@ describe('a client who signs off every post', () => {
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(true)
-    expect(made.body.message).toContain('signs off every post')
+    expect(made.body.message).toContain('sign off every post')
+    // a manager's upload is submitted for the check; the client's yes is then
+    // asked for from the composer
     expect(items()[0].status).toBe('internal_review')
 
     const id = made.body.post.id as string

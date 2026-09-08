@@ -201,7 +201,10 @@ export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 export function assetsApprovedOnBoard(
   item: { adhoc_post?: unknown; status?: unknown } | null | undefined,
 ): boolean {
-  if (!item || item.adhoc_post === true) return false
+  // an ad-hoc upload counts too, since 8 Sep 2026 (final): a scheduler's
+  // upload waits at draft/Internal check until a manager clears it, so
+  // "approved" on such a piece is the manager's own yes
+  if (!item) return false
   return ['approved_for_scheduling', 'scheduled'].includes(String(item.status ?? ''))
 }
 
@@ -1295,6 +1298,11 @@ export type CompositionInput = {
   scheduledFor: string | null | undefined
   /** false while merely SAVING or SENDING FOR REVIEW — a time belongs to posting */
   requireTime?: boolean
+  /** true while merely SAVING a draft or SENDING it for review: whether the
+   *  piece may go OUT is asked at the door that posts it, not here. Without
+   *  this a scheduler's fresh upload (`draft_uploaded`, 8 Sep 2026) could not
+   *  even have its caption saved — "Still being made". */
+  saving?: boolean
   now: string | number | Date
 }
 
@@ -1313,7 +1321,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
 
   const elig = postingEligibility(
     input.item, input.version ? [input.version] : [], input.withoutApproval === true)
-  if (!elig.ok && elig.reason !== 'No media yet') problems.push(elig.reason)
+  if (!input.saving && !elig.ok && elig.reason !== 'No media yet') problems.push(elig.reason)
 
   const slides = Array.isArray(input.slides) ? input.slides : []
   if (slides.length === 0) problems.push('Pick at least one photo or video')

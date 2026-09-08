@@ -447,6 +447,9 @@ export default function NewPostDialog({
     && (primary.key === 'schedule' || primary.key === 'direct' || primary.key === 'now')
   const check = useMemo(() => validateComposition({
     requireTime: sends,
+    // "Send for approval" and "Save as draft" are not the post going out —
+    // a draft piece is exactly what they are for
+    saving: !sends,
     // the piece as it ACTUALLY is, judged with this person's own rights: a
     // hardcoded `approved_for_scheduling` was how the window came to know
     // nothing about a piece the client had not seen
@@ -672,6 +675,33 @@ export default function NewPostDialog({
     try {
       const id = await ensurePost(state)
       if (what === 'draft') { setNote('Saved as a draft.'); return }
+      if (what === 'send' && reviewOnly) {
+        /* POST APPROVAL'S SEND. The piece itself is submitted — the ordinary
+         * `draft_uploaded → internal_review` move, through the transition
+         * route, with the chosen manager as the one who is told and asked.
+         * It moves into the Internal check column, on THEIR Overview, and
+         * they answer on the board: approve, send to the client, or send it
+         * back. No second gate. */
+        const who = approvers.find(pp => pp.id === approverId)?.name
+        const res = await fetch(`/api/production/items/${encodeURIComponent(target.itemId)}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: 'internal_review',
+            ...(approverId ? { notify_ids: [approverId] } : {}),
+            note: state.caption.trim() ? `Post: ${state.caption.trim().slice(0, 200)}` : undefined,
+          }),
+        })
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}))
+          // already with the manager is not an error — the second press is done
+          if (!/already|not allowed from|cannot move/i.test(String(json?.error ?? ''))) throw new ComposeProblem(json)
+        }
+        setNote(who
+          ? `Sent to ${who}. It is now in Internal check on Post approval; once they approve it, it appears on Schedule to book in.`
+          : 'Sent to your account manager. It is now in Internal check on Post approval.')
+        return
+      }
       if (what === 'send' || what === 'direct') {
         const res = await fetch(`/api/social/schedule/${id}/send`, {
           method: 'POST',

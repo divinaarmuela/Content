@@ -265,15 +265,25 @@ export async function createPostFromFiles(
    * their job title is.
    */
   let current = item
-  try {
-    current = await performTransition(user, item as never, 'internal_review', {
-      note: UPLOAD_ADHOC_REASON,
-    }) as unknown as ContentItem
-  } catch (e) {
-    // the media is saved either way; a piece that stayed at draft is a piece
-    // somebody can still submit by hand, and losing the upload would not be
-    // recoverable
-    console.error('upload post — could not submit the new piece for review:', e)
+  /* THE PROPER FLOW (8 Sep 2026, final). A manager's upload clears itself
+   * below. A scheduler's stays at `draft_uploaded` — NOT submitted here —
+   * because the submit is theirs to make from the composer: "Send for
+   * approval", to the account manager THEY pick. Submitting it here would
+   * fan the "ready for review" note out to every manager before the
+   * scheduler had chosen one. */
+  const straightOut = mayPostWithoutApproval(
+    actingRoles({ id: user.id, role: user.role }, current), signsOff)
+  if (straightOut) {
+    try {
+      current = await performTransition(user, item as never, 'internal_review', {
+        note: UPLOAD_ADHOC_REASON,
+      }) as unknown as ContentItem
+    } catch (e) {
+      // the media is saved either way; a piece that stayed at draft is a piece
+      // somebody can still submit by hand, and losing the upload would not be
+      // recoverable
+      console.error('upload post — could not submit the new piece for review:', e)
+    }
   }
 
   /**
@@ -285,14 +295,6 @@ export async function createPostFromFiles(
    * piece waits at `internal_review` for the manager's check, which is what it
    * did before this change too.
    */
-  /* AN UPLOAD ON SCHEDULE IS A POST, AND THE POST GATE IS ITS ONLY GATE.
-   * It used to wait at `internal_review` unless a manager uploaded it, so a
-   * scheduler's fresh upload opened on "Save as draft" and "Needs approval
-   * before it can post" — the asset gate, asked about a piece that was never
-   * production work. The proper one (8 Sep 2026): the piece is cleared here
-   * for everybody, and the scheduler then SENDS THE POST to a manager. */
-  const straightOut = true
-  void mayPostWithoutApproval; void signsOff
   if (straightOut && String(current.status) === 'internal_review') {
     try {
       current = await performTransition(user, current as never, 'approved_for_scheduling', {
@@ -320,12 +322,10 @@ export async function createPostFromFiles(
     item: current,
     version_number: versionNumber,
     needs_approval: needsApproval,
-    message: needsApproval
-      ? (signsOff
-        ? 'Saved. This client signs off every post, so it goes to them before it can go out.'
-        : 'Saved. An account manager checks it before it can go out.')
-      : mayPostWithoutApproval(actingRoles({ id: user.id, role: user.role }, current), signsOff)
-        ? 'Saved. This post can go out — nothing is waiting on anybody.'
+    message: !needsApproval
+      ? 'Saved. This post can go out — nothing is waiting on anybody.'
+      : signsOff
+        ? 'Saved. Write the caption, pick the time, then send it to the client — they sign off every post.'
         : 'Saved. Write the caption, pick the time, then send it to your account manager to approve.',
   }
 }

@@ -213,7 +213,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
       clientApproved: media?.clientApproved ?? false,
       itemStatus: media?.status
         ?? (fresh
-          ? (fresh.needsApproval ? 'internal_review' : 'approved_for_scheduling')
+          ? (fresh.itemStatus || (fresh.needsApproval ? 'draft_uploaded' : 'approved_for_scheduling'))
           : 'approved_for_scheduling'),
       post,
       at: composing.at,
@@ -241,6 +241,8 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
           postWithoutApproval={data.postWithoutApproval}
           clientSignsOff={data.clientSignsOff}
           driveAvailable={driveAvailable}
+          // Schedule offers approved pieces only; Post approval's window uploads
+          allowUploads={reviewOnly === true}
           onPick={m => openNew(m, choosing.at)}
           onApprove={approve}
           onCreated={made => openMade(made, choosing.at)}

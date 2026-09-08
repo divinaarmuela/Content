@@ -107,10 +107,11 @@ describe('one flow, not two', () => {
   })
 })
 
-describe('the Post approval header (8 Sep 2026)', () => {
-  it('holds no <Button> of its own', () => {
+describe('one primary button in the Post approval header', () => {
+  it('the header holds exactly one <Button>, and it is New post', () => {
     const src = code(LAYOUT)
-    expect(src.match(/<Button/g) ?? []).toHaveLength(0)
+    expect(src.match(/<Button/g) ?? []).toHaveLength(0)
+    expect(src.match(/<NewPostButton\s*\/>/g) ?? []).toHaveLength(1)
   })
 
   it('the board under it offers no second button of its own', () => {

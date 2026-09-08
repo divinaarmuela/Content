@@ -364,6 +364,8 @@ function problemsWith(input: {
   /** this person may post with no approval step in the way, so "still with
    *  the client" is not a problem to hand back to them */
   withoutApproval?: boolean
+  /** a draft being saved, not a post going out (see `CompositionInput.saving`) */
+  saving?: boolean
 }): string[] {
   const problems = validateComposition({
     item: input.item,
@@ -373,6 +375,7 @@ function problemsWith(input: {
     channels: input.accounts.map(a => ({ id: a.id, platform: a.platform })),
     scheduledFor: input.scheduledFor,
     withoutApproval: input.withoutApproval,
+    saving: input.saving,
     now: nowIso(),
   }).problems.slice()
 
@@ -476,6 +479,7 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
       // media this person may post before the client has seen it is not a
       // problem to hand back to them — the sign-off travels with the post
       withoutApproval: elig.needsClientApproval,
+      saving: true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
@@ -697,6 +701,7 @@ export async function updatePost(
       // problem to hand back to them — the sign-off travels with the post,
       // and saving a draft is never the moment to argue about it
       withoutApproval: elig.ok ? elig.needsClientApproval : true,
+      saving: true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }

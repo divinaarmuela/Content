@@ -64,7 +64,19 @@ export type NewPostSource = {
 export function newPostSources(input: {
   driveAvailable: boolean
   approvedCount: number
+  /** false on Schedule (8 Sep 2026): "the Schedule page is only for approved
+   *  items to be posted" — uploads happen on Post approval */
+  uploads?: boolean
 }): NewPostSource[] {
+  if (input.uploads === false) {
+    return [{
+      key: 'approved',
+      label: 'Approved media',
+      help: input.approvedCount > 0
+        ? 'Pieces that have been approved on Post approval.'
+        : 'Nothing approved yet — pieces are uploaded and approved on Post approval, then appear here.',
+    }]
+  }
   const out: NewPostSource[] = [{
     key: 'upload',
     label: 'Upload',
@@ -219,4 +231,7 @@ export type UploadedPostSummary = {
   slides: Slide[]
   /** does this post still need somebody's approval before it can go out? */
   needsApproval: boolean
+  /** where the piece actually is — a scheduler's upload sits at
+   *  `draft_uploaded` until they send it; a manager's is already cleared */
+  itemStatus?: string
 }
