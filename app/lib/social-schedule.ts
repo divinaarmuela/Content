@@ -522,12 +522,18 @@ async function insertPost(
   // names is no longer being written — cancelled, gone, or BOOKED (9 Sep
   // 2026, a piece posted in parts: the first post is on its way with its
   // files, and the next post is made of the files still free).
+  // …and a second OPEN post is fine when it is made of DIFFERENT files: the
+  // folder's ticks (9 Sep 2026). The lock only stops the same files being
+  // put into two posts by two presses.
+  const wanted = input.slides.map(s => s.url).sort().join('|')
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
-    return !!held && !['cancelled', 'scheduled', 'published', 'failed'].includes(String(held.status))
+    if (!held || ['cancelled', 'scheduled', 'published', 'failed'].includes(String(held.status))) return false
+    const theirs = asArray<Slide>(held.slides).map(s => s.url).sort().join('|')
+    return theirs === wanted || theirs === ''
   })
   if (!gate.ok) {
-    throw new AuthzError('This item already has a post — open that one instead of starting a second', 409)
+    throw new AuthzError('This item already has a post with these files — open that one instead of starting a second', 409)
   }
 
   const stamp = nowIso()

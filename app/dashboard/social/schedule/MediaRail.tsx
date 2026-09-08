@@ -158,8 +158,15 @@ export default function MediaRail({
       {/* the client's name is on the picker two inches away; repeating it here
           only truncated it */}
       <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="text-[13px] font-semibold">
-          {postWithoutApproval ? 'Media' : 'Approved media'}
+        <span className="flex flex-col leading-[1.15]">
+          <span className="text-[13px] font-semibold">
+            {postWithoutApproval ? 'Media' : 'Approved media'}
+          </span>
+          {/* the scheduler's question, answered in the heading (9 Sep 2026):
+              what is approved and not yet posted */}
+          <span className="text-[11px] text-muted-foreground">
+            {filters.has('Unused') ? 'Approved, not yet posted' : 'Everything approved'}
+          </span>
         </span>
         <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">{shown.length}</span>
       </div>
@@ -217,7 +224,7 @@ export default function MediaRail({
                         <span className="truncate text-[13px] font-semibold">{m.title}</span>
                         <span className="truncate text-[11px] text-muted-foreground">
                           {m.ok
-                            ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
+                            ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
                             : m.reason}
                         </span>
                       </span>

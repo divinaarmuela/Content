@@ -28,12 +28,15 @@ const urlsOf = (p: PostLike): string[] =>
     .map(s => (s && typeof s === 'object' ? String((s as { url?: unknown }).url ?? '') : ''))
     .filter(Boolean)
 
-/** urls in a post that is live, booked, or on its way — not free to post again */
+/** urls in a post that is BOOKED or LIVE — not free to post again. A draft,
+ *  or a post still waiting on an approval, holds nothing: the owner, 9 Sep
+ *  2026, "I only see two items but the approved card had five" — a forgotten
+ *  draft had swallowed the other three. */
 export function takenSlideUrls(posts: readonly PostLike[]): Set<string> {
   const out = new Set<string>()
   for (const p of posts) {
     const s = String(p.status ?? '')
-    if (s === 'cancelled' || s === 'failed') continue
+    if (s !== 'scheduled' && s !== 'published') continue
     for (const u of urlsOf(p)) out.add(u)
   }
   return out

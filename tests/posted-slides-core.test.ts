@@ -14,9 +14,11 @@ const posts = [
 ]
 
 describe('which files have gone, and which are free', () => {
-  it('a booked or published post takes its files; a cancelled or failed one does not', () => {
+  it('a booked or published post takes its files; a draft, a cancelled or a failed one does not', () => {
     expect([...takenSlideUrls(posts)]).toEqual(['a', 'b', 'c'])
     expect(remainingSlides(S, takenSlideUrls(posts)).map(s => s.url)).toEqual(['d'])
+    // a forgotten draft must not swallow the files (9 Sep 2026)
+    expect([...takenSlideUrls([{ status: 'draft', slides: [{ url: 'a' }] }, { status: 'approved', slides: [{ url: 'b' }] }])]).toEqual([])
   })
   it('only a published post counts as posted — by its row, or by a job of its that published', () => {
     expect([...publishedSlideUrls(posts)]).toEqual(['a', 'b'])

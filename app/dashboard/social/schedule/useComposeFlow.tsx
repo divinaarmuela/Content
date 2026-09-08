@@ -118,8 +118,12 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
     // still being written opens that one (the server would insist). A post
     // already booked or out is not "the one" — the next post is made of the
     // files still free (posted in parts, 9 Sep 2026).
-    const existing = data.posts.find(p => p.item_id === media.itemId && OPEN_POST.includes(String(p.status))) ?? null
-    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at, slides: existing ? null : (slides ?? null) })
+    // …unless the files were ticked in the folder: that is a NEW post of
+    // those files, whatever else is being written on the piece
+    const existing = slides?.length
+      ? null
+      : data.posts.find(p => p.item_id === media.itemId && OPEN_POST.includes(String(p.status))) ?? null
+    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at, slides: slides ?? null })
   }, [data.posts])
 
   const openMade = useCallback((made: UploadedPostSummary, at: string | null) => {
@@ -201,7 +205,9 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
     const media = data.media.find(m => m.itemId === composing.itemId)
     const post = composing.postId
       ? data.posts.find(p => p.id === composing.postId) ?? null
-      : data.posts.find(p => p.item_id === composing.itemId && OPEN_POST.includes(String(p.status))) ?? null
+      : composing.slides?.length
+        ? null
+        : data.posts.find(p => p.item_id === composing.itemId && OPEN_POST.includes(String(p.status))) ?? null
     // the upload's own answer, until the live rows carry it
     const fresh = pending && pending.itemId === composing.itemId ? pending : null
     if (!media && !post && !fresh) return null

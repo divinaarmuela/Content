@@ -40,7 +40,7 @@ import {
   accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
-import { readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
+import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
 
 /** A post as the calendar draws it: the row, its media, and the status, tone
  *  and networks the core gives it once the item and the jobs are read too. */
@@ -103,6 +103,8 @@ export type RailMedia = {
   clientSignsOff: boolean
   /** a post already uses this item — one post, one item */
   used: boolean
+  /** "2 of 4 posted" while a piece is part-way out (posted-slides-core) */
+  posted: string | null
   /**
    * Every file this piece has EVER held, across every version.
    *
@@ -320,6 +322,7 @@ export function useSchedulePosts(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           // "used" now means nothing left to post — every file is in a post
           used: elig.ok && elig.slides.length > 0 && slides.length === 0,
+          posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),
