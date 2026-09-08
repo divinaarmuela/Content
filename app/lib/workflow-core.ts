@@ -218,7 +218,8 @@ export function actingRoles(viewer: { id: string; role: Role }, item: ActingItem
   const ids = schedulerIdsOf(item)
   // handed the item = the hat, whatever the title; nobody handed it = the
   // schedulers can pick it up
-  if (ids.includes(viewer.id) || (ids.length === 0 && viewer.role === 'scheduler')) roles.push('scheduler')
+  // …and a general user books in what nobody was handed, like a scheduler
+  if (ids.includes(viewer.id) || (ids.length === 0 && (viewer.role === 'scheduler' || viewer.role === 'general'))) roles.push('scheduler')
 
   const order: Role[] = ['account_manager', 'editor', 'scheduler']
   return order.filter(r => roles.includes(r))

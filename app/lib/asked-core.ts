@@ -65,6 +65,7 @@ export function waitingOnViewer(item: AskedItem | null | undefined, viewerId: st
 export const ASKED_VERB: Record<Role, string> = {
   super_admin: 'to check',
   account_manager: 'to check',
+  general: 'to make and post',
   editor: 'to make',
   scheduler: 'to post',
   client: 'to look at',

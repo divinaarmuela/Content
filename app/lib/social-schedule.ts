@@ -150,7 +150,7 @@ const shape = (row: SocialPost): PlannedPost => ({
  * and the answer `actOnPostingApproval` gives cannot drift apart.
  */
 export function mayCompose(user: TeamUser, item: { owner_id?: string | null; scheduler_ids?: unknown }): boolean {
-  if (user.role === 'super_admin' || user.role === 'account_manager' || user.role === 'scheduler') return true
+  if (user.role === 'super_admin' || user.role === 'account_manager' || user.role === 'scheduler' || user.role === 'general') return true
   if (user.role === 'client') return false
   return maySendPostApproval(actingRoles({ id: user.id, role: user.role }, item))
 }

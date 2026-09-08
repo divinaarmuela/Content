@@ -115,7 +115,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // a Social child is nobody's default but the scheduler's Schedule: everyone
   // else reaches the children THROUGH Social (canSeePage falls back to the
   // parent), so hiding Social hides all of it in one move
-  if (socialParentOf(href)) return role === 'scheduler' && href === SCHEDULE_PAGE
+  if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && href === SCHEDULE_PAGE
   if (role === 'editor') {
     return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
@@ -123,6 +123,13 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     // both: the Scheduler board is their own five columns ("where is my
     // page, the columns one"), Schedule is where they upload and send
     return [...PERSONAL_PAGES, '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
+  }
+  if (role === 'general') {
+    // the owner, 9 Sep 2026: "Overview, Clients, Production, Editor, Post
+    // approval and Schedule" — the whole making-and-posting run, none of the
+    // managing. The client subpages ride on Clients, except credentials.
+    if (href === '/dashboard/clients' || (href.startsWith('/dashboard/clients/:id/') && href !== '/dashboard/clients/:id/credentials')) return true
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable

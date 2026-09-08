@@ -167,7 +167,7 @@ export function canClaimScheduler(i: WorkItem, v: Viewer): boolean {
     && SCHEDULER_STATUSES.includes(i.status)
     && i.status !== 'published'
     && schedulerIdsOf(i).length === 0
-    && (v.role === 'scheduler' || v.role === 'super_admin')
+    && (v.role === 'scheduler' || v.role === 'general' || v.role === 'super_admin')
 }
 
 /** Briefs still being planned — a booked shoot is done, whatever it says. */

@@ -444,7 +444,9 @@ export function pageCards<T extends BoardViewCard>(
   const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true || page === 'scheduler'
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
-    if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))
+    // a general user's Editor page is their own cards too — the making is
+    // theirs, the checking is the manager's
+    if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => mine(c) && fresh(c))
     // a manager on the Editor page sees the making, not the posting
     return cards.filter(c => fresh(c)
       && (mine(c) || (columnOf(c.status) !== 'ready_to_post' && columnOf(c.status) !== 'posted')))

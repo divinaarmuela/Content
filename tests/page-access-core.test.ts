@@ -61,7 +61,7 @@ const NAV = [
   { href: '/dashboard/settings' },
 ]
 
-const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin']
+const TEAM_ROLES: Role[] = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin']
 
 /**
  * THE THREE PAGES RESET (6 Sep 2026). The owner: "my team is currently
@@ -283,5 +283,18 @@ describe('grant-only pages — a named handful, not a role', () => {
   })
   it('the grant survives normalisation (it is not a default)', () => {
     expect(normaliseGrantedPages([BOOKINGS], 'super_admin')).toEqual([BOOKINGS])
+  })
+})
+
+/* ── the general user (9 Sep 2026) ─────────────────────────────────────── */
+
+describe('a general user', () => {
+  it('holds the making-and-posting pages and none of the managing', () => {
+    for (const h of ['/dashboard', '/dashboard/clients', '/dashboard/clients/:id/brand', '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/social/schedule', '/dashboard/notifications', '/dashboard/settings']) {
+      expect(defaultAllows('general', h), h).toBe(true)
+    }
+    for (const h of ['/dashboard/leads', '/dashboard/audience', '/dashboard/social', '/dashboard/social/inbox', '/dashboard/team', '/dashboard/reports', '/dashboard/website', '/dashboard/clients/:id/credentials', '/dashboard/bookings']) {
+      expect(defaultAllows('general', h), h).toBe(false)
+    }
   })
 })

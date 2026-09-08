@@ -37,6 +37,8 @@ export default function EditorPage() {
     () => (me && me.role !== 'client' ? { id: me.id, role: me.role } : null), [me])
   const live = useWorkRows(viewer)
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
+  /** who may start a card here — managers, and a general user (their own work) */
+  const canCreate = isManager || viewer?.role === 'general'
   const team = useTeamMembers(isManager)
   const { column, show, clearShow } = useBoardParams()
   // the card that is open beside the board, named in the address
@@ -69,7 +71,7 @@ export default function EditorPage() {
         summary={isManager
           ? 'Everything still being made, Draft to With client, with what is done folded in at the end. Check the work at its link, then send it on or send it back.'
           : 'Your cards: Draft, Internal check and With client, with what is done folded in at the end. Each one says what needs doing and where the work lives — add the link, then press Ready for checking.'}
-        actions={viewer && (
+        actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
             <Plus className="h-4 w-4" /> New card

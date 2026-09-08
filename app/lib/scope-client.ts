@@ -153,6 +153,7 @@ export function accessibleClientIdsOf(
   if (viewer.role === 'super_admin') return null
   if (viewer.role === 'client') return viewer.client_id ? [viewer.client_id] : []
   if (viewer.role === 'scheduler') return null // gated by STATUS, not by client
+  if (viewer.role === 'general') return null   // any client (9 Sep 2026)
   return assignments.filter(a => a.team_user_id === viewer.id).map(a => a.client_id)
 }
 
@@ -163,6 +164,7 @@ export function batchClientIdsOf(
   assignments: ScopeAssignment[],
 ): string[] | null {
   if (viewer.role === 'super_admin') return null
+  if (viewer.role === 'general') return null
   if (viewer.role === 'client') return viewer.client_id ? [viewer.client_id] : []
   return assignments.filter(a => a.team_user_id === viewer.id).map(a => a.client_id)
 }

@@ -4,8 +4,17 @@
  * without pulling in `server-only`, Clerk, the database, or nodemailer.
  */
 
-export const TEAM_ROLES = ['scheduler', 'editor', 'account_manager', 'super_admin'] as const
-export type Role = 'super_admin' | 'account_manager' | 'editor' | 'scheduler' | 'client'
+/**
+ * THE LADDER. `general` (9 Sep 2026) is the person who does everything a
+ * scheduler and an editor do — makes cards and shoot plans for any client,
+ * edits, sends for approval, books approved pieces in — and nothing a
+ * manager does: no approving, no reading the client's own comments. It sits
+ * above editor and below account_manager so `requireRole('editor')` and
+ * `requireRole('scheduler')` admit it and `requireRole('account_manager')`
+ * does not.
+ */
+export const TEAM_ROLES = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin'] as const
+export type Role = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'client'
 
 /**
  * The one spelling of each role a person reads on screen.
@@ -18,6 +27,7 @@ export type Role = 'super_admin' | 'account_manager' | 'editor' | 'scheduler' | 
 export const ROLE_LABEL: Record<Role, string> = {
   super_admin: 'Super admin',
   account_manager: 'Account manager',
+  general: 'General',
   editor: 'Editor',
   scheduler: 'Scheduler',
   client: 'Client',
@@ -52,7 +62,7 @@ export function isAllowlistedSuperAdmin(email: string, allowlist: string[]): boo
  * set rather than `roleSatisfies('scheduler')`. One list, so the schedule
  * page, the composer and the item page cannot disagree about it.
  */
-export const MAY_PUBLISH: readonly Role[] = ['scheduler', 'account_manager', 'super_admin']
+export const MAY_PUBLISH: readonly Role[] = ['scheduler', 'general', 'account_manager', 'super_admin']
 
 export function mayPublish(role: Role | string): boolean {
   return (MAY_PUBLISH as readonly string[]).includes(role)

@@ -113,16 +113,25 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'super_admin' && u.active_status })
     }
-    case 'schedulers':
+    case 'schedulers': {
+      // A CARD OWNED BY A GENERAL USER IS THEIRS TO BOOK IN (the owner, 9 Sep
+      // 2026: "if she does the task make sure it's her who gets the
+      // notification when things move, and not a scheduler")
+      const own = await generalOwnerOf(item)
+      if (own) return [own]
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'scheduler' && u.active_status })
+    }
     case 'assigned_schedulers': {
       // the people this card was handed to — or, when nobody was (the card
       // page no longer hands posting out; the card simply reaches Ready to
-      // post), every active scheduler, so the queue is never silent
+      // post), every active scheduler, so the queue is never silent — unless
+      // the card's owner is a general user, who books their own in
       const ids = (Array.isArray(item.scheduler_ids) ? item.scheduler_ids : [])
         .filter((x): x is string => typeof x === 'string').slice(0, 20)
       if (ids.length === 0) {
+        const own = await generalOwnerOf(item)
+        if (own) return [own]
         return table<TeamUserRow>('team_users')
           .list({ where: u => u.role === 'scheduler' && u.active_status })
       }
@@ -986,4 +995,12 @@ export async function addVersion(
     return data
   }
   throw new AuthzError('Could not allocate a version number — please retry', 409)
+}
+
+/** the card's owner, when they are a general user — the person who makes AND
+ *  books their own work, so the scheduler pool is not told about it */
+async function generalOwnerOf(item: { owner_id?: string | null }): Promise<TeamUserRow | null> {
+  if (!item.owner_id) return null
+  const owner = await table<TeamUserRow>('team_users').get(item.owner_id).catch(() => null)
+  return owner && owner.role === 'general' && owner.active_status ? owner : null
 }

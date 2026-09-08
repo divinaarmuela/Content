@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  mayPublish, ROLE_LABEL,
   parseAllowlist,
   isAllowlistedSuperAdmin,
   roleSatisfies,
@@ -69,5 +70,19 @@ describe('buildDedupeKey', () => {
     expect(buildDedupeKey('e', 't2', '1', 'a@b.c')).not.toBe(base)
     expect(buildDedupeKey('e', 't', '2', 'a@b.c')).not.toBe(base)
     expect(buildDedupeKey('e', 't', '1', 'x@b.c')).not.toBe(base)
+  })
+})
+
+describe('the general role (9 Sep 2026)', () => {
+  it('sits above editor and scheduler and below account manager', () => {
+    expect(roleSatisfies('general', 'scheduler')).toBe(true)
+    expect(roleSatisfies('general', 'editor')).toBe(true)
+    expect(roleSatisfies('general', 'account_manager')).toBe(false)
+    expect(roleSatisfies('account_manager', 'general')).toBe(true)
+    expect(roleSatisfies('editor', 'general')).toBe(false)
+  })
+  it('may publish, and has a name', () => {
+    expect(mayPublish('general')).toBe(true)
+    expect(ROLE_LABEL.general).toBe('General')
   })
 })

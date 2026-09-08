@@ -55,6 +55,7 @@ type ClientRow = { id: string; name: string }
 const ROLE_STYLE: Record<string, string> = {
   super_admin:     'bg-tint-blue text-foreground border-accent-blue/25',
   account_manager: 'bg-tint-green text-foreground border-accent-green/30',
+  general:         'bg-tint-blue text-foreground border-accent-blue/25',
   editor:          'bg-foreground/[0.06] text-muted-foreground border-border',
   scheduler:       'bg-tint-amber text-foreground border-accent-amber/35',
   client:          'bg-foreground/[0.04] text-muted-foreground border-border',
@@ -454,6 +455,7 @@ export default function TeamPage() {
                 <SelectContent>
                   <SelectItem value="account_manager">Account manager</SelectItem>
                   <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
                   <SelectItem value="client">Client user</SelectItem>
                   <SelectItem value="super_admin">Super admin</SelectItem>
@@ -547,6 +549,7 @@ export default function TeamPage() {
                   <SelectItem value="super_admin">Super admin</SelectItem>
                   <SelectItem value="account_manager">Account manager</SelectItem>
                   <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
                   <SelectItem value="client">Client user</SelectItem>
                 </SelectContent>

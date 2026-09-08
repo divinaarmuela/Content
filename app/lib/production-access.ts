@@ -188,6 +188,7 @@ export async function accessibleClientIds(user: TeamUser): Promise<string[] | nu
   if (user.role === 'super_admin') return null
   if (user.role === 'client') return user.client_id ? [user.client_id] : []
   if (user.role === 'scheduler') return null // scheduler is gated by STATUS, not client
+  if (user.role === 'general') return null   // "she can create briefs for any client" (9 Sep 2026)
   const rows = await table<TeamUserClient>('team_user_clients')
     .list({ by: { team_user_id: user.id } })
   return rows.map(r => r.client_id)
@@ -199,6 +200,7 @@ export async function accessibleClientIds(user: TeamUser): Promise<string[] | nu
  *  concepts. Only super_admin is unrestricted. */
 export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null
+  if (user.role === 'general') return null
   if (user.role === 'client') return user.client_id ? [user.client_id] : []
   const rows = await table<TeamUserClient>('team_user_clients')
     .list({ by: { team_user_id: user.id } })

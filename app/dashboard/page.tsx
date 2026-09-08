@@ -980,7 +980,7 @@ export default function OverviewPage() {
 
           {/* Seven identical grey ghost links and no cue which to press. The one
               thing a manager should do first now says so, and says how many. */}
-          {!loading && role !== 'editor' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
+          {!loading && role !== 'editor' && role !== 'general' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
             <Button size="sm" className="min-h-11 w-fit" asChild>
               <Link href="/dashboard/editor">
                 Check {data!.manager!.needs_review.length} card{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
@@ -990,7 +990,7 @@ export default function OverviewPage() {
           )}
 
           {/* ---- the lists, per role ---- */}
-          {!loading && role === 'editor' && data?.editor && (
+          {!loading && (role === 'editor' || role === 'general') && data?.editor && (
             <>
               <Section title="Assigned to you" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
                 <ItemRows items={data.editor.needs_action} todayKey={todayKey}
@@ -1092,7 +1092,7 @@ export default function OverviewPage() {
       </div>
 
       {/* ── the wide blocks, under both columns ── */}
-      {!loading && (role === 'editor' || data?.manager) && <Pipeline pipeline={data?.pipeline} page={role === 'editor' ? 'editor' : 'production'} />}
+      {!loading && (role === 'editor' || role === 'general' || data?.manager) && <Pipeline pipeline={data?.pipeline} page={role === 'editor' || role === 'general' ? 'editor' : 'production'} />}
 
       {data?.manager && (
         <>

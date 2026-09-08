@@ -24,7 +24,7 @@ const boards = () => table<Board>('boards')
 const items = () => table<BoardItem>('board_items')
 const comments = () => table<BoardComment>('board_comments')
 
-const TEAM_ROLES = ['scheduler', 'editor', 'account_manager', 'super_admin']
+const TEAM_ROLES = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin']
 
 /* ── access ─────────────────────────────────────────────────────────────── */
 

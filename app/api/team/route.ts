@@ -7,7 +7,7 @@ import { requireRole, authzErrorResponse, AuthzError, type Role } from '../../li
 import { onTeamChanged } from '../../lib/gdrive-members'
 import { takeClaimLock, releaseClaimLock, pendingInviteLockKey } from '../../lib/claim-lock'
 
-const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
+const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'general', 'editor', 'scheduler', 'client']
 
 /**
  * The team.

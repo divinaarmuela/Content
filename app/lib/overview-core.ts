@@ -128,7 +128,8 @@ export function buildOverview(input: OverviewInput): Record<string, unknown> {
 
   const unassignedAll = unassignedOf(items)
 
-  if (user.role === 'editor') {
+  // a general user's Overview is their own work too (9 Sep 2026)
+  if (user.role === 'editor' || user.role === 'general') {
     // strictly the editor's OWN work: the "Up for grabs" list below is the
     // answer to an empty desk, not colleagues' items filed under "yours"
     const pool = items.filter(i => i.owner_id === user.id)

@@ -5,7 +5,7 @@ import { requireRole, authzErrorResponse, type Role } from '../../../lib/authz'
 import { onTeamChanged } from '../../../lib/gdrive-members'
 import { releaseClaimLock, pendingInviteLockKey } from '../../../lib/claim-lock'
 
-const ROLES: Role[] = ['super_admin', 'account_manager', 'editor', 'scheduler', 'client']
+const ROLES: Role[] = ['super_admin', 'account_manager', 'general', 'editor', 'scheduler', 'client']
 
 /** Update a member (role, employment type, timezone, workday, active status,
  *  client assignments). super_admin only. */
