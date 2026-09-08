@@ -13,7 +13,7 @@ import {
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
-  CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED, tileTone, validateComposition,
+  CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED, mayPostWithoutApproval, tileTone, validateComposition,
   type SocialPostStatus, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import {
@@ -354,7 +354,12 @@ export default function NewPostDialog({
   }, [state.slides, state.perChannel, chosen])
 
   const status: SocialPostStatus = post?.live_status ?? 'draft'
-  const mayApprove = role === 'account_manager' || role === 'super_admin'
+  // WHO MAY POST WITHOUT ASKING is one rule, `mayPostWithoutApproval`, and it
+  // is every team role now (8 Sep 2026). This used to be a second copy of
+  // the old rule — managers and admins only — so a scheduler saw "Needs
+  // approval before it can post" and "Send for review" beside a server that
+  // would have let them post straight out.
+  const mayApprove = mayPostWithoutApproval(role, clientSignsOff)
   const canPublish = role ? roleMayPublish(role) : false
   /**
    * "Schedule" or "Post now" — the words have to match what pressing it does.

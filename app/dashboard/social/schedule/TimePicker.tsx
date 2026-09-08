@@ -70,7 +70,10 @@ export default function TimePicker({
       const PANEL = 380
       const below = window.innerHeight - r.bottom
       setAt({
-        left: Math.min(Math.max(8, r.left), window.innerWidth - 316),
+        // the panel is 340 wide: seven 40px day cells plus the picker's own
+        // gutters overran a 300px panel and Sunday spilled past the border —
+        // seen on a laptop, 8 Sep 2026, which is where posts are scheduled
+        left: Math.min(Math.max(8, r.left), window.innerWidth - 356),
         top: below > PANEL ? r.bottom + 6 : Math.max(8, r.top - PANEL - 6),
       })
     }
@@ -137,7 +140,7 @@ export default function TimePicker({
           style={{ left: at.left, top: at.top }}
           // bg-popover WITHOUT its foreground left the calendar's day numbers on
           // the browser default — black digits on the dark panel, unreadable.
-          className="fixed z-[70] w-[300px] rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+          className="fixed z-[70] w-[340px] rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
           <DayPicker
             mode="single"
             selected={dayOf(current.dayKey)}
