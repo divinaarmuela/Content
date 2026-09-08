@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { itemPath } from '../../../../../lib/workflow-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
@@ -115,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
             `<p><strong>What happens next:</strong> read it and, if changes are needed, tag the editor in a comment on the item — nobody else has been told yet.</p>`,
             OPEN_ITEM_CTA,
-            `${DASHBOARD_URL}/dashboard/production/${id}`
+            `${DASHBOARD_URL}${itemPath(item)}`
           ),
         })
       }
@@ -128,6 +129,42 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         target: { kind: 'item', id, title: String(item.title ?? 'an item') },
         commentId: comment.id,
       })
+    }
+
+    /**
+     * …AND THE PEOPLE HOLDING THE CARD (the owner, 9 Sep 2026: "when an AM
+     * or super admin leaves a comment on the card for the team, it notifies
+     * the scheduler, no?"). It did not — only a tag did. Now a team note by
+     * anyone reaches the card's owner and its schedulers, bell and email,
+     * unless they wrote it or were tagged already (tagging is the stronger
+     * word and has just been sent). Nobody outside the team is told.
+     */
+    if (visibility === 'internal' && user.role !== 'client') {
+      const holders = [
+        ...(item.owner_id ? [String(item.owner_id)] : []),
+        ...(Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : []),
+      ].filter(uid => uid && uid !== user.id && !tagged.some(t => t.id === uid))
+      if (holders.length > 0) {
+        const people = await table<TeamUser>('team_users')
+          .list({ where: u => holders.includes(u.id) && u.active_status === true && u.role !== 'client' })
+        for (const p of people) {
+          await notify({
+            actorName: user.name, actorEmail: user.email, actorClerkId: user.clerk_user_id,
+            eventType: 'item_comment',
+            entityType: 'content_item',
+            entityId: `${id}#${comment.id}#holder`,
+            recipientId: p.id, recipientEmail: p.email,
+            subject: `${user.name || user.email} left a note on ${item.title}`,
+            bodyHtml: renderEmail(
+              `A note on ${item.title}`,
+              `<p>${escapeHtml(user.name || user.email)} wrote on <strong>${escapeHtml(String(item.title ?? ''))}</strong>:</p>` +
+              `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>`,
+              OPEN_ITEM_CTA,
+              `${DASHBOARD_URL}${itemPath(item)}`,
+            ),
+          })
+        }
+      }
     }
 
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'comment' })

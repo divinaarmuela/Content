@@ -83,6 +83,9 @@ export function notificationHref(entityType: string, entityId: string): string |
 
   switch (entityType) {
     case 'content_item': return isUuid ? `/dashboard/production/${id}` : null
+    // a calendar note: the id is "<client id>#<note id>", the bell opens that
+    // client's week (9 Sep 2026)
+    case 'schedule_note': return isUuid ? `/dashboard/social/schedule?client=${id}` : null
     case 'batch':
     case 'shoot': return isUuid ? `/dashboard/production/shoots/${id}` : null
     case 'shoot_proposal': return '/dashboard/production/proposals'

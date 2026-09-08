@@ -13,7 +13,7 @@ import { accessibleClientIds, loadItemForUser } from './production-access'
 import { scopeContextOf, visibleItems } from './scope-client'
 import { actingRoles } from './workflow-core'
 import { actOnPostingApproval } from './posting-approval'
-import { notifyManagersBooked } from './booked-notify'
+import { notifyManagersBooked, notifyTeamOfNote } from './booked-notify'
 import {
   mayApprovePost, maySendPostApproval, publishBlockReason, stateAfterPostEdit,
 } from './posting-approval-core'
@@ -1781,6 +1781,10 @@ export async function addNote(
     updated_at: stamp,
   } as unknown as ScheduleNote)
   announceAfter('schedule', { client_id: input.client_id, note_id: row.id, kind: 'note' })
+  // the team on this client hears it (9 Sep 2026) — after the write, off
+  // the request's critical path
+  const client = await table<Client>('clients').get(input.client_id).catch(() => null)
+  void notifyTeamOfNote(user, { id: row.id, client_id: input.client_id, at, text }, client?.name ?? null)
   return row
 }
 

@@ -54,3 +54,47 @@ export async function notifyManagersBooked(
     console.error('booked notify:', e)
   }
 }
+
+/**
+ * A NOTE ON THE CALENDAR TELLS THE TEAM ON THAT CLIENT (the owner, 9 Sep
+ * 2026: "why does the back and forth chat not notify the team or the AM,
+ * like in the Schedule"). Every active team member on the client — the
+ * managers and the schedulers — except the person who wrote it. Bell and
+ * email; never a client.
+ */
+export async function notifyTeamOfNote(
+  actor: TeamUser,
+  note: { id: string; client_id: string; at: string; text: string },
+  clientName: string | null,
+): Promise<void> {
+  try {
+    const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: note.client_id } })
+    const joined = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
+    const people = joined
+      .map(r => r.team_users as unknown as { id: string; email: string; name: string; role: string; active_status: boolean } | null)
+      .filter((u): u is { id: string; email: string; name: string; role: string; active_status: boolean } =>
+        !!u && u.role !== 'client' && u.active_status && u.id !== actor.id)
+    const when = formatInZone(note.at, safeZone(undefined), 'full') ?? note.at
+    const who = actor.name || actor.email || 'Someone'
+    const subject = `${who} left a note on ${clientName ?? 'the'} calendar — ${when}`
+    for (const p of people) {
+      await notify({
+        actorName: actor.name, actorEmail: actor.email, actorClerkId: actor.clerk_user_id,
+        eventType: 'schedule_note',
+        entityType: 'schedule_note',
+        entityId: `${note.client_id}#${note.id}`,
+        recipientId: p.id, recipientEmail: p.email,
+        subject,
+        bodyHtml: renderEmail(
+          subject,
+          `<p>${escapeHtml(who)} wrote, pinned to ${escapeHtml(when)}:</p>` +
+          `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(note.text)}</blockquote>`,
+          'Open the calendar',
+          `${DASHBOARD_URL}/dashboard/social/schedule?client=${encodeURIComponent(note.client_id)}`,
+        ),
+      })
+    }
+  } catch (e) {
+    console.error('note notify:', e)
+  }
+}
