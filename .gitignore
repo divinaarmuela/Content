@@ -77,3 +77,4 @@ parked/
 
 # mobile responsiveness check output (screenshots + findings)
 /.mobile-check/
+.claude/worktrees/
