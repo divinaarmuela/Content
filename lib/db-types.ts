@@ -546,6 +546,7 @@ export interface ContentItem {
   change_note: string | null
   change_note_by: string | null
   change_note_at: string | null
+  posted_slides: unknown | null
   asked_ids: unknown | null
   asked_at: string | null
 }
@@ -1072,6 +1073,7 @@ export interface SocialAccount {
   active: boolean
   connected_at: string
   last_synced_at: string
+  health: unknown | null
 }
 
 export interface SocialPost {
@@ -1236,7 +1238,7 @@ export const TABLE_COLUMNS = {
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
-  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
@@ -1270,7 +1272,7 @@ export const TABLE_COLUMNS = {
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
   schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
-  social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at'],
+  social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
@@ -1316,7 +1318,7 @@ export const NULLABLE_COLUMNS = {
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
-  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
@@ -1350,7 +1352,7 @@ export const NULLABLE_COLUMNS = {
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],
   schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
-  social_accounts: ['client_id', 'name', 'username', 'avatar_url'],
+  social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
@@ -1403,7 +1405,7 @@ export const JSON_COLUMNS = {
   clients: ['brand_profile', 'instagram_locations'],
   content_applications: [],
   content_assets: [],
-  content_items: ['raw_assets', 'scheduler_ids', 'asked_ids'],
+  content_items: ['raw_assets', 'scheduler_ids', 'posted_slides', 'asked_ids'],
   deliverable_groups: ['planned'],
   drive_connection: [],
   drive_files: [],
@@ -1437,7 +1439,7 @@ export const JSON_COLUMNS = {
   schedule_entries: [],
   schedule_notes: [],
   shoot_proposals: [],
-  social_accounts: [],
+  social_accounts: ['health'],
   social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids'],
   team_invites: [],
   team_user_clients: [],

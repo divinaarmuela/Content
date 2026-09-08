@@ -18,7 +18,8 @@ import { useRole } from '../../useRole'
 import { usePersistedChoice } from '../../production/workHooks'
 import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
-import type { ScheduleNote } from '@/lib/db-types'
+import type { ScheduleNote, SocialAccount } from '@/lib/db-types'
+import { toast } from 'sonner'
 import MediaRail from './MediaRail'
 import NoteEditor from './NoteEditor'
 import { useDragSchedule } from './useDragSchedule'
@@ -396,6 +397,25 @@ export default function SchedulePage() {
     setAnchor(monthView ? shiftMonths(from, direction) : shiftDays(grid.days[0].iso, direction * 7))
   }
 
+  /** THE SAME CONNECT FLOW THE SOCIAL CHANNELS PAGE RUNS — a full navigation
+   *  to the network's sign-in, because the consent screens refuse to be
+   *  framed and popups get blocked. From the icon, for a scheduler too. */
+  const reconnect = async (account: SocialAccount) => {
+    if (!clientId) return
+    try {
+      const res = await fetch('/api/social/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, platform: String(account.platform) }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(json?.error ?? ''))
+      window.location.href = String(json.authUrl)
+    } catch (e) {
+      toast.error(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
+    }
+  }
+
   const rail = (
     <MediaRail
       media={data.media}
@@ -442,6 +462,7 @@ export default function SchedulePage() {
             onChannel={setChannel}
             view={view}
             onView={setView}
+            onReconnect={reconnect}
           />
 
           {/* date bar */}

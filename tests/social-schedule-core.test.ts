@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
+  TOO_SOON, eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
   assetsApprovedOnBoard, mayPostPiece, mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
@@ -1008,5 +1008,28 @@ describe('assets approved on the board', () => {
     expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(true)
     expect(mayPostPiece('scheduler', false, { status: 'internal_review', adhoc_post: true })).toBe(false)
     expect(mayPostPiece('account_manager', false, { status: 'internal_review', adhoc_post: true })).toBe(true)
+  })
+})
+
+/* ── a booked time needs a fifteen-minute lead (9 Sep 2026) ────────────── */
+
+describe('a booked time needs a lead', () => {
+  const at = (minutes: number) => new Date(Date.parse('2026-09-09T09:00:00Z') + minutes * 60_000).toISOString()
+  const check = (scheduledFor: string) => validateComposition({
+    item: { status: 'approved_for_scheduling', content_type: 'static' },
+    version: null,
+    slides: [{ url: 'u', name: 'n', type: 'image' }],
+    caption: 'x',
+    channels: [{ id: 'a', platform: 'instagram' }],
+    scheduledFor,
+    now: '2026-09-09T09:00:00Z',
+  })
+  it('refuses a time five minutes away', () => {
+    expect(check(at(5)).problems).toContain(TOO_SOON)
+  })
+  it('accepts Post now (inside two minutes) and anything fifteen minutes out', () => {
+    expect(check(at(1)).problems).not.toContain(TOO_SOON)
+    expect(check(at(15)).problems).not.toContain(TOO_SOON)
+    expect(check(at(60)).problems).not.toContain(TOO_SOON)
   })
 })

@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { Check, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Plus, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -80,23 +82,34 @@ function ringColour(platform: string): string {
   return bg.startsWith('#') ? bg : '#DD2A7B'
 }
 
-function AccountSlot({ slot, selected, onPick, fallbackName }: {
+function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
   slot: Extract<ProfileSlot, { kind: 'account' }>
   selected: boolean
   onPick: () => void
+  /** start the network's sign-in again for this account's platform */
+  onReconnect?: (account: SocialAccount) => void
   fallbackName: string
 }) {
   const { account, platform } = slot
   const name = account.username || account.name || fallbackName
   const ring = ringColour(platform)
+  /* IS IT STILL CONNECTED? The morning check writes its verdict on the
+   * account's row; the icon wears it — red for "reconnect now", amber for
+   * "soon" — and a press on a red one offers Reconnect, the same sign-in the
+   * Social channels page starts (the owner, 9 Sep 2026). */
+  const health = readStoredHealth((account as { health?: unknown }).health)
+  const broken = needsReconnect(health)
+  const soon = health?.level === 'watch'
+  const [asking, setAsking] = useState(false)
 
   return (
+    <div className="relative flex w-[58px] shrink-0 flex-col items-center gap-1">
     <button
       type="button"
       aria-pressed={selected}
-      title={selected ? `Showing only ${name}` : `Show only ${name}`}
-      onClick={onPick}
-      className="flex w-[58px] shrink-0 flex-col items-center gap-1"
+      title={broken ? `${name} — ${health?.reason ?? 'needs reconnecting'}` : soon ? `${name} — ${health?.reason}` : selected ? `Showing only ${name}` : `Show only ${name}`}
+      onClick={() => { if (broken && onReconnect) setAsking(v => !v); else onPick() }}
+      className="flex w-full flex-col items-center gap-1"
     >
       <span
         style={selected ? { boxShadow: `0 0 0 2px var(--dbx-surface, #fff), 0 0 0 4px ${ring}` } : undefined}
@@ -106,7 +119,7 @@ function AccountSlot({ slot, selected, onPick, fallbackName }: {
             does not, and initials again when a signed URL has run out — see
             AccountAvatar. The network's own mark rides in the corner. */}
         <AccountAvatar account={account} size={44} fallbackName={fallbackName} />
-        {selected && (
+        {selected && !broken && (
           <span
             style={{ background: ring }}
             className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-white"
@@ -114,11 +127,31 @@ function AccountSlot({ slot, selected, onPick, fallbackName }: {
             <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
           </span>
         )}
+        {(broken || soon) && (
+          <span
+            aria-label={broken ? 'Needs reconnecting' : 'Connection runs out soon'}
+            className={cn('absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-white', broken ? 'bg-accent-red' : 'bg-accent-amber')}
+          >
+            <AlertTriangle className="h-2.5 w-2.5" strokeWidth={3} aria-hidden />
+          </span>
+        )}
       </span>
-      <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground">
-        {name}
+      <span className={cn('w-full truncate text-center text-[11px] font-medium', broken ? 'text-accent-red' : 'text-muted-foreground')}>
+        {broken ? 'Reconnect' : name}
       </span>
     </button>
+    {asking && broken && onReconnect && (
+      <div className="absolute left-1/2 top-full z-30 mt-1 w-[220px] -translate-x-1/2 rounded-inner border border-border bg-popover p-3 text-left text-popover-foreground shadow-lg">
+        <p className="text-[13px] font-semibold">{name} needs reconnecting</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">{health?.reason}</p>
+        <button type="button" onClick={() => { setAsking(false); onReconnect(account) }}
+          className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
+          <RefreshCw className="h-3.5 w-3.5" /> Reconnect {brandFor(platform).label}
+        </button>
+        <button type="button" onClick={() => setAsking(false)} className="mt-1 w-full text-[12px] text-muted-foreground underline-offset-4 hover:underline">Not now</button>
+      </div>
+    )}
+    </div>
   )
 }
 
@@ -151,8 +184,11 @@ function EmptySlot({ platform }: { platform: string }) {
 }
 
 export default function ProfilesBar({
-  clients, clientId, onClient, accounts, channel, onChannel, view, onView,
+  clients, clientId, onClient, accounts, channel, onChannel, view, onView, onReconnect,
 }: {
+  /** start the network's sign-in again for this account (the Schedule
+   *  page's own connect flow — see page.tsx) */
+  onReconnect?: (account: SocialAccount) => void
   clients: Client[]
   clientId: string | null
   onClient: (id: string) => void
@@ -188,6 +224,7 @@ export default function ProfilesBar({
               selected={channel === slot.account.id}
               fallbackName={client?.name ?? slot.platform}
               onPick={() => onChannel(channel === slot.account.id ? null : slot.account.id)}
+              onReconnect={onReconnect}
             />
           ) : (
             <EmptySlot key={`empty-${slot.platform}`} platform={slot.platform} />

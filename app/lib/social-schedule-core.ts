@@ -1417,8 +1417,25 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
       problems.push('That is not a time we can read — pick one from the calendar')
     } else if (Number.isFinite(now) && when <= now) {
       problems.push('That time has already gone — pick a later one')
+    } else if (Number.isFinite(now) && when > now + POST_NOW_WINDOW_MS && when < now + MIN_LEAD_MS) {
+      problems.push(TOO_SOON)
     }
   }
 
   return { ok: problems.length === 0, problems }
 }
+
+/**
+ * HOW FAR AWAY A BOOKED TIME HAS TO BE (the owner, 9 Sep 2026: "make sure
+ * the time is suitable for the scheduler to choose safely — realistically a
+ * big file can't schedule automatically within less than 15 minutes").
+ *
+ * Two facts behind the number: a video is encoded before it is handed over,
+ * and the job that hands posts over runs every ten minutes. A time inside
+ * those fifteen minutes is a promise the system may not keep. "Post now"
+ * (inside two minutes) is different — it is sent straight away, with
+ * whatever copy is ready.
+ */
+export const MIN_LEAD_MS = 15 * 60_000
+export const POST_NOW_WINDOW_MS = 2 * 60_000
+export const TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle. To send it straight away, choose Post now.'

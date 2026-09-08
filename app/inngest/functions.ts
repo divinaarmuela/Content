@@ -785,8 +785,31 @@ export const followersSnapshot = inngest.createFunction(
   })
 )
 
+/**
+ * IS EVERY ACCOUNT STILL CONNECTED? — once a morning, before the day's
+ * posts. Writes the verdict on each account (the Schedule page's icons read
+ * it) and tells the scheduler, the managers and tech@ about any that needs
+ * reconnecting (the owner, 9 Sep 2026). One provider call for the lot.
+ */
+export const accountHealthDaily = inngest.createFunction(
+  {
+    id: 'account-health-daily',
+    name: 'Accounts: still connected?',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 0 7 * * *' }],
+    retries: 1,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => withRequestCache(async () => {
+    return step.run('check-accounts', async () => {
+      const { checkAllAccountsHealth } = await import('../lib/account-health')
+      return checkAllAccountsHealth(new Date())
+    })
+  })
+)
+
 export const functions = [
   dueReminders,
+  accountHealthDaily,
   driveMirrorFile,
   scanInboxScheduled,
   scanMailbox,

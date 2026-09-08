@@ -27,6 +27,8 @@ export interface Publisher {
   disconnectAccount(providerAccountId: string): Promise<void>
   /** Token validity and per-scope permissions for one account. */
   accountHealth(providerAccountId: string): Promise<unknown>
+  /** every account at once — see `checkAllAccountsHealth` */
+  accountsHealth(): Promise<unknown>
   /** Platform-native account insights (reach, views, engagement). */
   accountInsights(providerAccountId: string, platform: string): Promise<unknown>
   /** Day-by-day aggregate metrics. */
@@ -462,6 +464,13 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/accounts/${id}/health`)
   }
 
+  /** every account at once — `{ summary, accounts: [{ accountId, platform,
+   *  status, canPost, tokenValid, tokenExpiresAt, needsReconnect, issues }] }`
+   *  (read live 9 Sep 2026; docs: GET /v1/accounts/health) */
+  accountsHealth() {
+    return this.getJson('/accounts/health')
+  }
+
   accountInsights(id: string, platform: string) {
     // only some platforms expose account-level insights
     const supported = ['instagram', 'facebook', 'tiktok', 'youtube']
@@ -799,6 +808,7 @@ class UnconfiguredPublisher implements Publisher {
   async listAccounts() { return [] as ProviderAccount[] }
   async disconnectAccount() { return this.fail() }
   async accountHealth() { return null }
+  async accountsHealth() { return null }
   async accountInsights() { return null }
   async dailyMetrics() { return null }
   async followerStats() { return null }
@@ -859,6 +869,7 @@ function dryRunPublisher(): Publisher {
       ({ kind: 'published' as const, postId: `dry-run-${input.requestId}`, replayed: false }),
     accountHealth: async (providerAccountId: string) =>
       ({ ok: true, accountId: providerAccountId, dryRun: true }),
+    accountsHealth: async () => ({ summary: {}, accounts: [], dryRun: true }),
     deletePost: async () => ({ ok: true, dryRun: true }),
     uploadMedia: async (input: { filename: string; contentType: string }): Promise<MediaItem> =>
       ({ url: `https://dry-run.invalid/${input.filename}`, type: mediaTypeFor(input.contentType) ?? 'image' }),

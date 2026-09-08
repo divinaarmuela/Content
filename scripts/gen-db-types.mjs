@@ -413,6 +413,11 @@ const GHOST_COLUMNS = {
   //     card read it off the same live subscription. Null until the first
   //     read; a post older than a week is never read again.
   post_analytics: [['interactors', col('unknown', true, true)]],
+  //   social_accounts.health — IS IT STILL CONNECTED (9 Sep 2026). The
+  //     morning check's verdict, { level: ok|watch|act, reason, can_post,
+  //     expires_at, checked_at } (app/lib/account-health-core.ts), on the
+  //     account's own row so the Schedule page's icons read it live.
+  social_accounts: [['health', col('unknown', true, true)]],
   //   content_items.link_url / link_kind — A CARD CARRIES A LINK (the three
   //     pages reset, 6 Sep 2026). Where the work lives: a Google Drive or
   //     Dropbox URL somebody pasted, labelled by host ('drive' | 'dropbox' |

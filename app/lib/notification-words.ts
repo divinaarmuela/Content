@@ -94,7 +94,8 @@ export function notificationHref(entityType: string, entityId: string): string |
     case 'lead':
     case 'prospect': return '/dashboard/leads'
     case 'booking': return '/dashboard/bookings'
-    case 'social_account': return isUuid ? `/dashboard/social/${id}` : '/dashboard/social'
+    // a "reconnect" note opens the Schedule page, where the icon is (9 Sep 2026)
+    case 'social_account': return String(entityId ?? '').includes('#health') ? '/dashboard/social/schedule' : (isUuid ? `/dashboard/social/${id}` : '/dashboard/social')
     default: return null
   }
 }

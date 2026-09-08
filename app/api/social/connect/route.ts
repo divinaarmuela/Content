@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
+import { assertClientAccess } from '../../../lib/social-schedule'
 import { syncSocialAccounts } from '../../../lib/publish'
 import { isPlatform } from '../../../lib/publish-core'
 import { connectLinkFor } from '../../../lib/social-connect'
@@ -19,12 +20,16 @@ import { connectLinkFor } from '../../../lib/social-connect'
 export async function POST(req: Request) {
   return withRequestCache(async () => {
   try {
-    await requireRole('account_manager')
+    // a scheduler reconnects the accounts of the clients they hold — from the
+    // icons on the Schedule page (the owner, 9 Sep 2026); the client check is
+    // the same one every Schedule route makes
+    const user = await requireRole('scheduler')
     const { clientId, platform } = await req.json()
 
     if (typeof clientId !== 'string' || !clientId) {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
     }
+    await assertClientAccess(user, clientId)
     if (typeof platform !== 'string' || !isPlatform(platform)) {
       return NextResponse.json({ error: `Unsupported platform "${platform}"` }, { status: 400 })
     }
