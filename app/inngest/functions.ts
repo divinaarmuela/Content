@@ -202,7 +202,31 @@ export const publishPost = inngest.createFunction(
     triggers: [{ event: 'app/post.publish.requested' }],
     retries: 3,
     concurrency: { limit: 5 },
-    idempotency: 'event.data.jobId',
+    /* NO `idempotency` KEY HERE, AND IT MUST NOT COME BACK.
+     *
+     * It used to read `idempotency: 'event.data.jobId'`, which looks like
+     * sensible protection against posting twice and is in fact the reason
+     * nothing published between 31 August and 8 September 2026.
+     *
+     * Inngest drops a repeat of an idempotency key for TWENTY-FOUR HOURS.
+     * A job whose video is still encoding is not a failure — `runPublishJob`
+     * returns 'queued' and the job goes back on the queue to be tried again,
+     * which is the design. But the retry arrives as another
+     * `app/post.publish.requested` for the same jobId, so Inngest threw it
+     * away. Every post with a video big enough to need a copy therefore got
+     * exactly ONE chance, a few seconds after it was made, before the encoder
+     * had finished — and then became unreachable for a day. It sat at
+     * `status: 'queued'`, `attempts: 0`, looking scheduled, and never went.
+     *
+     * Read off the live run history on 8 Sep 2026: the 08:29:42 event ran and
+     * returned {"status":"queued"}; the dispatcher's events at 08:30:01 and
+     * the encoder's at 08:32:45 — same jobId — produced NO RUNS AT ALL.
+     *
+     * Posting twice is already prevented three times over, none of which
+     * depends on the event being unique: the queued → publishing claim below
+     * (one conditional write, one winner), the stored x-request-id replayed to
+     * the provider, and the provider's own content hash. A duplicate event
+     * loses the claim and does nothing. */
   },
   async ({ event, step }) => withRequestCache(async () => {
     const jobId = String(event.data?.jobId ?? '')
