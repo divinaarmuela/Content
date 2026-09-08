@@ -910,12 +910,18 @@ export type EncodeLadder = {
  * asks for. Nothing here is a target — a still, easy clip at CRF 20 spends
  * far less — it is the most a hard one may spend.
  *
- * 60 fps only for YouTube, which serves it. Everywhere else a 60 fps master
- * is halved to 30, because the platform would do that anyway and doing it
- * here means the bitrate goes into 30 good frames rather than 60 poor ones.
+ * 60 fps where the channel's own documentation says it takes it — YouTube,
+ * and Instagram, whose Reels specification reads "Frame rate: 23-60 FPS"
+ * (developers.facebook.com, Instagram Platform → Media, read 2026-09-08).
+ * Instagram sat at 30 on the belief that "the platform would do that anyway";
+ * that was never checked, and it is wrong. A 50 fps master posted through
+ * this app lost two frames in five for nothing — measured on a real post
+ * (C0584.MP4, 1080p50 in, 1080p30 out). The rest stay at 30 because nobody
+ * has read THEIR specification yet; each one moves when somebody does, not
+ * because Instagram moved.
  */
 export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
-  instagram: { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  instagram: { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },

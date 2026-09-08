@@ -575,9 +575,13 @@ describe('the encode ladder', () => {
     }
   })
 
-  it('keeps 60 fps only where the channel serves it', () => {
-    expect(PLATFORM_ENCODE.youtube.maxFps).toBe(60)
-    for (const platform of PLATFORMS.filter(p => p !== 'youtube')) {
+  it('keeps 60 fps only where the channel says it takes it', () => {
+    // read out of each platform's own specification, not assumed: YouTube
+    // serves 60, and Instagram Reels documents "Frame rate: 23-60 FPS"
+    for (const platform of ['youtube', 'instagram'] as const) {
+      expect(PLATFORM_ENCODE[platform].maxFps).toBe(60)
+    }
+    for (const platform of PLATFORMS.filter(p => p !== 'youtube' && p !== 'instagram')) {
       expect(PLATFORM_ENCODE[platform].maxFps).toBe(30)
     }
   })
