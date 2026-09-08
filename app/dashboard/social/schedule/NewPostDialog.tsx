@@ -122,7 +122,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 
 export default function NewPostDialog({
   target, tz, accounts, suggested, role, clientSignsOff, locations, clientName,
-  onClose, onOpenPost, onEditMedia,
+  reviewOnly, onClose, onOpenPost, onEditMedia,
 }: {
   target: ComposerTarget
   tz: string
@@ -136,6 +136,11 @@ export default function NewPostDialog({
   locations: SavedLocation[]
   /** whose post this is — named in the sentence that says who was told */
   clientName?: string | null
+  /** THE APPROVAL STEP, NOT THE POSTING ONE. The Scheduler page's window puts
+   *  a piece up for a decision: media, words, the preview, and one press that
+   *  sends it. When it goes out is picked afterwards, on the Schedule page, by
+   *  whoever books it in — so no clock is shown and nothing here can post. */
+  reviewOnly?: boolean
   onClose: () => void
   /** the draft became real — the page keeps its id so the live row can be
    *  handed back in */
@@ -322,10 +327,16 @@ export default function NewPostDialog({
   const wait = composerWait({ itemStatus: target.itemStatus, mayApprove, clientSignsOff })
   const { primary, menu: menuItems } = footerActions({
     status, mayApprove, mayPublish: canPublish, clientSignsOff, postingNow,
-    waiting: wait !== null,
+    waiting: wait !== null, reviewOnly,
   })
 
+  // a time is only owed by a press that actually sends: Schedule, Post now,
+  // or a manager's straight-out post. "Send for review" and "Save as draft"
+  // ask nothing of the clock.
+  const sends = !reviewOnly
+    && (primary.key === 'schedule' || primary.key === 'direct' || primary.key === 'now')
   const check = useMemo(() => validateComposition({
+    requireTime: sends,
     // the piece as it ACTUALLY is, judged with this person's own rights: a
     // hardcoded `approved_for_scheduling` was how the window came to know
     // nothing about a piece the client had not seen
@@ -776,12 +787,16 @@ export default function NewPostDialog({
             </Dropdown>
           )}
 
-          <span className="text-[13px] text-muted-foreground">on</span>
-          <TimePicker
-            value={state.scheduledFor}
-            tz={tz}
-            onChange={iso => dispatch({ type: 'time', iso })}
-          />
+          {!reviewOnly && (
+            <>
+              <span className="text-[13px] text-muted-foreground">on</span>
+              <TimePicker
+                value={state.scheduledFor}
+                tz={tz}
+                onChange={iso => dispatch({ type: 'time', iso })}
+              />
+            </>
+          )}
 
           <button
             type="button"

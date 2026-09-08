@@ -598,7 +598,10 @@ describe('a post waiting on somebody, said on the card', () => {
   it('brings an ad-hoc post back to the Scheduler board only while it waits on this person', () => {
     const adhoc = waiting({ id: 'ad1', adhoc_post: true })
     expect(pageCards('scheduler', [adhoc], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
-    expect(pageCards('scheduler', [adhoc], scheduler, TODAY)).toEqual([])
+    // the scheduler who uploaded it must see it too: "it doesn't even appear
+    // in the draft column" was the whole complaint — the thing needing a
+    // decision was visible to nobody at all
+    expect(pageCards('scheduler', [adhoc], scheduler, TODAY).map(c => c.id)).toEqual(['ad1'])
     expect(pageCards('production', [adhoc], manager, TODAY)).toEqual([])
     const answered = waiting({ id: 'ad1', adhoc_post: true, posting_approval_state: 'approved' })
     expect(pageCards('scheduler', [answered], manager, TODAY)).toEqual([])

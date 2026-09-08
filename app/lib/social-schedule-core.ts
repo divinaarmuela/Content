@@ -1249,6 +1249,8 @@ export type CompositionInput = {
    *  not signed off yet is not a problem to state back at them */
   withoutApproval?: boolean
   scheduledFor: string | null | undefined
+  /** false while merely SAVING or SENDING FOR REVIEW — a time belongs to posting */
+  requireTime?: boolean
   now: string | number | Date
 }
 
@@ -1342,12 +1344,17 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
   }
 
   // NO TIME MEANS PUBLISH NOW, further down (`buildPostBody` sets
-  // `publishNow`). The button above it says "Schedule", and the time pill
-  // still reads "Pick a time" — so a press meant to book something in put it
-  // straight on a client's live account. Deliberately posting now is its own
-  // menu item, and that path sets a real time (a minute out) before it gets
-  // here, so this guard never stands in its way.
-  if (!input.scheduledFor) {
+  // `publishNow`), so anything that actually SENDS must have one: a press
+  // meant to book something in was putting it straight on a client's live
+  // account while the pill still read "Pick a time".
+  //
+  // But sending for review is not posting. Asking somebody to approve a
+  // picture and a caption has nothing to do with when it goes out — the time
+  // is picked afterwards, by whoever books it in. Demanding one first left a
+  // scheduler unable to send anything for approval at all. So the guard binds
+  // the sending paths, not the asking ones; `requireTime` defaults to true so
+  // the server keeps it unless a caller deliberately says otherwise.
+  if (input.requireTime !== false && !input.scheduledFor) {
     problems.push('Pick a time — this post has none')
   }
 

@@ -420,7 +420,22 @@ export function pageCards<T extends BoardViewCard>(
    * board would otherwise be holding somebody up with nothing on any screen
    * to press. It leaves again the moment they answer.
    */
-  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
+  // Media uploaded straight onto the Schedule page is a POST, not production
+  // work, so it stays off these boards — EXCEPT while it is waiting on a
+  // person. A scheduler's upload goes to internal check for a manager, and
+  // hiding it there meant the thing needing a decision appeared nowhere at
+  // all: not in Draft, not in Internal check, not in anyone's list. It shows
+  // while it waits, and leaves again the moment it is answered.
+  const waitingOnSomeone = (c: T) => {
+    const status = String((c as { status?: unknown }).status ?? '')
+    if (status === 'internal_review' || status === 'client_review') return true
+    return String((c as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
+  }
+  // …and only on the SCHEDULER page, which is where a decision is made. A
+  // post is never production work, so Production and Editor never show one.
+  const work = (c: T) =>
+    (c as { adhoc_post?: unknown }).adhoc_post !== true
+    || (page === 'scheduler' && waitingOnSomeone(c))
     || (page === 'scheduler' && postApprovalOffer(c, viewer) !== null)
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {

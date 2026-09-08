@@ -1141,7 +1141,23 @@ export function footerActions(input: {
    *  is nothing here for this person to send, and a disabled "Send for
    *  review" over a red box was the whole of the dead end */
   waiting?: boolean
+  /** THE APPROVAL STEP. The Scheduler page's window puts a piece up for a
+   *  decision and offers one press that sends it — never one that posts.
+   *  When it goes out is chosen afterwards, on the Schedule page. */
+  reviewOnly?: boolean
 }): { primary: FooterAction; menu: FooterAction[] } {
+  if (input.reviewOnly === true) {
+    if (input.status === 'pending') {
+      return { primary: { key: 'none', label: 'Sent — waiting on a decision' }, menu: [] }
+    }
+    if (input.status === 'approved' || input.status === 'scheduled' || input.status === 'published') {
+      return { primary: { key: 'none', label: 'Approved — book it in on Schedule' }, menu: [] }
+    }
+    return {
+      primary: { key: 'send', label: SEND_FOR_REVIEW },
+      menu: [{ key: 'draft', label: 'Save as draft' }],
+    }
+  }
   const { status, mayApprove, mayPublish } = input
   const clientSignsOff = input.clientSignsOff === true
   const straightOut = mayApprove && !clientSignsOff

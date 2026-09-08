@@ -45,7 +45,7 @@ export default function SchedulerCompose({ onClose }: { onClose: () => void }) {
   const data = useSchedulePosts(viewer, clientId)
   const suggested = useSuggestedTimes(
     clientId, data.accounts[0]?.platform ?? 'instagram', data.tz)
-  const flow = useComposeFlow({ clientId, data, role: me?.role ?? null, suggested })
+  const flow = useComposeFlow({ clientId, data, role: me?.role ?? null, suggested, reviewOnly: true })
 
   /** the client they worked on last, if they still hold them */
   const remembered = useMemo(() => {

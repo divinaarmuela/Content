@@ -71,11 +71,14 @@ export type ComposeFlow = {
   windows: React.ReactNode
 }
 
-export function useComposeFlow({ clientId, data, role, suggested }: {
+export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: {
   clientId: string | null
   data: ScheduleData
   role: Role | null
   suggested: SuggestedTime[]
+  /** the approval step (the Scheduler page): no clock, one press that sends
+   *  it for a decision. Posting is chosen afterwards, on the Schedule page. */
+  reviewOnly?: boolean
 }): ComposeFlow {
   /**
    * The composer, held as "which piece, and which post" rather than as a copy
@@ -287,6 +290,7 @@ export function useComposeFlow({ clientId, data, role, suggested }: {
 
       {target && (
         <NewPostDialog
+          reviewOnly={reviewOnly}
           target={target}
           tz={data.tz}
           accounts={data.accounts}

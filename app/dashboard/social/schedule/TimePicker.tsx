@@ -29,7 +29,7 @@ import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
  * in dark mode.
  */
 
-const dayCell = 'h-10 w-10 rounded-tile text-center text-[13px] p-0 relative'
+const dayCell = 'h-10 w-10 rounded-tile text-center text-[13px] p-0 relative text-foreground'
 
 /** 'YYYY-MM-DD' → the Date react-day-picker wants, read as a plain day (UTC,
  *  so no zone can shift it onto the day before). */
@@ -135,7 +135,9 @@ export default function TimePicker({
         // card behind it in dark mode or it disappears into it
         <div data-time-panel
           style={{ left: at.left, top: at.top }}
-          className="fixed z-[70] w-[300px] rounded-inner border border-border bg-popover p-3 shadow-lg">
+          // bg-popover WITHOUT its foreground left the calendar's day numbers on
+          // the browser default — black digits on the dark panel, unreadable.
+          className="fixed z-[70] w-[300px] rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
           <DayPicker
             mode="single"
             selected={dayOf(current.dayKey)}
