@@ -353,9 +353,12 @@ export async function markScheduledAfterQueue(
   item: ContentItem,
   plan: Pick<ItemPublishPlan, 'targets' | 'scheduledFor'>,
   publishNow: boolean,
+  opts: { moveItem?: boolean } = {},
 ): Promise<ItemStatus | null> {
   await recordQueuedSchedule(item.id, plan.targets, publishNow ? null : plan.scheduledFor)
 
+  // a piece posted in parts is not "booked in" until every file is (9 Sep 2026)
+  if (opts.moveItem === false) return null
   const next = statusAfterQueue(item.status)
   if (!next) return null
   try {

@@ -39,6 +39,7 @@ import {
 } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { markScheduledAfterQueue } from './production-publish'
+import { readPostedSlides, takenSlideUrls } from './posted-slides-core'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { askForCopiesAhead } from './encode-ahead'
 import { previewVideos } from './stream'
@@ -1503,9 +1504,15 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
    * moves nowhere). Best-effort, like the route's: a booked post is booked
    * whether or not the bookkeeping lands.
    */
+  /* …ONLY ONCE EVERY FILE OF THE PIECE IS BOOKED OR OUT (the owner, 9 Sep
+   * 2026: "when one file was scheduled, why did the whole card show as
+   * posted?"). A piece posted in parts stays in Ready to post — saying
+   * "2 of 4 posted" — until the last of its files is in a booked post; the
+   * schedule row is still written, so the client's card shows the time. */
+  const allBooked = await everyFileBooked(item, versions)
   await markScheduledAfterQueue(user, item as never, {
     targets, scheduledFor: post.scheduled_for,
-  }, rightNow).catch(e =>
+  }, rightNow, { moveItem: allBooked }).catch(e =>
     console.error('could not record the schedule for a booked post:', (e as Error).message))
   // the provider holds the schedule; the event only makes the hand-over
   // immediate, and a dropped one is picked up by the next dispatcher pass
@@ -1907,4 +1914,16 @@ export async function analyticsForClient(clientId: string): Promise<Record<strin
     limit: 500,
   }).catch(() => [])
   return rows as unknown as Record<string, unknown>[]
+}
+
+/** every file of the piece's latest version sits in a booked or live post,
+ *  or was marked posted by hand (posted-slides-core) */
+async function everyFileBooked(item: ContentItem, versions: AssetVersion[]): Promise<boolean> {
+  const latest = [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
+  const files = slidesOf(latest)
+  if (files.length === 0) return true
+  const own = await posts().list({ by: { item_id: item.id } as Partial<SocialPost> }).catch(() => [] as SocialPost[])
+  const gone = takenSlideUrls(own)
+  for (const u of readPostedSlides((item as { posted_slides?: unknown }).posted_slides)?.urls ?? []) gone.add(u)
+  return files.every(f => gone.has(f.url))
 }
