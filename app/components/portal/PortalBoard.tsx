@@ -365,6 +365,11 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         ) : (
           <span className="text-[16px] font-semibold leading-[1.25]">{card.title}</span>
         )}
+        {card.parts && card.parts.posted < card.parts.total && (
+          <p className={cn('text-[13px] font-semibold', muted)}>
+            {card.parts.posted} of {card.parts.total} posted{card.parts.booked > card.parts.posted ? ` · ${card.parts.booked - card.parts.posted} booked in` : ''} · {card.parts.total - card.parts.booked} still to come
+          </p>
+        )}
         <p className={cn('text-[14px]', muted)}>
           {card.adhoc_post && canComment && card.status === 'client_review'
             ? `Have a look at each one and say what you think — ${amPhrase(amName)} will take it from there.`

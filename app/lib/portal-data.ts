@@ -12,6 +12,7 @@ import {
 } from './batch-brief-core'
 import { isInternalKind } from './task-kind-core'
 import { slidesOf } from './version-files-core'
+import { readPostedSlides, takenSlideUrls } from './posted-slides-core'
 import {
   clientStatusWord, planState, progressLine, scheduledWhen, shootStatusLabel,
   type LastStatusChange, type PlanState,
@@ -162,6 +163,9 @@ export type PortalCard = {
   /** see `PortalItem.adhoc_post` — on such a card the client is asked for
    *  comments on each asset, not for a decision (8 Sep 2026) */
   adhoc_post: boolean
+  /** A PIECE POSTED IN PARTS (9 Sep 2026): how many of its files are booked
+   *  and how many are out — null when there is nothing to say */
+  parts: { booked: number; posted: number; total: number } | null
   updated_at: string
   /** the booked posting time, in the client's words, for a scheduled post */
   posted_when: string | null
@@ -672,6 +676,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       preview_url: p.preview_url,
       slides: p.slides,
       adhoc_post: p.adhoc_post,
+      parts: partsOf(i, p.slides.length, postRows),
       updated_at: p.updated_at,
       posted_when: postedWhen,
       live_url: live,
@@ -710,6 +715,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       preview_url: null,
       slides: [],
       adhoc_post: false,
+      parts: null,
       updated_at: (b as { updated_at?: string }).updated_at ?? b.created_at ?? '',
       posted_when: null,
       live_url: null,
@@ -783,4 +789,15 @@ export async function getPortalDataByToken(token: string): Promise<PortalData | 
   const row = (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0]
   if (!row) return null
   return getPortalData(row.id)
+}
+
+/** how much of a piece is booked or out — the client's card said "Done" for
+ *  a card with one of five files booked (the owner, 9 Sep 2026) */
+function partsOf(item: { id: string; posted_slides?: unknown }, total: number, posts: readonly SocialPost[]): PortalCard['parts'] {
+  if (total < 2) return null
+  const own = posts.filter(p => p.item_id === item.id)
+  const booked = takenSlideUrls(own).size
+  const posted = readPostedSlides(item.posted_slides)?.posted ?? 0
+  if (booked === 0 && posted === 0) return null
+  return { booked: Math.min(total, Math.max(booked, posted)), posted: Math.min(total, posted), total }
 }
