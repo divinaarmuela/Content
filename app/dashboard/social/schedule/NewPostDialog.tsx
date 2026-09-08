@@ -18,8 +18,11 @@ import {
 } from '@/app/lib/social-schedule-core'
 import {
   autoKindFor, availableKinds, isOrganizationUrn, isPageId, isPlatform, networkName,
-  TIKTOK_CONSENT_LINE, type PostKind,
+  TIKTOK_CONSENT_LINE, type MediaItem, type Platform, type PostKind,
 } from '@/app/lib/publish-core'
+import { copiesToPrepare } from '@/app/lib/encode-ahead-core'
+import { copyAheadWords } from '@/app/lib/shrink-core'
+import { PLATFORM_MEDIA } from '@/app/lib/media-fit-core'
 import {
   buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO,
 } from '@/app/lib/post-preview-core'
@@ -257,6 +260,44 @@ export default function NewPostDialog({
     () => accounts.filter(a => state.channels.includes(a.id)), [accounts, state.channels])
   const platforms = useMemo(
     () => [...new Set(chosen.map(a => String(a.platform)))], [chosen])
+
+  /**
+   * THE COPY THAT IS ALREADY BEING MADE.
+   *
+   * A video too big for one of these channels gets a publish-grade copy made
+   * for it, and since this window is where the media is attached, that copy is
+   * asked for on the save rather than at the posting time. One quiet line, so
+   * the work is visible without being an event: nobody is waiting on it — that
+   * is the whole point — so it is not a spinner, a bar or a percentage.
+   *
+   * The same pure rule the server and the publish path use, so the line
+   * appears exactly when a copy is actually going to be made.
+   */
+  const preparingCopy = useMemo(() => {
+    const video = state.slides.length === 1 && state.slides[0].type === 'video'
+      ? state.slides[0] : null
+    if (!video || typeof video.bytes !== 'number') return null
+    const list: Platform[] = []
+    const kindFor: Partial<Record<Platform, PostKind>> = {}
+    const own: Partial<Record<Platform, MediaItem[]>> = {}
+    for (const account of chosen) {
+      const p = String(account.platform)
+      if (!isPlatform(p)) continue
+      list.push(p)
+      const extras = state.perChannel[account.id]
+      if (extras?.kind) kindFor[p] = extras.kind as PostKind
+      if (extras?.slides?.length) {
+        own[p] = extras.slides.map(sl => ({
+          url: sl.url, type: sl.type === 'video' ? 'video' as const : 'image' as const,
+        }))
+      }
+    }
+    const asks = copiesToPrepare({
+      probes: [{ url: video.url, type: 'video', bytes: video.bytes }],
+      platforms: list, kinds: kindFor, own,
+    })
+    return copyAheadWords(asks.map(a => PLATFORM_MEDIA[a.platform]?.label ?? a.platform))
+  }, [state.slides, state.perChannel, chosen])
 
   const status: SocialPostStatus = post?.live_status ?? 'draft'
   const mayApprove = role === 'account_manager' || role === 'super_admin'
@@ -839,6 +880,11 @@ export default function NewPostDialog({
                 Cover: from the editor. That is the picture people see before
                 they press play.
               </p>
+            )}
+
+            {/* the copy is being made now, weeks before it is needed */}
+            {preparingCopy && (
+              <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>
             )}
           </div>
 

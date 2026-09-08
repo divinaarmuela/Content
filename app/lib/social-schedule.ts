@@ -38,6 +38,7 @@ import {
 } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
+import { askForCopiesAhead } from './encode-ahead'
 import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
 import { safeZone } from './timezone-core'
@@ -545,6 +546,15 @@ async function insertPost(
       approved_by: null,
       note: null,
     } as unknown as SocialPost)
+    // A big video's copy is made NOW, not when the post is due. Fire and
+    // forget: nothing about this save waits on it, and the publish job still
+    // asks for itself if this never happened.
+    askForCopiesAhead({
+      clientId: item.client_id,
+      slides: input.slides,
+      channels: input.channels,
+      perChannel: input.perChannel,
+    })
     announceAfter('schedule', { client_id: item.client_id, post_id: row.id, kind: 'created' })
     return shape(row)
   } catch (e) {
@@ -733,6 +743,14 @@ export async function updatePost(
   if (!saved.claimed) {
     throw new AuthzError('Somebody changed this post while you were editing — refresh to see it', 409)
   }
+  // media replaced, or a channel added to a post that already had media —
+  // either way the copy is asked for here rather than at the posting time
+  askForCopiesAhead({
+    clientId: item.client_id,
+    slides,
+    channels: channelIds,
+    perChannel,
+  })
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'updated' })
   return shape(saved.row)
 }
@@ -960,7 +978,7 @@ async function claimPostSlides(
   postId: string, itemId: string, slides: Slide[],
   versionId: string | null, versionNumber: number | null, stamp: string,
 ): Promise<void> {
-  await posts().claim(postId, cur =>
+  const saved = await posts().claim(postId, cur =>
     cur && cur.item_id === itemId
       && !SETTLED.includes(String(cur.status)) && cur.status !== 'scheduled'
       ? {
@@ -973,6 +991,17 @@ async function claimPostSlides(
         updated_at: stamp,
       } as unknown as SocialPost
       : null)
+  // the media on the post just changed — ask for the copy of it now, while
+  // the posting time is still days away
+  if (saved.claimed) {
+    const row = shape(saved.row)
+    askForCopiesAhead({
+      clientId: String(row.client_id),
+      slides,
+      channels: row.channels,
+      perChannel: row.per_channel,
+    })
+  }
 }
 
 /* ── approval ───────────────────────────────────────────────────────────── */
