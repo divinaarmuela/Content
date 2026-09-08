@@ -183,13 +183,19 @@ export const publishDispatcher = inngest.createFunction(
       corrected: await reconcilePublishedJobs(),
       ids: await dueJobIds(),
     }))
-    if (ids.length === 0) return { due: 0, reclaimed, corrected }
+    // `synced` is a deliberate canary: it appears in a run's output only once
+    // Inngest is running a definition from a deploy AFTER 8 Sep 2026. If a
+    // dispatcher run's output lacks it, Inngest is serving a stale definition
+    // and the Vercel integration is not syncing — the exact silent failure
+    // that stopped every scheduled post between 31 Aug and 8 Sep. Cheap to
+    // read (`/v1/events/<id>/runs`), and it costs one word per run.
+    if (ids.length === 0) return { due: 0, reclaimed, corrected, synced: '2026-09-08' }
 
     await step.sendEvent(
       'dispatch-publish',
       ids.map(id => ({ name: 'app/post.publish.requested', data: { jobId: id } }))
     )
-    return { due: ids.length, reclaimed, corrected }
+    return { due: ids.length, reclaimed, corrected, synced: '2026-09-08' }
   })
 )
 

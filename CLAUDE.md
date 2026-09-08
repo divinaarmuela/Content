@@ -66,7 +66,27 @@ and `npm run build` must pass. Do not report completion on tests alone.
    ```bash
    curl -X PUT https://app.mdmmarketing.com.au/api/inngest   # {"modified":true} = it registered something new
    ```
-   Installing Inngest's Vercel integration makes this automatic on every deploy.
+   Installing Inngest's Vercel integration makes this automatic on every deploy
+   — BUT IT IS INSTALLED AND WAS STILL NOT SYNCING. Connected and "Enabled"
+   is not enough: with its **Custom Production Domain** blank, Inngest calls
+   the generated `*.vercel.app` URL, which Vercel's Deployment Protection
+   refuses, so every deploy's sync fails and nothing says so. That field must
+   read `app.mdmmarketing.com.au` (which is NOT protected — a manual
+   `curl -X PUT` against it succeeds unauthenticated).
+
+   HOW TO TELL IT IS STALE, in one request: the publish dispatcher returns a
+   `synced` field. Read any of its runs and look for it:
+
+   ```bash
+   curl -H "Authorization: Bearer $INNGEST_SIGNING_KEY"      "https://api.inngest.com/v1/events?name=app/post.publish.requested&limit=1"
+   # then /v1/events/<internal_id>/runs — `output.synced` missing = stale
+   ```
+
+   And the failure this caused, so it is recognised next time: NOTHING
+   PUBLISHED BETWEEN 31 AUGUST AND 8 SEPTEMBER 2026. Posts sat at
+   `status: 'queued'`, `attempts: 0`, looking perfectly scheduled. No error,
+   no log, no failed job — a function Inngest does not know about is not
+   called, and a post nobody asks about never goes.
 6. **The vitest config must be `vitest.config.mts`** (`.ts` throws ERR_REQUIRE_ESM).
    `server-only` is aliased to a stub there.
 7. **`lib/firebase-config.ts` reads env lazily.** `NEXT_PUBLIC_FIREBASE_DATABASE_URL`
