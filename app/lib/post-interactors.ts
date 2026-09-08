@@ -62,7 +62,8 @@ export async function duePosts(now: Date = new Date()): Promise<{ post: PostAnal
 
 /** read one post's likers and commenters, once for today */
 export async function readPostInteractors(
-  postId: string, opts: { now?: Date; source?: FollowerSource | null } = {},
+  postId: string,
+  opts: { now?: Date; source?: FollowerSource | null; force?: boolean } = {},
 ): Promise<{ status: 'read' | 'skipped' | 'failed'; reason?: string; likers?: number; commenters?: number }> {
   const now = opts.now ?? new Date()
   const source = opts.source === undefined ? configuredSource() : opts.source
@@ -74,7 +75,9 @@ export async function readPostInteractors(
   const seat = await analytics().claim(postId, cur => {
     if (!cur) return null
     const it = readInteractors(cur.interactors)
-    if (it?.fetched_day === today) return null
+    // `force` is a person asking now: today's earlier read does not stand in
+    // the way, only a read that is still running (the same day's claim)
+    if (it?.fetched_day === today && (!opts.force || it.status === 'running')) return null
     const running: Interactors = { ...(it ?? { ...emptyLike(), followed: [] }), status: 'running', fetched_day: today }
     return { ...cur, interactors: running }
   })

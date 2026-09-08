@@ -30,7 +30,7 @@ import {
   applySlideLimit, canReschedule, channelBlockReason,
   CLIENT_POLICY_UNREADABLE, CLIENT_SIGNS_OFF_REFUSAL, clientSignsOffEveryPost,
   coverForSlide, eligibility,
-  mayEditNote, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
+  assetsApprovedOnBoard, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
 import {
@@ -174,9 +174,10 @@ function assertCompose(user: TeamUser, item: ContentItem): void {
  * through is the ordinary one.
  */
 export async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<boolean> {
-  return mayPostWithoutApproval(
+  return mayPostPiece(
     actingRoles({ id: user.id, role: user.role }, item),
     await clientSignsOff(item.client_id),
+    item,
   )
 }
 
@@ -1103,12 +1104,20 @@ export async function scheduleWithoutApproval(
   const { post, item: loaded } = await loadPostForUser(user, id)
   let item = loaded
   assertCompose(user, item)
-  if (!mayApprovePost(actingRoles({ id: user.id, role: user.role }, item))) {
+  const hats = actingRoles({ id: user.id, role: user.role }, item)
+  /* TWO WAYS THROUGH THIS DOOR. A manager's, which performs the post's own
+   * sign-off in their name below; and the board's — the pieces were approved
+   * on the board, so a scheduler posts them with no second approval at all.
+   * On that path the posting gate is simply not consulted: nobody is asked,
+   * nobody answers, the post is marked cleared by the assets' approval. */
+  const viaBoard = assetsApprovedOnBoard(item) && !mayApprovePost(hats)
+  if (!mayApprovePost(hats) && !viaBoard) {
     throw new AuthzError('Only an account manager (or the client) can approve the final post', 403)
   }
   // the client's own contract, checked before anything is written: on such a
-  // client this path does not exist, for anybody
-  if (await clientSignsOff(item.client_id)) {
+  // client this path does not exist for a manager skipping them — but a piece
+  // the board already put in front of the client has their yes
+  if (!viaBoard && await clientSignsOff(item.client_id)) {
     throw new AuthzError(CLIENT_SIGNS_OFF_REFUSAL, 403)
   }
   if (SETTLED.includes(post.status) || post.status === 'scheduled') {
@@ -1157,28 +1166,49 @@ export async function scheduleWithoutApproval(
    * usable media on this path at all (`APPROVE_WITHOUT_CLIENT_STATUSES`), so
    * the check above has already refused it with "With the client now".
    */
-  if (usable.needsClientApproval) {
+  if (!viaBoard && usable.needsClientApproval) {
     item = await performTransition(
       user, item as never, 'approved_for_scheduling', { note },
     ) as unknown as ContentItem
   }
 
-  // the ask — written and logged, but nobody is emailed to answer a question
-  // that is being answered in the same breath
-  const asked = await actOnPostingApproval(user, item as never, {
-    action: 'send', client_too: false, self_approved: true,
-  })
-  // …and the answer, from the person entitled to give it
-  await actOnPostingApproval(user, { ...item, ...asked } as never, {
-    action: 'approve', note,
-  })
+  if (!viaBoard) {
+    // the ask — written and logged, but nobody is emailed to answer a
+    // question that is being answered in the same breath
+    const asked = await actOnPostingApproval(user, item as never, {
+      action: 'send', client_too: false, self_approved: true,
+    })
+    // …and the answer, from the person entitled to give it
+    await actOnPostingApproval(user, { ...item, ...asked } as never, {
+      action: 'approve', note,
+    })
+  } else {
+    // The board's yes IS the post's yes. The item's gate is written as
+    // approved — by the board, in this person's name, saying so — because
+    // every other screen (the calendar mirror, `publishBlockReason`) reads
+    // the item, and a gate reading "never asked" would flip the post back to
+    // draft the moment it was booked. Written directly: the gate's own
+    // `approve` insists on a manager answering a question, and here nobody
+    // asked one.
+    const stampNow = nowIso()
+    await table<ContentItem>('content_items').update(item.id, {
+      posting_approval_state: 'approved',
+      posting_approved_by: user.id,
+      posting_approved_at: stampNow,
+      posting_approval_note: 'Cleared by the board: the pieces were approved there, so the post needed no second approval.',
+      posting_client_required: false,
+    } as never)
+    item = { ...item, posting_approval_state: 'approved' } as ContentItem
+  }
 
   const stamp = nowIso()
   const cleared = await posts().claim(id, cur =>
     cur && cur.status === post.status
       ? {
         ...cur, status: 'approved', sent_at: cur.sent_at ?? stamp,
-        approval_mode: 'self', approved_by: user.id, approved_at: stamp,
+        // 'assets': cleared by the board's approval of the pieces, not by a
+        // person answering for this post
+        approval_mode: viaBoard ? 'assets' : 'self', approved_by: user.id, approved_at: stamp,
         updated_at: stamp,
       } as SocialPost
       : null)

@@ -1,0 +1,43 @@
+import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
+import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { loadPostPage } from '../../../../../lib/post-page'
+import { followersEnabled } from '../../../../../lib/follower-source'
+import { readPostInteractors } from '../../../../../lib/post-interactors'
+
+/**
+ * POST → read who liked and who commented on this post NOW.
+ *
+ * The morning look reads every post's people once a day at 6 am; until it
+ * came round the post page could only say "check back tomorrow". The owner,
+ * the night four posts went out: "why can't [it] fetch … who liked". So a
+ * manager can ask for the read on the spot. Same reader, same rows, same
+ * cost (a handful of requests) — just not made to wait for the morning.
+ *
+ * Gated by the post's own access rule (`loadPostPage`) and by the manager
+ * floor: it spends money, and a scheduler reads the answer either way.
+ */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return withRequestCache(async () => {
+    try {
+      const user = await requireRole('account_manager')
+      const { id } = await params
+      if (!followersEnabled()) return NextResponse.json({ error: 'Not switched on.' }, { status: 400 })
+      const page = await loadPostPage(user, id)
+      const body = await req.json().catch(() => ({})) as { analytics_id?: unknown }
+      const wanted = typeof body.analytics_id === 'string' ? body.analytics_id : page.analytics[0]?.id
+      const row = page.analytics.find(a => a.id === wanted)
+      if (!row) return NextResponse.json({ error: 'This post has not been read by the analytics sweep yet — give it a few minutes after it goes live.' }, { status: 409 })
+      if (String(row.platform) !== 'instagram') {
+        return NextResponse.json({ error: 'Only Instagram says who liked a post.' }, { status: 400 })
+      }
+      const result = await readPostInteractors(row.id, { force: true })
+      if (result.status === 'failed') return NextResponse.json({ error: result.reason ?? 'Could not read the people.' }, { status: 502 })
+      if (result.status === 'skipped') return NextResponse.json({ error: result.reason ?? 'A read is already under way.' }, { status: 409 })
+      return NextResponse.json({ ok: true, likers: result.likers ?? 0, commenters: result.commenters ?? 0 })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
+    }
+  })
+}

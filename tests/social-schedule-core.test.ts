@@ -3,7 +3,7 @@ import {
   eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
-  mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
+  assetsApprovedOnBoard, mayPostPiece, mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
   NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE, WITH_THE_CLIENT_NOW,
   APPROVE_WITHOUT_CLIENT_STATUSES, APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES,
   channelBlockReason, coverForSlide, mayEditNote, postTileFacts,
@@ -982,5 +982,29 @@ describe('who may change a note', () => {
     expect(mayEditNote({ id: 'u-writer', role: 'editor' }, null)).toBe(false)
     // a note with no author is nobody's but a manager's
     expect(mayEditNote({ id: '', role: 'editor' }, { created_by: null })).toBe(false)
+  })
+})
+
+
+/* ── pieces approved on the board need no second approval (8 Sep 2026) ──── */
+
+describe('assets approved on the board', () => {
+  it('is a piece that went through the columns and came out approved', () => {
+    expect(assetsApprovedOnBoard({ status: 'approved_for_scheduling' })).toBe(true)
+    expect(assetsApprovedOnBoard({ status: 'scheduled', adhoc_post: false })).toBe(true)
+  })
+  it('is never a file uploaded straight onto Schedule, whatever its status', () => {
+    expect(assetsApprovedOnBoard({ status: 'approved_for_scheduling', adhoc_post: true })).toBe(false)
+  })
+  it('is not a piece still on its way', () => {
+    for (const status of ['draft_uploaded', 'internal_review', 'client_review', 'client_changes_requested']) {
+      expect(assetsApprovedOnBoard({ status }), status).toBe(false)
+    }
+    expect(assetsApprovedOnBoard(null)).toBe(false)
+  })
+  it('lets a scheduler post such a piece without asking — and still makes them ask for an upload', () => {
+    expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling' })).toBe(true)
+    expect(mayPostPiece('scheduler', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(false)
+    expect(mayPostPiece('account_manager', false, { status: 'approved_for_scheduling', adhoc_post: true })).toBe(true)
   })
 })

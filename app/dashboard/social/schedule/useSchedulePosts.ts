@@ -31,7 +31,7 @@ import type {
   SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import {
-  clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility,
+  assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility,
   postTileFacts, type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
@@ -90,6 +90,10 @@ export type RailMedia = {
   /** where the piece is in the funnel — what says whether a manager may sign
    *  it off without the client from here */
   status: string
+  /** the pieces were approved ON THE BOARD (Draft → Internal check → With
+   *  client → Ready to post), so whoever schedules them just schedules them —
+   *  no second approval. False for a file uploaded straight onto Schedule. */
+  boardApproved: boolean
   /** the version the client would be approving, for the question they are
    *  asked before one is skipped */
   versionNumber: number | null
@@ -304,6 +308,7 @@ export function useSchedulePosts(
           clientApproved: elig.ok && !elig.needsClientApproval
             && !itemVersions.some(isAdHocUploadVersion),
           status: String(item.status ?? ''),
+          boardApproved: assetsApprovedOnBoard(item),
           clientSignsOff,
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,

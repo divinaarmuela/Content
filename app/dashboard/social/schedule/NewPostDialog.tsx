@@ -98,6 +98,9 @@ export type ComposerTarget = {
   /** the client said yes to this media (see `RailMedia.clientApproved`) —
    *  what the image editor's footer is written from */
   clientApproved: boolean
+  /** the pieces were approved on the board, so this post needs no second
+   *  approval from anybody (see `RailMedia.boardApproved`) */
+  boardApproved: boolean
   /** where the piece actually is in the funnel — what the window's own
    *  composition check judges, instead of assuming it is approved */
   itemStatus: string
@@ -368,7 +371,9 @@ export default function NewPostDialog({
   // the old rule — managers and admins only — so a scheduler saw "Needs
   // approval before it can post" and "Send for review" beside a server that
   // would have let them post straight out.
-  const mayApprove = mayPostWithoutApproval(role, clientSignsOff)
+  // …OR the pieces came through the board: approved there, posted here, no
+  // second approval — the owner's rule of 8 Sep 2026
+  const mayApprove = mayPostWithoutApproval(role, clientSignsOff) || target.boardApproved
 
   const clientIdOfPost = accounts[0]?.client_id ?? null
   useEffect(() => {

@@ -207,6 +207,8 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
       coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
       needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
+      // a fresh upload never saw the board; an opened post reads its piece
+      boardApproved: media?.boardApproved ?? false,
       // a post made from an upload a moment ago was never the client's to approve
       clientApproved: media?.clientApproved ?? false,
       itemStatus: media?.status

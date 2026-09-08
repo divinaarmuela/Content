@@ -187,6 +187,34 @@ export function clientSignsOffEveryPost(
 export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 
 /** …and the refusal if somebody asks for the short cut anyway. */
+/**
+ * THE PIECES CAME THROUGH THE BOARD AND WERE SIGNED OFF THERE.
+ *
+ * Owner, 8 Sep 2026: "once the pieces are approved [on the board] then it
+ * will land on Schedule; post scheduler can auto post without need to
+ * approval again, because the assets were approved." So a piece that went
+ * Draft → Internal check → With client → Ready to post is DONE being
+ * approved, and whoever schedules it just schedules it. The post gate — send
+ * to a manager, wait — is for the OTHER kind: a file uploaded straight onto
+ * Schedule, which never saw the board (`adhoc_post`).
+ */
+export function assetsApprovedOnBoard(
+  item: { adhoc_post?: unknown; status?: unknown } | null | undefined,
+): boolean {
+  if (!item || item.adhoc_post === true) return false
+  return ['approved_for_scheduling', 'scheduled'].includes(String(item.status ?? ''))
+}
+
+/** May this person post THIS piece without asking anybody: by their hat
+ *  (`mayPostWithoutApproval`) or because the board already said yes. */
+export function mayPostPiece(
+  who: string | null | undefined | readonly string[],
+  clientSignsOff: boolean | null | undefined,
+  item: { adhoc_post?: unknown; status?: unknown } | null | undefined,
+): boolean {
+  return mayPostWithoutApproval(who, clientSignsOff) || assetsApprovedOnBoard(item)
+}
+
 export const CLIENT_SIGNS_OFF_REFUSAL =
   'This client signs off every post — send it for approval'
 

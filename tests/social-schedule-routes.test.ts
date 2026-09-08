@@ -498,7 +498,26 @@ describe('schedule without approval', () => {
     expect(jobs()).toHaveLength(1)
   })
 
-  it('refuses a scheduler, in the same words approving would', async () => {
+  it('lets a scheduler post a piece the BOARD approved, with no second approval (8 Sep 2026)', async () => {
+    // the seed piece is approved_for_scheduling and is not an ad-hoc upload:
+    // it came through the columns, so scheduling it is just scheduling it
+    const id = (await create()).body.post.id as string
+    as(SCHEDULER)
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.status).toBe('scheduled')
+    expect(direct.body.post.approval_mode).toBe('assets')
+    expect(jobs()).toHaveLength(1)
+    // the item's gate says who and why, so nothing later flips it back
+    const item = fake.rows('content_items')[0] as any
+    expect(item.posting_approval_state).toBe('approved')
+    expect(item.posting_approved_by).toBe(SCHEDULER.id)
+    expect(String(item.posting_approval_note)).toMatch(/board/i)
+  })
+
+  it('still refuses a scheduler on a file uploaded straight onto Schedule', async () => {
+    fake.restore()
+    fake = seed({ adhoc_post: true })
     const id = (await create()).body.post.id as string
     as(SCHEDULER)
     const direct = await post(id, { mode: 'direct' })
@@ -584,16 +603,17 @@ describe('an account manager posts media the client has not signed off', () => {
     expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
     expect(jobs()).toHaveLength(0)
 
-    // …and on a piece they CAN see, the refusal is the approval one, unchanged
+    // …and on a piece they CAN see — one the board approved — they post it
+    // with no second approval (8 Sep 2026)
     fake.restore()
     fake = seed()
     as(AM)
     const visible = (await create()).body.post.id as string
     as(SCHEDULER)
-    const refused = await post(visible, { mode: 'direct' })
-    expect(refused.status).toBe(403)
-    expect(refused.body.error)
-      .toBe('Only an account manager (or the client) can approve the final post')
+    const allowed = await post(visible, { mode: 'direct' })
+    expect(allowed.status).toBe(200)
+    expect(allowed.body.post.status).toBe('scheduled')
+    expect(allowed.body.post.approval_mode).toBe('assets')
   })
 
   it('refuses everybody on a client who signs every post off, in plain words', async () => {

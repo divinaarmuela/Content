@@ -56,6 +56,8 @@ export type PostPageData = {
   jobs: PostJob[]
   /** the cached rows for this post, newest first — one per provider post */
   analytics: PostAnalytic[]
+  /** may this viewer ask for who liked / who commented to be read now */
+  may_read_people: boolean
 }
 
 const asIds = (v: unknown): string[] =>
@@ -91,6 +93,7 @@ export async function loadPostPage(user: TeamUser, id: string): Promise<PostPage
   })
 
   return {
+    may_read_people: (user.role === 'account_manager' || user.role === 'super_admin') && Boolean(process.env.HIKER_API_KEY),
     post,
     item: { id: item.id, title: item.title, client_id: item.client_id, status: item.status },
     client: {

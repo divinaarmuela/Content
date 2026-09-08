@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import ReadPeopleButton from './ReadPeopleButton'
 import Link from 'next/link'
 import { ExternalLink, MessageCircle } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
@@ -93,6 +94,7 @@ export default function PostView({ data }: { data: PostPageData }) {
 
   const pending = metricsPending(main)
   const numbers = performance && hasNumbers(performance) && !pending
+
 
   return (
     <div className="flex flex-col gap-4 pb-10">
@@ -195,7 +197,19 @@ export default function PostView({ data }: { data: PostPageData }) {
 
       {/* ── the people ─────────────────────────────────────────────────── */}
       <Card>
-        <CardHeader><CardTitle>People</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle>People</CardTitle>
+          {/* the morning look reads these once a day at 6 am; a manager can
+              ask for them now instead of being told to come back tomorrow */}
+          {data.may_read_people && main && String(main.platform) === 'instagram' && (
+            <ReadPeopleButton
+              postId={post.id}
+              analyticsId={main.id}
+              running={interactors?.status === 'running'}
+              readBefore={Boolean(interactors)}
+            />
+          )}
+        </CardHeader>
         <CardContent className="flex flex-col gap-5 pt-0">
           <Commented p={performance} />
           <Liked
