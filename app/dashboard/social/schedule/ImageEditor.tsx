@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crop as CropIcon, Loader2, Redo2, SlidersHorizontal, Type as TypeIcon, Undo2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SAVE_WAIT_MS, UPLOAD_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
 import {
   CROP_PRESETS, EMPTY_TEXT, LOOKS, MAX_EXPORT_PX, NEUTRAL_FILTERS, TEXT_FONTS,
   TEXT_SIZE_MAX, TEXT_SIZE_MIN, applyMatrix, arrowDelta, clampCover, clampCrop,
@@ -104,13 +105,17 @@ export default function ImageEditor(
             <h2 className="text-section-title">{isVideo ? 'Edit video' : 'Edit image'}</h2>
             <p className="text-[13px] text-muted-foreground">{target.title}</p>
           </div>
+          {/* ALWAYS a way out — busy or not. A save that hangs used to take
+              this button with it (9 Sep 2026); leaving mid-save loses only
+              the edit, and says so. */}
           <button
             type="button"
             onClick={onClose}
-            disabled={busy}
-            aria-label="Close"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted disabled:opacity-50"
+            aria-label={busy ? 'Cancel and close' : 'Close'}
+            title={busy ? 'Stop waiting and close — this edit is not saved' : undefined}
+            className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 hover:bg-muted"
           >
+            {busy && <span className="text-[13px] font-semibold">Cancel</span>}
             <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
         </div>
@@ -422,12 +427,12 @@ function PicturePanel({ target, slide, mayApprove, busy, setBusy, setProblem, on
       const { done } = uploadFiles([file], {
         group: `image-edit:${target.itemId}`, purpose: 'social',
       })
-      const landed = await done
+      const landed = await withTimeout(done, UPLOAD_WAIT_MS, 'The upload')
       const url = landed[0]?.url
       if (!url) throw new Error('The edited picture did not finish uploading')
 
-      const res = plan.kind === 'crop'
-        ? await fetch('/api/social/schedule/derive', {
+      const res = await withTimeout(plan.kind === 'crop'
+        ? fetch('/api/social/schedule/derive', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -438,7 +443,7 @@ function PicturePanel({ target, slide, mayApprove, busy, setBusy, setProblem, on
             kind: 'crop',
           }),
         })
-        : await fetch('/api/social/schedule/media', {
+        : fetch('/api/social/schedule/media', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -447,7 +452,7 @@ function PicturePanel({ target, slide, mayApprove, busy, setBusy, setProblem, on
             files: target.slides.map((s, i) =>
               (i === target.index ? { ...s, url, name } : s)),
           }),
-        })
+        }), SAVE_WAIT_MS, 'Saving the picture')
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setProblem(friendlyError(
@@ -851,11 +856,11 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
         const { done } = uploadFiles([file], {
           group: `image-edit:${target.itemId}`, purpose: 'social',
         })
-        coverUrl = (await done)[0]?.url ?? null
+        coverUrl = (await withTimeout(done, UPLOAD_WAIT_MS, 'The cover upload'))[0]?.url ?? null
         if (!coverUrl) throw new Error('The cover picture did not finish uploading')
       }
 
-      const res = await fetch('/api/social/schedule/derive', {
+      const res = await withTimeout(fetch('/api/social/schedule/derive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -867,7 +872,7 @@ function VideoPanel({ target, slide, busy, setBusy, setProblem, onSaved }: {
           trim_end: trimmed ? trim.end : null,
           kind: 'video',
         }),
-      })
+      }), SAVE_WAIT_MS * 3, 'Saving the video')
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setProblem(friendlyError(String(json?.error ?? ''), 'Schedule'))

@@ -5,6 +5,7 @@ import {
   Check, ChevronDown, Clock, Eye, MapPin, Pencil, Plus, Trash2, Wand2, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
 import type { SocialAccount } from '@/lib/db-types'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
@@ -823,7 +824,7 @@ export default function NewPostDialog({
         setPicking(false)
         return
       }
-      const id = await ensurePost({ ...state, slides: fresh.length === 0 ? next : state.slides })
+      const id = await withTimeout(ensurePost({ ...state, slides: fresh.length === 0 ? next : state.slides }), SAVE_WAIT_MS, 'Saving the post')
       if (fresh.length === 0) {
         dispatch({ type: 'slides', slides: next })
         dispatch({ type: 'saved' })
@@ -833,11 +834,11 @@ export default function NewPostDialog({
       // media the client has not seen: the whole arrangement becomes a new
       // version and the piece goes back to them. The server checks this again
       // — it is the one that decides.
-      const res = await fetch('/api/social/schedule/media', {
+      const res = await withTimeout(fetch('/api/social/schedule/media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item_id: target.itemId, post_id: id, files: next }),
-      })
+      }), SAVE_WAIT_MS, 'Saving the media')
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new ComposeProblem(json)
       dispatch({ type: 'slides', slides: next })
