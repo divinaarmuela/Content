@@ -120,7 +120,10 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
                 {initials(m.name, m.email)}
               </span>
-              {m.name || m.email}
+              <span className="flex flex-col leading-[1.15]" title={m.email}>
+                <span>{m.name || m.email}</span>
+                {m.name && <span className="text-[11px] text-muted-foreground">{m.email}</span>}
+              </span>
               <span className="text-[12px] uppercase tracking-wide text-muted-foreground">
                 {roleLabel(m.role)}
               </span>
@@ -151,6 +154,10 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-body-15 font-medium">{e.name || e.email}</span>
+                  {/* the email as well as the name — the owner, 9 Sep 2026: "make
+                      sure I can see the email, not just the name, so I know
+                      which one to trigger" */}
+                  {e.name && <span className="block truncate text-secondary-13 text-muted-foreground">{e.email}</span>}
                   <span className="block text-secondary-13 text-muted-foreground">
                     {roleLabel(e.role)} · {e.client_count === 0
                       ? 'no clients yet'
