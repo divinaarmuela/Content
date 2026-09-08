@@ -258,7 +258,22 @@ function CanvasCardInner({
   }, [soundOn, frameReady])
   // a clip that stops moving (scrolled away, unchosen) gives the sound back
   React.useEffect(() => { if (sound && !auto.play) onSound?.(false) }, [sound, auto.play, onSound])
-  const toggleSound = () => onSound?.(!soundOn)
+  /* THE UNMUTE HAPPENS IN THE CLICK, NOT IN AN EFFECT. Chrome pauses a clip
+   * that started playing by itself the moment it becomes audible, unless the
+   * unmute happens inside a user gesture — and a `useEffect` runs a tick
+   * later, which does not count. Measured on the board: muted, the clip ran
+   * 30.4s → 36.4s; `muted = false` from an effect gave `paused: true` and
+   * `webkitAudioDecodedByteCount: 0` with no error at all. So the element is
+   * told here, synchronously, and the effect below only reconciles. */
+  const toggleSound = () => {
+    const on = !soundOn
+    const v = videoRef.current
+    if (v && !playing) {
+      v.muted = !on
+      if (on) v.play().catch(() => { v.muted = true; onSound?.(false) })
+    }
+    onSound?.(on)
+  }
 
   // where the player's origin is stated to YouTube, so it will listen to us
   const origin = typeof window !== 'undefined' ? window.location.origin : undefined
