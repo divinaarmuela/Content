@@ -45,8 +45,14 @@ describe('creditedPost — the last post they touched before following', () => {
     const p = person({ username: 'a', followed_on: '2026-09-12', actions: [touched('liked', 'item-1', '2026-09-08'), touched('liked', 'item-2', '2026-09-11'), touched('liked', 'item-3', '2026-09-13')] })
     expect(creditedPost(p)?.item_id).toBe('item-2')
   })
-  it('nothing for somebody who never followed', () => {
+  it('nothing for somebody who never followed and never wrote', () => {
     expect(creditedPost(person({ username: 'a', actions: [touched()] }))).toBeNull()
+  })
+  it('a DM before the follow was seen anchors the credit — a late follower read cannot hand it to a later post', () => {
+    // liked A (8th), wrote in (9th), liked B (11th), only seen following on the 12th: from A
+    const p = person({ username: 'a', followed_on: '2026-09-12', reached_out_on: '2026-09-09',
+      actions: [touched('liked', 'item-1', '2026-09-08'), touched('liked', 'item-2', '2026-09-11')] })
+    expect(creditedPost(p)?.item_id).toBe('item-1')
   })
 })
 

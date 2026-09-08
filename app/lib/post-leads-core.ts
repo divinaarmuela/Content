@@ -79,13 +79,25 @@ export function leadsForPost(input: {
   return out.sort(leadOrder)
 }
 
-/** the last post of ours they touched on or before the day they followed —
- *  the one the follow is credited to (the same rule as `likelyFromUs`) */
-export function creditedPost(person: Pick<PeopleRow, 'followed_on' | 'actions'>): PeopleAction | null {
-  if (!person.followed_on) return null
+/**
+ * The post the person is credited to: the last post of ours they touched on
+ * or before their FIRST sign of coming over — the day they were first seen
+ * following, or the day they first wrote to the account, whichever came
+ * first.
+ *
+ * Why the earlier of the two (the owner, 8 Sep 2026, "assuming that the
+ * person was from there"): the follower list is read once a day, and a
+ * missed day stamps a follow later than it happened. Somebody who liked post
+ * A, wrote in, and was only seen following after post B came from A — the
+ * DM says so — and B must not take the credit because a read ran late.
+ */
+export function creditedPost(person: Pick<PeopleRow, 'followed_on' | 'actions' | 'reached_out_on'>): PeopleAction | null {
+  const anchors = [person.followed_on, person.reached_out_on].filter((d): d is string => !!d)
+  if (anchors.length === 0) return null
+  const anchor = anchors.sort()[0]
   let best: PeopleAction | null = null
   for (const a of person.actions) {
-    if (!a.day || a.day > person.followed_on) continue
+    if (!a.day || a.day > anchor) continue
     if (!best || a.day > (best.day ?? '')) best = a
   }
   return best
