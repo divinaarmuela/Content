@@ -35,7 +35,11 @@ import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
  * and each 40px button spilled over the next cell — hover "15", and "14"
  * lit up (the owner, 9 Sep 2026). A fixed 280px grid (7 × 40) centred in
  * the panel cannot do that. */
-const dayCell = 'h-10 w-10 shrink-0 rounded-tile text-center text-[13px] p-0 relative text-foreground'
+// PIXELS, NOT REM: `w-10` is 2.5rem, and the dashboard's root font size is
+// not 16px — the cells measured 48px, seven of them overran the 340px panel,
+// Sunday sat outside the box and the hover landed one cell off (the owner,
+// 9 Sep 2026: "I'm hovering over 13 and 13 is out of the box").
+const dayCell = 'h-[40px] w-[40px] shrink-0 rounded-tile text-center text-[13px] p-0 relative text-foreground'
 
 /** 'YYYY-MM-DD' → the Date react-day-picker wants, read as a plain day (UTC,
  *  so no zone can shift it onto the day before). */
@@ -170,15 +174,15 @@ export default function TimePicker({
               caption_label: 'text-[14px] font-semibold',
               nav: 'flex items-center',
               button_previous:
-                'absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
+                'absolute left-0 top-0 flex h-[36px] w-[36px] items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
               button_next:
-                'absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
-              month_grid: 'mx-auto w-[280px] border-collapse table-fixed',
+                'absolute right-0 top-0 flex h-[36px] w-[36px] items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
+              month_grid: 'mx-auto w-[280px] max-w-full border-collapse table-fixed',
               weekdays: 'flex',
-              weekday: 'h-6 w-10 shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
+              weekday: 'h-[24px] w-[40px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
               week: 'mt-1 flex',
               day: dayCell,
-              day_button: 'block h-10 w-10 rounded-tile font-medium hover:bg-muted',
+              day_button: 'block h-[40px] w-[40px] rounded-tile font-medium hover:bg-muted',
               selected: '[&>button]:bg-foreground [&>button]:text-background',
               today: '[&>button]:font-bold [&>button]:text-accent-blue',
               outside: 'opacity-40',

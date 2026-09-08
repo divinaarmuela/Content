@@ -518,12 +518,13 @@ async function insertPost(
   },
 ): Promise<PlannedPost> {
   const id = randomUUID()
-  // one live post per item. The lock is handed on the moment the post it
-  // names stops being live (cancelled, or gone), so nothing is ever blocked
-  // forever by a post nobody kept.
+  // one OPEN post per item. The lock is handed on the moment the post it
+  // names is no longer being written — cancelled, gone, or BOOKED (9 Sep
+  // 2026, a piece posted in parts: the first post is on its way with its
+  // files, and the next post is made of the files still free).
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
-    return !!held && held.status !== 'cancelled'
+    return !!held && !['cancelled', 'scheduled', 'published', 'failed'].includes(String(held.status))
   })
   if (!gate.ok) {
     throw new AuthzError('This item already has a post — open that one instead of starting a second', 409)

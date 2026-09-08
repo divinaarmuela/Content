@@ -12,6 +12,10 @@ import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
 import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
 import NewPostSources from './NewPostSources'
 import type { RailMedia, ScheduleData, SchedulePostRow } from './useSchedulePosts'
+import type { Slide } from '@/app/lib/version-files-core'
+
+/** a post still being written — the one a second press on its piece reopens */
+const OPEN_POST = ['draft', 'pending', 'approved']
 
 /**
  * ONE ACTION: ADD THE MEDIA, SEE IT, SEND IT — WHEREVER YOU ARE STANDING.
@@ -54,7 +58,8 @@ export type ComposeFlow = {
   /** an empty slot, a suggested time, or a button: ask what goes in it */
   openAt: (at: string | null) => void
   /** a piece from the rail or the approved grid */
-  openNew: (media: RailMedia, at: string | null) => void
+  /** …with, optionally, only SOME of its files (the folder's ticks) */
+  openNew: (media: RailMedia, at: string | null, slides?: Slide[] | null) => void
   /** an upload that just became a post — open the composer on it */
   openMade: (made: UploadedPostSummary, at: string | null) => void
   /** an existing post */
@@ -87,7 +92,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
    * button without anything here refetching.
    */
   const [composing, setComposing] = useState<
-    { itemId: string; postId: string | null; at: string | null } | null>(null)
+    { itemId: string; postId: string | null; at: string | null; slides?: Slide[] | null } | null>(null)
   /**
    * "New post" with nothing chosen yet.
    *
@@ -106,13 +111,15 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
    */
   const [pending, setPending] = useState<UploadedPostSummary | null>(null)
 
-  const openNew = useCallback((media: RailMedia, at: string | null) => {
+  const openNew = useCallback((media: RailMedia, at: string | null, slides?: Slide[] | null) => {
     if (!media.ok) return
     setChoosing(null)
-    // one post per piece: a second "new post" on a piece that has one opens
-    // the one that exists, which is what the server would insist on anyway
-    const existing = data.posts.find(p => p.item_id === media.itemId) ?? null
-    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at })
+    // one OPEN post per piece: a second "new post" on a piece that has one
+    // still being written opens that one (the server would insist). A post
+    // already booked or out is not "the one" — the next post is made of the
+    // files still free (posted in parts, 9 Sep 2026).
+    const existing = data.posts.find(p => p.item_id === media.itemId && OPEN_POST.includes(String(p.status))) ?? null
+    setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at, slides: existing ? null : (slides ?? null) })
   }, [data.posts])
 
   const openMade = useCallback((made: UploadedPostSummary, at: string | null) => {
@@ -194,7 +201,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
     const media = data.media.find(m => m.itemId === composing.itemId)
     const post = composing.postId
       ? data.posts.find(p => p.id === composing.postId) ?? null
-      : data.posts.find(p => p.item_id === composing.itemId) ?? null
+      : data.posts.find(p => p.item_id === composing.itemId && OPEN_POST.includes(String(p.status))) ?? null
     // the upload's own answer, until the live rows carry it
     const fresh = pending && pending.itemId === composing.itemId ? pending : null
     if (!media && !post && !fresh) return null
@@ -217,6 +224,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
           : 'approved_for_scheduling'),
       post,
       at: composing.at,
+      initialSlides: composing.slides ?? null,
     }
   }, [composing, data.media, data.posts, pending])
 

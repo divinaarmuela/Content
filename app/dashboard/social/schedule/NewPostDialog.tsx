@@ -78,6 +78,9 @@ export type ComposerTarget = {
   /** the approved version's files — the default media and the only media that
    *  needs no fresh approval */
   approved: Slide[]
+  /** the files ticked in the rail's folder — what a NEW post starts with,
+   *  instead of every file (9 Sep 2026) */
+  initialSlides?: Slide[] | null
   /** every file this piece has ever held — what tells a NEW file from a
    *  reorder, and so whether saving media makes a version */
   knownUrls: string[]
@@ -117,7 +120,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
   return {
     itemId: target.itemId,
     postId: post?.id ?? null,
-    slides: post?.slides ?? target.approved,
+    slides: post?.slides ?? (target.initialSlides?.length ? target.initialSlides : target.approved),
     caption: post ? String(post.caption ?? '') : '',
     scheduledFor: post?.scheduled_for ?? target.at,
     channels: post?.channels?.length ? post.channels : (accounts[0] ? [accounts[0].id] : []),
@@ -1449,6 +1452,7 @@ export default function NewPostDialog({
         onSave={saveMedia}
         onEditSlide={index => { setPicking(false); editSlide(index) }}
         saving={busy}
+        allowUploads={mayPostWithoutApproval(role, clientSignsOff)}
       />
     </div>
   )

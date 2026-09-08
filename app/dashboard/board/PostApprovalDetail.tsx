@@ -162,9 +162,22 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   /** a manager's note is for the team, or a reply the client sees on their
    *  portal — one switch, no email either way unless somebody is @tagged */
   const [toClient, setToClient] = useState(false)
+  /** the asset a reply is about — the reply carries its tag, so it lands
+   *  under that photo on the portal too (the owner, 9 Sep 2026: "if a client
+   *  comments on an asset why can't I reply back … so it appears on his
+   *  portal") */
+  const [replyOn, setReplyOn] = useState<number | null>(null)
+  const noteBox = useRef<HTMLTextAreaElement>(null)
+  const replyAbout = (i: number) => {
+    setReplyOn(i); setToClient(true); setDraft('')
+    setTimeout(() => noteBox.current?.focus(), 0)
+  }
   const sendNote = async () => {
-    const text = draft.trim()
-    if (!text || !item) return
+    const raw = draft.trim()
+    if (!raw || !item) return
+    const text = replyOn !== null && slides[replyOn]
+      ? tagComment(raw, slideTag(replyOn, slides.length, slides[replyOn].type))
+      : raw
     setSending(true)
     try {
       const res = await fetch(`/api/production/items/${item.id}/comments`, {
@@ -172,7 +185,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         body: JSON.stringify({ body: text, visibility: isManager && toClient ? 'client' : 'internal' }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not add the note')
-      setDraft('')
+      setDraft(''); setReplyOn(null)
+      toast.success(isManager && toClient ? `Replied — ${client?.name ?? 'the client'} sees it on their portal` : 'Note added')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not add the note')
     } finally {
@@ -396,6 +410,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                       {splitSlideTag(String(c.body ?? '')).rest}
                     </p>
                   ))}
+                  {isManager && (
+                    <button type="button" onClick={() => replyAbout(i)} className="w-fit text-[12px] font-semibold underline-offset-4 hover:underline">
+                      Reply to {client?.name ?? 'the client'} about this one
+                    </button>
+                  )}
                 </div>
               )}
             </figure>
@@ -454,8 +473,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               className={cn('rounded-full px-3 py-1.5', toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Reply to {client?.name ?? 'the client'}</button>
           </div>
         )}
+        {replyOn !== null && slides[replyOn] && (
+          <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            About {slides[replyOn].type === 'video' ? 'video' : 'photo'} {replyOn + 1} of {slides.length}
+            <button type="button" onClick={() => setReplyOn(null)} className="underline underline-offset-4">the whole post instead</button>
+          </p>
+        )}
         <div className="flex items-end gap-2">
-          <textarea rows={2} value={draft} onChange={e => setDraft(e.target.value)}
+          <textarea ref={noteBox} rows={2} value={draft} onChange={e => setDraft(e.target.value)}
             placeholder={isManager && toClient ? `They see this on their portal — no email is sent` : 'A note for the team — @name to tag someone'}
             className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
           <Button className="h-11 w-11 rounded-full p-0" disabled={sending || !draft.trim()} onClick={() => void sendNote()} aria-label="Add note">

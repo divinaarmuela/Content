@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Star } from 'lucide-react'
+import { ChevronDown, FolderOpen, Plus, Star } from 'lucide-react'
+import type { Slide } from '@/app/lib/version-files-core'
 import { cn } from '@/lib/utils'
 import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import { Thumb } from './tiles'
@@ -83,8 +84,8 @@ export default function MediaRail({
   postWithoutApproval: boolean
   /** start a post with nothing chosen yet */
   onNew: () => void
-  /** start a post from this piece */
-  onPick: (media: RailMedia) => void
+  /** start a post from this piece — with only the ticked files, when given */
+  onPick: (media: RailMedia, slides?: Slide[]) => void
   /** sign this piece off without waiting for the client */
   onApprove: (media: RailMedia) => void
 }) {
@@ -93,6 +94,26 @@ export default function MediaRail({
   const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>(['Unused']))
   const [starred, toggleStar] = useStars()
   const shown = useMemo(() => filterMedia(media, filters, starred), [media, filters, starred])
+
+  /**
+   * A FOLDER PER PIECE (the owner, 9 Sep 2026: "make sure approved media
+   * shows like a folder so we know we can select from there which one to
+   * post … once we select and see there we know which one we want to
+   * schedule"). Open a folder, tick the files, press Post — the composer
+   * opens with just those. Files already in a booked post are not offered.
+   */
+  const [openFolder, setOpenFolder] = useState<string | null>(null)
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set())
+  const openIt = (m: RailMedia) => {
+    if (openFolder === m.itemId) { setOpenFolder(null); return }
+    setOpenFolder(m.itemId)
+    setTicked(new Set(m.slides.map(sl => sl.url)))
+  }
+  const tick = (url: string) => setTicked(prev => {
+    const next = new Set(prev)
+    if (next.has(url)) next.delete(url); else next.add(url)
+    return next
+  })
 
   const flip = (f: RailFilter) => setFilters(prev => {
     const next = new Set(prev)
@@ -161,114 +182,129 @@ export default function MediaRail({
               : 'Nothing matches those filters.'}
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {shown.map(m => (
-              <div
-                key={m.itemId}
-                title={m.ok
-                  ? (m.needsClientApproval ? `${m.title} — ${NOT_CLIENT_APPROVED}` : m.title)
-                  : `${m.title} — ${m.reason}`}
-                draggable={m.ok}
-                onDragStart={e => {
-                  e.dataTransfer.effectAllowed = 'copy'
-                  e.dataTransfer.setData(RAIL_DRAG_TYPE, m.itemId)
-                  e.dataTransfer.setData('text/plain', m.title)
-                }}
-                className={cn(
-                  'group relative h-[84px] overflow-hidden rounded-tile border border-border bg-foreground/[0.06]',
-                  // the DIM goes on the picture, never on the card: `opacity`
-                  // makes a stacking context, so a button inside a 45% parent
-                  // cannot be drawn at full strength by any class of its own —
-                  // which is how the one new affordance on this page ended up
-                  // at 45%, cream on a dimmed thumbnail
-                  !m.ok && 'border-dashed',
-                )}
-              >
-                <button
-                  type="button"
-                  disabled={!m.ok}
-                  onClick={() => onPick(m)}
-                  aria-label={m.ok ? `Start a post from ${m.title}` : `${m.title} — ${m.reason}`}
-                  className="absolute inset-0 z-0 disabled:cursor-not-allowed"
-                />
-                <Thumb
-                  slide={m.cover}
-                  label={m.title}
-                  className={cn('pointer-events-none h-full w-full', !m.ok && 'opacity-45')}
-                />
-                {m.ok && !m.needsClientApproval && (
-                  <span className="pointer-events-none absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-[9px] font-bold text-ink">
-                    ✓<span className="sr-only">Approved</span>
-                  </span>
-                )}
-                <button
-                  type="button"
-                  aria-pressed={starred.has(m.itemId)}
-                  aria-label={starred.has(m.itemId) ? `Unstar ${m.title}` : `Star ${m.title}`}
-                  onClick={() => toggleStar(m.itemId)}
-                  className={cn(
-                    // a phone has no hover: the rail is a bottom sheet there,
-                    // so the star is always visible (and 44px) on a touch
-                    // screen and appears on hover on a desktop
-                    'absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-ink/55 text-cream transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:opacity-100',
-                    starred.has(m.itemId) ? 'opacity-100' : 'opacity-60 md:opacity-0',
-                  )}
+          <div className="flex flex-col gap-2">
+            {shown.map(m => {
+              const isOpen = openFolder === m.itemId
+              const chosen = m.slides.filter(sl => ticked.has(sl.url))
+              return (
+                <div
+                  key={m.itemId}
+                  draggable={m.ok}
+                  onDragStart={e => {
+                    e.dataTransfer.effectAllowed = 'copy'
+                    e.dataTransfer.setData(RAIL_DRAG_TYPE, m.itemId)
+                    e.dataTransfer.setData('text/plain', m.title)
+                  }}
+                  className={cn('rounded-tile border border-border bg-surface', !m.ok && 'border-dashed')}
                 >
-                  <Star
-                    className={cn('h-3.5 w-3.5', starred.has(m.itemId) && 'fill-accent-amber text-accent-amber')}
-                    strokeWidth={2}
-                  />
-                </button>
-                {/* TWO MARKERS, TWO DIFFERENT SENTENCES.
-                    "Not yet approved by the client" is a piece nobody has
-                    asked the client about — it is usable, and the sign-off
-                    happens by itself when the post goes out. "With the client
-                    now" is a piece on the client's screen AT THIS MOMENT: it
-                    is NOT usable in one press, because posting it would take
-                    it out from under somebody who is reading it. That one is
-                    only ever skipped on purpose, through the button below and
-                    the question it asks. */}
-                {m.ok && m.needsClientApproval && (
-                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
-                    {NOT_CLIENT_APPROVED}
-                  </span>
-                )}
-                {/* waiting on somebody, and this person could be that
-                    somebody: the whole bottom of the card signs it off, after
-                    one question. The reason sits ABOVE the button rather than
-                    being replaced by it — a manager pressing "Approve without
-                    client" has to be able to read that the client is looking
-                    at it right now. */}
-                {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) ? (
-                  <>
-                    {m.reason && (
-                      <span className="pointer-events-none absolute inset-x-1 bottom-12 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
-                        {m.reason}
+                  {/* the folder's face: cover, name, how many files, how many gone */}
+                  <div className="flex items-center gap-2 p-1.5">
+                    <button
+                      type="button"
+                      disabled={!m.ok}
+                      onClick={() => openIt(m)}
+                      aria-expanded={isOpen}
+                      aria-label={m.ok ? `Open ${m.title}` : `${m.title} — ${m.reason}`}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed"
+                    >
+                      <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[6px] bg-foreground/[0.06]">
+                        <Thumb slide={m.cover} label={m.title} className={cn('h-full w-full', !m.ok && 'opacity-45')} />
+                        {m.ok && !m.needsClientApproval && (
+                          <span className="absolute left-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent-green text-[8px] font-bold text-ink">✓</span>
+                        )}
                       </span>
+                      <span className="flex min-w-0 flex-col leading-[1.2]">
+                        <span className="truncate text-[13px] font-semibold">{m.title}</span>
+                        <span className="truncate text-[11px] text-muted-foreground">
+                          {m.ok
+                            ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
+                            : m.reason}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={starred.has(m.itemId)}
+                      aria-label={starred.has(m.itemId) ? `Unstar ${m.title}` : `Star ${m.title}`}
+                      onClick={() => toggleStar(m.itemId)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                    >
+                      <Star className={cn('h-3.5 w-3.5', starred.has(m.itemId) && 'fill-accent-amber text-accent-amber')} strokeWidth={2} />
+                    </button>
+                    {m.ok && (
+                      <button type="button" onClick={() => openIt(m)} aria-label={isOpen ? 'Close folder' : 'Open folder'}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted">
+                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <FolderOpen className="h-4 w-4" />}
+                      </button>
                     )}
+                  </div>
+
+                  {/* open: the files, ticked, and the one press */}
+                  {isOpen && m.ok && (
+                    <div className="flex flex-col gap-2 border-t border-border p-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {m.slides.map((sl, i) => {
+                          const on = ticked.has(sl.url)
+                          return (
+                            <button
+                              key={sl.url}
+                              type="button"
+                              onClick={() => tick(sl.url)}
+                              aria-pressed={on}
+                              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.type === 'video' ? 'video' : 'photo'} ${i + 1}`}
+                              className={cn(
+                                'relative aspect-square overflow-hidden rounded-[6px] bg-foreground/[0.06]',
+                                on ? 'outline outline-2 outline-offset-1 outline-foreground' : 'opacity-60',
+                              )}
+                            >
+                              <Thumb slide={sl} label={sl.name} className="h-full w-full" />
+                              <span className={cn(
+                                'absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold',
+                                on ? 'bg-foreground text-background' : 'bg-cream/90 text-ink',
+                              )}>{i + 1}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <button type="button" onClick={() => setTicked(new Set(chosen.length === m.slides.length ? [] : m.slides.map(sl => sl.url)))}
+                          className="text-[12px] font-semibold underline-offset-4 hover:underline">
+                          {chosen.length === m.slides.length ? 'Untick all' : 'Tick all'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={chosen.length === 0}
+                          onClick={() => onPick(m, chosen)}
+                          className="flex min-h-9 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background disabled:opacity-40"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Post {chosen.length === m.slides.length ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* waiting on somebody, and this person could be that
+                      somebody: sign it off, after one question */}
+                  {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) && (
                     <button
                       type="button"
                       onClick={() => onApprove(m)}
                       title={m.reason ? `${m.title} — ${m.reason}` : m.title}
-                      className="absolute inset-x-0 bottom-0 z-10 min-h-11 w-full bg-cream/95 px-2 text-[11px] font-semibold leading-[1.2] text-ink hover:bg-cream"
+                      className="min-h-9 w-full rounded-b-tile border-t border-border bg-cream/95 px-2 text-[11px] font-semibold text-ink hover:bg-cream"
                     >
                       Approve without client
                     </button>
-                  </>
-                ) : !m.ok && m.reason ? (
-                  <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-ink/70 px-2 py-0.5 text-[10px] font-semibold text-cream">
-                    {m.reason}
-                  </span>
-                ) : null}
-              </div>
-            ))}
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
       <p className="px-1.5 text-center text-[12px] text-muted-foreground">
-        Pick a piece of media to start a post, or drag it onto a time. You can
-        also drop a file straight onto the calendar.
+        Open a folder, tick the files you want, press Post. Or drag a folder
+        onto a time.
       </p>
 
       <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">

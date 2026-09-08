@@ -404,7 +404,7 @@ export default function SchedulePage() {
       role={me?.role ?? null}
       postWithoutApproval={data.postWithoutApproval}
       onNew={() => flow.openAt(weekSlots[0]?.iso ?? null)}
-      onPick={m => flow.openNew(m, null)}
+      onPick={(m, slides) => flow.openNew(m, null, slides ?? null)}
       onApprove={flow.approve}
     />
   )

@@ -49,7 +49,7 @@ const DRAG_TYPE = 'application/x-md-slide'
 
 export default function MediaPicker({
   open, onClose, itemId, approved, versionLabel, slides, platforms, onSave,
-  onEditSlide, saving,
+  onEditSlide, saving, allowUploads = true,
 }: {
   open: boolean
   onClose: () => void
@@ -66,6 +66,10 @@ export default function MediaPicker({
   /** open the page's image editor on the file in this slot of the post */
   onEditSlide: (index: number) => void
   saving: boolean
+  /** may this person add files that were never approved (Drive, Upload)? A
+   *  scheduler may not: "we only want the ones that are approved for
+   *  schedulers" (the owner, 9 Sep 2026) */
+  allowUploads?: boolean
 }) {
   const [tray, setTray] = useState<Slide[]>(slides)
   const [source, setSource] = useState<MediaSource>('approved')
@@ -295,7 +299,7 @@ export default function MediaPicker({
         {/* ── left: the library ── */}
         <div className="hidden w-[380px] shrink-0 flex-col gap-3 border-r border-border bg-paper p-4 md:flex">
           <div className="flex gap-2">
-            {SOURCES.map(s => (
+            {SOURCES.filter(s => allowUploads || s.key === 'approved').map(s => (
               <button
                 key={s.key}
                 type="button"
