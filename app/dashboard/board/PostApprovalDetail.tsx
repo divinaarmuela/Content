@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
+import { HandToDialog } from './BoardDialogs'
 import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
 import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
@@ -87,6 +88,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const card = item as unknown as BoardViewCard | null
   const actions = card && viewer ? cardActions(card, viewer) : { primary: null, more: [] }
   const busy = busyId === id
+  /** "Hand to…" — the same dialog the board card's menu opens (the owner, 9
+   *  Sep 2026: a manager who does not want to schedule it hands it to a
+   *  scheduler or a general user, who then sees it on their Schedule page) */
+  const [handing, setHanding] = useState(false)
+  const handedTo = (Array.isArray((item as { scheduler_ids?: unknown } | null)?.scheduler_ids)
+    ? ((item as { scheduler_ids: unknown[] }).scheduler_ids as unknown[]).map(String) : [])
+    .map(uid => nameOf(uid)).filter((n): n is string => !!n)
 
   /* ── the files: replace one, remove one, add more ──────────────────── */
   const [working, setWorking] = useState<string | null>(null)
@@ -332,7 +340,16 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               {a.label}
             </Button>
           ))}
+          {isManager && (
+            <Button variant="outline" className={secondary} disabled={busy} onClick={() => setHanding(true)}>
+              {handedTo.length > 0 ? `With ${handedTo.join(', ')} · change` : 'Hand to…'}
+            </Button>
+          )}
         </div>
+      )}
+      {isManager && viewer && (
+        <HandToDialog card={handing ? card : null} viewer={viewer} viewerName={me?.name ?? null}
+          onClose={() => setHanding(false)} />
       )}
 
       {/* ── 3. the files ── */}
