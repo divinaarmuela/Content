@@ -4,13 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
-import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../../lib/board-core'
+import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
 import {
   COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
   laneOf, pageLanes, reachableLanes,
   type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
-import { friendlyError } from '../../lib/support-core'
 import { useTable } from '@/lib/db-client'
 import type { PostAnalytic, SocialPost } from '@/lib/db-types'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
@@ -19,8 +18,9 @@ import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
 import {
-  DeleteDialog, HandToDialog, KindDialog, LinkDialog, PostChangesDialog, SendBackDialog, type KindRow,
+  DeleteDialog, HandToDialog, KindDialog, LinkDialog, type KindRow,
 } from './BoardDialogs'
+import { useCardActs } from './useCardActs'
 
 /**
  * THE ONE BOARD, on all three pages.
@@ -105,13 +105,13 @@ export function Board({
   connectedClientIds?: ReadonlySet<string>
   ariaLabel: string
 }) {
-  const [busyId, setBusyId] = useState<string | null>(null)
+  /** the three answers a card can be given, and their two dialogs — shared
+   *  with the Scheduler's "Waiting on you" list, so both press one route */
+  const { busyId, act, dialogs } = useCardActs<BoardCardRow>(viewer)
   const [dragging, setDragging] = useState<BoardCardRow | null>(null)
   const [over, setOver] = useState<PageLaneKey | null>(null)
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
   const [kindFor, setKindFor] = useState<BoardCardRow | null>(null)
-  const [sendBackFor, setSendBackFor] = useState<BoardCardRow | null>(null)
-  const [postChangesFor, setPostChangesFor] = useState<BoardCardRow | null>(null)
   const [handToFor, setHandToFor] = useState<BoardCardRow | null>(null)
   const [deleteFor, setDeleteFor] = useState<BoardCardRow | null>(null)
   /** a drag is not a press: browsers do not fire click after a drop, but a
@@ -169,62 +169,6 @@ export function Board({
     () => new Set<PageLaneKey>(dragging ? reachableLanes(page, dragging, viewer) : []),
     [dragging, page, viewer],
   )
-
-  /** one move through the ordinary transition route */
-  const transition = useCallback(async (card: BoardCardRow, to: string, label: string) => {
-    setBusyId(card.id)
-    try {
-      const res = await fetch(`/api/production/items/${card.id}/transition`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(friendlyError(body.error ?? 'Could not move it', 'this page'))
-      }
-      const column = BOARD_COLUMNS.find(c => c.key === columnOf(to as BoardViewCard['status']))
-      toast.success(`${label} — now in ${column?.label ?? 'its new column'}`)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not move it')
-    } finally {
-      setBusyId(null)
-    }
-  }, [])
-
-  /** the yes on a post that was waiting — nothing to type, so no dialog */
-  const approvePost = useCallback(async (card: BoardCardRow) => {
-    setBusyId(card.id)
-    try {
-      const res = await fetch(`/api/production/items/${card.id}/posting-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve' }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(friendlyError(body.error ?? 'Could not approve the post', 'this page'))
-      }
-      toast.success('Approved — whoever built this post has been told, and it can be booked in now')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not approve the post')
-    } finally {
-      setBusyId(null)
-    }
-  }, [])
-
-  /** every press on a card comes through here — a plain move, or the one
-   *  dialog that asks what needs changing */
-  const act = useCallback((card: BoardCardRow, action: CardAction) => {
-    switch (action.kind) {
-      case 'send_back': setSendBackFor(card); return
-      // the post's own gate, answered from the board — the same route the
-      // composer and the item page use, never a second one
-      case 'post_approval':
-        if (action.to === 'request_changes') setPostChangesFor(card)
-        else void approvePost(card)
-        return
-      case 'transition': void transition(card, action.to, action.label)
-    }
-  }, [transition, approvePost])
 
   const drop = (laneKey: PageLaneKey) => {
     const card = dragging
@@ -352,10 +296,9 @@ export function Board({
         ariaLabel={ariaLabel}
       />
 
+      {dialogs}
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
       <KindDialog card={kindFor} kinds={kinds} onClose={() => setKindFor(null)} />
-      <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} />
-      <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
       {/* the live listener repaints Who the moment the row lands */}
       <HandToDialog card={handToFor} viewer={viewer} viewerName={names.get(viewer.id) ?? null}
         onClose={() => setHandToFor(null)} />

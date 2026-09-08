@@ -17,6 +17,7 @@ import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { NewCardDialog } from '../board/BoardDialogs'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { useTeamMembers } from '../production/workHooks'
+import WaitingOnYou from './WaitingOnYou'
 
 /**
  * THE SCHEDULER PAGE: links and what needs doing, on the whole board.
@@ -30,6 +31,13 @@ import { useTeamMembers } from '../production/workHooks'
  * takes those and posts on the Schedule page — one pill away in the header
  * — or wherever they post; back here the card just moves, Ready to post →
  * Posted. The card never asks for a channel, a time or a live link.
+ *
+ * Above the board sits "Waiting on you" (`WaitingOnYou` / `waiting-core`):
+ * every one of those cards that somebody is actually held up by — a post
+ * sent for its final sign-off, a piece waiting on this manager's check, a
+ * piece sitting with the client, anything this person was asked for — with
+ * the two answers on the row. It reads the same cards the board does and
+ * offers only what the same rules already allow.
  *
  * The two fetches below feed the Overview's lenses only — "Going out today"
  * (`?show=today`) and "Waiting on an account" (`?show=account`) — and the
@@ -111,6 +119,12 @@ export default function SchedulerPage() {
         </div>
       )}
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
+
+      {/* everything stuck on a decision, before the board that holds it —
+          hidden entirely when nothing is waiting */}
+      {ready && (
+        <WaitingOnYou cards={cards} viewer={viewer} today={today} onOpenCard={sheet.open} />
+      )}
 
       {!ready ? (
         <div className="grid gap-3.5 md:grid-cols-2">
