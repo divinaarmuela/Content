@@ -949,6 +949,17 @@ export type EncodeTarget = {
    *  we know it, the channel's ceiling when we do not */
   maxSeconds: number
   maxrateKbps: number
+  /**
+   * The top of this channel's ladder, sent so the ENCODER can do the sum
+   * again once ffprobe has told it how long the clip really is.
+   *
+   * Most asks are fired the moment the media is attached, which is before
+   * anything has measured the file, so `maxrateKbps` above is usually the
+   * blind number: the channel's size limit spread over its whole length
+   * ceiling. The machine can only correct that upward if it knows what the
+   * ceiling was.
+   */
+  maxrateCapKbps: number
   bufsizeKbps: number
   audioKbps: number
   longSide: number
@@ -995,6 +1006,7 @@ export function encodeTargetFor(
     maxMB: rule.maxMB,
     maxSeconds,
     maxrateKbps,
+    maxrateCapKbps: ladder.maxrateCapKbps,
     // twice the maxrate: the buffer a VBR encoder is allowed to swing inside
     bufsizeKbps: maxrateKbps * 2,
     audioKbps: ladder.audioKbps,
@@ -1002,6 +1014,46 @@ export function encodeTargetFor(
     shortSide: ladder.shortSide,
     maxFps: ladder.maxFps,
   }
+}
+
+/**
+ * What this channel takes of one video, in MB and in seconds.
+ *
+ * The same rule `encodeTargetFor` budgets against, exported on its own so the
+ * publish path can ask "is this file small enough to send?" without having to
+ * rebuild a whole encode target — and can still ask it for a channel no copy
+ * could ever be made for.
+ */
+export function videoLimitsFor(
+  platform: Platform, kind?: PostKind,
+): { maxMB: number | null; maxSeconds: number | null } | null {
+  const rule = ruleFor(platform, 'video', kind)
+  if (!rule) return null
+  return { maxMB: rule.maxMB ?? null, maxSeconds: rule.maxSeconds ?? null }
+}
+
+/**
+ * Why this finished copy cannot be sent to this channel, if it cannot.
+ *
+ * The copy is checked AGAIN, against the same limit it was made to fit. Every
+ * number in the ladder is a promise about a file nobody has weighed yet — a
+ * trim that did not happen, a bitrate ceiling an encoder overshot, a row
+ * written before the machine started sizing its own copies — and a copy that
+ * quietly came out at three times the channel's limit is the client's post
+ * failing at the provider, or being re-compressed to mush, with nothing
+ * anywhere saying why.
+ *
+ * Returns null when the copy is fine, or when nothing is known about its size.
+ */
+export function copyTooBigReason(
+  platform: Platform, kind: PostKind | undefined, bytes: number | null | undefined,
+): string | null {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return null
+  const limits = videoLimitsFor(platform, kind)
+  if (!limits?.maxMB) return null
+  if (bytes <= limits.maxMB * MB) return null
+  const label = `${PLATFORM_MEDIA[platform]?.label ?? platform}${kindWord(kind)}`
+  return `The copy came out at ${mb(bytes)} and ${label} only takes ${limitMB(limits.maxMB)} — post a shorter or smaller export`
 }
 
 /** The biggest this target's copy could come out at, in MB. The number the

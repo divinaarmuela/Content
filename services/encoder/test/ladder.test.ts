@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_MAX_FPS, ffmpegArgs, ffprobeArgs, fitsBudget, outputFps, parseFrameRate,
-  parseProbe, targetDimensions, targetProblem, toneMapNeeded, videoKbpsOf,
+  DEFAULT_MAX_FPS, MIN_MAXRATE_KBPS, budgetedMaxrateKbps, ffmpegArgs, ffprobeArgs,
+  fitsBudget, outputFps, outputSeconds, parseFrameRate, parseProbe, targetDimensions,
+  targetForSource, targetProblem, toneMapNeeded, videoKbpsOf,
   worstCaseMB, TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE,
   type EncodeTarget,
 } from '../src/ladder.js'
@@ -281,5 +282,113 @@ describe('an HDR master is converted, not relabelled', () => {
     expect(TONE_MAP_MISSING_MESSAGE).toMatch(/HDR/)
     expect(TONE_MAP_MISSING_MESSAGE).toMatch(/BT\.709/)
     expect(TONE_MAP_FILTER_NAME).toBe('zscale')
+  })
+})
+
+
+/**
+ * THE COPY IS SIZED FROM THE LENGTH THE MACHINE MEASURED.
+ *
+ * The app has to budget before anything has opened the file, and the ask is
+ * fired the moment the media is attached — minutes before the duration is
+ * known. So the blind number it sends is the channel's size limit spread over
+ * the channel's whole length ceiling, and it was written to the row and
+ * rebuilt from the row on every retry, so it could never recover. A real job
+ * came out at 1745 kbps for want of this.
+ */
+describe('the bitrate the machine works out for itself', () => {
+  /** Instagram Reels as the app sends them when it does not know the length:
+   *  300 MB over the channel's fifteen-minute ceiling. */
+  const blind: EncodeTarget = {
+    platform: 'instagram',
+    maxMB: 300,
+    maxSeconds: 15 * 60,
+    // floor(0.85 x 300 x 8000 / 900) - 160
+    maxrateKbps: 2_106,
+    bufsizeKbps: 4_212,
+    audioKbps: 160,
+    maxrateCapKbps: 10_000,
+    longSide: 1920,
+    shortSide: 1080,
+    maxFps: 30,
+  }
+
+  it('gives a known four-minute clip the bitrate it can afford, not the blind one', () => {
+    const real = targetForSource(blind, { durationSec: 240 })
+    // floor(0.85 x 300 x 8000 / 240) - 160 = 8500 - 160
+    expect(real.maxrateKbps).toBe(8_340)
+    expect(real.bufsizeKbps).toBe(16_680)
+    expect(real.maxSeconds).toBe(240)
+    // and it still fits the channel it was made for
+    expect(fitsBudget(real)).toBe(true)
+    expect(worstCaseMB(real)).toBeLessThan(300)
+  })
+
+  it('never spends more than the channel is worth', () => {
+    // twenty seconds could afford 100 Mbps on the arithmetic alone
+    expect(targetForSource(blind, { durationSec: 20 }).maxrateKbps).toBe(10_000)
+  })
+
+  it('never drops below the floor that makes a copy worth making', () => {
+    const tiny = { ...blind, maxMB: 8, maxSeconds: 600 }
+    expect(budgetedMaxrateKbps(tiny, 600)).toBe(MIN_MAXRATE_KBPS)
+  })
+
+  it('leaves the target alone when nothing measured the source', () => {
+    expect(targetForSource(blind, {})).toBe(blind)
+  })
+
+  it('applies the same twice — the caller may have done it already', () => {
+    const once = targetForSource(blind, { durationSec: 240 })
+    expect(targetForSource(once, { durationSec: 240 })).toEqual(once)
+  })
+
+  it('budgets a clip longer than the channel for what the channel takes', () => {
+    const story: EncodeTarget = { ...blind, maxMB: 100, maxSeconds: 60, maxrateKbps: 11_173 }
+    // four minutes of master, sixty seconds of Story
+    const real = targetForSource(story, { durationSec: 240 })
+    expect(real.maxSeconds).toBe(60)
+    // floor(0.85 x 100 x 8000 / 60) - 160 = 11333 - 160, capped at 10,000
+    expect(real.maxrateKbps).toBe(10_000)
+  })
+
+  it('reports the length of the COPY, not of the master', () => {
+    expect(outputSeconds({ maxSeconds: 60 }, { durationSec: 240 })).toBe(60)
+    expect(outputSeconds({ maxSeconds: 60 }, { durationSec: 20 })).toBe(20)
+    expect(outputSeconds({ maxSeconds: 60 }, {})).toBeNull()
+  })
+})
+
+/**
+ * A COPY IS NEVER LONGER THAN THE CHANNEL TAKES.
+ *
+ * `maxSeconds` was arithmetic only — ffmpeg was never told to stop. A
+ * four-minute master posted as an Instagram Story (60 s, 100 MB) came out at
+ * four minutes and about 305 MB, and the publish path accepted it because the
+ * row said `ready`.
+ */
+describe('the trim', () => {
+  const story: EncodeTarget = {
+    platform: 'instagram', maxMB: 100, maxSeconds: 60,
+    maxrateKbps: 10_000, bufsizeKbps: 20_000, audioKbps: 160,
+    maxrateCapKbps: 10_000, longSide: 1920, shortSide: 1080, maxFps: 30,
+  }
+
+  it('tells ffmpeg to stop at the channel’s ceiling', () => {
+    const args = ffmpegArgs({
+      inputPath: 'in.mp4', outputPath: 'out.mp4', target: story,
+      source: { width: 1080, height: 1920, fps: 30, durationSec: 240 },
+    })
+    expect(arg(args, '-t')).toBe('60')
+    // …and the bitrate is the one sixty seconds of 100 MB affords
+    expect(arg(args, '-maxrate')).toBe('10000k')
+  })
+
+  it('does not cut a clip that is already short enough', () => {
+    const args = ffmpegArgs({
+      inputPath: 'in.mp4', outputPath: 'out.mp4', target: story,
+      source: { width: 1080, height: 1920, fps: 30, durationSec: 21.4 },
+    })
+    expect(arg(args, '-t')).toBe('22')
   })
 })

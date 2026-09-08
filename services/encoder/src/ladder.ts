@@ -27,6 +27,16 @@ export type EncodeTarget = {
   maxSeconds: number
   /** video bitrate ceiling, in kbps — `-maxrate` */
   maxrateKbps: number
+  /**
+   * The most this channel is ever worth spending, whatever the arithmetic
+   * says — the top of the ladder in `app/lib/media-fit-core.ts`.
+   *
+   * Optional, because rows and requests written before the machine started
+   * sizing the copy itself do not carry it. Without it the number that was
+   * sent IS the ceiling, so an older app can only ever have its copy made
+   * smaller here, never bigger.
+   */
+  maxrateCapKbps?: number
   /** `-bufsize`, normally twice the maxrate */
   bufsizeKbps: number
   /** AAC bitrate, in kbps */
@@ -74,6 +84,74 @@ export function fitsBudget(
   target: Pick<EncodeTarget, 'maxrateKbps' | 'audioKbps' | 'maxSeconds' | 'maxMB'>,
 ): boolean {
   return worstCaseMB(target) < target.maxMB
+}
+
+/**
+ * SIZE THE COPY FROM THE LENGTH THE MACHINE ACTUALLY MEASURED.
+ *
+ * The app has to budget the bitrate before anything has opened the file. When
+ * it does not know how long the clip runs — which is the normal case, because
+ * the ask is fired the moment the media is attached and the duration is
+ * filled in minutes later — it has no choice but to budget for the CHANNEL'S
+ * whole length ceiling. An Instagram Reel of unknown length is 300 MB spread
+ * over fifteen minutes: about 2 Mbps, against the 8 Mbps a known four-minute
+ * clip can afford. That number was then written to the row and rebuilt from
+ * the row on every retry, so it could never recover.
+ *
+ * By the time we are here, ffprobe has told us the truth. So the budget is
+ * done again, on the machine, from the real length:
+ *
+ *   maxrate = min(cap, floor(0.85 x maxMB x 8000 / seconds) - audio)
+ *
+ * The clip's own length, or the channel's ceiling if it is longer than that —
+ * because `ffmpegArgs` also trims to the ceiling, so the finished file is
+ * never longer than what was budgeted for. `maxMB` is never exceeded either
+ * way: it is the input to the sum, not something the sum can outgrow.
+ */
+export const BUDGET_HEADROOM = 0.85
+
+/** Never below this: under it the copy is no better than the web-player file
+ *  this service exists to replace. The same floor the app uses. */
+export const MIN_MAXRATE_KBPS = 1_500
+
+/** The bitrate a clip of this length can afford on this channel. */
+export function budgetedMaxrateKbps(
+  target: Pick<EncodeTarget, 'maxMB' | 'audioKbps' | 'maxrateKbps' | 'maxrateCapKbps'>,
+  seconds: number,
+): number {
+  const cap = Math.max(1, Math.round(target.maxrateCapKbps ?? target.maxrateKbps))
+  if (!Number.isFinite(seconds) || seconds <= 0) return Math.round(target.maxrateKbps)
+  const affordable = Math.floor((BUDGET_HEADROOM * target.maxMB * 8000) / seconds) - target.audioKbps
+  return Math.max(MIN_MAXRATE_KBPS, Math.min(cap, affordable))
+}
+
+/**
+ * The target this copy is really made at, once the source has been probed.
+ *
+ * Applying it twice changes nothing, so a caller that has already done it can
+ * hand the result to `ffmpegArgs` safely.
+ */
+export function targetForSource(
+  target: EncodeTarget, source: Pick<SourceInfo, 'durationSec'>,
+): EncodeTarget {
+  const probed = source.durationSec
+  if (!probed || !Number.isFinite(probed) || probed <= 0) return target
+  // ceil, so trimming to this number can never cut a frame off a clip that is
+  // already short enough
+  const seconds = Math.max(1, Math.min(Math.ceil(probed), Math.round(target.maxSeconds)))
+  const maxrateKbps = budgetedMaxrateKbps(target, seconds)
+  if (seconds === target.maxSeconds && maxrateKbps === target.maxrateKbps) return target
+  return { ...target, maxSeconds: seconds, maxrateKbps, bufsizeKbps: maxrateKbps * 2 }
+}
+
+/** How long the finished copy runs: the clip, or the channel's ceiling if the
+ *  clip is longer than the channel takes. */
+export function outputSeconds(
+  target: Pick<EncodeTarget, 'maxSeconds'>, source: Pick<SourceInfo, 'durationSec'>,
+): number | null {
+  const probed = source.durationSec
+  if (!probed || !Number.isFinite(probed) || probed <= 0) return null
+  return Math.min(probed, target.maxSeconds)
 }
 
 /**
@@ -207,7 +285,10 @@ export function ffmpegArgs(input: {
   target: EncodeTarget
   source: SourceInfo
 }): string[] {
-  const { inputPath, outputPath, target, source } = input
+  const { inputPath, outputPath, source } = input
+  // the real length decides the bitrate, not the guess the app had to make
+  // before anything had opened the file
+  const target = targetForSource(input.target, source)
   const { width, height } = targetDimensions(source, target)
   const fps = outputFps(source, target)
   const gop = Math.max(2, Math.round(fps * 2))
@@ -238,6 +319,11 @@ export function ffmpegArgs(input: {
     '-colorspace', 'bt709',
     '-r', String(fps),
     '-fps_mode', 'cfr',
+    // The channel's length ceiling, as an instruction rather than a hope.
+    // Without it a four-minute master posted as an Instagram Story came out
+    // at four minutes and ~300 MB, against the 60 seconds and 100 MB the
+    // channel takes — the whole size budget quietly wrong.
+    '-t', String(target.maxSeconds),
     '-g', String(gop),
     '-keyint_min', String(gop),
     '-sc_threshold', '0',

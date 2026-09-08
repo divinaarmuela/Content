@@ -7,7 +7,8 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import {
   TONE_MAP_FILTER_NAME, TONE_MAP_MISSING_MESSAGE, ffmpegArgs, ffprobeArgs,
-  parseProbe, targetDimensions, toneMapNeeded, videoKbpsOf,
+  outputSeconds, parseProbe, targetDimensions, targetForSource, toneMapNeeded,
+  videoKbpsOf,
   type EncodeTarget, type SourceInfo,
 } from './ladder.js'
 
@@ -218,14 +219,34 @@ export async function runEncode(req: EncodeRequest): Promise<EncodeResult> {
         log('tone mapping', { from: hdr })
       }
 
-      const encoded = await run('ffmpeg', ffmpegArgs({ inputPath: input, outputPath: output, target: req.target, source }), ENCODE_TIMEOUT_MS)
+      /**
+       * The target the copy is really made at.
+       *
+       * The app budgets the bitrate before anything has opened the file, and
+       * usually has to guess the length; now that ffprobe has answered, the
+       * sum is done again from the truth. `ffmpegArgs` does this itself, and
+       * doing it twice changes nothing — it is repeated here so what is
+       * LOGGED and REPORTED is what was actually asked for.
+       */
+      const target = targetForSource(req.target, source)
+      if (target.maxrateKbps !== req.target.maxrateKbps || target.maxSeconds !== req.target.maxSeconds) {
+        log('re-budgeted for the real length', {
+          seconds: source.durationSec, maxrateKbps: target.maxrateKbps, maxSeconds: target.maxSeconds,
+          wasKbps: req.target.maxrateKbps, wasSeconds: req.target.maxSeconds,
+        })
+      }
+
+      const encoded = await run('ffmpeg', ffmpegArgs({ inputPath: input, outputPath: output, target, source }), ENCODE_TIMEOUT_MS)
       if (encoded.code !== 0) {
         return { ...empty, error: `the encode failed: ${lastLine(encoded.stderr) || 'no reason given'}` }
       }
 
       const { size } = await stat(output)
-      const dims = targetDimensions(source, req.target)
-      const durationSec = source.durationSec ?? null
+      const dims = targetDimensions(source, target)
+      // what the COPY runs for, which is the clip trimmed to the channel's
+      // ceiling — the master's own length would misreport the bitrate and
+      // send a retry off budgeting for footage that is no longer in the file
+      const durationSec = outputSeconds(target, source)
       const result: EncodeResult = {
         jobId: req.jobId,
         ok: true,
@@ -233,7 +254,7 @@ export async function runEncode(req: EncodeRequest): Promise<EncodeResult> {
         durationSec,
         width: dims.width,
         height: dims.height,
-        videoKbps: videoKbpsOf(size, source.durationSec, req.target.audioKbps),
+        videoKbps: videoKbpsOf(size, durationSec ?? undefined, target.audioKbps),
       }
       log('encoded', { bytes: size, width: dims.width, height: dims.height, videoKbps: result.videoKbps })
 

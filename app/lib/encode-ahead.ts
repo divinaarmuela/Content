@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import { table } from '@/lib/db'
 import type { SocialAccount } from '@/lib/db-types'
 import { encoderConfigured } from './encoder'
-import { getEncodeJob } from './encode-jobs'
+import { canBeAskedAgain, getEncodeJob } from './encode-jobs'
 import { copiesToPrepare, type CopyAsk } from './encode-ahead-core'
 import { isPlatform, type MediaItem, type Platform, type PostKind } from './publish-core'
 import type { ChannelExtras } from './schedule-compose-core'
@@ -90,6 +90,9 @@ export function askForCopiesAhead(input: CopiesAheadInput): void {
             platform: ask.platform,
             kind: ask.kind,
             seconds: ask.seconds,
+            // the clip is being attached, so a copy that gave up on an
+            // earlier post may be asked for again
+            reopen: true,
           },
         })
       } catch (e) {
@@ -161,20 +164,25 @@ async function copiesWanted(input: CopiesAheadInput): Promise<CopyAsk[]> {
   if (wanted.length === 0) return []
 
   /**
-   * A row that already exists is left alone, whatever it says.
+   * A row that already exists is left alone — with one exception.
    *
    * `done` and `running` are obvious. `queued` is somebody else's ask from a
    * moment ago, and a cold one is taken back by the sweep, not by us.
-   * `failed` is the one worth stating: `runEncodeRequest` would answer
-   * `existing` and change nothing, so an event for it would be a run that
-   * does nothing — and a copy that genuinely cannot be made is a sentence the
-   * publish path already has for the person, not something to re-ask for
-   * quietly in the background.
+   *
+   * The exception is a `failed` row that has spent all three attempts on
+   * something a fourth could have fixed — a PUT that 500'd, a machine that
+   * fell over. That row is terminal for ever otherwise: it is claimed on
+   * `<source url>__<platform>`, so every future post of that clip to that
+   * channel failed instantly with no way to clear it short of the database
+   * console. The clip being attached afresh is the moment to try once more,
+   * and `reopen` on the event is what lets the job do it. A failure a retry
+   * could not improve on (no video in the file, HDR this machine cannot
+   * convert) still stays failed.
    */
   const out: CopyAsk[] = []
   for (const ask of wanted) {
     const row = await getEncodeJob(ask.sourceUrl, ask.platform)
-    if (row) continue
+    if (row && !canBeAskedAgain(row)) continue
     out.push(ask)
   }
   return out

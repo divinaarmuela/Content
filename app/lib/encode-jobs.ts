@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { EncodeJob } from '@/lib/db-types'
 import { publicBase } from './storage'
-import type { Platform } from './publish-core'
+import { copyTooBigReason } from './media-fit-core'
+import { isPlatform, type Platform, type PostKind } from './publish-core'
 
 /**
  * The `encode_jobs` row: one request for one publish-grade copy.
@@ -234,6 +235,52 @@ export async function reclaimEncodeJob(
 }
 
 /**
+ * Ask again for a copy that gave up.
+ *
+ * `failed` was terminal for ever: the row is claimed on
+ * `<source url>__<platform>`, so once a clip's Instagram copy had spent its
+ * three attempts, every future post of that clip to that channel failed
+ * instantly — `claimEncodeJob` answered `existing`, `progressOf` answered
+ * `failed`, and nothing short of deleting the row in the database console
+ * could clear it. A bad morning at the encoder poisoned a client's footage
+ * permanently.
+ *
+ * So when the media is attached AFRESH — a new post, a re-added clip — a row
+ * that has run out of attempts is handed back its three. Only that row: a
+ * failure a second attempt could not possibly improve on (no video in the
+ * file, HDR this machine cannot convert, a copy that came out too big for the
+ * channel) stays failed, because re-asking would ask the same impossible
+ * question.
+ *
+ * The key is kept, as everywhere else here, so the row can never end up
+ * naming an object the bytes did not go to. Compare-and-set, so two people
+ * re-attaching the same clip at once is one re-ask.
+ */
+export function canBeAskedAgain(row: EncodeJob | null | undefined): boolean {
+  if (!row || row.status !== 'failed') return false
+  if ((row.attempts ?? 0) < MAX_ENCODE_ATTEMPTS) return false    // still had tries left
+  return !encodeFailureIsPermanent(row.error)                    // a retry cannot help
+}
+
+export async function reopenEncodeJob(
+  id: string, now = Date.now(),
+): Promise<{ reopened: boolean; row: EncodeJob | null }> {
+  const taken = await table<EncodeJob>('encode_jobs').claim(id, cur => {
+    if (!cur || !canBeAskedAgain(cur)) return null
+    return {
+      ...cur,
+      status: 'queued',
+      attempts: 1,
+      error: null,
+      created_at: new Date(now).toISOString(),   // the stale ladder starts again
+      updated_at: new Date(now).toISOString(),
+    }
+  })
+  if (taken.claimed) return { reopened: true, row: taken.row }
+  return { reopened: false, row: taken.current }
+}
+
+/**
  * Jobs nobody is ever going to finish.
  *
  * A row left `running` when a machine died, or `queued` when the ask was
@@ -318,18 +365,42 @@ export async function settleEncodeJob(input: {
       updated_at: new Date().toISOString(),
     }
 
-    if (input.ok) {
+    /**
+     * A copy that does not fit the channel is not a finished copy.
+     *
+     * The machine reports what it made; this is where we weigh it against the
+     * limit it was made to fit. Accepting it because it said `ok` is how a
+     * 305 MB "Story" reached a channel that takes 100 MB — the copy was
+     * ready, the publish path took it at its word, and the failure happened
+     * at the provider where nobody was watching.
+     *
+     * Permanent: the same source at the same target makes the same file, so
+     * asking again would only spend a machine's afternoon proving it.
+     */
+    const tooBig = input.ok
+      ? copyTooBigReason(
+          isPlatform(cur.platform) ? cur.platform : 'instagram',
+          (cur.kind ?? undefined) as PostKind | undefined,
+          measured.bytes,
+        )
+      : null
+
+    if (input.ok && !tooBig) {
       retrying = false
       return {
         ...cur, ...measured,
         status: 'done',
         output_key: input.outputKey ?? cur.output_key,
         error: null,
+        // the machine sizes the copy from the length it PROBED, so a report
+        // that carries a duration is the honest answer to "what was this
+        // budgeted for?" — whatever the app had to guess when it asked
+        target_source: input.durationSec ? 'probed' : cur.target_source,
       }
     }
 
-    const reason = input.error ?? 'the encode failed'
-    const permanent = input.permanent ?? encodeFailureIsPermanent(reason)
+    const reason = tooBig ?? input.error ?? 'the encode failed'
+    const permanent = tooBig ? true : (input.permanent ?? encodeFailureIsPermanent(reason))
     const attempts = cur.attempts ?? 1
     const canTryAgain = !permanent && attempts < MAX_ENCODE_ATTEMPTS
     retrying = canTryAgain

@@ -257,6 +257,46 @@ describe('asking for the copies a saved post will need', () => {
     expect(sent).toHaveLength(1)
   })
 
+  /**
+   * A COPY THAT GAVE UP IS NOT A COPY THAT CAN NEVER BE MADE.
+   *
+   * The row is claimed on `<source url>__<platform>`, so a `failed` row was
+   * terminal for ever: every future post of that clip to that channel failed
+   * instantly, with nothing short of the database console to clear it. One
+   * bad morning at the encoder poisoned a client's footage permanently.
+   */
+  it('asks again for a copy that ran out of attempts, when the clip is attached afresh', async () => {
+    fake.restore()
+    fake = seed({ encode_jobs: [encodeJob('instagram', {
+      status: 'failed', attempts: 3, error: 'the copy would not upload (500)',
+    })] })
+    askForCopiesAhead({ clientId: 'c1', slides: [videoSlide], channels: ['acc-ig'] })
+    await settle()
+    expect(sent).toHaveLength(1)
+    // and the event says so, because only this path may reopen one
+    expect(sent[0].data).toMatchObject({ platform: 'instagram', reopen: true })
+  })
+
+  it('leaves a failure a retry could not improve on alone', async () => {
+    fake.restore()
+    fake = seed({ encode_jobs: [encodeJob('instagram', {
+      status: 'failed', attempts: 3, error: 'the source has no video in it',
+    })] })
+    askForCopiesAhead({ clientId: 'c1', slides: [videoSlide], channels: ['acc-ig'] })
+    await settle()
+    expect(sent).toEqual([])
+  })
+
+  it('leaves a failed row that still has attempts to the sweep', async () => {
+    fake.restore()
+    fake = seed({ encode_jobs: [encodeJob('instagram', {
+      status: 'failed', attempts: 1, error: 'the copy would not upload (500)',
+    })] })
+    askForCopiesAhead({ clientId: 'c1', slides: [videoSlide], channels: ['acc-ig'] })
+    await settle()
+    expect(sent).toEqual([])
+  })
+
   it('does nothing at all with no encoder configured', async () => {
     delete process.env.ENCODER_URL
     delete process.env.ENCODER_TOKEN

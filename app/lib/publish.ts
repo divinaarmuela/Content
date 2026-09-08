@@ -11,7 +11,7 @@ import { encoderConfigured } from './encoder'
 import { measuredDurationOf, smallerCopyOf } from './stream'
 import { headStoredObject } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
-import { PLATFORM_MEDIA, type AssetProbe } from './media-fit-core'
+import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
@@ -244,8 +244,24 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
       await settle({ targets: waited.targets })
     }
 
+    /**
+     * When every channel is holding its own file, the master stops travelling.
+     *
+     * It was relayed regardless: a 900 MB master pushed to the provider and
+     * attached to the post as shared media that no channel was ever going to
+     * use — the whole cost of the transfer, and the storage at the other end,
+     * for nothing. Each channel's own copy is on its own target and is
+     * relayed below.
+     */
+    if (waited.clearMedia && (job.media?.length ?? 0) > 0) {
+      job.media = []
+      await settle({ media: [] })
+    }
+
     // relay first, and persist the provider URLs so a retry does not re-upload
-    const media = await relayMedia(job.media ?? [])
+    const media = await relayMedia(job.media ?? [], waited.targets
+      ? 'This file is too big to send as it is — a copy is being made'
+      : 'This file is too big to send as it is — post a smaller export')
     if (media !== job.media) await settle({ media })
 
     // a channel's own media has to make the same trip — it is the same kind
@@ -254,7 +270,10 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     let targetsChanged = false
     for (const t of (job.targets ?? []) as Target[]) {
       if (t.options?.media?.length) {
-        const own = await relayMedia(t.options.media)
+        const own = await relayMedia(
+          t.options.media,
+          'This copy is still too big to send — post a shorter or smaller export',
+        )
         if (own !== t.options.media) targetsChanged = true
         targets.push({ ...t, options: { ...t.options, media: own } })
       } else {
@@ -339,6 +358,13 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
+    // A file too big to carry is not a bad five minutes: the next attempt
+    // would push exactly the same bytes at exactly the same ceiling. It fails,
+    // with the sentence a person can act on, rather than going round for ever.
+    if (e instanceof MediaTooBigToSend) {
+      await settle({ status: 'failed', attempts: job.attempts + 1, error: message })
+      return 'failed'
+    }
     // never leave a job stuck in 'publishing' — that would be invisible forever
     await settle({ status: 'queued', attempts: job.attempts + 1, error: message })
     return 'queued'
@@ -362,7 +388,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
  * exactly as it did before the encoder existed.
  */
 async function awaitCleanCopies(job: PublishJob): Promise<{
-  wait?: true; failed?: true; reason?: string; targets?: Target[]
+  wait?: true; failed?: true; reason?: string; targets?: Target[]; clearMedia?: true
 }> {
   if (!encoderConfigured()) return {}
   const media = job.media ?? []
@@ -413,8 +439,12 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
     if (t.options?.media?.length) own[t.platform] = t.options.media
   }
 
+  /** Is every channel holding a file of its own, so the master need not go? */
+  const allCovered = (list: Target[]) =>
+    list.length > 0 && list.every(t => (t.options?.media?.length ?? 0) > 0)
+
   const needing = channelsNeedingCopy({ probes: [probe], platforms, kinds, own })
-  if (needing.length === 0) return {}
+  if (needing.length === 0) return allCovered(targets) ? { clearMedia: true } : {}
 
   const copies = new Map<Platform, { url: string }>()
   for (const platform of needing) {
@@ -428,6 +458,17 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
         reason: `Could not prepare a copy for ${PLATFORM_MEDIA[platform]?.label ?? platform} — try a smaller export (${state.reason})`,
       }
     }
+    /**
+     * The copy is weighed against the channel it was made for.
+     *
+     * `ready` used to be enough. But a copy is only ever as good as the
+     * arithmetic that sized it, and this is the last place before a client's
+     * account where a copy that came out three times the channel's limit can
+     * still be stopped — a Story trimmed to 60 seconds is a promise made by
+     * the encoder, not something we had ever checked.
+     */
+    const tooBig = copyTooBigReason(platform, kinds[platform], state.bytes)
+    if (tooBig) return { failed: true, reason: tooBig }
     copies.set(platform, { url: state.url })
   }
 
@@ -438,7 +479,7 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
     if (!copy || t.options?.media?.length) return t
     return { ...t, options: { ...(t.options ?? {}), media: [{ url: copy.url, type: 'video' as const }] } }
   })
-  return { targets: next }
+  return allCovered(next) ? { targets: next, clearMedia: true } : { targets: next }
 }
 
 /**
@@ -461,14 +502,44 @@ export async function jobsWaitingOnCopy(sourceUrl: string): Promise<string[]> {
 }
 
 /**
+ * A file this function cannot carry, said once so the caller can fail the job
+ * rather than hand it back to the queue.
+ *
+ * The generic catch in `runPublishJob` re-queues, which is right for a bad
+ * five minutes and exactly wrong for this: a 900 MB master does not get
+ * smaller on the next attempt, and the reclaim sweep would push it through
+ * the provider again every fifteen minutes for ever.
+ */
+export class MediaTooBigToSend extends Error {}
+
+/**
+ * The most this function will push through itself, in MB.
+ *
+ * The relay is one serial R2 → this function → provider transfer inside an
+ * Inngest run capped at 300 seconds (`app/api/inngest/route.ts`). A 900 MB
+ * master does not finish: the run is killed with no error, the job never
+ * settles, and `reclaimStalePublishing` starts the identical transfer again a
+ * quarter of an hour later — provider storage, egress and function time,
+ * unbounded, for a file that is never going to arrive.
+ *
+ * Comfortably above the biggest copy any channel takes (Instagram's 300 MB),
+ * so a clean copy always travels; a master this size is refused in words.
+ */
+export const RELAY_MAX_MB = 350
+
+/**
  * Move a job's media onto the provider.
  *
  * The provider will not fetch arbitrary URLs, so assets living in our own
  * storage (Cloudflare R2) have to be relayed: download the bytes, presign, PUT, and swap in
  * the returned URL. Already-relayed items are left alone, which makes this
  * safe to run again after a retry.
+ *
+ * `tooBigMessage` is what a person is told if one of these files is beyond
+ * what this function can carry — the caller knows whether a copy is on its
+ * way, and we do not.
  */
-async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
+async function relayMedia(media: MediaItem[], tooBigMessage: string): Promise<MediaItem[]> {
   if (media.length === 0) return media
   const publisher = getPublisher()
   const providerHost = new URL(process.env.ZERNIO_API_URL ?? 'https://zernio.com/api/v1').host
@@ -486,6 +557,14 @@ async function relayMedia(media: MediaItem[]): Promise<MediaItem[]> {
     const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
     const filename = decodeURIComponent(new URL(item.url).pathname.split('/').pop() || 'asset')
     const length = Number(res.headers.get('content-length'))
+
+    // weighed BEFORE a byte is read: past this size the transfer does not
+    // finish inside the function's 300 seconds, and an unfinished transfer is
+    // a job that never settles and is started again for ever
+    if (Number.isFinite(length) && length > RELAY_MAX_MB * 1024 * 1024) {
+      await res.body.cancel().catch(() => {})
+      throw new MediaTooBigToSend(tooBigMessage)
+    }
 
     // The stream, NOT the bytes. `await res.arrayBuffer()` here read the whole
     // file into memory first, so a 2 GB master allocated 2 GB inside a

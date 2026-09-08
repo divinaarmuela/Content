@@ -511,3 +511,111 @@ describe('a failure the encoder reports', () => {
     expect(rows()[0].status).toBe('failed')
   })
 })
+
+
+/**
+ * A COPY THAT DOES NOT FIT THE CHANNEL IS NOT A FINISHED COPY.
+ *
+ * ffmpeg was never told to stop at the channel's length ceiling, so a
+ * four-minute master asked for as an Instagram Story came back `ok` at about
+ * 305 MB against the 100 MB Stories take — and the row said `done`.
+ */
+describe('a copy that came back too big', () => {
+  const storyRow = (over: Record<string, unknown> = {}): Row => ({
+    id: encodeJobId(SOURCE, 'instagram'),
+    source_url: SOURCE, platform: 'instagram', kind: 'story',
+    status: 'running', attempts: 1,
+    output_key: 'key-original-copy-instagram.mp4', target_source: 'fallback',
+    bytes: null, width: null, height: null, duration_sec: null, video_kbps: null,
+    error: null, asset_id: null, version_id: null, slide_index: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    ...over,
+  } as unknown as Row)
+
+  it('is failed with the sizes said out loud, and not asked for again', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [storyRow()] })
+    const out = await settleEncodeJob({
+      id: encodeJobId(SOURCE, 'instagram'), ok: true,
+      bytes: 305 * 1024 * 1024, width: 1080, height: 1920, durationSec: 240,
+    })
+    expect(out.retrying).toBe(false)
+    const row = rows()[0]
+    expect(row.status).toBe('failed')
+    expect(row.error).toMatch(/only takes 100 MB/)
+  })
+
+  it('takes one that fits, and records that the machine sized it', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [storyRow()] })
+    await settleEncodeJob({
+      id: encodeJobId(SOURCE, 'instagram'), ok: true,
+      bytes: 60 * 1024 * 1024, width: 1080, height: 1920, durationSec: 60,
+    })
+    const row = rows()[0]
+    expect(row.status).toBe('done')
+    // the row was asked for blind; the machine probed the real length, so the
+    // gap is findable rather than reported as something it never was
+    expect(row.target_source).toBe('probed')
+  })
+})
+
+/**
+ * A COPY THAT GAVE UP CAN BE ASKED FOR AGAIN.
+ *
+ * The row is claimed on `<source url>__<platform>`, so `failed` was terminal
+ * for ever: every future post of that clip to that channel failed instantly
+ * with no way to clear it. Only the attach path may reopen one — the publish
+ * path must keep telling the person in plain words instead of parking the
+ * post for another hour.
+ */
+describe('asking again for a copy that gave up', () => {
+  const deadRow = (over: Record<string, unknown> = {}): Row => ({
+    id: encodeJobId(SOURCE, 'instagram'),
+    source_url: SOURCE, platform: 'instagram', kind: 'reel',
+    status: 'failed', attempts: 3,
+    output_key: 'key-original-copy-instagram.mp4', target_source: 'measured',
+    bytes: null, width: null, height: null, duration_sec: 20, video_kbps: null,
+    error: 'the copy would not upload (500)',
+    asset_id: null, version_id: null, slide_index: null,
+    created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+    ...over,
+  } as unknown as Row)
+
+  it('is asked again, on the same key, when the clip is attached afresh', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [deadRow()] })
+    const out = await runEncodeRequest({
+      sourceUrl: SOURCE, platform: 'instagram', kind: 'reel', seconds: 20, reopen: true,
+    })
+    expect(out.at).toBe('asked')
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0].status).toBe('running')
+    expect(rows()[0].attempts).toBe(1)
+    // the reason is cleared (RTDB drops a null rather than storing one)
+    expect(rows()[0].error ?? null).toBeNull()
+    // the SAME key: a new one would let the row name an object nothing wrote
+    expect(presigned).toEqual(['key-original-copy-instagram.mp4'])
+  })
+
+  it('is left alone when the publish path is the one asking', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [deadRow()] })
+    const out = await runEncodeRequest({
+      sourceUrl: SOURCE, platform: 'instagram', kind: 'reel', seconds: 20,
+    })
+    expect(out).toEqual({ at: 'existing', jobId: encodeJobId(SOURCE, 'instagram'), status: 'failed' })
+    expect(asked).toEqual([])
+  })
+
+  it('is left alone when a second attempt could not possibly help', async () => {
+    fake.restore()
+    fake = seedDb({ encode_jobs: [deadRow({ error: 'the source has no video in it' })] })
+    const out = await runEncodeRequest({
+      sourceUrl: SOURCE, platform: 'instagram', kind: 'reel', seconds: 20, reopen: true,
+    })
+    expect(out.at).toBe('existing')
+    expect(rows()[0].status).toBe('failed')
+    expect(asked).toEqual([])
+  })
+})
