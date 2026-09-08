@@ -435,6 +435,12 @@ const GHOST_COLUMNS = {
     ['change_note', col('string', true)],
     ['change_note_by', col('string', true)],
     ['change_note_at', col('string', true)],
+    //   content_items.posted_slides — A PIECE POSTED IN PARTS (9 Sep 2026).
+    //     { urls, posted, total }: which of the card's files have gone out,
+    //     by a post that published or marked posted by hand. The card is
+    //     Posted only when every file has; until then it stays in Ready to
+    //     post saying "2 of 4 posted" (app/lib/posted-slides-core.ts).
+    ['posted_slides', col('unknown', true, true)],
     //   content_items.asked_ids / asked_at — WHO WAS ACTUALLY ASKED, and
     //     when. Whose turn it is used to be worked out from status + role
     //     alone, so a card in Internal check said "your turn" to every

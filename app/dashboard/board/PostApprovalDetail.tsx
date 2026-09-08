@@ -16,6 +16,7 @@ import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
+import { readPostedSlides } from '../../lib/posted-slides-core'
 import { uploadFiles } from '../uploadQueue'
 
 /**
@@ -198,6 +199,36 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       setWorking(null)
     }
   }
+  /* ── posted by hand, one file at a time ────────────────────────────── */
+  const postedSlides = readPostedSlides((item as { posted_slides?: unknown } | null)?.posted_slides)
+  const postedUrls = new Set(postedSlides?.urls ?? [])
+  const [handOn, setHandOn] = useState<number | null>(null)
+  const [handLink, setHandLink] = useState('')
+  const mayMarkPosted = ['approved_for_scheduling', 'scheduled'].includes(String(item?.status ?? ''))
+  const markPosted = async () => {
+    if (!item || handOn === null) return
+    const s = slides[handOn]
+    setWorking('Marking posted')
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/posted-slide`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: s.url, live_url: handLink.trim() || null }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(json?.error ?? 'Could not mark it posted'))
+      const p = json?.posted as { posted?: number; total?: number } | undefined
+      toast.success(p && p.posted !== undefined && p.total !== undefined && p.posted < p.total
+        ? `Marked posted — ${p.posted} of ${p.total} now out`
+        : 'Marked posted — every file is out, the card is in Posted')
+      setHandOn(null); setHandLink('')
+      if (p && p.posted !== undefined && p.total !== undefined && p.posted >= p.total) onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not mark it posted')
+    } finally {
+      setWorking(null)
+    }
+  }
+
   const mayAskChange = isManager && ['internal_review', 'client_review', 'client_changes_requested', 'approved_for_scheduling', 'revision_complete'].includes(String(item?.status ?? ''))
 
   /* ── delete, in two presses ────────────────────────────────────────── */
@@ -286,6 +317,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         <div className="flex items-center justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
             {slides.length} {slides.length === 1 ? 'file' : 'files'}{latest ? ` · version ${latest.version_number}` : ''}
+            {postedSlides && postedSlides.posted > 0 ? ` · ${postedSlides.posted} of ${postedSlides.total} posted` : ''}
           </p>
           <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
             <Plus className="h-4 w-4" /> Add another
@@ -315,6 +347,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     <Trash2 className="h-3.5 w-3.5" /> Remove
                   </Button>
                 )}
+                {postedUrls.has(s.url) && <Chip tone="green">Posted</Chip>}
+                {mayMarkPosted && !postedUrls.has(s.url) && handOn !== i && (
+                  <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink('') }}>
+                    Posted by hand
+                  </Button>
+                )}
                 {mayAskChange && changeOn !== i && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setChangeOn(i); setChangeText('') }}>
                     <MessageCircle className="h-3.5 w-3.5" /> Change this one
@@ -325,6 +363,17 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                   scheduler or an editor works from */}
               {changeAbout && changeAbout.index === i && (
                 <p className="rounded-inner bg-tint-red p-3 text-[13px]"><span className="font-semibold">Change asked for: </span>{changeAbout.rest}</p>
+              )}
+              {handOn === i && (
+                <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
+                  <p className="text-[13px]">This file went out by hand or through another tool. Paste the link to the live post if there is one.</p>
+                  <input value={handLink} onChange={e => setHandLink(e.target.value)} placeholder="https://www.instagram.com/p/… (optional)"
+                    className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]" />
+                  <div className="flex items-center gap-2">
+                    <Button className={primary} disabled={working !== null} onClick={() => void markPosted()}>It’s posted</Button>
+                    <Button variant="ghost" className={secondary} onClick={() => setHandOn(null)}>Cancel</Button>
+                  </div>
+                </div>
               )}
               {changeOn === i && (
                 <div className="flex flex-col gap-2 rounded-inner border border-border p-3">

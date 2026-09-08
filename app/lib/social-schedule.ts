@@ -13,6 +13,7 @@ import { accessibleClientIds, loadItemForUser } from './production-access'
 import { scopeContextOf, visibleItems } from './scope-client'
 import { actingRoles } from './workflow-core'
 import { actOnPostingApproval } from './posting-approval'
+import { notifyManagersBooked } from './booked-notify'
 import {
   mayApprovePost, maySendPostApproval, publishBlockReason, stateAfterPostEdit,
 } from './posting-approval-core'
@@ -1411,6 +1412,10 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
    */
   const rightNow = isPostingNow(post.scheduled_for, Date.now())
   const targets = targetsFor(post, accounts, versions)
+
+  // the managers hear it is booked (9 Sep 2026) — after the claim, so a
+  // press that lost the race tells nobody
+  void notifyManagersBooked(user, item, post, accounts.map(a => String(a.platform)))
 
   const queued = await queuePublishJob({
     clientId: item.client_id,

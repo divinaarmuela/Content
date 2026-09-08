@@ -618,3 +618,16 @@ describe('the kind word on an uploaded post', () => {
     expect(lines.kind).toBe('Post')
   })
 })
+
+/* ── a piece posted in parts (9 Sep 2026) ──────────────────────────────── */
+
+describe('the card says how much of it has gone out', () => {
+  it('"2 of 4 posted" while part-way, nothing otherwise', () => {
+    const l = (posted_slides: unknown) => cardLines({
+      id: 'x', title: 'T', status: 'approved_for_scheduling', client_id: 'c', owner_id: null, due_date: null, posted_slides,
+    } as never, { today: '2026-09-09' })
+    expect(l({ urls: ['a', 'b'], posted: 2, total: 4 }).posted).toBe('2 of 4 posted')
+    expect(l({ urls: [], posted: 0, total: 4 }).posted).toBeNull()
+    expect(l(undefined).posted).toBeNull()
+  })
+})

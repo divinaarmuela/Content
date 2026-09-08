@@ -2,7 +2,7 @@ import 'server-only'
 import { announceItemChange } from './production-live'
 import { table } from '@/lib/db'
 import type {
-  AssetVersion, Client, ContentItem as ContentItemRow, PublishJob, ScheduleEntry, SocialAccount,
+  AssetVersion, Client, ContentItem as ContentItemRow, PublishJob, ScheduleEntry, SocialAccount, SocialPost,
 } from '@/lib/db-types'
 import { queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
@@ -15,6 +15,7 @@ import { DEFAULT_TZ, safeZone } from './timezone-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
+import { fullyPosted, postedProgress, publishedSlideUrls, readPostedSlides } from './posted-slides-core'
 import { publishBlockReason } from './posting-approval-core'
 import { postingApprovalStateOf } from './posting-approval'
 import { analyticsForItems } from './post-analytics'
@@ -404,6 +405,22 @@ export async function recordPublishOnItem(
     const row = await table<ContentItemRow>('content_items').get(contentItemId)
     if (!row) return
 
+    /**
+     * A PIECE POSTED IN PARTS (9 Sep 2026). The card's files against every
+     * post made from it: the ones a published job carried, plus the ones
+     * marked posted by hand (kept on the row). The card moves to Posted only
+     * when every file has gone; until then it stays where it is, saying
+     * "2 of 4 posted", and the Schedule page offers only the rest.
+     */
+    const progress = await postedSlidesFor(contentItemId, row as { posted_slides?: unknown })
+    await table('content_items').update(contentItemId, { posted_slides: progress })
+    if (progress.total > 0 && !fullyPosted(progress)) {
+      announceItemChange({
+        item_id: contentItemId, client_id: (row as { client_id: string }).client_id, status: String(row.status), kind: 'updated',
+      })
+      return
+    }
+
     const actor = systemActor(systemActorLabel(platforms))
     let item = row as unknown as ContentItem
     for (const to of systemPublishSteps(item.status)) {
@@ -416,4 +433,22 @@ export async function recordPublishOnItem(
   } catch (e) {
     console.error('could not record publish on content item', contentItemId, e)
   }
+}
+
+/** what has gone out of this piece, read from its posts and their jobs and
+ *  the files marked posted by hand */
+export async function postedSlidesFor(
+  contentItemId: string,
+  row: { posted_slides?: unknown },
+): Promise<{ urls: string[]; posted: number; total: number }> {
+  const [versions, socialPosts, jobs] = await Promise.all([
+    table<AssetVersion>('asset_versions').list({ by: { item_id: contentItemId } }),
+    table<SocialPost>('social_posts').list({ by: { item_id: contentItemId } }).catch(() => [] as SocialPost[]),
+    table<PublishJob>('publish_jobs').list({ by: { content_item_id: contentItemId } }).catch(() => [] as PublishJob[]),
+  ])
+  const latest = [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
+  const slides = slidesOf(latest)
+  const publishedJobs = new Set(jobs.filter(j => String(j.status) === 'published').map(j => j.id))
+  const prev = readPostedSlides(row.posted_slides)
+  return postedProgress(slides, publishedSlideUrls(socialPosts, publishedJobs), prev?.urls ?? [])
 }

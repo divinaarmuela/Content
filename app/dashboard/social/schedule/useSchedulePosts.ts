@@ -40,6 +40,7 @@ import {
   accessibleClientIdsOf, scopeContextOf, visibleItems, type ScopeViewer,
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
+import { readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
 
 /** A post as the calendar draws it: the row, its media, and the status, tone
  *  and networks the core gives it once the item and the jobs are read too. */
@@ -290,12 +291,17 @@ export function useSchedulePosts(
 
   /** the media rail: one card per item, ready-to-use first */
   const media: RailMedia[] = useMemo(() => {
-    const usedItems = new Set(posts.rows.map(p => p.item_id))
     return scopedItems
       .map(item => {
         const itemVersions = versionsByItem.get(item.id) ?? []
         const elig = postingEligibility(item, itemVersions, postWithoutApproval)
-        const slides = elig.ok ? elig.slides : []
+        // A PIECE POSTED IN PARTS (9 Sep 2026): a file already in a post that
+        // is booked or live, or marked posted by hand, is not offered again;
+        // what is left is what the next post is made of
+        const own = posts.rows.filter(p => p.item_id === item.id)
+        const gone = takenSlideUrls(own)
+        for (const u of readPostedSlides((item as { posted_slides?: unknown }).posted_slides)?.urls ?? []) gone.add(u)
+        const slides = elig.ok ? remainingSlides(elig.slides, gone) : []
         return {
           itemId: item.id,
           title: item.title,
@@ -312,7 +318,8 @@ export function useSchedulePosts(
           clientSignsOff,
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
-          used: usedItems.has(item.id),
+          // "used" now means nothing left to post — every file is in a post
+          used: elig.ok && elig.slides.length > 0 && slides.length === 0,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),

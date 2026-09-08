@@ -13,6 +13,7 @@
  * only says how to word it and where to put it.
  */
 
+import { postedLine, readPostedSlides } from './posted-slides-core'
 import {
   actingRoles, availableTransitionsAs, presentTransitions, whoseTurn, STATUS_LABELS,
   type ItemStatus,
@@ -46,6 +47,8 @@ export type BoardViewCard = {
   scheduler_ids?: unknown
   due_date: string | null
   current_version_number?: number | null
+  /** which of the card's files have gone out (`posted-slides-core`) */
+  posted_slides?: unknown
   /** what the manager said needs changing, the last time it was sent back */
   change_note?: string | null
   client_approval_required?: boolean
@@ -98,6 +101,8 @@ export type CardLines = {
   link: { url: string; label: string } | null
   /** what needs doing, as plain text — null when nobody has said */
   brief: string | null
+  /** "2 of 4 posted" while a piece is part-way out; null otherwise */
+  posted: string | null
   /** who is holding it: a name, "You", or "Nobody yet" */
   assignee: string
   assigneeId: string | null
@@ -148,6 +153,7 @@ export function cardLines(
     kind: (card as { adhoc_post?: unknown }).adhoc_post === true ? 'Post' : (card.work_kinds?.name ?? null),
     link: card.link_url ? { url: card.link_url, label: linkLabel(card.link_kind) } : null,
     brief: card.brief?.trim() ? card.brief.trim() : null,
+    posted: postedLine(readPostedSlides(card.posted_slides)),
     assignee,
     assigneeId: card.owner_id ?? null,
     due,

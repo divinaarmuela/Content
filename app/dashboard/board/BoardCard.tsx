@@ -146,6 +146,7 @@ export function BoardCard({
         {lines.kind && <Chip tone={kindTone(card.work_kinds?.color)}>{lines.kind}</Chip>}
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
+        {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
       </>}
       note={<>
         {lines.brief && (
