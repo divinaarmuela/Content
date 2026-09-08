@@ -472,3 +472,16 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'approved_for_scheduling>scheduled': ['account_managers', 'owner_editor'],
   'scheduled>published': ['account_managers', 'owner_editor', 'assigned_schedulers'],
 }
+
+/**
+ * WHERE A LINK TO THIS PIECE GOES.
+ *
+ * The owner, 8 Sep 2026: "nothing goes in the Production page" — a post
+ * uploaded for approval (`adhoc_post`) lives on the Post approval board and
+ * nowhere else, so every email and every bell notification about it must
+ * land THERE, not on the Production card page. Production work keeps its
+ * card page.
+ */
+export function itemPath(item: { id: string; adhoc_post?: unknown }): string {
+  return item.adhoc_post === true ? '/dashboard/scheduler' : `/dashboard/production/${item.id}`
+}

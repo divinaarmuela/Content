@@ -1,4 +1,5 @@
 import 'server-only'
+import { itemPath } from './workflow-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
@@ -366,7 +367,7 @@ export async function actOnPostingApproval(
                 `<p style="border-left:3px solid #e4e4e7;padding-left:12px;">${escapeHtml(note)}</p>` +
                 `<p>Update the caption or the media, then send it for approval again.</p>`,
             'Open the item',
-            `${DASHBOARD_URL}/dashboard/production/${item.id}`,
+            `${DASHBOARD_URL}${itemPath(item)}`,
           ),
         })
       }

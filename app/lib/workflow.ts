@@ -23,6 +23,7 @@ import {
   STATUS_LABELS,
   type ItemStatus,
   type Audience,
+  itemPath,
 } from './workflow-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
@@ -190,7 +191,7 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
           : '') +
         (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
         OPEN_ITEM_CTA,
-        `${DASHBOARD_URL}/dashboard/production/${item.id}`
+        `${DASHBOARD_URL}${itemPath(item)}`
       ),
     })
   })().catch(e => console.error('job-assigned notification error:', e))
@@ -239,7 +240,7 @@ export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: stri
         + (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : '')
         + `<p>It is on your board now — open it to see everything on the card.</p>`,
         OPEN_ITEM_CTA,
-        `${DASHBOARD_URL}/dashboard/production/${item.id}`,
+        `${DASHBOARD_URL}${itemPath(item)}`,
       ),
     })
   })().catch(e => console.error('handed-over notification error:', e))
@@ -331,7 +332,7 @@ export async function notifyScheduleHandoff(
       `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext('approved_for_scheduling'))}</p>` +
       (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
       'Open the item',
-      `${DASHBOARD_URL}/dashboard/production/${item.id}`
+      `${DASHBOARD_URL}${itemPath(item)}`
     ),
   })))
   return people.length
@@ -389,7 +390,7 @@ export function notifyPublishQueued(
         // reader may well be in another one
         + (at ? `<p>Times are ${zoneLabel(tz)} time (${zoneAbbrev(tz, opts.scheduledFor)}), where the audience is.</p>` : ''),
         'Open the item',
-        `${DASHBOARD_URL}/dashboard/production/${item.id}`
+        `${DASHBOARD_URL}${itemPath(item)}`
       ),
     })))
   })().catch(e => console.error('publish notification error:', e))
@@ -895,7 +896,7 @@ export async function performTransition(
               ? (clientShareToken
                   ? `${DASHBOARD_URL}/portal/${clientShareToken}`
                   : `${DASHBOARD_URL}/client`)
-              : `${DASHBOARD_URL}/dashboard/production/${item.id}`
+              : `${DASHBOARD_URL}${itemPath(item)}`
           ),
         })
       }

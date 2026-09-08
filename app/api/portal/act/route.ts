@@ -5,7 +5,7 @@ import type {
   Batch, Client, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow, WorkKind,
 } from '@/lib/db-types'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
-import type { ItemStatus } from '../../../lib/workflow-core'
+import { itemPath, type ItemStatus } from '../../../lib/workflow-core'
 import { NOT_WITH_YOU, planDecidable, portalActions } from '../../../lib/portal-core'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceItemChange } from '../../../lib/production-live'
@@ -45,7 +45,8 @@ async function portalActor(clientId: string, clientName: string): Promise<TeamUs
 }
 
 /** Client comments route to the client's managers — never the editor. */
-async function notifyManagers(clientId: string, itemId: string, itemTitle: string, clientName: string, body: string) {
+async function notifyManagers(clientId: string, item: { id: string; adhoc_post?: unknown }, itemTitle: string, clientName: string, body: string) {
+  const itemId = item.id
   const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
   const data = await attachOne(links, 'team_user_id', 'team_users',
     ['id', 'email', 'name', 'role', 'active_status'])
@@ -67,7 +68,7 @@ async function notifyManagers(clientId: string, itemId: string, itemTitle: strin
         `Client comment on ${itemTitle}`,
         `<p>${escapeHtml(body.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">From ${escapeHtml(clientName)}'s portal. Review it and assign an editor task if changes are needed.</p>`,
         'Open the item',
-        `${DASHBOARD_URL}/dashboard/production/${itemId}`
+        `${DASHBOARD_URL}${itemPath(item)}`
       ),
     })
   }
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
           body: authorName ? `${comment}\n— ${authorName}` : comment,
           resolved: false,
         })
-        await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+        await notifyManagers(client.id, item, item.title, speaker, comment).catch(e =>
           console.error('portal manager notify error:', e))
       }
       return NextResponse.json({ ok: true })
@@ -213,7 +214,7 @@ export async function POST(req: Request) {
       if (comment) {
         // AWAITED: on serverless the invocation freezes the moment we return,
         // so fire-and-forget here silently lost the emails
-        await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+        await notifyManagers(client.id, item, item.title, speaker, comment).catch(e =>
           console.error('portal manager notify error:', e))
         // an APPROVAL note often carries the "when" — the schedulers who'll
         // actually set the date must hear it too (they never see comments)
@@ -236,7 +237,7 @@ export async function POST(req: Request) {
                   `Approved with a note: ${item.title}`,
                   `<p><strong>${escapeHtml(item.title)}</strong> was approved by ${escapeHtml(speaker)} with this note — it may say when they want it posted:</p><p>“${escapeHtml(comment.slice(0, 500))}”</p>`,
                   'Open the item',
-                  `${DASHBOARD_URL}/dashboard/production/${item.id}`
+                  `${DASHBOARD_URL}${itemPath(item)}`
                 ),
               })
             }
@@ -246,7 +247,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, status: transitioned?.status })
     }
     if (action === 'comment') {
-      await notifyManagers(client.id, item.id, item.title, speaker, comment).catch(e =>
+      await notifyManagers(client.id, item, item.title, speaker, comment).catch(e =>
         console.error('portal manager notify error:', e))
       return NextResponse.json({ ok: true })
     }

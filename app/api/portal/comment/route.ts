@@ -1,3 +1,4 @@
+import { itemPath } from '../../../lib/workflow-core'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, ContentItem, Batch } from '@/lib/db-types'
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
       announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'comment' })
       await notifyManagersOfComment({
         clientId: client.id, speaker, subjectTitle: item.title, body: text,
-        dashboardPath: `/dashboard/production/${item.id}`,
+        dashboardPath: itemPath(item),
       }).catch(e => console.error('portal comment notify error:', e))
       return NextResponse.json({ ok: true })
     }
