@@ -53,7 +53,7 @@ export const NAV_MAIN: NavItem[] = [
   // sent, waiting on a yes. It is on a manager's sidebar and NOT on a
   // scheduler's — theirs is Schedule, where they upload and send
   // (page-access-core decides who sees it).
-  { href: '/dashboard/scheduler',  label: 'Scheduler',        icon: CalendarCheck },
+  { href: '/dashboard/scheduler',  label: 'Post approval',    icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },
 ]
@@ -121,7 +121,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/bookings':      'Bookings',
   '/dashboard/production/availability': 'Availability',
   '/dashboard/production/proposals': 'Proposals',
-  '/dashboard/scheduler':     'Scheduler',
+  '/dashboard/scheduler':     'Post approval',
   // "Calendar" meant three different things; each one now says which
   '/dashboard/scheduler/calendar': 'Posting calendar',
   '/dashboard/calendar':      'Posting calendar',

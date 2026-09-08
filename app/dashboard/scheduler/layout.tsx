@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Kanban, Send } from 'lucide-react'
-import NewPostButton from './NewPostButton'
 import PageTitle from '../ui/PageTitle'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 
@@ -21,7 +20,7 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Board',
     icon: Kanban,
-    blurb: 'Every card, Draft to Posted — what needs doing and where the work lives. New post adds the media, shows you the preview and sends it for approval, right here.',
+    blurb: 'Every piece, Draft to Posted — where each one stands and who has it. Once a piece reaches Ready to post it is on Schedule to book in; posts themselves are approved on Schedule.',
   },
 ]
 
@@ -36,11 +35,11 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-col gap-4">
       <PageTitle
-        title="Scheduler"
+        title="Post approval"
         summary={active.blurb}
         actions={<>
           {/* link pills, on the page's own pill rail */}
-          <nav aria-label="Scheduler views"
+          <nav aria-label="Post approval views"
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface p-1">
             {VIEWS.map(v => {
               const Icon = v.icon
@@ -62,7 +61,6 @@ export default function SchedulerLayout({ children }: { children: React.ReactNod
               preview and "Send for approval" over this board — the Schedule
               page's own flow, not a second one to keep in step, and not a
               trip to another page */}
-          <NewPostButton />
         </>}
       />
 

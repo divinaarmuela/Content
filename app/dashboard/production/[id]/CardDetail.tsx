@@ -792,7 +792,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
       case 'approved_for_scheduling':
         return isBrief ? { text: 'Plan approved — book the date on the shoot page', href: detail.batch?.id ? `/dashboard/production/shoots/${detail.batch.id}` : board }
           : isInternal ? { text: 'Approved — this one is done', href: board }
-          : { text: 'Approved — it is under Ready to post on the Scheduler', href: '/dashboard/scheduler' }
+          : { text: 'Approved — it is under Ready to post on Post approval', href: '/dashboard/scheduler' }
       case 'scheduled': return isBrief ? { text: 'Shoot booked', href: board } : { text: 'Booked in', href: '/dashboard/scheduler' }
       case 'published': return { text: 'Posted', href: '/dashboard/scheduler' }
       default: return { text: label, href: board }

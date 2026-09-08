@@ -21,7 +21,7 @@ const LISTS: { href: string; label: string }[] = [
   { href: '/dashboard/production', label: 'Production' },
   { href: '/dashboard/editor', label: 'Editor' },
   { href: '/dashboard/scheduler/calendar', label: 'Calendar' },
-  { href: '/dashboard/scheduler', label: 'Scheduler' },
+  { href: '/dashboard/scheduler', label: 'Post approval' },
   { href: '/dashboard', label: 'Overview' },
 ]
 

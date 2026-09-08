@@ -42,7 +42,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/production', label: 'Production' },
   { href: '/dashboard/editor', label: 'Editor' },
   { href: '/dashboard/bookings', label: 'Bookings' },
-  { href: '/dashboard/scheduler', label: 'Scheduler' },
+  { href: '/dashboard/scheduler', label: 'Post approval' },
   { href: '/dashboard/calendar', label: 'Calendar' },
   { href: '/dashboard/activity', label: 'Asana activity' },
   { href: '/dashboard/reports', label: 'Reports' },
