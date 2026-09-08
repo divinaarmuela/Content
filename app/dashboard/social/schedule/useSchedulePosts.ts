@@ -200,6 +200,10 @@ export function useSchedulePosts(
         workKinds: workKinds.rows,
       }),
     ).filter(i => i.client_id === clientId)
+      // a shoot plan is a plan for a shoot, not something to post: it has no
+      // files and was showing in the rail as "No media yet" (the owner, 9 Sep
+      // 2026: "why does the super admin see August 2026 as no media yet")
+      .filter(i => (workKinds.rows.find(k => k.id === i.work_kind_id)?.slug ?? '') !== 'shoot_brief')
   }, [viewer, items.rows, assignments.rows, batches.rows, workKinds.rows, clientId])
 
   const itemById = useMemo(
