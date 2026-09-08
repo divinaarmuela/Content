@@ -270,6 +270,38 @@ export async function loadPostForUser(
   return { post: shape(row), item }
 }
 
+/**
+ * THE SAME, FOR A POST WHOSE CARD IS GONE — a manager's read only.
+ *
+ * The owner, 9 Sep 2026: "I just want to see the post I posted here shows
+ * there." Six cards were deleted at 23:12 the night before; the posts that
+ * had gone out through them stayed live on Instagram, with their numbers
+ * still in `post_analytics`, and their pages refused to open because the
+ * card behind them was null. A published post is a record in its own
+ * right: an account manager or a super admin on that client may still read
+ * it. The stand-in card is marked so nothing tries to move it.
+ */
+export async function loadPostOrRecordForUser(
+  user: TeamUser, id: string,
+): Promise<{ post: PlannedPost; item: ContentItem; cardGone: boolean }> {
+  const row = await posts().get(id)
+  if (!row) throw new AuthzError('That post no longer exists', 404)
+  const card = await table<ContentItem>('content_items').get(row.item_id).catch(() => null)
+  if (card) {
+    const item = await loadItemForUser(user, row.item_id)
+    return { post: shape(row), item, cardGone: false }
+  }
+  if (user.role !== 'account_manager' && user.role !== 'super_admin') {
+    throw new AuthzError('Item not found', 404)
+  }
+  await assertClientAccess(user, row.client_id)
+  const item = {
+    id: row.item_id, client_id: row.client_id, title: String(row.caption ?? '').trim().slice(0, 80) || 'Post',
+    status: 'published', adhoc_post: true, owner_id: null, scheduler_ids: [],
+  } as unknown as ContentItem
+  return { post: shape(row), item, cardGone: true }
+}
+
 async function versionsOf(itemId: string): Promise<AssetVersion[]> {
   return table<AssetVersion>('asset_versions').list({ where: v => v.item_id === itemId })
 }

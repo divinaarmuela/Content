@@ -4,7 +4,7 @@ import type {
   Client, ContentItem, PostAnalytic, PublishJob, SocialAccount,
 } from '@/lib/db-types'
 import type { TeamUser } from './authz'
-import { loadPostForUser, type PlannedPost } from './social-schedule'
+import { loadPostOrRecordForUser, type PlannedPost } from './social-schedule'
 import { analyticsForPost } from './post-page-core'
 import { safeZone } from './timezone-core'
 
@@ -58,6 +58,8 @@ export type PostPageData = {
   analytics: PostAnalytic[]
   /** may this viewer ask for who liked / who commented to be read now */
   may_read_people: boolean
+  /** the card behind this post was deleted; the post is read as a record */
+  card_gone: boolean
 }
 
 const asIds = (v: unknown): string[] =>
@@ -65,7 +67,7 @@ const asIds = (v: unknown): string[] =>
 
 /** Everything the post's page needs, gated by the card it belongs to. */
 export async function loadPostPage(user: TeamUser, id: string): Promise<PostPageData> {
-  const { post, item } = await loadPostForUser(user, id)
+  const { post, item, cardGone } = await loadPostOrRecordForUser(user, id)
   const jobIds = asIds(post.publish_job_ids)
 
   const [clientRow, accountRows, jobRows, analyticRows] = await Promise.all([
@@ -94,6 +96,7 @@ export async function loadPostPage(user: TeamUser, id: string): Promise<PostPage
 
   return {
     may_read_people: (user.role === 'account_manager' || user.role === 'super_admin') && Boolean(process.env.HIKER_API_KEY),
+    card_gone: cardGone,
     post,
     item: { id: item.id, title: item.title, client_id: item.client_id, status: item.status },
     client: {

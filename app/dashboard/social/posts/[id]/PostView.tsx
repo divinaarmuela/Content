@@ -100,7 +100,9 @@ export default function PostView({ data }: { data: PostPageData }) {
     <div className="flex flex-col gap-4 pb-10">
       <PageTitle
         title={item.title}
-        summary={status.detail ?? 'Everything about this post, in one place.'}
+        summary={data.card_gone
+          ? 'The card this post was made from has been deleted. What went out, and how it did, is kept here.'
+          : (status.detail ?? 'Everything about this post, in one place.')}
       />
 
       {/* ── where it went, and where it got to ─────────────────────────── */}
