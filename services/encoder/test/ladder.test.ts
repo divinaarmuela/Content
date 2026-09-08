@@ -105,7 +105,7 @@ describe('the ffmpeg arguments', () => {
   })
 
   it('is constrained quality, not a fixed bitrate', () => {
-    expect(arg(args, '-crf')).toBe('20')
+    expect(arg(args, '-crf')).toBe('18')
     expect(arg(args, '-maxrate')).toBe('10000k')
     expect(arg(args, '-bufsize')).toBe('20000k')
     expect(args).not.toContain('-b:v')

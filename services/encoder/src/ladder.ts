@@ -271,9 +271,19 @@ export function targetProblem(target: Partial<EncodeTarget> | null | undefined):
 /**
  * Everything ffmpeg is told, in order.
  *
- * `-crf 20` with a `-maxrate` ceiling is constrained quality: an easy clip
+ * `-crf 18` with a `-maxrate` ceiling is constrained quality: an easy clip
  * spends less than the ceiling, a hard one is held at it, and neither
  * overruns the channel's size limit because the ceiling was derived from it.
+ *
+ * It was 20 — the common delivery default — and that was never weighed
+ * against what these channels actually allow. Measured on a real post
+ * (C0584.MP4, 1080p50, 8 Sep 2026): a 960 MB master came out at 28 MB and
+ * 1.95 Mbps, against Instagram's 300 MB ceiling and the ~16 Mbps that
+ * ceiling affords over a two-minute clip. Under a tenth of the allowance,
+ * with the ceiling nowhere near binding — so the number holding quality
+ * down was this one, and nothing else. 18 costs roughly 40 MB on the same
+ * clip, still a seventh of what Instagram takes, and buys margin exactly
+ * where 20 gets caught out: grain, dark gradients, and fast motion.
  *
  * `-g` is two seconds of frames — the keyframe interval every platform's
  * re-encoder is happiest with — and `-sc_threshold 0` stops libx264 adding
@@ -302,7 +312,7 @@ export function ffmpegArgs(input: {
     '-profile:v', 'high',
     '-level', '4.1',
     '-preset', 'medium',
-    '-crf', '20',
+    '-crf', '18',
     '-maxrate', `${Math.round(target.maxrateKbps)}k`,
     '-bufsize', `${Math.round(target.bufsizeKbps)}k`,
     // lanczos because a 4K master downscaled with the default filter looks
