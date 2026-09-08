@@ -595,15 +595,14 @@ describe('a post waiting on somebody, said on the card', () => {
    * person is the one exception, and only on the Scheduler board — nobody
    * should be asked for an answer they have no way to give.
    */
-  it('brings an ad-hoc post back to the Scheduler board only while it waits on this person', () => {
+  it('keeps an ad-hoc post off every board, even while it waits — it is answered on Schedule (8 Sep 2026)', () => {
+    // "they can only start approving or not approving on the schedule page,
+    // not the scheduler page": the Overview's "Waiting on you" carries the
+    // post and its link opens the composer, with the frames in front of them
     const adhoc = waiting({ id: 'ad1', adhoc_post: true })
-    expect(pageCards('scheduler', [adhoc], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
-    // the scheduler who uploaded it must see it too: "it doesn't even appear
-    // in the draft column" was the whole complaint — the thing needing a
-    // decision was visible to nobody at all
-    expect(pageCards('scheduler', [adhoc], scheduler, TODAY).map(c => c.id)).toEqual(['ad1'])
+    expect(pageCards('scheduler', [adhoc], manager, TODAY)).toEqual([])
+    expect(pageCards('scheduler', [adhoc], scheduler, TODAY)).toEqual([])
     expect(pageCards('production', [adhoc], manager, TODAY)).toEqual([])
-    const answered = waiting({ id: 'ad1', adhoc_post: true, posting_approval_state: 'approved' })
-    expect(pageCards('scheduler', [answered], manager, TODAY)).toEqual([])
+    expect(pageCards('editor', [adhoc], manager, TODAY)).toEqual([])
   })
 })

@@ -426,17 +426,14 @@ export function pageCards<T extends BoardViewCard>(
   // hiding it there meant the thing needing a decision appeared nowhere at
   // all: not in Draft, not in Internal check, not in anyone's list. It shows
   // while it waits, and leaves again the moment it is answered.
-  const waitingOnSomeone = (c: T) => {
-    const status = String((c as { status?: unknown }).status ?? '')
-    if (status === 'internal_review' || status === 'client_review') return true
-    return String((c as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
-  }
-  // …and only on the SCHEDULER page, which is where a decision is made. A
-  // post is never production work, so Production and Editor never show one.
-  const work = (c: T) =>
-    (c as { adhoc_post?: unknown }).adhoc_post !== true
-    || (page === 'scheduler' && waitingOnSomeone(c))
-    || (page === 'scheduler' && postApprovalOffer(c, viewer) !== null)
+  //
+  // NO LONGER (8 Sep 2026). A post is answered on SCHEDULE — the composer,
+  // with the frames — "they can only start approving or not approving on the
+  // schedule page, not the scheduler page". So a post uploaded there never
+  // sits in these columns at all: the Overview's "Waiting on you" carries it
+  // and its link opens the composer. `page` is still read by the Editor
+  // rule below.
+  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
     if (viewer.role === 'editor') return cards.filter(c => mine(c) && fresh(c))

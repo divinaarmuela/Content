@@ -188,7 +188,10 @@ export function waitingRow(
       since: sinceWords(card.updated_at, today),
       onYou: offer !== null,
       who: offer !== null ? 'you' : line === POST_WAITING_CLIENT ? 'client' : 'manager',
-      actions: offer ? [offer.primary, offer.changes] : [],
+      // NO INLINE ANSWER on a post (8 Sep 2026): the yes, the change and
+      // "send to the client" are pressed in the composer on Schedule, with
+      // the frames in front of the person. The row is the way there.
+      actions: [],
       open: { kind: 'post', href: postHref(card.client_id, card.id) },
       stamp: card.updated_at ?? null,
     }

@@ -59,15 +59,17 @@ describe('a post sent for its final sign-off', () => {
     updated_at: '2026-09-07T02:00:00.000Z',
   })
 
-  it('is on the manager who may answer it, with both answers', () => {
+  it('is on the manager who may answer it — and the answer is given on Schedule, not here', () => {
     const row = waitingRow(pending, manager, TODAY)!
     expect(row.kind).toBe('post')
     expect(row.onYou).toBe(true)
     expect(row.who).toBe('you')
     expect(row.line).toBe(POST_WAITING_LINE)
     expect(row.since).toBe('since yesterday')
-    expect(row.actions.map(a => a.label)).toEqual([POST_APPROVE_LABEL, POST_CHANGES_LABEL])
-    expect(row.actions.every(a => a.kind === 'post_approval')).toBe(true)
+    // no inline Approve / Send back (8 Sep 2026): the row is the way to the
+    // composer, where the frames are; the labels still exist for the composer
+    expect(row.actions).toEqual([])
+    expect([POST_APPROVE_LABEL, POST_CHANGES_LABEL].every(Boolean)).toBe(true)
   })
 
   it('opens the composer on its own preview, not the card', () => {
@@ -232,7 +234,9 @@ describe('the list itself', () => {
     const { yours, others } = splitWaiting(rows())
     expect(yours.map(r => r.id)).toEqual(['d', 'b'])
     expect(others.map(r => r.id)).toEqual(['a'])
-    expect(yours.every(r => r.actions.length > 0)).toBe(true)
+    // a card yours to answer carries its answers; a POST yours to answer
+    // carries none here — it is answered on Schedule — but is still yours
+    expect(yours.every(r => r.actions.length > 0 || r.kind === 'post')).toBe(true)
     expect(others.every(r => r.actions.length === 0)).toBe(true)
   })
 
