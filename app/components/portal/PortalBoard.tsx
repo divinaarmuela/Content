@@ -201,6 +201,63 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
     }
   }
 
+  /**
+   * THE COMMENT BOX, DRAWN WHERE THE COMMENT IS ABOUT. The owner, 9 Sep
+   * 2026: "the UI is bad because each comment input is at the lowest" — a
+   * box at the foot of a card four photos tall is a box nobody finds. So it
+   * opens directly under the asset that was pressed, and the whole-post box
+   * stays at the foot for anything general.
+   */
+  const composer = (slide: number | null) => (
+    <div className="flex flex-col gap-2">
+      {token && (
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Your name"
+          aria-label="Your name"
+          maxLength={60}
+          className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
+        />
+      )}
+      <div className="flex items-end gap-2">
+        <textarea
+          rows={2}
+          value={draft}
+          autoFocus={slide !== null}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendComment() }}
+          placeholder={slide === null ? 'Anything about the post as a whole…' : 'What do you think of this one?'}
+          className="min-h-11 w-full flex-1 resize-none rounded-tile border border-border bg-background p-2.5 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button type="button" disabled={busy !== null || !draft.trim()} onClick={() => void sendComment()}
+          aria-label="Send comment"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40">
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+      {slide !== null && (
+        <button type="button" onClick={() => { setOnSlide(null); setDraft('') }} className={cn('w-fit text-[13px] underline underline-offset-4', muted)}>
+          Cancel
+        </button>
+      )}
+    </div>
+  )
+
+  /** one comment, as a line */
+  const commentLine = (c: PortalCard['comments'][number]) => (
+    <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
+      <p className={cn('flex flex-wrap items-baseline gap-x-2 text-[12px]', muted)}>
+        <span className="font-semibold">{c.author_name}</span>
+        {c.from_team && <Chip tone={ink ? 'muted' : 'ink'} className="px-1.5 py-0.5 text-[10px]">MD Media</Chip>}
+        <span suppressHydrationWarning>{when(c.created_at)}</span>
+        {onCardLine(c.card_label) && <span className="italic">{onCardLine(c.card_label)}</span>}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{splitSlideTag(c.body).rest}</p>
+    </div>
+  )
+  const general = comments.filter(c => splitSlideTag(c.body).index === null)
+
   // ── swipe from the right approves (phones) ──
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
@@ -262,11 +319,11 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           <img src={card.preview_url} alt="" loading="lazy" className="h-[120px] w-full rounded-tile object-cover" />
         )}
         {assets.length > 0 && (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             {assets.map((s, i) => {
-              const n = perSlide.get(i) ?? 0
+              const here = comments.filter(c => splitSlideTag(c.body).index === i)
               return (
-                <figure key={s.url} className="flex flex-col gap-1.5">
+                <figure key={s.url} className="flex flex-col gap-2">
                   <div className={cn('overflow-hidden rounded-tile', ink ? 'bg-cream/10' : 'bg-foreground/[0.06]')}>
                     {s.type === 'video'
                       ? <video src={s.url} controls playsInline preload="metadata" className="max-h-[520px] w-full object-contain" />
@@ -277,12 +334,15 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                     <span className={cn('text-[12px] font-semibold uppercase tracking-[0.02em]', muted)}>
                       {s.type === 'video' ? 'Video' : 'Photo'} {i + 1} of {assets.length}
                     </span>
-                    {n > 0 && <span className={cn('text-[12px]', muted)}>{n} {n === 1 ? 'comment' : 'comments'}</span>}
-                    <button type="button" onClick={() => { setOnSlide(i); setOpen(true) }}
-                      className="inline-flex min-h-9 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
-                      <MessageCircle className="h-3.5 w-3.5" /> Comment on this one
-                    </button>
+                    {onSlide !== i && (
+                      <button type="button" onClick={() => { setOnSlide(i); setDraft('') }}
+                        className="inline-flex min-h-9 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
+                        <MessageCircle className="h-3.5 w-3.5" /> {here.length === 0 ? 'Comment on this one' : 'Add a comment'}
+                      </button>
+                    )}
                   </figcaption>
+                  {here.length > 0 && <div className="flex flex-col gap-2">{here.map(commentLine)}</div>}
+                  {onSlide === i && composer(i)}
                 </figure>
               )
             })}
@@ -447,65 +507,26 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           </div>
         )}
 
-        {/* comments, pinned to this card. A comment the client left on a
-            card of the planning board says which card. */}
+        {/* the post as a whole — comments that are not about one asset, and
+            a box for one. On a card with no assets to press, this is the
+            only thread. */}
         {canComment && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setOpen(v => !v)}
               className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>
               <MessageCircle className="h-4 w-4" />
-              {comments.length === 0 ? 'Leave a comment' : `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}`}
+              {assets.length > 0
+                ? (general.length === 0 ? 'Comment on the whole post' : `${general.length} on the whole post`)
+                : (comments.length === 0 ? 'Leave a comment' : `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}`)}
               <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
             </button>
             {open && (
               <div className="flex flex-col gap-2.5">
-                {comments.map(c => (
-                  <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
-                    <p className={cn('flex flex-wrap items-baseline gap-x-2 text-[12px]', muted)}>
-                      <span className="font-semibold">{c.author_name}</span>
-                      {c.from_team && <Chip tone={ink ? 'muted' : 'ink'} className="px-1.5 py-0.5 text-[10px]">MD Media</Chip>}
-                      <span suppressHydrationWarning>{when(c.created_at)}</span>
-                      {onCardLine(c.card_label) && (
-                        <span className="italic">{onCardLine(c.card_label)}</span>
-                      )}
-                      {splitSlideTag(c.body).label && (
-                        <span className="italic">on {splitSlideTag(c.body).label!.toLowerCase()}</span>
-                      )}
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{splitSlideTag(c.body).rest}</p>
-                  </div>
-                ))}
-                {token && (
-                  <input
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Your name"
-                    aria-label="Your name"
-                    maxLength={60}
-                    className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
-                  />
+                {(assets.length > 0 ? general : comments).map(commentLine)}
+                {onSlide === null && composer(null)}
+                {onSlide !== null && (
+                  <p className={cn('text-[13px]', muted)}>Your comment box is under {assets[onSlide]?.type === 'video' ? 'video' : 'photo'} {onSlide + 1}.</p>
                 )}
-                {onSlide !== null && assets[onSlide] && (
-                  <p className={cn('flex items-center gap-2 text-[13px]', muted)}>
-                    About {assets[onSlide].type === 'video' ? 'video' : 'photo'} {onSlide + 1} of {assets.length}
-                    <button type="button" onClick={() => setOnSlide(null)} className="underline underline-offset-4">the whole post instead</button>
-                  </p>
-                )}
-                <div className="flex items-end gap-2">
-                  <textarea
-                    rows={2}
-                    value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendComment() }}
-                    placeholder="Say something about this one…"
-                    className="min-h-11 w-full flex-1 resize-none rounded-tile border border-border bg-background p-2.5 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <button type="button" disabled={busy !== null || !draft.trim()} onClick={() => void sendComment()}
-                    aria-label="Send comment"
-                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40">
-                    <Send className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
             )}
           </div>

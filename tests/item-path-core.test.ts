@@ -43,3 +43,18 @@ describe('the Post approval board opens the card the address names', () => {
     expect(src).toMatch(/sheet\.open\(wanted\)/)
   })
 })
+
+describe('the plain drawer (9 Sep 2026)', () => {
+  it('opens for every uploaded post, and for every card on the Editor page', () => {
+    const sheet = readFileSync(join(process.cwd(), 'app/dashboard/board/CardSheet.tsx'), 'utf8')
+    expect(sheet).toMatch(/adhoc \|\| simple/)
+    const editor = readFileSync(join(process.cwd(), 'app/dashboard/editor/page.tsx'), 'utf8')
+    expect(editor).toMatch(/<CardSheet [^>]*simple/)
+    const detail = readFileSync(join(process.cwd(), 'app/dashboard/board/PostApprovalDetail.tsx'), 'utf8')
+    // no way out to the Production card page
+    expect(detail).not.toMatch(/dashboard\/production\//)
+    // production work writes ordinary versions; an uploaded post the Schedule page's way
+    expect(detail).toMatch(/\/api\/production\/items\/\$\{item\.id\}\/versions/)
+    expect(detail).toMatch(/\/api\/social\/schedule\/media/)
+  })
+})

@@ -21,10 +21,13 @@ import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-she
  * swipe to the right: the panel follows the thumb and lets go past 80px.
  * The full page is one tap away for anyone who wants the room.
  */
-export function CardSheet({ id, onClose }: {
+export function CardSheet({ id, onClose, simple = false }: {
   /** the open card, or null for shut */
   id: string | null
   onClose: () => void
+  /** the plain drawer — files, decision, what was said — for every card, not
+   *  only an uploaded post (the Editor page, 9 Sep 2026) */
+  simple?: boolean
 }) {
   // the swipe: where the touch began, how far it has come
   const start = useRef<{ x: number; y: number } | null>(null)
@@ -68,7 +71,7 @@ export function CardSheet({ id, onClose }: {
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">Card</SheetTitle>
-        {id && !openedLoading && (adhoc
+        {id && !openedLoading && (adhoc || simple
           ? <PostApprovalDetail key={id} id={id} onClose={onClose} />
           : <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />)}
       </SheetContent>

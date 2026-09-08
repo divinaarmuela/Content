@@ -59,12 +59,10 @@ beforeEach(() => {
 afterEach(() => fake.restore())
 
 describe('the pure rule', () => {
-  it('the account manager, the super admin and the scheduler read client comments', () => {
+  it('only the account manager and the super admin read client comments (9 Sep 2026)', () => {
     expect(canReadClientComments('account_manager')).toBe(true)
     expect(canReadClientComments('super_admin')).toBe(true)
-    // the scheduler sent the post; the client’s answer is theirs to read (8 Sep 2026)
-    expect(canReadClientComments('scheduler')).toBe(true)
-    for (const r of ['editor', 'client', null, undefined] as const) {
+    for (const r of ['editor', 'scheduler', 'client', null, undefined] as const) {
       expect(canReadClientComments(r), String(r)).toBe(false)
     }
   })
@@ -75,8 +73,8 @@ describe('the pure rule', () => {
     expect(clientCommentsFor('account_manager', rows).map(r => r.id)).toEqual(['1', '3'])
     expect(clientCommentsFor('super_admin', rows).map(r => r.id)).toEqual(['1', '3'])
     expect(clientCommentsFor('editor', rows)).toEqual([])
-    // the scheduler reads them too (8 Sep 2026) — they sent the post
-    expect(clientCommentsFor('scheduler', rows).map(r => r.id)).toEqual(['1', '3'])
+    // the scheduler does NOT (9 Sep 2026): the manager's change note names the file instead
+    expect(clientCommentsFor('scheduler', rows)).toEqual([])
     expect(clientCommentsFor('client', rows)).toEqual([])
   })
   it('the item page thread agrees: an editor or scheduler never sees a client row', () => {
@@ -108,9 +106,9 @@ describe('GET /api/production/items/[id]/client-comments', () => {
     expect(r.status).toBe(403)
     expect(r.json).toEqual({ error: "The client's comments go to their account manager" })
   })
-  it('a scheduler reads them — they sent the post the client answered (8 Sep 2026)', async () => {
+  it('a scheduler is refused too (9 Sep 2026) — what the client asked for reaches them as the change note', async () => {
     h.user = who('scheduler')
     const res = await get()
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(403)
   })
 })

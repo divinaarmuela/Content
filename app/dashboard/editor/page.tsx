@@ -100,7 +100,7 @@ export default function EditorPage() {
       )}
 
       {/* the card, beside the board — the board stays live behind it */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} />
+      <CardSheet id={sheet.cardId} onClose={sheet.close} simple />
 
       {viewer && (
         <NewCardDialog
