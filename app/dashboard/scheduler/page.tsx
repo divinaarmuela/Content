@@ -14,9 +14,7 @@ import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
-import { NEW_CARD_EVENT } from './NewPostButton'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
-import { NewCardDialog } from '../board/BoardDialogs'
 import { useTeamMembers } from '../production/workHooks'
 
 /**
@@ -44,22 +42,14 @@ export default function SchedulerPage() {
   // columns say what each card is
   const live = useWorkRows(viewer, { schedulerPostFilter: false })
   const { column, show, clearShow } = useBoardParams()
+  const [today, setToday] = useState<string | null>(null)
+  useEffect(() => { setToday(todayKey()) }, [])
   // the card that is open beside the board, named in the address
   const sheet = useCardSheet()
   // any team role makes work — the owner's rule; a scheduler's odd task
   // (trend research, a caption pass) is a card like any other
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   const team = useTeamMembers(isManager)
-  const [newOpen, setNewOpen] = useState(false)
-  // the header's New menu asks; this page answers, so there is one button
-  useEffect(() => {
-    const open = () => setNewOpen(true)
-    window.addEventListener(NEW_CARD_EVENT, open)
-    return () => window.removeEventListener(NEW_CARD_EVENT, open)
-  }, [])
-  const [today, setToday] = useState<string | null>(null)
-  useEffect(() => { setToday(todayKey()) }, [])
-
   /** clients with at least one connected channel — for "Waiting on an account" */
   const [connectedClientIds, setConnectedClientIds] = useState<ReadonlySet<string>>(() => new Set())
   useEffect(() => {
@@ -133,16 +123,6 @@ export default function SchedulerPage() {
       )}
       {/* the card, beside the board — the board stays live behind it */}
       <CardSheet id={sheet.cardId} onClose={sheet.close} />
-      {viewer && (
-        <NewCardDialog
-          open={newOpen}
-          onOpenChange={setNewOpen}
-          clients={live.clients.map(c => ({ id: c.id, name: c.name }))}
-          kinds={live.tables.workKinds.rows}
-          team={team}
-          viewer={{ ...viewer, name: me?.name }}
-        />
-      )}
     </div>
   )
 }
