@@ -233,10 +233,23 @@ describe('schedulerPostFilter: false', () => {
     { id: 'handed', client_id: 'c1', status: 'approved_for_scheduling', owner_id: 'u9', scheduler_ids: ['u2'] },
     { id: 'free', client_id: 'c1', status: 'approved_for_scheduling', owner_id: 'u9', scheduler_ids: [] },
   ]
-  it('keeps the status gate but drops the board-only post-filter', () => {
-    expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, []).map(i => i.id)).toEqual(['free'])
+  it('a scheduler sees only cards that are THEIRS — owned, handed, asked or tagged (9 Sep 2026)', () => {
+    // u1 owns nothing here and was handed nothing: nothing, whatever the flag
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, []).map(i => i.id)).toEqual([])
     expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, [], { schedulerPostFilter: false })
-      .map(i => i.id)).toEqual(['brief', 'handed', 'free'])
+      .map(i => i.id)).toEqual([])
+    // u2 was handed one: that one
+    expect(visibleItems({ id: 'u2', role: 'scheduler' }, rows, [], { schedulerPostFilter: false })
+      .map(i => i.id)).toEqual(['handed'])
+    // a general user: the same rule, at any status
+    const own: any[] = [
+      { id: 'mine', client_id: 'c1', status: 'draft_uploaded', owner_id: 'g1' },
+      { id: 'theirs', client_id: 'c1', status: 'draft_uploaded', owner_id: 'g2' },
+      { id: 'asked', client_id: 'c1', status: 'internal_review', owner_id: 'g2', asked_ids: ['g1'] },
+    ]
+    expect(visibleItems({ id: 'g1', role: 'general' }, own, []).map(i => i.id)).toEqual(['mine', 'asked'])
+    // a manager sees the lot
+    expect(visibleItems({ id: 'am', role: 'account_manager' }, own, [{ team_user_id: 'am', client_id: 'c1' }]).map(i => i.id)).toEqual(['mine', 'theirs', 'asked'])
   })
   it('still hides a pre-approval row the scheduler does not own', () => {
     const draft: any = [{ id: 'd', client_id: 'c1', status: 'draft_uploaded', owner_id: 'u9' }]

@@ -111,7 +111,8 @@ function seed(
     }] as unknown as Row[],
     content_items: [{
       id: ITEM, client_id: CLIENT, title: 'The launch post', status: 'approved_for_scheduling',
-      content_type: 'carousel', owner_id: OWNER.id, scheduler_ids: [], caption: 'Hello',
+      // handed to the scheduler: since 9 Sep 2026 a scheduler sees only the cards that are theirs
+      content_type: 'carousel', owner_id: OWNER.id, scheduler_ids: [SCHEDULER.id], caption: 'Hello',
       posting_approval_state: null, platform_targets: ['instagram'],
       ...itemPatch,
     }] as unknown as Row[],
@@ -1246,10 +1247,10 @@ describe('listing a week', () => {
     expect(JSON.stringify(forScheduler)).not.toMatch(/nobody else should read/)
   })
 
-  it('shows the scheduler the jobs that ARE theirs, and the unassigned ones', async () => {
+  it('shows the scheduler the jobs that ARE theirs, and nobody else’s (9 Sep 2026)', async () => {
     await withSomebodyElsesJob()
     as(SCHEDULER)
-    const mine = await create()            // ITEM has no scheduler_ids at all
+    const mine = await create()            // ITEM was handed to this scheduler
     expect(mine.status).toBe(200)
 
     const listed = await lib.listPosts({ clientId: CLIENT, viewer: SCHEDULER as never })

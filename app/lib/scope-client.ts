@@ -21,6 +21,7 @@
  */
 
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
+import { askedIdsOf } from './asked-core'
 import type { ScopeViewer } from './production-access-core'
 
 export type { ScopeViewer } from './production-access-core'
@@ -251,9 +252,23 @@ export function visibleItems<T extends ScopeItem>(
     return true
   })
 
-  if (viewer.role !== 'scheduler' || ctx.schedulerPostFilter === false) return scoped
+  /* THEIR OWN CARDS ONLY (the owner, 9 Sep 2026): a scheduler or a general
+   * user sees the cards they own, were handed the scheduling of, were asked
+   * about, or were tagged in — on every board and on the Schedule page. An
+   * account manager or a super admin sees everything. This stands whatever
+   * `schedulerPostFilter` says: that flag is about the approved queue, this
+   * is about whose work it is. */
+  const own = (viewer.role === 'scheduler' || viewer.role === 'general')
+    ? scoped.filter(r =>
+      r.owner_id === viewer.id
+      || schedulerIdsOf(r).includes(viewer.id)
+      || askedIdsOf(r as never).includes(viewer.id)
+      || taggedItems.has(r.id))
+    : scoped
+
+  if (viewer.role !== 'scheduler' || ctx.schedulerPostFilter === false) return own
   // the scheduler post-filter, exactly as the route applies it after the join
-  return scoped.filter(r => {
+  return own.filter(r => {
     if (r.owner_id === viewer.id) return true
     if (slugOf(r, kindSlugById) === 'shoot_brief') return false
     const ids = schedulerIdsOf(r)
