@@ -1303,6 +1303,12 @@ export type CompositionInput = {
    *  this a scheduler's fresh upload (`draft_uploaded`, 8 Sep 2026) could not
    *  even have its caption saved — "Still being made". */
   saving?: boolean
+  /** true when the post is only being WRITTEN DOWN — Save as draft, or the
+   *  window's own autosave. A draft owes nothing to the networks yet: the
+   *  TikTok tick, a YouTube title's length, a partnership nobody can see are
+   *  all asked at the door that sends it (9 Sep 2026: "can't save as draft"
+   *  was the TikTok box, on a post nobody was posting). */
+  draft?: boolean
   now: string | number | Date
 }
 
@@ -1377,11 +1383,12 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
 
   // …and everything wrong with a channel's own posting options. The rule is
   // `optionProblems`, the SAME function the server runs on the way out, so
-  // the window never approves of a post the publisher would refuse.
+  // the window never approves of a post the publisher would refuse. A DRAFT
+  // is exempt: nothing is going out, so nothing is owed to the network yet.
   const media = slides.map(s => ({
     url: s.url, type: s.type === 'video' ? 'video' as const : 'image' as const,
   }))
-  for (const channel of channels) {
+  for (const channel of input.draft ? [] : channels) {
     const platform = String(channel.platform) as Platform
     if (!PLATFORM_RULES[platform]) continue
     const own: PostOptions = channel.options ?? {}

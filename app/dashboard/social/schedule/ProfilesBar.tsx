@@ -95,11 +95,15 @@ function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
   const ring = ringColour(platform)
   /* IS IT STILL CONNECTED? The morning check writes its verdict on the
    * account's row; the icon wears it — red for "reconnect now", amber for
-   * "soon" — and a press on a red one offers Reconnect, the same sign-in the
-   * Social channels page starts (the owner, 9 Sep 2026). */
+   * "soon" — and a press on EITHER opens the reason and offers Reconnect,
+   * the same sign-in the Social channels page starts (the owner, 9 Sep
+   * 2026). The amber one used to filter the calendar like an ordinary press
+   * and keep its reason in the hover title, which a phone never shows: "the
+   * top icons show yellow caution but does nothing". */
   const health = readStoredHealth((account as { health?: unknown }).health)
   const broken = needsReconnect(health)
   const soon = health?.level === 'watch'
+  const warned = broken || soon
   const [asking, setAsking] = useState(false)
 
   return (
@@ -108,7 +112,7 @@ function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
       type="button"
       aria-pressed={selected}
       title={broken ? `${name} — ${health?.reason ?? 'needs reconnecting'}` : soon ? `${name} — ${health?.reason}` : selected ? `Showing only ${name}` : `Show only ${name}`}
-      onClick={() => { if (broken && onReconnect) setAsking(v => !v); else onPick() }}
+      onClick={() => { if (warned && onReconnect) setAsking(v => !v); else onPick() }}
       className="flex w-full flex-col items-center gap-1"
     >
       <span
@@ -140,14 +144,25 @@ function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
         {broken ? 'Reconnect' : name}
       </span>
     </button>
-    {asking && broken && onReconnect && (
+    {asking && warned && onReconnect && (
       <div className="absolute left-1/2 top-full z-30 mt-1 w-[220px] -translate-x-1/2 rounded-inner border border-border bg-popover p-3 text-left text-popover-foreground shadow-lg">
-        <p className="text-[13px] font-semibold">{name} needs reconnecting</p>
-        <p className="mt-1 text-[12px] text-muted-foreground">{health?.reason}</p>
+        <p className="text-[13px] font-semibold">
+          {broken ? `${name} needs reconnecting` : `${name} — connection runs out soon`}
+        </p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          {health?.reason}
+          {soon && ' Reconnecting now keeps every post on this account going out.'}
+        </p>
         <button type="button" onClick={() => { setAsking(false); onReconnect(account) }}
           className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
           <RefreshCw className="h-3.5 w-3.5" /> Reconnect {brandFor(platform).label}
         </button>
+        {soon && (
+          <button type="button" onClick={() => { setAsking(false); onPick() }}
+            className="mt-1 flex min-h-9 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold">
+            {selected ? 'Show every channel' : `Show only ${name}`}
+          </button>
+        )}
         <button type="button" onClick={() => setAsking(false)} className="mt-1 w-full text-[12px] text-muted-foreground underline-offset-4 hover:underline">Not now</button>
       </div>
     )}

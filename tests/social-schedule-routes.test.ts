@@ -1107,6 +1107,56 @@ describe('the lists behind the per-network options', () => {
   })
 })
 
+/* ── TikTok's tick, judged with the options the composer actually holds ── */
+
+describe('the TikTok tick', () => {
+  const withTikTok = () => {
+    const tables = (fake.tree() as any).mdm.tables
+    tables.social_accounts['acc-tt'] = {
+      id: 'acc-tt', client_id: CLIENT, platform: 'tiktok', provider_account_id: 'prov-tt',
+      name: 'Acme on TikTok', username: 'acme', avatar_url: null, active: true,
+    }
+  }
+
+  /**
+   * The owner, 9 Sep 2026: "cant save as draft and also cant post to tiktok".
+   * The server judged the tick with NO options — every TikTok post was
+   * "Tick the TikTok box" whatever the composer had ticked. The window
+   * checked the real options and said fine; the server checked none and
+   * said no.
+   */
+  it('a ticked box is a ticked box — the post saves and goes', async () => {
+    withTikTok()
+    as(AM)
+    const made = await create({
+      channels: ['acc-1', 'acc-tt'],
+      per_channel: { 'acc-tt': { tiktokConsent: true } },
+    })
+    expect(made.status).toBe(200)
+    const direct = await post(made.body.post.id as string, { mode: 'direct' })
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.status).toBe('scheduled')
+  })
+
+  it('a DRAFT saves without the tick — nothing is going out yet', async () => {
+    withTikTok()
+    as(AM)
+    const made = await create({ channels: ['acc-1', 'acc-tt'] })
+    expect(made.status).toBe(200)
+    expect(made.body.post.status).toBe('draft')
+  })
+
+  it('…and the door that sends it still asks for the tick', async () => {
+    withTikTok()
+    as(AM)
+    const made = await create({ channels: ['acc-1', 'acc-tt'] })
+    const direct = await post(made.body.post.id as string, { mode: 'direct' })
+    expect(direct.status).toBe(400)
+    expect(String(direct.body.error ?? direct.body.problems)).toMatch(/Tick the TikTok box/)
+    expect(jobs()).toHaveLength(0)
+  })
+})
+
 /* ── the cover the editor saved ─────────────────────────────────────────── */
 
 describe('the cover picture reaches the provider', () => {

@@ -378,21 +378,36 @@ function problemsWith(input: {
   withoutApproval?: boolean
   /** a draft being saved, not a post going out (see `CompositionInput.saving`) */
   saving?: boolean
+  /** only being written down — nothing owed to the networks yet (`CompositionInput.draft`) */
+  draft?: boolean
 }): string[] {
   const problems = validateComposition({
     item: input.item,
     version: input.version,
     slides: input.slides,
     caption: input.caption,
-    channels: input.accounts.map(a => ({ id: a.id, platform: a.platform })),
+    // WITH each channel's own options. Without them the TikTok tick was
+    // judged missing on every post that had a TikTok channel, whatever the
+    // composer had ticked (9 Sep 2026: "cant save as draft and also cant
+    // post to tiktok") — the window checked the real options and said fine,
+    // the server checked none and said no.
+    channels: input.accounts.map(a => ({
+      id: a.id,
+      platform: a.platform,
+      kind: (input.perChannel[a.id]?.kind as PostKind | undefined) ?? null,
+      options: optionsFromExtras(input.perChannel[a.id]),
+    })),
     scheduledFor: input.scheduledFor,
     withoutApproval: input.withoutApproval,
     saving: input.saving,
+    draft: input.draft,
     now: nowIso(),
   }).problems.slice()
 
   const platforms = input.accounts.map(a => a.platform).filter(isPlatform)
-  if (platforms.length > 0 && input.slides.length > 0) {
+  // the publisher's own check is for a post going OUT; a draft being written
+  // down is not one, and is not refused for what it does not yet have
+  if (platforms.length > 0 && input.slides.length > 0 && !input.draft) {
     const kinds: Partial<Record<Platform, PostKind>> = {}
     const mediaByPlatform: Partial<Record<Platform, MediaItem[]>> = {}
     const captionByPlatform: Partial<Record<Platform, string>> = {}
@@ -492,6 +507,7 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
       // problem to hand back to them — the sign-off travels with the post
       withoutApproval: elig.needsClientApproval,
       saving: true,
+      draft: true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
@@ -721,6 +737,7 @@ export async function updatePost(
       // and saving a draft is never the moment to argue about it
       withoutApproval: elig.ok ? elig.needsClientApproval : true,
       saving: true,
+      draft: true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
