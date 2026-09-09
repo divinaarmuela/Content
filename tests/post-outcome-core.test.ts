@@ -176,3 +176,17 @@ describe('the one line a board card says about its booking', () => {
     expect(cardBookingLine([{ status: 'draft', publish_job_ids: [] }], jobs, null, fmt)).toBeNull()
   })
 })
+
+/* ── the 1:15 am post of 10 Sep 2026: Instagram up, TikTok still processing ── */
+
+describe('a channel the provider has not reported on', () => {
+  it('is pending, never published, when the provider only lists the live ones', () => {
+    // Zernio's analytics endpoint listed Instagram alone, with the post
+    // "published" — TikTok was still processing the video
+    const r = resultsFromRemote(job({ status: 'scheduled' }), [
+      { platform: 'instagram', status: 'published' },
+    ], 'published', '2026-09-09T15:20:08Z')
+    expect(r.find(o => o.platform === 'instagram')?.status).toBe('published')
+    expect(r.find(o => o.platform === 'tiktok')?.status).toBe('pending')
+  })
+})

@@ -732,7 +732,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
   // while asking for THAT post answered "published" at once. So a job we still
   // think is scheduled is always asked about by id; the list is only a
   // shortcut for jobs already known to be published.
-  const lookup = async (job: { status: string; provider_post_id: unknown }): Promise<Remote | null> => {
+  const lookup = async (job: { status: string; provider_post_id: unknown; targets?: unknown }): Promise<Remote | null> => {
     const id = String(job.provider_post_id)
     if (job.status !== 'scheduled' && byId.has(id)) return byId.get(id) ?? null
     const one = await publisher.postAnalytics(id).catch(() => null) as
@@ -761,12 +761,38 @@ export async function reconcilePublishedJobs(): Promise<number> {
     }
     const platformLive = platforms.some(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
     const live = LIVE.includes(String(one.status).toLowerCase()) && (Boolean(one.publishedAt) || platformLive)
+    // EVERY channel the job was sent to has to be live, not just one. The
+    // provider's post reads "published" with a publishedAt the moment its
+    // FIRST channel is up, and its analytics list carries only the channels
+    // that are live — so the 1:15 am post of 10 Sep 2026 was marked posted
+    // on TikTok, and the team emailed, while TikTok was still processing.
+    // Some channel not yet reported live is a wait, described per channel.
+    const wanted = platformsOf(job.targets).map(p => p.toLowerCase())
+    const reported = new Set((platforms as RemotePlatformRow[])
+      .filter(p => LIVE.includes(String(p.status ?? '').toLowerCase()))
+      .map(p => String(p.platform ?? p.name ?? '').toLowerCase()))
+    const everyChannelLive = wanted.length === 0 || wanted.every(p => reported.has(p))
+    if (live && !everyChannelLive) return { status: 'waiting', platforms }
     return { status: live ? 'published' : (LIVE.includes(one.status) ? 'scheduled' : one.status), platforms }
   }
 
   for (const job of jobs) {
     const remote = await lookup(job)
     if (!remote?.status) continue
+
+    if (remote.status === 'waiting') {
+      // some channels are up, the rest are still with the platform: say so
+      // per channel, keep the job booked, tell nobody it is posted yet
+      const now = new Date().toISOString()
+      const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl ?? null
+      await table('publish_jobs').update(job.id, {
+        ...(url ? { permalink: url } : {}),
+        platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms,
+          job.status === 'scheduled' ? 'scheduled' : 'published', now),
+        updated_at: now,
+      })
+      continue
+    }
 
     if (job.status === 'scheduled' && ['published', 'posted', 'success'].includes(remote.status)) {
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl ?? null
@@ -836,7 +862,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
           table<ContentAsset>('content_assets').update(a.id, { post_url: url })))
         // the platform assigns the permalink after the fact; push it through
         // to the schedule entry so the client-facing live link is populated
-        if (job.content_item_id) {
+        // — for a job that IS published; a booked one is not posted because
+        // one channel has a link
+        if (job.content_item_id && job.status === 'published') {
           const { recordPublishOnItem } = await import('./production-publish')
           await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
         }

@@ -139,9 +139,14 @@ export function resultsFromRemote(
   for (const t of targetsOf(job)) {
     seen.add(t.platform)
     const r = byPlatform.get(t.platform)
+    // a channel the provider has not reported on is NOT published: Zernio's
+    // analytics endpoint lists only the channels that are live, so the 1:15
+    // am post of 10 Sep 2026 read "published" on TikTok while TikTok was
+    // still processing the video — and the team was emailed "now Posted"
+    const missing: OutcomeStatus = fallback === 'published' ? 'pending' : fallback
     out.push(r ? fromRow(t.platform, t.kind, r, at, fallback) : {
-      platform: t.platform, status: fallback, kind: t.kind, reason: null, url: null,
-      at: fallback === 'scheduled' ? job.scheduled_for ?? at : at,
+      platform: t.platform, status: missing, kind: t.kind, reason: null, url: null,
+      at: missing === 'scheduled' ? job.scheduled_for ?? at : at,
     })
   }
   // a channel the provider names that the job did not — kept, so nothing the
