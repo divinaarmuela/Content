@@ -6,7 +6,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
-import type { SocialAccount } from '@/lib/db-types'
+import type { EncodeJob, SocialAccount } from '@/lib/db-types'
+import { useTable } from '@/lib/db-client'
+import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
@@ -434,6 +436,44 @@ export default function NewPostDialog({
   }, [state.slides, state.perChannel, chosen])
 
   const status: SocialPostStatus = post?.live_status ?? 'draft'
+
+  /**
+   * THE RIGHT MOMENT TO POST, BY DEFAULT.
+   *
+   * While the encoder is still making this video's copies, a time before
+   * they are done is not a time the post can keep. The window reads the
+   * encoder's live rows for this file, works out when the last copy lands
+   * (encode-eta-core — the same sum the server refuses on), and moves its
+   * own clock to the earliest safe time whenever the chosen one is earlier.
+   * Anyone who can book — super admin, scheduler, AM — gets the same
+   * default (the owner, 10 Sep 2026). A booked post is not moved under
+   * anyone; it says so instead, and the server refuses a move to before.
+   */
+  const encodeRows = useTable<EncodeJob>('encode_jobs')
+  const videoUrl = state.slides.length === 1 && state.slides[0].type === 'video' ? state.slides[0].url : null
+  const copiesReady = useMemo(() => {
+    if (!videoUrl) return null
+    const rows = (encodeRows.rows ?? []).filter(r => r.source_url === videoUrl)
+    const platforms = chosen.map(a => String(a.platform))
+    return copiesReadyAt(rows, platforms, Date.now())
+  }, [encodeRows.rows, videoUrl, chosen])
+  const safeAt = copiesReady === null ? null : earliestSafeTime(Date.now(), copiesReady)
+  const chosenMs = state.scheduledFor ? new Date(state.scheduledFor).getTime() : NaN
+  const beforeCopies = safeAt !== null && Number.isFinite(chosenMs) && chosenMs < safeAt
+  const bookedAlready = status === 'scheduled' || status === 'published'
+  useEffect(() => {
+    if (!beforeCopies || bookedAlready || safeAt === null) return
+    // whole minutes, so the pill reads like a time somebody chose
+    const rounded = Math.ceil(safeAt / 60_000) * 60_000
+    dispatch({ type: 'time', iso: new Date(rounded).toISOString() })
+  }, [beforeCopies, bookedAlready, safeAt])
+  const copyNames = chosen.map(a => networkName(String(a.platform))).filter((v, i, arr) => arr.indexOf(v) === i).join(', ')
+  const copiesLine = safeAt === null || copiesReady === null ? null
+    : `Clean copies for ${copyNames} are still being made — ready by about ${formatInZone(new Date(copiesReady).toISOString(), tz, 'time')}. ${
+      beforeCopies && bookedAlready
+        ? `This post is booked for before that — move it to ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')} or later.`
+        : `The earliest safe time is ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')}, so the clock starts there.`
+    }`
   // WHO MAY POST WITHOUT ASKING is one rule, `mayPostWithoutApproval`, and it
   // is every team role now (8 Sep 2026). This used to be a second copy of
   // the old rule — managers and admins only — so a scheduler saw "Needs
@@ -1116,7 +1156,9 @@ export default function NewPostDialog({
                     type="button"
                     title={s.why}
                     onClick={() => dispatch({ type: 'time', iso: s.iso })}
-                    disabled={locked && status !== 'scheduled'}
+                    // a best time before the copies are done is not a time
+                    // this post can keep
+                    disabled={(locked && status !== 'scheduled') || (safeAt !== null && new Date(s.iso).getTime() < safeAt)}
                     className={cn(
                       'min-h-11 rounded-full px-3 text-[12px] font-semibold',
                       on
@@ -1214,7 +1256,9 @@ export default function NewPostDialog({
             )}
 
             {/* the copy is being made now, weeks before it is needed */}
-            {preparingCopy && (
+            {copiesLine ? (
+              <p className={cn('text-[12px]', beforeCopies && bookedAlready ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{copiesLine}</p>
+            ) : preparingCopy && (
               <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>
             )}
 

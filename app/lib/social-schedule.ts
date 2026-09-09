@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
-  AssetVersion, Batch, Client, ContentItem, PublishJob as PublishJobRow,
+  AssetVersion, Batch, Client, ContentItem, EncodeJob, PublishJob as PublishJobRow,
   ScheduleEntry, ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
@@ -43,7 +43,9 @@ import { mirrorVersionSlides } from './gdrive-mirror'
 import { askForCopiesAhead } from './encode-ahead'
 import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
-import { safeZone } from './timezone-core'
+import { formatInZone, safeZone } from './timezone-core'
+import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-core'
+import { networkName } from './publish-core'
 import { inngest } from '../inngest/client'
 
 /**
@@ -350,6 +352,48 @@ async function zoneOf(clientId: string, given?: string | null): Promise<string> 
   if (given) return safeZone(given)
   const client = await table<Client>('clients').get(clientId).catch(() => null)
   return safeZone((client?.timezone as string | null) ?? null)
+}
+
+/**
+ * A BOOKED TIME IS A PROMISE THE COPIES HAVE TO KEEP.
+ *
+ * The clean copies a video needs are made by the encoder after the file is
+ * attached, and a 4K master takes real minutes. A post booked for before
+ * they are done goes out late, or with the copy still missing — so the
+ * time is refused, with the earliest safe one in the sentence, in the
+ * client's clock. The window bumps its own clock to the same time by
+ * default; this is the backstop for a drag on the calendar, a typed time,
+ * or a second tab (the owner, 10 Sep 2026: "ensure that the timing is
+ * accurate… show them the right moment to post… because a super admin,
+ * scheduler or AM can schedule").
+ *
+ * Null when there is nothing to wait for: no video, a carousel, copies
+ * already done, or a time comfortably after them.
+ */
+async function copiesNotReadyBy(
+  post: Pick<SocialPost, 'slides' | 'timezone'>,
+  accounts: readonly SocialAccount[],
+  whenMs: number,
+  now = Date.now(),
+): Promise<string | null> {
+  const slides = Array.isArray(post.slides) ? post.slides : []
+  const video = slides.length === 1 && slides[0]?.type === 'video' ? slides[0] : null
+  if (!video?.url) return null
+  const platforms = [...new Set(accounts.map(a => String(a.platform)))]
+  const rows = await table<EncodeJob>('encode_jobs')
+    .list({ where: r => r.source_url === video.url })
+    .catch(() => [] as EncodeJob[])
+  const readyAt = copiesReadyAt(rows, platforms, now)
+  if (readyAt === null) return null
+  const safeAt = earliestSafeTime(now, readyAt)
+  if (whenMs >= safeAt) return null
+  const zone = safeZone(post.timezone ?? null)
+  const fmt = (ms: number) => formatInZone(new Date(ms).toISOString(), zone, 'time') ?? new Date(ms).toISOString()
+  const open = new Set(
+    rows.filter(r => (r.status === 'queued' || r.status === 'running') && platforms.includes(String(r.platform)))
+      .map(r => String(r.platform)),
+  )
+  return copiesLateWords([...open].map(networkName), readyAt, safeAt, fmt)
 }
 
 /** The client's connected accounts, by id — a channel that is not this
@@ -1470,6 +1514,10 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
     perChannel: post.per_channel, scheduledFor: post.scheduled_for,
   })
   if (problems.length > 0) throw new ComposeError(problems)
+  // the copies have to be done before the time booked (10 Sep 2026)
+  const whenMs = new Date(String(post.scheduled_for ?? '')).getTime()
+  const late = Number.isFinite(whenMs) ? await copiesNotReadyBy(post, accounts, whenMs) : null
+  if (late) throw new ComposeError([late])
 
   // ── the one winner ───────────────────────────────────────────────────
   const stamp = nowIso()
@@ -1635,6 +1683,14 @@ export async function reschedule(user: TeamUser, id: string, iso: string): Promi
 
   const move = canReschedule(post)
   if (!move.ok) return { ok: false, error: move.reason }
+
+  // a drag or a typed time lands here too: the copies have to be done by
+  // then, whether the post is a draft being moved or a booking being
+  // re-queued (the owner, 10 Sep 2026: "make sure rescheduling works great too")
+  if (post.status === 'approved' || post.status === 'scheduled') {
+    const late = await copiesNotReadyBy(post, await channelsFor(item.client_id, post.channels), when)
+    if (late) return { ok: false, error: late }
+  }
 
   if (move.mode === 'move') {
     assertCompose(user, item)

@@ -334,7 +334,10 @@ export default function WeekGrid({
       // the window scrolls), so 6 am goes just under the sticky day header,
       // which itself sits under the 72px top bar
       const top = el.getBoundingClientRect().top + window.scrollY + 6 * grid.rowPx - TOP_BAR_PX
-      window.scrollTo({ top: Math.max(0, top) })
+      // `instant`: the page scrolls smoothly by default (globals.css), and a
+      // smooth jump on mount is cancelled by the page settling a frame later
+      // — measured at 5px of the 760 asked for (10 Sep 2026)
+      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
     })
     return () => cancelAnimationFrame(frame)
   }, [grid.days[0]?.iso, grid.rowPx])
