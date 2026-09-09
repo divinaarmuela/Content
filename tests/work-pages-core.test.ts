@@ -168,6 +168,24 @@ describe('productionScope — a brief belongs to whoever is planning the shoot',
   it('all is everything', () => {
     expect(productionScope(tasks, viewer('account_manager'), scope('all'), owners)).toEqual(tasks)
   })
+
+  // Raina writes a brief and hands it to someone else — under "Mine" it
+  // vanished from her own board the moment she saved it. Creating counts.
+  it('the creator sees what they made, whoever it was handed to', () => {
+    const made = [
+      brief({ id: 'wrote-it', owner_id: THEM, batch_id: 'b4', created_by_id: ME }),
+      brief({ id: 'wrote-it-open', owner_id: null, created_by_id: ME }),
+      brief({ id: 'not-mine', owner_id: THEM, batch_id: 'b4', created_by_id: THEM }),
+    ]
+    expect(productionScope(made, viewer('editor'), scope('mine'), owners).map(i => i.id))
+      .toEqual(['wrote-it', 'wrote-it-open'])
+    // and what she made does not sit in the unclaimed pool for HER —
+    // for everyone else it still does
+    expect(productionScope(made, viewer('editor'), scope('unassigned'), owners).map(i => i.id))
+      .toEqual([])
+    expect(productionScope(made, viewer('editor', THEM), scope('unassigned'), owners).map(i => i.id))
+      .toEqual(['wrote-it-open'])
+  })
 })
 
 describe('unassignedCount / activeBriefTasks', () => {

@@ -42,6 +42,8 @@ export type LiveItem = ContentItem & {
   work_kinds: { name: string; slug: string; color: string; uses_media?: boolean } | null
   my_open_task?: boolean
   created_by?: string | null
+  /** the creator’s id — the scope rule counts what you made as yours */
+  created_by_id?: string | null
   approved_by?: string | null
   slide_count?: number
   status_label?: string
@@ -170,14 +172,14 @@ export function useWorkRows(
    *  API derives from the activity log. */
   const credits = useMemo(() => {
     const nameOf = new Map(t.team.rows.map(a => [a.id, a.name || a.email]))
-    const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
+    const byItem = new Map<string, { created_by: string | null; created_by_id: string | null; approved_by: string | null }>()
     const acts = t.activity.rows
       .filter(a => a.entity_type === 'content_item' && ['created', 'status_change'].includes(a.action))
       .sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
     for (const a of acts) {
-      const entry = byItem.get(a.entity_id) ?? { created_by: null, approved_by: null }
+      const entry = byItem.get(a.entity_id) ?? { created_by: null, created_by_id: null, approved_by: null }
       const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
-      if (a.action === 'created') entry.created_by = who
+      if (a.action === 'created') { entry.created_by = who; entry.created_by_id = a.actor_id ?? null }
       else if (a.new_value === 'approved_for_scheduling') entry.approved_by = who
       byItem.set(a.entity_id, entry)
     }
@@ -206,6 +208,7 @@ export function useWorkRows(
         batches: t.batches.rows,
         taggedItemIds: tagAssignments.items,
         taggedBatchIds: tagAssignments.batches,
+        activity: t.activity.rows,
         workKinds: t.workKinds.rows,
         schedulerPostFilter,
       }),
@@ -236,6 +239,7 @@ export function useWorkRows(
       }
       row.my_open_task = openTasks.has(r.id)
       row.created_by = credit?.created_by ?? null
+      row.created_by_id = credit?.created_by_id ?? null
       row.approved_by = credit?.approved_by ?? null
       row.slide_count = slideCounts.get(r.id) ?? 0
       return row

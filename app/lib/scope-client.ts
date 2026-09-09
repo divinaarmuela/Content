@@ -57,6 +57,10 @@ export type ScopeContext = {
   items?: ScopeItem[]
   taggedItemIds?: Iterable<string>
   taggedBatchIds?: Iterable<string>
+  /** the items this person CREATED, read off the activity log — making a
+   *  thing keeps it on your board even after you hand it to someone else
+   *  (the owner's rule, 9 Sep 2026: Raina must see the brief she wrote) */
+  createdItemIds?: Iterable<string>
   /** work_kinds rows, when the items carry only `work_kind_id` */
   workKinds?: { id: string; slug: string }[]
   /**
@@ -95,6 +99,26 @@ export function taggedIdsOf(
     .filter(Boolean))]
 }
 
+/** An activity row, as the creator rule reads it — either table's shape. */
+export type ScopeActivity = {
+  entity_type?: string | null
+  entity_id?: string | null
+  action?: string | null
+  actor_id?: string | null
+}
+
+/** The item ids somebody CREATED, read off the activity log — the only place
+ *  creation is recorded, since `content_items` carries no created_by. */
+export function createdItemIdsOf(
+  activity: readonly ScopeActivity[] | null | undefined,
+  viewerId: string,
+): string[] {
+  return [...new Set((activity ?? [])
+    .filter(a => a?.entity_type === 'content_item' && a?.action === 'created' && a?.actor_id === viewerId)
+    .map(a => String(a?.entity_id ?? ''))
+    .filter(Boolean))]
+}
+
 /**
  * THE ONE PLACE THE SCOPE CONTEXT IS ASSEMBLED.
  *
@@ -117,9 +141,13 @@ export function scopeContextOf(input: {
   /** already-resolved tag ids — the server's way */
   taggedItemIds?: Iterable<string>
   taggedBatchIds?: Iterable<string>
+  /** already-resolved created-item ids — the server's way */
+  createdItemIds?: Iterable<string>
   /** or the comment rows to read them off — the browser's way */
   itemComments?: readonly ScopeComment[]
   batchComments?: readonly ScopeComment[]
+  /** or the activity rows to read creation off — the browser's way */
+  activity?: readonly ScopeActivity[]
   /** the other items in hand, for "is this ONE row visible" */
   items?: ScopeItem[]
   schedulerPostFilter?: boolean
@@ -135,11 +163,16 @@ export function scopeContextOf(input: {
     ...(input.taggedBatchIds ?? []),
     ...taggedIdsOf(input.batchComments, viewer.id, 'batch_id'),
   ]
+  const created = tagsOff ? [] : [
+    ...(input.createdItemIds ?? []),
+    ...createdItemIdsOf(input.activity, viewer.id),
+  ]
   return {
     batches: input.batches ?? [],
     workKinds: input.workKinds ?? [],
     taggedItemIds: [...new Set(itemTags)],
     taggedBatchIds: [...new Set(batchTags)],
+    createdItemIds: [...new Set(created)],
     ...(input.items ? { items: input.items } : {}),
     ...(input.schedulerPostFilter === undefined ? {} : { schedulerPostFilter: input.schedulerPostFilter }),
   }
@@ -191,18 +224,21 @@ export function heldBatchIdsOf(
   return held
 }
 
-/** `assignedItemsFilter` — the four ways an assignment opens ONE item for
- *  somebody who is not on its client team. */
+/** `assignedItemsFilter` — the five ways involvement opens ONE item for
+ *  somebody who is not on its client team: owning it, being handed its
+ *  scheduling, holding its shoot, being tagged on it — or having MADE it. */
 export function assignedItemsPredicate(
   viewer: ScopeViewer,
   heldBatches: Set<string>,
   taggedItems: Set<string>,
+  createdItems: Set<string> = new Set(),
 ): (item: ScopeItem) => boolean {
   return (item: ScopeItem) =>
     item.owner_id === viewer.id
     || schedulerIdsOf(item).includes(viewer.id)
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
+    || createdItems.has(item.id)
 }
 
 /** The work kind's slug for an item, whichever way the row carries it. */
@@ -232,8 +268,9 @@ export function visibleItems<T extends ScopeItem>(
 
   const heldBatches = heldBatchIdsOf(viewer, items, ctx.batches ?? [], ctx.taggedBatchIds ?? [])
   const taggedItems = new Set(ctx.taggedItemIds ?? [])
+  const createdItems = new Set(ctx.createdItemIds ?? [])
   const assigned = clientIds !== null && viewer.role !== 'client'
-    ? assignedItemsPredicate(viewer, heldBatches, taggedItems)
+    ? assignedItemsPredicate(viewer, heldBatches, taggedItems, createdItems)
     : null
   const kindSlugById = new Map((ctx.workKinds ?? []).map(k => [k.id, k.slug]))
 
@@ -252,18 +289,22 @@ export function visibleItems<T extends ScopeItem>(
     return true
   })
 
-  /* THEIR OWN CARDS ONLY (the owner, 9 Sep 2026): a scheduler or a general
-   * user sees the cards they own, were handed the scheduling of, were asked
-   * about, or were tagged in — on every board and on the Schedule page. An
-   * account manager or a super admin sees everything. This stands whatever
-   * `schedulerPostFilter` says: that flag is about the approved queue, this
-   * is about whose work it is. */
-  const own = (viewer.role === 'scheduler' || viewer.role === 'general')
+  /* THEIR OWN CARDS ONLY (the owner, 9 Sep 2026): a scheduler, an editor or
+   * a general user sees the cards they own, were handed the scheduling of,
+   * were asked about, were tagged in — or CREATED — on every board and on
+   * the Schedule page. Only an account manager (their dedicated clients) or
+   * a super admin (everything) sees beyond their own involvement. This
+   * stands whatever `schedulerPostFilter` says: that flag is about the
+   * approved queue, this is about whose work it is. */
+  const own = (viewer.role === 'scheduler' || viewer.role === 'general' || viewer.role === 'editor')
     ? scoped.filter(r =>
       r.owner_id === viewer.id
       || schedulerIdsOf(r).includes(viewer.id)
       || askedIdsOf(r as never).includes(viewer.id)
-      || taggedItems.has(r.id))
+      || taggedItems.has(r.id)
+      || createdItems.has(r.id)
+      // a shoot they hold opens its rows — planning a shoot is one job
+      || (r.batch_id != null && heldBatches.has(r.batch_id)))
     : scoped
 
   if (viewer.role !== 'scheduler' || ctx.schedulerPostFilter === false) return own
@@ -309,7 +350,7 @@ export function visibleClientIdsOf(
   const base = accessibleClientIdsOf(viewer, assignments)
   if (base === null || viewer.role === 'client') return base
   const held = heldBatchIdsOf(viewer, items, batches, ctx.taggedBatchIds ?? [])
-  const assigned = assignedItemsPredicate(viewer, held, new Set(ctx.taggedItemIds ?? []))
+  const assigned = assignedItemsPredicate(viewer, held, new Set(ctx.taggedItemIds ?? []), new Set(ctx.createdItemIds ?? []))
   return [...new Set([
     ...base,
     ...items.filter(assigned).map(i => i.client_id),
@@ -356,7 +397,7 @@ export function itemIsVisible(
   if (clientIds === null || clientIds.includes(item.client_id)) return true
   if (viewer.role === 'client') return false
   const held = heldBatchIdsOf(viewer, ctx.items ?? [item], ctx.batches ?? [], ctx.taggedBatchIds ?? [])
-  return assignedItemsPredicate(viewer, held, new Set(ctx.taggedItemIds ?? []))(item)
+  return assignedItemsPredicate(viewer, held, new Set(ctx.taggedItemIds ?? []), new Set(ctx.createdItemIds ?? []))(item)
 }
 
 export { SCHEDULER_STATUSES }

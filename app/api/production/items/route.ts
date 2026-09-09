@@ -52,7 +52,7 @@ export async function GET(req: Request) {
     }
     // the same tables the boards subscribe to (see useLiveWork.ts), read once
     // inside this request's cache
-    const [assignments, batches, workKinds, itemTags, batchTags] = await Promise.all([
+    const [assignments, batches, workKinds, itemTags, batchTags, createdIds] = await Promise.all([
       user.role === 'super_admin' || user.role === 'client'
         ? Promise.resolve([] as TeamUserClient[])
         : table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }),
@@ -60,6 +60,14 @@ export async function GET(req: Request) {
       table<WorkKindRow>('work_kinds').list(),
       taggedItemIds(user),
       taggedBatchIds(user),
+      // what this person CREATED — recorded only in the activity log, and a
+      // grant like a tag: making a thing keeps it visible after handing it on
+      user.role === 'super_admin' || user.role === 'client'
+        ? Promise.resolve([] as string[])
+        : table<WorkflowActivity>('workflow_activity').list({
+            where: a => a.actor_id === user.id && a.entity_type === 'content_item' && a.action === 'created',
+            limit: 3000,
+          }).then(rows => rows.map(a => a.entity_id).filter(Boolean)).catch(() => [] as string[]),
     ])
     if (user.role === 'client' && !viewer.client_id) return NextResponse.json([])
 
@@ -87,6 +95,7 @@ export async function GET(req: Request) {
         batches,
         taggedItemIds: itemTags,
         taggedBatchIds: batchTags,
+        createdItemIds: createdIds,
         workKinds: workKinds as unknown as { id: string; slug: string }[],
       }),
     ).slice(0, 500)
@@ -144,12 +153,12 @@ export async function GET(req: Request) {
           })
           const actors = await table<TeamUser>('team_users').list()
           const nameOf = new Map(actors.map(a => [a.id, a.name || a.email]))
-          const byItem = new Map<string, { created_by: string | null; approved_by: string | null }>()
+          const byItem = new Map<string, { created_by: string | null; created_by_id: string | null; approved_by: string | null }>()
           for (const a of acts) {
             const key = a.entity_id
-            const entry = byItem.get(key) ?? { created_by: null, approved_by: null }
+            const entry = byItem.get(key) ?? { created_by: null, created_by_id: null, approved_by: null }
             const who = a.actor_id ? nameOf.get(a.actor_id) ?? null : null
-            if (a.action === 'created') entry.created_by = who
+            if (a.action === 'created') { entry.created_by = who; entry.created_by_id = a.actor_id ?? null }
             // rows arrive oldest-first, so the last approval wins
             else if (a.new_value === 'approved_for_scheduling') entry.approved_by = who
             byItem.set(key, entry)

@@ -27,6 +27,8 @@ export type WorkItem = {
   work_kinds?: { slug?: string; uses_media?: boolean } | null
   /** the viewer has an open task on this item — a hand-off that outranks ownership */
   my_open_task?: boolean
+  /** who made it, from the activity log — Production counts that as involvement */
+  created_by_id?: string | null
 }
 
 export type Viewer = { id: string; role: Role }
@@ -134,14 +136,19 @@ export function schedulerScope<T extends WorkItem>(items: T[], v: Viewer, scope:
 }
 
 /** The production page: shoot briefs, where the BATCH's owner counts as much
- *  as the task's — planning a shoot is one job across several rows. */
+ *  as the task's — planning a shoot is one job across several rows. The
+ *  CREATOR counts too: Raina writes a brief for someone else to run, and
+ *  under "Mine" it was gone from her own board the moment she saved it.
+ *  Making a thing is involvement, whoever ends up holding it. A brief she
+ *  created and left open still shows its claim button — it sits on her
+ *  board AND is honestly up for grabs; those are different facts. */
 export function productionScope<T extends WorkItem>(
   briefTasks: T[], v: Viewer, scope: ScopeSet,
   batchOwnerById: Record<string, string | null | undefined>,
 ): T[] {
   return applyScope(briefTasks, v, scope, (i, viewer) => {
     const batchOwner = batchOwnerById[i.batch_id ?? '']
-    if (i.owner_id === viewer.id || batchOwner === viewer.id) return 'mine'
+    if (i.owner_id === viewer.id || batchOwner === viewer.id || i.created_by_id === viewer.id) return 'mine'
     if (!i.owner_id && !batchOwner) return 'unassigned'
     return 'other'
   })

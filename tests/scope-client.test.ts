@@ -28,8 +28,17 @@ describe('visibleItems', () => {
       .toEqual(['i1', 'i2', 'i3'])
   })
 
-  it('an editor sees assigned clients plus items handed to them', () => {
+  // the owner, 9 Sep 2026: being on a client's team no longer shows an
+  // editor the whole client — only what is theirs: owned, handed, asked,
+  // tagged, created, or riding a shoot they hold. Client-wide sight belongs
+  // to the account manager and the super admin.
+  it('an editor sees only what is theirs — a client seat opens nothing by itself', () => {
     const out = visibleItems({ id: 'u1', role: 'editor' }, items, onC1)
+    expect(out.map(i => i.id)).toEqual(['i2'])
+  })
+
+  it('an editor sees what they created, even after handing it to someone else', () => {
+    const out = visibleItems({ id: 'u1', role: 'editor' }, items, [], { createdItemIds: ['i1'] })
     expect(out.map(i => i.id)).toEqual(['i1', 'i2'])
   })
 
