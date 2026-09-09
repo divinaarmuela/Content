@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Copy, Link2 } from 'lucide-react'
+import { Check, Copy, Link2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { publicUrl } from '@/app/lib/public-url'
 import { CONNECTABLE, connectLinkPath } from '@/app/lib/connect-link-core'
@@ -20,8 +20,9 @@ import PlatformIcon, { brandFor } from './PlatformIcon'
  * Connect button on each. The token is the client's portal token — the
  * same door the portal link opens — so only their managers see this.
  */
-export default function ClientConnectLink({ token, connected }: {
+export default function ClientConnectLink({ token, clientId, connected }: {
   token: string
+  clientId: string
   /** the networks already connected — ticked off by default, since asking
    *  the client for those again is asking twice */
   connected: readonly string[]
@@ -30,8 +31,30 @@ export default function ClientConnectLink({ token, connected }: {
     CONNECTABLE.filter(p => !connected.includes(p)).slice(0, 3))
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(false)
+  const [mailing, setMailing] = useState(false)
 
   const link = useMemo(() => publicUrl(connectLinkPath(token, picked)), [token, picked])
+
+  /** the same link, emailed by us — to their portal logins and the contact
+   *  email on their record — for the manager who would rather not paste */
+  const email = async () => {
+    setMailing(true)
+    try {
+      const res = await fetch('/api/social/connect/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, networks: picked.join(',') }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(json?.error ?? 'Could not send it'))
+      const who = (json.recipients as { email: string }[] | undefined)?.map(r => r.email).join(', ')
+      toast.success(json.sent > 0 ? `Sent to ${who}` : 'Nothing was sent — check the client’s email settings')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send it')
+    } finally {
+      setMailing(false)
+    }
+  }
 
   const toggle = (p: Platform) =>
     setPicked(cur => cur.includes(p) ? cur.filter(x => x !== p) : CONNECTABLE.filter(x => x === p || cur.includes(x)))
@@ -82,6 +105,10 @@ export default function ClientConnectLink({ token, connected }: {
             <button type="button" onClick={copy} disabled={picked.length === 0}
               className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50">
               {copied ? <><Check className="h-4 w-4" aria-hidden /> Copied</> : <><Copy className="h-4 w-4" aria-hidden /> Copy link</>}
+            </button>
+            <button type="button" onClick={email} disabled={picked.length === 0 || mailing}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold disabled:opacity-50">
+              <Mail className="h-4 w-4" aria-hidden /> {mailing ? 'Sending…' : 'Email it to the client'}
             </button>
           </div>
           {picked.length === 0 && (

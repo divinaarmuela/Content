@@ -421,6 +421,25 @@ export default function SchedulePage() {
   }
   const reconnect = (account: SocialAccount) => connect(String(account.platform))
 
+  /** no login for it here: email the client their own connect link, with
+   *  Reconnect waiting on that network */
+  const askClient = async (account: SocialAccount) => {
+    if (!clientId) return
+    try {
+      const res = await fetch('/api/social/connect/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, platform: String(account.platform), reason: 'reconnect' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(json?.error ?? ''))
+      const who = (json.recipients as { email: string }[] | undefined)?.map(r => r.email).join(', ')
+      toast.success(json.sent > 0 ? `Asked ${who} to reconnect ${brandFor(String(account.platform)).label}.` : 'Nothing was sent — check the client’s email settings')
+    } catch (e) {
+      toast.error(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
+    }
+  }
+
   /**
    * BACK FROM THE NETWORK. The provider attaches the account a moment after
    * it sends the person back, so the first re-read can honestly come back
@@ -510,6 +529,7 @@ export default function SchedulePage() {
             onView={setView}
             onReconnect={reconnect}
             onConnect={connect}
+            onAskClient={askClient}
           />
 
           {/* date bar */}

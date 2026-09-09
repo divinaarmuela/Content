@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { AlertTriangle, Check, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Check, Mail, Plus, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
 import {
@@ -82,12 +82,14 @@ function ringColour(platform: string): string {
   return bg.startsWith('#') ? bg : '#DD2A7B'
 }
 
-function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
+function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbackName }: {
   slot: Extract<ProfileSlot, { kind: 'account' }>
   selected: boolean
   onPick: () => void
   /** start the network's sign-in again for this account's platform */
   onReconnect?: (account: SocialAccount) => void
+  /** email the client their own connect link, with Reconnect on it */
+  onAskClient?: (account: SocialAccount) => void
   fallbackName: string
 }) {
   const { account, platform } = slot
@@ -159,13 +161,21 @@ function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
             theirs (the owner, 9 Sep 2026: "what if team click reconnect"). */}
         <p className="mt-1.5 rounded-inner bg-tint-amber px-2 py-1.5 text-[11px] leading-[1.4]">
           Sign in as <strong>{name}</strong>, or as an admin on their page. Signing in as
-          yourself connects <em>your</em> account instead. No login? Send the client their
-          connect link from Social channels.
+          yourself connects <em>your</em> account instead.
         </p>
         <button type="button" onClick={() => { setAsking(false); onReconnect(account) }}
           className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
           <RefreshCw className="h-3.5 w-3.5" /> Reconnect {brandFor(platform).label}
         </button>
+        {/* no login for it? one press emails the client their own connect
+            link, with Reconnect waiting on it — the way out of the popover
+            that does not involve typing an email */}
+        {onAskClient && (
+          <button type="button" onClick={() => { setAsking(false); onAskClient(account) }}
+            className="mt-1 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full border border-border text-[13px] font-semibold">
+            <Mail className="h-3.5 w-3.5" /> Email the client to reconnect
+          </button>
+        )}
         {soon && (
           <button type="button" onClick={() => { setAsking(false); onPick() }}
             className="mt-1 flex min-h-9 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold">
@@ -231,7 +241,7 @@ function EmptySlot({ platform, onConnect }: { platform: string; onConnect?: (pla
 }
 
 export default function ProfilesBar({
-  clients, clientId, onClient, accounts, channel, onChannel, view, onView, onReconnect, onConnect,
+  clients, clientId, onClient, accounts, channel, onChannel, view, onView, onReconnect, onConnect, onAskClient,
 }: {
   /** start the network's sign-in again for this account (the Schedule
    *  page's own connect flow — see page.tsx) */
@@ -239,6 +249,8 @@ export default function ProfilesBar({
   /** connect a network this client has no account on yet — the same sign-in,
    *  from the empty slot, coming back HERE (the owner, 9 Sep 2026) */
   onConnect?: (platform: string) => void
+  /** email the client their own connect link, with Reconnect waiting on it */
+  onAskClient?: (account: SocialAccount) => void
   clients: Client[]
   clientId: string | null
   onClient: (id: string) => void
@@ -275,6 +287,7 @@ export default function ProfilesBar({
               fallbackName={client?.name ?? slot.platform}
               onPick={() => onChannel(channel === slot.account.id ? null : slot.account.id)}
               onReconnect={onReconnect}
+              onAskClient={onAskClient}
             />
           ) : (
             <EmptySlot key={`empty-${slot.platform}`} platform={slot.platform} onConnect={onConnect} />

@@ -227,7 +227,7 @@ export default function SocialPage() {
                 {/* the link the client connects their own accounts from —
                     only a manager holds the token that makes it */}
                 {c.share_token && (
-                  <ClientConnectLink token={c.share_token} connected={platformsFor(c.id)} />
+                  <ClientConnectLink token={c.share_token} clientId={c.id} connected={platformsFor(c.id)} />
                 )}
               </CardContent>
             </Card>
