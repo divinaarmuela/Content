@@ -437,8 +437,10 @@ export default function SchedulePage() {
   const reconnect = (account: SocialAccount) => connect(String(account.platform))
 
   /** no login for it here: email the client their own connect link, with
-   *  Reconnect waiting on that network */
-  const askClient = async (account: SocialAccount) => {
+   *  Reconnect waiting on that network. Kept, not wired: the owner does not
+   *  want clients sent that link from the Schedule page (9 Sep 2026). */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _askClient = async (account: SocialAccount) => {
     if (!clientId) return
     try {
       const res = await fetch('/api/social/connect/invite', {
@@ -544,7 +546,10 @@ export default function SchedulePage() {
             onView={setView}
             onReconnect={reconnect}
             onConnect={connect}
-            onAskClient={askClient}
+            // NOT the client's job (the owner, 9 Sep 2026: "client might
+            // login from the public url but we prefer not to send them
+            // that"). The invite route stays for the Social channels page;
+            // the Schedule popover offers Reconnect and Check again only.
           />
 
           {/* date bar */}
