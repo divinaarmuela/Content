@@ -18,7 +18,7 @@ import {
   assertClientAccess, ComposeError, startPostOnItem, type PlannedPost,
 } from './social-schedule'
 import { headStoredObject, publicBase, MAX_DERIVED_BYTES } from './storage'
-import { ourStorageUrl, storedFileIsUsable } from './storage-core'
+import { MAX_STORED_FILE_BYTES, ourStorageUrl, storedFileIsUsable } from './storage-core'
 import { normaliseSlides, slidesSatisfyType, type Slide } from './version-files-core'
 import { UPLOAD_ADHOC_REASON, contentTypeForFiles, titleForUpload } from './schedule-upload-core'
 
@@ -97,14 +97,19 @@ export type UploadPostResult = {
 export { UPLOAD_ADHOC_REASON }
 
 /**
- * The biggest file this path will accept onto a post.
+ * The biggest file this path will accept onto a post: what the storage takes.
  *
- * Not a limit on the upload itself — the bucket takes 5 GB and the item page
- * is where a master belongs. It is the ceiling on something being published:
- * a video past this would fail at the provider hours later, with nobody
- * watching, which is the failure this whole feature exists to stop.
+ * This was a 1 GB ceiling of its own, from before the smaller-copy flow, on
+ * the theory that a bigger video "would fail at the provider hours later".
+ * It no longer would: YouTube and TikTok take a multi-GB master, and every
+ * other channel is handed a smaller copy made for it — the 5:50 pm post on
+ * 8 Sep 2026 went out to all four from a 2 GB file. What the ceiling did on
+ * 9 Sep was refuse the owner's 1.4 GB C6437.MP4 the moment it finished
+ * uploading, which is the opposite of help. Whether a network takes a file
+ * is answered per channel (media-fit-core, the composer's own check), not
+ * by a second number here.
  */
-export const MAX_POST_FILE_BYTES = 1024 * 1024 * 1024
+export const MAX_POST_FILE_BYTES = MAX_STORED_FILE_BYTES
 
 /* ── the files ──────────────────────────────────────────────────────────── */
 

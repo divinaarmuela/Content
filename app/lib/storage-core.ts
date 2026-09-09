@@ -20,6 +20,16 @@ export const OBJECT_KEY_SHAPE = /^[0-9]{10,}-[a-z0-9]{4,10}-[A-Za-z0-9._-]+$/
 export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] as const
 export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm', 'm4v'] as const
 
+/**
+ * The biggest file our storage takes in one upload: R2's ceiling for a
+ * single PUT, 4.995 GiB. The upload route refuses past it, and so does
+ * anything that puts a stored file on a post — there is no larger file to
+ * find. What each NETWORK will take of a file this size is a different
+ * question, answered per channel by media-fit-core and the smaller-copy
+ * flow, never by a second ceiling here.
+ */
+export const MAX_STORED_FILE_BYTES = Math.floor(4.995 * 1024 * 1024 * 1024)
+
 export type FileKind = 'image' | 'video'
 
 export function extensionOf(url: string): string {

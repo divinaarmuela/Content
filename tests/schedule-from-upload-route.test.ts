@@ -315,6 +315,35 @@ describe('a client who signs off every post', () => {
 /* ── what may be posted at all ──────────────────────────────────────────── */
 
 describe('the files are checked before anything is written', () => {
+  // the owner, 9 Sep 2026: a 1.4 GB C6437.MP4 finished uploading and was
+  // refused with "too big to put on a post" by a 1 GB ceiling from before the
+  // smaller-copy flow. The ceiling is the storage's now; what each network
+  // takes of a big file is the channels' question, answered per channel.
+  it('takes a video as big as the storage takes — a 1.4 GB master is a post', async () => {
+    const { headStoredObject } = await import('../app/lib/storage')
+    const head = headStoredObject as unknown as { mockImplementationOnce: (f: () => unknown) => void }
+    head.mockImplementationOnce(async () => ({ contentType: 'video/mp4', bytes: 1_477_002_318 }))
+    as(AM)
+    const made = await upload({
+      files: [{ url: `${BASE}/1712345678901-ab12cd-C6437.mp4`, name: 'C6437.MP4', type: 'video', bytes: 1_477_002_318 }],
+    })
+    expect(made.status).toBe(200)
+    expect(items()).toHaveLength(1)
+  })
+
+  it('still refuses a file bigger than the storage could have taken', async () => {
+    const { headStoredObject } = await import('../app/lib/storage')
+    const head = headStoredObject as unknown as { mockImplementationOnce: (f: () => unknown) => void }
+    head.mockImplementationOnce(async () => ({ contentType: 'video/mp4', bytes: 6 * 1024 * 1024 * 1024 }))
+    as(AM)
+    const made = await upload({
+      files: [{ url: `${BASE}/1712345678901-ab12cd-huge.mp4`, name: 'huge.mp4', type: 'video', bytes: 6 * 1024 * 1024 * 1024 }],
+    })
+    expect(made.status).toBe(400)
+    expect(String(made.body.error)).toContain('too big')
+    expect(items()).toHaveLength(0)
+  })
+
   it('refuses a URL that is not on our own storage', async () => {
     const bad = await upload({
       files: [{ ...FILE, url: 'https://somewhere-else.example/1712345678901-ab12cd-x.jpg' }],

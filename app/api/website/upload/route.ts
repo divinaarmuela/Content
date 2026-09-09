@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { guard } from '@/app/lib/authz'
 import { signUpload, putObject, r2Configured } from '@/app/lib/storage'
+import { MAX_STORED_FILE_BYTES } from '@/app/lib/storage-core'
 
 /**
  * R2's ceiling for a single PUT, which is how the browser uploads: 4.995 GiB.
@@ -13,7 +14,7 @@ import { signUpload, putObject, r2Configured } from '@/app/lib/storage'
  * being a real constraint the moment R2 was wired up and was just an
  * arbitrary wall.
  */
-const MAX_BYTES = Math.floor(4.995 * 1024 * 1024 * 1024)
+const MAX_BYTES = MAX_STORED_FILE_BYTES
 
 /**
  * Media upload.
