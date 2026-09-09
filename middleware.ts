@@ -92,6 +92,7 @@ export const config = {
     '/sign-in/:path*',
     '/sign-up/:path*',
     '/api/assistant/:path*',
+    '/api/asana/:path*',
     '/api/audience/:path*',
     '/api/boards/:path*',
     // the ADMIN half of bookings only: it calls auth() through requireRole,
@@ -118,6 +119,13 @@ export const config = {
     '/api/instagram-video',
     '/api/instagram-video/:path*',
     '/api/leads/:path*',
+    // the board's link previews (a post link on a mockup card): requireRole
+    // calls auth(), which throws unless the middleware ran — every preview
+    // was a 500 in production until this line (the owner, 9 Sep 2026: "does
+    // the post linking work?"). tests/middleware-matcher.test.ts now pins that
+    // every route calling auth() is matched.
+    '/api/link-preview',
+    '/api/link-preview/:path*',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/production/:path*',
