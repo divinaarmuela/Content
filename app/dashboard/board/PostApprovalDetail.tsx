@@ -57,8 +57,8 @@ import CollapsibleCard from '../CollapsibleCard'
  */
 /** "Booked · Fri 11 Sep, 9:00 am" or "Went out on Instagram · …" under one
  *  file, from the post that carries it (post-outcome-core.fileBooking) */
-function FileBookingChip({ url, posts, jobsById, alreadyPosted }: {
-  url: string; posts: SocialPost[]; jobsById: ReadonlyMap<string, OutcomeJob>; alreadyPosted: boolean
+function FileBookingChip({ url, posts, jobsById }: {
+  url: string; posts: SocialPost[]; jobsById: ReadonlyMap<string, OutcomeJob>
 }) {
   const booking = fileBooking(url, posts, jobsById)
   if (!booking) return null
@@ -70,7 +70,7 @@ function FileBookingChip({ url, posts, jobsById, alreadyPosted }: {
   if (booking.status === 'published') {
     return (
       <>
-        {!alreadyPosted && <Chip tone="green">Went out{live.length ? ` on ${live.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>}
+        <Chip tone="green">Went out{live.length ? ` on ${live.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>
         {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
       </>
     )
@@ -424,14 +424,16 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     <Trash2 className="h-3.5 w-3.5" /> Remove
                   </Button>
                 )}
-                {postedUrls.has(s.url) && (
+                {postedUrls.has(s.url) && (handRecord(postedSlides, s.url) || !fileBooking(s.url, filePosts, jobsById)) && (
                   <Chip tone="green">
                     {handRecord(postedSlides, s.url)
                       ? `Posted by hand · ${new Date(handRecord(postedSlides, s.url)!.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
                       : 'Posted'}
                   </Chip>
                 )}
-                <FileBookingChip url={s.url} posts={filePosts} jobsById={jobsById} alreadyPosted={postedUrls.has(s.url)} />
+                {/* "Went out on Instagram · Wed 9 Sep, 8:30 pm" / "Booked · …" from
+                    the post that carries this file */}
+                {!handRecord(postedSlides, s.url) && <FileBookingChip url={s.url} posts={filePosts} jobsById={jobsById} />}
                 {handRecord(postedSlides, s.url)?.link && (
                   <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
                 )}
