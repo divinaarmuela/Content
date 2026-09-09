@@ -11,7 +11,7 @@
  * only place that can be caught is here, while the file is still replaceable.
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AlertTriangle, Check, Crop, FileCog, Gauge, HelpCircle, Sparkles, XCircle } from 'lucide-react'
 import PlatformIcon from './PlatformIcon'
 import type { Platform, PostKind } from '../../lib/publish-core'
@@ -27,12 +27,14 @@ import {
  * it will appear, bars where they will be. Read at a glance, before the
  * words below say the same thing.
  */
-function FramePreview({ probe, platform, kind }: {
+function FramePreview({ probe, platform, kind, playable }: {
   probe: AssetProbe
   platform: Platform
   kind: PostKind | undefined
+  playable?: (url: string) => string
 }) {
   const f = displayFrame(platform, kind, probe.type, probe)
+  const [broken, setBroken] = useState(false)
   // the frame: a phone screen 150px tall for tall shapes, a card 150px wide
   // for wide ones — so a 1.91:1 feed card is never three phones wide and
   // sitting on top of its neighbour (9 Sep 2026)
@@ -52,8 +54,11 @@ function FramePreview({ probe, platform, kind }: {
         aria-hidden
       >
         <div className="relative overflow-hidden bg-ink" style={{ width: fitW, height: fitH }}>
-          {probe.type === 'video' ? (
-            <video src={`${probe.url}#t=0.5`} muted playsInline preload="metadata" tabIndex={-1}
+          {probe.type === 'video' && broken ? (
+            <span className="flex h-full w-full items-center justify-center p-1 text-center text-[9px] leading-tight text-cream">no preview here — still posts</span>
+          ) : probe.type === 'video' ? (
+            <video src={`${playable ? playable(probe.url) : probe.url}#t=0.5`} muted playsInline preload="metadata" tabIndex={-1}
+              onError={() => setBroken(true)}
               className="h-full w-full" style={{ objectFit: f.fit === 'cover' ? 'cover' : 'contain' }} />
           ) : probe.type === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -126,8 +131,10 @@ function assetLine(probe: AssetProbe): string {
 }
 
 export default function AssetCheck({
-  probes, platforms, kinds, overrides, copies, compact = false,
+  probes, platforms, kinds, overrides, copies, playable, compact = false,
 }: {
+  /** the file a browser can play for a master (the encoder's copy) */
+  playable?: (url: string) => string
   probes: AssetProbe[]
   platforms: Platform[]
   kinds?: Partial<Record<Platform, PostKind>>
@@ -199,7 +206,7 @@ export default function AssetCheck({
         <div className="flex flex-wrap gap-3 pb-1">
           {platforms.map(p => {
             const first = probesOf(p)[0]
-            return first ? <FramePreview key={p} probe={first} platform={p} kind={kinds?.[p]} /> : null
+            return first ? <FramePreview key={p} probe={first} platform={p} kind={kinds?.[p]} playable={playable} /> : null
           })}
         </div>
       )}

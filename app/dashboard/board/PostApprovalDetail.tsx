@@ -21,6 +21,8 @@ import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
 import { fileBooking, outcomeWords, type OutcomeJob } from '../../lib/post-outcome-core'
 import { networkName } from '../../lib/publish-core'
 import { uploadFiles } from '../uploadQueue'
+import { usePlayable } from '../social/usePlayable'
+import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 
@@ -106,6 +108,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const adhoc = (item as { adhoc_post?: unknown } | null)?.adhoc_post === true
+  // the encoder's .mp4 copy of a master when one exists — a camera .mov
+  // drew a black player here (10 Sep 2026)
+  const playable = usePlayable()
+  const [cannotPlay, setCannotPlay] = useState<Set<string>>(new Set())
 
   const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
   const slides = useMemo(() => slidesOf(latest), [latest])
@@ -426,7 +432,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             <figure key={s.url} className="flex flex-col gap-2">
               <div className="overflow-hidden rounded-inner bg-foreground/[0.06]">
                 {s.type === 'video'
-                  ? <video src={s.url} controls playsInline preload="metadata" className="max-h-[480px] w-full object-contain" />
+                  ? cannotPlay.has(s.url)
+                    ? <p className="p-4 text-[13px] text-muted-foreground">{CANNOT_PLAY_HERE}</p>
+                    : <video src={`${playable(s.url)}#t=0.5`} controls playsInline preload="metadata"
+                        onError={() => setCannotPlay(prev => new Set(prev).add(s.url))}
+                        className="max-h-[480px] w-full object-contain" />
                   // eslint-disable-next-line @next/next/no-img-element
                   : <img src={s.url} alt={s.name} className="max-h-[480px] w-full object-contain" />}
               </div>

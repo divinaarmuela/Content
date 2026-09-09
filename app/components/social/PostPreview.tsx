@@ -5,6 +5,7 @@ import { AlertTriangle, FileText, Film, ImageIcon, Link2, MapPin } from 'lucide-
 import { cn } from '@/lib/utils'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
 import { tabTone, type ClientPreview } from '../../lib/post-preview-core'
+import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 
 /**
  * THE POST, AS EACH NETWORK WILL SHOW IT.
@@ -72,11 +73,14 @@ export function PreviewTabs({ previews, active, onPick, className }: {
 
 /* ── the picture, in the network's own crop ─────────────────────────────── */
 
-function Frame({ media, aspect, label }: {
+function Frame({ media, aspect, label, playable }: {
   media: PreviewFrameData['media'][number] | undefined
   aspect: string
   label: string
+  /** the file a browser can play for a master (the encoder's copy) */
+  playable?: (url: string) => string
 }) {
+  const [broken, setBroken] = useState(false)
   return (
     <div
       style={{ aspectRatio: aspect }}
@@ -93,16 +97,21 @@ function Frame({ media, aspect, label }: {
         // owner, 9 Sep 2026: "the preview is showing black screen"). Half a
         // second in so a fade-from-black master does not open on black; the
         // film icon stays underneath for a file the browser cannot decode.
-        <span className="relative flex h-full w-full items-center justify-center bg-ink text-cream">
+        <span className="relative flex h-full w-full flex-col items-center justify-center gap-2 bg-ink px-4 text-center text-cream">
           <Film className="h-6 w-6" strokeWidth={1.6} aria-hidden />
-          <video
-            src={`${media.url}#t=0.5`}
-            controls
-            muted
-            playsInline
-            preload="metadata"
-            className="absolute inset-0 h-full w-full object-contain"
-          />
+          {broken ? (
+            <span className="text-[12px] opacity-90">{CANNOT_PLAY_HERE}</span>
+          ) : (
+            <video
+              src={`${playable ? playable(media.url) : media.url}#t=0.5`}
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              onError={() => setBroken(true)}
+              className="absolute inset-0 h-full w-full object-contain"
+            />
+          )}
         </span>
       ) : media.type === 'document' ? (
         <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
@@ -148,9 +157,10 @@ function Caption({ caption }: { caption: PreviewFrameData['caption'] }) {
 
 /* ── one network's whole frame ──────────────────────────────────────────── */
 
-export function PostPreviewFrame({ preview, className }: {
+export function PostPreviewFrame({ preview, className, playable }: {
   preview: PreviewFrameData
   className?: string
+  playable?: (url: string) => string
 }) {
   const [slide, setSlide] = useState(0)
   // the set can shrink under the picked slide while somebody is editing
@@ -197,7 +207,7 @@ export function PostPreviewFrame({ preview, className }: {
 
       {preview.captionAbove && <div className="pb-3">{caption}</div>}
 
-      <Frame media={shown} aspect={preview.aspect} label={preview.name} />
+      <Frame media={shown} aspect={preview.aspect} label={preview.name} playable={playable} />
 
       {/* the dots under a carousel — and they move it */}
       {preview.dots && (
@@ -249,8 +259,10 @@ export function PostPreviewFrame({ preview, className }: {
 
 /* ── the whole pane: the marks, the frame, and anything wrong ───────────── */
 
-export default function PostPreviewPane({ previews, intro, empty, className }: {
+export default function PostPreviewPane({ previews, intro, empty, className, playable }: {
   previews: readonly PreviewFrameData[]
+  /** the file a browser can play for a master (the encoder's copy) */
+  playable?: (url: string) => string
   /** the sentence over the frame */
   intro?: string
   /** what to say when no channel is picked yet */
@@ -295,7 +307,7 @@ export default function PostPreviewPane({ previews, intro, empty, className }: {
         </div>
       )}
 
-      <PostPreviewFrame preview={shown} />
+      <PostPreviewFrame preview={shown} playable={playable} />
     </div>
   )
 }

@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Film, ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePlayable } from '../usePlayable'
 import type { SocialPostStatus, TileTone } from '@/app/lib/social-schedule-core'
 import type { Slide } from '@/app/lib/version-files-core'
 
@@ -67,6 +69,10 @@ export function Thumb({ slide, className, label }: {
   className?: string
   label?: string
 }) {
+  // the encoder's .mp4 copy when there is one — a camera .mov the browser
+  // cannot decode drew a black tile (10 Sep 2026)
+  const playable = usePlayable()
+  const [broken, setBroken] = useState<string | null>(null)
   if (!slide) {
     return (
       <div className={cn('flex items-center justify-center bg-foreground/[0.06] text-muted-foreground', className)}>
@@ -84,15 +90,18 @@ export function Thumb({ slide, className, label }: {
     return (
       <div className={cn('relative flex items-center justify-center overflow-hidden bg-ink text-cream', className)}>
         <Film className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-        <video
-          src={`${slide.url}#t=0.5`}
-          muted
-          playsInline
-          preload="metadata"
-          aria-hidden
-          tabIndex={-1}
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-        />
+        {broken !== slide.url && (
+          <video
+            src={`${playable(slide.url)}#t=0.5`}
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden
+            tabIndex={-1}
+            onError={() => setBroken(slide.url)}
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <span className="sr-only">{label ?? slide.name}</span>
       </div>
     )

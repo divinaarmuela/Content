@@ -26,6 +26,7 @@ import { copyAheadWords } from '@/app/lib/shrink-core'
 import { PLATFORM_MEDIA, type AssetProbe } from '@/app/lib/media-fit-core'
 import { isMeasured, measureUrl } from '@/app/lib/measure-media-client'
 import AssetCheck from '../AssetCheck'
+import { usePlayable } from '../usePlayable'
 import {
   buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO,
 } from '@/app/lib/post-preview-core'
@@ -352,6 +353,7 @@ export default function NewPostDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.slides.map(sl => sl.url).join('|')])
 
+  const playable = usePlayable()
   const probes = useMemo<AssetProbe[]>(() => state.slides.map(sl => ({
     url: sl.url, type: sl.type,
     ...(sl.bytes ? { bytes: sl.bytes } : {}),
@@ -1219,7 +1221,7 @@ export default function NewPostDialog({
             {/* what each channel will do with these files — said here, where
                 the file can still be swapped, not in a client's feed */}
             {state.slides.length > 0 && checkPlatforms.length > 0 && (
-              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} compact />
+              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact />
             )}
           </div>
 
@@ -1249,6 +1251,7 @@ export default function NewPostDialog({
 
             {pane === 'preview' && (
               <PostPreviewPane
+                playable={playable}
                 previews={preview.networks}
                 intro={PREVIEW_INTRO}
                 empty="Pick a channel above and the post will appear here as that network will show it."

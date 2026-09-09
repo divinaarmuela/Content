@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { table } from '@/lib/db'
 import type { ProviderWebhook, PublishJob, SocialAccount } from '@/lib/db-types'
 import { decryptSecret } from './secret-box'
+import { resultsForAll, type OutcomeJob } from './post-outcome-core'
 import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
 import {
   claimDelivery, finishDelivery, releaseDelivery,
@@ -296,12 +297,17 @@ async function published(
     const open = await jobs.list({
       where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status),
     })
+    // the per-channel record too: without it a job the webhook settled kept
+    // "scheduled" on every channel under a "published" job (10 Sep 2026)
+    const live = platforms.map(p => p.toLowerCase())
     rows = (await Promise.all(open.map(j => jobs.update(j.id, {
       status: 'published',
       published_at: now,
       updated_at: now,
       error: null,
       ...(permalink ? { permalink } : {}),
+      platform_results: resultsForAll(j as unknown as OutcomeJob, 'published', { at: now, url: permalink })
+        .map(o => live.length && !live.includes(o.platform) ? { ...o, status: 'pending' as const, url: null } : o),
     })))).filter((j): j is PublishJob => j !== null)
   } catch (e) {
     // a real database failure SHOULD be retried by the provider
@@ -357,6 +363,7 @@ async function failed(postId: string, message: string): Promise<Response> {
     })
     await Promise.all(open.map(j => jobs.update(j.id, {
       status: 'failed', error: message, updated_at: new Date().toISOString(),
+      platform_results: resultsForAll(j as unknown as OutcomeJob, 'failed', { at: new Date().toISOString(), reason: message }),
     })))
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
