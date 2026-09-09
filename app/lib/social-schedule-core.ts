@@ -618,7 +618,7 @@ const SNAP_MINUTES = 15
 export function scheduleWeekGrid(opts: WeekGridOptions): ScheduleWeekGrid {
   const tz = safeZone(opts.tz)
   const fromHour = clampHour(opts.fromHour ?? 6, 6)
-  const toHour = Math.max(fromHour, clampHour(opts.toHour ?? 20, 20))
+  const toHour = Math.max(fromHour, clampHour(opts.toHour ?? 23, 23))
   const rowPx = Number.isFinite(opts.rowPx) && (opts.rowPx as number) > 0 ? (opts.rowPx as number) : 44
   const headerPx = Number.isFinite(opts.headerPx) && (opts.headerPx as number) >= 0
     ? (opts.headerPx as number)

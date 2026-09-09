@@ -503,7 +503,9 @@ export default function NewPostDialog({
   // or a manager's straight-out post. "Send for review" and "Save as draft"
   // ask nothing of the clock.
   const sends = !reviewOnly
-    && (primary.key === 'schedule' || primary.key === 'direct' || primary.key === 'now')
+    && (primary.key === 'schedule' || primary.key === 'direct' || primary.key === 'now' || primary.key === 'move')
+  /** the booked post's clock has not been touched — nothing to move to */
+  const unmoved = primary.key === 'move' && (post?.scheduled_for ?? null) === state.scheduledFor
   const check = useMemo(() => validateComposition({
     requireTime: sends,
     // "Send for approval" and "Save as draft" are not the post going out —
@@ -794,6 +796,20 @@ export default function NewPostDialog({
         finished(what === 'direct' ? (postingNow ? 'now' : 'booked') : 'sent', id, who)
         return
       }
+      if (what === 'move') {
+        // pulls the booking back from the channel and books it again at the
+        // new time — one press, the server does both (`reschedule`)
+        const res = await fetch(`/api/social/schedule/${id}/reschedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ at: state.scheduledFor }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new ComposeProblem(json)
+        setNote('Moved — booked in again at the new time.')
+        finished('booked', id)
+        return
+      }
       if (what === 'now') {
         const res = await fetch(`/api/social/schedule/${id}/reschedule`, {
           method: 'POST',
@@ -1041,7 +1057,9 @@ export default function NewPostDialog({
                 value={state.scheduledFor}
                 tz={tz}
                 onChange={iso => dispatch({ type: 'time', iso })}
-                disabled={locked}
+                // a booked post keeps its words and files locked but its
+                // clock open — that is how it is moved
+                disabled={locked && status !== 'scheduled'}
               />
             </>
           )}
@@ -1496,7 +1514,7 @@ export default function NewPostDialog({
             ) : (
               <SplitButton
                 label={busy ? 'Working…' : primary.label}
-                disabled={busy || (wait ? shownChecks.length > 0 : !check.ok)}
+                disabled={busy || unmoved || (wait ? shownChecks.length > 0 : !check.ok)}
                 onPrimary={() => void run(primary.key)}
                 items={menuItems.map(m => ({ key: m.key, label: m.label }))}
                 onPick={k => void run(k as FooterActionKey)}

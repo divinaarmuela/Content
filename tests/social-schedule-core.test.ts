@@ -205,11 +205,11 @@ describe('scheduleWeekGrid', () => {
     expect(g.days[0].weekday).toBe('Monday')
   })
 
-  it('runs 6 am to 8 pm by the hour', () => {
+  it('runs 6 am to 11 pm by the hour', () => {
     expect(g.hours[0]).toBe(6)
-    expect(g.hours[g.hours.length - 1]).toBe(20)
-    expect(g.hours).toHaveLength(15)
-    expect(g.height).toBe(40 + 14 * 44)
+    expect(g.hours[g.hours.length - 1]).toBe(23)
+    expect(g.hours).toHaveLength(18)
+    expect(g.height).toBe(40 + 17 * 44)
   })
 
   it('puts a tile at the right height for its time in the client zone', () => {
@@ -227,9 +227,9 @@ describe('scheduleWeekGrid', () => {
   })
 
   it('a post past the last hour clamps and is flagged off the grid', () => {
-    const late = g.tileTop(at('2026-08-27T22:15'))
+    const late = g.tileTop(at('2026-08-27T23:45'))
     expect(late!.offGrid).toBe(true)
-    expect(late!.top).toBe(40 + 14 * 44)
+    expect(late!.top).toBe(40 + 17 * 44)
     const early = g.tileTop(at('2026-08-27T05:00'))
     expect(early!.offGrid).toBe(true)
     expect(early!.top).toBe(40)
@@ -262,7 +262,7 @@ describe('scheduleWeekGrid', () => {
     expect(g.slotAt(0, 40 + 8)!.minute).toBe(15)
     expect(g.slotAt(0, 40 + 5)!.minute).toBe(0)
     expect(g.slotAt(0, -500)).toMatchObject({ hour: 6, minute: 0 })
-    expect(g.slotAt(0, 99999)).toMatchObject({ hour: 20, minute: 0 })
+    expect(g.slotAt(0, 99999)).toMatchObject({ hour: 23, minute: 0 })
     expect(g.slotAt(9, 100)).toBeNull()
     expect(g.slotAt(-1, 100)).toBeNull()
   })

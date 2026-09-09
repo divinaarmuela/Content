@@ -297,7 +297,7 @@ describe('the now-line', () => {
 
   it('is not drawn at all before the day starts or after it ends', () => {
     expect(nowLineTop(grid, '2026-09-08T18:00:00.000Z')).toBeNull()   // 4am
-    expect(nowLineTop(grid, '2026-09-09T12:00:00.000Z')).toBeNull()   // 10pm
+    expect(nowLineTop(grid, '2026-09-09T13:30:00.000Z')).toBeNull()   // 11:30pm
   })
 
   it('is in the client zone, not the reader one', () => {

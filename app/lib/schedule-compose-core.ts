@@ -1207,7 +1207,7 @@ export function mediaApprovalBadge(input: {
   return { label: NOT_CLIENT_SIGNED_BADGE, tone: 'amber' }
 }
 
-export type FooterActionKey = 'send' | 'draft' | 'direct' | 'schedule' | 'now' | 'none'
+export type FooterActionKey = 'send' | 'draft' | 'direct' | 'schedule' | 'now' | 'move' | 'none'
 
 export type FooterAction = { key: FooterActionKey; label: string }
 
@@ -1279,6 +1279,13 @@ export function footerActions(input: {
     return mayPublish
       ? { primary: { key: 'schedule', label: 'Schedule' }, menu: [{ key: 'now', label: 'Post now' }] }
       : { primary: { key: 'none', label: 'Approved — a scheduler books it in' }, menu: [] }
+  }
+  // A BOOKED POST CAN BE MOVED (the owner, 9 Sep 2026: "I accidentally
+  // scheduled it for tomorrow… it should be easy for me to reschedule").
+  // The window keeps the words and the files locked and opens the clock:
+  // the press pulls the booking back and books it again at the new time.
+  if (status === 'scheduled' && mayPublish) {
+    return { primary: { key: 'move', label: 'Move to this time' }, menu: [{ key: 'now', label: 'Post now' }] }
   }
   if (status === 'scheduled' || status === 'published'
     || status === 'failed' || status === 'cancelled') {

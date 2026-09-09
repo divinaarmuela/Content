@@ -432,10 +432,15 @@ describe('the button at the bottom offers only what this person may do', () => {
     expect(menu).toEqual([])
   })
 
-  it('a post already booked in or finished has nothing to press', () => {
-    for (const status of ['scheduled', 'published', 'failed', 'cancelled'] as const) {
+  it('a post already finished has nothing to press; a booked one can be moved by somebody who may post', () => {
+    for (const status of ['published', 'failed', 'cancelled'] as const) {
       expect(footerActions({ status, ...manager }).primary.key).toBe('none')
     }
+    // 9 Sep 2026: "I accidentally scheduled it for tomorrow"
+    const moved = footerActions({ status: 'scheduled', ...manager })
+    expect(moved.primary).toEqual({ key: 'move', label: 'Move to this time' })
+    expect(moved.menu.map(m => m.key)).toEqual(['now'])
+    expect(footerActions({ status: 'scheduled', mayApprove: false, mayPublish: false }).primary.key).toBe('none')
   })
 
   it('a post waiting on somebody can be sent again rather than sent twice', () => {

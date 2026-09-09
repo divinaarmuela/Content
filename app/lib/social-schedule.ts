@@ -29,7 +29,7 @@ import {
 } from './schedule-compose-core'
 import {
   applySlideLimit, canReschedule, channelBlockReason,
-  coverForSlide, eligibility,
+  coverForSlide, eligibility, MIN_LEAD_MS, POST_NOW_WINDOW_MS, TOO_SOON,
   assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
@@ -1610,6 +1610,13 @@ export async function reschedule(user: TeamUser, id: string, iso: string): Promi
     }
   }
   if (when <= Date.now()) return { ok: false, error: 'That time has already gone — pick a later one' }
+  // the same lead the composer asks for: inside the "post now" window is
+  // fine (that is what Post now sends), anything else needs the fifteen
+  // minutes the copies and the ten-minute cycle need (the owner, 9 Sep
+  // 2026: "make sure when rescheduling it's a safe time too")
+  if (when > Date.now() + POST_NOW_WINDOW_MS && when < Date.now() + MIN_LEAD_MS) {
+    return { ok: false, error: TOO_SOON }
+  }
   const at = new Date(when).toISOString()
 
   const move = canReschedule(post)

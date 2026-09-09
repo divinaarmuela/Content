@@ -132,11 +132,11 @@ describe('moving with the keyboard', () => {
     expect(at(higher).hour).toBe(6)
     expect(at(higher).minute).toBe(0)
 
-    // 8:00 pm — the bottom
-    const dusk = '2026-09-09T10:00:00.000Z'
-    expect(at(dusk).hour).toBe(20)
+    // 11:00 pm — the bottom (the grid reached 8 pm until 9 Sep 2026)
+    const dusk = '2026-09-09T13:00:00.000Z'
+    expect(at(dusk).hour).toBe(23)
     const lower = keyboardMove(dusk, 'ArrowDown', TZ)!
-    expect(at(lower).hour).toBe(20)
+    expect(at(lower).hour).toBe(23)
     expect(at(lower).minute).toBe(0)
   })
 

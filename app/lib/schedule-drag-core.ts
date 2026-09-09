@@ -105,7 +105,10 @@ export type HourWindow = { fromHour: number; toHour: number }
 
 /** The hours the week grid draws. A move outside them would put a post where
  *  nobody can see it — and where the drop slot cannot be drawn either. */
-export const GRID_HOURS: HourWindow = { fromHour: 6, toHour: 20 }
+/** 6 am to 11 pm. It stopped at 8 pm, so a 9 pm post could not be dragged
+ *  anywhere and a tile could not be dropped after eight (the owner, 9 Sep
+ *  2026: "I can't drag past 9pm"). */
+export const GRID_HOURS: HourWindow = { fromHour: 6, toHour: 23 }
 
 export function keyboardMove(
   iso: string | null | undefined,
