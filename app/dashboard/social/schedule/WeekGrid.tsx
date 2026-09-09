@@ -320,14 +320,18 @@ export default function WeekGrid({
   return (
     <div className="flex min-h-0 flex-1 overflow-auto">
       {/* the hour rail */}
-      <div className="sticky left-0 z-10 flex w-12 shrink-0 flex-col bg-background">
-        <div style={{ height: grid.headerPx }} />
+      {/* every row is `shrink-0`: the rail is a flex column inside a box
+          shorter than the day, and without it the rows were squeezed to fit
+          — 52px each beside 72px hour lines, so "11 AM" sat two hours above
+          the 11:00 tiles (9 Sep 2026) */}
+      <div className="sticky left-0 z-10 flex w-12 shrink-0 flex-col self-start bg-background">
+        <div className="shrink-0" style={{ height: grid.headerPx }} />
         {grid.hours.map((h, i) => (
           <div
             key={h}
             style={{ height: grid.rowPx }}
             className={cn(
-              'pt-0.5 text-[10px] font-semibold text-muted-foreground',
+              'shrink-0 pt-0.5 text-[10px] font-semibold text-muted-foreground',
               i > 0 && 'border-t border-border',
             )}
           >
