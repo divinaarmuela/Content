@@ -47,6 +47,19 @@ export const SOCIAL_POST_STATUSES = [
 ] as const
 export type SocialPostStatus = (typeof SOCIAL_POST_STATUSES)[number]
 
+/**
+ * A post still BEING WRITTEN — the one the piece's next press should open
+ * rather than start beside. Draft, waiting on approval, approved but not
+ * yet booked, or sent back for changes. The server's one-open-post-per-
+ * piece gate and the window's "open the existing one" read THIS list; they
+ * used to keep their own, and the window's forgot `changes`, so a post sent
+ * back for changes looked post-free to the window and the server refused
+ * the second one it then started (the owner, 9 Sep 2026: "I can't post it").
+ */
+export const OPEN_POST_STATUSES: readonly SocialPostStatus[] = ['draft', 'pending', 'approved', 'changes']
+export const isOpenPost = (status: unknown) =>
+  (OPEN_POST_STATUSES as readonly string[]).includes(String(status ?? ''))
+
 /** The tones the restyle draws a tile in. */
 export type TileTone = 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'muted' | 'red-outline'
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  approveWithoutClientQuestion, mayPostWithoutApproval, type SuggestedTime,
+  approveWithoutClientQuestion, mayPostWithoutApproval, OPEN_POST_STATUSES, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { readLocations } from '@/app/lib/schedule-compose-core'
@@ -14,8 +14,9 @@ import NewPostSources from './NewPostSources'
 import type { RailMedia, ScheduleData, SchedulePostRow } from './useSchedulePosts'
 import type { Slide } from '@/app/lib/version-files-core'
 
-/** a post still being written — the one a second press on its piece reopens */
-const OPEN_POST = ['draft', 'pending', 'approved']
+/** a post still being written — the one a second press on its piece reopens.
+ *  The SERVER's list, not a copy of it: the copy here forgot `changes`. */
+const OPEN_POST: readonly string[] = OPEN_POST_STATUSES
 
 /**
  * ONE ACTION: ADD THE MEDIA, SEE IT, SEND IT — WHEREVER YOU ARE STANDING.

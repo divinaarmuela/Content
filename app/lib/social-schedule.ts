@@ -30,7 +30,7 @@ import {
 import {
   applySlideLimit, canReschedule, channelBlockReason,
   coverForSlide, eligibility,
-  assetsApprovedOnBoard, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
+  assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
 import {
@@ -574,7 +574,7 @@ async function insertPost(
   const wanted = input.slides.map(s => s.url).sort().join('|')
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
-    if (!held || ['cancelled', 'scheduled', 'published', 'failed'].includes(String(held.status))) return false
+    if (!held || !isOpenPost(held.status)) return false
     const theirs = asArray<Slide>(held.slides).map(s => s.url).sort().join('|')
     return theirs === wanted || theirs === ''
   })

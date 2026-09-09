@@ -1033,3 +1033,15 @@ describe('a booked time needs a lead', () => {
     expect(check(at(60)).problems).not.toContain(TOO_SOON)
   })
 })
+
+describe('one open post per piece — the window and the server read one list', () => {
+  it('a post sent back for changes is still OPEN: the next press reopens it, the server would refuse a second', async () => {
+    const { isOpenPost, OPEN_POST_STATUSES, SOCIAL_POST_STATUSES } = await import('../app/lib/social-schedule-core')
+    expect([...OPEN_POST_STATUSES]).toEqual(['draft', 'pending', 'approved', 'changes'])
+    // the complement is exactly what the server's gate used to spell out
+    const settled = SOCIAL_POST_STATUSES.filter(s => !isOpenPost(s))
+    expect(settled).toEqual(['scheduled', 'published', 'failed', 'cancelled'])
+    expect(isOpenPost('changes')).toBe(true)
+    expect(isOpenPost(undefined)).toBe(false)
+  })
+})
