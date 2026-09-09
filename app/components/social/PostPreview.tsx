@@ -88,9 +88,21 @@ function Frame({ media, aspect, label }: {
           <span className="text-[12px]">Nothing picked yet</span>
         </span>
       ) : media.type === 'video' ? (
-        <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-ink text-cream">
+        // THE VIDEO ITSELF, playable. This was a black box with a film icon
+        // and "Video — it plays here", which read as a broken preview (the
+        // owner, 9 Sep 2026: "the preview is showing black screen"). Half a
+        // second in so a fade-from-black master does not open on black; the
+        // film icon stays underneath for a file the browser cannot decode.
+        <span className="relative flex h-full w-full items-center justify-center bg-ink text-cream">
           <Film className="h-6 w-6" strokeWidth={1.6} aria-hidden />
-          <span className="text-[12px] opacity-80">Video — it plays here</span>
+          <video
+            src={`${media.url}#t=0.5`}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            className="absolute inset-0 h-full w-full object-contain"
+          />
         </span>
       ) : media.type === 'document' ? (
         <span className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
