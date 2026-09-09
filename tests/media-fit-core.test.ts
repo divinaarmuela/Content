@@ -161,16 +161,37 @@ describe('length', () => {
 })
 
 describe('shape', () => {
-  it('warns that a landscape master is cropped for a Reel', () => {
+  it('says a landscape video is shown with bars on a Reel — not cropped', () => {
     const findings = assessAssets({
       probes: [reel({ width: 1920, height: 1080 })],
       platforms: ['instagram'],
       kinds: { instagram: 'reel' },
     })
-    const crop = findings.find(f => f.headline === 'Cropped to fit')
-    expect(crop?.level).toBe('reframed')
-    expect(crop?.detail).toContain('16:9')
-    expect(crop?.detail).toContain('9:16 vertical')
+    const bars = findings.find(f => f.headline === 'Shown with bars')
+    expect(bars?.level).toBe('reframed')
+    expect(bars?.detail).toContain('16:9')
+    expect(bars?.detail).toContain('9:16 vertical')
+    expect(bars?.consequence).toMatch(/your call/)
+    // a still IS cropped
+    const still = assessAssets({ probes: [{ url: 'https://x/a.jpg', type: 'image', width: 1920, height: 1080, bytes: MB }], platforms: ['tiktok'] })
+    expect(still.find(f => f.headline === 'Cropped to fit')).toBeTruthy()
+  })
+
+  // 9 Sep 2026: the modal said "Quality drops" on Instagram beside an
+  // encoder built to stop exactly that
+  it('a channel our encoder copies for is told "clean copy", never "quality drops"', () => {
+    const findings = assessAssets({
+      probes: [reel({ bytes: 400 * MB })],
+      platforms: ['instagram', 'tiktok', 'youtube'],
+      kinds: { instagram: 'reel' },
+      copies: ['instagram', 'tiktok'],
+    })
+    expect(findings.filter(f => f.level === 'degraded')).toEqual([])
+    expect(findings.filter(f => f.level === 'copied').map(f => f.platform).sort()).toEqual(['instagram', 'tiktok'])
+    expect(findings.find(f => f.platform === 'instagram')?.headline).toBe('Sent as a clean copy')
+    expect(findings.find(f => f.platform === 'youtube')).toBeUndefined()
+    expect(verdictByPlatform(findings, ['instagram', 'youtube']).map(v => v.level)).toEqual(['copied', 'ok'])
+    expect(fitHeadline(findings, ['instagram', 'tiktok', 'youtube'])).toMatch(/clean copy is made for Instagram and TikTok/)
   })
 
   it('blocks rather than crops on LinkedIn, which fails to process instead', () => {

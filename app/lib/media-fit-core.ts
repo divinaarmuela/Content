@@ -45,7 +45,12 @@ export type AssetProbe = {
   seconds?: number
 }
 
-export type FitLevel = 'ok' | 'reframed' | 'degraded' | 'blocked'
+/** `copied`: OUR encoder makes this channel a copy at its own spec before
+ *  it goes — the master is untouched and the channel gets a file inside its
+ *  limits, so it does not re-compress it. Not a drop in quality: the
+ *  opposite of one. (9 Sep 2026 — the modal said "Quality drops" on
+ *  Instagram beside an encoder built to stop exactly that.) */
+export type FitLevel = 'ok' | 'copied' | 'reframed' | 'degraded' | 'blocked'
 
 /** One thing that will happen to one asset on one platform. */
 export type Finding = {
@@ -409,8 +414,13 @@ export function assessAssets(input: {
   probes: AssetProbe[]
   platforms: Platform[]
   kinds?: Partial<Record<Platform, PostKind>>
+  /** channels our encoder makes a clean copy for (shrink-core's
+   *  `channelsNeedingCopy`) — the size verdict on those is "clean copy",
+   *  never "quality drops" */
+  copies?: readonly Platform[]
 }): Finding[] {
   const findings: Finding[] = []
+  const copied = new Set<Platform>(input.copies ?? [])
 
   input.probes.forEach((probe, i) => {
     const asset = i + 1
@@ -458,7 +468,19 @@ export function assessAssets(input: {
       }
 
       // ── file size ─────────────────────────────────────────────────
-      if (probe.bytes !== undefined && rule.maxMB !== undefined && probe.bytes > rule.maxMB * MB) {
+      // a channel getting our clean copy is told so ONCE, here, whatever the
+      // master weighs — and the size branch below is skipped for it, because
+      // the copy is what goes, and the copy is inside the limit
+      if (probe.type === 'video' && copied.has(platform)) {
+        push({
+          level: 'copied',
+          headline: 'Sent as a clean copy',
+          detail: `${probe.bytes !== undefined ? `${mb(probe.bytes)}; ` : ''}a copy at ${spec.label}'s own spec (1080p, H.264) is made here first`,
+          consequence:
+            `Your master is not touched. ${spec.label} receives a file inside its limits, ` +
+            'so it does not re-compress it on the way in.',
+        })
+      } else if (probe.bytes !== undefined && rule.maxMB !== undefined && probe.bytes > rule.maxMB * MB) {
         if (rule.oversize === 'compress') {
           push({
             level: 'degraded',
@@ -524,6 +546,19 @@ export function assessAssets(input: {
               detail: `${spec.label} takes between 1:2.4 and 2.4:1`,
               consequence: 'The upload fails while processing — it never appears at all.',
             })
+          } else if (probe.type === 'video' && rule.aspectName) {
+            // a video is never cropped on the vertical channels — it is shown
+            // whole, small, with bars above and below. Saying "cropped" sent
+            // people looking for a lost edge (9 Sep 2026); the real cost is
+            // that a 16:9 clip fills a third of the phone screen
+            push({
+              level: 'reframed',
+              headline: 'Shown with bars',
+              detail: `${shape}; ${spec.label}${kindWord(kind)} shows ${rule.aspectName}`,
+              consequence:
+                'It posts whole, but small, with black bars above and below on a phone. ' +
+                'It is your call — a 9:16 cut of the same footage fills the screen.',
+            })
           } else {
             push({
               level: 'reframed',
@@ -578,7 +613,7 @@ export function assessAssets(input: {
     }
   })
 
-  const rank: Record<Finding['level'], number> = { blocked: 0, degraded: 1, reframed: 2 }
+  const rank: Record<Finding['level'], number> = { blocked: 0, degraded: 1, reframed: 2, copied: 3 }
   return findings.sort((a, b) =>
     a.asset - b.asset || rank[a.level] - rank[b.level] || a.platform.localeCompare(b.platform))
 }
@@ -600,7 +635,7 @@ export function unmeasured(probes: AssetProbe[]): number[] {
 export function verdictByPlatform(
   findings: Finding[], platforms: Platform[],
 ): { platform: Platform; level: FitLevel; count: number }[] {
-  const rank: Record<FitLevel, number> = { ok: 0, reframed: 1, degraded: 2, blocked: 3 }
+  const rank: Record<FitLevel, number> = { ok: 0, copied: 1, reframed: 2, degraded: 3, blocked: 4 }
   return platforms.map(platform => {
     const mine = findings.filter(f => f.platform === platform)
     const level = mine.reduce<FitLevel>(
@@ -611,7 +646,8 @@ export function verdictByPlatform(
 
 export const LEVEL_WORDS: Record<FitLevel, { label: string; meaning: string }> = {
   ok:       { label: 'Posts as-is',   meaning: 'Nothing is changed on the way out.' },
-  reframed: { label: 'Cropped',       meaning: 'It posts, in a different shape or length than you gave it.' },
+  copied:   { label: 'Clean copy',    meaning: 'A copy at this channel\'s own spec is made first. Your master is untouched.' },
+  reframed: { label: 'Reshaped',      meaning: 'It posts, in a different shape or length than you gave it.' },
   degraded: { label: 'Quality drops', meaning: 'It posts, re-encoded — visibly worse than your master.' },
   blocked:  { label: 'Will not post', meaning: 'The platform refuses it. Nothing goes live on that channel.' },
 }
@@ -805,9 +841,10 @@ export function assetOutcomes(input: {
   probes: AssetProbe[]
   platforms: Platform[]
   kinds?: Partial<Record<Platform, PostKind>>
+  copies?: readonly Platform[]
 }): AssetOutcome[] {
   const findings = assessAssets(input)
-  const rank: Record<FitLevel, number> = { ok: 0, reframed: 1, degraded: 2, blocked: 3 }
+  const rank: Record<FitLevel, number> = { ok: 0, copied: 1, reframed: 2, degraded: 3, blocked: 4 }
   const rows: AssetOutcome[] = []
 
   input.probes.forEach((probe, i) => {
@@ -848,10 +885,12 @@ export function fitHeadline(findings: Finding[], platforms: Platform[]): string 
   const blocked = at('blocked')
   const degraded = at('degraded')
   const reframed = at('reframed')
+  const copied = at('copied')
 
   if (blocked.length > 0) return `These files will not post on ${list(blocked)}.`
   if (degraded.length > 0) return `Everything posts, but ${list(degraded)} will re-encode your media.`
-  if (reframed.length > 0) return `Everything posts, but ${list(reframed)} will crop or trim it.`
+  if (reframed.length > 0) return `Everything posts, but ${list(reframed)} will show it in a different shape.`
+  if (copied.length > 0) return `Everything posts. A clean copy is made for ${list(copied)}; the rest take the file as it is.`
   return `These files post untouched on all ${platforms.length} channel${platforms.length === 1 ? '' : 's'}.`
 }
 

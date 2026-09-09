@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useMemo } from 'react'
-import { AlertTriangle, Check, Crop, FileCog, Gauge, HelpCircle, XCircle } from 'lucide-react'
+import { AlertTriangle, Check, Crop, FileCog, Gauge, HelpCircle, Sparkles, XCircle } from 'lucide-react'
 import PlatformIcon from './PlatformIcon'
 import type { Platform, PostKind } from '../../lib/publish-core'
 import {
@@ -25,6 +25,10 @@ const TONE: Record<FitLevel, { chip: string; icon: typeof Check }> = {
   ok: {
     chip: 'border-accent-green/30 bg-tint-green text-foreground',
     icon: Check,
+  },
+  copied: {
+    chip: 'border-accent-green/30 bg-tint-green text-foreground',
+    icon: Sparkles,
   },
   reframed: {
     chip: 'border-accent-blue/25 bg-tint-blue text-accent-blue-deep',
@@ -67,11 +71,14 @@ function assetLine(probe: AssetProbe): string {
 }
 
 export default function AssetCheck({
-  probes, platforms, kinds, overrides, compact = false,
+  probes, platforms, kinds, overrides, copies, compact = false,
 }: {
   probes: AssetProbe[]
   platforms: Platform[]
   kinds?: Partial<Record<Platform, PostKind>>
+  /** channels our encoder makes a clean copy for — said as such, never as
+   *  "quality drops" (the owner, 9 Sep 2026) */
+  copies?: Platform[]
   /** a channel given its own files is checked against THOSE, not the shared set */
   overrides?: Partial<Record<Platform, AssetProbe[]>>
   /** the Review step wants the verdict without the per-asset breakdown */
@@ -83,8 +90,8 @@ export default function AssetCheck({
     [overrides, probes],
   )
   const findings = useMemo(
-    () => platforms.flatMap(p => assessAssets({ probes: probesOf(p), platforms: [p], kinds })),
-    [probesOf, platforms, kinds],
+    () => platforms.flatMap(p => assessAssets({ probes: probesOf(p), platforms: [p], kinds, copies })),
+    [probesOf, platforms, kinds, copies],
   )
   const verdicts = useMemo(
     () => verdictByPlatform(findings, platforms),
@@ -93,8 +100,8 @@ export default function AssetCheck({
   // a row for every asset on every channel — a channel that is fine has to say
   // so out loud, or it looks the same as a channel nobody checked
   const outcomes = useMemo(
-    () => platforms.flatMap(p => assetOutcomes({ probes: probesOf(p), platforms: [p], kinds })),
-    [probesOf, platforms, kinds],
+    () => platforms.flatMap(p => assetOutcomes({ probes: probesOf(p), platforms: [p], kinds, copies })),
+    [probesOf, platforms, kinds, copies],
   )
   const missing = useMemo(
     () => unmeasured([...probes, ...Object.values(overrides ?? {}).flat()]),
@@ -109,14 +116,14 @@ export default function AssetCheck({
 
   if (probes.length === 0 && platforms.length === 0) return null
 
-  const rank: Record<FitLevel, number> = { ok: 0, reframed: 1, degraded: 2, blocked: 3 }
+  const rank: Record<FitLevel, number> = { ok: 0, copied: 1, reframed: 2, degraded: 3, blocked: 4 }
   const worst = verdicts.reduce<FitLevel>(
     (w, v) => (rank[v.level] > rank[w] ? v.level : w), 'ok')
 
   return (
     <div className="grid gap-3 rounded-inner border border-border p-3">
       <div className="flex items-start gap-2">
-        {worst === 'ok'
+        {worst === 'ok' || worst === 'copied'
           ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-green" />
           : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" />}
         <div>
@@ -168,7 +175,7 @@ export default function AssetCheck({
         return (
           <details
             key={v.platform}
-            open={v.level !== 'ok'}
+            open={v.level !== 'ok' && v.level !== 'copied'}
             className="rounded-inner border border-border"
           >
             {/* Safari draws its own disclosure triangle unless the webkit

@@ -843,7 +843,7 @@ export default function ComposeDialog({
 
               {/* what each platform will do to these exact files — shown here,
                   while the file can still be swapped for a better export */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} copies={needingCopy} />
 
 
               <div className="grid gap-1.5">
@@ -976,7 +976,7 @@ export default function ComposeDialog({
 
               {/* the verdict again at the last moment, without the detail —
                   the breakdown lives on the Content step, next to the files */}
-              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} compact />
+              <AssetCheck probes={probes} platforms={platforms} kinds={kinds} overrides={perProbes} copies={needingCopy} compact />
 
               {warnings.length > 0 && (
                 <div className="flex items-start gap-2 rounded-inner border border-border bg-foreground/[0.04] px-3 py-2 text-secondary-13 text-muted-foreground">

@@ -406,6 +406,30 @@ export default function NewPostDialog({
     })
     return copyAheadWords(asks.map(a => PLATFORM_MEDIA[a.platform]?.label ?? a.platform))
   }, [state.slides, state.perChannel, chosen])
+  /** the channels that copy is made for — the check says "clean copy" on
+   *  those rather than "quality drops" (the owner, 9 Sep 2026) */
+  const copyPlatforms = useMemo<Platform[]>(() => {
+    const video = state.slides.length === 1 && state.slides[0].type === 'video' ? state.slides[0] : null
+    if (!video) return []
+    const list = chosen.map(a => a.platform).filter(isPlatform)
+    const kindFor: Partial<Record<Platform, PostKind>> = {}
+    const own: Partial<Record<Platform, MediaItem[]>> = {}
+    for (const account of chosen) {
+      const p = account.platform
+      if (!isPlatform(p)) continue
+      const extras = state.perChannel[account.id]
+      if (extras?.kind) kindFor[p] = extras.kind as PostKind
+      if (extras?.slides?.length) {
+        own[p] = extras.slides.map(sl => ({
+          url: sl.url, type: sl.type === 'video' ? 'video' as const : 'image' as const,
+        }))
+      }
+    }
+    return copiesToPrepare({
+      probes: [{ url: video.url, type: 'video', bytes: video.bytes }],
+      platforms: list, kinds: kindFor, own,
+    }).map(a => a.platform)
+  }, [state.slides, state.perChannel, chosen])
 
   const status: SocialPostStatus = post?.live_status ?? 'draft'
   // WHO MAY POST WITHOUT ASKING is one rule, `mayPostWithoutApproval`, and it
@@ -1155,7 +1179,7 @@ export default function NewPostDialog({
             {/* what each channel will do with these files — said here, where
                 the file can still be swapped, not in a client's feed */}
             {state.slides.length > 0 && checkPlatforms.length > 0 && (
-              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} compact />
+              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} compact />
             )}
           </div>
 
