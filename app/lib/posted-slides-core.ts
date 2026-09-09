@@ -24,7 +24,9 @@ export type PostedSlides = {
   /** the files marked posted BY HAND: when it went out, and the live link if
    *  there was one (the owner, 9 Sep 2026: "how can I mark or put the time
    *  it posted and log it?") */
-  hand?: Record<string, { at: string; link: string | null }>
+  /* A LIST, not a map keyed by url: a database key cannot hold `.` or `/`
+   * (CLAUDE.md trap 9) — the first write of a url-keyed map was refused. */
+  hand?: { url: string; at: string; link: string | null }[]
 }
 
 const urlsOf = (p: PostLike): string[] =>
@@ -75,7 +77,7 @@ export function postedProgress(
   const done = new Set<string>([...published, ...byHand])
   const urls = slides.map(s => s.url).filter(u => done.has(u))
   const out: PostedSlides = { urls, posted: urls.length, total: slides.length }
-  if (hand && Object.keys(hand).length > 0) out.hand = hand
+  if (hand && hand.length > 0) out.hand = hand
   return out
 }
 
@@ -92,19 +94,24 @@ export function readPostedSlides(v: unknown): PostedSlides | null {
   const posted = Number(o.posted ?? urls.length)
   if (!Number.isFinite(total) || !Number.isFinite(posted)) return null
   const rawHand = (o as { hand?: unknown }).hand
-  const hand: PostedSlides['hand'] = {}
-  if (rawHand && typeof rawHand === 'object') {
-    for (const [u, v] of Object.entries(rawHand as Record<string, unknown>)) {
-      if (v && typeof v === 'object' && typeof (v as { at?: unknown }).at === 'string') {
-        hand[u] = { at: (v as { at: string }).at, link: typeof (v as { link?: unknown }).link === 'string' ? (v as { link: string }).link : null }
+  const hand: NonNullable<PostedSlides['hand']> = []
+  if (Array.isArray(rawHand)) {
+    for (const v of rawHand) {
+      if (v && typeof v === 'object' && typeof (v as { url?: unknown }).url === 'string' && typeof (v as { at?: unknown }).at === 'string') {
+        hand.push({ url: (v as { url: string }).url, at: (v as { at: string }).at, link: typeof (v as { link?: unknown }).link === 'string' ? (v as { link: string }).link : null })
       }
     }
   }
-  return Object.keys(hand).length > 0 ? { urls, posted, total, hand } : { urls, posted, total }
+  return hand.length > 0 ? { urls, posted, total, hand } : { urls, posted, total }
 }
 
 /** the card's line — only while it is part-way: "2 of 4 posted" */
 export function postedLine(p: PostedSlides | null | undefined): string | null {
   if (!p || p.total === 0 || p.posted === 0 || p.posted >= p.total) return null
   return `${p.posted} of ${p.total} posted`
+}
+
+/** the by-hand record for one file, if there is one */
+export function handRecord(p: PostedSlides | null | undefined, url: string): { url: string; at: string; link: string | null } | null {
+  return p?.hand?.find(h => h.url === url) ?? null
 }

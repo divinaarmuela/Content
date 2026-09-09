@@ -17,7 +17,7 @@ import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
-import { readPostedSlides } from '../../lib/posted-slides-core'
+import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
 import { uploadFiles } from '../uploadQueue'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
@@ -389,13 +389,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 )}
                 {postedUrls.has(s.url) && (
                   <Chip tone="green">
-                    {postedSlides?.hand?.[s.url]
-                      ? `Posted by hand · ${new Date(postedSlides.hand[s.url].at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
+                    {handRecord(postedSlides, s.url)
+                      ? `Posted by hand · ${new Date(handRecord(postedSlides, s.url)!.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
                       : 'Posted'}
                   </Chip>
                 )}
-                {postedSlides?.hand?.[s.url]?.link && (
-                  <a href={postedSlides.hand[s.url].link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
+                {handRecord(postedSlides, s.url)?.link && (
+                  <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
                 )}
                 {mayMarkPosted && !postedUrls.has(s.url) && handOn !== i && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink(''); setHandAt(localNow()) }}>

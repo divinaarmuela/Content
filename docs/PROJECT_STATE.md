@@ -389,6 +389,15 @@ reported success.
 
 ### Running the live harness
 
+`tests/e2e/three-roles-roleplay.e2e.ts` (9 Sep 2026) plays the Post approval journey
+live with three roles: the scheduler uploads and asks the AM; the AM sends to the
+client, the client comments on one photo from the portal (only the AM may read
+it), the AM logs the approval and hands it over; the scheduler books ONE of four
+files (dry run) and marks the rest posted by hand — the card stays in Ready to
+post until the last file; the super admin sees everything, a second scheduler
+nothing; every notification is read back from the log and every recipient is
+`.invalid`. Same flags as below, same teardown-and-read-back.
+
 `tests/e2e/social-schedule-live.e2e.ts` plays the whole journey against the REAL
 database, on the ZZ TEST client only, with `.invalid` people, its own
 `zz-test-…` channel, and every row deleted and read back at the end.

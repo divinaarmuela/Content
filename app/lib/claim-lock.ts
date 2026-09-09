@@ -46,7 +46,12 @@ const YOUNG_MS = 60_000
 export async function takeClaimLock(
   key: string,
   holder: string,
-  stillHeld?: (heldBy: string) => Promise<boolean>,
+  /** is the current holder still using the lock? `true`/`false` as before —
+   *  a `false` inside the young window is not believed (the holder's row may
+   *  not be written yet). `'free'` is DECISIVE: the holder's row was read and
+   *  says the lock is not needed (a booked post, or a post made of other
+   *  files — 9 Sep 2026), and is honoured at any age. */
+  stillHeld?: (heldBy: string) => Promise<boolean | 'free'>,
 ): Promise<{ ok: true } | { ok: false; holder: string }> {
   const mine = (): ClaimLock => ({ id: key, holder, at: new Date().toISOString() })
   const first = await locks().claim(key, cur => (free(cur) ? mine() : null))
@@ -56,7 +61,9 @@ export async function takeClaimLock(
   if (!held) return { ok: false, holder: '' }
   if (held.holder === holder) return { ok: true }
   const young = Date.parse(held.at ?? '') > Date.now() - YOUNG_MS
-  if (!stillHeld || young || await stillHeld(held.holder)) return { ok: false, holder: held.holder }
+  if (!stillHeld) return { ok: false, holder: held.holder }
+  const verdict = await stillHeld(held.holder)
+  if (verdict === true || (verdict === false && young)) return { ok: false, holder: held.holder }
 
   // the lock outlived what it guarded — take it over, still atomically: only
   // the claimant whose write lands on the SAME dead holder wins

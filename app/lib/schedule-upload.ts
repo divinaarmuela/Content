@@ -176,7 +176,7 @@ async function clientSignsOff(clientId: string): Promise<{ client: Client | null
  * editor hat on their own upload and lets them move it forward.
  */
 async function createBackingItem(
-  user: TeamUser, clientId: string, title: string, contentType: string,
+  user: TeamUser, clientId: string, title: string, contentType: string, signsOff: boolean,
 ): Promise<ContentItem> {
   const kinds = await table<WorkKind>('work_kinds').list().catch(() => [] as WorkKind[])
   const kind = resolveKindForWrite(kinds as WorkKind[], null)
@@ -204,7 +204,11 @@ async function createBackingItem(
     // scheduler for a client who does not sign off) owns it outright; only
     // when the uploader could NOT have approved it does the client's word
     // still stand in the way.
-    client_approval_required: !(await mayPostStraightOut(user, { client_id: clientId } as ContentItem)),
+    // THE CLIENT'S OWN RULE, not the uploader's rank (9 Sep 2026). Set from
+    // "could this person post straight out", a scheduler's upload was marked
+    // as needing the client, and the manager's board then offered only "Send
+    // to client" — no Approve — on a client who does not sign every post off.
+    client_approval_required: signsOff,
     // a post made on the Schedule page is a POST, not production work: it
     // keeps its card (the file, the versions, the numbers afterwards) but
     // never appears on the Production, Editor or Scheduler boards
@@ -264,7 +268,7 @@ export async function createPostFromFiles(
     caption: input.title ? String(input.title) : (input.caption ?? null),
   })
 
-  const item = await createBackingItem(user, clientId, title, contentType)
+  const item = await createBackingItem(user, clientId, title, contentType, signsOff)
 
   // version 1 — the same call the item page's upload makes, so the numbering,
   // the Drive mirror and the video preview all happen as usual

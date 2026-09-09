@@ -574,9 +574,11 @@ async function insertPost(
   const wanted = input.slides.map(s => s.url).sort().join('|')
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
-    if (!held || !isOpenPost(held.status)) return false
+    if (!held) return false                       // not written yet, or gone — the lock's age decides
+    if (!isOpenPost(held.status)) return 'free'   // booked, out, or cancelled: decisively not held
     const theirs = asArray<Slide>(held.slides).map(s => s.url).sort().join('|')
-    return theirs === wanted || theirs === ''
+    if (theirs === wanted || theirs === '') return true
+    return 'free'                                 // an open post of OTHER files: the folder's ticks
   })
   if (!gate.ok) throw new DuplicatePostError(gate.holder, item.id)
 

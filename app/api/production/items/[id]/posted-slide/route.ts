@@ -42,7 +42,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const at = typeof body.posted_at === 'string' && body.posted_at ? new Date(body.posted_at) : new Date()
       if (!Number.isFinite(at.getTime())) throw new AuthzError('That is not a time we can read', 400)
       if (at.getTime() > Date.now() + 60_000) throw new AuthzError('That time has not come yet — a post marked by hand has already gone out', 400)
-      const hand = { ...(prev?.hand ?? {}), [url]: { at: at.toISOString(), link: liveUrl } }
+      const hand = [...(prev?.hand ?? []).filter(h => h.url !== url), { url, at: at.toISOString(), link: liveUrl }]
       const progress = postedProgress(slides, new Set(), byHand, hand)
       await table('content_items').update(id, { posted_slides: progress })
       const index = slides.findIndex(s => s.url === url) + 1
