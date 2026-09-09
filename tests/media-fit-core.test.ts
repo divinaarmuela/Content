@@ -562,7 +562,9 @@ describe('the encode ladder', () => {
   it('spends the channel ceiling on a clip short enough to afford it', () => {
     // a 20-second reel: 20 Mbps for 20s is 50 MB, nowhere near Instagram's 300
     expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(20_000)
-    expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(12_000)
+    // 10 Sep 2026: TikTok keeps 4K under a 20 Mbps ceiling
+    expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(20_000)
+    expect(encodeTargetFor('tiktok', undefined, 20)!.longSide).toBe(3840)
     expect(encodeTargetFor('twitter', undefined, 20)!.maxrateKbps).toBe(8_000)
   })
 
@@ -589,8 +591,15 @@ describe('the encode ladder', () => {
     }
   })
 
-  it('is 1080p on the short side and 1920 on the long one', () => {
+  it('is 1080p on the short side and 1920 on the long one — except TikTok, which keeps 4K', () => {
     for (const platform of PLATFORMS) {
+      if (platform === 'tiktok') {
+        // 10 Sep 2026: TikTok takes a 4K upload; shrinking a 4K master to
+        // 1080p before TikTok re-encoded it again was the soft picture
+        expect(PLATFORM_ENCODE[platform].shortSide).toBe(2160)
+        expect(PLATFORM_ENCODE[platform].longSide).toBe(3840)
+        continue
+      }
       expect(PLATFORM_ENCODE[platform].shortSide).toBe(1080)
       expect(PLATFORM_ENCODE[platform].longSide).toBe(1920)
     }

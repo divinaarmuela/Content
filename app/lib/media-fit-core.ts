@@ -1068,7 +1068,14 @@ export type EncodeLadder = {
 export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
   instagram: { maxrateCapKbps: 20_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   facebook:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
-  tiktok:    { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
+  // TIKTOK KEEPS 4K. It takes a 4K upload (its cap is 4096 x 2160) and
+  // re-encodes whatever it gets; a 4K master shrunk to 1080p here and then
+  // re-encoded there, shown letterboxed on a phone, was the soft picture
+  // the owner saw on 10 Sep 2026 (master 3840 x 2160 at 49 Mbps, copy
+  // 1920 x 1080 at 12 Mbps). The copy now keeps the master's size — never
+  // upscaled, `outputSize` — under a 20 Mbps ceiling, so TikTok's own
+  // encoder works from the real picture. ~270 MB for a two-minute clip.
+  tiktok:    { maxrateCapKbps: 20_000, audioKbps: 160, longSide: 3840, shortSide: 2160, maxFps: 60 },
   linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   twitter:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   youtube:   { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
