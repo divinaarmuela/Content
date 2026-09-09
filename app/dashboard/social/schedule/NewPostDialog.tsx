@@ -72,6 +72,23 @@ import type { SchedulePostRow } from './useSchedulePosts'
  * button here without a refresh.
  */
 
+/**
+ * WHAT JUST HAPPENED, handed out of the window so the page can say it in a
+ * window of its own (the owner, 9 Sep 2026: "saving as draft doesn't tell
+ * the user that it's a draft … once scheduled show a different popup").
+ */
+export type ComposerOutcome = {
+  kind: 'draft' | 'sent' | 'booked' | 'now'
+  postId: string
+  itemId: string
+  /** the instant it goes out, or null for a draft with no time yet */
+  at: string | null
+  /** the account ids it goes to */
+  channels: string[]
+  /** who it was sent to, for 'sent' */
+  who?: string | null
+}
+
 export type ComposerTarget = {
   itemId: string
   title: string
@@ -131,7 +148,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 
 export default function NewPostDialog({
   target, tz, accounts, suggested, role, clientSignsOff, locations, clientName,
-  reviewOnly, onClose, onOpenPost, onEditMedia,
+  reviewOnly, onClose, onOpenPost, onEditMedia, onDone,
 }: {
   target: ComposerTarget
   tz: string
@@ -156,6 +173,11 @@ export default function NewPostDialog({
   onOpenPost: (postId: string) => void
   /** open the page's one image editor on a picture of this post */
   onEditMedia: (target: ImageEditorTarget) => void
+  /** a press that finished — saved, sent, booked, posting now. The page
+   *  closes this window and says what happened in one of its own; without
+   *  it the window stayed open looking exactly as it had, with one green
+   *  line above the footer that scrolled away. */
+  onDone?: (outcome: ComposerOutcome) => void
 }) {
   const post = target.post
   const [state, dispatch] = useReducer(
@@ -432,6 +454,13 @@ export default function NewPostDialog({
    * over a minute that has just arrived.
    */
   const postingNow = isPostingNow(state.scheduledFor, Date.now())
+  /* BOOKED IS READ-ONLY. Once the provider holds the post, the server refuses
+   * every edit ("already booked with the channel — cancel it first"), so a
+   * window that still offered the caption, the clock, the channels and
+   * Change media was offering four ways to reach a refusal (the audit of 9
+   * Sep 2026). The fields lock; the trash button (cancel the booking) is the
+   * one thing left, which is what the server allows. */
+  const locked = status === 'scheduled' || status === 'published'
   /**
    * WAITING ON SOMEBODY ELSE is not an error.
    *
@@ -477,6 +506,9 @@ export default function NewPostDialog({
   }), [
     state.slides, state.caption, state.scheduledFor, state.perChannel,
     chosen, target.contentType,
+    // …and the live facts the check reads: an approval landing in another
+    // tab turns the button into Schedule, and the verdict has to turn with it
+    sends, mayApprove, target.itemStatus,
   ])
 
   /** everything genuinely wrong, minus the one sentence the quiet wait line
@@ -677,10 +709,15 @@ export default function NewPostDialog({
 
   const run = async (what: FooterActionKey) => {
     if (what === 'none') return
-    setBusy(true); setProblems([]); setNote(null); setConfirm(null)
+    setBusy(true); setProblems([]); setNote(null); setConfirm(null); setExistingPost(null)
+    // what the page is told once a press has finished — it closes this
+    // window and says it in one of its own
+    const finished = (kind: ComposerOutcome['kind'], id: string, who?: string | null) => {
+      if (onDone) onDone({ kind, postId: id, itemId: target.itemId, at: state.scheduledFor, channels: [...state.channels], who: who ?? null })
+    }
     try {
       const id = await ensurePost(state)
-      if (what === 'draft') { setNote('Saved as a draft.'); return }
+      if (what === 'draft') { setNote('Saved as a draft.'); finished('draft', id); return }
       if (what === 'send' && reviewOnly) {
         /* POST APPROVAL'S SEND. The piece itself is submitted — the ordinary
          * `draft_uploaded → internal_review` move, through the transition
@@ -706,6 +743,7 @@ export default function NewPostDialog({
         setNote(who
           ? `Sent to ${who}. It is now in Internal check on Post approval; once they approve it, it appears on Schedule to book in.`
           : 'Sent to your account manager. It is now in Internal check on Post approval.')
+        finished('sent', id, who ?? null)
         return
       }
       if (what === 'send' || what === 'direct') {
@@ -723,14 +761,13 @@ export default function NewPostDialog({
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new ComposeProblem(json)
+        const who = what === 'send' ? approvers.find(pp => pp.id === approverId)?.name ?? null : null
         setNote(what === 'direct'
           ? 'Approved by you and booked in with the channel.'
-          : (() => {
-              const who = approvers.find(pp => pp.id === approverId)?.name
-              return who
-                ? `Sent to ${who}. Once they approve it, it is booked in for the time you chose — nothing else to press.`
-                : sentForReviewLine(null)
-            })())
+          : who
+            ? `Sent to ${who}. Once they approve it, it is booked in for the time you chose — nothing else to press.`
+            : sentForReviewLine(null))
+        finished(what === 'direct' ? (postingNow ? 'now' : 'booked') : 'sent', id, who)
         return
       }
       if (what === 'now') {
@@ -746,6 +783,7 @@ export default function NewPostDialog({
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new ComposeProblem(json)
       setNote('Booked in with the channel.')
+      finished(what === 'now' ? 'now' : 'booked', id)
     } catch (e) {
       setProblems(problemsOf(e))
       setExistingPost(e instanceof ComposeProblem ? e.existingPostId : null)
@@ -924,8 +962,9 @@ export default function NewPostDialog({
                 <button
                   key={a.id}
                   type="button"
-                  onClick={() => dispatch({ type: 'channel', id: a.id, on: !on })}
-                  className="flex min-h-11 w-full items-center gap-2 rounded-tile px-2 text-left text-[13px] hover:bg-muted"
+                  onClick={() => { if (!locked) dispatch({ type: 'channel', id: a.id, on: !on }) }}
+                  disabled={locked}
+                  className="flex min-h-11 w-full items-center gap-2 rounded-tile px-2 text-left text-[13px] hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
                 >
                   <PlatformIcon platform={String(a.platform)} size={22} className="rounded-full" />
                   <span className="min-w-0 flex-1 truncate">{a.username || a.name}</span>
@@ -978,6 +1017,7 @@ export default function NewPostDialog({
                 value={state.scheduledFor}
                 tz={tz}
                 onChange={iso => dispatch({ type: 'time', iso })}
+                disabled={locked}
               />
             </>
           )}
@@ -1073,14 +1113,16 @@ export default function NewPostDialog({
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setPicking(true)}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border text-[13px] font-semibold hover:bg-muted"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-              Change media
-            </button>
+            {!locked && (
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="flex min-h-11 items-center justify-center gap-2 rounded-full border border-border text-[13px] font-semibold hover:bg-muted"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                Change media
+              </button>
+            )}
 
             {/* The editor, from where the picture is. Somebody fixing a crop
                 mid-caption should not have to close the post, find the week's
@@ -1156,6 +1198,7 @@ export default function NewPostDialog({
               <textarea
                 value={state.caption}
                 onChange={e => dispatch({ type: 'caption', caption: e.target.value })}
+                readOnly={locked}
                 rows={4}
                 placeholder="What goes with the picture?"
                 className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
@@ -1400,6 +1443,9 @@ export default function NewPostDialog({
             title={STATUS_WORDS[status]}
           >
             <span className={cn('inline-block h-2 w-2 rounded-full', DOT_CLASS[tileTone(status)])} />
+            {/* the word itself, when it is one: the approval sentence alone
+                read the same before and after Save as draft */}
+            {status === 'draft' && <span className="rounded-full bg-foreground/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-[0.06em]">Draft</span>}
             {approvalLine(status, { mayApprove, clientSignsOff })}
           </span>
 

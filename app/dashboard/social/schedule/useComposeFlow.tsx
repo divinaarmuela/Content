@@ -5,11 +5,13 @@ import {
   approveWithoutClientQuestion, mayPostWithoutApproval, OPEN_POST_STATUSES, type SuggestedTime,
 } from '@/app/lib/social-schedule-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
-import { readLocations } from '@/app/lib/schedule-compose-core'
+import { outcomeWords, readLocations } from '@/app/lib/schedule-compose-core'
+import { NETWORK_LABEL } from '@/app/lib/social-schedule-core'
+import { dayKeyInZone } from '@/app/lib/timezone-core'
 import type { UploadedPostSummary } from '@/app/lib/schedule-upload-core'
 import type { Role } from '@/app/lib/identity-core'
 import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
-import NewPostDialog, { type ComposerTarget } from './NewPostDialog'
+import NewPostDialog, { type ComposerOutcome, type ComposerTarget } from './NewPostDialog'
 import NewPostSources from './NewPostSources'
 import type { RailMedia, ScheduleData, SchedulePostRow } from './useSchedulePosts'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -77,11 +79,14 @@ export type ComposeFlow = {
   windows: React.ReactNode
 }
 
-export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: {
+export function useComposeFlow({ clientId, data, role, suggested, reviewOnly, onShowDay }: {
   clientId: string | null
   data: ScheduleData
   role: Role | null
   suggested: SuggestedTime[]
+  /** "Show on calendar" from the window that follows a press: the page
+   *  moves its week to that day (a 'YYYY-MM-DD' key in the client's zone) */
+  onShowDay?: (dayKey: string) => void
   /** the approval step (the Scheduler page): no clock, one press that sends
    *  it for a decision. Posting is chosen afterwards, on the Schedule page. */
   reviewOnly?: boolean
@@ -111,6 +116,14 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
    * moment they land.
    */
   const [pending, setPending] = useState<UploadedPostSummary | null>(null)
+  /**
+   * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026). Save as draft,
+   * Send for approval, Schedule and Post now used to leave the composer open
+   * looking exactly as it had, with one green line above the footer. Now
+   * the composer closes and this says what happened, where it is, and what
+   * is left to do.
+   */
+  const [done, setDone] = useState<ComposerOutcome | null>(null)
 
   const openNew = useCallback((media: RailMedia, at: string | null, slides?: Slide[] | null) => {
     if (!media.ok) return
@@ -326,8 +339,51 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
           onClose={() => { setComposing(null); setPending(null) }}
           onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
           onEditMedia={setEditing}
+          onDone={outcome => { setComposing(null); setPending(null); setDone(outcome) }}
         />
       )}
+
+      {done && (() => {
+        const networks = [...new Set(done.channels
+          .map(id => data.accounts.find(a => a.id === id)?.platform)
+          .filter((p): p is string => !!p)
+          .map(p => NETWORK_LABEL[p] ?? p))]
+        const words = outcomeWords({ kind: done.kind, at: done.at, tz: data.tz, networks, who: done.who })
+        const reopen = () => { const o = done; setDone(null); setComposing({ itemId: o.itemId, postId: o.postId, at: null }) }
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={words.title}
+            onMouseDown={e => { if (e.target === e.currentTarget) setDone(null) }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
+          >
+            <div className="flex w-full max-w-[440px] flex-col gap-3 rounded-card bg-popover p-5 text-popover-foreground shadow-xl">
+              <h2 className="text-section-title">{words.title}</h2>
+              <p className="text-[14px] leading-[1.5] text-muted-foreground">{words.body}</p>
+              <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+                {done.kind === 'draft' && (
+                  <button type="button" onClick={reopen}
+                    className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">
+                    Keep editing
+                  </button>
+                )}
+                {words.showOnCalendar && done.at && onShowDay && (
+                  <button type="button"
+                    onClick={() => { const key = dayKeyInZone(done.at!, data.tz); setDone(null); if (key) onShowDay(key) }}
+                    className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">
+                    Show on calendar
+                  </button>
+                )}
+                <button type="button" onClick={() => setDone(null)}
+                  className="min-h-11 rounded-full bg-foreground px-5 text-[13px] font-semibold text-background">
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {editSaved && (
         <div
@@ -355,7 +411,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
   return {
     openAt, openNew, openMade, openPost, openItem, approve,
     edit: setEditing,
-    open: choosing !== null || target !== null || approving !== null || editing !== null,
+    open: choosing !== null || target !== null || approving !== null || editing !== null || done !== null,
     windows,
   }
 }

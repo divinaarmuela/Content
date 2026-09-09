@@ -105,7 +105,11 @@ export default function SchedulePage() {
    * it. Everything below is an opener: the rail, an empty slot, a suggested
    * time, a tile, a piece dragged onto a day, a file dropped on one.
    */
-  const flow = useComposeFlow({ clientId, data, role: me?.role ?? null, suggested })
+  const flow = useComposeFlow({
+    clientId, data, role: me?.role ?? null, suggested,
+    // "Show on calendar" from the window that follows a press
+    onShowDay: key => setAnchor(key),
+  })
 
   /** …and the piece that link named, opened once the page knows about it */
   const arrivedOn = useRef<string | null>(
@@ -354,6 +358,14 @@ export default function SchedulePage() {
 
   const inWeek = useMemo(
     () => channelPosts.filter(p => onOneOfDays(p.scheduled_for, tz, weekKeys)),
+    [channelPosts, weekKeys, tz])
+  /** the week's posts AND the ones with no time yet: the List has a "No time
+   *  yet" group for exactly those, and the week filter used to keep every
+   *  one of them out of it — "a draft nobody can find is a draft nobody
+   *  finishes" (the owner, 9 Sep 2026: "saving as draft doesn't tell the
+   *  user"). Only the List draws them; a grid has no cell for no-time. */
+  const inWeekOrUntimed = useMemo(
+    () => channelPosts.filter(p => !p.scheduled_for || onOneOfDays(p.scheduled_for, tz, weekKeys)),
     [channelPosts, weekKeys, tz])
 
   const weekNotes = useMemo(
@@ -686,7 +698,7 @@ export default function SchedulePage() {
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
+                <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -706,7 +718,7 @@ export default function SchedulePage() {
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeek} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
+              <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">

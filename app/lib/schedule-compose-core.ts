@@ -34,7 +34,7 @@ import {
   postingEligibility, NETWORK_LABEL, type SocialPostStatus,
 } from './social-schedule-core'
 import { reorder, type Slide, type SlideSource } from './version-files-core'
-import { fromZonedInput, wallTimeIn } from './timezone-core'
+import { formatInZone, fromZonedInput, wallTimeIn } from './timezone-core'
 
 /* ── the composition being edited ───────────────────────────────────────── */
 
@@ -857,6 +857,31 @@ export function to24(hour12: number, meridiem: Meridiem): number {
   return h === 12 ? 12 : h + 12
 }
 
+/**
+ * THE CALENDAR'S DAY, IN ONE FRAME OF REFERENCE.
+ *
+ * react-day-picker builds every cell as a LOCAL-midnight Date, and hands the
+ * same back on a click. The picker used to read that Date with `getUTC*` —
+ * which, for any browser east of Greenwich, is the day before. Melbourne is
+ * ten hours east: a click on the 15th stored the 14th, the highlight
+ * followed the wrong key, and "today" could not be picked at all because
+ * yesterday-at-six had already gone (the owner, 9 Sep 2026: "the calendar
+ * cursor on the popup is not showing on the right day"). Both directions
+ * are local now, and a round trip is pinned in the tests.
+ *
+ * A day KEY is 'YYYY-MM-DD' in the client's zone; the Date that carries it
+ * across the calendar is local noon, which no daylight-saving change can
+ * push onto another day.
+ */
+export function dayKeyToCalendarDate(key: string | null | undefined): Date | undefined {
+  if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return undefined
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d, 12)
+}
+export function calendarDateToDayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Read an instant as the picker's fields, in the client's zone. */
 export function splitClock(
   iso: string | number | Date | null | undefined, tz: string,
@@ -1030,6 +1055,59 @@ export function approvalLine(
  * What a person is told once it has gone — who has it, and what happens next.
  * No mechanism, no state name: two facts and a promise.
  */
+/**
+ * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026: "once scheduled
+ * make sure the popup is showing correctly, then show a different popup").
+ *
+ * One sentence for what happened, one for where it is, and the two things
+ * left to do. Said from the outcome and the clock, not from the composer's
+ * state — the composer has closed.
+ */
+export type OutcomeKind = 'draft' | 'sent' | 'booked' | 'now'
+
+export function outcomeWords(input: {
+  kind: OutcomeKind
+  at: string | null
+  tz: string
+  /** the networks it goes to, already named ("Instagram, TikTok") */
+  networks: readonly string[]
+  who?: string | null
+}): { title: string; body: string; showOnCalendar: boolean } {
+  const when = input.at ? formatInZone(input.at, input.tz, 'full') : null
+  const where = input.networks.length > 0 ? input.networks.join(', ') : 'no channel yet'
+  switch (input.kind) {
+    case 'draft':
+      return {
+        title: 'Saved as a draft',
+        body: when
+          ? `Nothing goes out. It sits on the calendar at ${when} as a draft until you send or schedule it.`
+          : 'Nothing goes out. It has no time yet, so it is in the list under “No time yet” until you give it one.',
+        showOnCalendar: !!when,
+      }
+    case 'sent':
+      return {
+        title: input.who ? `Sent to ${input.who} for approval` : 'Sent for approval',
+        body: when
+          ? `Once they approve it, it is booked in for ${when} on ${where} — nothing else to press. You will be told when they answer.`
+          : `Once they approve it, it can be booked in on ${where}. You will be told when they answer.`,
+        showOnCalendar: !!when,
+      }
+    case 'now':
+      return {
+        title: 'Posting now',
+        body: `It is on its way to ${where}. The tile changes when each network confirms it — a slow one can take a few minutes.`,
+        showOnCalendar: true,
+      }
+    case 'booked':
+    default:
+      return {
+        title: when ? `Booked in for ${when}` : 'Booked in',
+        body: `It goes out on ${where} at that time by itself. Nothing else to press; the tile says when it is live.`,
+        showOnCalendar: true,
+      }
+  }
+}
+
 export function sentForReviewLine(clientName: string | null | undefined): string {
   const who = String(clientName ?? '').trim()
   return who

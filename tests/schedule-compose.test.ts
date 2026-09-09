@@ -677,3 +677,65 @@ describe('a scheduler on the Schedule page', () => {
     expect(pillLine('draft', { mayApprove, clientSignsOff: false })).toBe('Not sent to anyone — yours to post')
   })
 })
+
+/**
+ * THE CALENDAR'S DAY, ONE FRAME OF REFERENCE (the owner, 9 Sep 2026: "the
+ * calendar cursor on the popup is not showing on the right day"). The
+ * picker read react-day-picker's LOCAL-midnight cell with getUTC*, which
+ * east of Greenwich is the day before — Melbourne clicked the 15th and
+ * booked the 14th. Both directions are local now; whatever zone this test
+ * runs in, a key must come back as itself.
+ */
+describe('the day the calendar hands back is the day that was pressed', () => {
+  it('round-trips a key through the Date the calendar draws, in any zone', async () => {
+    const { dayKeyToCalendarDate, calendarDateToDayKey } = await import('../app/lib/schedule-compose-core')
+    for (const key of ['2026-09-15', '2026-01-01', '2026-12-31', '2026-10-04', '2026-04-05']) {
+      const d = dayKeyToCalendarDate(key)!
+      // the cell the picker draws for that key: local, and noon so DST cannot move it
+      expect([d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours()]).toEqual(key.split('-').map(Number).concat(12))
+      expect(calendarDateToDayKey(d)).toBe(key)
+      // …and the cell react-day-picker builds itself (local MIDNIGHT) reads back the same
+      expect(calendarDateToDayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()))).toBe(key)
+    }
+  })
+
+  it('refuses a key that is not a day', async () => {
+    const { dayKeyToCalendarDate } = await import('../app/lib/schedule-compose-core')
+    expect(dayKeyToCalendarDate(null)).toBeUndefined()
+    expect(dayKeyToCalendarDate('15/09/2026')).toBeUndefined()
+  })
+})
+
+/**
+ * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026: "saving as draft
+ * doesn't tell the user that it's a draft … once scheduled show a different
+ * popup"). One sentence for what happened, one for where it is.
+ */
+describe('what the page says after a press', () => {
+  const at = '2026-09-15T08:30:00.000Z' // 6:30 pm Melbourne
+
+  it('a draft says nothing goes out, and where it sits', async () => {
+    const { outcomeWords } = await import('../app/lib/schedule-compose-core')
+    const timed = outcomeWords({ kind: 'draft', at, tz: MELB, networks: ['Instagram'] })
+    expect(timed.title).toBe('Saved as a draft')
+    expect(timed.body).toMatch(/Nothing goes out/)
+    expect(timed.body).toMatch(/6:30 pm/)
+    expect(timed.showOnCalendar).toBe(true)
+    const untimed = outcomeWords({ kind: 'draft', at: null, tz: MELB, networks: [] })
+    expect(untimed.body).toMatch(/No time yet/)
+    expect(untimed.showOnCalendar).toBe(false)
+  })
+
+  it('booked names the time and the networks; sent names the person', async () => {
+    const { outcomeWords } = await import('../app/lib/schedule-compose-core')
+    const booked = outcomeWords({ kind: 'booked', at, tz: MELB, networks: ['Instagram', 'TikTok'] })
+    expect(booked.title).toMatch(/^Booked in for .*6:30 pm/)
+    expect(booked.body).toContain('Instagram, TikTok')
+    const sent = outcomeWords({ kind: 'sent', at, tz: MELB, networks: ['Instagram'], who: 'Ava' })
+    expect(sent.title).toBe('Sent to Ava for approval')
+    expect(sent.body).toMatch(/Once they approve it/)
+    const now = outcomeWords({ kind: 'now', at, tz: MELB, networks: ['TikTok'] })
+    expect(now.title).toBe('Posting now')
+    expect(now.body).toContain('TikTok')
+  })
+})

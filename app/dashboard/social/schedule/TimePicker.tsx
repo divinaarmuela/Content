@@ -6,7 +6,7 @@ import { DayPicker } from 'react-day-picker'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-  clockPillLabel, joinClock, splitClock, to12, to24,
+  calendarDateToDayKey, clockPillLabel, dayKeyToCalendarDate, joinClock, splitClock, to12, to24,
   HOURS_12, MINUTE_STEPS, type ClockValue, type Meridiem,
 } from '@/app/lib/schedule-compose-core'
 import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
@@ -41,15 +41,12 @@ import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
 // 9 Sep 2026: "I'm hovering over 13 and 13 is out of the box").
 const dayCell = 'h-[40px] w-[40px] shrink-0 rounded-tile text-center text-[13px] p-0 relative text-foreground'
 
-/** 'YYYY-MM-DD' → the Date react-day-picker wants, read as a plain day (UTC,
- *  so no zone can shift it onto the day before). */
-function dayOf(key: string | null): Date | undefined {
-  if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return undefined
-  const [y, m, d] = key.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 12))
-}
-const keyOf = (d: Date): string =>
-  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+/** 'YYYY-MM-DD' ⇄ the Date react-day-picker draws and hands back — one frame
+ *  of reference, the browser's local day, in BOTH directions. The UTC pair
+ *  this replaced booked the day before for anyone east of Greenwich (see
+ *  `dayKeyToCalendarDate` in schedule-compose-core, and its test). */
+const dayOf = dayKeyToCalendarDate
+const keyOf = calendarDateToDayKey
 
 export default function TimePicker({
   value, tz, onChange, disabled,
@@ -161,6 +158,9 @@ export default function TimePicker({
             selected={dayOf(current.dayKey)}
             defaultMonth={dayOf(current.dayKey)}
             onSelect={d => { if (d) set({ dayKey: keyOf(d) }) }}
+            // "today" is the CLIENT's today, not the browser's: an overseas
+            // scheduler booking a Melbourne client sees Melbourne's day ringed
+            today={dayOf(today)}
             showOutsideDays
             weekStartsOn={1}
             // a day that has gone cannot hold a post. Refusing it at save time
