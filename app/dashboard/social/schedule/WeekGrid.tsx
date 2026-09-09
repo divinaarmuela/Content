@@ -320,17 +320,29 @@ export default function WeekGrid({
   /* FIRST LIGHT AT 6 AM. The grid runs the whole day now (midnight posts
      were unreachable), so on a fresh week the page is scrolled to 6 am —
      the night rows are above, one flick away. */
-  const sixAm = useRef<HTMLDivElement | null>(null)
+  const root = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    sixAm.current?.scrollIntoView({ block: 'start' })
-  }, [grid.days[0]?.iso])
+    // the nearest box that scrolls (the page's), moved so 6 am sits under
+    // the day headers. `scrollIntoView` on a child of the sticky rail did
+    // nothing reliable; arithmetic on the scroller does.
+    const el = root.current
+    if (!el) return
+    let scroller: HTMLElement | null = el.parentElement
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+    if (!scroller) return
+    const frame = requestAnimationFrame(() => {
+      const offset = el.getBoundingClientRect().top - scroller!.getBoundingClientRect().top + scroller!.scrollTop
+      scroller!.scrollTop = offset + 6 * grid.rowPx
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [grid.days[0]?.iso, grid.rowPx])
 
   return (
     // NOT a scroller of its own: it sits inside the page's scroller and
     // scrolled independently — the wheel moved the grid until the grid hit
     // its end, and only then the page (the owner, 9 Sep 2026: "can't scroll
     // down properly until I touch the bottom line"). One scroller now.
-    <div className="flex shrink-0">
+    <div ref={root} className="flex shrink-0">
       {/* the hour rail */}
       {/* every row is `shrink-0`: the rail is a flex column inside a box
           shorter than the day, and without it the rows were squeezed to fit
@@ -341,8 +353,7 @@ export default function WeekGrid({
         {grid.hours.map((h, i) => (
           <div
             key={h}
-            ref={h === 6 ? sixAm : undefined}
-            style={{ height: grid.rowPx, scrollMarginTop: grid.headerPx }}
+            style={{ height: grid.rowPx }}
             className={cn(
               'shrink-0 pt-0.5 text-[10px] font-semibold text-muted-foreground',
               i > 0 && 'border-t border-border',
