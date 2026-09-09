@@ -260,7 +260,7 @@ export function parseOutcomeSentence(error: string | null | undefined): { live: 
 export function outcomeWords(o: PlatformOutcome): { label: string; tone: 'done' | 'waiting' | 'trouble' | 'moving' | 'quiet' } {
   switch (o.status) {
     case 'published': return { label: 'Went out', tone: 'done' }
-    case 'scheduled': return { label: 'Booked', tone: 'waiting' }
+    case 'scheduled': return { label: 'Scheduled', tone: 'waiting' }
     case 'failed': return { label: 'Did not go out', tone: 'trouble' }
     case 'pending': return { label: 'Still going out', tone: 'moving' }
     case 'cancelled': return { label: 'Cancelled', tone: 'quiet' }
@@ -421,7 +421,7 @@ export type FileBooking = {
 
 /**
  * For one file of a card: the post that carries it, if that post is booked
- * or has gone out — so the card can say "Booked · Fri 9:00" or "Went out on
+ * or has gone out — so the card can say "Scheduled · Fri 9:00" or "Went out on
  * Instagram" under the file, next to "Posted by hand" on the ones done by hand.
  */
 export function fileBooking(

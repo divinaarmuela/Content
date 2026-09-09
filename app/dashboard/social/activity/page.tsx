@@ -33,7 +33,7 @@ import PageTitle from '../../ui/PageTitle'
  * this app has had looked like a mystery. Then it existed with one word per
  * job — and one word cannot say "went out on Instagram, refused by TikTok",
  * which is what the 15:45 post of 8 Sep 2026 did. So now: three piles
- * (Booked, Did not post, Posted — a partial sits on two of them), one line
+ * (Scheduled, Did not post, Posted — a partial sits on two of them), one line
  * per channel saying what kind of post it was and what happened to it, the
  * files marked "Posted by hand" on the cards listed next to the jobs, and
  * the last thirty days' numbers per client along the top.
@@ -51,7 +51,7 @@ const TONE: Record<Tone, { chip: string; icon: typeof CheckCircle2 }> = {
 }
 
 const TABS: { key: PostsTab; label: string }[] = [
-  { key: 'scheduled', label: 'Booked' },
+  { key: 'scheduled', label: 'Scheduled' },
   { key: 'did_not_post', label: 'Did not post' },
   { key: 'posted', label: 'Posted' },
 ]
@@ -220,9 +220,9 @@ export default function PublishActivityPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Send}
-          title={tab === 'scheduled' ? 'Nothing booked' : tab === 'did_not_post' ? 'Nothing refused' : 'Nothing out yet'}
+          title={tab === 'scheduled' ? 'Nothing scheduled' : tab === 'did_not_post' ? 'Nothing refused' : 'Nothing out yet'}
           body={tab === 'scheduled'
-            ? 'Posts booked from the Schedule page wait here until they go out.'
+            ? 'Posts scheduled from the Schedule page wait here until they go out.'
             : tab === 'did_not_post'
             ? 'A channel that refuses a post lands here, with the reason.'
             : 'Posts that went out — by a channel or by hand — are listed here, newest first.'}

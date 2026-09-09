@@ -21,7 +21,7 @@ describe('a job read back as a sentence', () => {
   it('says a booked post is booked, in the client\'s zone', () => {
     const w = jobWords(job({ status: 'scheduled', scheduled_for: '2026-09-04T23:00:00Z' }), NOW)
     // 23:00 UTC is 9:00 am the next day in Melbourne — the audience's clock
-    expect(w.headline).toMatch(/^Booked for Sat 5 Sept? 2026, 9:00 am AEST/)
+    expect(w.headline).toMatch(/^Scheduled for Sat 5 Sept? 2026, 9:00 am AEST/)
     expect(w.canCancel).toBe(true)
     expect(w.canRetry).toBe(false)
   })

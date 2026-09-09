@@ -55,7 +55,7 @@ import CollapsibleCard from '../CollapsibleCard'
  * with — and its files are written as versions through the item's own
  * versions route, so the numbering and the history are the ordinary ones.
  */
-/** "Booked · Fri 11 Sep, 9:00 am" or "Went out on Instagram · …" under one
+/** "Scheduled · Fri 11 Sep, 9:00 am" or "Went out on Instagram · …" under one
  *  file, from the post that carries it (post-outcome-core.fileBooking) */
 function FileBookingChip({ url, posts, jobsById }: {
   url: string; posts: SocialPost[]; jobsById: ReadonlyMap<string, OutcomeJob>
@@ -77,7 +77,7 @@ function FileBookingChip({ url, posts, jobsById }: {
   }
   return (
     <>
-      <Chip tone="amber">Booked{when ? ` · ${when}` : ''}</Chip>
+      <Chip tone="amber">Scheduled{when ? ` · ${when}` : ''}</Chip>
       {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
     </>
   )
@@ -90,7 +90,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const { rows: versions } = useTable<AssetVersion>('asset_versions', { by: byItem })
   const { rows: comments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
-  // THE POSTS THAT CARRY EACH FILE, so the file can say "Booked · Fri 9:00"
+  // THE POSTS THAT CARRY EACH FILE, so the file can say "Scheduled · Fri 9:00"
   // or "Went out on Instagram" — the owner, 9 Sep 2026: "in schedule to
   // show that it's scheduled and in post approval page"
   const { rows: filePosts } = useTable<SocialPost>('social_posts', { by: byItem })
@@ -431,7 +431,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                       : 'Posted'}
                   </Chip>
                 )}
-                {/* "Went out on Instagram · Wed 9 Sep, 8:30 pm" / "Booked · …" from
+                {/* "Went out on Instagram · Wed 9 Sep, 8:30 pm" / "Scheduled · …" from
                     the post that carries this file */}
                 {!handRecord(postedSlides, s.url) && <FileBookingChip url={s.url} posts={filePosts} jobsById={jobsById} />}
                 {handRecord(postedSlides, s.url)?.link && (
