@@ -245,7 +245,7 @@ function EmptySlot({ platform, onConnect }: { platform: string; onConnect?: (pla
         title={`Connect a ${label} account`}
         disabled={busy}
         onClick={() => { setBusy(true); onConnect(platform) }}
-        className="flex w-[58px] shrink-0 flex-col items-center gap-1"
+        className="flex w-[66px] shrink-0 flex-col items-center gap-1"
       >
         {face}
       </button>
@@ -255,7 +255,7 @@ function EmptySlot({ platform, onConnect }: { platform: string; onConnect?: (pla
     <Link
       href="/dashboard/social"
       title={`Connect a ${label} account`}
-      className="flex w-[58px] shrink-0 flex-col items-center gap-1"
+      className="flex w-[66px] shrink-0 flex-col items-center gap-1"
     >
       {face}
     </Link>
@@ -299,7 +299,7 @@ export default function ProfilesBar({
 
       {/* the networks scroll rather than wrap: ten slots and a calendar have
           to share one row on a laptop */}
-      <div className="flex min-w-0 flex-1 items-start gap-1 overflow-x-auto pb-0.5">
+      <div className="flex min-w-0 flex-1 items-start gap-2 overflow-x-auto pb-0.5">
         {slots.map(slot => (
           slot.kind === 'account' ? (
             <AccountSlot
