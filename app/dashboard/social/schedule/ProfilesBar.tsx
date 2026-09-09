@@ -153,6 +153,15 @@ function AccountSlot({ slot, selected, onPick, onReconnect, fallbackName }: {
           {health?.reason}
           {soon && ' Reconnecting now keeps every post on this account going out.'}
         </p>
+        {/* the sign-in that opens is THE NETWORK's, in this browser: whoever
+            signs in is who gets connected. Signing in as yourself puts your
+            own account in the client's slot — and on Instagram replaces
+            theirs (the owner, 9 Sep 2026: "what if team click reconnect"). */}
+        <p className="mt-1.5 rounded-inner bg-tint-amber px-2 py-1.5 text-[11px] leading-[1.4]">
+          Sign in as <strong>{name}</strong>, or as an admin on their page. Signing in as
+          yourself connects <em>your</em> account instead. No login? Send the client their
+          connect link from Social channels.
+        </p>
         <button type="button" onClick={() => { setAsking(false); onReconnect(account) }}
           className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
           <RefreshCw className="h-3.5 w-3.5" /> Reconnect {brandFor(platform).label}
