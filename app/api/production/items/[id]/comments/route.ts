@@ -140,10 +140,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
      * word and has just been sent). Nobody outside the team is told.
      */
     if (visibility === 'internal' && user.role !== 'client') {
-      const holders = [
+      // …and the client's account managers (the owner, 9 Sep 2026: "will it
+      // send the notification to the scheduler AND the AM assigned?") — the
+      // AM holds the client even when they do not hold the card
+      const managerLinks = item.client_id
+        ? await table<TeamUserClient>('team_user_clients').list({ by: { client_id: item.client_id } })
+        : []
+      const managerIds = (await attachOne(managerLinks, 'team_user_id', 'team_users', ['id', 'role', 'active_status']))
+        .map(r => r.team_users as unknown as { id: string; role: string; active_status: boolean } | null)
+        .filter((u): u is { id: string; role: string; active_status: boolean } => !!u && u.active_status && u.role === 'account_manager')
+        .map(u => u.id)
+      const holders = [...new Set([
         ...(item.owner_id ? [String(item.owner_id)] : []),
         ...(Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : []),
-      ].filter(uid => uid && uid !== user.id && !tagged.some(t => t.id === uid))
+        ...managerIds,
+      ])].filter(uid => uid && uid !== user.id && !tagged.some(t => t.id === uid))
       if (holders.length > 0) {
         const people = await table<TeamUser>('team_users')
           .list({ where: u => holders.includes(u.id) && u.active_status === true && u.role !== 'client' })
