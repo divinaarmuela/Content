@@ -13,7 +13,7 @@ import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/w
 import { taskExemptFromClientScope } from '../../../lib/item-edit-core'
 import {
   accessibleClientIds, canOpenBatch, openTaggedIds,
-  taggedBatchIds, taggedItemIds,
+  createdItemIds, taggedBatchIds, taggedItemIds,
 } from '../../../lib/production-access'
 import { scopeContextOf, visibleItems, type ScopeViewer } from '../../../lib/scope-client'
 import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
@@ -60,14 +60,9 @@ export async function GET(req: Request) {
       table<WorkKindRow>('work_kinds').list(),
       taggedItemIds(user),
       taggedBatchIds(user),
-      // what this person CREATED — recorded only in the activity log, and a
-      // grant like a tag: making a thing keeps it visible after handing it on
-      user.role === 'super_admin' || user.role === 'client'
-        ? Promise.resolve([] as string[])
-        : table<WorkflowActivity>('workflow_activity').list({
-            where: a => a.actor_id === user.id && a.entity_type === 'content_item' && a.action === 'created',
-            limit: 3000,
-          }).then(rows => rows.map(a => a.entity_id).filter(Boolean)).catch(() => [] as string[]),
+      // what this person CREATED — a grant like a tag: making a thing keeps
+      // it visible after handing it on
+      createdItemIds(user),
     ])
     if (user.role === 'client' && !viewer.client_id) return NextResponse.json([])
 

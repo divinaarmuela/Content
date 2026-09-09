@@ -142,16 +142,23 @@ export function schedulerScope<T extends WorkItem>(items: T[], v: Viewer, scope:
  *  Making a thing is involvement, whoever ends up holding it. A brief she
  *  created and left open still shows its claim button — it sits on her
  *  board AND is honestly up for grabs; those are different facts. */
+export function productionAssignment(
+  i: WorkItem, viewer: Viewer, batchOwnerById: Record<string, string | null | undefined>,
+): Assignment {
+  const batchOwner = batchOwnerById[i.batch_id ?? '']
+  if (i.owner_id === viewer.id || batchOwner === viewer.id || i.created_by_id === viewer.id) return 'mine'
+  if (!i.owner_id && !batchOwner) return 'unassigned'
+  return 'other'
+}
+
 export function productionScope<T extends WorkItem>(
   briefTasks: T[], v: Viewer, scope: ScopeSet,
   batchOwnerById: Record<string, string | null | undefined>,
 ): T[] {
-  return applyScope(briefTasks, v, scope, (i, viewer) => {
-    const batchOwner = batchOwnerById[i.batch_id ?? '']
-    if (i.owner_id === viewer.id || batchOwner === viewer.id || i.created_by_id === viewer.id) return 'mine'
-    if (!i.owner_id && !batchOwner) return 'unassigned'
-    return 'other'
-  })
+  // ONE classifier for the board, the Unassigned count and "can you see what
+  // you just made" — three answers from three rules is how the pill counted
+  // a card the board filed under Mine
+  return applyScope(briefTasks, v, scope, (i, viewer) => productionAssignment(i, viewer, batchOwnerById))
 }
 
 /** How many of these are waiting for somebody to pick them up. */

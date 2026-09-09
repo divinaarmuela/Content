@@ -113,9 +113,11 @@ export async function POST(req: Request) {
     }
     const data = await table('deliverable_groups')
       .insert(planned ? { ...baseRow, planned } : baseRow) as unknown as DeliverableGroup
+    // logged as what it IS: a 'content_item' row here would feed the creator
+    // grant (`createdItemIds`) a group id no item matches
     await logActivity({
       actor: user, clientId,
-      entityType: 'content_item', entityId: data.id,
+      entityType: 'deliverable_group', entityId: data.id,
       action: 'created',
       newValue: `${title} — ${target} promised`,
       ...(batchId || !adhocReason ? {} : { detail: `ad-hoc: ${adhocReason.slice(0, 300)}` }),

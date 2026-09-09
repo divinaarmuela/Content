@@ -6,7 +6,7 @@ import type {
 } from '@/lib/db-types'
 import { AuthzError, requireSignedIn, authzErrorResponse } from '../../lib/authz'
 import {
-  accessibleClientIds, assertUuid, openTaggedIds, taggedBatchIds, taggedItemIds,
+  accessibleClientIds, assertUuid, createdItemIds, openTaggedIds, taggedBatchIds, taggedItemIds,
 } from '../../lib/production-access'
 import { visibleItems, type ScopeViewer } from '../../lib/scope-client'
 import { buildOverview, type OverviewItem } from '../../lib/overview-core'
@@ -51,7 +51,7 @@ export async function GET() {
     }
     let items: ItemLite[] = []
     try {
-      const [assignments, batches, workKinds, itemTags, batchTags] = await Promise.all([
+      const [assignments, batches, workKinds, itemTags, batchTags, createdIds] = await Promise.all([
         clientIds === null
           ? Promise.resolve([] as TeamUserClient[])
           : table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }),
@@ -59,6 +59,7 @@ export async function GET() {
         table<WorkKind>('work_kinds').list(),
         taggedItemIds(user),
         taggedBatchIds(user),
+        createdItemIds(user),
       ])
       const all = await table<ContentItem>('content_items').list({
         orderBy: [['updated_at', 'desc']],
@@ -71,6 +72,7 @@ export async function GET() {
           batches,
           taggedItemIds: itemTags,
           taggedBatchIds: batchTags,
+          createdItemIds: createdIds,
           workKinds: workKinds as unknown as { id: string; slug: string }[],
           schedulerPostFilter: false,
         },

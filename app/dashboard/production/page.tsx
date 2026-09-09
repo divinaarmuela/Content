@@ -30,7 +30,7 @@ import { type ItemStatus } from '../../lib/workflow-core'
 import { BRIEF_STATUS_TURN, itemStatusLabel } from '../../lib/brief-task-core'
 import { TASK_STATUS_TURN, taskStatusLabel } from '../../lib/task-kind-core'
 import {
-  activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment,
+  activeBriefTasks, activeInternalTasks, canClaimEditor, editorAssignment, productionAssignment,
   isBriefTask, isInternalTask, productionScope, recentlyDoneTasks, unassignedCount,
   type ScopeMode, type Viewer,
 } from '../../lib/work-pages-core'
@@ -299,15 +299,22 @@ export default function ProductionPage() {
    * happens to be "Mine" alone, the board answered a successful creation with
    * an empty page. Creating is an explicit act — it earns a view.
    */
-  const revealCreated = (created?: { id: string; owner_id?: string | null }[]) => {
+  const revealCreated = (created?: { id: string; owner_id?: string | null; batch_id?: string | null }[]) => {
     if (!viewer || !created?.length || scope.has('all')) return
+    // judged by the board's own rule — and by that rule what you just made
+    // is YOURS (the creator counts), so it can only be hidden while Mine is
+    // off. Turning Mine on is the honest answer; "everyone's" no longer is,
+    // since an editor's "everyone" is only their own work.
     const hidden = created.some(r => {
-      const a = editorAssignment({ id: r.id, status: 'draft_uploaded', owner_id: r.owner_id ?? null }, viewer)
+      const a = productionAssignment({
+        id: r.id, status: 'draft_uploaded', owner_id: r.owner_id ?? null,
+        batch_id: r.batch_id ?? null, created_by_id: viewer.id,
+      }, viewer, batchOwnerById)
       return a === 'other' || !scope.has(a)
     })
     if (!hidden) return
-    setScope(new Set<ScopeMode>(['all']))
-    toast.message('Showing everyone’s, so the new work is on screen.')
+    setScope(new Set<ScopeMode>([...scope, 'mine']))
+    toast.message('Showing yours, so the new work is on screen.')
   }
 
   const matches = (clientId: string, title: string) =>
@@ -374,9 +381,11 @@ export default function ProductionPage() {
   const nothingToShow = shoots !== null && boardCount === 0 && doneRows.length === 0
     && bookedShoots.length === 0 && closedShoots.length === 0
 
-  // the pool: plans and tasks nobody has picked up yet
+  // the pool: plans and tasks nobody has picked up yet — counted by the
+  // board's own rule, so the pill and the columns cannot disagree
   const openPool = viewer
-    ? unassignedCount([...briefsInFilters, ...tasksInFilters], viewer, editorAssignment)
+    ? unassignedCount(briefsInFilters, viewer, (i, v) => productionAssignment(i, v, batchOwnerById))
+      + unassignedCount(tasksInFilters, viewer, (i, v) => productionAssignment(i, v, {}))
     : 0
 
   /** The calendar, drawn from exactly the rows the board is drawn from. */

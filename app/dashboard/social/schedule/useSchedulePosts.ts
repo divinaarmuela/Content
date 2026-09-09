@@ -27,8 +27,8 @@
 import { useMemo } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
-  AssetVersion, Batch, Client, ContentItem, PublishJob, ScheduleNote,
-  SocialAccount, SocialPost, TeamUserClient, WorkKind,
+  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, PublishJob, ScheduleNote,
+  SocialAccount, SocialPost, TeamUserClient, WorkflowActivity, WorkKind,
 } from '@/lib/db-types'
 import {
   assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility,
@@ -184,6 +184,11 @@ export function useSchedulePosts(
   // work kind is how a shoot plan is told apart from a piece of content
   const batches = useTable<Batch>('batches', { enabled: on })
   const workKinds = useTable<WorkKind>('work_kinds', { enabled: on })
+  // and the grants — tags and creation — read off the same tables the
+  // boards hold, or an editor sees less here than on their own board
+  const itemComments = useTable<ItemComment>('item_comments', { enabled: on })
+  const batchComments = useTable<BatchComment>('batch_comments', { enabled: on })
+  const activity = useTable<WorkflowActivity>('workflow_activity', { enabled: on })
 
   /** the items this viewer may see at all — the items API's own predicate,
    *  with the items API's own context (`tests/scope-client.test.ts` pins the
@@ -197,6 +202,9 @@ export function useSchedulePosts(
       scopeContextOf({
         viewer,
         batches: batches.rows,
+        itemComments: itemComments.rows,
+        batchComments: batchComments.rows,
+        activity: activity.rows,
         workKinds: workKinds.rows,
       }),
     ).filter(i => i.client_id === clientId)
@@ -204,7 +212,7 @@ export function useSchedulePosts(
       // files and was showing in the rail as "No media yet" (the owner, 9 Sep
       // 2026: "why does the super admin see August 2026 as no media yet")
       .filter(i => (workKinds.rows.find(k => k.id === i.work_kind_id)?.slug ?? '') !== 'shoot_brief')
-  }, [viewer, items.rows, assignments.rows, batches.rows, workKinds.rows, clientId])
+  }, [viewer, items.rows, assignments.rows, batches.rows, itemComments.rows, batchComments.rows, activity.rows, workKinds.rows, clientId])
 
   const itemById = useMemo(
     () => new Map(scopedItems.map(i => [i.id, i])), [scopedItems])

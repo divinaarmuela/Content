@@ -31,7 +31,7 @@ import type {
 import { CLIENT_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { slidesOf } from '../lib/version-files-core'
 import {
-  scopeContextOf, taggedIdsOf, visibleBatches, visibleClientIdsOf, visibleGroups,
+  createdItemIdsOf, scopeContextOf, taggedIdsOf, visibleBatches, visibleClientIdsOf, visibleGroups,
   visibleItems, type ScopeContext, type ScopeViewer,
 } from '../lib/scope-client'
 
@@ -313,10 +313,13 @@ export function useWorkRows(
    *
    * The old pages toasted "Could not load shoots" when their fetch threw. A
    * live board that silently draws nothing on a dropped subscription is worse
-   * than the fetch was: it looks like an answer. Only the four tables the
-   * cards are made of count — a missing credit is not a broken page.
+   * than the fetch was: it looks like an answer. The four tables the cards
+   * are made of count, and so does the activity log now that it decides
+   * VISIBILITY (what you created) and not just a credit line — a dropped
+   * activity listener would quietly re-hide the brief you wrote.
    */
-  const error = t.items.error || t.batches.error || t.clients.error || t.workKinds.error || null
+  const error = t.items.error || t.batches.error || t.clients.error || t.workKinds.error
+    || t.activity.error || null
 
   // memoised: this object is a memo key on every page that uses it (the
   // Overview derives its whole payload from it), and a fresh literal per
@@ -360,6 +363,13 @@ export function useItemScopeContext(
     'content_items', { by: byBatch })
   const { rows: batchComments, loading: batchCommentsLoading } =
     useTable<BatchComment & { assigned_to?: string | null }>('batch_comments')
+  // the activity log is the only record of who CREATED an item; the board
+  // lists what you made, so the click on it has to be let through too.
+  // (`entity_id` is not an indexed column, so this is filtered in memory
+  // from the same subscription the boards already hold.)
+  const byEntity = useMemo(() => ({ entity_id: item?.id ?? '' }), [item?.id])
+  const { rows: itemActivity, loading: activityLoading } =
+    useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
 
   // A subscription re-keys in an EFFECT, one render after the key changed, so
   // for that one render the hook still reports the previous key's settled
@@ -379,10 +389,13 @@ export function useItemScopeContext(
     taggedBatchIds: viewer
       ? batchComments.filter(c => c.assigned_to === viewer.id).map(c => c.batch_id).filter(Boolean)
       : [],
-  }), [siblings, batch, batchComments, itemComments, viewer, item?.id])
+    createdItemIds: viewer && item
+      ? createdItemIdsOf(itemActivity, viewer.id).filter(id => id === item.id)
+      : [],
+  }), [siblings, batch, batchComments, itemComments, itemActivity, viewer, item?.id])
 
   return {
     ctx,
-    loading: !keyed || siblingsLoading || batchCommentsLoading || (batchId !== null && batchLoading),
+    loading: !keyed || siblingsLoading || batchCommentsLoading || activityLoading || (batchId !== null && batchLoading),
   }
 }

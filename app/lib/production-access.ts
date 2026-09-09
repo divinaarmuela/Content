@@ -1,6 +1,6 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient } from '@/lib/db-types'
+import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
 
@@ -115,6 +115,29 @@ export async function taggedItemIds(user: TeamUser): Promise<string[]> {
   const rows = await table<ItemComment>('item_comments')
     .list({ where: r => r.assigned_to === user.id, limit: 500 })
   return [...new Set(rows.map(r => r.item_id).filter(Boolean))]
+}
+
+/**
+ * The items this person CREATED — a grant like a tag, read off the activity
+ * log because `content_items` carries no created_by. A failed read is
+ * LOGGED and returns nothing: the board would quietly re-hide what they
+ * made, which is exactly the silent failure CLAUDE.md warns about, so it
+ * must at least be visible in the logs. Newest first, so a prolific creator
+ * loses their oldest rows past the cap, never their latest.
+ */
+export async function createdItemIds(user: TeamUser): Promise<string[]> {
+  if (user.role === 'client' || user.role === 'super_admin') return []
+  try {
+    const rows = await table<WorkflowActivity>('workflow_activity').list({
+      where: a => a.actor_id === user.id && a.entity_type === 'content_item' && a.action === 'created',
+      orderBy: [['created_at', 'desc']],
+      limit: 3000,
+    })
+    return [...new Set(rows.map(a => a.entity_id).filter(Boolean))]
+  } catch (err) {
+    console.error('[scope] could not read created items for', user.id, err)
+    return []
+  }
 }
 
 /**
@@ -248,9 +271,11 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
 }
 
 /**
- * The four ways an assignment opens ONE item for someone off its client team.
+ * The five ways involvement opens ONE item for someone off its client team.
  *
- * Held directly (owner, or handed the scheduling); tagged in a comment; or
+ * Held directly (owner, or handed the scheduling); tagged in a comment;
+ * CREATED by them (the activity log is the only record of that — the board
+ * lists what you made, so the click has to open it too); or
  * sitting under a shoot this person holds — because the shoot page lists
  * every item on the shoot, and a list whose rows 404 on click is the same
  * broken promise as a page that hides work you were given. Runs only on the
@@ -267,6 +292,12 @@ async function assignmentOpensItem(
     limit: 1,
   })
   if (tag.length > 0) return true
+  const made = await table<WorkflowActivity>('workflow_activity').list({
+    where: a => a.entity_id === item.id && a.entity_type === 'content_item'
+      && a.action === 'created' && a.actor_id === user.id,
+    limit: 1,
+  })
+  if (made.length > 0) return true
   if (!item.batch_id) return false
   const batch = await table<Batch>('batches').get(item.batch_id)
   return batch ? await canOpenBatch(user, batch) : false
