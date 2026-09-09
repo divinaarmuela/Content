@@ -229,8 +229,15 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly, on
       itemId: composing.itemId,
       title: media?.title ?? post?.item_title ?? fresh?.title ?? 'Post',
       contentType: media?.contentType ?? String(post?.item_type ?? fresh?.contentType ?? ''),
-      approved: media?.slides ?? fresh?.slides ?? [],
-      knownUrls: media?.knownUrls ?? (fresh ? fresh.slides.map(s => s.url) : []),
+      // A BOOKED OR LIVE POST'S FILES ARE THE SIGNED-OFF FILES. Its piece has
+      // left the rail (the rail is "approved, not yet posted"), so `media` is
+      // null here and the window read the post as carrying files nobody
+      // signed off — "New media — not signed off" over a post the manager
+      // had booked themselves (the owner, 9 Sep 2026)
+      approved: media?.slides ?? fresh?.slides
+        ?? (post && (post.live_status === 'scheduled' || post.live_status === 'published') ? post.slides : []),
+      knownUrls: media?.knownUrls ?? (fresh ? fresh.slides.map(s => s.url)
+        : post && (post.live_status === 'scheduled' || post.live_status === 'published') ? post.slides.map(s => s.url) : []),
       coverUrl: media?.coverUrl ?? null,
       versionNumber: post?.version_number ?? null,
       needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
