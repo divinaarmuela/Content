@@ -542,7 +542,7 @@ export default function SchedulePage() {
             clients={data.clients}
             clientId={clientId}
             onClient={pickClient}
-            accounts={data.accounts}
+            accounts={data.allAccounts}
             channel={channel}
             onChannel={setChannel}
             view={view}

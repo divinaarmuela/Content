@@ -55,7 +55,8 @@ export function profileSlots(
   accounts: readonly SocialAccount[] | null | undefined,
   order: readonly string[] = NETWORK_ORDER,
 ): ProfileSlot[] {
-  const live = (accounts ?? []).filter(a => a?.active !== false)
+  // revoked accounts stay in the bar, red, so they can be reconnected
+  const live = (accounts ?? []).filter(a => !!a)
   const out: ProfileSlot[] = []
   for (const platform of order) {
     const mine = live.filter(a => a.platform === platform)
@@ -104,7 +105,10 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
    * and keep its reason in the hover title, which a phone never shows: "the
    * top icons show yellow caution but does nothing". */
   const health = readStoredHealth((account as { health?: unknown }).health)
-  const broken = needsReconnect(health)
+  // a channel the network revoked (`active: false`) is exactly the one that
+  // needs the Reconnect press — it was filtered out of the bar while the
+  // tile named it as the block (the audit of 9 Sep 2026)
+  const broken = needsReconnect(health) || account.active === false
   const [checking, setChecking] = useState(false)
   const soon = health?.level === 'watch'
   const warned = broken || soon

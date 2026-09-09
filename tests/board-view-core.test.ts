@@ -128,6 +128,15 @@ describe('the control on a card', () => {
     expect(more).toContainEqual({ kind: 'transition', to: 'approved_for_scheduling', label: "Log the client's approval" })
   })
 
+  // 9 Sep 2026: an uploaded post is booked on the Schedule page and marked
+  // posted one file at a time — the whole-card presses were a 400 or a lie
+  it('an uploaded post offers no whole-card Booked in / Posted press', () => {
+    const ready = cardActions(card({ status: 'approved_for_scheduling', adhoc_post: true } as Partial<BoardViewCard>), scheduler)
+    expect([ready.primary, ...ready.more].filter(Boolean).some(a => a!.kind === 'transition' && (a!.to === 'scheduled' || a!.to === 'published'))).toBe(false)
+    const booked = cardActions(card({ status: 'scheduled', adhoc_post: true } as Partial<BoardViewCard>), manager)
+    expect([booked.primary, ...booked.more].filter(Boolean).some(a => a!.kind === 'transition' && a!.to === 'published')).toBe(false)
+  })
+
   it('a scheduler moves a ready card to Booked in, then to Posted — plain moves, nothing asked', () => {
     expect(cardActions(card({ status: 'approved_for_scheduling' }), scheduler).primary)
       .toEqual({ kind: 'transition', to: 'scheduled', label: BOOKED_LABEL })

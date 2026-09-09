@@ -828,6 +828,13 @@ export default function NewPostDialog({
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new ComposeProblem(json)
+        // a BOOKED post is re-queued by that move itself; the booking call
+        // below is for a post not yet handed over and refuses a booked one
+        if (status === 'scheduled') {
+          setNote('Sending now.')
+          finished('now', id)
+          return
+        }
       }
       const res = await fetch(`/api/social/schedule/${id}/schedule`, { method: 'POST' })
       const json = await res.json().catch(() => ({}))
@@ -951,10 +958,14 @@ export default function NewPostDialog({
     if (!state.postId) { onClose(); return }
     setBusy(true)
     try {
-      await fetch(`/api/social/schedule/${state.postId}`, { method: 'DELETE' })
+      // the server's answer is the truth: "the channel would not let go" is
+      // a refusal, not a cancel (the audit of 9 Sep 2026)
+      const res = await fetch(`/api/social/schedule/${state.postId}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new ComposeProblem(json)
       onClose()
-    } catch {
-      setProblems(['Could not take that post off the calendar. Try again in a moment.'])
+    } catch (e) {
+      setProblems(e instanceof ComposeProblem ? problemsOf(e) : ['Could not take that post off the calendar. Try again in a moment.'])
     } finally {
       setBusy(false)
     }
@@ -1103,6 +1114,7 @@ export default function NewPostDialog({
                     type="button"
                     title={s.why}
                     onClick={() => dispatch({ type: 'time', iso: s.iso })}
+                    disabled={locked && status !== 'scheduled'}
                     className={cn(
                       'min-h-11 rounded-full px-3 text-[12px] font-semibold',
                       on
@@ -1257,7 +1269,7 @@ export default function NewPostDialog({
               />
             </label>
 
-            {groups.length > 0 && (
+            {groups.length > 0 && !locked && (
               <>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   More options
@@ -1293,8 +1305,9 @@ export default function NewPostDialog({
               </>
             )}
 
-            {/* the other channels this client has — Later's "Also post to" */}
-            {accounts.some(a => !state.channels.includes(a.id)) && (
+            {/* the other channels this client has — Later's "Also post to";
+                not on a booked or posted post, whose channels are set */}
+            {!locked && accounts.some(a => !state.channels.includes(a.id)) && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[12px] text-muted-foreground">Also post to</span>
                 {accounts.filter(a => !state.channels.includes(a.id)).map(a => (
@@ -1406,7 +1419,7 @@ export default function NewPostDialog({
           </div>
         )}
 
-        {status === 'pending' && mayApprove && (
+        {status === 'pending' && mayPostWithoutApproval(role, clientSignsOff) && (
           <div className="mx-3.5 mt-3.5 flex flex-col gap-2.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-3">
             <p className="text-[13px] font-semibold">
               This post is waiting on you. Look at it above, then approve it, send it to the client, or say what to change.

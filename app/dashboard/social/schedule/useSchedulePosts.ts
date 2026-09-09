@@ -145,6 +145,7 @@ export type ScheduleData = {
   posts: SchedulePostRow[]
   notes: ScheduleNote[]
   accounts: SocialAccount[]
+  allAccounts: SocialAccount[]
   media: RailMedia[]
   /** this client signs every post off themselves — nobody skips the wait */
   clientSignsOff: boolean
@@ -377,6 +378,8 @@ export function useSchedulePosts(
     posts: tiles,
     notes: notes.rows.filter(n => n.client_id === clientId),
     accounts: liveAccounts,
+    /** every account on the client, revoked ones included — for the bar */
+    allAccounts: clientAccounts,
     media,
     clientSignsOff,
     postWithoutApproval,

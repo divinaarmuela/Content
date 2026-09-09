@@ -47,7 +47,38 @@ export type PublishJob = {
   attempts: number
 }
 
-export const publishLockKey = (contentItemId: string) => `publish__${contentItemId}`
+/**
+ * The lock a job takes while it is live: ONE PER ITEM PER SET OF FILES.
+ *
+ * It was one per item, which made "book two of the five today and the other
+ * three tomorrow" impossible: the second post was refused with "This content
+ * item is already queued to publish" while the first was still booked (the
+ * audit of 9 Sep 2026). Two posts of the SAME file are still one winner —
+ * the key carries the files.
+ */
+export const publishLockKey = (contentItemId: string, mediaKey = '') =>
+  mediaKey ? `publish__${contentItemId}__${mediaKey}` : `publish__${contentItemId}`
+
+/** every file a job carries — shared media and each channel's own */
+export function jobMediaUrls(job: { media?: unknown; targets?: unknown }): string[] {
+  const urls = new Set<string>()
+  for (const m of Array.isArray(job.media) ? job.media as { url?: unknown }[] : []) if (typeof m?.url === 'string') urls.add(m.url)
+  for (const t of Array.isArray(job.targets) ? job.targets as { options?: { media?: { url?: unknown }[] } }[] : []) {
+    for (const m of t?.options?.media ?? []) if (typeof m?.url === 'string') urls.add(m.url)
+  }
+  return [...urls].sort()
+}
+
+/** a short stable key for a set of files (RTDB keys take no `. # $ [ ] /`) */
+export function mediaKeyOf(urls: readonly string[]): string {
+  if (urls.length === 0) return 'text'
+  let h = 0
+  for (const u of urls) for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) >>> 0
+  return `${urls.length}x${h.toString(36)}`
+}
+
+export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown }) =>
+  publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)))
 
 /** The platform names off a job's stored targets, however loosely typed. */
 function platformsOf(targets: unknown): string[] {
@@ -136,15 +167,21 @@ export async function queuePublishJob(input: {
   if (input.contentItemId) {
     // the read first, because it is the only thing that knows about jobs
     // queued before this lock existed — but it is not the guarantee
+    // a live job of this item that carries ANY of the same files is the
+    // same post going twice; one carrying other files is a part-booking
+    const mine = new Set(jobMediaUrls({ media: input.media, targets: input.targets }))
     const live = await table<PublishJobRow>('publish_jobs').list({
       where: j => j.content_item_id === input.contentItemId
-        && LIVE_JOB_STATUSES.includes(j.status),
+        && LIVE_JOB_STATUSES.includes(j.status)
+        // a job with no files on record (text, or from before files were
+        // recorded) still holds the whole card
+        && (mine.size === 0 || jobMediaUrls(j).length === 0 || jobMediaUrls(j).some(u => mine.has(u))),
       limit: 1,
     })
-    if (live.length > 0) return { error: 'This content item is already queued to publish' }
+    if (live.length > 0) return { error: 'These files are already queued to publish on this card' }
 
     const gate = await takeClaimLock(
-      publishLockKey(input.contentItemId), jobId,
+      publishLockKey(input.contentItemId, mediaKeyOf([...mine])), jobId,
       async holder => {
         const held = await table<PublishJobRow>('publish_jobs').get(holder)
         return !!held && LIVE_JOB_STATUSES.includes(held.status)
@@ -176,7 +213,7 @@ export async function queuePublishJob(input: {
     return { id: row.id }
   } catch (e) {
     // the lock is only worth holding while there is a job behind it
-    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId), jobId).catch(() => {})
+    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets }))), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
 }
@@ -235,7 +272,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     // a job that has stopped being live stops owning its content item
     const status = fields.status
     if (typeof status === 'string' && !LIVE_JOB_STATUSES.includes(status) && claimed.content_item_id) {
-      await releaseClaimLock(publishLockKey(String(claimed.content_item_id)), jobId).catch(() => {})
+      await releaseClaimLock(jobLockKey(claimed), jobId).catch(() => {})
     }
   }
 

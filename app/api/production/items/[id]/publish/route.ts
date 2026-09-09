@@ -11,7 +11,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { PublishJob } from '@/lib/db-types'
 import { getPublisher } from '../../../../../lib/publisher'
 import { releaseClaimLock } from '../../../../../lib/claim-lock'
-import { publishLockKey } from '../../../../../lib/publish'
+import { jobLockKey } from '../../../../../lib/publish'
 
 /**
  * Who may put something on a client's live accounts.
@@ -176,7 +176,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     }
     // a cancelled job stops owning its content item
     if (job.content_item_id) {
-      await releaseClaimLock(publishLockKey(String(job.content_item_id)), job.id).catch(() => {})
+      await releaseClaimLock(jobLockKey(job), job.id).catch(() => {})
     }
 
     await logActivity({

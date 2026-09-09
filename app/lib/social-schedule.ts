@@ -18,7 +18,7 @@ import {
   mayApprovePost, maySendPostApproval, publishBlockReason, stateAfterPostEdit,
 } from './posting-approval-core'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
-import { LIVE_JOB_STATUSES, publishLockKey, queuePublishJob } from './publish'
+import { LIVE_JOB_STATUSES, jobLockKey, queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
 import {
   isPlatform, validatePost,
@@ -872,6 +872,17 @@ export async function addMediaVersion(
   const slides = normaliseSlides(input.files)
   if (slides.length === 0) throw new ComposeError(['Pick at least one photo or video'])
 
+  // A FILE THE CHANNEL HOLDS, OR THAT HAS GONE OUT, STAYS: a version that
+  // drops or swaps it would leave the booking pointing at a file the card no
+  // longer shows. Only the UI stopped this (the audit of 9 Sep 2026).
+  const held = (await posts().list({ by: { item_id: item.id } }))
+    .filter(p => ['scheduled', 'published'].includes(String(p.status)))
+    .flatMap(p => asArray<{ url?: unknown }>(p.slides).map(s => String(s?.url ?? '')))
+  const keeping = new Set(slides.map(s => s.url))
+  if (held.some(u => u && !keeping.has(u))) {
+    throw new AuthzError('A file that is booked in or already posted cannot be replaced or removed — cancel the booking first', 409)
+  }
+
   /**
    * EVERY file the caller offered, including the ones the slide cap dropped.
    *
@@ -1105,6 +1116,9 @@ export async function sendForApproval(
     item, version: (elig.version as AssetVersion) ?? null,
     slides: post.slides, caption: String(post.caption ?? ''), accounts,
     perChannel: post.per_channel, scheduledFor: post.scheduled_for,
+    // asking for a yes owes the networks nothing yet — the time is chosen
+    // when it is booked (the audit of 9 Sep 2026: a timeless send was refused)
+    saving: true,
   })
   if (problems.length > 0) throw new ComposeError(problems)
 
@@ -1576,7 +1590,7 @@ async function cancelJob(job: PublishJobRow): Promise<{ ok: true } | { ok: false
     return { ok: false, error: 'It moved on while you were cancelling — refresh to see where it got to' }
   }
   if (job.content_item_id) {
-    await releaseClaimLock(publishLockKey(String(job.content_item_id)), job.id).catch(() => {})
+    await releaseClaimLock(jobLockKey(job), job.id).catch(() => {})
   }
   return { ok: true }
 }
@@ -1719,7 +1733,11 @@ async function moveScheduleRows(itemId: string, from: string | null, to: string)
 export async function cancelPost(user: TeamUser, id: string): Promise<PlannedPost> {
   const { post, item } = await loadPostForUser(user, id)
   assertCompose(user, item)
-  if (post.status === 'published') {
+  // GONE OUT is read off the jobs: nothing writes `published` on the post
+  // row itself, so the row's status alone let a live post be marked
+  // cancelled and its item's approval reset (the audit of 9 Sep 2026)
+  const all = await jobsOf(post)
+  if (post.status === 'published' || all.some(j => j.status === 'published' || j.status === 'duplicate')) {
     throw new AuthzError('This post has already gone out — delete it at the channel instead', 409)
   }
 
@@ -1747,6 +1765,24 @@ export async function cancelPost(user: TeamUser, id: string): Promise<PlannedPos
       .catch(e => console.error('approval reset failed:', (e as Error).message))
   }
   await releaseClaimLock(postLockKey(item.id), id).catch(() => {})
+  // THE CARD FOLLOWS: a card in Booked in whose only booking was just pulled
+  // back goes back to Ready to post, and its schedule rows stop promising
+  // the time — it sat in Booked in with no way out (the audit of 9 Sep 2026)
+  if (saved.claimed && item.status === 'scheduled') {
+    const others = (await posts().list({ by: { item_id: item.id } }))
+      .filter(p => p.id !== id && ['scheduled', 'published'].includes(String(p.status)))
+    if (others.length === 0) {
+      await table('content_items').update(item.id, { status: 'approved_for_scheduling', updated_at: stamp }).catch(() => {})
+      const rows = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: item.id } }).catch(() => [] as ScheduleEntry[])
+      await Promise.all(rows.filter(r => r.publish_status !== 'published')
+        .map(r => table('schedule_entries').update(r.id, { scheduled_at: null }).catch(() => {})))
+      await logActivity({
+        actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
+        action: 'post_cancelled', oldValue: 'scheduled', newValue: 'approved_for_scheduling',
+        detail: 'Booking cancelled — back in Ready to post',
+      }).catch(() => {})
+    }
+  }
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'cancelled' })
   return saved.claimed ? shape(saved.row) : shape(saved.current ?? (await posts().get(id))!)
 }

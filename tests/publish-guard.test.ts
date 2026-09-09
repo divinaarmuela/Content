@@ -60,7 +60,7 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
     it(`refuses a second job while one is ${status}`, async () => {
       fake = seedDb({ publish_jobs: [job('j1', status)] })
       const result = await queuePublishJob(validPost)
-      expect(result).toEqual({ error: 'This content item is already queued to publish' })
+      expect(result).toEqual({ error: 'These files are already queued to publish on this card' })
       // …and nothing was written
       expect(fake.rows('publish_jobs')).toHaveLength(1)
     })
@@ -69,7 +69,7 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
   it('a SCHEDULED job still holds the slot — the provider is holding that post until its time', async () => {
     fake = seedDb({ publish_jobs: [job('j1', 'scheduled')] })
     expect(await queuePublishJob(validPost))
-      .toEqual({ error: 'This content item is already queued to publish' })
+      .toEqual({ error: 'These files are already queued to publish on this card' })
   })
 
   for (const status of ['published', 'duplicate', 'failed', 'cancelled']) {

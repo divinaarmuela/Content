@@ -303,7 +303,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     }
   }
 
-  const mayAskChange = isManager && ['internal_review', 'client_review', 'client_changes_requested', 'approved_for_scheduling', 'revision_complete'].includes(String(item?.status ?? ''))
+  // not from Ready to post: there is no send-back edge from there, so the
+  // press was a guaranteed 403 (the audit of 9 Sep 2026)
+  const mayAskChange = isManager && ['internal_review', 'client_review', 'client_changes_requested', 'revision_complete'].includes(String(item?.status ?? ''))
 
   /* ── delete, in two presses ────────────────────────────────────────── */
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -373,7 +375,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       </div>
 
       {/* ── 2. the decision ── */}
-      {(actions.primary || actions.more.length > 0) && (
+      {(actions.primary || actions.more.length > 0 || isManager) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-4">
           {actions.primary && (
             <Button className={primary} disabled={busy} onClick={() => card && act(card, actions.primary!)}>

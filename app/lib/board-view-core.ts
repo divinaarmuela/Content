@@ -304,7 +304,14 @@ export function cardActions(
   if (waiting) push(waiting.changes)
   if (waiting && primary) push(actionFor(primary.to, primary.label, hats))
   for (const s of secondary) push(actionFor(s.to, s.label, hats))
-  return { primary: first, more: all.filter(a => a !== first) }
+  // AN UPLOADED POST IS BOOKED ON THE SCHEDULE PAGE and marked posted one
+  // file at a time ("Posted by hand"): a whole-card "Booked in" was a 400
+  // (no schedule row) or a lie (one of five files booked), and a whole-card
+  // "Posted" contradicted the "2 of 5 posted" chip (the audit of 9 Sep 2026)
+  const adhoc = (card as { adhoc_post?: unknown }).adhoc_post === true
+  const kept = adhoc ? all.filter(a => !(a.kind === 'transition' && (a.to === 'scheduled' || a.to === 'published'))) : all
+  const head = first === null ? null : kept.includes(first) ? first : (kept[0] ?? null)
+  return { primary: head, more: kept.filter(a => a !== head) }
 }
 
 export type DropDecision =
