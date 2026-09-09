@@ -65,7 +65,13 @@ const AlertDialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t bg-popover px-6 py-4 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2',
+      // In normal flow, on purpose — the same fix DialogFooter had. The
+      // sticky footer with negative margins sat on top of the last line of
+      // the description on a short confirmation ("Delete this card?": the
+      // sentence about the client's portal was cut off, 9 Sep 2026). The
+      // content scrolls (AlertDialogContent), so the buttons are always
+      // reachable, at the end, where a person expects them.
+      'flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end sm:gap-0 sm:space-x-2',
       className
     )}
     {...props}
