@@ -302,7 +302,7 @@ function JobCard({ job, client, busy, onRetry, onCancel }: {
             {outcomes.map((o, i) => <OutcomeLine key={`${o.platform}-${i}`} o={o} tz={tz} />)}
           </ul>
 
-          {words.detail && !outcomes.some(o => o.reason) && (
+          {words.detail && !outcomes.some(o => o.reason) && job.status !== 'published' && (
             <p className={`mt-1.5 text-secondary-13 ${words.tone === 'trouble' ? 'text-foreground' : 'text-muted-foreground'}`}>
               {words.detail}
             </p>

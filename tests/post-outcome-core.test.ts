@@ -81,6 +81,13 @@ describe('a job read as per-channel outcomes', () => {
     const only = outcomesForJob(job({ error: 'Did not go out — instagram: token expired; tiktok: no reason given.' }))
     expect(only.map(o => [o.status, o.reason])).toEqual([['failed', 'token expired'], ['failed', 'no reason given']])
     expect(parseOutcomeSentence('This file is too big to send')).toBeNull()
+    // the 31 Aug job: a reason with full stops of its own, and a wait tail
+    const real = parseOutcomeSentence('Went out on tiktok, youtube. Did not go out on instagram: Instagram could not fetch your media from the URL. Make sure it is publicly accessible (not Google Drive) and try again.; linkedin: Publishing timed out during platform API call. Check the platform before retrying. Still going out on threads — the platform is processing it; do not resend.')
+    expect(real?.live).toEqual(['tiktok', 'youtube'])
+    expect([...real!.failed.entries()]).toEqual([
+      ['instagram', 'Instagram could not fetch your media from the URL. Make sure it is publicly accessible (not Google Drive) and try again'],
+      ['linkedin', 'Publishing timed out during platform API call. Check the platform before retrying'],
+    ])
   })
   it('a cancelled job overrides a stored booking', () => {
     const stored = resultsForAll(job(), 'scheduled', { at: 'x' })

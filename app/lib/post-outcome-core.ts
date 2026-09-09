@@ -239,11 +239,15 @@ export function outcomesForJob(job: OutcomeJob): PlatformOutcome[] {
 export function parseOutcomeSentence(error: string | null | undefined): { live: string[]; failed: Map<string, string> } | null {
   const text = String(error ?? '')
   const live = /Went out on ([^.]+)\./.exec(text)
-  const notOut = /Did not go out (?:on |— )([^]*?)\.(?:\s|$)/.exec(text)
+  // the reasons run to the end of the sentence (or to the "Still going out"
+  // tail) — a reason can hold full stops of its own, so the first one is
+  // not the end: "Make sure it's publicly accessible (…) and try again.;
+  // linkedin: …" is two channels, not one and a half
+  const notOut = /Did not go out (?:on |— )([^]*?)(?:\s+Still going out[^]*)?$/.exec(text)
   if (!live && !notOut) return null
   const failed = new Map<string, string>()
-  for (const part of (notOut?.[1] ?? '').split(';')) {
-    const m = /^\s*([a-z]+):\s*(.*)$/i.exec(part)
+  for (const part of (notOut?.[1] ?? '').split(/;\s*(?=[a-z]+:\s)/i)) {
+    const m = /^\s*([a-z]+):\s*([^]*?)\.?\s*$/i.exec(part)
     if (m) failed.set(m[1].toLowerCase(), m[2].trim())
   }
   return {
