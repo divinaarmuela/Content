@@ -132,8 +132,11 @@ describe('posted by hand, and the numbers per client', () => {
     const booked = job({ id: 'j2', status: 'scheduled', media: [{ url: 'p', type: 'image' }], targets: [{ platform: 'instagram' }] })
     const other = job({ id: 'j3', client_id: 'c2', status: 'published', published_at: '2026-09-07T00:00:00Z' })
     const s = clientStats([partial, booked, other], byHandRows(items))
+    // POSTS, the same unit as the tabs: the partial is one post that went out
+    // AND one that did not; the other client's post went out once, as a
+    // reel on Instagram and a video on TikTok
     expect(s.find(x => x.client_id === 'c1')).toEqual({ client_id: 'c1', went_out: 1, booked: 1, did_not: 1, by_hand: 1, kinds: { Reel: 1 } })
-    expect(s.find(x => x.client_id === 'c2')).toEqual({ client_id: 'c2', went_out: 2, booked: 0, did_not: 0, by_hand: 0, kinds: { Reel: 1, Video: 1 } })
+    expect(s.find(x => x.client_id === 'c2')).toEqual({ client_id: 'c2', went_out: 1, booked: 0, did_not: 0, by_hand: 0, kinds: { Reel: 1, Video: 1 } })
     expect(kindsLine({ Reel: 4, 'Feed post': 1, Story: 2 })).toBe('4 reels, 2 stories, 1 feed post')
     // a window leaves old ones out
     expect(clientStats([other], [], { sinceMs: Date.parse('2026-09-08T00:00:00Z') })).toEqual([])

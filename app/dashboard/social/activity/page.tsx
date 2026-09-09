@@ -15,7 +15,7 @@ import ConfirmAction from '../../ConfirmAction'
 import EmptyState from '../../EmptyState'
 import { useProductionLive } from '../../production/useProductionLive'
 import {
-  attentionLine, isKnownPlatform, jobWords, looksStuck,
+  isKnownPlatform, jobWords, looksStuck,
   type PublishJob, type Tone,
 } from '../../../lib/publish-activity-core'
 import {
@@ -89,7 +89,6 @@ export default function PublishActivityPage() {
   useProductionLive(load, { pollMs: 30_000 })
 
   const clientName = (id: string | null) => clients.find(c => c.id === id)?.name ?? 'No client'
-  const summary = attentionLine(jobs ?? [])
 
   const stats = useMemo(
     () => clientStats(jobs ?? [], byHand, { sinceMs: Date.now() - THIRTY_DAYS }),
@@ -103,6 +102,16 @@ export default function PublishActivityPage() {
       posted: sortForTab(scoped, 'posted').length + hand.length,
     }
   }, [jobs, byHand, onlyClient])
+
+  // ONE unit everywhere on this page: posts. The headline used to count
+  // failed jobs, the client card channels and the tabs posts — "5 did not go
+  // out" over "13 did not" over "Did not post · 9" (the owner, 9 Sep 2026)
+  const summary = jobs === null ? null
+    : [
+      counts.scheduled ? `${counts.scheduled} scheduled` : null,
+      counts.did_not_post ? `${counts.did_not_post} did not post` : null,
+      counts.posted ? `${counts.posted} posted` : null,
+    ].filter(Boolean).join(' · ') || null
 
   /** the rows on the open tab: jobs, and on Posted the by-hand files too,
    *  interleaved by time so "what went out this week" reads in order */
@@ -179,10 +188,10 @@ export default function PublishActivityPage() {
               >
                 <span className="truncate text-[13px] font-semibold">{clientName(s.client_id)}</span>
                 <span className={`text-[12px] ${on ? 'opacity-80' : 'text-muted-foreground'}`}>
-                  {s.went_out} went out · {s.booked} booked · {s.did_not} did not
-                  {s.by_hand > 0 ? ` · ${s.by_hand} by hand` : ''}
+                  {s.went_out + s.by_hand} posted{s.by_hand > 0 ? ` (${s.by_hand} by hand)` : ''} · {s.booked} scheduled · {s.did_not} did not post
                 </span>
-                {kinds && <span className={`truncate text-[12px] ${on ? 'opacity-80' : 'text-muted-foreground'}`}>{kinds}</span>}
+                {kinds && <span className={`truncate text-[12px] ${on ? 'opacity-80' : 'text-muted-foreground'}`}>on channels: {kinds}</span>}
+                <span className={`text-[11px] ${on ? 'opacity-70' : 'text-muted-foreground'}`}>last 30 days</span>
               </button>
             )
           })}

@@ -354,18 +354,25 @@ export function byHandRows(
 
 export type ClientStats = {
   client_id: string | null
-  /** channels that went out (a job to three channels counts three) */
+  /** POSTS that went out (a post live on any channel counts once) */
   went_out: number
-  /** channels booked and not yet out */
+  /** posts scheduled and not yet out */
   booked: number
-  /** channels that did not go out */
+  /** posts that did not go out on at least one channel, or were cancelled */
   did_not: number
   /** files marked posted by hand */
   by_hand: number
-  /** "Reel" → 4, "Feed post" → 2 — what went out, by kind */
+  /** "Reel" → 4, "Feed post" → 2 — what went out, per CHANNEL (one post to
+   *  Instagram and TikTok is a reel and a video) */
   kinds: Record<string, number>
 }
 
+/**
+ * The numbers per client, in POSTS — the same unit as the tabs, so the card
+ * and the tabs never disagree (9 Sep 2026: the card said "13 did not" in
+ * channels while the tab said 9 in posts, and the headline said 5 in
+ * failed jobs — three answers to one question).
+ */
 export function clientStats(
   jobs: readonly (OutcomeJob & { client_id?: string | null })[],
   byHand: readonly ByHandRow[],
@@ -380,14 +387,20 @@ export function clientStats(
   }
   const recent = (iso: string | null | undefined) => !since || !iso || Date.parse(iso) >= since
   for (const job of jobs) {
-    for (const o of outcomesForJob(job)) {
-      if (o.status === 'published' && !recent(o.at)) continue
-      if ((o.status === 'failed' || o.status === 'cancelled') && !recent(o.at ?? job.updated_at)) continue
-      const s = get(job.client_id ?? null)
-      if (o.status === 'published') { s.went_out++; s.kinds[o.kind] = (s.kinds[o.kind] ?? 0) + 1 }
-      else if (o.status === 'scheduled' || o.status === 'queued' || o.status === 'pending') s.booked++
-      else if (o.status === 'failed') s.did_not++
+    const tabs = postsTabs(job)
+    const scheduled = tabs.has('scheduled')
+    const posted = tabs.has('posted') && recent(job.published_at ?? job.updated_at)
+    const didNot = tabs.has('did_not_post') && recent(job.updated_at ?? job.created_at)
+    if (!scheduled && !posted && !didNot) continue
+    const s = get(job.client_id ?? null)
+    if (scheduled) s.booked++
+    if (posted) {
+      s.went_out++
+      for (const o of outcomesForJob(job)) {
+        if (o.status === 'published') s.kinds[o.kind] = (s.kinds[o.kind] ?? 0) + 1
+      }
     }
+    if (didNot) s.did_not++
   }
   for (const h of byHand) {
     if (!recent(h.at)) continue
