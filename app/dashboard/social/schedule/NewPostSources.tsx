@@ -77,7 +77,35 @@ export default function NewPostSources({
 
   const group = useMemo(() => `new-post:${clientId ?? 'none'}`, [clientId])
   const uploads = useUploadGroup(group)
-  useEffect(() => () => clearGroup(group), [group])
+
+  /**
+   * THE WINDOW MAY CLOSE; THE UPLOAD MAY NOT BE LOST.
+   *
+   * The tray says "keep this tab open — you can keep working anywhere in the
+   * dashboard", and the queue keeps the bytes moving at module scope. This
+   * window used to clear its group on unmount, so closing it threw the
+   * finished file away (the owner, 9 Sep 2026: "when I close the modal it
+   * does not work" — 7 minutes of a 1.4 GB upload, gone). Now the group
+   * outlives the window: a file that landed while it was closed, or is still
+   * landing when it reopens, is picked up here the moment its row is done.
+   * The group is cleared when the post is MADE, or when a file is removed.
+   */
+  useEffect(() => {
+    const landed = uploads.filter(u => u.status === 'done' && u.url)
+    if (landed.length === 0) return
+    setChosen(prev => {
+      const have = new Set(prev.map(s => s.url))
+      const fresh = landed.filter(u => !have.has(u.url!))
+      if (fresh.length === 0) return prev
+      return [...prev, ...fresh.map(u => ({
+        url: u.url!,
+        name: u.name,
+        type: slideTypeFromUrl(u.url!),
+        bytes: u.total,
+        source: 'upload' as const,
+      }))]
+    })
+  }, [uploads])
 
   useEffect(() => {
     box.current?.focus()
@@ -99,14 +127,22 @@ export default function NewPostSources({
       const measured = await Promise.all((keep as unknown as File[]).map(f => measureFile(f)))
       const byName = new Map((keep as unknown as File[]).map((f, i) => [f.name + f.size, measured[i]] as const))
       const landed = await done
-      setChosen(prev => [...prev, ...landed.map(({ file, url }) => ({
-        url,
-        name: file.name,
-        type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
-        bytes: file.size,
-        source: 'upload' as const,
-        ...(byName.get(file.name + file.size) ?? {}),
-      }))])
+      // by URL, so a file the queue effect above already picked up is
+      // REPLACED with this measured copy rather than listed twice
+      setChosen(prev => {
+        const byUrl = new Map(prev.map(s => [s.url, s] as const))
+        for (const { file, url } of landed) {
+          byUrl.set(url, {
+            url,
+            name: file.name,
+            type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
+            bytes: file.size,
+            source: 'upload' as const,
+            ...(byName.get(file.name + file.size) ?? {}),
+          })
+        }
+        return [...byUrl.values()]
+      })
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
     }
@@ -158,6 +194,15 @@ export default function NewPostSources({
     }
   }
 
+  /** take a file out of the pick — and out of the queue, or the effect above
+   *  would put a landed upload straight back */
+  const removeChosen = useCallback((i: number) => {
+    const gone = chosen[i]
+    // outside the updater: a state updater must not carry side effects
+    if (gone) for (const u of uploads) if (u.url === gone.url) dismissUpload(u.id)
+    setChosen(c => c.filter((_, n) => n !== i))
+  }, [chosen, uploads])
+
   /* ── …and the post they came for ──────────────────────────────────────── */
 
   const makeThePost = async () => {
@@ -176,6 +221,8 @@ export default function NewPostSources({
         setProblem(list[0] ?? friendlyError(String(json?.error ?? ''), 'Schedule'))
         return
       }
+      // the files are a post now; the queue rows have done their job
+      clearGroup(group)
       onCreated({
         itemId: String(json.item_id),
         postId: String(json.post?.id ?? ''),
@@ -298,7 +345,7 @@ export default function NewPostSources({
                 />
               </label>
               <UploadRows uploads={uploads} onDismiss={dismissUpload} />
-              <ChosenStrip files={chosen} onRemove={i => setChosen(c => c.filter((_, n) => n !== i))} />
+              <ChosenStrip files={chosen} onRemove={removeChosen} />
             </div>
           ) : source === 'drive' ? (
             <div className="flex flex-col gap-2">
@@ -334,7 +381,7 @@ export default function NewPostSources({
                   </div>
                 ))
               )}
-              <ChosenStrip files={chosen} onRemove={i => setChosen(c => c.filter((_, n) => n !== i))} />
+              <ChosenStrip files={chosen} onRemove={removeChosen} />
             </div>
           ) : (
             <>

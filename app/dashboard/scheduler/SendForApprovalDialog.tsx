@@ -74,8 +74,24 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
   /* ── the files ────────────────────────────────────────────────────────── */
   const group = useMemo(() => `approval:${clientId ?? 'none'}`, [clientId])
   const uploads = useUploadGroup(group)
-  useEffect(() => () => clearGroup(group), [group])
   const [chosen, setChosen] = useState<Slide[]>([])
+  // the window may close; the upload may not be lost (the owner, 9 Sep 2026,
+  // on the Schedule page's twin of this window). The group outlives the
+  // window: a file that landed while it was closed is picked up here the
+  // moment its row is done, and the group clears when the post is made.
+  useEffect(() => {
+    const landed = uploads.filter(u => u.status === 'done' && u.url)
+    if (landed.length === 0) return
+    setChosen(prev => {
+      const have = new Set(prev.map(s => s.url))
+      const fresh = landed.filter(u => !have.has(u.url!))
+      if (fresh.length === 0) return prev
+      return [...prev, ...fresh.map(u => ({
+        url: u.url!, name: u.name, bytes: u.total, source: 'upload' as const,
+        type: slideTypeFromUrl(u.url!),
+      }))]
+    })
+  }, [uploads])
   const [problem, setProblem] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
@@ -87,10 +103,17 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
     try {
       const { done } = uploadFiles(keep as unknown as File[], { group, purpose: 'social' })
       const landed = await done
-      setChosen(prev => [...prev, ...landed.map(({ file, url }) => ({
-        url, name: file.name, bytes: file.size, source: 'upload' as const,
-        type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
-      }))])
+      // by URL: the effect above may have listed it already
+      setChosen(prev => {
+        const byUrl = new Map(prev.map(s => [s.url, s] as const))
+        for (const { file, url } of landed) {
+          byUrl.set(url, {
+            url, name: file.name, bytes: file.size, source: 'upload' as const,
+            type: file.type.startsWith('video/') ? 'video' as const : slideTypeFromUrl(url),
+          })
+        }
+        return [...byUrl.values()]
+      })
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
     }
@@ -140,6 +163,8 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
         setProblem(list[0] ?? friendlyError(String(json?.error ?? ''), 'Post approval'))
         return
       }
+      // the files are a post now; the queue rows have done their job
+      clearGroup(group)
       toast.success(String(json.message ?? 'Done'))
       router.refresh()
       onClose()
@@ -243,7 +268,11 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                       // eslint-disable-next-line @next/next/no-img-element
                       : <img src={s.url} alt="" className="h-full w-full object-cover" />}
                     <button type="button" aria-label={`Remove ${s.name}`}
-                      onClick={() => setChosen(prev => prev.filter(x => x.url !== s.url))}
+                      onClick={() => {
+                        // out of the queue too, or the effect puts it straight back
+                        for (const u of uploads) if (u.url === s.url) dismissUpload(u.id)
+                        setChosen(prev => prev.filter(x => x.url !== s.url))
+                      }}
                       className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-cream">
                       <X className="h-3 w-3" />
                     </button>

@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
-import { clearFinishedUploads, dismissUpload, getUploads, subscribeUploads } from './uploadQueue'
+import { awaitingPickup, clearFinishedUploads, dismissUpload, getUploads, subscribeUploads } from './uploadQueue'
 import { UploadOverall, UploadRows } from './UploadRows'
 import { isSettled, overallProgress } from '../lib/upload-progress-core'
 
@@ -56,6 +56,13 @@ export default function UploadTray() {
       {active.length > 0 && (
         <p className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
           Keep this tab open — you can keep working anywhere in the dashboard.
+        </p>
+      )}
+      {/* a file that finished after the New post window was closed: say
+          where it is, or "Uploads finished" reads as "and then what?" */}
+      {active.length === 0 && uploads.some(awaitingPickup) && (
+        <p className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
+          Waiting in <strong>New post</strong> — open it again and the file is already picked.
         </p>
       )}
     </div>

@@ -75,10 +75,17 @@ export function subscribeUploads(fn: () => void): () => void {
 export function getUploads(): QueuedUpload[] {
   return queue
 }
+/** Is this a finished file waiting for New post to be reopened? Such a row
+ *  is the only record of an upload the window was closed on, so the tray's
+ *  "dismiss finished" keeps it; the row's own X still removes it. */
+export function awaitingPickup(u: QueuedUpload): boolean {
+  return (u.group.startsWith('new-post:') || u.group.startsWith('approval:')) && u.status === 'done' && !!u.url
+}
+
 export function clearFinishedUploads(): void {
   const keep = new Set<string>()
   queue = queue.filter(u => {
-    if (!isSettled(u.status)) { keep.add(u.id); return true }
+    if (!isSettled(u.status) || awaitingPickup(u)) { keep.add(u.id); return true }
     return false
   })
   for (const id of [...sources.keys()]) if (!keep.has(id)) sources.delete(id)
