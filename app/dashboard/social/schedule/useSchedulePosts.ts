@@ -41,6 +41,7 @@ import {
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
 import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
+import { outcomesForJob, type OutcomeJob, type PlatformOutcome } from '@/app/lib/post-outcome-core'
 
 /** A post as the calendar draws it: the row, its media, and the status, tone
  *  and networks the core gives it once the item and the jobs are read too. */
@@ -57,6 +58,8 @@ export type SchedulePostRow = SocialPost & {
   item_type: string | null
   /** the one sentence the server would refuse to post with, or null */
   block_reason: string | null
+  /** what each channel did with it — went out, booked, refused (post-outcome-core) */
+  outcomes: PlatformOutcome[]
 }
 
 /** One card in the media rail: an approved item's media, or the plain reason
@@ -280,14 +283,22 @@ export function useSchedulePosts(
       .map(row => {
         const item = itemById.get(row.item_id)!
         const facts = postTileFacts(row, item, jobsById, clientAccounts)
+        const jobIds = asArray<string>(row.publish_job_ids).map(String)
+        // per channel: the list row says "Instagram went out, TikTok did
+        // not" rather than one word for the lot
+        const outcomes = jobIds
+          .map(id => jobsById.get(id) as unknown as OutcomeJob | undefined)
+          .filter((j): j is OutcomeJob => !!j)
+          .flatMap(outcomesForJob)
         return {
           ...row,
           slides: asArray<Slide>(row.slides),
           channels: asArray<string>(row.channels).map(String),
-          publish_job_ids: asArray<string>(row.publish_job_ids).map(String),
+          publish_job_ids: jobIds,
           item_title: (item.title as string | null) ?? null,
           item_type: (item.content_type as string | null) ?? null,
           ...facts,
+          outcomes,
         }
       })
       .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))

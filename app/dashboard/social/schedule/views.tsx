@@ -12,6 +12,8 @@ import { RAIL_DRAG_TYPE } from './MediaRail'
 import { DROP_KINDS } from './WeekGrid'
 import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
 import type { SchedulePostRow } from './useSchedulePosts'
+import { outcomeWords, type PlatformOutcome } from '@/app/lib/post-outcome-core'
+import { networkName } from '@/app/lib/publish-core'
 
 /**
  * The three other ways to look at the same week's posts: a month, a list, and
@@ -52,12 +54,37 @@ function PostRow({ post, tz, onOpen }: {
           {' · '}
           {STATUS_WORDS[post.live_status]}
         </span>
+        {/* WHAT EACH CHANNEL DID — one word per channel once a job exists,
+            so "went out on Instagram, TikTok refused it" is on the row */}
+        {post.outcomes.length > 0 && (
+          <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px]">
+            {post.outcomes.map((o, i) => <OutcomeMark key={`${o.platform}-${i}`} o={o} />)}
+          </span>
+        )}
       </span>
       <span className="flex shrink-0 items-center gap-1.5">
         {post.platforms.slice(0, 3).map(c => <PlatformIcon key={c} platform={c} size={18} />)}
         <StatusDot tone={post.tone} />
       </span>
     </button>
+  )
+}
+
+const MARK_TONE: Record<ReturnType<typeof outcomeWords>['tone'], string> = {
+  done: 'text-accent-green', trouble: 'text-accent-red', waiting: 'text-muted-foreground',
+  moving: 'text-accent-blue-deep', quiet: 'text-muted-foreground',
+}
+const MARK_GLYPH: Record<ReturnType<typeof outcomeWords>['tone'], string> = {
+  done: '✓', trouble: '✕', waiting: '·', moving: '…', quiet: '–',
+}
+
+function OutcomeMark({ o }: { o: PlatformOutcome }) {
+  const w = outcomeWords(o)
+  return (
+    <span className={cn('inline-flex items-center gap-1', MARK_TONE[w.tone])} title={o.reason ?? w.label}>
+      <span aria-hidden>{MARK_GLYPH[w.tone]}</span>
+      {networkName(o.platform)} {o.kind.toLowerCase()} · {w.label.toLowerCase()}
+    </span>
   )
 }
 

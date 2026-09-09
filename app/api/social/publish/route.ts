@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { PublishJob, SocialPost } from '@/lib/db-types'
+import type { AssetVersion, ContentItem, PublishJob, SocialPost } from '@/lib/db-types'
+import { byHandRows } from '../../../lib/post-outcome-core'
+import { slidesOf } from '../../../lib/version-files-core'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { mayPublish } from '../../../lib/identity-core'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
@@ -155,6 +157,29 @@ export async function GET(req: Request) {
       }
     }
 
+    // THE CARD EACH JOB DELIVERS, by name — and the files marked "Posted by
+    // hand" on the cards, one row each (post-outcome-core.byHandRows), so a
+    // card with five files and one done by hand is logged on the Posts page
+    // the same as a job is
+    const itemIds = new Set(rows.map(j => String(j.content_item_id ?? '')).filter(Boolean))
+    const items = await table<ContentItem>('content_items').list({
+      where: i => itemIds.has(i.id)
+        || (Array.isArray((i as { posted_slides?: { hand?: unknown } }).posted_slides?.hand)
+          && (!clientId || i.client_id === clientId)),
+    }).catch(() => [] as ContentItem[])
+    const titleOf = new Map(items.map(i => [i.id, i.title ?? null]))
+    const handItems = items.filter(i => Array.isArray((i as { posted_slides?: { hand?: unknown } }).posted_slides?.hand))
+    const handIds = new Set(handItems.map(i => i.id))
+    const versions = handIds.size
+      ? await table<AssetVersion>('asset_versions').list({ where: v => handIds.has(String(v.item_id)) }).catch(() => [] as AssetVersion[])
+      : []
+    const latestOf = new Map<string, AssetVersion>()
+    for (const v of versions) {
+      const cur = latestOf.get(String(v.item_id))
+      if (!cur || Number(v.version_number ?? 0) > Number(cur.version_number ?? 0)) latestOf.set(String(v.item_id), v)
+    }
+    const by_hand = byHandRows(handItems, item => slidesOf(latestOf.get(item.id) ?? null))
+
     // the columns the old select named. timezone, media and updated_at ride
     // along: the activity page prints the booked time in the CLIENT's zone,
     // shows a thumbnail, and needs updated_at to tell "sending now" from
@@ -167,8 +192,11 @@ export async function GET(req: Request) {
       error: j.error, attempts: j.attempts,
       created_at: j.created_at, updated_at: j.updated_at, published_at: j.published_at,
       post_id: postByJob.get(j.id) ?? null,
+      // what happened on EACH channel (post-outcome-core)
+      platform_results: j.platform_results ?? null,
+      item_title: j.content_item_id ? titleOf.get(String(j.content_item_id)) ?? null : null,
     }))
-    return NextResponse.json({ jobs })
+    return NextResponse.json({ jobs, by_hand })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

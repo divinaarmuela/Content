@@ -12,6 +12,7 @@ import { measuredDurationOf, smallerCopyOf } from './stream'
 import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
+import { resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
@@ -221,6 +222,13 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
   const job = claimed as unknown as PublishJob & { attempts: number }
   const publisher = getPublisher()
 
+  /** the per-channel record for this settle — what each channel is doing
+   *  now, written with every status change (post-outcome-core) */
+  const perChannel = (
+    status: 'queued' | 'scheduled' | 'published' | 'failed',
+    detail: { reason?: string | null; at?: string | null } = {},
+  ) => resultsForAll(job as unknown as OutcomeJob, status, { at: new Date().toISOString(), ...detail })
+
   const settle = async (fields: Record<string, unknown>) => {
     await table('publish_jobs')
       .update(jobId, { ...fields, updated_at: new Date().toISOString() })
@@ -248,11 +256,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
      */
     const waited = await awaitCleanCopies(job)
     if (waited.wait) {
-      await settle({ status: 'queued', error: waited.reason })
+      await settle({ status: 'queued', error: waited.reason, platform_results: perChannel('queued', { reason: waited.reason }) })
       return 'queued'
     }
     if (waited.failed) {
-      await settle({ status: 'failed', attempts: job.attempts + 1, error: waited.reason })
+      await settle({ status: 'failed', attempts: job.attempts + 1, error: waited.reason, platform_results: perChannel('failed', { reason: waited.reason }) })
       return 'failed'
     }
     if (waited.targets) {
@@ -321,6 +329,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           published_at: isFuture ? null : new Date().toISOString(),
           attempts: job.attempts + 1,
           error: null,
+          // every channel booked, or every channel out — the provider's
+          // per-channel verdict replaces this on the next reconcile
+          platform_results: isFuture
+            ? perChannel('scheduled', { at: job.scheduled_for })
+            : perChannel('published'),
         })
         if (isFuture) return 'scheduled'
         // close the loop back into production: the board and the scheduler
@@ -346,6 +359,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           published_at: new Date().toISOString(),
           attempts: job.attempts + 1,
           error: 'Provider reported an identical post already exists',
+          platform_results: perChannel('published'),
         })
         // …and it must close the loop back into production exactly as
         // 'published' does. It did not, which meant a duplicate left the post
@@ -365,11 +379,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
 
       case 'retryable':
         // back to queued so the scheduler picks it up again
-        await settle({ status: 'queued', attempts: job.attempts + 1, error: outcome.message })
+        await settle({ status: 'queued', attempts: job.attempts + 1, error: outcome.message, platform_results: perChannel('queued', { reason: outcome.message }) })
         return 'queued'
 
       case 'permanent':
-        await settle({ status: 'failed', attempts: job.attempts + 1, error: outcome.message })
+        await settle({ status: 'failed', attempts: job.attempts + 1, error: outcome.message, platform_results: perChannel('failed', { reason: outcome.message }) })
         // a post that failed on a dead token must turn the account's icon
         // red NOW and tell the team — not at tomorrow's 7 am check. The
         // provider is asked for its verdict rather than the error string
@@ -383,11 +397,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     // would push exactly the same bytes at exactly the same ceiling. It fails,
     // with the sentence a person can act on, rather than going round for ever.
     if (e instanceof MediaTooBigToSend) {
-      await settle({ status: 'failed', attempts: job.attempts + 1, error: message })
+      await settle({ status: 'failed', attempts: job.attempts + 1, error: message, platform_results: perChannel('failed', { reason: message }) })
       return 'failed'
     }
     // never leave a job stuck in 'publishing' — that would be invisible forever
-    await settle({ status: 'queued', attempts: job.attempts + 1, error: message })
+    await settle({ status: 'queued', attempts: job.attempts + 1, error: message, platform_results: perChannel('queued', { reason: message }) })
     return 'queued'
   }
 }
@@ -722,11 +736,13 @@ export async function reconcilePublishedJobs(): Promise<number> {
       // still 'scheduled' at the moment of writing, or somebody else moved it
       const live = await table<PublishJobRow>('publish_jobs').get(job.id)
       if (live?.status === 'scheduled') {
+        const now = new Date().toISOString()
         await table('publish_jobs').update(job.id, {
           status: 'published',
-          published_at: new Date().toISOString(),
+          published_at: now,
           ...(url ? { permalink: url } : {}),
-          updated_at: new Date().toISOString(),
+          platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'published', now),
+          updated_at: now,
         })
       }
       if (job.content_item_id) {
@@ -744,19 +760,25 @@ export async function reconcilePublishedJobs(): Promise<number> {
       // nothing has actually failed yet — a channel is still processing. Say
       // so on the row without marking it failed, and without offering a retry
       // that would post the same video twice.
+      const now = new Date().toISOString()
       if (outcome.failedPlatforms.length === 0 && outcome.pendingPlatforms.length > 0) {
         await table('publish_jobs').update(job.id, {
           error: outcome.error,
           ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
-          updated_at: new Date().toISOString(),
+          platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms,
+            job.status === 'scheduled' ? 'scheduled' : 'published', now),
+          updated_at: now,
         })
         continue
       }
+      // the one `status` word says failed; the record says WHICH channel went
+      // out and which did not — "went out on instagram; tiktok: too big"
       await table('publish_jobs').update(job.id, {
         status: 'failed',
         error: outcome.error,
         ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
-        updated_at: new Date().toISOString(),
+        platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now),
+        updated_at: now,
       })
       changed++
       await healthAfterFailure((job as { client_id?: string | null }).client_id ?? null)
@@ -764,7 +786,11 @@ export async function reconcilePublishedJobs(): Promise<number> {
       // capture the permalink once the platform assigns one
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
       if (url) {
-        await table('publish_jobs').update(job.id, { permalink: url })
+        await table('publish_jobs').update(job.id, {
+          permalink: url,
+          platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms,
+            job.status === 'scheduled' ? 'scheduled' : 'published', new Date().toISOString()),
+        })
         // mirror it onto the registered asset so evidence links to the live post
         const assets = await table<ContentAsset>('content_assets').list({
           where: a => a.provider_post_id === job.provider_post_id && a.post_url == null,

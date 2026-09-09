@@ -460,6 +460,14 @@ const GHOST_COLUMNS = {
     ['asked_ids', col('unknown', true, true, true)],
     ['asked_at', col('string', true)],
   ],
+  //   publish_jobs.platform_results — WHAT WENT OUT, PER CHANNEL (9 Sep 2026).
+  //     [{ platform, status, kind, reason, url, at }] written at every settle
+  //     (app/lib/post-outcome-core.ts). One job to Instagram and TikTok is
+  //     two outcomes: the 15:45 post of 8 Sep went out on Instagram and was
+  //     refused by TikTok, and the one `status` word could not say so.
+  publish_jobs: [
+    ['platform_results', col('unknown', true, true, true)],
+  ],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],
     //   clients.client_approval_required — does THIS CLIENT sign every post

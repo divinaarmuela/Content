@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Client, ContentItem, ItemComment, TeamUser, WorkKind } from '@/lib/db-types'
+import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, WorkKind } from '@/lib/db-types'
 import { Button } from '@/components/ui/button'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
@@ -18,6 +18,8 @@ import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
+import { fileBooking, outcomeWords, type OutcomeJob } from '../../lib/post-outcome-core'
+import { networkName } from '../../lib/publish-core'
 import { uploadFiles } from '../uploadQueue'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
@@ -53,6 +55,34 @@ import CollapsibleCard from '../CollapsibleCard'
  * with — and its files are written as versions through the item's own
  * versions route, so the numbering and the history are the ordinary ones.
  */
+/** "Booked · Fri 11 Sep, 9:00 am" or "Went out on Instagram · …" under one
+ *  file, from the post that carries it (post-outcome-core.fileBooking) */
+function FileBookingChip({ url, posts, jobsById, alreadyPosted }: {
+  url: string; posts: SocialPost[]; jobsById: ReadonlyMap<string, OutcomeJob>; alreadyPosted: boolean
+}) {
+  const booking = fileBooking(url, posts, jobsById)
+  if (!booking) return null
+  const when = booking.at
+    ? new Date(booking.at).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    : null
+  const live = booking.outcomes.filter(o => o.status === 'published').map(o => networkName(o.platform))
+  const refused = booking.outcomes.filter(o => o.status === 'failed')
+  if (booking.status === 'published') {
+    return (
+      <>
+        {!alreadyPosted && <Chip tone="green">Went out{live.length ? ` on ${live.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>}
+        {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
+      </>
+    )
+  }
+  return (
+    <>
+      <Chip tone="amber">Booked{when ? ` · ${when}` : ''}</Chip>
+      {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
+    </>
+  )
+}
+
 export default function PostApprovalDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { me } = useRole()
   const { row: item } = useRow<ContentItem>('content_items', id)
@@ -60,6 +90,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const { rows: versions } = useTable<AssetVersion>('asset_versions', { by: byItem })
   const { rows: comments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
+  // THE POSTS THAT CARRY EACH FILE, so the file can say "Booked · Fri 9:00"
+  // or "Went out on Instagram" — the owner, 9 Sep 2026: "in schedule to
+  // show that it's scheduled and in post approval page"
+  const { rows: filePosts } = useTable<SocialPost>('social_posts', { by: byItem })
+  const byContentItem = useMemo(() => ({ content_item_id: id }), [id])
+  const { rows: fileJobs } = useTable<PublishJob>('publish_jobs', { by: byContentItem })
+  const jobsById = useMemo(() => new Map<string, OutcomeJob>(fileJobs.map(j => [j.id, j as unknown as OutcomeJob])), [fileJobs])
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const adhoc = (item as { adhoc_post?: unknown } | null)?.adhoc_post === true
@@ -394,6 +431,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                       : 'Posted'}
                   </Chip>
                 )}
+                <FileBookingChip url={s.url} posts={filePosts} jobsById={jobsById} alreadyPosted={postedUrls.has(s.url)} />
                 {handRecord(postedSlides, s.url)?.link && (
                   <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
                 )}

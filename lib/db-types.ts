@@ -955,6 +955,7 @@ export interface PublishJob {
   created_at: string
   updated_at: string
   published_at: string | null
+  platform_results: unknown | null
 }
 
 export interface ReportSetting {
@@ -1263,7 +1264,7 @@ export const TABLE_COLUMNS = {
   post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'id', 'created_at', 'updated_at', 'client_id', 'slug', 'name', 'industry', 'tag', 'services', 'description', 'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach', 'outcome', 'sort_order', 'published'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
-  publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at'],
+  publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
   room_invite_requests: ['id', 'name', 'email', 'about', 'created_at'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
@@ -1343,7 +1344,7 @@ export const NULLABLE_COLUMNS = {
   post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'client_id', 'result'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
-  publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at'],
+  publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results'],
   report_settings: ['data_from', 'last_sent_for'],
   room_invite_requests: ['about'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'label', 'updated_by'],
@@ -1430,7 +1431,7 @@ export const JSON_COLUMNS = {
   post_analytics: ['raw', 'performance', 'interactors'],
   projects: [],
   provider_webhooks: ['events'],
-  publish_jobs: ['media', 'targets'],
+  publish_jobs: ['media', 'targets', 'platform_results'],
   report_settings: [],
   room_invite_requests: [],
   scan_mailboxes: [],
@@ -1516,7 +1517,7 @@ export const JSON_ARRAY_COLUMNS = {
   post_analytics: [],
   projects: [],
   provider_webhooks: ['events'],
-  publish_jobs: ['media', 'targets'],
+  publish_jobs: ['media', 'targets', 'platform_results'],
   report_settings: [],
   room_invite_requests: [],
   scan_mailboxes: [],
