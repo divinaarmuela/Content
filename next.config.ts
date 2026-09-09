@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
         destination: 'https://www.mdmmarketing.com.au/work',
         permanent: true,
       },
+      // the Post approval page, as it is typed from memory (the owner, 9 Sep
+      // 2026: "/dashboard/schedular — this page showing an error"). A plain
+      // 404 for one letter is a bad answer to somebody who knows the page.
+      { source: '/dashboard/schedular', destination: '/dashboard/scheduler', permanent: false },
+      { source: '/dashboard/schedular/:path*', destination: '/dashboard/scheduler/:path*', permanent: false },
     ]
   },
 }
