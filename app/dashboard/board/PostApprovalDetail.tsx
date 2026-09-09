@@ -437,7 +437,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 {handRecord(postedSlides, s.url)?.link && (
                   <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
                 )}
-                {mayMarkPosted && !postedUrls.has(s.url) && handOn !== i && (
+                {/* a file already booked or out through a channel is not
+                    one to mark by hand (the owner, 9 Sep 2026) */}
+                {mayMarkPosted && !postedUrls.has(s.url) && !fileBooking(s.url, filePosts, jobsById) && handOn !== i && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink(''); setHandAt(localNow()) }}>
                     Posted by hand
                   </Button>

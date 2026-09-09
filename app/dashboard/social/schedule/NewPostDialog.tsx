@@ -577,8 +577,13 @@ export default function NewPostDialog({
     }),
   }), [state.slides, state.caption, state.perChannel, chosen, locations])
 
+  // every file a version of the piece has ever carried, not only the ones
+  // still free to post: a piece whose files have all gone out sits in the
+  // rail as "Already posted" with NO remaining files, and judged against
+  // those alone its own booked post read as "New media — not signed off"
+  // (the owner, 9 Sep 2026)
   const approvedUrls = useMemo(
-    () => new Set(target.approved.map(s => s.url)), [target.approved])
+    () => new Set([...target.approved.map(s => s.url), ...target.knownUrls]), [target.approved, target.knownUrls])
   const allApproved = state.slides.length > 0 && state.slides.every(s => approvedUrls.has(s.url))
   const badge = mediaApprovalBadge({
     clientApproved: target.clientApproved,
