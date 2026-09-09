@@ -317,8 +317,20 @@ export default function WeekGrid({
   }
   useEffect(() => clearHold, [])
 
+  /* FIRST LIGHT AT 6 AM. The grid runs the whole day now (midnight posts
+     were unreachable), so on a fresh week the page is scrolled to 6 am —
+     the night rows are above, one flick away. */
+  const sixAm = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    sixAm.current?.scrollIntoView({ block: 'start' })
+  }, [grid.days[0]?.iso])
+
   return (
-    <div className="flex min-h-0 flex-1 overflow-auto">
+    // NOT a scroller of its own: it sits inside the page's scroller and
+    // scrolled independently — the wheel moved the grid until the grid hit
+    // its end, and only then the page (the owner, 9 Sep 2026: "can't scroll
+    // down properly until I touch the bottom line"). One scroller now.
+    <div className="flex shrink-0">
       {/* the hour rail */}
       {/* every row is `shrink-0`: the rail is a flex column inside a box
           shorter than the day, and without it the rows were squeezed to fit
@@ -329,7 +341,8 @@ export default function WeekGrid({
         {grid.hours.map((h, i) => (
           <div
             key={h}
-            style={{ height: grid.rowPx }}
+            ref={h === 6 ? sixAm : undefined}
+            style={{ height: grid.rowPx, scrollMarginTop: grid.headerPx }}
             className={cn(
               'shrink-0 pt-0.5 text-[10px] font-semibold text-muted-foreground',
               i > 0 && 'border-t border-border',

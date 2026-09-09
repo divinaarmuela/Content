@@ -632,8 +632,18 @@ class ZernioPublisher implements Publisher {
     return this.post(`/posts/${encodeURIComponent(postId)}/edit`, { content })
   }
 
-  deletePost(postId: string) {
-    return this.post(`/posts/${encodeURIComponent(postId)}/delete`)
+  /** Pull a draft or booked post back. Zernio's route is `DELETE
+   *  /v1/posts/{id}` — it was sent as `POST …/delete`, which does not exist,
+   *  so every reschedule and cancel of a booked post answered "The channel
+   *  would not let go of this post: No such API endpoint" (9 Sep 2026). A
+   *  404 is taken as already gone. */
+  async deletePost(postId: string) {
+    const res = await fetch(`${BASE}/posts/${encodeURIComponent(postId)}`, { method: 'DELETE', headers: this.headers() })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok && res.status !== 404) {
+      throw new Error(String((json as Record<string, unknown>).error ?? `Could not delete the post (${res.status})`))
+    }
+    return json
   }
 
   listBroadcasts() {

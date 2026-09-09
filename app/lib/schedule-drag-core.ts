@@ -108,7 +108,7 @@ export type HourWindow = { fromHour: number; toHour: number }
 /** 6 am to 11 pm. It stopped at 8 pm, so a 9 pm post could not be dragged
  *  anywhere and a tile could not be dropped after eight (the owner, 9 Sep
  *  2026: "I can't drag past 9pm"). */
-export const GRID_HOURS: HourWindow = { fromHour: 6, toHour: 23 }
+export const GRID_HOURS: HourWindow = { fromHour: 0, toHour: 23 }
 
 export function keyboardMove(
   iso: string | null | undefined,

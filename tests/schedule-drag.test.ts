@@ -99,7 +99,7 @@ describe('moving with the keyboard', () => {
     // the day really does turn over — and the post is then pulled into the
     // hours the grid draws, rather than left at 12:15 am where no column
     // could show it
-    const later = keyboardMove(late, 'ArrowDown', TZ)!
+    const later = keyboardMove(late, 'ArrowDown', TZ, { fromHour: 6, toHour: 20 })!
     expect(at(later).day).toBe(at(late).day + 1)
     expect(at(later).hour).toBe(6)
     expect(at(later).minute).toBe(0)
@@ -126,13 +126,15 @@ describe('moving with the keyboard', () => {
 
   it('stops at the edges of the hours the grid draws', () => {
     // 6:00 am — the top of the grid. Up again must not walk the post off it
-    const dawn = '2026-09-08T20:00:00.000Z'
-    expect(at(dawn).hour).toBe(6)
-    const higher = keyboardMove(dawn, 'ArrowUp', TZ)!
-    expect(at(higher).hour).toBe(6)
-    expect(at(higher).minute).toBe(0)
+    // the grid draws the whole day now (9 Sep 2026): midnight is the top
+    const midnight = '2026-09-08T14:00:00.000Z'
+    expect(at(midnight).hour).toBe(0)
+    // up from midnight is the evening before — the day above, not a wall
+    const higher = keyboardMove(midnight, 'ArrowUp', TZ)!
+    expect(at(higher).day).toBe(at(midnight).day - 1)
+    expect(at(higher).hour).toBe(23)
 
-    // 11:00 pm — the bottom (the grid reached 8 pm until 9 Sep 2026)
+    // 11:00 pm — the bottom
     const dusk = '2026-09-09T13:00:00.000Z'
     expect(at(dusk).hour).toBe(23)
     const lower = keyboardMove(dusk, 'ArrowDown', TZ)!

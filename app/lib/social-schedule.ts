@@ -4,7 +4,7 @@ import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
   AssetVersion, Batch, Client, ContentItem, PublishJob as PublishJobRow,
-  ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
+  ScheduleEntry, ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
 import { AuthzError, authzErrorResponse, type TeamUser } from './authz'
@@ -36,7 +36,7 @@ import {
 import {
   normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
 } from './version-files-core'
-import { addVersion, performTransition } from './workflow'
+import { addVersion, logActivity, performTransition } from './workflow'
 import { markScheduledAfterQueue } from './production-publish'
 import { readPostedSlides, takenSlideUrls } from './posted-slides-core'
 import { mirrorVersionSlides } from './gdrive-mirror'
@@ -1682,8 +1682,31 @@ export async function reschedule(user: TeamUser, id: string, iso: string): Promi
   }
   await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
     .catch(e => console.error('reschedule dispatch failed:', (e as Error).message))
+  // THE CARD FOLLOWS THE MOVE (the owner, 9 Sep 2026: "make sure the cards
+  // in post approval get updated too if we move around"): the schedule
+  // rows the board, the Overview and the portal read carry the new time,
+  // and the card's own log says who moved it and to when
+  await moveScheduleRows(item.id, post.scheduled_for ?? null, at)
+  await logActivity({
+    actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
+    action: 'post_rescheduled', oldValue: post.scheduled_for ?? undefined, newValue: at,
+    detail: `Moved to ${new Date(at).toLocaleString('en-AU', { timeZone: post.timezone || 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`,
+  }).catch(() => {})
   announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'moved' })
   return { ok: true, post: shape(saved.row), mode: 'requeue' }
+}
+
+/** the item's schedule rows that carried the old time now carry the new
+ *  one — a published row is left alone */
+async function moveScheduleRows(itemId: string, from: string | null, to: string): Promise<void> {
+  try {
+    const rows = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: itemId } })
+    await Promise.all(rows
+      .filter(r => r.publish_status !== 'published' && (!from || !r.scheduled_at || r.scheduled_at === from))
+      .map(r => table('schedule_entries').update(r.id, { scheduled_at: to })))
+  } catch (e) {
+    console.error('could not move the schedule rows', itemId, e instanceof Error ? e.message : e)
+  }
 }
 
 /**

@@ -327,7 +327,10 @@ export default function SchedulePage() {
     // 72px an hour: a 64px tile sits INSIDE its hour band. At the core's
     // 44px default an 80px tile straddled two hour lines and the week read
     // as a pile (the owner, 9 Sep 2026: "the lines get cramped")
-    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX }),
+    // the whole day: a midnight post was off the grid and could not be
+    // dragged or dropped (the owner, 9 Sep 2026: "want to schedule it at
+    // 12 am but no way"); the grid opens scrolled to 6 am
+    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX, fromHour: 0, toHour: 23 }),
     [anchor, todayKey, tz])
   const monthView = view === 'Month'
   const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
