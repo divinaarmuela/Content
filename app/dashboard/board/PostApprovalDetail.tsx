@@ -75,9 +75,15 @@ function FileBookingChip({ url, posts, jobsById }: {
       </>
     )
   }
+  // the channels it is booked on, by name — "Scheduled on TikTok, Instagram
+  // · Thu 12:00 pm" (the owner, 9 Sep 2026: "if it's scheduled then say
+  // what platform(s)")
+  const bookedOn = [...new Set(booking.outcomes
+    .filter(o => o.status === 'scheduled' || o.status === 'queued' || o.status === 'pending')
+    .map(o => networkName(o.platform)))]
   return (
     <>
-      <Chip tone="amber">Scheduled{when ? ` · ${when}` : ''}</Chip>
+      <Chip tone="amber">Scheduled{bookedOn.length ? ` on ${bookedOn.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>
       {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
     </>
   )
@@ -317,6 +323,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
 
   if (!item) return <div className="p-5 text-[14px] text-muted-foreground">Loading…</div>
   const status = String(item.status) as ItemStatus
+  /** booked in or posted: the files are the channel's now */
+  const frozenCard = status === 'scheduled' || status === 'published'
   const primary = 'h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90'
   const secondary = 'h-11 rounded-full px-4 text-[14px] font-semibold'
 
@@ -396,14 +404,22 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             {slides.length} {slides.length === 1 ? 'file' : 'files'}{latest ? ` · version ${latest.version_number}` : ''}
             {postedSlides && postedSlides.posted > 0 ? ` · ${postedSlides.posted} of ${postedSlides.total} posted` : ''}
           </p>
-          <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
-            <Plus className="h-4 w-4" /> Add another
-          </Button>
+          {/* a card booked in or posted takes no new files: what the channel
+              holds is what goes (the owner, 9 Sep 2026: "if something is
+              scheduled how come I can add another") */}
+          {!frozenCard && (
+            <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
+              <Plus className="h-4 w-4" /> Add another
+            </Button>
+          )}
         </div>
         {working && <p className="text-[13px] text-muted-foreground">{working}…</p>}
         {slides.length === 0 && <p className="text-[14px] text-muted-foreground">No files yet.</p>}
         {slides.map((s, i) => {
           const about = said.filter(c => splitSlideTag(String(c.body ?? '')).index === i)
+          // a file the channel holds, or that has gone out, is not one to
+          // replace, remove or send back — it is out of our hands
+          const gone = postedUrls.has(s.url) || fileBooking(s.url, filePosts, jobsById) !== null
           return (
             <figure key={s.url} className="flex flex-col gap-2">
               <div className="overflow-hidden rounded-inner bg-foreground/[0.06]">
@@ -415,11 +431,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               <figcaption className="flex flex-wrap items-center gap-2">
                 <span className="text-[13px] font-semibold">{s.type === 'video' ? 'Video' : 'Photo'} {i + 1} of {slides.length}</span>
                 <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{s.name}</span>
-                <Button variant="outline" size="sm" className="h-9 rounded-full" disabled={working !== null}
-                  onClick={() => { replacing.current = i; replaceInput.current?.click() }}>
-                  <RefreshCw className="h-3.5 w-3.5" /> Replace
-                </Button>
-                {slides.length > 1 && (
+                {!gone && !frozenCard && (
+                  <Button variant="outline" size="sm" className="h-9 rounded-full" disabled={working !== null}
+                    onClick={() => { replacing.current = i; replaceInput.current?.click() }}>
+                    <RefreshCw className="h-3.5 w-3.5" /> Replace
+                  </Button>
+                )}
+                {!gone && !frozenCard && slides.length > 1 && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => remove(i)}>
                     <Trash2 className="h-3.5 w-3.5" /> Remove
                   </Button>
@@ -444,7 +462,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     Posted by hand
                   </Button>
                 )}
-                {mayAskChange && changeOn !== i && (
+                {mayAskChange && !gone && changeOn !== i && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setChangeOn(i); setChangeText('') }}>
                     <MessageCircle className="h-3.5 w-3.5" /> Change this one
                   </Button>
