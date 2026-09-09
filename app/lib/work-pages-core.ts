@@ -181,7 +181,7 @@ export function backLinkFor(
 ): { href: string; label: string } {
   // a brief lives on Production whatever its status — its "approved" is a
   // shoot to book, not a post to schedule
-  if (isBriefTask(i) || isInternalTask(i)) return { href: '/dashboard/production', label: 'Production' }
+  if (isBriefTask(i) || isInternalTask(i)) return { href: '/dashboard/production', label: 'Shoot brief boards' }
   if (SCHEDULER_STATUSES.includes(i.status)) return { href: '/dashboard/scheduler', label: 'Scheduler' }
   return { href: '/dashboard/editor', label: 'Editor' }
 }

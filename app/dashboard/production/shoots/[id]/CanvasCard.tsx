@@ -90,6 +90,40 @@ export function PlatformMark({ provider, className = 'h-3.5 w-3.5' }: { provider
  *  image card and the link card both need it, and because it must stop the
  *  pointer reaching the canvas — a click that starts a drag is a click that
  *  never plays anything. */
+/**
+ * A mock-up's caption, the way the platform itself shows one.
+ *
+ * Pasting a real post's link copies its caption onto the card — up to 500
+ * characters — and the frame used to print every one of them. In a 280px
+ * card a long Instagram caption became a skinny tower of 12px text that
+ * dwarfed the picture it was under. Instagram's own answer is the right one:
+ * two lines and "… more", the full text behind one tap, and "less" to fold
+ * it back. The buttons stop the pointer so a tap on "more" never starts a
+ * drag or reads as a click on the canvas.
+ */
+function MockupCaption({ lead, caption }: { lead?: React.ReactNode; caption: string }) {
+  const [open, setOpen] = React.useState(false)
+  // roughly what two lines hold at the mock-up widths; under it, no chrome
+  const long = caption.length > 88 || caption.includes('\n')
+  const toggle = (
+    <button
+      type="button"
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+      className="text-muted-foreground/80 hover:text-foreground"
+    >
+      {open ? 'less' : '… more'}
+    </button>
+  )
+  return (
+    <p className={`break-words ${open ? 'whitespace-pre-wrap' : long ? 'line-clamp-2' : ''}`}>
+      {lead}
+      {caption}
+      {long && <> {toggle}</>}
+    </p>
+  )
+}
+
 function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
   return (
     <button
@@ -666,7 +700,7 @@ function CanvasCardInner({
           </div>
           {(caption || editing) && (
             <div className="px-2.5 pb-2 text-[12px] leading-snug text-foreground">
-              {editing ? captionEditor('text-[12px]') : <p className="whitespace-pre-wrap break-words">{caption}</p>}
+              {editing ? captionEditor('text-[12px]') : <MockupCaption caption={caption} />}
             </div>
           )}
           <div className="relative bg-foreground/[0.06]" style={{ aspectRatio: fb ? '1 / 1' : '1.91 / 1' }}>{img}</div>
@@ -767,10 +801,15 @@ function CanvasCardInner({
           <Bookmark className="ml-auto h-4 w-4" />
         </div>
         <div className="px-2.5 pb-2 text-[12px] leading-snug text-muted-foreground">
-          {editing ? captionEditor('text-[12px] text-foreground') : (
+          {editing ? captionEditor('text-[12px] text-foreground') : caption ? (
+            <MockupCaption
+              lead={<><span className="font-semibold text-foreground">{handle}</span>{' '}</>}
+              caption={caption}
+            />
+          ) : (
             <p className="break-words">
               <span className="font-semibold text-foreground">{handle}</span>{' '}
-              {caption || <span className="opacity-50">Double-click to write a caption…</span>}
+              <span className="opacity-50">Double-click to write a caption…</span>
             </p>
           )}
         </div>

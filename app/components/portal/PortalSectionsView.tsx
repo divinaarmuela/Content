@@ -79,26 +79,34 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
       {shoots.length > 0 && (
         <section className="flex flex-col gap-6" data-portal-section="shoots">
           <SectionHeading count={shoots.length}>{shoots.length === 1 ? 'YOUR SHOOT' : 'YOUR SHOOTS'}</SectionHeading>
-          {shoots.map(card => (
-            <div key={card.id} id={`shoot-${card.id}`} className="flex scroll-mt-16 flex-col gap-3">
-              <PortalCardView card={card} amName={data.am_name} accent={accent} surface={surface} className="max-w-3xl" />
-              {/* the planning board, open, by the owner's rule — the same
-                  canvas the team draws on, read-only, with its comments */}
-              {card.shoot?.shared && card.shoot.canvas_cards.length > 0 && (
-                <ShootBoard
-                  shootId={card.id}
-                  boardName={card.shoot.board_name}
-                  cards={card.shoot.canvas_cards}
-                  comments={card.comments}
-                  surface={surface}
-                  clientName={data.client.name}
-                  amName={data.am_name}
-                  initialCardId={initialCardId ?? null}
-                  fullHref={token ? `/portal/${token}/shoot/${card.id}` : null}
-                />
-              )}
-            </div>
-          ))}
+          {shoots.map(card => {
+            // The board LEADS when it is live. It is the visual half of the
+            // plan — the thing the client actually looks at — so an active
+            // board opens the shoot at full width with the brief card under
+            // it, rather than making the client scroll past the admin card
+            // to reach the pictures. A shoot with no shared board keeps the
+            // card alone, exactly as before.
+            const boardLive = card.shoot?.shared && card.shoot.canvas_cards.length > 0
+            const board = boardLive && card.shoot && (
+              <ShootBoard
+                shootId={card.id}
+                boardName={card.shoot.board_name}
+                cards={card.shoot.canvas_cards}
+                comments={card.comments}
+                surface={surface}
+                clientName={data.client.name}
+                amName={data.am_name}
+                initialCardId={initialCardId ?? null}
+                fullHref={token ? `/portal/${token}/shoot/${card.id}` : null}
+              />
+            )
+            return (
+              <div key={card.id} id={`shoot-${card.id}`} className="flex scroll-mt-16 flex-col gap-3">
+                {board}
+                <PortalCardView card={card} amName={data.am_name} accent={accent} surface={surface} className="max-w-3xl" />
+              </div>
+            )
+          })}
         </section>
       )}
 

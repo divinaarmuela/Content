@@ -43,7 +43,12 @@ const TONE: Record<NonNullable<PortalCard['tone']>, string> = {
   amber: 'bg-tint-amber',
   green: 'bg-tint-green',
   blue: 'bg-tint-blue',
-  ink: 'bg-ink text-cream',
+  // the inverted accent, from THEME tokens: foreground/background flip with
+  // the toggle, so a wrapped shoot is an ink card on the light portal and a
+  // cream card on the dark one. It was literal bg-ink/text-cream — the same
+  // black card in both themes, which read as light mode not applying to the
+  // shoot card at all.
+  ink: 'bg-foreground text-background',
 }
 
 const when = (iso: string) =>
@@ -60,7 +65,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
   const router = useRouter()
   const token = 'token' in surface ? surface.token : null
   const ink = card.tone === 'ink'
-  const muted = ink ? 'text-cream/70' : 'text-muted-foreground'
+  const muted = ink ? 'text-background/70' : 'text-muted-foreground'
 
   // ── what the client has done to this card since the page loaded ──
   // The server has taken the decision but the page still holds the data it
@@ -246,7 +251,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
 
   /** one comment, as a line */
   const commentLine = (c: PortalCard['comments'][number]) => (
-    <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
+    <div key={c.id} className={cn('rounded-tile p-2.5 text-[14px]', ink ? 'bg-background/10' : 'bg-foreground/[0.04]')}>
       <p className={cn('flex flex-wrap items-baseline gap-x-2 text-[12px]', muted)}>
         <span className="font-semibold">{c.author_name}</span>
         {c.from_team && <Chip tone={ink ? 'muted' : 'ink'} className="px-1.5 py-0.5 text-[10px]">MD Media</Chip>}
@@ -324,7 +329,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
               const here = comments.filter(c => splitSlideTag(c.body).index === i)
               return (
                 <figure key={s.url} className="flex flex-col gap-2">
-                  <div className={cn('overflow-hidden rounded-tile', ink ? 'bg-cream/10' : 'bg-foreground/[0.06]')}>
+                  <div className={cn('overflow-hidden rounded-tile', ink ? 'bg-background/10' : 'bg-foreground/[0.06]')}>
                     {s.type === 'video'
                       ? <video src={s.url} controls playsInline preload="metadata" className="max-h-[520px] w-full object-contain" />
                       // eslint-disable-next-line @next/next/no-img-element
@@ -350,7 +355,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         )}
         <div className="flex items-center gap-2">
           {card.word && (
-            <span className={cn('text-[12px] font-semibold uppercase tracking-[0.02em]', ink ? 'text-cream/60' : 'text-muted-foreground')}>
+            <span className={cn('text-[12px] font-semibold uppercase tracking-[0.02em]', ink ? 'text-background/60' : 'text-muted-foreground')}>
               {card.word}
             </span>
           )}
@@ -384,7 +389,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           </p>
         )}
         {card.status === 'published' && card.metrics && (
-          <div className={ink ? 'text-cream' : ''}><PostMetricsRow item={{ metrics: card.metrics } as never} /></div>
+          <div className={ink ? 'text-background' : ''}><PostMetricsRow item={{ metrics: card.metrics } as never} /></div>
         )}
         {card.status === 'published' && token && card.post_id && (
           <Link
@@ -429,7 +434,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
               {planOpen ? 'Hide the plan' : 'See the plan'}
             </button>
             {planOpen && (
-              <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[14px]', ink ? 'bg-cream/10' : 'bg-foreground/[0.04]')}>
+              <div className={cn('flex flex-col gap-2.5 rounded-tile p-3 text-[14px]', ink ? 'bg-background/10' : 'bg-foreground/[0.04]')}>
                 {card.shoot.concept && <p className="whitespace-pre-wrap leading-relaxed">{card.shoot.concept}</p>}
                 {card.shoot.planned_deliverables.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
@@ -442,7 +447,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                   <ul className="flex flex-col gap-1">
                     {card.shoot.shot_list.map(r => (
                       <li key={r.id} className="flex items-start gap-2">
-                        <span className={cn('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border', ink ? 'border-cream/50' : 'border-foreground/40')}>
+                        <span className={cn('mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border', ink ? 'border-background/50' : 'border-foreground/40')}>
                           {r.done && <Check className="h-3 w-3" />}
                         </span>
                         <span className={r.done ? 'opacity-60' : ''}>{r.text}{r.qty ? <span className="opacity-50"> ×{r.qty}</span> : null}</span>

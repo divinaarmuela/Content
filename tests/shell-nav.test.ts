@@ -221,7 +221,7 @@ describe('pageTitle', () => {
 
   it('falls back to the section for a page underneath one', () => {
     expect(pageTitle('/dashboard/clients/abc-123')).toBe('Clients')
-    expect(pageTitle('/dashboard/production/shoots/xyz')).toBe('Production')
+    expect(pageTitle('/dashboard/production/shoots/xyz')).toBe('Shoot brief boards')
     // the longest prefix wins here too
     expect(pageTitle('/dashboard/team/activity/x')).toBe('Team activity')
     expect(pageTitle('/dashboard/production/proposals')).toBe('Proposals')
