@@ -17,13 +17,20 @@ import { isPlatform, type Platform } from './publish-core'
  * after the write and whichever id is stored there is the one both of them
  * use — the loser adopts it rather than carrying its own.
  */
-/** Where the network sends the person back once they have said yes. */
-export type ConnectReturn = 'social' | 'schedule'
+/** Where the network sends the person back once they have said yes: one of
+ *  our pages by name, or an exact path (the client's own connect link, which
+ *  carries a token and the ticked networks). */
+export type ConnectReturn = 'social' | 'schedule' | { path: string }
 
 /** The page for a return, WITH the client and the network, so the page can
  *  re-read the provider's account list and say what just connected. */
 export function connectReturnPath(returnTo: ConnectReturn, clientId: string, platform: string): string {
   const q = `connected=${encodeURIComponent(platform)}&clientId=${encodeURIComponent(clientId)}`
+  if (typeof returnTo === 'object') {
+    // an exact path on OUR site only — never an address somebody else chose
+    const path = returnTo.path.startsWith('/') && !returnTo.path.startsWith('//') ? returnTo.path : '/'
+    return `${path}${path.includes('?') ? '&' : '?'}${q}`
+  }
   return returnTo === 'schedule'
     ? `/dashboard/social/schedule?client=${encodeURIComponent(clientId)}&${q}`
     : `/dashboard/social?${q}`

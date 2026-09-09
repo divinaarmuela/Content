@@ -21,6 +21,29 @@ export const TECH_EMAIL = 'tech@mdmmarketing.com.au'
  * managers, and the agency's tech inbox. Once per account per day
  * (`notify` dedupes on the entity id).
  */
+/**
+ * Re-read ONE client's accounts' health, now — after a reconnect, so the
+ * "expired" the morning check wrote does not stand until tomorrow's 7 am on
+ * an account the client has just signed into again. No emails: that is the
+ * morning's job, and a reconnect is good news.
+ */
+export async function refreshClientAccountsHealth(clientId: string, now: Date = new Date()): Promise<number> {
+  const publisher = getPublisher()
+  const answer = await publisher.accountsHealth().catch(() => null) as { accounts?: ProviderHealth[] } | null
+  const rows = Array.isArray(answer?.accounts) ? answer!.accounts! : []
+  if (rows.length === 0) return 0
+  const ours = await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })
+  const byProvider = new Map(ours.filter(a => a.active !== false).map(a => [String(a.provider_account_id), a]))
+  let updated = 0
+  for (const row of rows) {
+    const account = byProvider.get(String(row.accountId ?? ''))
+    if (!account) continue
+    await table('social_accounts').update(account.id, { health: healthVerdict(row, now.getTime()) })
+    updated++
+  }
+  return updated
+}
+
 export async function checkAllAccountsHealth(now: Date = new Date()): Promise<{ checked: number; act: number; watch: number; told: number }> {
   const tally = { checked: 0, act: 0, watch: 0, told: 0 }
   const publisher = getPublisher()

@@ -12,6 +12,7 @@ import EmptyState from '../EmptyState'
 import SocialChannels from '../clients/SocialChannels'
 import { needsAttention, timeLeftWords } from '../../lib/token-health-core'
 import PlatformIcon from './PlatformIcon'
+import ClientConnectLink from './ClientConnectLink'
 import ComposeDialog from './ComposeDialog'
 import PageTitle from '../ui/PageTitle'
 
@@ -19,6 +20,8 @@ type Client = {
   id: string
   name: string
   status: 'prospect' | 'active' | 'paused' | 'archived'
+  /** the portal token — only a manager receives it (the clients API) */
+  share_token?: string | null
 }
 
 type Account = {
@@ -221,6 +224,11 @@ export default function SocialPage() {
                   </div>
                 </div>
                 <SocialChannels clientId={c.id} onChanged={load} />
+                {/* the link the client connects their own accounts from —
+                    only a manager holds the token that makes it */}
+                {c.share_token && (
+                  <ClientConnectLink token={c.share_token} connected={platformsFor(c.id)} />
+                )}
               </CardContent>
             </Card>
           ))}

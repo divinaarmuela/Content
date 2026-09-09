@@ -4,6 +4,7 @@ import type { Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { assertClientAccess } from '../../../lib/social-schedule'
 import { syncSocialAccounts } from '../../../lib/publish'
+import { refreshClientAccountsHealth } from '../../../lib/account-health'
 import { isPlatform } from '../../../lib/publish-core'
 import { connectLinkFor } from '../../../lib/social-connect'
 
@@ -68,6 +69,9 @@ export async function PUT(req: Request) {
     }
 
     const synced = await syncSocialAccounts(clientId, client.social_profile_id)
+    // after a reconnect from the Schedule bar or Social channels, the red
+    // badge must not stand until tomorrow's check on a token that works
+    await refreshClientAccountsHealth(clientId).catch(() => 0)
     return NextResponse.json({ synced })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
