@@ -742,7 +742,12 @@ export default function NewPostDialog({
       if (onDone) onDone({ kind, postId: id, itemId: target.itemId, at: state.scheduledFor, channels: [...state.channels], who: who ?? null })
     }
     try {
-      const id = await ensurePost(state)
+      // A BOOKED POST IS NOT SAVED FIRST. The server refuses every edit to a
+      // post the channel holds ("already booked — cancel it first"), and the
+      // save before a move tripped exactly that refusal (9 Sep 2026). A move
+      // or a Post now on a booked post changes the time and nothing else, and
+      // `reschedule` does that by itself.
+      const id = status === 'scheduled' && state.postId ? state.postId : await ensurePost(state)
       if (what === 'draft') { setNote('Saved as a draft.'); finished('draft', id); return }
       if (what === 'send' && reviewOnly) {
         /* POST APPROVAL'S SEND. The piece itself is submitted — the ordinary
