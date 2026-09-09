@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  byHandRows, clientStats, fileBooking, kindWords, kindsLine, outcomesForJob, parseOutcomeSentence, postsTabs,
+  byHandRows, cardBookingLine, clientStats, fileBooking, kindWords, kindsLine, outcomesForJob, parseOutcomeSentence, postsTabs,
   readPlatformResults, resultsForAll, resultsFromRemote, sortForTab,
   type OutcomeJob,
 } from '../app/lib/post-outcome-core'
@@ -157,5 +157,22 @@ describe('one file of a card: booked or out', () => {
     expect(fileBooking('a', posts, jobs)?.outcomes.map(o => o.platform)).toEqual(['instagram', 'tiktok'])
     expect(fileBooking('b', posts, jobs)).toBeNull()
     expect(fileBooking('c', posts, jobs)).toMatchObject({ status: 'published' })
+  })
+})
+
+describe('the one line a board card says about its booking', () => {
+  const fmt = (iso: string) => iso.slice(0, 16)
+  it('names the channels and the time — booked, posted, part-way', () => {
+    const jobs = new Map<string, OutcomeJob>([
+      ['b', job({ id: 'b', status: 'scheduled', scheduled_for: '2026-09-10T02:00:00Z', platform_results: null })],
+      ['p', job({ id: 'p', status: 'published', published_at: '2026-09-09T13:46:00Z', platform_results: null })],
+    ])
+    expect(cardBookingLine([{ status: 'scheduled', publish_job_ids: ['b'], scheduled_for: '2026-09-10T02:00:00Z' }], jobs, null, fmt))
+      .toBe('Booked on Instagram, TikTok · 2026-09-10T02:00')
+    expect(cardBookingLine([{ status: 'published', publish_job_ids: ['p'] }], jobs, { posted: 1, total: 1 }, fmt))
+      .toBe('Posted on Instagram, TikTok · 2026-09-09T13:46')
+    expect(cardBookingLine([{ status: 'published', publish_job_ids: ['p'] }, { status: 'scheduled', publish_job_ids: ['b'] }], jobs, { posted: 2, total: 5 }, fmt))
+      .toBe('2 of 5 posted · Booked on Instagram, TikTok · 2026-09-10T02:00')
+    expect(cardBookingLine([{ status: 'draft', publish_job_ids: [] }], jobs, null, fmt)).toBeNull()
   })
 })

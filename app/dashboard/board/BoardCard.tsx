@@ -82,7 +82,7 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref,
+  statsHref, booking,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -110,6 +110,9 @@ export function BoardCard({
    *  stats line becomes the link to it: the numbers are what somebody wants
    *  more of, so they are where the way to more of them lives. */
   statsHref?: string | null
+  /** "Booked on TikTok, Instagram · Thu 12:00 pm" — where the files are
+   *  booked or went out, so a card in Ready to post or Posted says so */
+  booking?: string | null
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const [briefOpen, setBriefOpen] = useState(false)
@@ -160,6 +163,9 @@ export function BoardCard({
         {/* who holds it, and — beside it, never instead of it — who was
             actually asked for the next thing on it */}
         <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>
+        {booking && (
+          <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{booking}</span>
+        )}
         {stats && card.status === 'published' && (
           statsHref ? (
             // above the card's own overlay, so the line is a real link rather

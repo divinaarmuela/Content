@@ -424,6 +424,40 @@ function plural(kind: string, n: number): string {
   return `${w}s`
 }
 
+/* ── the one line a board card says about its booking ───────────────────── */
+
+/**
+ * "Booked on TikTok, Instagram · Thu 10 Sep, 12:00 pm", "Posted on Instagram
+ * · Wed 9 Sep, 11:46 pm", "2 of 5 posted · 3 booked on TikTok · Fri 9:00 am".
+ * What the card in Ready to post / Posted says under its title, from the
+ * posts that carry its files (the owner, 9 Sep 2026: "make it easy to
+ * understand the cards… if it's scheduled then say what platform(s)").
+ */
+export function cardBookingLine(
+  posts: readonly { status?: string | null; slides?: unknown; publish_job_ids?: unknown; scheduled_for?: string | null }[],
+  jobsById: ReadonlyMap<string, OutcomeJob>,
+  progress: { posted: number; total: number } | null,
+  fmt: (iso: string) => string,
+): string | null {
+  const live = posts.filter(p => ['scheduled', 'published'].includes(String(p.status ?? '')))
+  if (live.length === 0) return null
+  const outcomes = live.flatMap(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
+    .map(id => jobsById.get(String(id))).filter((j): j is OutcomeJob => !!j).flatMap(outcomesForJob))
+  const names = (list: PlatformOutcome[]) => [...new Set(list.map(o => networkName(o.platform)))].join(', ')
+  const out = outcomes.filter(o => o.status === 'published')
+  const booked = outcomes.filter(o => o.status === 'scheduled' || o.status === 'queued' || o.status === 'pending')
+  const failed = outcomes.filter(o => o.status === 'failed')
+  const soonest = booked.map(o => o.at).filter((a): a is string => !!a).sort()[0]
+    ?? live.filter(p => p.status === 'scheduled').map(p => p.scheduled_for).filter((a): a is string => !!a).sort()[0]
+  const latest = out.map(o => o.at).filter((a): a is string => !!a).sort().slice(-1)[0]
+  const parts: string[] = []
+  if (progress && progress.posted > 0 && progress.posted < progress.total) parts.push(`${progress.posted} of ${progress.total} posted`)
+  if (booked.length) parts.push(`Booked on ${names(booked)}${soonest ? ` · ${fmt(soonest)}` : ''}`)
+  else if (out.length && !(progress && progress.posted > 0 && progress.posted < progress.total)) parts.push(`Posted on ${names(out)}${latest ? ` · ${fmt(latest)}` : ''}`)
+  if (failed.length) parts.push(`Did not post on ${names(failed)}`)
+  return parts.length ? parts.join(' · ') : null
+}
+
 /* ── one file on a card: booked or out? ─────────────────────────────────── */
 
 export type FileBooking = {

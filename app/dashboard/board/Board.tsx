@@ -11,7 +11,9 @@ import {
   type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
 import { useTable } from '@/lib/db-client'
-import type { PostAnalytic, SocialPost } from '@/lib/db-types'
+import type { PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
+import { cardBookingLine, type OutcomeJob } from '../../lib/post-outcome-core'
+import { readPostedSlides } from '../../lib/posted-slides-core'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { readInteractors, withFromThisPost } from '../../lib/followers-core'
 import { postPageHref } from '../../lib/post-page-core'
@@ -146,7 +148,25 @@ export function Board({
 
   /** …and where that line GOES: the post's own page. A card that carried
    *  several posts links to the one that actually went out last. */
-  const { rows: postRows } = useTable<SocialPost>('social_posts', { enabled: hasPosted })
+  const hasBooked = useMemo(() => cards.some(c => ['approved_for_scheduling', 'scheduled', 'published'].includes(String(c.status))), [cards])
+  const { rows: postRows } = useTable<SocialPost>('social_posts', { enabled: hasPosted || hasBooked })
+  const { rows: jobRows } = useTable<PublishJob>('publish_jobs', { enabled: hasBooked })
+  /** "Booked on TikTok, Instagram · Thu 12:00 pm" under a card, from the
+   *  posts that carry its files (post-outcome-core.cardBookingLine) */
+  const bookingByItem = useMemo(() => {
+    const out = new Map<string, string>()
+    if (!hasBooked) return out
+    const jobsById = new Map<string, OutcomeJob>(jobRows.map(j => [j.id, j as unknown as OutcomeJob]))
+    const fmt = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    for (const c of cards) {
+      if (!['approved_for_scheduling', 'scheduled', 'published'].includes(String(c.status))) continue
+      const mine = postRows.filter(p => p.item_id === c.id)
+      const progress = readPostedSlides((c as { posted_slides?: unknown }).posted_slides)
+      const line = cardBookingLine(mine, jobsById, progress ? { posted: progress.posted, total: progress.total } : null, fmt)
+      if (line) out.set(c.id, line)
+    }
+    return out
+  }, [cards, postRows, jobRows, hasBooked])
   const postByItem = useMemo(() => {
     const out = new Map<string, string>()
     const sent = [...postRows]
@@ -244,6 +264,7 @@ export function Board({
                 onDelete={setDeleteFor}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
+                booking={bookingByItem.get(c.id) ?? null}
               />
             )}
           </div>
