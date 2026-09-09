@@ -37,8 +37,6 @@ import { checkTaskTransitionAs, isInternalKind, taskStatusLabel, type KindShape 
 import { needsNewVersion } from './claim-core'
 import { handoverSubject, tidyNote } from './hand-over-core'
 import { askedPatch, NOBODY_ASKED } from './asked-core'
-// pure, no I/O — the one question "does this client sign every post off"
-import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost, mayPostWithoutApproval } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
 import type { Slide } from './version-files-core'
 
@@ -558,58 +556,13 @@ export async function performTransition(
       : checkTransitionAs(hats, from, to, { auto: opts?.auto })
   if (!check.ok) throw new AuthzError(check.reason, 403)
 
-  /**
-   * THE CLIENT'S OWN POLICY, ENFORCED RATHER THAN DISPLAYED.
-   *
-   * `presentTransitions` hides the `→ approved_for_scheduling` edge on every
-   * status except `client_review` when the item requires the client's
-   * sign-off — but only on the item page, and only by not drawing a button.
-   * Any other surface reaching this function got a different answer to the
-   * same question, which is a client policy that holds on one screen and not
-   * on another.
-   *
-   * WHOSE POLICY IT IS (ruled 5 Sep 2026). It is the CLIENT'S:
-   * `clients.client_approval_required`, and only when it is explicitly true.
-   * This used to read the ITEM's column of the same name, which defaults to
-   * true on every piece ever made — so an account manager could not sign off
-   * their own client's work without first sending it to a client the agency
-   * never agreed to send it to. The item column still routes work through
-   * `client_review` in the ordinary way; what it no longer does is speak for
-   * the client's contract.
-   *
-   * The system's own moves are exempt: those are the provider reporting what
-   * has already happened, not somebody deciding to skip the client.
-   *
-   * AND SO IS A MANAGER (the owner, 9 Sep 2026): an account manager or a
-   * super admin signs their client's work off "even when the client has that
-   * lock" — the switch is a reminder to them, not a second person. It still
-   * holds everyone else to the client's answer.
-   */
-  if (!system && to === 'approved_for_scheduling' && from !== 'client_review'
-    && !mayPostWithoutApproval(hats, null)) {
-    /**
-     * AND IT FAILS CLOSED.
-     *
-     * This read used to end in `.catch(() => null)`, which made a dropped
-     * connection say "the ordinary arrangement" — i.e. go ahead. The whole
-     * job of this gate is the one client who insisted on signing every post
-     * off, so "we could not check" has to mean no, said in a sentence that
-     * blames us and invites another go. A client row that is genuinely
-     * ABSENT is a different answer: there is no policy to honour, and every
-     * other gate still applies.
-     */
-    let client: { id: string; client_approval_required?: unknown } | null
-    try {
-      client = await table<{ id: string; client_approval_required?: unknown }>('clients')
-        .get(item.client_id)
-    } catch {
-      throw new AuthzError(CLIENT_POLICY_UNREADABLE, 503)
-    }
-    if (clientSignsOffEveryPost(client)) {
-      throw new AuthzError(
-        'This client signs their work off themselves — send it to them first', 403)
-    }
-  }
+  // The client's "signs off every post" switch used to be enforced here — a
+  // read of the client row, failing closed, refusing the approve edge to
+  // anyone but the client. Every hat that can take this edge is a manager's
+  // (workflow-core: account_manager or super_admin), and the owner ruled on
+  // 9 Sep 2026 that the switch does not bind a manager. A gate nobody can
+  // reach is not a gate; the switch is the words on the client's page and
+  // the line under the Schedule button.
 
   if (!system && isBriefTask && 'requires' in check && check.requires === 'batch_locked') {
     if (!briefBatch || !['locked', 'shot'].includes(briefBatch.status ?? '')) {

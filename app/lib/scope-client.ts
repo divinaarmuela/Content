@@ -296,6 +296,11 @@ export function visibleItems<T extends ScopeItem>(
    * a super admin (everything) sees beyond their own involvement. This
    * stands whatever `schedulerPostFilter` says: that flag is about the
    * approved queue, this is about whose work it is. */
+  // a shoot they OWN opens its rows — planning a shoot is one job, and the
+  // shoot's owner is assigned to all of it. Merely holding one item on a
+  // shoot is not: that reach handed a scheduler every sibling row on the
+  // shoot, which is the pool the ruling took away.
+  const ownedBatches = new Set((ctx.batches ?? []).filter(b => b.owner_id === viewer.id).map(b => b.id))
   const own = (viewer.role === 'scheduler' || viewer.role === 'general' || viewer.role === 'editor')
     ? scoped.filter(r =>
       r.owner_id === viewer.id
@@ -303,8 +308,7 @@ export function visibleItems<T extends ScopeItem>(
       || askedIdsOf(r as never).includes(viewer.id)
       || taggedItems.has(r.id)
       || createdItems.has(r.id)
-      // a shoot they hold opens its rows — planning a shoot is one job
-      || (r.batch_id != null && heldBatches.has(r.batch_id)))
+      || (r.batch_id != null && ownedBatches.has(r.batch_id)))
     : scoped
 
   if (viewer.role !== 'scheduler' || ctx.schedulerPostFilter === false) return own

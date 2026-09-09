@@ -138,7 +138,8 @@ export const APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES: ItemStatus[] =
  * `who` is a role, or the hats this person wears on THIS item (rights follow
  * assignment, so the server passes `actingRoles`).
  *
- * The one exception is the client's own policy — see `clientSignsOffEveryPost`.
+ * The client's own "signs off every post" switch is read and ignored here —
+ * see `clientSignsOffEveryPost`: a reminder to the manager, never a gate.
  */
 export function mayPostWithoutApproval(
   who: string | null | undefined | readonly string[],
@@ -170,9 +171,11 @@ export function mayPostWithoutApproval(
  *
  * `clients.client_approval_required`, and only when it is explicitly `true`.
  * Unset means "the ordinary arrangement", which is the one the ruling
- * describes: the account manager decides. A client whose contract says they
- * see everything first keeps the full flow, for everybody, and the server
- * refuses the short cut rather than hiding it.
+ * describes: the account manager decides. Since 9 Sep 2026 the switch is a
+ * REMINDER, not a gate: it is the line under the Schedule button and the
+ * words on the client's page ("send it to them unless you mean to post it
+ * yourself"), and the note a scheduler sees on their upload. No server path
+ * refuses a manager on its account any more.
  *
  * NOT the item's own `client_approval_required`, which defaults to true on
  * every piece and would mean "the exception" was the rule.
@@ -186,7 +189,6 @@ export function clientSignsOffEveryPost(
 /** The line under the button on such a client. */
 export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 
-/** …and the refusal if somebody asks for the short cut anyway. */
 /**
  * THE PIECES CAME THROUGH THE BOARD AND WERE SIGNED OFF THERE.
  *
@@ -218,8 +220,6 @@ export function mayPostPiece(
   return mayPostWithoutApproval(who, clientSignsOff) || assetsApprovedOnBoard(item)
 }
 
-export const CLIENT_SIGNS_OFF_REFUSAL =
-  'This client signs off every post — send it for approval'
 
 /**
  * …and what is said when we could not READ the client's settings at all.

@@ -85,14 +85,29 @@ describe('visibleItems', () => {
       { id: 'x2', client_id: 'cX', status: 'draft_uploaded', owner_id: 'u1', batch_id: 'bA', scheduler_ids: [] },
       { id: 'x3', client_id: 'cX', status: 'draft_uploaded', owner_id: 'u9', scheduler_ids: [] },
     ]
-    // u1 owns x2 on shoot bA, so the whole shoot opens — x1 rides along
+    // u1 owns x2 on shoot bA — that is x2's, and ONLY x2's: holding one item
+    // on a shoot does not hand an editor its siblings (the owner, 9 Sep 2026:
+    // "no, unless they're assigned or they created themselves")
     expect(visibleItems({ id: 'u1', role: 'editor' }, rows, []).map(i => i.id))
-      .toEqual(['x1', 'x2'])
+      .toEqual(['x2'])
+    // owning the SHOOT is being assigned to all of it — then x1 rides along
+    expect(
+      visibleItems({ id: 'u1', role: 'editor' }, rows, [], { batches: [{ id: 'bA', client_id: 'cX', owner_id: 'u1' }] })
+        .map(i => i.id),
+    ).toEqual(['x1', 'x2'])
     // tagged on x3 by an unresolved comment: that alone opens it
     expect(
       visibleItems({ id: 'u1', role: 'editor' }, rows, [], { taggedItemIds: ['x3'] })
         .map(i => i.id),
-    ).toEqual(['x1', 'x2', 'x3'])
+    ).toEqual(['x2', 'x3'])
+  })
+
+  it('a scheduler handed one item on a shoot is not handed the shoot', () => {
+    const rows: any[] = [
+      { id: 's1', client_id: 'cX', status: 'approved_for_scheduling', owner_id: 'u9', batch_id: 'bA', scheduler_ids: ['u1'] },
+      { id: 's2', client_id: 'cX', status: 'approved_for_scheduling', owner_id: 'u9', batch_id: 'bA', scheduler_ids: [] },
+    ]
+    expect(visibleItems({ id: 'u1', role: 'scheduler' }, rows, []).map(i => i.id)).toEqual(['s1'])
   })
 })
 

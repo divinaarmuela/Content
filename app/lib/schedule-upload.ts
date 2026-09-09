@@ -45,8 +45,8 @@ import { UPLOAD_ADHOC_REASON, contentTypeForFiles, titleForUpload } from './sche
  * (`mayPostWithoutApproval` + `performTransition`), never by a second rule
  * living here:
  *
- *   • an account manager or a super admin — and never on a client who signs
- *     off every post — gets the piece carried to `approved_for_scheduling` on
+ *   • an account manager or a super admin — on any client, lock or no lock
+ *     (the owner, 9 Sep 2026) — gets the piece carried to `approved_for_scheduling` on
  *     the ordinary "Approve without client" edge, recorded against them. Their
  *     post can go out at once, and `scheduleWithoutApproval` has nothing left
  *     to do for the media;

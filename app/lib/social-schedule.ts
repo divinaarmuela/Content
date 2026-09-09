@@ -29,7 +29,6 @@ import {
 } from './schedule-compose-core'
 import {
   applySlideLimit, canReschedule, channelBlockReason,
-  CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost,
   coverForSlide, eligibility,
   assetsApprovedOnBoard, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
@@ -163,12 +162,16 @@ function assertCompose(user: TeamUser, item: ContentItem): void {
 }
 
 /**
- * MAY THIS PERSON POST WITH NO APPROVAL STEP IN THE WAY? (ruled 5 Sep 2026)
+ * MAY THIS PERSON POST WITH NO APPROVAL STEP IN THE WAY? (ruled 5 Sep 2026;
+ * the client's switch dropped from it 9 Sep 2026)
  *
  * The client's account manager, or a super admin — read off the hats they
  * wear on THIS item, so an editor handed the scheduling of a piece does not
- * inherit the manager's signature with it. A client whose contract says they
- * see every post first turns it off for everybody.
+ * inherit the manager's signature with it — or a piece the board already
+ * signed off. The client's "signs off every post" switch is NOT consulted:
+ * the owner ruled that a manager posts straight out "even when the client
+ * has that lock", and a read of the client row here (it failed closed) was
+ * a 503 standing in the way of a policy that binds nobody on this path.
  *
  * The answer decides two things and nothing else: which media this person may
  * build a post out of (`eligibleFor`), and whether the app performs the two
@@ -176,32 +179,7 @@ function assertCompose(user: TeamUser, item: ContentItem): void {
  * through is the ordinary one.
  */
 export async function mayPostStraightOut(user: TeamUser, item: ContentItem): Promise<boolean> {
-  return mayPostPiece(
-    actingRoles({ id: user.id, role: user.role }, item),
-    await clientSignsOff(item.client_id),
-    item,
-  )
-}
-
-/**
- * `clients.client_approval_required`, explicitly true — AND IT FAILS CLOSED.
- *
- * A client we cannot READ used to be treated as the ordinary arrangement,
- * which meant a dropped connection answered "go ahead" to the one question
- * protecting the one client who insisted on seeing every post first. So a
- * read that throws is a refusal, in a sentence that says it is our fault.
- *
- * A client row that is genuinely ABSENT is a different answer: there is no
- * policy on file to honour, and every other gate still applies.
- */
-async function clientSignsOff(clientId: string): Promise<boolean> {
-  let client: Client | null
-  try {
-    client = await table<Client>('clients').get(clientId)
-  } catch {
-    throw new AuthzError(CLIENT_POLICY_UNREADABLE, 503)
-  }
-  return clientSignsOffEveryPost(client)
+  return mayPostPiece(actingRoles({ id: user.id, role: user.role }, item), null, item)
 }
 
 /** The media this person may build a post out of. */

@@ -17,7 +17,8 @@ import type { Row } from '@/lib/db-types'
  *   a scheduler uploads the same file → the same piece, the same post, and
  *   the short cut is REFUSED: their post still waits for the manager's check;
  *
- *   a client who signs off every post keeps the full flow for everybody.
+ *   a client who signs off every post changes nothing for a manager (the
+ *   owner, 9 Sep 2026) — the switch is a note, not a gate.
  *
  * Nothing here may reach a real account (PUBLISH_DRY_RUN=1) or a real bucket:
  * storage is mocked, so the only fetch in the process is the fake database.

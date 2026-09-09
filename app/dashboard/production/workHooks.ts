@@ -51,8 +51,8 @@ export function usePersistedScope(key: string, role: Role | null): [ScopeSet, (s
     try { localStorage.setItem(key, JSON.stringify([...s])) } catch { /* private mode */ }
   }, [key])
 
-  // 'scheduler' is the least privileged team role: if the caller ever does
-  // render this, it shows own-work-only rather than everyone's
+  // before the role is known: everything this person can see, which for a
+  // non-manager is already only their own work
   return [stored ?? defaultScope(role ?? 'scheduler'), setScope]
 }
 

@@ -1789,7 +1789,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                   Send this to the client for their answer
                   <span className="block text-muted-foreground/80">
                     Turn it off and an account manager signs it off here instead. Whether
-                    this client sees every post before it goes out is set on their own page.
+                    this client usually sees every post first is set on their own page — a
+                    reminder to the manager, who can still sign off here.
                   </span>
                 </span>
               </label>

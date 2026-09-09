@@ -50,8 +50,7 @@ export const hasScopeChoice = (role: Role) => isManager(role)
 
 /** Everyone opens on everything they can see; for a non-manager that is
  *  already only their own work, and the switch is not shown. */
-export function defaultScope(role: Role): ScopeSet {
-  void role
+export function defaultScope(_role: Role): ScopeSet {
   return new Set<ScopeMode>(['all'])
 }
 

@@ -373,10 +373,14 @@ export function useItemScopeContext(
 
   // A subscription re-keys in an EFFECT, one render after the key changed, so
   // for that one render the hook still reports the previous key's settled
-  // rows. This says "not yet" for exactly that render.
-  const [keyedTo, setKeyedTo] = useState<string | null | undefined>(undefined)
-  useEffect(() => { setKeyedTo(batchId) }, [batchId])
-  const keyed = keyedTo === batchId
+  // rows. This says "not yet" for exactly that render — for BOTH keys: the
+  // activity subscription is keyed on the item, and tracking only the shoot
+  // let a batch-less card judge its creator on the '' key's empty rows and
+  // bounce them.
+  const key = `${batchId ?? ''}|${item?.id ?? ''}`
+  const [keyedTo, setKeyedTo] = useState<string | undefined>(undefined)
+  useEffect(() => { setKeyedTo(key) }, [key])
+  const keyed = keyedTo === key
 
   const ctx: ScopeContext = useMemo(() => ({
     items: siblings,

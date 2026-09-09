@@ -286,11 +286,13 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                   <Button type="button" variant="outline" className={secondary} disabled={!ready} onClick={() => void send('client')}>
                     {busy === 'client' ? 'Sending…' : `Send to ${client?.name ?? 'the client'}`}
                   </Button>
-                  {!signsOff && (
-                    <Button type="button" className={primary} disabled={!ready} onClick={() => void send('approve')}>
-                      {busy === 'approve' ? 'Approving…' : 'Approve — ready to post'}
-                    </Button>
-                  )}
+                  {/* the client's "signs off every post" switch no longer takes
+                      this button away from a manager (the owner, 9 Sep 2026)
+                      — it is the line underneath, a reminder to send it on
+                      when they mean to */}
+                  <Button type="button" className={primary} disabled={!ready} onClick={() => void send('approve')}>
+                    {busy === 'approve' ? 'Approving…' : 'Approve — ready to post'}
+                  </Button>
                 </>
               ) : (
                 <Button type="button" className={primary} disabled={!ready || !approverId} onClick={() => void send('ask')}>
@@ -299,7 +301,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
               )}
             </div>
             {manager && signsOff && (
-              <p className="text-[12px] text-muted-foreground">{client?.name} signs off every post, so it goes to them.</p>
+              <p className="text-[12px] text-muted-foreground">{client?.name} signs off every post — send it to them unless you mean to post it yourself.</p>
             )}
           </>
         )}

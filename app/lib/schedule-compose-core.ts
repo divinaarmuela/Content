@@ -1191,12 +1191,10 @@ export function footerActions(input: {
     }
   }
   const { status, mayApprove, mayPublish } = input
-  const clientSignsOff = input.clientSignsOff === true
-  // the client's lock is read but not obeyed here: the owner ruled (9 Sep
+  // `input.clientSignsOff` is deliberately not read here: the owner ruled (9 Sep
   // 2026) that a manager schedules or posts straight out EVEN on a client
   // who signs every post off — the lock is the line under the button, a
   // reminder to ask when they mean to, never a second person to wait on
-  void clientSignsOff
   const straightOut = mayApprove
 
   if (status === 'approved') {

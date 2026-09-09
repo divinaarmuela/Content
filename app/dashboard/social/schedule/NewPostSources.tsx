@@ -417,7 +417,10 @@ export default function NewPostSources({
         </div>
 
         <p className="text-[12px] text-muted-foreground">
-          {clientSignsOff
+          {/* a manager's upload clears itself whatever the client's switch
+              says (the owner, 9 Sep 2026); the "goes to them first" note is
+              for the people it is still true of */}
+          {clientSignsOff && !postWithoutApproval
             ? CLIENT_SIGNS_OFF_UPLOAD_NOTE
             : uploadOutcomeLine(postWithoutApproval)}
         </p>

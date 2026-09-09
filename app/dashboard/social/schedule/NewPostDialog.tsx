@@ -458,7 +458,7 @@ export default function NewPostDialog({
     // hardcoded `approved_for_scheduling` was how the window came to know
     // nothing about a piece the client had not seen
     item: { status: target.itemStatus, content_type: target.contentType },
-    withoutApproval: mayApprove && !clientSignsOff,
+    withoutApproval: mayApprove,
     version: null,
     slides: state.slides,
     caption: state.caption,
@@ -1419,9 +1419,10 @@ export default function NewPostDialog({
             )}
           </div>
 
-          {/* the one client where a manager still asks — said once, plainly,
-              under the button that would otherwise have posted */}
-          {clientSignsOff && mayApprove && primary.key === 'send' && (
+          {/* the client who signs every post off — said once, plainly, under
+              the button that WILL post (the owner, 9 Sep 2026: the switch is
+              a reminder to the manager, never a gate on them) */}
+          {clientSignsOff && mayApprove && (primary.key === 'direct' || primary.key === 'send') && (
             <p className="w-full text-[12px] text-muted-foreground">{CLIENT_SIGNS_OFF_NOTE}</p>
           )}
 
