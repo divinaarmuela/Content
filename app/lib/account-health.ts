@@ -4,7 +4,7 @@ import { attachOne } from '@/lib/db-join'
 import type { Client, SocialAccount, TeamUserClient } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { notify, renderEmail, escapeHtml } from './mailer'
-import { healthVerdict, reconnectSubject, type ProviderHealth, type StoredHealth } from './account-health-core'
+import { healthVerdict, readStoredHealth, reconnectSubject, type ProviderHealth, type StoredHealth } from './account-health-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 /** the agency's own inbox — always told when an account drops (the owner,
@@ -27,21 +27,33 @@ export const TECH_EMAIL = 'tech@mdmmarketing.com.au'
  * an account the client has just signed into again. No emails: that is the
  * morning's job, and a reconnect is good news.
  */
-export async function refreshClientAccountsHealth(clientId: string, now: Date = new Date()): Promise<number> {
+export async function refreshClientAccountsHealth(
+  clientId: string,
+  opts: { now?: Date; tell?: boolean } = {},
+): Promise<{ updated: number; act: number; told: number }> {
+  const now = opts.now ?? new Date()
+  const tally = { updated: 0, act: 0, told: 0 }
   const publisher = getPublisher()
   const answer = await publisher.accountsHealth().catch(() => null) as { accounts?: ProviderHealth[] } | null
   const rows = Array.isArray(answer?.accounts) ? answer!.accounts! : []
-  if (rows.length === 0) return 0
+  if (rows.length === 0) return tally
   const ours = await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })
   const byProvider = new Map(ours.filter(a => a.active !== false).map(a => [String(a.provider_account_id), a]))
-  let updated = 0
+  const day = now.toISOString().slice(0, 10)
   for (const row of rows) {
     const account = byProvider.get(String(row.accountId ?? ''))
     if (!account) continue
-    await table('social_accounts').update(account.id, { health: healthVerdict(row, now.getTime()) })
-    updated++
+    const before = readStoredHealth((account as { health?: unknown }).health)
+    const health = healthVerdict(row, now.getTime())
+    await table('social_accounts').update(account.id, { health })
+    tally.updated++
+    if (health.level !== 'act') continue
+    tally.act++
+    // a token that has JUST died — a post failed on it — is told today, not
+    // at tomorrow's 7 am; one already known is left to the morning's dedupe
+    if (opts.tell && before?.level !== 'act') tally.told += await tellTheTeam(account, health, day)
   }
-  return updated
+  return tally
 }
 
 export async function checkAllAccountsHealth(now: Date = new Date()): Promise<{ checked: number; act: number; watch: number; told: number }> {

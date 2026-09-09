@@ -349,17 +349,40 @@ describe('when every channel is holding its own copy', () => {
  * later, for ever.
  */
 describe('a master beyond what the function can carry', () => {
-  it('fails the post with a plain sentence rather than going round again', async () => {
+  const bigFile = () => vi.stubGlobal('fetch', async () => new Response('fake-bytes', {
+    status: 200,
+    headers: { 'content-type': 'video/mp4', 'content-length': String(900 * 1024 * 1024) },
+  }))
+
+  /**
+   * …is handed to the provider BY ITS ADDRESS, not refused. The provider
+   * fetches any public URL with the right Content-Type on a fast host — its
+   * own docs — and our storage's public host is one. The 8 Sep ceiling
+   * refused every master over 350 MB outright, which made "YouTube and
+   * TikTok take the master" false: the owner's 1.4 GB TikTok post of 9 Sep
+   * failed with "a copy is being made" and no copy was ever coming for
+   * TikTok.
+   */
+  it('goes to the provider by its own public address when it lives on our storage', async () => {
     const smallFile = globalThis.fetch
-    // the same fake response, but honest about how big the file is
-    vi.stubGlobal('fetch', async () => new Response('fake-bytes', {
-      status: 200,
-      headers: { 'content-type': 'video/mp4', 'content-length': String(900 * 1024 * 1024) },
-    }))
-    // no encoder: nothing to wait for, so the master is what would be relayed
+    bigFile()
     delete process.env.ENCODER_URL
     delete process.env.ENCODER_TOKEN
     fake = seedDb({ publish_jobs: [publishJob('j1')], encode_jobs: [] })
+
+    expect(await runPublishJob('j1')).toBe('published')
+    // untouched: the URL the provider got is ours, not a relayed copy
+    expect(published[0].media).toEqual([{ url: MASTER, type: 'video' }])
+    vi.stubGlobal('fetch', smallFile)
+  })
+
+  it('is still refused, in a plain sentence, when it is somewhere the provider cannot be sent', async () => {
+    const smallFile = globalThis.fetch
+    bigFile()
+    delete process.env.ENCODER_URL
+    delete process.env.ENCODER_TOKEN
+    const elsewhere = { ...publishJob('j1'), media: [{ url: 'https://cdn.somewhere-else.example/master.mp4', type: 'video' }] } as Row
+    fake = seedDb({ publish_jobs: [elsewhere], encode_jobs: [] })
 
     expect(await runPublishJob('j1')).toBe('failed')
     expect(published).toEqual([])

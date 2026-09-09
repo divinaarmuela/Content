@@ -9,7 +9,7 @@ import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { encoderConfigured } from './encoder'
 import { measuredDurationOf, smallerCopyOf } from './stream'
-import { headStoredObject } from './storage'
+import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
 import {
@@ -177,6 +177,22 @@ export async function queuePublishJob(input: {
     // the lock is only worth holding while there is a job behind it
     if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
+  }
+}
+
+/**
+ * After a post fails: ask the provider whether the client's accounts still
+ * hold a live token, write the verdict, and tell the team about any that
+ * have just died. Best effort — a health read that fails must not turn a
+ * recorded failure into an unrecorded one.
+ */
+async function healthAfterFailure(clientId: string | null | undefined): Promise<void> {
+  if (!clientId) return
+  try {
+    const { refreshClientAccountsHealth } = await import('./account-health')
+    await refreshClientAccountsHealth(clientId, { tell: true })
+  } catch (e) {
+    console.error('[publish] health after failure', clientId, e instanceof Error ? e.message : e)
   }
 }
 
@@ -354,6 +370,11 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
 
       case 'permanent':
         await settle({ status: 'failed', attempts: job.attempts + 1, error: outcome.message })
+        // a post that failed on a dead token must turn the account's icon
+        // red NOW and tell the team — not at tomorrow's 7 am check. The
+        // provider is asked for its verdict rather than the error string
+        // parsed; a failure for any other reason changes nothing.
+        await healthAfterFailure(job.client_id)
         return 'failed'
     }
   } catch (e) {
@@ -512,6 +533,14 @@ export async function jobsWaitingOnCopy(sourceUrl: string): Promise<string[]> {
  */
 export class MediaTooBigToSend extends Error {}
 
+/** Is this address on our own storage's public host — a URL the provider
+ *  can fetch for itself, with no relay in the way? */
+function isOurPublicUrl(url: string): boolean {
+  const base = publicBase()
+  if (!base) return false
+  try { return new URL(url).host === new URL(base).host } catch { return false }
+}
+
 /**
  * The most this function will push through itself, in MB.
  *
@@ -563,6 +592,18 @@ async function relayMedia(media: MediaItem[], tooBigMessage: string): Promise<Me
     // a job that never settles and is started again for ever
     if (Number.isFinite(length) && length > RELAY_MAX_MB * 1024 * 1024) {
       await res.body.cancel().catch(() => {})
+      /* TOO BIG TO CARRY IS NOT TOO BIG TO SEND. The relay was written when
+       * media lived in Supabase Storage, on the belief that "the provider will
+       * not fetch arbitrary URLs". Its docs say the opposite: a media URL has
+       * to be public, return the bytes with the right Content-Type, not
+       * redirect, and sit on a fast host — and our storage's public host is
+       * all four. So a master past the relay's ceiling is handed over by its
+       * own address and fetched by the provider, which has no 300-second
+       * clock. Without this, the 8 Sep ceiling made every video over 350 MB
+       * bound for TikTok or YouTube fail — "YouTube and TikTok take the
+       * master" was true in shrink-core and false here (the owner, 9 Sep
+       * 2026: "what happened to the 3:45 post"). */
+      if (isOurPublicUrl(item.url)) { out.push(item); continue }
       throw new MediaTooBigToSend(tooBigMessage)
     }
 
@@ -718,6 +759,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
         updated_at: new Date().toISOString(),
       })
       changed++
+      await healthAfterFailure((job as { client_id?: string | null }).client_id ?? null)
     } else {
       // capture the permalink once the platform assigns one
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl

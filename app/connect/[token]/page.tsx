@@ -5,6 +5,11 @@ import { table } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
 import { isShareToken, parseNetworks } from '../../lib/connect-link-core'
 import { needsReconnect, readStoredHealth } from '../../lib/account-health-core'
+
+const healthFacts = (raw: unknown) => {
+  const h = readStoredHealth(raw)
+  return { reconnect: needsReconnect(h), soon: h?.level === 'watch', reason: h?.reason ?? null }
+}
 import { archivo, sometype } from '../../components/lama/fonts'
 import PortalShell from '../../components/portal/PortalShell'
 import ConnectNetworks from './ConnectNetworks'
@@ -46,9 +51,11 @@ export default async function ConnectPage({ params, searchParams }: {
     .filter(a => a.active !== false)
     .map(a => ({
       platform: String(a.platform), username: a.username ?? null, name: a.name ?? null,
-      reconnect: needsReconnect(readStoredHealth((a as { health?: unknown }).health)),
+      ...healthFacts((a as { health?: unknown }).health),
     }))
   const justConnected = Array.isArray(q.connected) ? q.connected[0] : q.connected
+  // the network sent them back with an error instead of an account
+  const returnError = Array.isArray(q.error) ? q.error[0] : q.error
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -71,6 +78,7 @@ export default async function ConnectPage({ params, searchParams }: {
           networksParam={networksParam ?? ''}
           initial={accounts}
           justConnected={justConnected ?? null}
+          returnError={returnError ?? null}
         />
 
         <footer className="mt-auto pt-12">

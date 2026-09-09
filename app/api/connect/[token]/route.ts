@@ -28,6 +28,12 @@ async function clientFor(token: string): Promise<Client | null> {
   return (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0] ?? null
 }
 
+/** the check's verdict as the client's page reads it: expired, or soon */
+function healthFacts(raw: unknown): Pick<ConnectedAccount, 'reconnect' | 'soon' | 'reason'> {
+  const h = readStoredHealth(raw)
+  return { reconnect: needsReconnect(h), soon: h?.level === 'watch', reason: h?.reason ?? null }
+}
+
 /** what the page draws: platform + handle, nothing a stranger could use */
 async function connectedFor(clientId: string): Promise<ConnectedAccount[]> {
   const rows = await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })
@@ -35,8 +41,7 @@ async function connectedFor(clientId: string): Promise<ConnectedAccount[]> {
     .filter(a => a.active !== false)
     .map(a => ({
       platform: String(a.platform), username: a.username ?? null, name: a.name ?? null,
-      // the morning check's verdict, so the client's page can offer Reconnect
-      reconnect: needsReconnect(readStoredHealth((a as { health?: unknown }).health)),
+      ...healthFacts((a as { health?: unknown }).health),
     }))
 }
 

@@ -23,7 +23,7 @@ vi.mock('../app/lib/publisher', () => ({
       return `https://network.example/oauth/${platform}`
     },
     listAccounts: async () => [
-      { id: 'acc-fb', platform: 'facebook', username: 'acme.page', name: 'Acme', active: true },
+      { providerAccountId: 'acc-fb', platform: 'facebook', username: 'acme.page', name: 'Acme', avatarUrl: null },
     ],
     // after a reconnect the provider says the token works again
     accountsHealth: async () => ({ accounts: [{ accountId: 'acc-fb', platform: 'facebook', status: 'healthy', canPost: true, tokenValid: true, needsReconnect: false }] }),
@@ -61,7 +61,7 @@ describe('the link itself — pure', () => {
 
   it('says who is connected on a network, in the client’s words', () => {
     const have = [{ platform: 'facebook', username: 'acme.page' }]
-    expect(networkState(have, 'facebook')).toEqual({ connected: true, who: 'acme.page', reconnect: false })
+    expect(networkState(have, 'facebook')).toEqual({ connected: true, who: 'acme.page', reconnect: false, soon: false, reason: null })
     expect(networkState(have, 'tiktok')).toEqual({ connected: false })
   })
 
@@ -90,7 +90,7 @@ describe('the token-authed API', () => {
     const res = await json(route.GET(new Request('https://x.test'), params(TOKEN)))
     expect(res.status).toBe(200)
     expect(res.body.client).toBe('Acme')
-    expect(res.body.connected).toEqual([{ platform: 'instagram', username: 'acme', name: null, reconnect: false }])
+    expect(res.body.connected).toEqual([{ platform: 'instagram', username: 'acme', name: null, reconnect: false, soon: false, reason: null }])
     expect(JSON.stringify(res.body)).not.toContain('secret')
   })
 
@@ -129,7 +129,7 @@ describe('the token-authed API', () => {
     const res = await json(route.PUT(new Request('https://x.test', { method: 'PUT' }), params(TOKEN)))
     expect(res.status).toBe(200)
     expect(res.body.synced).toBe(1)
-    expect(res.body.connected).toEqual([{ platform: 'facebook', username: 'acme.page', name: 'Acme', reconnect: false }])
+    expect(res.body.connected).toEqual([{ platform: 'facebook', username: 'acme.page', name: 'Acme', reconnect: false, soon: false, reason: 'Connected' }])
   })
 })
 
@@ -152,5 +152,21 @@ describe('the same link reconnects (the owner: "what if the connection is gettin
     const after = await json(route.PUT(new Request('https://x.test', { method: 'PUT' }), params(TOKEN)))
     expect(after.body.connected[0]).toMatchObject({ platform: 'facebook', reconnect: false })
     expect((fake.rows('social_accounts')[0] as any).health.level).toBe('ok')
+  })
+})
+
+describe('the words for a sign-in that did not finish', () => {
+  it('say nothing was changed, and what to press', async () => {
+    const { returnErrorWords } = await import('../app/lib/connect-link-core')
+    expect(returnErrorWords('access_denied', 'Facebook')).toMatch(/cancelled — nothing was connected/)
+    expect(returnErrorWords('server_error', 'TikTok')).toMatch(/did not finish connecting — nothing was changed/)
+    expect(returnErrorWords('', 'TikTok')).toBeNull()
+    expect(returnErrorWords(null, 'TikTok')).toBeNull()
+  })
+
+  it('a connection that runs out soon is said, and offered a Reconnect, before a post is refused', async () => {
+    const { networkState } = await import('../app/lib/connect-link-core')
+    const have = [{ platform: 'tiktok', username: 'acme', soon: true, reason: 'Its connection runs out in 6 days — reconnect it before then.' }]
+    expect(networkState(have, 'tiktok')).toMatchObject({ connected: true, reconnect: false, soon: true, reason: expect.stringContaining('6 days') })
   })
 })
