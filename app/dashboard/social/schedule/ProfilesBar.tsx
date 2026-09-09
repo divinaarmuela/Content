@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { AlertTriangle, Check, Mail, Plus, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
+import { toast } from 'sonner'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -104,6 +105,7 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
    * top icons show yellow caution but does nothing". */
   const health = readStoredHealth((account as { health?: unknown }).health)
   const broken = needsReconnect(health)
+  const [checking, setChecking] = useState(false)
   const soon = health?.level === 'watch'
   const warned = broken || soon
   const [asking, setAsking] = useState(false)
@@ -182,6 +184,26 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
             {selected ? 'Show every channel' : `Show only ${name}`}
           </button>
         )}
+        {/* already reconnected, or the provider has renewed it itself (TikTok
+            rotates its token daily)? Ask the provider now instead of waiting
+            for tomorrow's 7 am check — the row updates live */}
+        <button type="button" disabled={checking}
+          onClick={async () => {
+            setChecking(true)
+            try {
+              const res = await fetch('/api/social/accounts/health', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId: account.client_id }),
+              })
+              if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not check')
+              setAsking(false)
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : 'Could not check')
+            } finally { setChecking(false) }
+          }}
+          className="mt-1 flex min-h-9 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold disabled:opacity-60">
+          {checking ? 'Checking…' : 'Already reconnected — check again'}
+        </button>
         <button type="button" onClick={() => setAsking(false)} className="mt-1 w-full text-[12px] text-muted-foreground underline-offset-4 hover:underline">Not now</button>
       </div>
     )}

@@ -66,10 +66,19 @@ export function healthVerdict(row: ProviderHealth, now: number): StoredHealth {
       reason: issues[0] ?? (row.tokenValid === false ? 'Its connection has expired — posts will not go out until it is reconnected.' : 'It needs reconnecting — posts will not go out until it is.'),
     }
   }
-  if (left !== null && left <= 0) {
+  // THE DATE IS NOT THE VERDICT when the provider says healthy. TikTok's
+  // token lives 24 hours and the provider renews it itself: on 9 Sep 2026 it
+  // expired at 08:47 that day, on the 10th at 10:48 the next — rolling
+  // forward every day, never dying. Reading that date warned "runs out in 1
+  // day — reconnect" every morning, and reconnecting changed nothing (the
+  // owner: "after keep connecting to tiktok this one shows"). A healthy,
+  // valid token is connected; the date only counts once the provider stops
+  // vouching for it.
+  const vouched = status === 'healthy' && row.tokenValid === true
+  if (!vouched && left !== null && left <= 0) {
     return { level: 'act', can_post: false, expires_at, checked_at, reason: 'Its connection has expired — reconnect it before the next post.' }
   }
-  if (status === 'warning' || (left !== null && left <= WATCH_DAYS)) {
+  if (status === 'warning' || (!vouched && left !== null && left <= WATCH_DAYS)) {
     return {
       level: 'watch', can_post: true, expires_at, checked_at,
       reason: issues[0] ?? (left !== null ? `Its connection runs out in ${left} ${left === 1 ? 'day' : 'days'} — reconnect it before then.` : 'The posting service flagged it — worth a look.'),

@@ -20,11 +20,12 @@ describe('healthVerdict — the provider\'s row in three words', () => {
     expect(healthVerdict({ status: 'error', tokenValid: false, issues: ['Token revoked by the user'] }, NOW)).toMatchObject({ level: 'act', reason: 'Token revoked by the user', can_post: false })
     expect(healthVerdict({ status: 'healthy', tokenValid: true, canPost: false }, NOW).level).toBe('act')
   })
-  it('a token past its date is act, even if the provider still says healthy', () => {
-    expect(healthVerdict({ status: 'healthy', tokenValid: true, tokenExpiresAt: day(-1) }, NOW).level).toBe('act')
+  it('a token past its date is act, unless the provider still vouches for it', () => {
+    expect(healthVerdict({ status: 'healthy', tokenExpiresAt: day(-1) }, NOW).level).toBe('act')
+    expect(healthVerdict({ status: 'healthy', tokenValid: true, tokenExpiresAt: day(-1) }, NOW).level).toBe('ok')
   })
-  it('a token that runs out within a week is watch, with the days in the sentence', () => {
-    const h = healthVerdict({ status: 'healthy', tokenValid: true, tokenExpiresAt: day(3) }, NOW)
+  it('a token that runs out within a week is watch, with the days in the sentence — when the provider is not vouching', () => {
+    const h = healthVerdict({ status: 'healthy', tokenExpiresAt: day(3) }, NOW)
     expect(h.level).toBe('watch')
     expect(h.reason).toMatch(/runs out in 3 days/)
     expect(healthVerdict({ status: 'warning', tokenValid: true, tokenExpiresAt: day(40), issues: ['Missing permission: pages_read'] }, NOW)).toMatchObject({ level: 'watch', reason: 'Missing permission: pages_read' })
@@ -32,8 +33,9 @@ describe('healthVerdict — the provider\'s row in three words', () => {
   it('the live shape read on 9 Sep 2026 parses', () => {
     const live = { accountId: '6a94d22f77555aae01271b2c', platform: 'tiktok', username: 'yusufuryurr', status: 'healthy', canPost: true, tokenValid: true, tokenExpiresAt: '2026-09-09T08:47:20.491Z', needsReconnect: false, issues: [] }
     const h = healthVerdict(live, NOW)
-    // six hours left: watch, one day
-    expect(h.level).toBe('watch')
+    // six hours left on a healthy, valid token: TikTok renews it daily (the
+    // 10th read 2026-09-10T10:48) — connected, not a warning
+    expect(h.level).toBe('ok')
     expect(h.expires_at).toBe('2026-09-09T08:47:20.491Z')
   })
 })
