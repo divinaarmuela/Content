@@ -29,7 +29,7 @@ import {
 } from './schedule-compose-core'
 import {
   applySlideLimit, canReschedule, channelBlockReason,
-  CLIENT_POLICY_UNREADABLE, CLIENT_SIGNS_OFF_REFUSAL, clientSignsOffEveryPost,
+  CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost,
   coverForSlide, eligibility,
   assetsApprovedOnBoard, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
@@ -1168,12 +1168,12 @@ export async function scheduleWithoutApproval(
   if (!mayApprovePost(hats) && !viaBoard) {
     throw new AuthzError('Only an account manager (or the client) can approve the final post', 403)
   }
-  // the client's own contract, checked before anything is written: on such a
-  // client this path does not exist for a manager skipping them — but a piece
-  // the board already put in front of the client has their yes
-  if (!viaBoard && await clientSignsOff(item.client_id)) {
-    throw new AuthzError(CLIENT_SIGNS_OFF_REFUSAL, 403)
-  }
+  // The client's own "signs off every post" switch used to refuse this path
+  // to a manager. The owner ruled otherwise (9 Sep 2026): an account manager
+  // or a super admin schedules or posts straight out, "no approval or accept
+  // feature, even when the client has that lock". The switch is still read
+  // — it is the line under the composer's button — but it no longer stands
+  // between a manager and the Schedule press.
   if (SETTLED.includes(post.status) || post.status === 'scheduled') {
     throw new AuthzError('This post has already been dealt with', 409)
   }

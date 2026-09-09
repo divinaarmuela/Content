@@ -386,12 +386,12 @@ describe('the button at the bottom offers only what this person may do', () => {
     expect(primary).toEqual({ key: 'direct', label: 'Post now' })
   })
 
-  it('a client who signs every post off puts the manager back on the full flow', () => {
+  // the owner, 9 Sep 2026: "no approval or accept feature, even when the
+  // client has that lock" — the manager's button does not move for it
+  it('a client who signs every post off does NOT move the manager off the one press', () => {
     const { primary, menu } = footerActions({ status: 'draft', ...manager, clientSignsOff: true })
-    expect(primary.label).toBe(SEND_FOR_REVIEW)
-    // the old shape, unchanged: asking first, with the short cut under the arrow
-    expect(menu.map(m => m.key)).toEqual(['draft', 'direct'])
-    expect(menu[1].label).toBe('Schedule without approval')
+    expect(primary).toEqual({ key: 'direct', label: 'Schedule' })
+    expect(menu.map(m => m.key)).toEqual(['send', 'draft'])
   })
 
   it('a scheduler on that client sees exactly what they saw before', () => {
@@ -600,9 +600,10 @@ describe('the window says the calm truth when it is waiting on somebody else', (
 
   it('is not the manager\'s window — they are the person being waited on', () => {
     expect(composerWait({ itemStatus: 'internal_review', mayApprove: true })).toBeNull()
-    // …unless this client signs every post off, when nobody skips the client
+    // …and a client who signs every post off does not change that (the owner,
+    // 9 Sep 2026): the lock is a note to the manager, never a wait
     expect(composerWait({ itemStatus: 'internal_review', mayApprove: true, clientSignsOff: true }))
-      .not.toBeNull()
+      .toBeNull()
   })
 
   it('is only this one wait: a piece with the client, or still being made, is said as before', () => {

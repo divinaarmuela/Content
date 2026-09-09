@@ -39,9 +39,20 @@ export type ScopeSet = Set<ScopeMode>
 
 export const isManager = (role: Role) => role === 'account_manager' || role === 'super_admin'
 
-/** Managers run the whole board; everyone else opens on their own work. */
+/**
+ * Only a manager has anything to choose between. Everyone else is shown
+ * their own work and nothing else by `visibleItems` (the owner, 9 Sep 2026:
+ * "no, unless they're assigned or they created themselves"), so for them
+ * Mine IS Everyone and Unassigned is always empty — a switch with three
+ * pills that all show the same board is a puzzle, not a control.
+ */
+export const hasScopeChoice = (role: Role) => isManager(role)
+
+/** Everyone opens on everything they can see; for a non-manager that is
+ *  already only their own work, and the switch is not shown. */
 export function defaultScope(role: Role): ScopeSet {
-  return isManager(role) ? new Set<ScopeMode>(['all']) : new Set<ScopeMode>(['mine', 'unassigned'])
+  void role
+  return new Set<ScopeMode>(['all'])
 }
 
 /** scheduler_ids as it is meant: a list of user ids. Anything else is none —

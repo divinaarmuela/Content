@@ -1020,7 +1020,7 @@ export function approvalLine(
   status: SocialPostStatus,
   input: { mayApprove?: boolean; clientSignsOff?: boolean } = {},
 ): string {
-  if (status === 'draft' && input.mayApprove === true && input.clientSignsOff !== true) {
+  if (status === 'draft' && input.mayApprove === true) {
     return 'Not sent to anyone — yours to post'
   }
   return APPROVAL_LINE[status]
@@ -1080,11 +1080,11 @@ export function composerWait(input: {
   itemStatus: string
   /** may this person approve the final post */
   mayApprove: boolean
-  /** this client signs every post off, so nobody skips them */
+  /** this client signs every post off — a note to the manager, not a gate on them (the owner, 9 Sep 2026) */
   clientSignsOff?: boolean
 }): ComposerWait | null {
   if (input.itemStatus !== 'internal_review') return null
-  if (input.mayApprove && input.clientSignsOff !== true) return null
+  if (input.mayApprove) return null
   const elig = postingEligibility({ status: input.itemStatus }, [], false)
   if (elig.ok) return null
   return { line: WAITING_ON_MANAGER, replaces: elig.reason }
@@ -1152,8 +1152,9 @@ export type FooterAction = { key: FooterActionKey; label: string }
  * account manager on the client, or a super admin, gets "Schedule" (or "Post
  * now" when the time they picked is now) as the ONE press, and
  * "Send for review" moves under the arrow for the times they do want the
- * client to see it first. Nobody else's window changes, and a client who
- * signs every post off (`clientSignsOff`) puts everyone back on the full flow.
+ * client to see it first. Nobody else's window changes. A client who signs
+ * every post off (`clientSignsOff`) used to put the manager back on the full
+ * flow; since 9 Sep 2026 it is a note under the button and nothing more.
  *
  * Hiding the option is presentation; the refusal itself lives in
  * `scheduleWithoutApproval` and `assertMayPublish` on the server.
@@ -1191,7 +1192,12 @@ export function footerActions(input: {
   }
   const { status, mayApprove, mayPublish } = input
   const clientSignsOff = input.clientSignsOff === true
-  const straightOut = mayApprove && !clientSignsOff
+  // the client's lock is read but not obeyed here: the owner ruled (9 Sep
+  // 2026) that a manager schedules or posts straight out EVEN on a client
+  // who signs every post off — the lock is the line under the button, a
+  // reminder to ask when they mean to, never a second person to wait on
+  void clientSignsOff
+  const straightOut = mayApprove
 
   if (status === 'approved') {
     return mayPublish
@@ -1221,9 +1227,10 @@ export function footerActions(input: {
       menu: [send, { key: 'draft', label: 'Save as draft' }],
     }
   }
-  const menu: FooterAction[] = [{ key: 'draft', label: 'Save as draft' }]
-  if (mayApprove) menu.push({ key: 'direct', label: 'Schedule without approval' })
-  return { primary: send, menu }
+  // only somebody who may NOT approve reaches here now, so there is no
+  // "Schedule without approval" to tuck under the arrow — that was the
+  // manager's short cut on a locked client, and the manager gets the button
+  return { primary: send, menu: [{ key: 'draft', label: 'Save as draft' }] }
 }
 
 /**

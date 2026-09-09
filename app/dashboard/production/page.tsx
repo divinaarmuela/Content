@@ -618,8 +618,12 @@ export default function ProductionPage() {
         actions={<>
           {/* one place, always on screen — a control that moves with the data
               is a control nobody learns */}
-          <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
-            unassignedHint="Plans and tasks nobody has picked up yet." />
+          {/* managers only: everyone else is shown their own work and nothing
+              else, so for them all three pills would draw the same board */}
+          {isManager && (
+            <ScopeSwitch scope={scope} onChange={setScope} unassignedCount={openPool}
+              unassignedHint="Plans and tasks nobody has picked up yet." />
+          )}
           {(canPlan || isManager) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -690,7 +694,9 @@ export default function ProductionPage() {
         </div>
       </div>
       <p className="-mt-2 text-[13px] text-muted-foreground">
-        Mine, Unassigned and Everyone cover plans and tasks. Shoots are always shown.
+        {isManager
+          ? 'Mine, Unassigned and Everyone cover plans and tasks. Shoots are always shown.'
+          : 'Your plans and tasks — what you made, what you were given, and the shoots you are on.'}
         {outOfScope > 0 && <> ({outOfScope} more outside this view)</>}
       </p>
 

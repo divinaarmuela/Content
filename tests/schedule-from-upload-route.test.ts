@@ -294,20 +294,20 @@ describe('a client who signs off every post', () => {
     as(AM)
   })
 
-  it('keeps the full flow, even for an account manager', async () => {
+  // the owner, 9 Sep 2026: an account manager's upload clears itself and
+  // schedules straight out, "even when the client has that lock" — the
+  // switch is the line under the button, not a second person to wait on
+  it('does not slow an account manager down', async () => {
     const made = await upload()
     expect(made.status).toBe(200)
-    expect(made.body.needs_approval).toBe(true)
-    expect(made.body.message).toContain('sign off every post')
-    // a manager's upload is submitted for the check; the client's yes is then
-    // asked for from the composer
-    expect(items()[0].status).toBe('internal_review')
+    expect(made.body.needs_approval).toBe(false)
+    expect(items()[0].status).toBe('approved_for_scheduling')
 
     const id = made.body.post.id as string
     await compose(id, { caption: 'Doors open at six', channels: ['acc-1'] })
     const sent = await sendIt(id, { mode: 'direct' })
-    expect(sent.status).toBe(403)
-    expect(jobs()).toHaveLength(0)
+    expect(sent.status).toBe(200)
+    expect(jobs()).toHaveLength(1)
   })
 })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { defaultScope, restoredChoice, type ScopeMode, type ScopeSet } from '../../lib/work-pages-core'
+import { defaultScope, hasScopeChoice, restoredChoice, type ScopeMode, type ScopeSet } from '../../lib/work-pages-core'
 import type { Role } from '../../lib/identity-core'
 
 /**
@@ -33,6 +33,10 @@ export function usePersistedScope(key: string, role: Role | null): [ScopeSet, (s
 
   useEffect(() => {
     if (role === null || stored !== null) return
+    // no switch for this role means no remembered choice either — a stale
+    // "mine" from before the rule changed would filter a board that has
+    // nothing left to hide, with no pill on screen to undo it
+    if (!hasScopeChoice(role)) { setStored(defaultScope(role)); return }
     try {
       const saved = localStorage.getItem(key)
       const parsed: unknown = saved ? JSON.parse(saved) : null

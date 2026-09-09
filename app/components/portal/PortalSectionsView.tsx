@@ -12,7 +12,8 @@ import PortalPostApprovals from './PortalPostApproval'
 /**
  * THE PORTAL, TOP TO BOTTOM — the layout the owner asked back for.
  *
- * Sections in the order a client cares: what needs THEM, then their shoots
+ * Sections in the order a client cares: their shoot first (the owner, 9 Sep
+ * 2026), then what needs THEM
  * (each with its planning board open underneath), then what the team is
  * making, what is approved and booked, and what is live. The cards inside
  * are today's cards — one line, the link, one tap to approve, "Ask for a
@@ -49,7 +50,7 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
         {key === 'review' && plansWaiting.length > 0 && (
           <p className="text-[14px]">
             {plansWaiting.length === 1 ? 'A shoot plan is' : `${plansWaiting.length} shoot plans are`} waiting on you too —{' '}
-            <a href={`#shoot-${plansWaiting[0].id}`} className="font-semibold underline underline-offset-4">it’s just below</a>.
+            <a href={`#shoot-${plansWaiting[0].id}`} className="font-semibold underline underline-offset-4">it’s just above</a>.
           </p>
         )}
         {s.cards.length === 0 ? (
@@ -69,13 +70,10 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
 
   return (
     <div className="flex flex-col gap-12 sm:gap-16">
-      {/* the finished POST — the pictures, the words and the hour, as each
-          network will show them. It sits ABOVE the work review because it is
-          the last thing anybody is waiting on before it goes out. */}
-      <PortalPostApprovals items={data.post_approvals} surface={surface} accent={accent} />
-
-      {grid('review')}
-
+      {/* THE SHOOT FIRST (the owner, 9 Sep 2026: "your shoot shows first
+          before needs your review"). The shoot — its board open at full
+          width, the plan under it — is what the client came to look at;
+          the approvals and the review queue follow. */}
       {shoots.length > 0 && (
         <section className="flex flex-col gap-6" data-portal-section="shoots">
           <SectionHeading count={shoots.length}>{shoots.length === 1 ? 'YOUR SHOOT' : 'YOUR SHOOTS'}</SectionHeading>
@@ -109,6 +107,13 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
           })}
         </section>
       )}
+
+      {/* the finished POST — the pictures, the words and the hour, as each
+          network will show them. It sits ABOVE the work review because it is
+          the last thing anybody is waiting on before it goes out. */}
+      <PortalPostApprovals items={data.post_approvals} surface={surface} accent={accent} />
+
+      {grid('review')}
 
       {grid('production')}
       {grid('approved')}

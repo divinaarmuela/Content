@@ -67,7 +67,7 @@ export default function ClientApproval({
       if (!res.ok) throw new Error(json?.error ?? 'Save failed')
       setOn(json?.client_approval_required === true)
       toast.success(next
-        ? 'Saved. This client now signs off every post.'
+        ? 'Saved. This client signs off every post — managers can still post directly.'
         : 'Saved. An account manager can post without waiting.')
     } catch (e) {
       setOn(before)
@@ -99,8 +99,9 @@ export default function ClientApproval({
               <span className="text-[14px] font-medium">This client signs off every post</span>
               <span className="max-w-prose text-secondary-13 text-muted-foreground">
                 {on
-                  ? 'Every post goes to this client for their answer before it can be booked in. '
-                    + 'Nobody here can skip that — not an account manager, not an admin.'
+                  ? 'The team sends every post to this client for their answer. An account '
+                    + 'manager or an admin can still schedule or post directly — the Schedule '
+                    + 'page reminds them under the button, and records who signed it off.'
                   : 'An account manager can post this client’s work without waiting for them. '
                     + 'The app records who signed it off. Turn this on for a client whose '
                     + 'agreement says they see everything first.'}

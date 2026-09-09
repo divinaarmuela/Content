@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   activeBriefTasks, applyScope, backLinkFor, canClaimEditor,
   canClaimScheduler, defaultScope, editorAssignment, editorScope, isBriefTask,
-  isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
+  hasScopeChoice, isManager, productionScope, recentlyDoneTasks, schedulerAssignment, schedulerIdsOf,
   restoredChoice, schedulerScope, unassignedCount,
   type ScopeMode, type ScopeSet, type Viewer, type WorkItem,
 } from '../app/lib/work-pages-core'
@@ -26,11 +26,17 @@ describe('defaultScope — you open on your own work; a manager opens on all of 
       expect([...defaultScope(role)]).toEqual(['all'])
     }
   })
-  it('everyone else sees their own work and the unclaimed pool', () => {
-    for (const role of ['editor', 'scheduler', 'client'] as Role[]) {
+  // the owner, 9 Sep 2026: an editor is shown only what they made or were
+  // given — so there is nothing for a switch to choose between, and they
+  // open on everything they can see, which IS their own work
+  it('everyone else has no switch and opens on all of what they can see', () => {
+    for (const role of ['editor', 'scheduler', 'general', 'client'] as Role[]) {
       expect(isManager(role)).toBe(false)
-      expect([...defaultScope(role)].sort()).toEqual(['mine', 'unassigned'])
+      expect(hasScopeChoice(role)).toBe(false)
+      expect([...defaultScope(role)]).toEqual(['all'])
     }
+    expect(hasScopeChoice('account_manager')).toBe(true)
+    expect(hasScopeChoice('super_admin')).toBe(true)
   })
 })
 
@@ -123,8 +129,8 @@ describe('editorScope', () => {
   it('drops briefs and anything already out of the editors’ hands', () => {
     expect(editorScope(items, viewer(), scope('all')).map(i => i.id)).toEqual(['draft', 'approved', 'theirs'])
   })
-  it('a default-scoped editor never sees another person’s item', () => {
-    expect(editorScope(items, viewer(), defaultScope('editor')).map(i => i.id)).toEqual(['draft', 'approved'])
+  it('a mine-and-pool editor never sees another person’s item', () => {
+    expect(editorScope(items, viewer(), scope('mine', 'unassigned')).map(i => i.id)).toEqual(['draft', 'approved'])
   })
 })
 
@@ -141,8 +147,8 @@ describe('schedulerScope', () => {
     expect(schedulerScope(items, viewer('scheduler'), scope('all')).map(i => i.id))
       .toEqual(['approved', 'sched', 'pub'])
   })
-  it('a default-scoped scheduler sees theirs and the pool, not another’s', () => {
-    expect(schedulerScope(items, viewer('scheduler'), defaultScope('scheduler')).map(i => i.id))
+  it('a mine-and-pool scheduler sees theirs and the pool, not another’s', () => {
+    expect(schedulerScope(items, viewer('scheduler'), scope('mine', 'unassigned')).map(i => i.id))
       .toEqual(['approved', 'pub'])
   })
 })

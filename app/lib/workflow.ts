@@ -38,7 +38,7 @@ import { needsNewVersion } from './claim-core'
 import { handoverSubject, tidyNote } from './hand-over-core'
 import { askedPatch, NOBODY_ASKED } from './asked-core'
 // pure, no I/O — the one question "does this client sign every post off"
-import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost } from './social-schedule-core'
+import { CLIENT_POLICY_UNREADABLE, clientSignsOffEveryPost, mayPostWithoutApproval } from './social-schedule-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
 import type { Slide } from './version-files-core'
 
@@ -579,8 +579,14 @@ export async function performTransition(
    *
    * The system's own moves are exempt: those are the provider reporting what
    * has already happened, not somebody deciding to skip the client.
+   *
+   * AND SO IS A MANAGER (the owner, 9 Sep 2026): an account manager or a
+   * super admin signs their client's work off "even when the client has that
+   * lock" — the switch is a reminder to them, not a second person. It still
+   * holds everyone else to the client's answer.
    */
-  if (!system && to === 'approved_for_scheduling' && from !== 'client_review') {
+  if (!system && to === 'approved_for_scheduling' && from !== 'client_review'
+    && !mayPostWithoutApproval(hats, null)) {
     /**
      * AND IT FAILS CLOSED.
      *

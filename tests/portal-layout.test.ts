@@ -55,10 +55,13 @@ describe('the hero and the strip', () => {
   })
 })
 
-describe('the sections, in order, with the board open under each shoot', () => {
-  it('reads review → shoots → production → approved → published', () => {
-    const order = ["grid('review')", "data-portal-section=\"shoots\"", "grid('production')", "grid('approved')", "grid('published')"]
-      .map(s => view.indexOf(s))
+describe('the sections, in order, with the board open over each shoot', () => {
+  // the owner, 9 Sep 2026: "your shoot shows first before needs your review"
+  it('reads shoots → post approvals → review → production → approved → published', () => {
+    const order = [
+      'data-portal-section="shoots"', '<PortalPostApprovals', "grid('review')",
+      "grid('production')", "grid('approved')", "grid('published')",
+    ].map(s => view.indexOf(s))
     expect(order.every(i => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })

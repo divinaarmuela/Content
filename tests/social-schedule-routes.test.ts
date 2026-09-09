@@ -616,17 +616,18 @@ describe('an account manager posts media the client has not signed off', () => {
     expect(allowed.body.post.approval_mode).toBe('assets')
   })
 
-  it('refuses everybody on a client who signs every post off, in plain words', async () => {
+  // the owner, 9 Sep 2026: "they can schedule or publish as an AM or super
+  // admin — no approval or accept feature, even when the client has that lock"
+  it('lets a manager straight through on a client who signs every post off', async () => {
     fake.restore()
     fake = seed({}, { client_approval_required: true })
     as(AM)
     const id = (await create()).body.post.id as string
     const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(403)
-    expect(direct.body.error).toBe('This client signs off every post — send it for approval')
-    expect(jobs()).toHaveLength(0)
-    // nothing was written on the way to the refusal
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBeFalsy()
+    expect(direct.status).toBe(200)
+    expect(direct.body.post.status).toBe('scheduled')
+    expect(direct.body.post.approval_mode).toBe('self')
+    expect(jobs()).toHaveLength(1)
   })
 
   it('will not rescue a piece that is still being MADE — no edge takes it', async () => {
@@ -1325,16 +1326,17 @@ describe('an approval says who really gave it', () => {
    * M1. The workflow-level guard — the one that binds every surface, not just
    * the Schedule page — had no test at all, with the flag set or unset.
    */
-  it('refuses the manager\u2019s own sign-off on a client who signs every post off', async () => {
+  // \u2026which the owner then turned around for managers (9 Sep 2026): "no
+  // approval or accept feature, even when the client has that lock". The
+  // guard still binds everyone else; a manager signs off in their own name.
+  it('lets the manager sign off on a client who signs every post off', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' }, { client_approval_required: true })
     as(AM)
-    const refused = await move('approved_for_scheduling')
-    expect(refused.status).toBe(403)
-    expect(refused.body.error)
-      .toBe('This client signs their work off themselves \u2014 send it to them first')
-    expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
-    expect(approvalRows()).toHaveLength(0)
+    const done = await move('approved_for_scheduling')
+    expect(done.status).toBe(200)
+    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
+    expect(approvalRows()[0].approval_type).toBe('internal')
   })
 
   it('\u2026and allows it on an ordinary client, with the flag unset', async () => {
@@ -1352,32 +1354,34 @@ describe('an approval says who really gave it', () => {
    * answered "the ordinary arrangement" — i.e. go ahead — to the one question
    * protecting the one client who insisted on seeing every post.
    */
-  it('REFUSES rather than assumes when the client row cannot be read', async () => {
+  // Since 9 Sep 2026 the policy does not apply to a manager at all, so there
+  // is nothing to check on their behalf: an unreadable client row holds up
+  // nobody the lock no longer governs. (The fail-closed read stays in
+  // `performTransition` for everyone the lock still binds.)
+  it('does not hold a manager up when the client row cannot be read', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' })
     as(AM)
     const undo = failReadsNaming('/clients/')
     try {
-      const refused = await move('approved_for_scheduling')
-      expect(refused.status).toBe(503)
-      expect(refused.body.error).toContain('could not check')
-      expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
+      const done = await move('approved_for_scheduling')
+      expect(done.status).toBe(200)
+      expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
     } finally {
       undo()
     }
   })
 
-  it('\u2026and the Schedule page\u2019s own path refuses too', async () => {
+  it('\u2026nor on the Schedule page\u2019s own path', async () => {
     fake.restore()
     fake = seed({ status: 'approved_for_scheduling' })
     as(AM)
     const id = (await create()).body.post.id as string
     const undo = failReadsNaming('/clients/')
     try {
-      const refused = await post(id, { mode: 'direct' })
-      expect(refused.status).toBe(503)
-      expect(refused.body.error).toContain('could not check')
-      expect(jobs()).toHaveLength(0)
+      const done = await post(id, { mode: 'direct' })
+      expect(done.status).toBe(200)
+      expect(jobs()).toHaveLength(1)
     } finally {
       undo()
     }
@@ -1469,12 +1473,14 @@ describe('the client\u2019s own "signs off every post" switch', () => {
     expect(saved.body.client_approval_required).toBe(true)
     expect((fake.rows('clients')[0] as any).client_approval_required).toBe(true)
 
-    // …and now nobody takes the short cut on this client
-    const refused = await json(transition.POST(
+    // …and a manager STILL signs the work off themselves (the owner, 9 Sep
+    // 2026): the switch is a reminder to them, not a gate on them
+    const allowed = await json(transition.POST(
       new Request('https://x.test/transition', {
         method: 'POST', body: JSON.stringify({ to: 'approved_for_scheduling' }),
       }), params(ITEM)))
-    expect(refused.status).toBe(403)
+    expect(allowed.status).toBe(200)
+    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
   })
 
   it('turns it off again', async () => {
