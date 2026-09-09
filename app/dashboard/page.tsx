@@ -770,10 +770,20 @@ export default function OverviewPage() {
    * link into the cards it counts (`overviewTiles`, pure and tested). Drawn
    * from the same live rows as everything else on the page.
    */
+  /** the posts — every card that is not a shoot plan; what the tiles and the
+   *  pipeline strip both count, so they cannot disagree */
+  const postCards = useMemo(
+    () => (live.items as unknown as BoardViewCard[])
+      .filter(c => ((c as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief'),
+    [live.items])
+  const postPipeline = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const c of postCards) out[String(c.status)] = (out[String(c.status)] ?? 0) + 1
+    return out
+  }, [postCards])
   const tiles = useMemo(() => {
     if (!viewer || live.loading || !todayKey) return null
-    const cards = (live.items as unknown as BoardViewCard[])
-      .filter(c => ((c as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief')
+    const cards = postCards
     const postingToday = new Set(
       entryRows.filter(e => e.scheduled_at && dayKeyInZone(e.scheduled_at, zone) === todayKey).map(e => e.item_id))
     const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
@@ -785,7 +795,7 @@ export default function OverviewPage() {
     return overviewTiles({
       viewer, cards, today: todayKey, postingToday, connectedClientIds, clientCount, leadsWeek, mayLeads,
     })
-  }, [viewer, live.loading, live.items, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
+  }, [viewer, live.loading, postCards, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
   /* MiniCalendar reads a Date with the BROWSER's own calendar. This hands it
      one whose local year/month/day are the viewer zone's today, so the filled
      cell and the markers can never disagree about which day it is. */
@@ -1092,7 +1102,11 @@ export default function OverviewPage() {
       </div>
 
       {/* ── the wide blocks, under both columns ── */}
-      {!loading && (role === 'editor' || role === 'general' || data?.manager) && <Pipeline pipeline={data?.pipeline} page={role === 'editor' || role === 'general' ? 'editor' : 'production'} />}
+      {/* the SAME cards the tiles above count — posts, not shoot plans. The
+          strip used to read the API's pipeline (every item, shoot plans
+          included) while "The agency at a glance" left shoot plans out, so
+          one card said "0 draft" and the other "Draft · 4" (9 Sep 2026). */}
+      {!loading && (role === 'editor' || role === 'general' || data?.manager) && <Pipeline pipeline={postPipeline} page={role === 'editor' || role === 'general' ? 'editor' : 'production'} />}
 
       {data?.manager && (
         <>
