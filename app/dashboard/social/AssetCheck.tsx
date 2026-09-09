@@ -33,17 +33,19 @@ function FramePreview({ probe, platform, kind }: {
   kind: PostKind | undefined
 }) {
   const f = displayFrame(platform, kind, probe.type, probe)
-  const H = 150
-  // the frame: a phone screen for tall shapes, a card for wide ones
-  const frameW = Math.round(H * f.frame)
-  const frameH = H
+  // the frame: a phone screen 150px tall for tall shapes, a card 150px wide
+  // for wide ones — so a 1.91:1 feed card is never three phones wide and
+  // sitting on top of its neighbour (9 Sep 2026)
+  const tall = f.frame <= 1
+  const frameW = tall ? Math.round(150 * f.frame) : 150
+  const frameH = tall ? 150 : Math.round(150 / f.frame)
   // the media inside it, at its own shape, fitted to the frame
   const fitW = f.fit === 'contain' ? Math.min(frameW, Math.round(frameH * f.media)) : frameW
   const fitH = f.fit === 'contain' ? Math.min(frameH, Math.round(frameW / f.media)) : frameH
   const bars = f.fit === 'contain' && (fitW < frameW - 1 || fitH < frameH - 1)
   const label = PLATFORM_MEDIA[platform].label
   return (
-    <figure className="flex w-[124px] shrink-0 flex-col items-center gap-1.5">
+    <figure className="flex shrink-0 flex-col items-center gap-1.5" style={{ width: Math.max(frameW, 96) }}>
       <div
         className="relative flex items-center justify-center overflow-hidden rounded-[10px] bg-ink ring-2 ring-ink/80"
         style={{ width: frameW, height: frameH }}
@@ -194,7 +196,7 @@ export default function AssetCheck({
       {/* how the first file sits on each channel's screen — bars, crops and
           all — before a word of the verdicts below */}
       {platforms.length > 0 && probes.length > 0 && (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-3 pb-1">
           {platforms.map(p => {
             const first = probesOf(p)[0]
             return first ? <FramePreview key={p} probe={first} platform={p} kind={kinds?.[p]} /> : null
