@@ -263,6 +263,8 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly }: 
           onPick={m => openNew(m, choosing.at)}
           onApprove={approve}
           onCreated={made => openMade(made, choosing.at)}
+          // the server named the post that already holds these files
+          onOpenExisting={(itemId, postId) => { setChoosing(null); setComposing({ itemId, postId, at: null }) }}
           onClose={() => setChoosing(null)}
         />
       )}

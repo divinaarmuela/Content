@@ -38,7 +38,7 @@ import type { RailMedia } from './useSchedulePosts'
  */
 export default function NewPostSources({
   clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable, allowUploads = true,
-  onPick, onApprove, onCreated, onClose,
+  onPick, onApprove, onCreated, onOpenExisting, onClose,
 }: {
   clientId: string | null
   media: RailMedia[]
@@ -59,6 +59,8 @@ export default function NewPostSources({
   onApprove: (media: RailMedia) => void
   /** the upload became a post: open the composer on it */
   onCreated: (made: UploadedPostSummary) => void
+  /** the server named a post that already holds these files: open THAT one */
+  onOpenExisting?: (itemId: string, postId: string) => void
   onClose: () => void
 }) {
   const sources = useMemo(
@@ -68,6 +70,8 @@ export default function NewPostSources({
   const [q, setQ] = useState('')
   const [chosen, setChosen] = useState<Slide[]>([])
   const [problem, setProblem] = useState<string | null>(null)
+  /** the post the server says already holds these files — one press opens it */
+  const [existing, setExisting] = useState<{ postId: string; itemId: string } | null>(null)
   /** making the post — the one thing that blocks the footer */
   const [busy, setBusy] = useState(false)
   /** …and reading the Drive folder, which must not look like the same wait */
@@ -219,6 +223,11 @@ export default function NewPostSources({
       if (!res.ok) {
         const list = Array.isArray(json?.problems) ? json.problems as string[] : []
         setProblem(list[0] ?? friendlyError(String(json?.error ?? ''), 'Schedule'))
+        // "already has a post with these files": the server names it, so the
+        // window can open it rather than send the person looking
+        setExisting(json?.post_id && json?.item_id
+          ? { postId: String(json.post_id), itemId: String(json.item_id) }
+          : null)
         return
       }
       // the files are a post now; the queue rows have done their job
@@ -310,9 +319,16 @@ export default function NewPostSources({
         </p>
 
         {problem && (
-          <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
-            {problem}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
+            <span>{problem}</span>
+            {existing && onOpenExisting && (
+              <button type="button"
+                onClick={() => onOpenExisting(existing.itemId, existing.postId)}
+                className="ml-auto inline-flex min-h-9 items-center rounded-full bg-foreground px-3 text-[12px] font-semibold text-background">
+                Open that post
+              </button>
+            )}
+          </div>
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">

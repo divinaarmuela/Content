@@ -162,6 +162,8 @@ export default function NewPostDialog({
     composerReducer, seedOf(target, accounts), initialComposer)
   const [busy, setBusy] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
+  /** the post a refusal named — one press opens it instead */
+  const [existingPost, setExistingPost] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   /**
    * WHICH PICTURE THE BUTTONS ARE ABOUT.
@@ -746,6 +748,7 @@ export default function NewPostDialog({
       setNote('Booked in with the channel.')
     } catch (e) {
       setProblems(problemsOf(e))
+      setExistingPost(e instanceof ComposeProblem ? e.existingPostId : null)
     } finally {
       setBusy(false)
     }
@@ -776,6 +779,7 @@ export default function NewPostDialog({
       setNote(`Sent to ${clientName || 'the client'}. They can approve it or leave a comment on their portal; their yes books it in.`)
     } catch (e) {
       setProblems(problemsOf(e))
+      setExistingPost(e instanceof ComposeProblem ? e.existingPostId : null)
     } finally {
       setBusy(false)
     }
@@ -805,6 +809,7 @@ export default function NewPostDialog({
         : 'Sent back with your note. Whoever built this post has been told.')
     } catch (e) {
       setProblems(problemsOf(e))
+      setExistingPost(e instanceof ComposeProblem ? e.existingPostId : null)
     } finally {
       setBusy(false)
     }
@@ -847,6 +852,7 @@ export default function NewPostDialog({
       setPicking(false)
     } catch (e) {
       setProblems(problemsOf(e))
+      setExistingPost(e instanceof ComposeProblem ? e.existingPostId : null)
     } finally {
       setBusy(false)
     }
@@ -1237,6 +1243,15 @@ export default function NewPostDialog({
                 {p}
               </p>
             ))}
+            {/* "already has a post with these files": the server named it —
+                open it, rather than send the person to find it */}
+            {existingPost && (
+              <button type="button"
+                onClick={() => { setProblems([]); setExistingPost(null); onOpenPost(existingPost) }}
+                className="inline-flex min-h-9 w-fit items-center rounded-full bg-foreground px-4 text-[12px] font-semibold text-background">
+                Open that post
+              </button>
+            )}
             {note && (
               <p className="rounded-inner border border-accent-green/40 bg-tint-green px-3 py-2 text-[12px] font-medium">
                 {note}
@@ -1468,12 +1483,15 @@ const KIND_WORD = POST_KIND_WORD
 /** A server refusal that carried a whole list of things to fix. */
 class ComposeProblem extends Error {
   problems: string[]
+  /** "already has a post with these files" — the post the server means */
+  existingPostId: string | null
   constructor(json: unknown) {
-    const j = (json ?? {}) as { error?: string; problems?: string[] }
+    const j = (json ?? {}) as { error?: string; problems?: string[]; post_id?: string }
     super(j.error ?? 'That did not work')
     this.problems = Array.isArray(j.problems) && j.problems.length > 0
       ? j.problems
       : [friendlyError(j.error ?? '', 'this post')]
+    this.existingPostId = typeof j.post_id === 'string' && j.post_id ? j.post_id : null
   }
 }
 

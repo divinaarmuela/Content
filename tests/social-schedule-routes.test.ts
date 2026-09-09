@@ -1107,6 +1107,23 @@ describe('the lists behind the per-network options', () => {
   })
 })
 
+/* ── a second post of the same files names the first ────────────────────── */
+
+describe('one open post per piece with the same files', () => {
+  // the owner, 9 Sep 2026, testing with the same file twice: "why is this
+  // coming up" — the refusal said "open that one" and named no way to.
+  it('refuses the second press and says WHICH post to open', async () => {
+    as(AM)
+    const first = await create()
+    expect(first.status).toBe(200)
+    const again = await create()
+    expect(again.status).toBe(409)
+    expect(String(again.body.error)).toContain('open that one')
+    expect(again.body.post_id).toBe(first.body.post.id)
+    expect(again.body.item_id).toBe(ITEM)
+  })
+})
+
 /* ── TikTok's tick, judged with the options the composer actually holds ── */
 
 describe('the TikTok tick', () => {

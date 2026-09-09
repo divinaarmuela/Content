@@ -85,6 +85,22 @@ export class ComposeError extends AuthzError {
   }
 }
 
+/**
+ * "There is already a post with these files" — WITH the post, so the window
+ * can open it rather than tell the person to go and find it (the owner, 9
+ * Sep 2026: "why is this coming up" — a second press with the same file was
+ * refused in words that named no way forward).
+ */
+export class DuplicatePostError extends AuthzError {
+  postId: string
+  itemId: string
+  constructor(postId: string, itemId: string) {
+    super('This item already has a post with these files — open that one instead of starting a second', 409)
+    this.postId = postId
+    this.itemId = itemId
+  }
+}
+
 const nowIso = () => new Date().toISOString()
 
 /** A column the generator does not know about yet, read tolerantly — the same
@@ -231,6 +247,9 @@ export async function assertClientAccess(user: TeamUser, clientId: string): Prom
 export function scheduleErrorResponse(e: unknown): NextResponse {
   if (e instanceof ComposeError) {
     return NextResponse.json({ error: e.message, problems: e.problems }, { status: e.status })
+  }
+  if (e instanceof DuplicatePostError) {
+    return NextResponse.json({ error: e.message, post_id: e.postId, item_id: e.itemId }, { status: e.status })
   }
   const { error, status } = authzErrorResponse(e)
   return NextResponse.json({ error }, { status })
@@ -559,9 +578,7 @@ async function insertPost(
     const theirs = asArray<Slide>(held.slides).map(s => s.url).sort().join('|')
     return theirs === wanted || theirs === ''
   })
-  if (!gate.ok) {
-    throw new AuthzError('This item already has a post with these files — open that one instead of starting a second', 409)
-  }
+  if (!gate.ok) throw new DuplicatePostError(gate.holder, item.id)
 
   const stamp = nowIso()
   try {
