@@ -14,7 +14,7 @@ const master: AssetProbe = {
 describe('which channels get the smaller copy', () => {
   // the whole point of a 2 GB master: YouTube, TikTok and LinkedIn take it at
   // full quality, and only Instagram needs something smaller
-  it('names the channels the master is too big to MOVE — YouTube and TikTok keep it', () => {
+  it('names the channels the master is too big to MOVE — YouTube keeps it; TikTok always gets a copy', () => {
     // LinkedIn times out on a 2 GB master every time. TikTok looked the same
     // for an hour and was not: the provider reports a slow TikTok upload as
     // "failed — still processing, do not repost", and the 3:26 pm master went
@@ -23,14 +23,27 @@ describe('which channels get the smaller copy', () => {
       probes: [master],
       platforms: ['instagram', 'youtube', 'tiktok', 'linkedin'],
       kinds: { instagram: 'reel' },
-    })).toEqual(['instagram', 'linkedin'])
+    })).toEqual(['instagram', 'tiktok', 'linkedin'])
+  })
+
+  // 9 Sep 2026: a 213 MB master sent to TikTok as it was went live blurred;
+  // the copy at TikTok's own spec is what it gets now, whatever the size
+  it('TikTok gets a copy at its own spec even when the master is small', () => {
+    expect(channelsNeedingCopy({
+      probes: [{ ...master, bytes: 50 * MB }],
+      platforms: ['instagram', 'tiktok', 'youtube'],
+    })).toEqual(['tiktok'])
+    expect(channelsNeedingCopy({
+      probes: [{ ...master, bytes: 50 * MB }], platforms: ['tiktok'],
+      own: { tiktok: [{ url: 'https://cdn.example.invalid/short.mp4', type: 'video' }] },
+    })).toEqual([])
   })
 
   it('does not bother LinkedIn with a copy of a file the provider can move', () => {
     expect(channelsNeedingCopy({
       probes: [{ ...master, bytes: 400 * MB }],
       platforms: ['instagram', 'tiktok', 'linkedin', 'youtube'],
-    })).toEqual(['instagram'])
+    })).toEqual(['instagram', 'tiktok'])
   })
 
   it('leaves a channel alone once it has a file of its own', () => {

@@ -38,6 +38,20 @@ export const PRACTICAL_RELAY_MB = 500
 /** Channels that have taken a 2 GB master, end to end, today. */
 const TAKES_THE_MASTER: readonly Platform[] = ['youtube', 'tiktok']
 
+/**
+ * Channels that get their own copy WHATEVER the master weighs.
+ *
+ * TikTok took the Event Spaces master on 9 Sep 2026 — a 213 MB .mov at
+ * 15.7 Mbps — and what went live was blurred: TikTok re-encodes everything
+ * it is given, and the further the file sits from its own spec (H.264,
+ * ~12 Mbps, 1080 short side) the harder that pass is. Instagram's copy of
+ * the same master, made by our encoder at Instagram's spec, was fine. So
+ * TikTok is sent the copy made at its spec, the same as Instagram (the
+ * owner, 9 Sep 2026: "give it the same way too"). The 2 GB "still
+ * processing" lesson above still stands for YouTube.
+ */
+const ALWAYS_COPY: readonly Platform[] = ['tiktok']
+
 /** Channels the SHARED video is too big for — by the platform's rule or by
  *  what the provider can actually move — that have no file of their own yet.
  *  Only a lone video qualifies: a carousel's slides are not one file to shrink. */
@@ -52,6 +66,7 @@ export function channelsNeedingCopy(input: {
   if (video.bytes === undefined) return []
   return input.platforms.filter(p => {
     if (input.own?.[p]?.length) return false
+    if (ALWAYS_COPY.includes(p)) return true
     const limit = sizeLimitFor(p, 'video', input.kinds?.[p])
     const platformMax = limit?.maxMB ?? Infinity
     const practicalMax = TAKES_THE_MASTER.includes(p) ? Infinity : PRACTICAL_RELAY_MB

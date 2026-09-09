@@ -68,8 +68,9 @@ const publishJob = (id: string): Row => ({
   media: [{ url: MASTER, type: 'video' }],
   targets: [
     { platform: 'instagram', accountId: 'acc-1', options: { kind: 'reel' } },
-    // TikTok takes the master whole, so it never waits for anything
-    { platform: 'tiktok', accountId: 'acc-2' },
+    // YouTube takes the master whole, so it never waits for anything
+    // (TikTok used to be here — since 9 Sep 2026 it gets a copy like Instagram)
+    { platform: 'youtube', accountId: 'acc-2' },
   ],
   timezone: 'Australia/Melbourne', scheduled_for: null, attempts: 0,
   created_at: '2026-09-03T00:00:00.000Z', updated_at: '2026-09-03T00:00:00.000Z',
@@ -154,9 +155,9 @@ describe('once the copy has landed', () => {
     const targets = published[0].targets as { platform: string; options?: { media?: { url: string }[] } }[]
     expect(targets.find(t => t.platform === 'instagram')!.options?.media)
       .toEqual([{ url: 'https://zernio.com/copy-instagram.mp4', type: 'video' }])
-    // TikTok takes a 2 GB master end to end; giving it a copy would be a
+    // YouTube takes a 2 GB master end to end; giving it a copy would be a
     // worse video for no reason
-    expect(targets.find(t => t.platform === 'tiktok')!.options?.media).toBeUndefined()
+    expect(targets.find(t => t.platform === 'youtube')!.options?.media).toBeUndefined()
     expect(published[0].media).toEqual([{ url: 'https://zernio.com/master.mp4', type: 'video' }])
   })
 })
@@ -329,7 +330,7 @@ describe('when every channel is holding its own copy', () => {
 
   it('but a channel taking the master still gets it', async () => {
     fake = seedDb({
-      publish_jobs: [publishJob('j1')],           // instagram + tiktok
+      publish_jobs: [publishJob('j1')],           // instagram + youtube
       encode_jobs: [encodeJob({
         status: 'done', output_key: 'copy-instagram.mp4', bytes: 120 * 1024 * 1024,
         width: 1080, height: 1920, duration_sec: 20,

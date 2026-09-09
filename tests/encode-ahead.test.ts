@@ -36,10 +36,10 @@ describe('which copies a post needs', () => {
     const theirs = channelsNeedingCopy({ probes: [bigVideo], platforms, kinds })
       .filter(p => encodeTargetFor(p, kinds[p as 'instagram'], bigVideo.seconds))
     expect(mine.map(a => a.platform)).toEqual(theirs)
-    // and it is not vacuous: Instagram needs one, TikTok and YouTube take the
-    // master whole
+    // and it is not vacuous: Instagram needs one, TikTok always gets one
+    // (9 Sep 2026), YouTube takes the master whole
     expect(mine.map(a => a.platform)).toContain('instagram')
-    expect(mine.map(a => a.platform)).not.toContain('tiktok')
+    expect(mine.map(a => a.platform)).toContain('tiktok')
     expect(mine.map(a => a.platform)).not.toContain('youtube')
   })
 
@@ -183,9 +183,12 @@ describe('asking for the copies a saved post will need', () => {
       perChannel: { 'acc-ig': { kind: 'reel' } },
     })
     await settle()
-    expect(sent).toHaveLength(1)
-    expect(sent[0].name).toBe('media/encode')
-    expect(sent[0].data).toMatchObject({
+    // one for Instagram, one for TikTok — TikTok gets a copy at its own
+    // spec whatever the master weighs (9 Sep 2026)
+    expect(sent).toHaveLength(2)
+    expect(sent.map(e => e.name)).toEqual(['media/encode', 'media/encode'])
+    expect(sent.map(e => (e.data as { platform: string }).platform).sort()).toEqual(['instagram', 'tiktok'])
+    expect(sent.find(e => (e.data as { platform: string }).platform === 'instagram')!.data).toMatchObject({
       sourceUrl: MASTER, platform: 'instagram', kind: 'reel',
     })
   })
@@ -209,7 +212,7 @@ describe('asking for the copies a saved post will need', () => {
 
   it('sends nothing for a file every channel can take', async () => {
     headBytes = 12 * MB
-    askForCopiesAhead({ clientId: 'c1', slides: [videoSlide], channels: ['acc-ig', 'acc-tt'] })
+    askForCopiesAhead({ clientId: 'c1', slides: [videoSlide], channels: ['acc-ig'] })
     await settle()
     expect(sent).toEqual([])
   })
