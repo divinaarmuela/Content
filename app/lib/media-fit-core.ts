@@ -1138,6 +1138,10 @@ export type EncodeTarget = {
  * to fit inside, or the budget will not stretch to a bitrate better than the
  * player file we already have.
  */
+/** the most a copy may weigh and still be relayed to the provider — a
+ *  little under `RELAY_MAX_MB` (350) so the headroom is real */
+export const RELAY_COPY_MB = 320
+
 export function encodeTargetFor(
   platform: Platform, kind: PostKind | undefined, seconds?: number,
 ): EncodeTarget | null {
@@ -1152,9 +1156,13 @@ export function encodeTargetFor(
   // never budget for LESS than the clip, and never for more than the channel
   const maxSeconds = Math.max(1, Math.min(measured ?? ceiling, ceiling))
 
-  // what the channel's own size limit affords, once the sound is paid for
+  // what the channel's own size limit affords, once the sound is paid for —
+  // and never more than the relay can carry to the provider (350 MB,
+  // `RELAY_MAX_MB` in publish.ts): TikTok's own 4 GB limit would let a long
+  // 4K copy grow past what we can send (10 Sep 2026)
+  const budgetMB = Math.min(rule.maxMB, RELAY_COPY_MB)
   const affordable = Math.floor(
-    (ENCODE_BUDGET_HEADROOM * rule.maxMB * 8 * 1000) / maxSeconds,
+    (ENCODE_BUDGET_HEADROOM * budgetMB * 8 * 1000) / maxSeconds,
   ) - ladder.audioKbps
   const maxrateKbps = Math.min(ladder.maxrateCapKbps, affordable)
   if (maxrateKbps < ENCODE_MIN_KBPS) return null

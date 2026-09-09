@@ -380,9 +380,13 @@ describe('the profiles bar shows every network we can post to', () => {
     expect(slots).toHaveLength(NETWORK_ORDER.length + 1)
   })
 
-  it('leaves a disconnected account out — its network reads as empty', () => {
+  it('keeps a disconnected account in the bar — it is the one that needs Reconnect', () => {
+    // 10 Sep 2026: a revoked channel was filtered out of the bar while the
+    // tile named it as the block; the bar now shows it, red, with Reconnect
     const slots = profileSlots([account('a', 'tiktok', { active: false })])
-    expect(slots.find(s => s.platform === 'tiktok')?.kind).toBe('empty')
+    const slot = slots.find(s => s.platform === 'tiktok')
+    expect(slot?.kind).toBe('account')
+    expect(slot && slot.kind === 'account' ? slot.account.active : null).toBe(false)
   })
 })
 
