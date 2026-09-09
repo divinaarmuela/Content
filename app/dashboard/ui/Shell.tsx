@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, CalendarDays, Search,
+  CalendarClock, CalendarDays, Search, GraduationCap,
 } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -85,6 +85,8 @@ export const NAV_TOOLS: NavItem[] = [
   { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
   { href: '/dashboard/ai',            label: 'AI Assistant',  icon: Sparkles },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+  // the first-day tutorial, kept in the sidebar so it can be reopened
+  { href: '/dashboard/start',         label: 'How this works', icon: GraduationCap },
   { href: '/dashboard/settings',      label: 'Settings',      icon: Settings },
 ]
 
@@ -98,12 +100,13 @@ export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
-  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications'] },
+  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications', '/dashboard/start'] },
 ]
 export const PINNED_BOTTOM = '/dashboard/settings'
 
 export const PAGE_TITLES: Record<string, string> = {
   '/dashboard':               'Overview',
+  '/dashboard/start':         'How this works',
   '/dashboard/leads':         'Leads',
   '/dashboard/clients':       'Clients',
   '/dashboard/files':         'Files',

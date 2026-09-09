@@ -85,7 +85,7 @@ export function socialParentOf(href: string): string | null {
 
 /** Every team role gets the Overview, their own Notifications feed, and
  *  Settings (their profile and notification preferences live there). */
-const PERSONAL_PAGES = ['/dashboard', '/dashboard/notifications', '/dashboard/settings']
+const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/notifications', '/dashboard/settings']
 
 /**
  * The default ladder — THE THREE PAGES RESET (6 Sep 2026).

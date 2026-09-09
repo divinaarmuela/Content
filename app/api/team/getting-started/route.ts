@@ -23,7 +23,7 @@ import { dismissKey, type GettingStartedPage } from '@/app/lib/getting-started-c
 
 export const dynamic = 'force-dynamic'
 
-const PAGES: GettingStartedPage[] = ['overview', 'editor', 'scheduler', 'production', 'item']
+const PAGES: GettingStartedPage[] = ['overview', 'editor', 'scheduler', 'production', 'item', 'start']
 
 export async function GET() {
   return withRequestCache(async () => {

@@ -32,7 +32,7 @@ export type GettingStartedPanel = {
 }
 
 /** The screens that carry a panel. 'overview' is the landing page. */
-export type GettingStartedPage = 'overview' | 'editor' | 'scheduler' | 'production' | 'item'
+export type GettingStartedPage = 'overview' | 'editor' | 'scheduler' | 'production' | 'item' | 'start'
 
 const HEADING = 'New here? Three things to know.'
 

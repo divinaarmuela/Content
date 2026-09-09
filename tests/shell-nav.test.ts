@@ -92,6 +92,7 @@ describe('resolveNav by role', () => {
       '/dashboard/editor',
       '/dashboard/notifications',
       '/dashboard/settings',
+      '/dashboard/start',
     ].sort())
   })
 
@@ -105,6 +106,7 @@ describe('resolveNav by role', () => {
       '/dashboard/notifications',
       '/dashboard/scheduler',
       '/dashboard/settings',
+      '/dashboard/start',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
     expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule'])
