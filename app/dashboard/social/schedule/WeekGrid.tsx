@@ -29,6 +29,8 @@ import type { SchedulePostRow } from './useSchedulePosts'
 
 /** an hour of the week, in pixels — the page passes it to the grid */
 export const WEEK_ROW_PX = 72
+/** the Shell's sticky top bar (h-[72px]) — what sticky day headers sit under */
+const TOP_BAR_PX = 72
 /** a tile: shorter than an hour, so it never straddles the next hour line */
 const TILE_PX = 64
 
@@ -327,12 +329,12 @@ export default function WeekGrid({
     // nothing reliable; arithmetic on the scroller does.
     const el = root.current
     if (!el) return
-    let scroller: HTMLElement | null = el.parentElement
-    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
-    if (!scroller) return
     const frame = requestAnimationFrame(() => {
-      const offset = el.getBoundingClientRect().top - scroller!.getBoundingClientRect().top + scroller!.scrollTop
-      scroller!.scrollTop = offset + 6 * grid.rowPx
+      // the PAGE scrolls (measured 9 Sep 2026: no box between the grid and
+      // the window scrolls), so 6 am goes just under the sticky day header,
+      // which itself sits under the 72px top bar
+      const top = el.getBoundingClientRect().top + window.scrollY + 6 * grid.rowPx - TOP_BAR_PX
+      window.scrollTo({ top: Math.max(0, top) })
     })
     return () => cancelAnimationFrame(frame)
   }, [grid.days[0]?.iso, grid.rowPx])
@@ -462,7 +464,8 @@ export default function WeekGrid({
               <div
                 style={{ height: grid.headerPx }}
                 className={cn(
-                  'sticky top-0 z-10 flex items-baseline justify-center gap-1.5 border-b border-border bg-surface text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
+                  // under the Shell's own sticky bar, not behind it
+                  'sticky top-[72px] z-10 flex items-baseline justify-center gap-1.5 border-b border-border bg-surface text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
                 )}
               >
                 {day.weekday.slice(0, 3)}
