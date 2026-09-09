@@ -26,6 +26,7 @@ import { useDragSchedule } from './useDragSchedule'
 import EditMediaLauncher from './EditMediaLauncher'
 import { CLIENT_KEY, useComposeFlow, useSuggestedTimes } from './useComposeFlow'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
+import { brandFor } from '../PlatformIcon'
 import WeekGrid, { StoriesStrip } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
 import { useSchedulePosts } from './useSchedulePosts'
@@ -400,13 +401,16 @@ export default function SchedulePage() {
   /** THE SAME CONNECT FLOW THE SOCIAL CHANNELS PAGE RUNS — a full navigation
    *  to the network's sign-in, because the consent screens refuse to be
    *  framed and popups get blocked. From the icon, for a scheduler too. */
-  const reconnect = async (account: SocialAccount) => {
+  const connect = async (platform: string) => {
     if (!clientId) return
     try {
       const res = await fetch('/api/social/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, platform: String(account.platform) }),
+        // …and come back HERE, not to the Social channels page (the owner,
+        // 9 Sep 2026: "I clicked the Facebook icon on Schedule and it
+        // brought me to the Social page instead of connecting it here")
+        body: JSON.stringify({ clientId, platform, returnTo: 'schedule' }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? ''))
@@ -415,6 +419,48 @@ export default function SchedulePage() {
       toast.error(friendlyError(e instanceof Error ? e.message : '', 'Schedule'))
     }
   }
+  const reconnect = (account: SocialAccount) => connect(String(account.platform))
+
+  /**
+   * BACK FROM THE NETWORK. The provider attaches the account a moment after
+   * it sends the person back, so the first re-read can honestly come back
+   * empty — the same short retry the Social channels page runs, so the new
+   * channel simply appears in the bar rather than after a refresh.
+   */
+  useEffect(() => {
+    if (!clientId) return
+    const params = new URLSearchParams(window.location.search)
+    const platform = params.get('connected')
+    if (!platform || params.get('clientId') !== clientId) return
+    let cancelled = false
+    const clearQuery = () => {
+      params.delete('connected'); params.delete('clientId')
+      const qs = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    }
+    ;(async () => {
+      let found = 0
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        try {
+          const res = await fetch('/api/social/connect', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId }),
+          })
+          const json = await res.json().catch(() => ({}))
+          found = Number(json?.synced ?? 0)
+          if (found > 0) break
+        } catch { /* try again */ }
+        await new Promise(r => setTimeout(r, 1500))
+      }
+      if (cancelled) return
+      clearQuery()
+      toast[found > 0 ? 'success' : 'message'](found > 0
+        ? `${brandFor(platform).label} connected — it is on the bar now.`
+        : `${brandFor(platform).label} is not showing yet — give it a moment, then reload.`)
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId])
 
   const rail = (
     <MediaRail
@@ -463,6 +509,7 @@ export default function SchedulePage() {
             view={view}
             onView={setView}
             onReconnect={reconnect}
+            onConnect={connect}
           />
 
           {/* date bar */}

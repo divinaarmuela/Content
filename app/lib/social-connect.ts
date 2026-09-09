@@ -17,8 +17,20 @@ import { isPlatform, type Platform } from './publish-core'
  * after the write and whichever id is stored there is the one both of them
  * use — the loser adopts it rather than carrying its own.
  */
+/** Where the network sends the person back once they have said yes. */
+export type ConnectReturn = 'social' | 'schedule'
+
+/** The page for a return, WITH the client and the network, so the page can
+ *  re-read the provider's account list and say what just connected. */
+export function connectReturnPath(returnTo: ConnectReturn, clientId: string, platform: string): string {
+  const q = `connected=${encodeURIComponent(platform)}&clientId=${encodeURIComponent(clientId)}`
+  return returnTo === 'schedule'
+    ? `/dashboard/social/schedule?client=${encodeURIComponent(clientId)}&${q}`
+    : `/dashboard/social?${q}`
+}
+
 export async function connectLinkFor(
-  clientId: string, platform: string,
+  clientId: string, platform: string, returnTo: ConnectReturn = 'social',
 ): Promise<{ authUrl: string; clientName: string } | { error: string; status: number }> {
   if (!isPlatform(platform)) {
     return { error: `Unsupported platform "${platform}"`, status: 400 }
@@ -46,14 +58,18 @@ export async function connectLinkFor(
     profileId = (mint.claimed ? mint.row.social_profile_id : mint.current?.social_profile_id) ?? created
   }
 
-  // Return to the social channels page. Redirecting to /dashboard/clients/[id]
-  // lands on a blank 404 — no such route exists — after the user has already
-  // granted access, which reads as a failure when the connection succeeded.
+  // Return to the page the person STARTED on. The Social channels page by
+  // default; the Schedule page when the press was one of its channel icons
+  // (the owner, 9 Sep 2026: "I clicked the Facebook icon on Schedule and it
+  // brought me to the Social page instead of connecting it here"). A
+  // scheduler cannot even see the Social channels page, so for them the
+  // old return was a refusal after a success. Redirecting to
+  // /dashboard/clients/[id] lands on a 404 — no such route exists.
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
   const authUrl = await publisher.connectUrl({
     platform: platform as Platform,
     profileId,
-    redirectUrl: `${base}/dashboard/social?connected=${platform}&clientId=${clientId}`,
+    redirectUrl: `${base}${connectReturnPath(returnTo, clientId, platform)}`,
   })
 
   return { authUrl, clientName: client.name ?? 'the client' }

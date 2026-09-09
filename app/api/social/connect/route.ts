@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     // icons on the Schedule page (the owner, 9 Sep 2026); the client check is
     // the same one every Schedule route makes
     const user = await requireRole('scheduler')
-    const { clientId, platform } = await req.json()
+    const { clientId, platform, returnTo } = await req.json()
 
     if (typeof clientId !== 'string' || !clientId) {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
@@ -34,8 +34,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Unsupported platform "${platform}"` }, { status: 400 })
     }
 
-    // one profile per client, minted once — see connectLinkFor
-    const link = await connectLinkFor(clientId, platform)
+    // one profile per client, minted once — see connectLinkFor. The network
+    // sends the person back to the page they pressed the icon on.
+    const link = await connectLinkFor(clientId, platform, returnTo === 'schedule' ? 'schedule' : 'social')
     if ('error' in link) {
       return NextResponse.json({ error: link.error }, { status: link.status })
     }
@@ -47,15 +48,19 @@ export async function POST(req: Request) {
   })
 }
 
-/** Re-read the provider's account list for a client after they finish OAuth. */
+/** Re-read the provider's account list for a client after they finish OAuth.
+ *  The same floor as starting a connection: whoever may start one from the
+ *  Schedule icons (a scheduler, for a client they hold) has to be able to
+ *  finish it, and finishing is this re-read. */
 export async function PUT(req: Request) {
   return withRequestCache(async () => {
   try {
-    await requireRole('account_manager')
+    const user = await requireRole('scheduler')
     const { clientId } = await req.json()
     if (typeof clientId !== 'string') {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
     }
+    await assertClientAccess(user, clientId)
 
     const client = await table<Client>('clients').get(clientId)
     if (!client?.social_profile_id) {
