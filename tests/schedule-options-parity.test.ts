@@ -273,6 +273,23 @@ describe('every posting option the window collects reaches the job', () => {
     })
   })
 
+  // 9 Sep 2026: the editor's cover reached Instagram and YouTube as
+  // `thumbnailUrl` and TikTok, which takes it under another name, got none
+  it('the editor cover reaches TikTok as its own cover field, unless TikTok was given one', () => {
+    const VIDEO = 'https://media.invalid/a.mp4'
+    const COVER = 'https://media.invalid/cover.jpg'
+    const withSlides = { ...post({}), slides: [{ url: VIDEO, type: 'video' }], channels: ['acc-tt'], per_channel: {} } as unknown as PlannedPost
+    const versions = [{ id: 'v1', version_number: 1, file_url: VIDEO, cover_url: COVER, files: null }] as unknown as Parameters<typeof targetsFor>[2]
+    const tt = targetsFor(withSlides, [account({ id: 'acc-tt', platform: 'tiktok', provider_account_id: 'prov-tt' })], versions)[0]
+    expect(tt.options).toMatchObject({ thumbnailUrl: COVER, videoCoverImageUrl: COVER })
+    const own = { ...withSlides, per_channel: { 'acc-tt': { videoCoverImageUrl: 'https://media.invalid/mine.jpg' } } } as unknown as PlannedPost
+    const ttOwn = targetsFor(own, [account({ id: 'acc-tt', platform: 'tiktok', provider_account_id: 'prov-tt' })], versions)[0]
+    expect(ttOwn.options?.videoCoverImageUrl).toBe('https://media.invalid/mine.jpg')
+    // and the body carries it where TikTok reads it
+    const body = buildPostBody({ caption: 'x', media: [{ url: VIDEO, type: 'video' }], targets: [tt], scheduledFor: null })
+    expect((body as { tiktokSettings?: { video_cover_image_url?: string } }).tiktokSettings?.video_cover_image_url).toBe(COVER)
+  })
+
   it('a channel nobody opened the options for still posts', () => {
     const targets = targetsFor(post({}), [account()])
     expect(targets[0].options).toBeUndefined()

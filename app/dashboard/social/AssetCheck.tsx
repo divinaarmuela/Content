@@ -16,10 +16,63 @@ import { AlertTriangle, Check, Crop, FileCog, Gauge, HelpCircle, Sparkles, XCirc
 import PlatformIcon from './PlatformIcon'
 import type { Platform, PostKind } from '../../lib/publish-core'
 import {
-  assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, unmeasured,
+  assessAssets, assetOutcomes, channelSpecs, describeAspect, displayFrame, fitHeadline, unmeasured,
   verdictByPlatform, LEVEL_WORDS, PLATFORM_MEDIA,
   type AssetProbe, type FitLevel,
 } from '../../lib/media-fit-core'
+
+/**
+ * HOW IT SITS ON THE PHONE — one small screen per channel, drawn from the
+ * first file: the frame the channel shows, the file inside it at the shape
+ * it will appear, bars where they will be. Read at a glance, before the
+ * words below say the same thing.
+ */
+function FramePreview({ probe, platform, kind }: {
+  probe: AssetProbe
+  platform: Platform
+  kind: PostKind | undefined
+}) {
+  const f = displayFrame(platform, kind, probe.type, probe)
+  const H = 150
+  // the frame: a phone screen for tall shapes, a card for wide ones
+  const frameW = Math.round(H * f.frame)
+  const frameH = H
+  // the media inside it, at its own shape, fitted to the frame
+  const fitW = f.fit === 'contain' ? Math.min(frameW, Math.round(frameH * f.media)) : frameW
+  const fitH = f.fit === 'contain' ? Math.min(frameH, Math.round(frameW / f.media)) : frameH
+  const bars = f.fit === 'contain' && (fitW < frameW - 1 || fitH < frameH - 1)
+  const label = PLATFORM_MEDIA[platform].label
+  return (
+    <figure className="flex w-[124px] shrink-0 flex-col items-center gap-1.5">
+      <div
+        className="relative flex items-center justify-center overflow-hidden rounded-[10px] bg-ink ring-2 ring-ink/80"
+        style={{ width: frameW, height: frameH }}
+        aria-hidden
+      >
+        <div className="relative overflow-hidden bg-ink" style={{ width: fitW, height: fitH }}>
+          {probe.type === 'video' ? (
+            <video src={`${probe.url}#t=0.5`} muted playsInline preload="metadata" tabIndex={-1}
+              className="h-full w-full" style={{ objectFit: f.fit === 'cover' ? 'cover' : 'contain' }} />
+          ) : probe.type === 'image' ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={probe.url} alt="" className="h-full w-full" style={{ objectFit: f.fit === 'cover' ? 'cover' : 'contain' }} />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-[10px] text-cream">document</span>
+          )}
+        </div>
+        {bars && (
+          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-1.5 text-[9px] font-bold text-ink">bars</span>
+        )}
+      </div>
+      <figcaption className="flex flex-col items-center text-center">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold">
+          <PlatformIcon platform={platform} size={11} /> {label} · {f.name}
+        </span>
+        <span className="text-[11px] leading-tight text-muted-foreground">{f.note}</span>
+      </figcaption>
+    </figure>
+  )
+}
 
 const TONE: Record<FitLevel, { chip: string; icon: typeof Check }> = {
   ok: {
@@ -137,6 +190,17 @@ export default function AssetCheck({
           </p>
         </div>
       </div>
+
+      {/* how the first file sits on each channel's screen — bars, crops and
+          all — before a word of the verdicts below */}
+      {platforms.length > 0 && probes.length > 0 && (
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {platforms.map(p => {
+            const first = probesOf(p)[0]
+            return first ? <FramePreview key={p} probe={first} platform={p} kind={kinds?.[p]} /> : null
+          })}
+        </div>
+      )}
 
       {/* the cross-platform answer: is this set acceptable on each channel */}
       {platforms.length > 0 && probes.length > 0 && (

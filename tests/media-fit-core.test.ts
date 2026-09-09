@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  assessAssets, assetOutcomes, channelSpecs, describeAspect, fitHeadline, formatOf,
+  assessAssets, assetOutcomes, channelSpecs, describeAspect, displayFrame, fitHeadline, formatOf,
   effectiveKind, kindLabel, postingAs, requirementLines, unmeasured, verdictByPlatform, PLATFORM_MEDIA,
   PLATFORM_ENCODE, encodeTargetFor, encodeWorstCaseMB,
   type AssetProbe,
@@ -613,5 +613,45 @@ describe('the encode ladder', () => {
 
   it('has a ladder for every channel there is', () => {
     for (const platform of PLATFORMS) expect(PLATFORM_ENCODE[platform]).toBeTruthy()
+  })
+})
+
+/* ── how the picture sits on the phone (9 Sep 2026) ────────────────────── */
+
+describe('displayFrame — the box each channel shows a file in', () => {
+  const landscape = { width: 1920, height: 1080 }
+  const vertical = { width: 1080, height: 1920 }
+  it('a landscape video on TikTok is shown whole, with bars, in a 9:16 frame', () => {
+    const f = displayFrame('tiktok', undefined, 'video', landscape)
+    expect(f.fit).toBe('contain')
+    expect(f.name).toBe('9:16')
+    expect(f.media).toBeCloseTo(16 / 9, 2)
+    expect(f.note).toMatch(/bars/)
+  })
+  it('a vertical video fills the screen on TikTok, Reels and Shorts', () => {
+    expect(displayFrame('tiktok', undefined, 'video', vertical).note).toBe('Fills the screen')
+    expect(displayFrame('instagram', undefined, 'video', vertical).note).toBe('Fills the screen')
+    expect(displayFrame('youtube', 'reel', 'video', vertical).name).toBe('9:16')
+  })
+  it('a still on TikTok or a Story is cropped to 9:16, not barred', () => {
+    const f = displayFrame('tiktok', undefined, 'image', landscape)
+    expect(f.fit).toBe('cover')
+    expect(f.note).toBe('Cropped to 9:16')
+    expect(displayFrame('instagram', 'story', 'image', vertical).note).toBe('Fills the screen')
+  })
+  it('a YouTube video sits in a 16:9 player; a vertical one gets bars at the sides', () => {
+    expect(displayFrame('youtube', undefined, 'video', landscape).note).toBe('Fills the player')
+    expect(displayFrame('youtube', undefined, 'video', vertical).note).toMatch(/sides/)
+  })
+  it('a feed post takes the file own shape, clamped to what the feed allows', () => {
+    const f = displayFrame('instagram', 'feed', 'image', vertical)
+    expect(f.fit).toBe('clamp')
+    expect(f.name).toBe('4:5')
+    expect(f.note).toBe('Cropped to 4:5')
+    expect(displayFrame('instagram', 'feed', 'image', { width: 1080, height: 1350 }).note).toBe('Shown as it is')
+  })
+  it('with no measurements it still draws a sensible frame', () => {
+    expect(displayFrame('tiktok', undefined, 'video', null).note).toBe('Fills the screen')
+    expect(displayFrame('linkedin', undefined, 'image', null).fit).toBe('clamp')
   })
 })

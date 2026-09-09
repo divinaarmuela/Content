@@ -1402,6 +1402,14 @@ export function targetsFor(
       const cover = coverForSlide(trimmed[0]?.url, versions)
       if (cover) options.thumbnailUrl = cover
     }
+    // TikTok takes its cover as a different field (`video_cover_image_url`,
+    // stitched in as the first frame). The same picture, unless somebody
+    // chose TikTok's own — a picture or a frame time (9 Sep 2026 —
+    // Instagram and YouTube got the editor's cover, TikTok silently did not).
+    if (account.platform === 'tiktok' && options.thumbnailUrl
+        && !options.videoCoverImageUrl && typeof options.videoCoverTimestampMs !== 'number') {
+      options.videoCoverImageUrl = options.thumbnailUrl
+    }
     out.push({
       platform: account.platform,
       accountId: account.provider_account_id || account.id,

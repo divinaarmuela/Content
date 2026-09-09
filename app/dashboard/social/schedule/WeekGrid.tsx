@@ -27,7 +27,10 @@ import type { SchedulePostRow } from './useSchedulePosts'
  * off the page.
  */
 
-const TILE_PX = 80
+/** an hour of the week, in pixels — the page passes it to the grid */
+export const WEEK_ROW_PX = 72
+/** a tile: shorter than an hour, so it never straddles the next hour line */
+const TILE_PX = 64
 
 /** The two things that can be dropped on a column, named once for both grids. */
 export const DROP_KINDS = { post: TILE_DRAG_TYPE, media: RAIL_DRAG_TYPE }
@@ -195,7 +198,7 @@ export function DropSlot({ top, iso, tz, offGrid }: {
       aria-hidden
       style={{ top }}
       className={cn(
-        'pointer-events-none absolute inset-x-1.5 flex h-[80px] items-center justify-center rounded-tile border-2 border-dashed border-accent-blue bg-tint-blue',
+        'pointer-events-none absolute inset-x-1.5 flex h-[64px] items-center justify-center rounded-tile border-2 border-dashed border-accent-blue bg-tint-blue',
         offGrid && 'h-10',
       )}
     >

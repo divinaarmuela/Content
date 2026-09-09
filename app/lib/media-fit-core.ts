@@ -875,6 +875,82 @@ function list(items: string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
+/* ── how the picture sits on the phone ─────────────────────────────────── */
+
+/**
+ * The box a channel shows this file in, and how the file sits in it —
+ * what a phone-shaped preview draws (the owner, 9 Sep 2026: "tell the user
+ * in the modal what it will post as… like Later's UI").
+ *
+ *   contain  the whole file is shown inside a fixed frame; a shape that does
+ *            not match gets bars (a 16:9 clip on TikTok)
+ *   cover    the frame is fixed and the file is cropped to fill it (a still
+ *            on TikTok, a Story)
+ *   clamp    the post takes the file's own shape, clamped to the range the
+ *            feed allows (Instagram feed 4:5 … 1.91:1)
+ *
+ * `frame` and `media` are width ÷ height. `media` is the shape the file
+ * appears at inside the frame; when it is narrower or wider than `frame`,
+ * the difference is bars.
+ */
+export type DisplayFrame = {
+  fit: 'contain' | 'cover' | 'clamp'
+  frame: number
+  media: number
+  /** "9:16", "4:5", "16:9" — the frame, in words */
+  name: string
+  /** one short line: "Shown with bars", "Cropped to 9:16", "Fills the screen" */
+  note: string
+}
+
+const VERTICAL = 9 / 16
+const WIDE = 16 / 9
+
+function ratioName(r: number): string {
+  const known: [number, string][] = [
+    [VERTICAL, '9:16'], [0.8, '4:5'], [1, '1:1'], [WIDE, '16:9'], [1.91, '1.91:1'], [2 / 3, '2:3'],
+  ]
+  const hit = known.find(([v]) => Math.abs(v - r) < 0.02)
+  return hit ? hit[1] : r >= 1 ? `${r.toFixed(2)}:1` : `1:${(1 / r).toFixed(2)}`
+}
+
+export function displayFrame(
+  platform: Platform, kind: PostKind | undefined, type: MediaType,
+  asset?: { width?: number; height?: number } | null,
+): DisplayFrame {
+  const own = asset?.width && asset?.height ? asset.width / asset.height : null
+  const effective = effectiveKind(platform, type, kind)
+  const rule = ruleFor(platform, type, kind)
+  const vertical = rule?.aspectName === '9:16 vertical'
+    || effective === 'story' || effective === 'reel'
+    || (platform === 'tiktok')
+  const wideVideo = platform === 'youtube' && type === 'video' && effective !== 'reel'
+
+  if (wideVideo) {
+    const media = own ?? WIDE
+    return {
+      fit: 'contain', frame: WIDE, media, name: '16:9',
+      note: Math.abs(media - WIDE) < 0.05 ? 'Fills the player' : 'Shown with bars at the sides',
+    }
+  }
+  if (vertical) {
+    if (type === 'video') {
+      const media = own ?? VERTICAL
+      const same = Math.abs(media - VERTICAL) < 0.05
+      return { fit: 'contain', frame: VERTICAL, media, name: '9:16', note: same ? 'Fills the screen' : 'Shown with bars — small on a phone' }
+    }
+    return { fit: 'cover', frame: VERTICAL, media: VERTICAL, name: '9:16', note: own && Math.abs(own - VERTICAL) >= 0.05 ? 'Cropped to 9:16' : 'Fills the screen' }
+  }
+  const min = rule?.aspectMin ?? 0.5
+  const max = rule?.aspectMax ?? 1.91
+  const shown = own === null ? Math.min(Math.max(1, min), max) : Math.min(Math.max(own, min), max)
+  const cropped = own !== null && Math.abs(shown - own) >= 0.02
+  return {
+    fit: 'clamp', frame: shown, media: shown, name: ratioName(shown),
+    note: cropped ? `Cropped to ${ratioName(shown)}` : 'Shown as it is',
+  }
+}
+
 /** One sentence for the whole set — what the person reads first. */
 export function fitHeadline(findings: Finding[], platforms: Platform[]): string {
   if (platforms.length === 0) return 'Choose a channel to check these files against.'

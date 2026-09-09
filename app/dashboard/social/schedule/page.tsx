@@ -27,7 +27,7 @@ import EditMediaLauncher from './EditMediaLauncher'
 import { CLIENT_KEY, useComposeFlow, useSuggestedTimes } from './useComposeFlow'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import { brandFor } from '../PlatformIcon'
-import WeekGrid, { StoriesStrip } from './WeekGrid'
+import WeekGrid, { StoriesStrip, WEEK_ROW_PX } from './WeekGrid'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
 import { useSchedulePosts } from './useSchedulePosts'
 import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
@@ -324,7 +324,10 @@ export default function SchedulePage() {
   // keyed on the DAY, not the minute: the clock ticking must not rebuild the
   // week under every memo that reads it
   const grid = useMemo(
-    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz }),
+    // 72px an hour: a 64px tile sits INSIDE its hour band. At the core's
+    // 44px default an 80px tile straddled two hour lines and the week read
+    // as a pile (the owner, 9 Sep 2026: "the lines get cramped")
+    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX }),
     [anchor, todayKey, tz])
   const monthView = view === 'Month'
   const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
