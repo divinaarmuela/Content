@@ -1368,7 +1368,10 @@ export default function NewPostDialog({
             {/* what each channel will do with these files — said here, where
                 the file can still be swapped, not in a client's feed */}
             {state.slides.length > 0 && checkPlatforms.length > 0 && (
-              <AssetCheck probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact />
+              <AssetCheck
+                probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
+                linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !state.perChannel[a.id]?.organizationUrn)}
+              />
             )}
           </div>
 

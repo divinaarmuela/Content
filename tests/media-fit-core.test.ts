@@ -667,3 +667,27 @@ describe('displayFrame — the box each channel shows a file in', () => {
     expect(displayFrame('linkedin', undefined, 'image', null).fit).toBe('clamp')
   })
 })
+
+/* ── two rules off Zernio's guides (docs audit, 10 Sep 2026) ───────────── */
+
+describe('an Instagram carousel takes the first item’s shape', () => {
+  it('says a differently shaped later picture is cropped, and nothing about a matching one', () => {
+    const wide: AssetProbe = { url: 'https://x/1.jpg', type: 'image', bytes: MB, width: 1080, height: 566 }
+    const tall: AssetProbe = { url: 'https://x/2.jpg', type: 'image', bytes: MB, width: 1080, height: 1350 }
+    const wideToo: AssetProbe = { url: 'https://x/3.jpg', type: 'image', bytes: MB, width: 1200, height: 629 }
+    const f = assessAssets({ probes: [wide, tall, wideToo], platforms: ['instagram'], kinds: { instagram: 'carousel' } })
+    const cropped = f.filter(x => x.headline === 'Cropped to match the first picture')
+    expect(cropped.map(x => x.asset)).toEqual([2])
+    expect(cropped[0].level).toBe('reframed')
+  })
+})
+
+describe('a person’s LinkedIn video is ten minutes', () => {
+  it('blocks a twelve-minute clip on a personal profile and lets a company page have it', () => {
+    const long: AssetProbe = { url: 'https://x/a.mp4', type: 'video', bytes: 200 * MB, width: 1920, height: 1080, seconds: 12 * 60 }
+    const personal = assessAssets({ probes: [long], platforms: ['linkedin'], linkedinPersonal: true })
+    expect(personal.some(x => x.level === 'blocked' && /personal LinkedIn profile/.test(x.headline))).toBe(true)
+    const page = assessAssets({ probes: [long], platforms: ['linkedin'], linkedinPersonal: false })
+    expect(page.some(x => /personal LinkedIn profile/.test(x.headline))).toBe(false)
+  })
+})

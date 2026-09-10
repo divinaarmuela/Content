@@ -419,6 +419,9 @@ export function assessAssets(input: {
    *  `channelsNeedingCopy`) — the size verdict on those is "clean copy",
    *  never "quality drops" */
   copies?: readonly Platform[]
+  /** LinkedIn channels posting as a PERSON (no company page chosen): a
+   *  person's video is 10 minutes, a page's is 30 (Zernio's LinkedIn guide) */
+  linkedinPersonal?: boolean
 }): Finding[] {
   const findings: Finding[] = []
   const copied = new Set<Platform>(input.copies ?? [])
@@ -613,6 +616,41 @@ export function assessAssets(input: {
       }
     }
   })
+
+  // INSTAGRAM GIVES EVERY ITEM IN A CAROUSEL THE FIRST ITEM'S SHAPE (its
+  // guide: "All items share the aspect ratio of the first item") — a tall
+  // second picture after a wide first one is cropped, and nothing said so
+  // (the docs audit of 10 Sep 2026)
+  if (input.platforms.includes('instagram') && input.probes.length > 1) {
+    const first = input.probes[0]
+    const shape = (p: AssetProbe) => (p.width && p.height ? p.width / p.height : null)
+    const lead = shape(first)
+    if (lead) {
+      input.probes.forEach((probe, i) => {
+        const mine = shape(probe)
+        if (i === 0 || !mine || Math.abs(mine - lead) / lead <= 0.02) return
+        findings.push({
+          platform: 'instagram', asset: i + 1, level: 'reframed',
+          headline: 'Cropped to match the first picture',
+          detail: `${describeAspect(probe.width!, probe.height!)}; the first item is ${describeAspect(first.width!, first.height!)}`,
+          consequence: 'Instagram gives every item in a carousel the first item’s shape, so this one is cropped to fit it. Put the shape you want first, or export them all the same.',
+        })
+      })
+    }
+  }
+  // A PERSON'S LINKEDIN VIDEO IS 10 MINUTES; a company page's is 30, and the
+  // ladder holds the page's number (the docs audit of 10 Sep 2026)
+  if (input.linkedinPersonal && input.platforms.includes('linkedin')) {
+    input.probes.forEach((probe, i) => {
+      if (probe.type !== 'video' || !probe.seconds || probe.seconds <= 10 * 60) return
+      findings.push({
+        platform: 'linkedin', asset: i + 1, level: 'blocked',
+        headline: 'Too long for a personal LinkedIn profile',
+        detail: `${Math.round(probe.seconds / 60)} min; a person’s profile allows 10, a company page 30`,
+        consequence: 'LinkedIn refuses it on a personal profile. Post it from the company page (More options → Which company page), or trim it.',
+      })
+    })
+  }
 
   const rank: Record<Finding['level'], number> = { blocked: 0, degraded: 1, reframed: 2, copied: 3 }
   return findings.sort((a, b) =>

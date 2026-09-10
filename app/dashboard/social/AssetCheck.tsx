@@ -131,7 +131,7 @@ function assetLine(probe: AssetProbe): string {
 }
 
 export default function AssetCheck({
-  probes, platforms, kinds, overrides, copies, playable, compact = false,
+  probes, platforms, kinds, overrides, copies, playable, linkedinPersonal, compact = false,
 }: {
   /** the file a browser can play for a master (the encoder's copy) */
   playable?: (url: string) => string
@@ -141,6 +141,8 @@ export default function AssetCheck({
   /** channels our encoder makes a clean copy for — said as such, never as
    *  "quality drops" (the owner, 9 Sep 2026) */
   copies?: Platform[]
+  /** LinkedIn posting as a person — no company page chosen */
+  linkedinPersonal?: boolean
   /** a channel given its own files is checked against THOSE, not the shared set */
   overrides?: Partial<Record<Platform, AssetProbe[]>>
   /** the Review step wants the verdict without the per-asset breakdown */
@@ -152,8 +154,8 @@ export default function AssetCheck({
     [overrides, probes],
   )
   const findings = useMemo(
-    () => platforms.flatMap(p => assessAssets({ probes: probesOf(p), platforms: [p], kinds, copies })),
-    [probesOf, platforms, kinds, copies],
+    () => platforms.flatMap(p => assessAssets({ probes: probesOf(p), platforms: [p], kinds, copies, linkedinPersonal })),
+    [probesOf, platforms, kinds, copies, linkedinPersonal],
   )
   const verdicts = useMemo(
     () => verdictByPlatform(findings, platforms),
