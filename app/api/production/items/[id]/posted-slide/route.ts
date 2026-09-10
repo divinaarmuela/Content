@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { mayPublish } from '../../../../../lib/identity-core'
 import { table, withRequestCache } from '@/lib/db'
 import type { AssetVersion } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/authz'
@@ -24,6 +25,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return withRequestCache(async () => {
     try {
       const user = await requireRole('scheduler')
+      // the ladder admits an editor here; publishing — which marking the last
+      // file posted IS — never does (the audit of 10 Sep 2026)
+      if (!mayPublish(user.role)) throw new AuthzError('Only somebody who may post can mark a file posted', 403)
       const { id } = await params
       const item = await loadItemForUser(user, id)
       const body = await req.json().catch(() => ({})) as { url?: unknown; live_url?: unknown; platform?: unknown; posted_at?: unknown }

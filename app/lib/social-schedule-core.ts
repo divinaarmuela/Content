@@ -1251,7 +1251,10 @@ export function nowLineTop(
 
 /* ── the list view ──────────────────────────────────────────────────────── */
 
-export type ListablePost = { scheduled_for?: string | null }
+export type ListablePost = { scheduled_for?: string | null; live_status?: string | null }
+
+/** the List's first heading: the drafts, which no grid draws (10 Sep 2026) */
+export const DRAFTS_GROUP_LABEL = 'Drafts — not on the calendar until scheduled'
 
 export type ListGroup<T extends ListablePost> = {
   /** the client's day key, or '' for posts with no time yet */
@@ -1278,21 +1281,31 @@ export function groupForList<T extends ListablePost>(
 ): ListGroup<T>[] {
   const zone = safeZone(tz)
   const groups = new Map<string, T[]>()
+  const drafts: T[] = []
   for (const post of Array.isArray(posts) ? posts : []) {
+    // drafts first, together: they are the one kind of post no grid shows,
+    // so the List is where somebody comes to find them
+    if (post?.live_status === 'draft') { drafts.push(post); continue }
     const key = dayKeyInZone(post?.scheduled_for ?? null, zone) ?? ''
     const list = groups.get(key) ?? []
     list.push(post)
     groups.set(key, list)
   }
-  return [...groups.keys()].sort().map(dayKey => ({
-    dayKey,
-    label: dayKey === ''
-      ? 'No time yet'
-      : nearbyDayLabel(dayKey, todayKey)
-        ?? formatInZone(`${dayKey}T12:00:00Z`, 'UTC', 'date') ?? dayKey,
-    posts: groups.get(dayKey)!.sort((a, b) =>
-      String(a?.scheduled_for ?? '').localeCompare(String(b?.scheduled_for ?? ''))),
-  }))
+  const byTime = (a: T, b: T) => String(a?.scheduled_for ?? '').localeCompare(String(b?.scheduled_for ?? ''))
+  const out: ListGroup<T>[] = drafts.length
+    ? [{ dayKey: 'drafts', label: DRAFTS_GROUP_LABEL, posts: drafts.sort(byTime) }]
+    : []
+  for (const dayKey of [...groups.keys()].sort()) {
+    out.push({
+      dayKey,
+      label: dayKey === ''
+        ? 'No time yet'
+        : nearbyDayLabel(dayKey, todayKey)
+          ?? formatInZone(`${dayKey}T12:00:00Z`, 'UTC', 'date') ?? dayKey,
+      posts: groups.get(dayKey)!.sort(byTime),
+    })
+  }
+  return out
 }
 
 /**

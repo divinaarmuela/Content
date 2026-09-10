@@ -171,6 +171,8 @@ describe('More options never offers what the provider cannot do', () => {
         // the two Reel settings: with no post type chosen yet, a setting is
         // shown rather than hidden from somebody looking for it
         'trialReel', 'audioName',
+        // …and the rest of Instagram's own switches (10 Sep 2026)
+        'igCover', 'igTagPeople', 'igComments', 'igMute', 'igAi', 'igPaid', 'igSponsors',
       ])
   })
 
@@ -725,9 +727,11 @@ describe('what the page says after a press', () => {
     expect(timed.title).toBe('Saved as a draft')
     expect(timed.body).toMatch(/Nothing goes out/)
     expect(timed.body).toMatch(/6:30 pm/)
-    expect(timed.showOnCalendar).toBe(true)
+    // a draft is off the calendar grids (10 Sep 2026): the popup says where it is
+    expect(timed.body).toMatch(/Drafts in the left rail/)
+    expect(timed.showOnCalendar).toBe(false)
     const untimed = outcomeWords({ kind: 'draft', at: null, tz: MELB, networks: [] })
-    expect(untimed.body).toMatch(/No time yet/)
+    expect(untimed.body).toMatch(/no time yet/i)
     expect(untimed.showOnCalendar).toBe(false)
   })
 

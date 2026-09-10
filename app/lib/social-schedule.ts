@@ -1,9 +1,10 @@
 import 'server-only'
+import { readPlatformResults } from './post-outcome-core'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
-  AssetVersion, Batch, Client, ContentItem, EncodeJob, PublishJob as PublishJobRow,
+  AssetVersion, Batch, Client, ContentItem, EncodeJob, FollowerSnapshot, PublishJob as PublishJobRow,
   ScheduleEntry, ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
@@ -45,7 +46,7 @@ import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
 import { formatInZone, safeZone } from './timezone-core'
 import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-core'
-import { postTrial, trialWords } from './trial-reel-core'
+import { isTrialTarget, latestFollowerCount, postTrial, trialFollowersProblem, trialWords } from './trial-reel-core'
 import { networkName } from './publish-core'
 import { inngest } from '../inngest/client'
 
@@ -397,6 +398,25 @@ async function copiesNotReadyBy(
   return copiesLateWords([...open].map(networkName), readyAt, safeAt, fmt)
 }
 
+/** Instagram's floor for a Trial Reel, judged on the latest follower count
+ *  we hold; null when the post is not a trial, the account clears it, or
+ *  nobody has counted yet. */
+async function trialReelProblem(
+  post: Pick<SocialPost, 'per_channel'>,
+  accounts: readonly SocialAccount[],
+): Promise<string | null> {
+  const perChannel = readPerChannel(post.per_channel)
+  for (const a of accounts) {
+    if (!isTrialTarget(String(a.platform), perChannel[a.id])) continue
+    const rows = await table<FollowerSnapshot>('follower_snapshots')
+      .list({ where: r => r.account_id === a.id && typeof r.count === 'number' })
+      .catch(() => [] as FollowerSnapshot[])
+    const why = trialFollowersProblem(latestFollowerCount(rows, a.id), a.username)
+    if (why) return why
+  }
+  return null
+}
+
 /** The client's connected accounts, by id — a channel that is not this
  *  client's, or not connected, is not a channel. */
 async function channelsFor(clientId: string, ids: readonly string[]): Promise<SocialAccount[]> {
@@ -465,6 +485,10 @@ function problemsWith(input: {
     withoutApproval: input.withoutApproval,
     saving: input.saving,
     draft: input.draft,
+    // a draft being saved, or a post being sent for review, owes nobody a
+    // time — the window says so and the server used to disagree ("Pick a
+    // time" under an enabled Save as draft; the audit of 10 Sep 2026)
+    requireTime: !input.saving,
     now: nowIso(),
   }).problems.slice()
 
@@ -806,11 +830,16 @@ export async function updatePost(
     if (problems.length > 0) throw new ComposeError(problems)
   }
 
+  // WHAT AN APPROVAL COVERS: the files, the words and where it goes — the
+  // three things the approver was shown. A channel's own settings (a cover
+  // frame, tagged people, a Trial Reel, comments off) are the scheduler's to
+  // set on an approved post without sending it round again (the owner, 10
+  // Sep 2026: "the scheduler can do all this without approval… they can do
+  // whatever they want with the approved").
   const contentChanged =
     JSON.stringify(slides) !== JSON.stringify(post.slides)
     || caption !== String(post.caption ?? '')
     || JSON.stringify(channelIds) !== JSON.stringify(post.channels)
-    || JSON.stringify(perChannel) !== JSON.stringify(post.per_channel)
 
   // the approval moves FIRST: the item is the record, and a post claiming
   // "waiting on approval" over an item still marked approved would be a lie
@@ -1519,6 +1548,10 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
   const whenMs = new Date(String(post.scheduled_for ?? '')).getTime()
   const late = Number.isFinite(whenMs) ? await copiesNotReadyBy(post, accounts, whenMs) : null
   if (late) throw new ComposeError([late])
+  // a Trial Reel on an account under Instagram's floor is refused HERE, with
+  // the reason, rather than by Instagram at posting time (12:45 pm, 10 Sep 2026)
+  const trialWhy = await trialReelProblem(post, accounts)
+  if (trialWhy) throw new ComposeError([trialWhy])
 
   // ── the one winner ───────────────────────────────────────────────────
   const stamp = nowIso()
@@ -1795,7 +1828,11 @@ export async function cancelPost(user: TeamUser, id: string): Promise<PlannedPos
   // row itself, so the row's status alone let a live post be marked
   // cancelled and its item's approval reset (the audit of 9 Sep 2026)
   const all = await jobsOf(post)
-  if (post.status === 'published' || all.some(j => j.status === 'published' || j.status === 'duplicate')) {
+  // …and off the per-channel record: a job the reconciler keeps at
+  // 'scheduled' while TikTok finishes still has a live Instagram Reel on it
+  const anyChannelLive = all.some(j =>
+    (readPlatformResults((j as { platform_results?: unknown }).platform_results) ?? []).some(o => o.status === 'published'))
+  if (post.status === 'published' || anyChannelLive || all.some(j => j.status === 'published' || j.status === 'duplicate')) {
     throw new AuthzError('This post has already gone out — delete it at the channel instead', 409)
   }
 

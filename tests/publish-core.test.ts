@@ -611,8 +611,7 @@ describe('per-network options land where the network takes them', () => {
       title: 'A morning in the roastery',
       visibility: 'unlisted',
       madeForKids: false,
-      // no duplicates, no leading hash, no stray spaces
-      tags: ['coffee', 'melbourne'],
+      // tags are NOT here: Zernio reads them at the top of the body (10 Sep 2026)
       categoryId: '27',
       playlistId: 'PL1',
       containsSyntheticMedia: true,

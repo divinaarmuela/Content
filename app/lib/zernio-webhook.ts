@@ -300,15 +300,40 @@ async function published(
     // the per-channel record too: without it a job the webhook settled kept
     // "scheduled" on every channel under a "published" job (10 Sep 2026)
     const live = platforms.map(p => p.toLowerCase())
-    rows = (await Promise.all(open.map(j => jobs.update(j.id, {
-      status: 'published',
-      published_at: now,
-      updated_at: now,
-      error: null,
-      ...(permalink ? { permalink } : {}),
-      platform_results: resultsForAll(j as unknown as OutcomeJob, 'published', { at: now, url: permalink })
-        .map(o => live.length && !live.includes(o.platform) ? { ...o, status: 'pending' as const, url: null } : o),
-    })))).filter((j): j is PublishJob => j !== null)
+    /** every channel the job was sent to, lower-cased */
+    const wantedOf = (j: PublishJob) => (Array.isArray(j.targets) ? j.targets : [])
+      .map(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase()).filter(Boolean)
+    // THE SAME RULE THE RECONCILER KEEPS: a post is posted when EVERY channel
+    // is live. A delivery that names only some of them settles those
+    // channels and leaves the job booked — the 1:15 am post of 10 Sep 2026
+    // was called posted, and the team emailed, on Instagram alone
+    const settled: PublishJob[] = []
+    const partial: PublishJob[] = []
+    for (const j of open) {
+      const wanted = wantedOf(j)
+      const everyChannelLive = live.length === 0 || wanted.length === 0 || wanted.every(p => live.includes(p))
+      const results = resultsForAll(j as unknown as OutcomeJob, 'published', { at: now, url: permalink })
+        .map(o => live.length && !live.includes(o.platform) ? { ...o, status: 'pending' as const, url: null } : o)
+      if (everyChannelLive) {
+        const row = await jobs.update(j.id, {
+          status: 'published', published_at: now, updated_at: now, error: null,
+          ...(permalink ? { permalink } : {}),
+          platform_results: results,
+        })
+        if (row) settled.push(row)
+      } else {
+        await jobs.update(j.id, {
+          updated_at: now,
+          ...(permalink ? { permalink } : {}),
+          platform_results: results,
+        })
+        partial.push(j)
+      }
+    }
+    if (partial.length && !settled.length) {
+      return NextResponse.json({ ok: true, partial: partial.map(j => j.id), waitingOn: partial.map(j => wantedOf(j).filter(p => !live.includes(p))) })
+    }
+    rows = settled
   } catch (e) {
     // a real database failure SHOULD be retried by the provider
     const message = e instanceof Error ? e.message : String(e)

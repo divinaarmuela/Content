@@ -310,8 +310,16 @@ export function cardActions(
   // "Posted" contradicted the "2 of 5 posted" chip (the audit of 9 Sep 2026)
   const adhoc = (card as { adhoc_post?: unknown }).adhoc_post === true
   const kept = adhoc ? all.filter(a => !(a.kind === 'transition' && (a.to === 'scheduled' || a.to === 'published'))) : all
-  const head = first === null ? null : kept.includes(first) ? first : (kept[0] ?? null)
-  return { primary: head, more: kept.filter(a => a !== head) }
+  // with no filled button, the face shows the constructive answer, not the
+  // destructive one: "Log the client's approval" before "Send back for
+  // changes" (the audit of 10 Sep 2026)
+  const constructive = (a: CardAction) => !(a.kind === 'send_back' || (a.kind === 'transition' && a.to === 'revision_required'))
+  const head = first === null ? null : kept.includes(first) ? first : (kept.find(constructive) ?? kept[0] ?? null)
+  // the card draws the first of `more` on its face when there is no filled
+  // button, so the constructive answers come first in it
+  const rest = kept.filter(a => a !== head)
+  const more = [...rest.filter(constructive), ...rest.filter(a => !constructive(a))]
+  return { primary: head, more }
 }
 
 export type DropDecision =
@@ -321,6 +329,7 @@ export type DropDecision =
 /** What a drop onto a column does — the same status a button would reach,
  *  or the machine's plain reason it cannot. */
 export const NEEDS_CLIENT_REASON = "This card needs the client's approval first"
+export const ADHOC_MOVE_REASON = 'An uploaded post is booked from the Schedule page, and marked posted one file at a time'
 
 /**
  * A card that needs the client cannot be approved past them by a drag any
@@ -351,6 +360,12 @@ export function dropAction(card: BoardViewCard, column: BoardColumnKey, viewer: 
   const d = canMoveTo({ status: card.status }, column, hats)
   if (!d.ok) return { ok: false, reason: d.reason }
   if (needsClientFirst(card, d.to)) return { ok: false, reason: NEEDS_CLIENT_REASON }
+  // the same rule `cardActions` keeps: an uploaded post is booked on the
+  // Schedule page and marked posted one file at a time — a drag or a "Move
+  // to" was still offering the whole-card press (the audit of 10 Sep 2026)
+  if ((card as { adhoc_post?: unknown }).adhoc_post === true && (d.to === 'scheduled' || d.to === 'published')) {
+    return { ok: false, reason: ADHOC_MOVE_REASON }
+  }
   return { ok: true, action: actionFor(d.to, d.label, hats), column }
 }
 

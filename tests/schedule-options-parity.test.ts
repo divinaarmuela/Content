@@ -38,6 +38,13 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
   locationId: '12345678',
   trialGraduation: 'MANUAL',
   audioName: 'Our sound',
+  thumbOffset: 2500,
+  userTags: [{ username: 'ada', x: 0.5, y: 0.5 }],
+  isAiGenerated: true,
+  commentsEnabled: false,
+  muteAudio: true,
+  isPaidPartnership: true,
+  brandedContentSponsors: ['sponsorco'],
   title: 'The video title',
   visibility: 'unlisted',
   madeForKids: true,
@@ -185,7 +192,8 @@ describe('every posting option the window collects reaches the job', () => {
     for (const key of SET_BY_THE_WINDOW) {
       if (NEVER_IN_THE_BODY[key]) continue
       const value = EVERY_EXTRA[key]
-      const needle = Array.isArray(value) ? String(value[0]) : String(value)
+      const first = Array.isArray(value) ? value[0] : value
+      const needle = first && typeof first === 'object' ? String((first as { username: string }).username) : String(first)
       // a boolean's own word is too common to search for, so those are found
       // by the provider's name for them instead
       const found = typeof value === 'boolean'
@@ -215,6 +223,13 @@ describe('every posting option the window collects reaches the job', () => {
       locationId: '12345678',
       trialParams: { graduationStrategy: 'MANUAL' },
       audioName: 'Our sound',
+      thumbOffset: 2500,
+      userTags: [{ username: 'ada' }],
+      isAiGenerated: true,
+      commentsEnabled: false,
+      muteAudio: true,
+      isPaidPartnership: true,
+      brandedContentSponsors: ['sponsorco'],
     })
     expect(dataFor('instagram').title).toBeUndefined()
     expect(dataFor('instagram').organizationUrn).toBeUndefined()
@@ -224,7 +239,6 @@ describe('every posting option the window collects reaches the job', () => {
       title: 'The video title',
       visibility: 'unlisted',
       madeForKids: true,
-      tags: ['coffee', 'melbourne'],
       categoryId: '27',
       playlistId: 'PL-abc',
       containsSyntheticMedia: true,

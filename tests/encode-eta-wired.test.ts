@@ -19,7 +19,9 @@ describe('a booked time waits for the copies', () => {
   })
   it('the window moves its own clock to the earliest safe time, but never a booked post', () => {
     expect(window).toContain("useTable<EncodeJob>('encode_jobs')")
-    expect(window).toContain('if (!beforeCopies || bookedAlready || safeAt === null) return')
-    expect(window).toContain("dispatch({ type: 'time', iso: new Date(rounded).toISOString() })")
+    expect(window).toContain('if (!beforeCopies || bookedAlready || safeAt === null || pickedTime.current) return')
+    // a default set quietly — never an override of a time the person picked,
+    // never an "unsaved" window (the audit of 10 Sep 2026)
+    expect(window).toContain("dispatch({ type: 'time', iso: new Date(safeAt).toISOString(), quiet: true })")
   })
 })

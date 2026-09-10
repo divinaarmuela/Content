@@ -32,11 +32,19 @@ not ignored, it is a post that never happens.
 | Instagram | `location` — "Add location" (saved places + Page ID box) | `locationId` | `locationId` (never on a Story) |
 | Instagram | **Trial Reel is a post TYPE** in the header menu ("Trial Reel — we decide" / "— Instagram decides"), not a More options row; `trial-reel-core.ts` holds the rule and the words | `trialGraduation` (+ `kind: 'reel'`) | `trialParams.graduationStrategy` (Reels only) |
 | Instagram | `audioName` — "Name the sound" | `audioName` | `audioName` (Reels only) |
+| Instagram | `igCover` — "Cover frame" (seconds) | `thumbOffset` | `thumbOffset` (ms; the editor's cover picture travels as `instagramThumbnail` and wins) |
+| Instagram | `igTagPeople` — "Tag people" | `userTags` | `userTags` (username; centre point on pictures, none on Reels) |
+| Instagram | `igComments` — "Allow comments" (on by default) | `commentsEnabled` | `commentsEnabled: false` only when off |
+| Instagram | `igMute` — "Mute the sound" | `muteAudio` | `muteAudio` |
+| Instagram | `igAi` — "Made with AI" | `isAiGenerated` | `isAiGenerated` |
+| Instagram | `igPaid` — "Paid partnership" | `isPaidPartnership` | `isPaidPartnership` (needs Facebook Login on the account) |
+| Instagram | `igSponsors` — "Sponsors" | `brandedContentSponsors` | `brandedContentSponsors` (max 2; only with the label on) |
+| Instagram | NOT OFFERED: `audioConfiguration` (catalog music) — needs the account reconnected with Facebook Login and a music search; a build of its own | | |
 | YouTube | `ytTitle` — "Video title" | `title` | `title` (clamped to 100) |
 | YouTube | `ytVisibility` — "Who can watch" | `visibility` | `visibility` |
 | YouTube | `ytCategory` — "Category" (13 plain names) | `categoryId` | `categoryId` |
 | YouTube | `ytPlaylist` — "Add to a playlist" (fetched) | `playlistId` | `playlistId` |
-| YouTube | `ytTags` — "Search tags" | `tags` | `tags` (de-duplicated, `#` stripped) |
+| YouTube | `ytTags` — "Search tags" | `tags` | **top-level** `tags` on the body (de-duplicated, `#` stripped) — inside the entry Zernio ignores it; fixed 10 Sep 2026 |
 | YouTube | `ytKids` — "Made for children" | `madeForKids` | `madeForKids` |
 | YouTube | `ytThumbnail` — "Cover picture" (not on a Short) | `thumbnailUrl` | `mediaItems[0].thumbnail` — see above |
 | YouTube | `ytSynthetic` — "Made with AI…" | `containsSyntheticMedia` | `containsSyntheticMedia` |

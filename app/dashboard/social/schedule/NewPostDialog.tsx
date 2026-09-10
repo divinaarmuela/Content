@@ -6,14 +6,14 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
-import type { EncodeJob, SocialAccount } from '@/lib/db-types'
+import type { EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
 import { useTable } from '@/lib/db-client'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
-import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
+import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
-  readPerChannel, PAGE_ID_HELP, sentForReviewLine,
+  readPerChannel, readUserTags, PAGE_ID_HELP, sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
@@ -458,22 +458,30 @@ export default function NewPostDialog({
     const platforms = chosen.map(a => String(a.platform))
     return copiesReadyAt(rows, platforms, Date.now())
   }, [encodeRows.rows, videoUrl, chosen])
-  const safeAt = copiesReady === null ? null : earliestSafeTime(Date.now(), copiesReady)
+  // frozen against the copies' finish, not the render clock: recomputing
+  // with Date.now() on every render crept the chosen time forward a minute
+  // at a time while somebody typed (the audit of 10 Sep 2026)
+  const safeAt = useMemo(
+    () => (copiesReady === null ? null : Math.ceil(earliestSafeTime(Date.now(), copiesReady) / 60_000) * 60_000),
+    [copiesReady])
   const chosenMs = state.scheduledFor ? new Date(state.scheduledFor).getTime() : NaN
   const beforeCopies = safeAt !== null && Number.isFinite(chosenMs) && chosenMs < safeAt
   const bookedAlready = status === 'scheduled' || status === 'published'
+  /** has this person picked a time themselves in this window? A default is
+   *  moved for them; a choice is never overwritten — the check says why */
+  const pickedTime = useRef(false)
   useEffect(() => {
-    if (!beforeCopies || bookedAlready || safeAt === null) return
-    // whole minutes, so the pill reads like a time somebody chose
-    const rounded = Math.ceil(safeAt / 60_000) * 60_000
-    dispatch({ type: 'time', iso: new Date(rounded).toISOString() })
+    if (!beforeCopies || bookedAlready || safeAt === null || pickedTime.current) return
+    dispatch({ type: 'time', iso: new Date(safeAt).toISOString(), quiet: true })
   }, [beforeCopies, bookedAlready, safeAt])
   const copyNames = chosen.map(a => networkName(String(a.platform))).filter((v, i, arr) => arr.indexOf(v) === i).join(', ')
   const copiesLine = safeAt === null || copiesReady === null ? null
     : `Clean copies for ${copyNames} are still being made — ready by about ${formatInZone(new Date(copiesReady).toISOString(), tz, 'time')}. ${
       beforeCopies && bookedAlready
         ? `This post is booked for before that — move it to ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')} or later.`
-        : `The earliest safe time is ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')}, so the clock starts there.`
+        : beforeCopies
+          ? `The time you picked is before that — the earliest safe time is ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')}.`
+          : `The earliest safe time is ${formatInZone(new Date(safeAt).toISOString(), tz, 'time')}, so the clock starts there.`
     }`
   // WHO MAY POST WITHOUT ASKING is one rule, `mayPostWithoutApproval`, and it
   // is every team role now (8 Sep 2026). This used to be a second copy of
@@ -657,15 +665,26 @@ export default function NewPostDialog({
   const trial = postTrial(state.perChannel, instagramChannels)
   // judged on INSTAGRAM's kinds, not the lead channel's: a post led by
   // TikTok with Instagram second can still be a Trial Reel
-  const trialPossible = instagramChannels.length > 0 && availableKinds('instagram', media).includes('reel')
+  // …and only over ONE VIDEO: a Reel is exactly that, and the audit of 10
+  // Sep 2026 found the type offered over five photos and refused at send
+  const trialPossible = instagramChannels.length > 0
+    && media.length === 1 && media[0].type === 'video'
+    && availableKinds('instagram', media).includes('reel')
+  // …and only where Instagram will take one: under 1,000 followers Meta
+  // refuses the post at posting time (12:45 pm, 10 Sep 2026)
+  const followerRows = useTable<FollowerSnapshot>('follower_snapshots')
+  const trialBlocked = useMemo(() => {
+    for (const a of instagramChannels) {
+      const why = trialFollowersProblem(latestFollowerCount(followerRows.rows, a.id), a.username)
+      if (why) return why
+    }
+    return null
+  }, [followerRows.rows, instagramChannels])
   const setTrial = (strategy: 'MANUAL' | 'SS_PERFORMANCE' | '') => {
-    for (const a of chosen) {
-      dispatch({
-        type: 'extra', channel: a.id,
-        patch: String(a.platform) === 'instagram'
-          ? { kind: 'reel', trialGraduation: strategy || undefined }
-          : { kind: 'reel' },
-      })
+    // an Instagram-only setting: the other channels keep whatever type they
+    // had — LinkedIn was being handed "Reel" (the audit of 10 Sep 2026)
+    for (const a of instagramChannels) {
+      dispatch({ type: 'extra', channel: a.id, patch: { kind: 'reel', trialGraduation: strategy || undefined } })
     }
   }
 
@@ -771,7 +790,10 @@ export default function NewPostDialog({
     item_id: target.itemId,
     slides: s.slides,
     caption: s.caption,
-    channels: s.channels,
+    // only channels the window can see: an account revoked since the post
+    // was written is dropped rather than refused by name (the audit of 10
+    // Sep 2026)
+    channels: s.channels.filter(id => accounts.some(a => a.id === id)),
     per_channel: s.perChannel,
     scheduled_for: s.scheduledFor,
     timezone: tz,
@@ -1135,7 +1157,12 @@ export default function NewPostDialog({
                   {KIND_WORD[k]}
                 </MenuItem>
               ))}
-              {trialPossible && TRIAL_CHOICES.filter(c => c.value !== '').map(c => (
+              {trialPossible && trialBlocked && (
+                <p className="px-2 py-2 text-[12px] leading-snug text-muted-foreground">
+                  <span className="font-semibold text-foreground">Trial Reel</span> — {trialBlocked}
+                </p>
+              )}
+              {trialPossible && !trialBlocked && TRIAL_CHOICES.filter(c => c.value !== '').map(c => (
                 <MenuItem key={c.value} onClick={() => setTrial(c.value)}>
                   <span className="flex flex-col items-start leading-tight">
                     <span>Trial Reel — {c.label.replace(/^Non-followers first — /, '')}</span>
@@ -1152,7 +1179,7 @@ export default function NewPostDialog({
               <TimePicker
                 value={state.scheduledFor}
                 tz={tz}
-                onChange={iso => dispatch({ type: 'time', iso })}
+                onChange={iso => { pickedTime.current = true; dispatch({ type: 'time', iso }) }}
                 // a booked post keeps its words and files locked but its
                 // clock open — that is how it is moved
                 disabled={locked && status !== 'scheduled'}
@@ -1188,7 +1215,7 @@ export default function NewPostDialog({
                     key={s.iso}
                     type="button"
                     title={s.why}
-                    onClick={() => dispatch({ type: 'time', iso: s.iso })}
+                    onClick={() => { pickedTime.current = true; dispatch({ type: 'time', iso: s.iso }) }}
                     // a best time before the copies are done is not a time
                     // this post can keep
                     disabled={(locked && status !== 'scheduled') || (safeAt !== null && new Date(s.iso).getTime() < safeAt)}
@@ -1291,9 +1318,14 @@ export default function NewPostDialog({
             {/* a Trial Reel is the one post type whose result the client
                 cannot see on their own feed — say so where the type is set */}
             {trial && (
-              <p className="rounded-inner border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-[12px] leading-snug">
-                <strong>Trial Reel.</strong> {TRIAL_SENTENCE}{' '}
-                {trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}
+              <p className={cn(
+                'rounded-inner border px-3 py-2 text-[12px] leading-snug',
+                trialBlocked ? 'border-accent-red/40 bg-accent-red/10' : 'border-accent-blue/40 bg-accent-blue/10',
+              )}>
+                <strong>Trial Reel.</strong>{' '}
+                {trialBlocked
+                  ? `${trialBlocked} Pick Reel in the type menu.`
+                  : `${TRIAL_SENTENCE} ${trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}`}
               </p>
             )}
 
@@ -1579,7 +1611,10 @@ export default function NewPostDialog({
           <button
             type="button"
             onClick={() => (state.postId ? setConfirm('delete') : requestClose())}
-            disabled={busy}
+            // a posted post cannot come off the calendar — the server says
+            // so, and a red refusal is worse than no button
+            disabled={busy || status === 'published'}
+            hidden={status === 'published'}
             aria-label={state.postId ? 'Take this post off the calendar' : 'Close without saving'}
             className="flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-60"
           >
@@ -2042,6 +2077,19 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
         open={open}
         onToggle={() => setOpen(o => !o)}
         onChange={list => set(list.length > 0 ? list : undefined)}
+      />
+    )
+  }
+  /* ── people tagged in the post: typed as names, stored as tags ── */
+  if (option.control === 'people') {
+    const names = readUserTags(held).map(t => t.username)
+    return (
+      <ListRow
+        option={option}
+        value={names}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+        onChange={list => set(list.length > 0 ? readUserTags(list) : undefined)}
       />
     )
   }

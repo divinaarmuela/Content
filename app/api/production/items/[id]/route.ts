@@ -5,7 +5,7 @@ import type {
   AssetVersion, PublishJob, Client, ContentItem, ItemComment, ScheduleEntry, TeamUser, TeamUserClient,
   WorkflowActivity,
 } from '@/lib/db-types'
-import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { requireSignedIn, requireRole, authzErrorResponse, AuthzError } from '../../../../lib/authz'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
@@ -308,6 +308,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const user = await requireRole('account_manager')
     const { id } = await params
     const item = await loadItemForUser(user, id)
+    // a post the channel is holding, or has published, is not deleted from
+    // here: the post would stay live and the app would lose every record of
+    // it (the audit of 10 Sep 2026)
+    if (item.status === 'scheduled' || item.status === 'published') {
+      throw new AuthzError(
+        item.status === 'scheduled'
+          ? 'This is booked with the channel — cancel it on the Schedule page first'
+          : 'This has gone out — delete it at the channel; the record stays here',
+        409,
+      )
+    }
 
     // publish_jobs has NO fk to content_items — cancel any queued/publishing job
     // FIRST, or the cron would publish a deleted item to the client's live account

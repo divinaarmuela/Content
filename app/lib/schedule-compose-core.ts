@@ -28,7 +28,7 @@ import {
   TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS, YOUTUBE_CATEGORIES,
   YOUTUBE_VISIBILITY_LABELS,
   type CommercialContentType, type Platform, type PostKind, type PostOptions,
-  type TikTokPrivacy, type TrialGraduation, type YoutubeVisibility,
+  type TikTokPrivacy, type TrialGraduation, type UserTag, type YoutubeVisibility,
 } from './publish-core'
 import {
   postingEligibility, NETWORK_LABEL, type SocialPostStatus,
@@ -62,6 +62,15 @@ export type ChannelExtras = {
   /* Instagram */
   trialGraduation?: TrialGraduation
   audioName?: string
+  /** milliseconds into the video the Reel cover is taken from */
+  thumbOffset?: number
+  /** people tagged in the post — usernames; feed pictures carry a centre point */
+  userTags?: UserTag[]
+  isAiGenerated?: boolean
+  commentsEnabled?: boolean
+  muteAudio?: boolean
+  isPaidPartnership?: boolean
+  brandedContentSponsors?: string[]
   /* YouTube, and a Facebook Reel's title */
   title?: string
   visibility?: YoutubeVisibility
@@ -111,6 +120,8 @@ const EXTRA_KEY_MAP: Record<keyof ChannelExtras, true> = {
   caption: true, kind: true, slides: true,
   firstComment: true, collaborators: true, shareToFeed: true, locationId: true,
   trialGraduation: true, audioName: true,
+  thumbOffset: true, userTags: true, isAiGenerated: true, commentsEnabled: true,
+  muteAudio: true, isPaidPartnership: true, brandedContentSponsors: true,
   title: true, visibility: true, madeForKids: true, tags: true,
   categoryId: true, playlistId: true, containsSyntheticMedia: true, thumbnailUrl: true,
   organizationUrn: true, disableLinkPreview: true, documentTitle: true,
@@ -177,7 +188,9 @@ export type ComposerAction =
    *  edit to the post, so it never makes the window "unsaved" */
   | { type: 'measured'; slides: Slide[] }
   | { type: 'channel'; id: string; on: boolean }
-  | { type: 'time'; iso: string | null }
+  /** `quiet`: a default being set for the person, not a change they made —
+   *  the window does not become "unsaved" over it */
+  | { type: 'time'; iso: string | null; quiet?: boolean }
   | { type: 'extra'; channel: string; patch: ChannelExtras }
   | { type: 'saved'; postId?: string | null }
 
@@ -233,10 +246,12 @@ export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
 
 /** What SHAPE each extra is stored as. Exhaustive on purpose: a new setting
  *  cannot be added to `ChannelExtras` without saying how it is read back. */
-const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'list' | 'slides'> = {
+const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'list' | 'people' | 'slides'> = {
   caption: 'text', kind: 'text', slides: 'slides',
   firstComment: 'text', collaborators: 'list', shareToFeed: 'flag', locationId: 'text',
   trialGraduation: 'text', audioName: 'text',
+  thumbOffset: 'number', userTags: 'people', isAiGenerated: 'flag', commentsEnabled: 'flag',
+  muteAudio: 'flag', isPaidPartnership: 'flag', brandedContentSponsors: 'list',
   title: 'text', visibility: 'text', madeForKids: 'flag', tags: 'list',
   categoryId: 'text', playlistId: 'text', containsSyntheticMedia: 'flag',
   thumbnailUrl: 'text',
@@ -267,6 +282,24 @@ const ALLOWED: Partial<Record<keyof ChannelExtras, readonly string[]>> = {
  * takes the client's approval down with it — so two readers that disagree is
  * a bug with a client's approval in it. There is now one.
  */
+/** Tagged people as stored: `{ username }`, or a bare username from an
+ *  older window. Feed pictures get a centre point, which publish-core keeps
+ *  only where Instagram wants one. */
+export function readUserTags(value: unknown): UserTag[] {
+  if (!Array.isArray(value)) return []
+  const out: UserTag[] = []
+  const seen = new Set<string>()
+  for (const raw of value) {
+    const username = String(
+      typeof raw === 'string' ? raw : (raw as { username?: unknown } | null)?.username ?? '',
+    ).trim().replace(/^@/, '')
+    if (!username || seen.has(username)) continue
+    seen.add(username)
+    out.push({ username, x: 0.5, y: 0.5 })
+  }
+  return out.slice(0, 20)
+}
+
 export function readChannelExtras(raw: unknown): ChannelExtras {
   const r = (raw && typeof raw === 'object' && !Array.isArray(raw))
     ? raw as Record<string, unknown> : {}
@@ -302,10 +335,21 @@ export function readChannelExtras(raw: unknown): ChannelExtras {
       case 'list': {
         if (!Array.isArray(value)) break
         const list = value.map(String).map(x => x.trim().replace(/^@/, '')).filter(Boolean)
-        // three collaborators is Instagram's own ceiling; tags have no count
-        // limit, only a combined length, which the checks report on
-        const capped = key === 'collaborators' ? list.slice(0, 3) : list.slice(0, 50)
+        // three collaborators is Instagram's own ceiling, two sponsors is
+        // Instagram's too; tags have no count limit, only a combined
+        // length, which the checks report on
+        const capped = key === 'collaborators' ? list.slice(0, 3)
+          : key === 'brandedContentSponsors' ? list.slice(0, 2)
+          : list.slice(0, 50)
         if (capped.length > 0) out[key] = capped
+        break
+      }
+      case 'people': {
+        // tagged people: a username each, with a centre point for the kinds
+        // that need one (publish-core drops the point where it means nothing)
+        if (!Array.isArray(value)) break
+        const people = readUserTags(value)
+        if (people.length > 0) out[key] = people
         break
       }
       case 'slides':
@@ -355,7 +399,7 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
     case 'time':
       return state.scheduledFor === action.iso
         ? state
-        : { ...state, scheduledFor: action.iso, dirty: true }
+        : { ...state, scheduledFor: action.iso, dirty: action.quiet ? state.dirty : true }
     case 'extra': {
       const before = state.perChannel[action.channel] ?? {}
       return {
@@ -438,6 +482,7 @@ export function limitsLine(
 export type MoreOptionKey =
   | 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
   | 'trialReel' | 'audioName'
+  | 'igCover' | 'igTagPeople' | 'igComments' | 'igMute' | 'igAi' | 'igPaid' | 'igSponsors'
   | 'ytTitle' | 'ytVisibility' | 'ytCategory' | 'ytPlaylist' | 'ytTags'
   | 'ytKids' | 'ytSynthetic' | 'ytThumbnail'
   | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle'
@@ -450,6 +495,8 @@ export type MoreOptionKey =
 export type OptionControl =
   'text' | 'longText' | 'toggle' | 'select' | 'tags' | 'seconds'
   | 'location' | 'collaborators' | 'consent'
+  /** usernames of people tagged in the post — stored as `UserTag`s */
+  | 'people'
 
 export type OptionChoice = { value: string; label: string }
 
@@ -534,6 +581,42 @@ const OPTION_SPECS: OptionSpec[] = [
     key: 'audioName', field: 'audioName', control: 'text',
     label: 'Name the sound', on: ['instagram'], kinds: ['reel'],
     placeholder: 'What the audio is called on the Reel',
+  },
+  {
+    key: 'igCover', field: 'thumbOffset', control: 'seconds', label: 'Cover frame',
+    on: ['instagram', 'facebook'], kinds: ['reel'], lead: 'video',
+    help: 'How many seconds into the video the cover picture is taken from. '
+      + 'A cover picture chosen in the video editor is used instead when there is one.',
+  },
+  {
+    key: 'igTagPeople', field: 'userTags', control: 'people', label: 'Tag people',
+    on: ['instagram'], kinds: ['feed', 'reel', 'carousel'],
+    placeholder: 'Instagram usernames, separated by commas',
+    help: 'On a picture the tag sits in the middle; on a Reel it is a name under the post.',
+  },
+  {
+    key: 'igComments', field: 'commentsEnabled', control: 'toggle',
+    label: 'Allow comments', on: ['instagram'], defaultOn: true,
+  },
+  {
+    key: 'igMute', field: 'muteAudio', control: 'toggle',
+    label: 'Mute the sound', on: ['instagram'], lead: 'video',
+  },
+  {
+    key: 'igAi', field: 'isAiGenerated', control: 'toggle',
+    label: 'Made with AI', on: ['instagram'],
+    help: 'Instagram puts an AI label on the post.',
+  },
+  {
+    key: 'igPaid', field: 'isPaidPartnership', control: 'toggle',
+    label: 'Paid partnership', on: ['instagram'],
+    help: 'Shows the "Paid partnership" label. The account has to be connected with Facebook Login for Instagram to take it.',
+  },
+  {
+    key: 'igSponsors', field: 'brandedContentSponsors', control: 'tags',
+    label: 'Sponsors', on: ['instagram'],
+    placeholder: 'Up to two Instagram usernames, separated by commas',
+    help: 'Only sent with the Paid partnership label on.',
   },
 
   /* ── YouTube ── */
@@ -1077,12 +1160,15 @@ export function outcomeWords(input: {
   const where = input.networks.length > 0 ? input.networks.join(', ') : 'no channel yet'
   switch (input.kind) {
     case 'draft':
+      // a draft is not on the calendar grids (10 Sep 2026): it lives in the
+      // rail's Drafts count and at the top of the List until it is sent or
+      // scheduled
       return {
         title: 'Saved as a draft',
         body: when
-          ? `Nothing goes out. It sits on the calendar at ${when} as a draft until you send or schedule it.`
-          : 'Nothing goes out. It has no time yet, so it is in the list under “No time yet” until you give it one.',
-        showOnCalendar: !!when,
+          ? `Nothing goes out. It is kept for ${when} but stays off the calendar until you send or schedule it — find it under Drafts in the left rail, or at the top of the List.`
+          : 'Nothing goes out. It has no time yet. Find it under Drafts in the left rail, or at the top of the List, and give it one.',
+        showOnCalendar: false,
       }
     case 'sent':
       return {

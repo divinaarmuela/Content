@@ -466,6 +466,14 @@ export type PostOptions = {
   trialGraduation?: TrialGraduation
   /** The name shown under a Reel for its custom audio. */
   audioName?: string
+  /** `false` turns comments off the moment it is published. */
+  commentsEnabled?: boolean
+  /** Strip the sound before sending — Reels, Stories and video slides. */
+  muteAudio?: boolean
+  /** The "Paid partnership" label; needs the account connected with Facebook Login. */
+  isPaidPartnership?: boolean
+  /** Up to two sponsors, Instagram usernames — only with the label above. */
+  brandedContentSponsors?: string[]
 
   /* ── YouTube (and a Facebook Reel, which also carries a title) ─────── */
 
@@ -727,10 +735,13 @@ const FIELD_PLATFORMS: Record<string, Platform[]> = {
   locationId: ['instagram'],
   trialParams: ['instagram'],
   audioName: ['instagram'],
+  commentsEnabled: ['instagram'],
+  muteAudio: ['instagram'],
+  isPaidPartnership: ['instagram'],
+  brandedContentSponsors: ['instagram'],
   title: ['youtube', 'facebook'],
   visibility: ['youtube'],
   madeForKids: ['youtube'],
-  tags: ['youtube'],
   categoryId: ['youtube'],
   playlistId: ['youtube'],
   containsSyntheticMedia: ['youtube'],
@@ -790,6 +801,16 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   if (o.thumbnailUrl) put('instagramThumbnail', o.thumbnailUrl)
   if (typeof o.thumbOffset === 'number') put('thumbOffset', o.thumbOffset)
   if (o.isAiGenerated) put('isAiGenerated', true)
+  // the rest of Instagram's own switches (docs.zernio.com/platforms/instagram,
+  // read 10 Sep 2026): each travels only when it says something the network
+  // would not do on its own
+  if (o.commentsEnabled === false) put('commentsEnabled', false)
+  if (o.muteAudio) put('muteAudio', true)
+  if (o.isPaidPartnership) {
+    put('isPaidPartnership', true)
+    const sponsors = (o.brandedContentSponsors ?? []).map(s => String(s).trim().replace(/^@/, '')).filter(Boolean)
+    if (sponsors.length) put('brandedContentSponsors', sponsors.slice(0, 2))
+  }
 
   /* ── Instagram: a trial Reel, and the name of its sound ── */
   // both are Reel settings; a carousel or a Story carrying them is a 400
@@ -812,7 +833,9 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   }
   if (o.visibility) put('visibility', o.visibility)
   if (o.madeForKids !== undefined) put('madeForKids', o.madeForKids)
-  if (o.tags?.length) put('tags', cleanTags(o.tags))
+  // YouTube tags are NOT here: Zernio reads `tags` at the top of the body
+  // only, and named the misplaced field in `warnings` while every tag ever
+  // typed was dropped (the research of 10 Sep 2026) — `buildPostBody` sets it
   if (o.categoryId) put('categoryId', String(o.categoryId))
   if (o.playlistId) put('playlistId', String(o.playlistId))
   if (o.containsSyntheticMedia) put('containsSyntheticMedia', true)
@@ -876,6 +899,9 @@ export type ZernioPostBody = {
   /** TikTok's mandatory settings — top level, NOT platformSpecificData; Zernio
    *  calls that out as the one special case */
   tiktokSettings?: TikTokSettings
+  /** YouTube search tags — top level too, so one set serves every YouTube
+   *  channel in the body (one per post today) */
+  tags?: string[]
 }
 
 export type TikTokSettings = {
@@ -1035,6 +1061,13 @@ export function buildPostBody(input: {
   // silently thrown away.
   const tiktok = input.targets.find(t => t.platform === 'tiktok')
   if (tiktok) body.tiktokSettings = tiktokSettingsFor(tiktok.options)
+  // YouTube's tags ride at the top level as well — inside the platform entry
+  // Zernio ignores them and says so in `warnings` (10 Sep 2026)
+  const youtube = input.targets.find(t => t.platform === 'youtube' && t.options?.tags?.length)
+  if (youtube) {
+    const tags = cleanTags(youtube.options!.tags)
+    if (tags.length) body.tags = tags
+  }
   if (input.scheduledFor) {
     body.scheduledFor = input.scheduledFor
     body.timezone = input.timezone ?? 'Australia/Melbourne'

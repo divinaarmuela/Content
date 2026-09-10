@@ -72,7 +72,7 @@ function FileBookingChip({ url, posts, jobsById }: {
   if (booking.status === 'published') {
     return (
       <>
-        <Chip tone="green">Went out{live.length ? ` on ${live.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>
+        <Chip tone="green">Went out{live.length ? ` on ${live.join(', ')}` : ''}{when ? ` · ${when}` : ''}{booking.outcomes.some(o => o.kind === 'Trial Reel') ? ' · Trial Reel' : ''}</Chip>
         {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
       </>
     )
@@ -85,7 +85,7 @@ function FileBookingChip({ url, posts, jobsById }: {
     .map(o => networkName(o.platform)))]
   return (
     <>
-      <Chip tone="amber">Scheduled{bookedOn.length ? ` on ${bookedOn.join(', ')}` : ''}{when ? ` · ${when}` : ''}</Chip>
+      <Chip tone="amber">Booked in{bookedOn.length ? ` on ${bookedOn.join(', ')}` : ''}{when ? ` · ${when}` : ''}{booking.outcomes.some(o => o.kind === 'Trial Reel') ? ' · Trial Reel' : ''}</Chip>
       {refused.map(o => <span key={o.platform} title={o.reason ?? undefined}><Chip tone="red">{networkName(o.platform)}: {outcomeWords(o).label.toLowerCase()}</Chip></span>)}
     </>
   )
@@ -360,7 +360,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             <Chip tone={status === 'approved_for_scheduling' || status === 'scheduled' ? 'green' : status === 'published' ? 'ink' : status === 'client_review' ? 'blue' : 'amber'}>
               {STATUS_LABELS[status] ?? status}
             </Chip>
-            <span className="text-[13px] text-muted-foreground">{whatHappensNext(status)}</span>
+            <span className="text-[13px] text-muted-foreground">
+              {adhoc && status === 'draft_uploaded' ? 'Uploaded — waiting for the team to check it.' : whatHappensNext(status)}
+            </span>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -599,7 +601,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         </div>
       </div>
 
-      {isManager && (
+      {isManager && status !== 'scheduled' && status !== 'published' && (
         <div className={cn('mt-auto flex items-center justify-end gap-2 border-t border-border px-5 py-4')}>
           {confirmDelete ? (
             <>

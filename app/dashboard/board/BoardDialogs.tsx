@@ -427,6 +427,16 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
         }),
       })
       if (!res.ok) throw new Error(await readError(res, 'Could not hand it over'))
+      // an uploaded post is handed to whoever POSTS it: the scheduler seat
+      // is what every hat rule and the drawer's "With X" line read, and
+      // moving only the owner changed neither (the audit of 10 Sep 2026)
+      if ((card as { adhoc_post?: unknown }).adhoc_post === true) {
+        const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheduler_ids: [chosen.id] }),
+        })
+        if (!seat.ok) throw new Error(await readError(seat, 'Could not hand the posting over'))
+      }
       toast.success(`Handed to ${personLabel(chosen)}.`)
       onHanded?.()
       onClose()
