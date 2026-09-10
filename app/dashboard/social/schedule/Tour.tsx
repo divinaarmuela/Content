@@ -64,13 +64,9 @@ export default function Tour({ tour, onClose }: {
   /** the card's own height, measured after it draws, so it can be kept on
    *  screen (the owner, 10 Sep 2026: "it's coming out of the screen") */
   const card = useRef<HTMLDivElement | null>(null)
-  const [cardHeight, setCardHeight] = useState(200)
-  useEffect(() => {
-    const el = card.current
-    if (!el) return
-    const h = Math.round(el.getBoundingClientRect().height)
-    if (h > 0 && h !== cardHeight) setCardHeight(h)
-  })
+  /** a budget, not a measurement: measuring the card and re-placing it
+   *  re-wrapped the words and measured again, without end (10 Sep 2026) */
+  const cardHeight = 230
 
   /** the phone rule, read once and then on every resize */
   useEffect(() => {
@@ -113,22 +109,27 @@ export default function Tour({ tour, onClose }: {
     // instant: the page scrolls smoothly by default (globals.css), and a
     // spotlight measured mid-glide sits where the box WAS
     el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior })
+    let raf = 0
     const measure = () => {
-      const live = findTarget(step.target)
-      const next = live ? boxOf(live) : null
-      // only a real move re-renders: a scroll fires this dozens of times
-      setSpot(prev => (prev && next && prev.top === next.top && prev.left === next.left
-        && prev.width === next.width && prev.height === next.height) ? prev : next)
+      window.cancelAnimationFrame(raf)
+      raf = window.requestAnimationFrame(() => {
+        const live = findTarget(step.target)
+        const next = live ? boxOf(live) : null
+        // only a real move re-renders
+        setSpot(prev => (prev && next && prev.top === next.top && prev.left === next.left
+          && prev.width === next.width && prev.height === next.height) ? prev : next)
+      })
     }
     measure()
-    const frames = [0, 60, 180, 400].map(ms => window.setTimeout(measure, ms))
+    // a few beats while the page settles after the scroll, then on resize
+    // only — a scroll listener re-measured on every pixel of a smooth
+    // scroll and the page never went idle (10 Sep 2026)
+    const frames = [60, 200, 500, 1000].map(ms => window.setTimeout(measure, ms))
     window.addEventListener('resize', measure)
-    // capture: the scroller is the page, a grid or a dialog's own panel
-    window.addEventListener('scroll', measure, true)
     return () => {
+      window.cancelAnimationFrame(raf)
       for (const f of frames) window.clearTimeout(f)
       window.removeEventListener('resize', measure)
-      window.removeEventListener('scroll', measure, true)
     }
   }, [step, go])
 
@@ -192,7 +193,7 @@ export default function Tour({ tour, onClose }: {
       ) : (
         <div
           aria-hidden
-          className="absolute rounded-[12px] ring-2 ring-cream/70 transition-all duration-150"
+          className="absolute rounded-[12px] ring-2 ring-cream/70"
           style={{
             top: spot.top, left: spot.left, width: spot.width, height: spot.height,
             boxShadow: '0 0 0 9999px rgba(20, 20, 20, 0.55)',
@@ -208,7 +209,7 @@ export default function Tour({ tour, onClose }: {
             ? 'absolute inset-x-3 bottom-3'
             : 'absolute',
         )}
-        style={cardStyle}
+        style={{ ...cardStyle, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }}
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
           {tour.name} · {shownNumber} of {total}
