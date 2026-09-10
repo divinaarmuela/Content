@@ -521,7 +521,7 @@ export default function OverviewPage() {
     if (!viewer || !isManager || live.loading || !todayKey) return null
     const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
     return monthPostsByAccount({
-      now: `${todayKey}T12:00:00Z`,
+      now: new Date().toISOString(),
       accounts: accountRows,
       clients: live.tables.clients.rows,
       jobs: jobRows as unknown as MonthJob[],

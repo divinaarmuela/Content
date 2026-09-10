@@ -364,6 +364,26 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
         // body — say which, the way the reconcile does, rather than "posted"
         const rows = outcome.platforms ?? []
         const refused = !isFuture && rows.some(r => String(r.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(r))
+        // THE SAME RULE THE RECONCILER AND THE WEBHOOK KEEP: posted means
+        // every channel is live. An immediate publish answered "Instagram
+        // live, TikTok processing" is booked, not posted (review, 10 Sep 2026)
+        const wanted = platformsOf(job.targets).map(p => p.toLowerCase())
+        const liveNow = new Set(rows
+          .filter(r => ['published', 'posted', 'success'].includes(String(r.status ?? '').toLowerCase()))
+          .map(r => String(r.platform ?? r.name ?? '').toLowerCase()))
+        const someStillGoing = !isFuture && !refused && rows.length > 0 && wanted.length > 0 && !wanted.every(p => liveNow.has(p))
+        if (someStillGoing) {
+          const now = new Date().toISOString()
+          await settle({
+            status: 'scheduled',
+            provider_post_id: outcome.postId,
+            attempts: job.attempts + 1,
+            error: null,
+            platform_results: resultsFromRemote(job as unknown as OutcomeJob, rows, 'published', now),
+          })
+          return 'scheduled'
+        }
+
         if (refused) {
           const told = describeRemoteOutcome('partial', rows)
           await settle({

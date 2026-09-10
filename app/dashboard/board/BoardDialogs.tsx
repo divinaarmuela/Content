@@ -430,7 +430,11 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
       // an uploaded post is handed to whoever POSTS it: the scheduler seat
       // is what every hat rule and the drawer's "With X" line read, and
       // moving only the owner changed neither (the audit of 10 Sep 2026)
-      if ((card as { adhoc_post?: unknown }).adhoc_post === true) {
+      // the posting seat exists once the piece is approved (the handoff route
+      // refuses any other stage); before that the owner move above is the
+      // whole hand-over (review, 10 Sep 2026)
+      if ((card as { adhoc_post?: unknown }).adhoc_post === true
+        && (card.status === 'approved_for_scheduling' || card.status === 'scheduled')) {
         const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduler_ids: [chosen.id] }),

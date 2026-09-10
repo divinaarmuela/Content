@@ -1104,3 +1104,12 @@ describe('what the docs audit of 10 Sep 2026 found', () => {
     expect(platformErrorWords('Something nobody documented')).toBe('Something nobody documented')
   })
 })
+
+/* ── the review of 10 Sep 2026: a trial with no kind chosen is still a Reel ── */
+
+describe('a trial Reel whose kind was never chosen', () => {
+  it('is sent as a trial, the way every screen names it', () => {
+    expect(toPlatformData({ trialGraduation: 'MANUAL' }, 'instagram')?.trialParams).toEqual({ graduationStrategy: 'MANUAL' })
+    expect(toPlatformData({ trialGraduation: 'MANUAL', kind: 'carousel' }, 'instagram')?.trialParams).toBeUndefined()
+  })
+})

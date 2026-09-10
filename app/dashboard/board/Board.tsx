@@ -292,7 +292,7 @@ export function Board({
                 // the DELETE route is manager-only, so the menu entry is too —
                 // a person never sees a button the server would refuse
                 // …and never on a card the channel holds or has published
-                canDelete={isManager && c.status !== 'scheduled' && c.status !== 'published'}
+                canDelete={isManager && c.status !== 'published'}
                 onDelete={setDeleteFor}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}

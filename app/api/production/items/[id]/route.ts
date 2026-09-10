@@ -312,12 +312,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     // here: the post would stay live and the app would lose every record of
     // it (the audit of 10 Sep 2026)
     if (item.status === 'scheduled' || item.status === 'published') {
-      throw new AuthzError(
-        item.status === 'scheduled'
-          ? 'This is booked with the channel — cancel it on the Schedule page first'
-          : 'This has gone out — delete it at the channel; the record stays here',
-        409,
-      )
+      // …only when a post really is behind it: a card moved to Booked in by
+      // hand, with no post, can still be thrown away (review, 10 Sep 2026)
+      const behind = await table<PublishJob>('publish_jobs').list({
+        where: r => r.content_item_id === id && ['queued', 'publishing', 'scheduled', 'published', 'duplicate'].includes(r.status),
+        limit: 1,
+      })
+      if (behind.length > 0) {
+        throw new AuthzError(
+          item.status === 'scheduled'
+            ? 'This is booked with the channel — cancel it on the Schedule page first'
+            : 'This has gone out — delete it at the channel; the record stays here',
+          409,
+        )
+      }
     }
 
     // publish_jobs has NO fk to content_items — cancel any queued/publishing job

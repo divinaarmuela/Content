@@ -1150,7 +1150,10 @@ export function toPlatformData(
   // 'reel' and nothing else: a post that was a Reel when this was set and is
   // saved as a carousel later would otherwise still send it, and Instagram
   // answers that with a 400
-  if (o.trialGraduation && o.kind === 'reel') {
+  // a lone video with no kind chosen IS a Reel on Instagram (`effectiveKind`),
+  // and the card, the email and the portal all call such a post a Trial
+  // Reel — so it is sent as one (review, 10 Sep 2026)
+  if (o.trialGraduation && (o.kind ?? 'reel') === 'reel') {
     put('trialParams', { graduationStrategy: o.trialGraduation })
   }
   if (o.audioName?.trim() && o.kind === 'reel') {

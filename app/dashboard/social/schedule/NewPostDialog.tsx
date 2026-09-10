@@ -826,8 +826,11 @@ export default function NewPostDialog({
       if (line) lines.push({ id: account.id, line })
       if (problem) stops.push(problem)
     }
-    return { lines, stops }
-  }, [chosen, lists])
+    // the cap is a rolling 24 hours: a post booked for later than that, a
+    // draft, or a send for approval is not stopped by it (review, 10 Sep 2026)
+    const soon = !state.scheduledFor || new Date(state.scheduledFor).getTime() - Date.now() < 24 * 3600_000
+    return { lines, stops: soon ? stops : [] }
+  }, [chosen, lists, state.scheduledFor])
 
   /**
    * The longest video THIS TikTok account may post.
@@ -850,10 +853,10 @@ export default function NewPostDialog({
     item_id: target.itemId,
     slides: s.slides,
     caption: s.caption,
-    // only channels the window can see: an account revoked since the post
-    // was written is dropped rather than refused by name (the audit of 10
-    // Sep 2026)
-    channels: s.channels.filter(id => accounts.some(a => a.id === id)),
+    // every channel the post holds, seen or not: a channel that needs
+    // reconnecting is refused by the server in words, which beats dropping it
+    // in silence and re-opening the client's approval (review, 10 Sep 2026)
+    channels: s.channels,
     per_channel: s.perChannel,
     scheduled_for: s.scheduledFor,
     timezone: tz,
@@ -1777,7 +1780,7 @@ export default function NewPostDialog({
             ) : (
               <SplitButton
                 label={busy ? 'Working…' : primary.label}
-                disabled={busy || unmoved || caps.stops.length > 0
+                disabled={busy || unmoved || (caps.stops.length > 0 && sends)
                   || (wait ? shownChecks.length > 0 : !check.ok)}
                 onPrimary={() => void run(primary.key)}
                 items={menuItems.map(m => ({ key: m.key, label: m.label }))}
@@ -2206,15 +2209,19 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
 
   /* ── a question with two to four answers, instead of a post ── */
   if (option.control === 'poll') {
-    const poll = readPoll(held) ?? { question: '', options: ['', ''] }
+    // what is typed is kept as typed: trimming and dropping blanks on every
+    // keystroke ate trailing spaces and moved answers between boxes (review,
+    // 10 Sep 2026) — the stored poll is cleaned by `readPoll` when it is read
+    const raw = (held && typeof held === 'object' ? held : null) as { question?: string; options?: string[]; duration?: PollDuration } | null
+    const poll = { question: String(raw?.question ?? ''), options: Array.isArray(raw?.options) ? raw!.options!.map(String) : ['', ''], duration: raw?.duration }
     const answers = poll.options.length >= POLL_OPTIONS_MIN
       ? poll.options
       : [...poll.options, ...Array(POLL_OPTIONS_MIN - poll.options.length).fill('')]
     const write = (next: { question?: string; options?: string[]; duration?: PollDuration }) => {
       const question = next.question ?? poll.question
-      const options = (next.options ?? answers).map(a => a.trim()).filter(Boolean)
+      const options = next.options ?? answers
       const duration = next.duration ?? poll.duration
-      set(question.trim() || options.length > 0
+      set(question.trim() || options.some(o => o.trim())
         ? { question, options, ...(duration ? { duration } : {}) }
         : undefined)
     }
