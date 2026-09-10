@@ -544,6 +544,12 @@ export default function SchedulePage() {
       onNew={() => flow.openAt(weekSlots[0]?.iso ?? null)}
       onPick={(m, slides) => flow.openNew(m, null, slides ?? null)}
       onApprove={flow.approve}
+      onRemove={async m => {
+        const res = await fetch(`/api/production/items/${m.itemId}`, { method: 'DELETE' })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) { toast.error(String(json?.error ?? 'Could not remove that piece')); return }
+        toast.success(`Removed ${m.title}`)
+      }}
     />
   )
 

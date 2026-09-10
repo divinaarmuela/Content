@@ -71,7 +71,7 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, drafts = 0, onDrafts, loading, role, postWithoutApproval, onNew, onPick, onApprove,
+  media, waiting, drafts = 0, onDrafts, loading, role, postWithoutApproval, onNew, onPick, onApprove, onRemove,
 }: {
   media: RailMedia[]
   waiting: number
@@ -91,7 +91,12 @@ export default function MediaRail({
   onPick: (media: RailMedia, slides?: Slide[]) => void
   /** sign this piece off without waiting for the client */
   onApprove: (media: RailMedia) => void
+  /** a manager throwing a piece away from here — the rail had no way to
+   *  delete anything (the owner, 10 Sep 2026: "as a super admin or AM why
+   *  wasn't I able to delete this") */
+  onRemove?: (media: RailMedia) => Promise<void> | void
 }) {
+  const [removing, setRemoving] = useState<string | null>(null)
   // "Unused" starts on, as the design has it: the rail is for finding the
   // next thing to post, and media already in a post is not that
   const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>(['Unused']))
@@ -293,6 +298,27 @@ export default function MediaRail({
                     </div>
                   )}
 
+                  {/* a manager removes a piece from here: two presses, and
+                      never one the channel is holding */}
+                  {onRemove && (role === 'account_manager' || role === 'super_admin') && isOpen && (
+                    removing === m.itemId ? (
+                      <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1.5">
+                        <span className="text-[11px] font-semibold">Remove this piece and its files?</span>
+                        <span className="flex gap-1.5">
+                          <button type="button" onClick={() => setRemoving(null)} className="min-h-8 rounded-full border border-border px-2.5 text-[11px] font-semibold hover:bg-muted">Keep it</button>
+                          <button type="button" onClick={() => { setRemoving(null); void onRemove(m) }} className="min-h-8 rounded-full bg-accent-red px-2.5 text-[11px] font-semibold text-cream">Remove</button>
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRemoving(m.itemId)}
+                        className="min-h-8 w-full border-t border-border px-2 text-left text-[11px] font-semibold text-muted-foreground hover:bg-muted"
+                      >
+                        Remove this piece
+                      </button>
+                    )
+                  )}
                   {/* waiting on somebody, and this person could be that
                       somebody: sign it off, after one question */}
                   {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) && (
