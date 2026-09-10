@@ -1361,7 +1361,7 @@ export default function NewPostDialog({
             {/* the copy is being made now, weeks before it is needed */}
             {copiesLine ? (
               <p className={cn('text-[12px]', beforeCopies && bookedAlready ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{copiesLine}</p>
-            ) : preparingCopy && (
+            ) : preparingCopy && !bookedAlready && (
               <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>
             )}
 
@@ -1640,18 +1640,20 @@ export default function NewPostDialog({
 
         {/* ── footer ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-surface p-3.5">
-          <button
-            type="button"
-            onClick={() => (state.postId ? setConfirm('delete') : requestClose())}
-            // a posted post cannot come off the calendar — the server says
-            // so, and a red refusal is worse than no button
-            disabled={busy || status === 'published'}
-            hidden={status === 'published'}
-            aria-label={state.postId ? 'Take this post off the calendar' : 'Close without saving'}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-60"
-          >
-            <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          </button>
+          {/* a posted post cannot come off the calendar — the server says
+              so, and a red refusal is worse than no button (the `hidden`
+              attribute lost to the flex class on the live site, 10 Sep 2026) */}
+          {status !== 'published' && (
+            <button
+              type="button"
+              onClick={() => (state.postId ? setConfirm('delete') : requestClose())}
+              disabled={busy}
+              aria-label={state.postId ? 'Take this post off the calendar' : 'Close without saving'}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+            </button>
+          )}
 
           <span
             className={cn(
