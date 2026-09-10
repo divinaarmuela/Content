@@ -701,10 +701,19 @@ export function postWarnings(input: {
     warnings.push('Link stickers, polls and countdowns cannot be added by any API — those need a manual post.')
   }
 
-  if (kinds.includes('reel')) {
+  // per network: a YouTube Short is not a Reel — three minutes, vertical,
+  // and YouTube picks its cover (Zernio's YouTube guide, read 10 Sep 2026)
+  const reelOn = Object.entries(input.kinds ?? {}).filter(([, k]) => k === 'reel').map(([p]) => p)
+  if (reelOn.some(p => p !== 'youtube')) {
     warnings.push(
       `Reels should be ${REEL_REQUIREMENTS.aspect} (${REEL_REQUIREMENTS.resolution}), ` +
       `up to ${REEL_REQUIREMENTS.maxSeconds}s, ${REEL_REQUIREMENTS.formats}.`
+    )
+  }
+  if (reelOn.includes('youtube')) {
+    warnings.push(
+      'A YouTube Short is a vertical 9:16 video of up to 3 minutes — YouTube decides it is a Short from the file. '
+      + 'Shorts cannot be given a cover picture; YouTube chooses a frame.'
     )
   }
 

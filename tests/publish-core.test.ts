@@ -4,7 +4,7 @@ import {
   availableKinds, autoKindFor, describeRemoteOutcome, isStillProcessing, SUPPORTED_PLATFORMS,
   cleanTags, optionProblems, tagsLength, tiktokSettingsFor, youtubeDefaults,
   asOrganizationUrn, isOrganizationUrn,
-  TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX,
+  TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX, postWarnings,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -927,5 +927,18 @@ describe('what the options themselves get wrong, in plain words', () => {
     })
     expect(issues.some(i => i.platform === 'tiktok' && /Tick the TikTok box/.test(i.problem)))
       .toBe(true)
+  })
+})
+
+/* ── a YouTube Short is not a Reel: its own limits, no cover (10 Sep 2026) ── */
+
+describe('the Short warning', () => {
+  it('names 3 minutes and no cover for YouTube, and keeps the Reel line for Instagram', () => {
+    const yt = postWarnings({ caption: 'a', media: [{ url: 'https://x/a.mp4', type: 'video' }], kinds: { youtube: 'reel' } })
+    expect(yt.join(' ')).toMatch(/Short is a vertical 9:16 video of up to 3 minutes/)
+    expect(yt.join(' ')).not.toMatch(/Reels should be/)
+    const ig = postWarnings({ caption: 'a', media: [{ url: 'https://x/a.mp4', type: 'video' }], kinds: { instagram: 'reel' } })
+    expect(ig.join(' ')).toMatch(/Reels should be/)
+    expect(ig.join(' ')).not.toMatch(/Short/)
   })
 })

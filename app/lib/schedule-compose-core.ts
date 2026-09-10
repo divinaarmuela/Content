@@ -662,7 +662,9 @@ const OPTION_SPECS: OptionSpec[] = [
     // YouTube ignores a custom thumbnail on a Short, so the row goes with it
     kinds: ['feed', 'carousel'],
     placeholder: 'Link to the picture',
-    help: 'A JPEG or PNG, 1280 x 720, up to 2 MB. Shorts do not have one.',
+    help: 'A JPEG, PNG or GIF, 1280 x 720, up to 2 MB. YouTube only takes a custom cover on a phone-verified channel: '
+      + 'on an unverified one the video still posts with an ordinary cover, and Zernio stops sending covers to that channel for seven days. '
+      + 'Shorts cannot have one.',
   },
 
   /* ── LinkedIn ── */
