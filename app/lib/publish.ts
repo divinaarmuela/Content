@@ -876,10 +876,14 @@ export async function reconcilePublishedJobs(): Promise<number> {
       // capture the permalink once the platform assigns one
       const url = remote.platforms?.find(p => p.platformPostUrl)?.platformPostUrl
       if (url) {
+        // dated by when it went out, not by this sweep: every pass was
+        // re-stamping "Posted on Instagram · 5:40 pm" with its own clock
+        // (10 Sep 2026)
+        const wentOut = (job as { published_at?: string | null }).published_at ?? new Date().toISOString()
         await table('publish_jobs').update(job.id, {
           permalink: url,
           platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms,
-            job.status === 'scheduled' ? 'scheduled' : 'published', new Date().toISOString()),
+            job.status === 'scheduled' ? 'scheduled' : 'published', wentOut),
         })
         // mirror it onto the registered asset so evidence links to the live post
         const assets = await table<ContentAsset>('content_assets').list({
