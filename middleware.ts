@@ -95,6 +95,10 @@ export const config = {
     '/sign-in/:path*',
     '/sign-up/:path*',
     '/api/assistant/:path*',
+    // "act as this person": its handlers call auth(), which throws unless
+    // the middleware ran (live: "Clerk can't detect usage of
+    // clerkMiddleware()", 10 Sep 2026)
+    '/api/act-as/:path*',
     '/api/asana/:path*',
     '/api/audience/:path*',
     '/api/boards/:path*',
