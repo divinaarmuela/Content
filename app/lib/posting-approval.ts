@@ -1,9 +1,10 @@
 import 'server-only'
+import { postTrial, trialWords } from './trial-reel-core'
 import { itemPath } from './workflow-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
-  Client, ContentItem, ScheduleEntry, TeamUser as TeamUserRow, TeamUserClient,
+  Client, ContentItem, ScheduleEntry, SocialAccount, SocialPost, TeamUser as TeamUserRow, TeamUserClient,
 } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { actingRoles } from './workflow-core'
@@ -119,15 +120,23 @@ async function previewFacts(item: ApprovableItem): Promise<{
   whenLine: string | null
   platforms: string
   tz: string
+  trial: string | null
 }> {
-  const [client, entries] = await Promise.all([
+  const [client, entries, posts, accounts] = await Promise.all([
     table<Client>('clients').get(item.client_id),
     table<ScheduleEntry>('schedule_entries').list({
       by: { item_id: item.id },
       where: r => r.scheduled_at != null,
       orderBy: [['scheduled_at', 'asc']],
     }),
+    table<SocialPost>('social_posts').list({ by: { item_id: item.id } }).catch(() => [] as SocialPost[]),
+    table<SocialAccount>('social_accounts').list({ by: { client_id: item.client_id } }).catch(() => [] as SocialAccount[]),
   ])
+  // a Trial Reel is worth a line of its own in the ask: the approver may
+  // otherwise wait for a post that never shows on the profile
+  const trial = posts
+    .map(p => trialWords(postTrial(p.per_channel as Parameters<typeof postTrial>[0], accounts.map(a => ({ id: a.id, platform: String(a.platform) })))))
+    .find((w): w is string => !!w) ?? null
   const tz = safeZone(client?.timezone as string | null)
   const first = entries[0] ?? null
   const targets = Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []
@@ -136,6 +145,7 @@ async function previewFacts(item: ApprovableItem): Promise<{
     ...targets,
   ])].map(platformLabel)
   return {
+    trial,
     whenLine: first?.scheduled_at
       ? `${formatWithZone(first.scheduled_at as string, tz)} — ${zoneLabel(tz)} time (${zoneAbbrev(tz, first.scheduled_at as string)})`
       : null,
@@ -175,11 +185,12 @@ async function itemSchedulingPeople(item: ApprovableItem): Promise<{ id: string;
 }
 
 /** the email the approver gets: the post as it will actually appear */
-function previewHtml(item: ApprovableItem, facts: { whenLine: string | null; platforms: string }): string {
+function previewHtml(item: ApprovableItem, facts: { whenLine: string | null; platforms: string; trial?: string | null }): string {
   const caption = (item.caption ?? '').trim()
   return (
     `<p><strong>${escapeHtml(item.title ?? 'A post')}</strong> is ready to go out and needs your sign-off on the final post.</p>` +
     `<p><strong>Where:</strong> ${escapeHtml(facts.platforms)}</p>` +
+    (facts.trial ? `<p><strong>${escapeHtml(facts.trial)}.</strong> Followers will not see it on the profile or in their feed until it graduates.</p>` : '') +
     (facts.whenLine ? `<p><strong>When:</strong> ${escapeHtml(facts.whenLine)}</p>` : '<p><strong>When:</strong> as soon as it is approved</p>') +
     `<p><strong>Caption, exactly as it will post:</strong></p>` +
     `<p style="border-left:3px solid #e4e4e7;padding-left:12px;white-space:pre-wrap;">${caption ? escapeHtml(caption) : '<em>(no caption — it would go out with the title as its text)</em>'}</p>`

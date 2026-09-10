@@ -45,6 +45,7 @@ import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
 import { formatInZone, safeZone } from './timezone-core'
 import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-core'
+import { postTrial, trialWords } from './trial-reel-core'
 import { networkName } from './publish-core'
 import { inngest } from '../inngest/client'
 
@@ -1547,7 +1548,8 @@ export async function schedulePost(user: TeamUser, id: string): Promise<PlannedP
 
   // the managers hear it is booked (9 Sep 2026) — after the claim, so a
   // press that lost the race tells nobody
-  void notifyManagersBooked(user, item, post, accounts.map(a => String(a.platform)))
+  void notifyManagersBooked(user, item, post, accounts.map(a => String(a.platform)),
+    trialWords(postTrial(post.per_channel as Parameters<typeof postTrial>[0], accounts.map(a => ({ id: a.id, platform: String(a.platform) })))))
 
   const queued = await queuePublishJob({
     clientId: item.client_id,

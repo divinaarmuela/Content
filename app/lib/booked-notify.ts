@@ -21,6 +21,8 @@ export async function notifyManagersBooked(
   item: { id: string; title: string; client_id: string; adhoc_post?: unknown },
   post: { scheduled_for?: string | null; timezone?: string | null },
   channels: readonly string[],
+  /** "Trial Reel · non-followers first, …" when it is one */
+  trial: string | null = null,
 ): Promise<void> {
   try {
     const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: item.client_id } })
@@ -44,6 +46,7 @@ export async function notifyManagersBooked(
         bodyHtml: renderEmail(
           subject,
           `<p><strong>${escapeHtml(item.title)}</strong> is booked to go out ${escapeHtml(when)}${escapeHtml(where)}, by ${escapeHtml(actor.name || actor.email || '')}.</p>` +
+          (trial ? `<p><strong>${escapeHtml(trial)}.</strong> The client's own feed will not show it until it graduates.</p>` : '') +
           `<p>Nothing is needed from you — this is so you know.</p>`,
           'See it',
           `${DASHBOARD_URL}${itemPath(item)}`,

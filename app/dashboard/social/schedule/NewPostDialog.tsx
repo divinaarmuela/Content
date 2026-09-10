@@ -9,6 +9,7 @@ import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
 import type { EncodeJob, SocialAccount } from '@/lib/db-types'
 import { useTable } from '@/lib/db-client'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
+import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
@@ -644,6 +645,27 @@ export default function NewPostDialog({
   /** what this post WILL be, chosen or worked out — the thing a location has
    *  to be checked against */
   const effectiveKind = pickedKind || autoKind || undefined
+  /**
+   * TRIAL REEL IS A POST TYPE (the owner, 10 Sep 2026: "add a new type in
+   * the popup, like trial reel"). It lives in the header's type menu beside
+   * Reel and Story, so nobody has to know it is a setting inside More
+   * options. Picking it sets the kind to Reel AND the graduation strategy on
+   * every Instagram channel; picking any other type clears the strategy, so
+   * a post cannot be a trial by accident.
+   */
+  const instagramChannels = chosen.filter(a => String(a.platform) === 'instagram')
+  const trial = postTrial(state.perChannel, instagramChannels)
+  const trialPossible = instagramChannels.length > 0 && kinds.includes('reel')
+  const setTrial = (strategy: 'MANUAL' | 'SS_PERFORMANCE' | '') => {
+    for (const a of chosen) {
+      dispatch({
+        type: 'extra', channel: a.id,
+        patch: String(a.platform) === 'instagram'
+          ? { kind: 'reel', trialGraduation: strategy || undefined }
+          : { kind: 'reel' },
+      })
+    }
+  }
 
   /** video or pictures — a stitch setting on a set of photos is a control
    *  for something nobody can do */
@@ -1088,14 +1110,14 @@ export default function NewPostDialog({
               label={(
                 <>
                   <Zap className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
-                  {pickedKind ? KIND_WORD[pickedKind] : 'Auto publish'}
+                  {trial ? 'Trial Reel' : pickedKind ? KIND_WORD[pickedKind] : 'Auto publish'}
                 </>
               )}
               width={220}
             >
               <MenuItem
                 onClick={() => {
-                  for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: undefined } })
+                  for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: undefined, trialGraduation: undefined } })
                 }}
               >
                 Auto publish{autoKind ? ` — ${KIND_WORD[autoKind].toLowerCase()}` : ''}
@@ -1104,10 +1126,18 @@ export default function NewPostDialog({
                 <MenuItem
                   key={k}
                   onClick={() => {
-                    for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: k } })
+                    for (const a of chosen) dispatch({ type: 'extra', channel: a.id, patch: { kind: k, trialGraduation: undefined } })
                   }}
                 >
                   {KIND_WORD[k]}
+                </MenuItem>
+              ))}
+              {trialPossible && TRIAL_CHOICES.filter(c => c.value !== '').map(c => (
+                <MenuItem key={c.value} onClick={() => setTrial(c.value)}>
+                  <span className="flex flex-col items-start leading-tight">
+                    <span>Trial Reel — {c.label.replace(/^Non-followers first — /, '')}</span>
+                    <span className="text-[11px] font-normal text-muted-foreground">{c.help}</span>
+                  </span>
                 </MenuItem>
               ))}
             </Dropdown>
@@ -1255,6 +1285,15 @@ export default function NewPostDialog({
               </p>
             )}
 
+            {/* a Trial Reel is the one post type whose result the client
+                cannot see on their own feed — say so where the type is set */}
+            {trial && (
+              <p className="rounded-inner border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-[12px] leading-snug">
+                <strong>Trial Reel.</strong> {TRIAL_SENTENCE}{' '}
+                {trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}
+              </p>
+            )}
+
             {/* the copy is being made now, weeks before it is needed */}
             {copiesLine ? (
               <p className={cn('text-[12px]', beforeCopies && bookedAlready ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{copiesLine}</p>
@@ -1336,7 +1375,7 @@ export default function NewPostDialog({
                     {group.platform === 'tiktok' && tiktokLimit && (
                       <p className="text-[11px] text-muted-foreground">{tiktokLimit}</p>
                     )}
-                    {group.options.map(o => (
+                    {group.options.filter(o => o.key !== 'trialReel').map(o => (
                       <ExtraRow
                         key={o.key}
                         option={o}

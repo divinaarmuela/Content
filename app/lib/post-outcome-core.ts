@@ -18,6 +18,7 @@
  */
 
 import { networkName, type MediaItem } from './publish-core'
+import { isTrialTarget } from './trial-reel-core'
 import { readPostedSlides } from './posted-slides-core'
 
 export type OutcomeStatus = 'queued' | 'scheduled' | 'published' | 'failed' | 'pending' | 'cancelled'
@@ -40,7 +41,7 @@ export type PlatformOutcome = {
 export type OutcomeJob = {
   id?: string
   status?: string | null
-  targets?: { platform: string; options?: { kind?: string; media?: MediaItem[] | null } | null }[] | null
+  targets?: { platform: string; options?: { kind?: string; media?: MediaItem[] | null; trialGraduation?: string | null } | null }[] | null
   media?: MediaItem[] | null
   scheduled_for?: string | null
   published_at?: string | null
@@ -87,10 +88,18 @@ const STATUSES: OutcomeStatus[] = ['queued', 'scheduled', 'published', 'failed',
 function targetsOf(job: OutcomeJob): { platform: string; kind: string }[] {
   return (Array.isArray(job.targets) ? job.targets : [])
     .filter(t => t && typeof t.platform === 'string')
-    .map(t => ({
-      platform: t.platform.toLowerCase(),
-      kind: kindWords(t.platform, t.options?.kind, t.options?.media?.length ? t.options.media : job.media),
-    }))
+    .map(t => {
+      const kind = kindWords(t.platform, t.options?.kind, t.options?.media?.length ? t.options.media : job.media)
+      // a Reel going to non-followers first is a Trial Reel everywhere it is
+      // named — the Posts page, the calendar's list, the card (10 Sep 2026)
+      const trial = kind === 'Reel' && isTrialTarget(t.platform, { kind: 'reel', trialGraduation: t.options?.trialGraduation })
+      return { platform: t.platform.toLowerCase(), kind: trial ? 'Trial Reel' : kind }
+    })
+}
+
+/** Is any channel of this job a Trial Reel? */
+export function jobIsTrial(job: OutcomeJob): boolean {
+  return targetsOf(job).some(t => t.kind === 'Trial Reel')
 }
 
 /** Every channel of the job given ONE outcome — the settle that had no
@@ -460,6 +469,10 @@ export function cardBookingLine(
   if (booked.length) parts.push(`Booked on ${names(booked)}${soonest ? ` · ${fmt(soonest)}` : ''}`)
   else if (out.length && !(progress && progress.posted > 0 && progress.posted < progress.total)) parts.push(`Posted on ${names(out)}${latest ? ` · ${fmt(latest)}` : ''}`)
   if (failed.length) parts.push(`Did not post on ${names(failed)}`)
+  if (parts.length && live.some(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
+    .some(id => { const j = jobsById.get(String(id)); return j ? jobIsTrial(j) : false }))) {
+    parts.push('Trial Reel')
+  }
   return parts.length ? parts.join(' · ') : null
 }
 

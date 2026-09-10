@@ -196,10 +196,20 @@ export function PostPreviewFrame({ preview, className, playable }: {
             )}
           </span>
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-          {preview.kindWord}
+        <span className={cn(
+          'shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold',
+          preview.trial ? 'bg-accent-blue text-white' : 'bg-muted text-muted-foreground',
+        )}>
+          {preview.trial ? 'Trial Reel' : preview.kindWord}
         </span>
       </div>
+      {/* a trial is the one thing about a Reel a client cannot see for
+          themselves — their own feed will not show it */}
+      {preview.trial && (
+        <p className="px-3 pb-2 text-[11px] leading-snug text-muted-foreground">
+          {preview.trial.replace(/^Trial Reel · /, 'Shown to non-followers first. ').replace(/^(\w)/, m => m.toUpperCase())}
+        </p>
+      )}
 
       {preview.title && (
         <p className="px-3 pb-2 text-[15px] font-semibold leading-tight">{preview.title}</p>

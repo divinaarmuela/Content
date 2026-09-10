@@ -23,6 +23,7 @@
  *     refusals and the notes — see `CLIENT_PREVIEW_FIELDS`.
  */
 
+import { isTrialTarget, trialWords } from './trial-reel-core'
 import {
   PLATFORM_RULES, autoKindFor, isPlatform, networkName, validatePost,
   type MediaType, type Platform, type PostKind, type PostOptions,
@@ -286,6 +287,8 @@ export type NetworkPreview = {
   firstComment: string | null
   place: string | null
   link: string | null
+  /** "Trial Reel · non-followers first, …" when this Instagram Reel is one, else null */
+  trial: string | null
   /** why this network would REFUSE the post — publish-core's own sentences */
   problems: string[]
   /** true things worth knowing that are not refusals */
@@ -395,6 +398,7 @@ export function buildPostPreview(input: PreviewInput): PostPreview {
       firstComment: spec.firstComment ? (own.firstComment?.trim() || null) : null,
       place: spec.place ? (String(c.placeName ?? '').trim() || null) : null,
       link: spec.linkCard && own.disableLinkPreview !== true ? firstLinkIn(words) : null,
+      trial: isTrialTarget(platform, { kind, trialGraduation: own.trialGraduation }) ? trialWords(own.trialGraduation) : null,
       problems: issues.filter(i => i.platform === platform).map(i => i.problem),
       notes,
     } satisfies NetworkPreview
@@ -414,7 +418,7 @@ export function buildPostPreview(input: PreviewInput): PostPreview {
 export const CLIENT_PREVIEW_FIELDS = [
   'platform', 'network', 'handle', 'name', 'avatarUrl',
   'kind', 'kindWord', 'aspect', 'media', 'slides', 'dots',
-  'caption', 'captionAbove', 'title', 'firstComment', 'place', 'link',
+  'caption', 'captionAbove', 'title', 'firstComment', 'place', 'link', 'trial',
 ] as const
 
 export type ClientPreview = Pick<NetworkPreview, (typeof CLIENT_PREVIEW_FIELDS)[number]>
@@ -445,6 +449,7 @@ export function forClient(n: NetworkPreview): ClientPreview {
     firstComment: n.firstComment,
     place: n.place,
     link: n.link,
+    trial: n.trial,
   }
 }
 

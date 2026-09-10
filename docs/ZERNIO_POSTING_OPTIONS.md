@@ -30,7 +30,7 @@ not ignored, it is a post that never happens.
 | Instagram | `collaborators` — "Invite collaborator" | `collaborators` | `collaborators` (max 3) |
 | Instagram | `shareToFeed` — "Also show the Reel in the feed" | `shareToFeed` | `shareToFeed` |
 | Instagram | `location` — "Add location" (saved places + Page ID box) | `locationId` | `locationId` (never on a Story) |
-| Instagram | `trialReel` — "Trial Reel" (Off / we decide / Instagram decides) | `trialGraduation` | `trialParams.graduationStrategy` (Reels only) |
+| Instagram | **Trial Reel is a post TYPE** in the header menu ("Trial Reel — we decide" / "— Instagram decides"), not a More options row; `trial-reel-core.ts` holds the rule and the words | `trialGraduation` (+ `kind: 'reel'`) | `trialParams.graduationStrategy` (Reels only) |
 | Instagram | `audioName` — "Name the sound" | `audioName` | `audioName` (Reels only) |
 | YouTube | `ytTitle` — "Video title" | `title` | `title` (clamped to 100) |
 | YouTube | `ytVisibility` — "Who can watch" | `visibility` | `visibility` |
