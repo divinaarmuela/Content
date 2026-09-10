@@ -206,7 +206,19 @@ export function monthPostsByAccount(input: {
       const byId = t.accountId ? byProvider.get(t.accountId) : undefined
       const hit = byId && byId.client_id === (job.client_id ?? null) ? byId
         : (accountsOfClient.get(job.client_id as string) ?? []).find(a => a.platform.toLowerCase() === t.platform)
-      if (hit) found.set(hit.id, hit)
+      if (hit) { found.set(hit.id, hit); continue }
+      // an account the client switched OFF is left out on purpose; one that
+      // has been disconnected since (TikTok on 10 Sep 2026) has no row at all
+      // any more, and its posts still happened, so they sit on a row that
+      // says so
+      const switchedOff = input.accounts.some(a => a.client_id === (job.client_id ?? null) && a.platform.toLowerCase() === t.platform)
+      if (t.platform && !switchedOff) {
+        const gone: MonthAccount = {
+          id: `gone:${job.client_id ?? ''}:${t.platform}`, client_id: job.client_id ?? null,
+          platform: t.platform, provider_account_id: '', username: null, name: 'No longer connected',
+        }
+        found.set(gone.id, gone)
+      }
     }
     return [...found.values()]
   }

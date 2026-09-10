@@ -43,7 +43,6 @@ import {
   accountHandle, monthPostsByAccount, postCountsLine, postMetricsLine,
   NO_POSTS_THIS_MONTH, type AccountPostsRow, type MonthJob,
 } from '../lib/overview-posts-core'
-import { type MonthClientRow } from '../lib/overview-month-core'
 
 type ItemLite = {
   id: string; title: string; status: ItemStatus; content_type: string
@@ -276,154 +275,7 @@ function ItemRows({ items, empty, todayKey }: {
 const shortDate = (iso: string, tz?: string | null) =>
   formatInZone(iso, tz || DEFAULT_TZ, 'date') ?? ''
 
-/**
- * "This month across clients" — the owner's one screen.
- *
- * Every client the caller can see: what actually went live, what is booked,
- * what is still being made, when the last post went out, and how the month
- * has done in views. The agreement half of this table (what was promised, and
- * whether the promise was met) came off on 10 Sep 2026 at the owner's word,
- * "the agreements part we can remove on overview", and lives on each client's
- * own Agreement tab, where it is edited.
- *
- * Under 768px the table becomes cards: the same facts, stacked, because six
- * columns on a phone is a horizontal scroll nobody reads.
- */
-function MonthAcrossClients() {
-  const router = useRouter()
-  const [back, setBack] = useState(0)                 // whole months before now
-  const [rows, setRows] = useState<MonthClientRow[] | null>(null)
-  // a failed fetch used to render "No active clients to report on." — the app
-  // telling a manager their agency has no clients because a request 500'd
-  const [failed, setFailed] = useState<string | null>(null)
-  const [attempt, setAttempt] = useState(0)
 
-  const now = new Date()
-  const target = new Date(now.getFullYear(), now.getMonth() - back, 1)
-  const month = target.getMonth() + 1
-  const year = target.getFullYear()
-
-  useEffect(() => {
-    let live = true
-    setRows(null); setFailed(null)
-    fetch(`/api/overview/month?month=${month}&year=${year}`)
-      .then(async r => {
-        if (!r.ok) throw new Error(`${r.status}`)
-        return r.json()
-      })
-      .then(j => { if (live) setRows(j.clients ?? []) })
-      .catch(e => {
-        console.error('[overview month] load failed', e)
-        if (live) setFailed(e instanceof Error ? e.message : 'unknown')
-      })
-    return () => { live = false }
-  }, [month, year, attempt])
-
-  const monthName = target.toLocaleDateString('en-AU', { month: 'long', year: back === 0 ? undefined : 'numeric' })
-  const openClient = (id: string) => router.push(`/dashboard/clients/${id}`)
-
-  return (
-    <Panel
-      title="This month across clients"
-      right={
-        <div className="flex shrink-0 items-center gap-1">
-          <button type="button" aria-label="Previous month"
-            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-foreground/[0.06]"
-            onClick={() => setBack(b => Math.min(b + 1, 24))}>
-            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.8} />
-          </button>
-          <span className="min-w-[6rem] text-center text-[13px] font-semibold">{monthName}</span>
-          <button type="button" aria-label="Next month" disabled={back === 0}
-            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-foreground/[0.06] disabled:opacity-40"
-            onClick={() => setBack(b => Math.max(0, b - 1))}>
-            <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.8} />
-          </button>
-        </div>
-      }
-    >
-      {failed
-        ? <LoadFailed what="this month's numbers" detail={failed} onRetry={() => setAttempt(a => a + 1)} />
-        : rows === null && <Skeleton className="h-40 w-full rounded-inner" />}
-      {!failed && rows !== null && rows.length === 0 && (
-        <p className="py-6 text-center text-[13px] text-muted-foreground">
-          No active clients to report on.
-        </p>
-      )}
-
-      {/* ---- 768px and up: the table ---- */}
-      {rows !== null && rows.length > 0 && (
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-[14px]">
-            <thead>
-              <tr className="border-b border-border text-left">
-                {['Client', 'Posted', 'Scheduled', 'In production', 'Last post', 'Views'].map((h, i) => (
-                  <th key={h} className={`py-2 text-[12px] font-semibold text-muted-foreground ${i > 0 ? 'px-3' : 'pr-3'}`}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <MonthTableRow key={r.id} row={r} onOpen={() => openClient(r.id)} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ---- under 768px: the same facts as cards ---- */}
-      {rows !== null && rows.length > 0 && (
-        <div className="flex flex-col gap-2 md:hidden">
-          {rows.map(r => (
-            <button key={r.id} type="button" onClick={() => openClient(r.id)}
-              className="w-full rounded-inner border border-border p-3.5 text-left hover:bg-foreground/[0.04]">
-              <span className="min-w-0 truncate text-[15px] font-semibold">{r.name}</span>
-              <div className="mt-2 grid grid-cols-3 gap-2 tabular-nums">
-                {[
-                  ['Posted', r.posted], ['Sched.', r.scheduled], ['In prod.', r.in_production],
-                ].map(([label, v]) => (
-                  <div key={String(label)}>
-                    <p className="text-[12px] text-muted-foreground">{label}</p>
-                    <p className="text-[15px] font-semibold">{v}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[12px] text-muted-foreground">
-                {r.last_post ? `Last post ${shortDate(r.last_post.at, r.tz)}` : 'No posts yet'}
-                {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
-              </p>
-            </button>
-          ))}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-function MonthTableRow({ row, onOpen }: { row: MonthClientRow; onOpen: () => void }) {
-  const num = 'px-3 py-2 tabular-nums'
-  return (
-    <tr onClick={onOpen}
-      className="cursor-pointer border-b border-border hover:bg-foreground/[0.04]">
-      <td className="py-2 pr-3"><span className="truncate font-medium">{row.name}</span></td>
-      <td className={`${num} font-semibold`}>{row.posted}</td>
-      <td className={`${num} text-muted-foreground`}>{row.scheduled}</td>
-      <td className={`${num} text-muted-foreground`}>{row.in_production}</td>
-      <td className="px-3 py-2 text-[13px] text-muted-foreground">
-        {row.last_post
-          ? (row.last_post.item_id
-              ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
-                  className="underline-offset-4 hover:underline">{shortDate(row.last_post.at, row.tz)}</Link>
-              : shortDate(row.last_post.at, row.tz))
-          : <span className="text-foreground/30">—</span>}
-      </td>
-      <td className={`${num} text-muted-foreground`}>
-        {row.views === null ? <span className="text-foreground/30">—</span> : compactCount(row.views)}
-      </td>
-    </tr>
-  )
-}
 
 /**
  * "POSTS THIS MONTH" — one row per client account: what went out, what is
@@ -1043,7 +895,6 @@ export default function OverviewPage() {
       {data?.manager && (
         <>
           {/* the ledger first, then what each account actually posted */}
-          <MonthAcrossClients />
           <PostsThisMonth rows={accountPosts} />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* what is waiting on YOU, beside who else is behind */}

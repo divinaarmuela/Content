@@ -61,6 +61,16 @@ export default function Tour({ tour, onClose }: {
   const [spot, setSpot] = useState<Spot | null>(null)
   const [narrow, setNarrow] = useState(false)
   const started = useRef(false)
+  /** the card's own height, measured after it draws, so it can be kept on
+   *  screen (the owner, 10 Sep 2026: "it's coming out of the screen") */
+  const card = useRef<HTMLDivElement | null>(null)
+  const [cardHeight, setCardHeight] = useState(200)
+  useEffect(() => {
+    const el = card.current
+    if (!el) return
+    const h = Math.round(el.getBoundingClientRect().height)
+    if (h > 0 && h !== cardHeight) setCardHeight(h)
+  })
 
   /** the phone rule, read once and then on every resize */
   useEffect(() => {
@@ -100,10 +110,15 @@ export default function Tour({ tour, onClose }: {
     if (!step) return
     const el = findTarget(step.target)
     if (!el) { go(1); return }
-    el.scrollIntoView({ block: 'center', inline: 'nearest' })
+    // instant: the page scrolls smoothly by default (globals.css), and a
+    // spotlight measured mid-glide sits where the box WAS
+    el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior })
     const measure = () => {
       const live = findTarget(step.target)
-      setSpot(live ? boxOf(live) : null)
+      const next = live ? boxOf(live) : null
+      // only a real move re-renders: a scroll fires this dozens of times
+      setSpot(prev => (prev && next && prev.top === next.top && prev.left === next.left
+        && prev.width === next.width && prev.height === next.height) ? prev : next)
     }
     measure()
     const frames = [0, 60, 180, 400].map(ms => window.setTimeout(measure, ms))
@@ -142,15 +157,24 @@ export default function Tour({ tour, onClose }: {
   const cardStyle: React.CSSProperties = (() => {
     if (narrow || !spot) return {}
     const width = 320
-    const below = spot.top + spot.height + 12
-    const roomBelow = window.innerHeight - below > 190
+    const vh = window.innerHeight
+    const vw = window.innerWidth
     const left = Math.min(
       Math.max(12, spot.left + spot.width / 2 - width / 2),
-      Math.max(12, window.innerWidth - width - 12),
+      Math.max(12, vw - width - 12),
     )
-    return roomBelow
-      ? { top: below, left, width }
-      : { bottom: Math.max(12, window.innerHeight - spot.top + 12), left, width }
+    // under the box when the whole card fits there, above it when it fits
+    // there, and otherwise beside it — always clamped inside the window
+    const below = spot.top + spot.height + 12
+    const above = spot.top - 12 - cardHeight
+    const top = below + cardHeight <= vh - 12 ? below
+      : above >= 12 ? above
+      : Math.min(Math.max(12, spot.top), vh - cardHeight - 12)
+    const beside = !(below + cardHeight <= vh - 12) && !(above >= 12)
+    const sideLeft = beside
+      ? (spot.left + spot.width + 12 + width <= vw - 12 ? spot.left + spot.width + 12 : Math.max(12, spot.left - 12 - width))
+      : left
+    return { top: Math.max(12, top), left: sideLeft, width }
   })()
 
   return (
@@ -177,6 +201,7 @@ export default function Tour({ tour, onClose }: {
       )}
 
       <div
+        ref={card}
         className={cn(
           'pointer-events-auto rounded-card border border-border bg-popover p-4 shadow-xl',
           narrow || !spot

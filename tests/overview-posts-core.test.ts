@@ -221,3 +221,28 @@ describe('the words', () => {
     expect(accountHandle({ ...row, username: null, platform: null })).toBe('Posted by hand')
   })
 })
+
+/* ── a channel whose account was disconnected since still counts (10 Sep 2026) ── */
+
+describe('an account that is no longer connected', () => {
+  it('keeps its posts on a row that says so', () => {
+    const rows = monthPostsByAccount({
+      now: '2026-09-10T03:00:00Z',
+      clients: [{ id: 'c1', name: 'Club', timezone: 'Australia/Melbourne' }],
+      accounts: [{ id: 'ig', client_id: 'c1', platform: 'instagram', provider_account_id: 'p-ig', username: 'club' }],
+      jobs: [{
+        id: 'j1', client_id: 'c1', status: 'published', published_at: '2026-09-10T02:00:00Z', created_at: '2026-09-10T01:00:00Z',
+        scheduled_for: '2026-09-10T02:00:00Z', updated_at: '2026-09-10T02:00:00Z', error: null, permalink: null,
+        media: [{ url: 'https://r2/x.mp4', type: 'video' }],
+        targets: [{ platform: 'tiktok', accountId: 'p-tt-gone' } as never, { platform: 'instagram', accountId: 'p-ig' } as never],
+      }],
+      byHand: [],
+      analytics: [],
+    })
+    const tiktok = rows.find(r => r.platform === 'tiktok')
+    expect(tiktok).toBeTruthy()
+    expect(tiktok!.username).toBe('No longer connected')
+    expect(tiktok!.went_out).toBe(1)
+    expect(rows.find(r => r.platform === 'instagram')!.went_out).toBe(1)
+  })
+})
