@@ -291,7 +291,7 @@ export default function ProfilesBar({
   const slots = profileSlots(accounts)
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-border py-2">
+    <div data-tour="profiles-bar" className="flex flex-wrap items-center gap-3 border-b border-border py-2">
       <Select value={clientId ?? ''} onValueChange={onClient}>
         <SelectTrigger className="h-11 w-[200px] shrink-0 rounded-full border-border bg-surface text-[13px] font-semibold">
           <SelectValue placeholder="Pick a client" />
@@ -322,6 +322,7 @@ export default function ProfilesBar({
       </div>
 
       <div
+        data-tour="views"
         role="tablist"
         aria-label="How to look at the week"
         className="ml-auto flex shrink-0 items-center gap-1 rounded-full border border-border bg-surface p-1"

@@ -12,6 +12,8 @@ import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
 import { coverPatchFor, currentCover } from '@/app/lib/cover-core'
 import CoverPicker from './CoverPicker'
+import Tour, { useTourOnce } from './Tour'
+import { POST_WINDOW_TOUR } from '@/app/lib/tour-core'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
@@ -158,7 +160,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 }
 
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, clientSignsOff, locations, clientName,
+  target, tz, accounts, suggested, role, userId, clientSignsOff, locations, clientName,
   reviewOnly, onClose, onOpenPost, onEditMedia, onDone,
 }: {
   target: ComposerTarget
@@ -166,6 +168,9 @@ export default function NewPostDialog({
   accounts: SocialAccount[]
   suggested: SuggestedTime[]
   role: Role | null
+  /** who is looking, so the first-time walkthrough runs once per person and
+   *  then never again. Missing means no walkthrough. */
+  userId?: string | null
   /** this client signs every post off themselves — the one client where an
    *  account manager still sends a post for approval like everybody else */
   clientSignsOff: boolean
@@ -194,6 +199,8 @@ export default function NewPostDialog({
   const [state, dispatch] = useReducer(
     composerReducer, seedOf(target, accounts), initialComposer)
   const [busy, setBusy] = useState(false)
+  const { open: tourOpen, close: closeTour } = useTourOnce(
+    'post-window', { userId: userId ?? null, role, ready: true })
   const [problems, setProblems] = useState<string[]>([])
   /** the post a refusal named — one press opens it instead */
   const [existingPost, setExistingPost] = useState<string | null>(null)
@@ -1139,6 +1146,7 @@ export default function NewPostDialog({
             )}
             width={260}
             closeOnPick={false}
+            tour="post-channels"
           >
             {accounts.length === 0 && (
               <p className="p-2 text-[13px] text-muted-foreground">
@@ -1179,6 +1187,7 @@ export default function NewPostDialog({
               )}
               width={trialPossible ? 300 : 220}
               disabled={locked}
+              tour="post-kind"
             >
               <MenuItem
                 onClick={() => {
@@ -1215,15 +1224,17 @@ export default function NewPostDialog({
 
           {!reviewOnly && (
             <>
-              <span className="shrink-0 text-[13px] text-muted-foreground">on</span>
-              <TimePicker
-                value={state.scheduledFor}
-                tz={tz}
-                onChange={iso => { pickedTime.current = true; dispatch({ type: 'time', iso }) }}
-                // a booked post keeps its words and files locked but its
-                // clock open — that is how it is moved
-                disabled={locked && status !== 'scheduled'}
-              />
+              <span data-tour="post-time" className="flex shrink-0 items-center gap-2.5">
+                <span className="text-[13px] text-muted-foreground">on</span>
+                <TimePicker
+                  value={state.scheduledFor}
+                  tz={tz}
+                  onChange={iso => { pickedTime.current = true; dispatch({ type: 'time', iso }) }}
+                  // a booked post keeps its words and files locked but its
+                  // clock open — that is how it is moved
+                  disabled={locked && status !== 'scheduled'}
+                />
+              </span>
             </>
           )}
 
@@ -1351,6 +1362,7 @@ export default function NewPostDialog({
                 owner, 10 Sep 2026). A single video only — a carousel's cover
                 is one of its pictures, chosen below. */}
             {state.slides.length === 1 && state.slides[0].type === 'video' && chosen.length > 0 && (
+              <div data-tour="post-cover">
               <CoverPicker
                 videoUrl={state.slides[0].url}
                 playable={playable}
@@ -1364,6 +1376,7 @@ export default function NewPostDialog({
                   }
                 }}
               />
+              </div>
             )}
             {/* a TikTok photo post's cover is one of its pictures */}
             {!locked && state.slides.length > 1 && chosen.some(a => String(a.platform) === 'tiktok') && shownSlide && (
@@ -1417,10 +1430,12 @@ export default function NewPostDialog({
             {/* what each channel will do with these files — said here, where
                 the file can still be swapped, not in a client's feed */}
             {state.slides.length > 0 && checkPlatforms.length > 0 && (
+              <div data-tour="post-check">
               <AssetCheck
                 probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
                 linkedinPersonal={chosen.some(a => String(a.platform) === 'linkedin' && !state.perChannel[a.id]?.organizationUrn)}
               />
+              </div>
             )}
           </div>
 
@@ -1472,7 +1487,7 @@ export default function NewPostDialog({
             </label>
 
             {groups.length > 0 && !locked && (
-              <>
+              <div data-tour="post-options" className="flex flex-col gap-2.5">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   More options
                 </span>
@@ -1504,7 +1519,7 @@ export default function NewPostDialog({
                     ))}
                   </div>
                 ))}
-              </>
+              </div>
             )}
 
             {/* the other channels this client has — Later's "Also post to";
@@ -1687,7 +1702,12 @@ export default function NewPostDialog({
           </div>
         )}
 
-        {/* ── footer ── */}
+        {/* THE FIRST TIME somebody opens this window, the seven things in it,
+          one sentence each. Escape or Skip ends it, and it is remembered per
+          person: help, never a gate. */}
+      {tourOpen && <Tour tour={POST_WINDOW_TOUR} onClose={closeTour} />}
+
+      {/* ── footer ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-surface p-3.5">
           {/* a posted post cannot come off the calendar — the server says
               so, and a red refusal is worse than no button (the `hidden`
@@ -1749,6 +1769,7 @@ export default function NewPostDialog({
                 onPrimary={() => void run(primary.key)}
                 items={menuItems.map(m => ({ key: m.key, label: m.label }))}
                 onPick={k => void run(k as FooterActionKey)}
+                tour="post-submit"
               />
             )}
           </div>
@@ -1826,9 +1847,11 @@ function problemsOf(e: unknown): string[] {
  * ref pointing at the dialog card, so clicking the caption box left the
  * channel list hanging open over the words being typed.
  */
-function Dropdown({ label, width, closeOnPick = true, disabled = false, children }: {
+function Dropdown({ label, width, closeOnPick = true, disabled = false, tour, children }: {
   label: React.ReactNode
   width: number
+  /** the `data-tour` key the walkthrough points at, when it points here */
+  tour?: string
   /** a booked or posted post keeps its type — the menu shows it, and opens nothing */
   disabled?: boolean
   /**
@@ -1861,7 +1884,7 @@ function Dropdown({ label, width, closeOnPick = true, disabled = false, children
   }, [open])
 
   return (
-    <div ref={box} className="relative">
+    <div ref={box} data-tour={tour} className="relative">
       <button
         type="button"
         aria-expanded={open}
@@ -1899,8 +1922,10 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: React.
 
 /** The footer's one button, with the ways to save it that are not the
  *  obvious one tucked behind the chevron. */
-function SplitButton({ label, disabled, onPrimary, items, onPick }: {
+function SplitButton({ label, disabled, onPrimary, items, onPick, tour }: {
   label: string
+  /** the `data-tour` key the walkthrough points at */
+  tour?: string
   disabled: boolean
   onPrimary: () => void
   items: { key: string; label: string }[]
@@ -1918,7 +1943,7 @@ function SplitButton({ label, disabled, onPrimary, items, onPick }: {
   }, [open])
 
   return (
-    <div ref={box} className="relative flex">
+    <div ref={box} data-tour={tour} className="relative flex">
       <button
         type="button"
         disabled={disabled}

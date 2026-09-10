@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   ArrowRight, CalendarClock, CheckCircle2, ClipboardList, Clock,
-  ChevronDown, ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Hand,
 } from 'lucide-react'
 import GettingStarted from './GettingStarted'
 import { LoadFailed } from './NotSetUp'
@@ -25,7 +25,10 @@ import {
   viewerHint, zoneLabel,
 } from '../lib/timezone-core'
 import { useTable } from '@/lib/db-client'
-import type { Lead, ScheduleEntry, UserPageAccess } from '@/lib/db-types'
+import type {
+  Lead, PostAnalytic, PublishJob, ScheduleEntry, SocialAccount, UserPageAccess,
+} from '@/lib/db-types'
+import PlatformIcon from './social/PlatformIcon'
 import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
@@ -35,10 +38,12 @@ import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../li
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
 import { compactCount } from '../lib/post-analytics-core'
+import { byHandRows } from '../lib/post-outcome-core'
 import {
-  expandLine, NO_AGREEMENT_LINE,
-  type MonthClientRow, type MonthStatus,
-} from '../lib/overview-month-core'
+  accountHandle, monthPostsByAccount, postCountsLine, postMetricsLine,
+  NO_POSTS_THIS_MONTH, type AccountPostsRow, type MonthJob,
+} from '../lib/overview-posts-core'
+import { type MonthClientRow } from '../lib/overview-month-core'
 
 type ItemLite = {
   id: string; title: string; status: ItemStatus; content_type: string
@@ -267,53 +272,22 @@ function ItemRows({ items, empty, todayKey }: {
   )
 }
 
-type AtRiskLine = { type: string; label: string; quota: number; delivered: number; pace: string; in_production?: number; approved?: number; scheduled?: number; posted?: number }
-type AtRiskClient = { id: string; name: string; has_agreement: boolean; worst: string; lines: AtRiskLine[] }
-
-const PACE_DOT: Record<string, string> = {
-  behind: 'bg-accent-red', tight: 'bg-accent-amber', on_track: 'bg-accent-green', met: 'bg-accent-green',
-}
-
-const MONTH_CHIP: Record<MonthStatus, ChipTone> = {
-  short: 'red', at_risk: 'amber', on_track: 'blue', met: 'green',
-}
-
-const chipWords = (r: MonthClientRow) => (r.status === 'met' ? 'Met ✓' : r.status_label)
-
 /** A client's last post, on that client's own calendar. */
 const shortDate = (iso: string, tz?: string | null) =>
   formatInZone(iso, tz || DEFAULT_TZ, 'date') ?? ''
 
-/** The per-type promise: "Reels 2/4 · Graphics 3/3", short lines coloured. */
-function TypeChips({ row }: { row: MonthClientRow }) {
-  return (
-    <span className="flex flex-wrap gap-x-3 gap-y-1">
-      {row.lines.map(l => (
-        <span key={l.type}
-          className={`text-[12px] font-medium tabular-nums ${
-            l.posted >= l.promised ? 'text-muted-foreground'
-              : l.pace === 'behind' ? 'text-accent-red'
-                : l.pace === 'tight' ? 'text-accent-amber'
-                  : 'text-muted-foreground'
-          }`}>
-          {expandLine(l)}
-        </span>
-      ))}
-    </span>
-  )
-}
-
 /**
  * "This month across clients" — the owner's one screen.
  *
- * Every client the caller can see, in triage order: what they were promised,
- * what actually went live, what is still moving, and what the month has done
- * in views. The Agreement gaps card below is the alert — this is the ledger,
- * so a client who is perfectly fine still appears, which is the whole point of
- * asking "did everyone get their month?".
+ * Every client the caller can see: what actually went live, what is booked,
+ * what is still being made, when the last post went out, and how the month
+ * has done in views. The agreement half of this table (what was promised, and
+ * whether the promise was met) came off on 10 Sep 2026 at the owner's word,
+ * "the agreements part we can remove on overview", and lives on each client's
+ * own Agreement tab, where it is edited.
  *
- * Under 768px the table becomes cards: the same eight facts, stacked, because
- * eight columns on a phone is a horizontal scroll nobody reads.
+ * Under 768px the table becomes cards: the same facts, stacked, because six
+ * columns on a phone is a horizontal scroll nobody reads.
  */
 function MonthAcrossClients() {
   const router = useRouter()
@@ -322,7 +296,6 @@ function MonthAcrossClients() {
   // a failed fetch used to render "No active clients to report on." — the app
   // telling a manager their agency has no clients because a request 500'd
   const [failed, setFailed] = useState<string | null>(null)
-  const [open, setOpen] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
   const now = new Date()
@@ -383,7 +356,7 @@ function MonthAcrossClients() {
           <table className="w-full text-[14px]">
             <thead>
               <tr className="border-b border-border text-left">
-                {['Client', 'Promised', 'Posted', 'Scheduled', 'In production', 'Status', 'Last post', 'Views'].map((h, i) => (
+                {['Client', 'Posted', 'Scheduled', 'In production', 'Last post', 'Views'].map((h, i) => (
                   <th key={h} className={`py-2 text-[12px] font-semibold text-muted-foreground ${i > 0 ? 'px-3' : 'pr-3'}`}>
                     {h}
                   </th>
@@ -392,30 +365,23 @@ function MonthAcrossClients() {
             </thead>
             <tbody>
               {rows.map(r => (
-                <MonthTableRow key={r.id} row={r}
-                  expanded={open === r.id}
-                  onToggle={() => setOpen(o => (o === r.id ? null : r.id))}
-                  onOpen={() => openClient(r.id)} />
+                <MonthTableRow key={r.id} row={r} onOpen={() => openClient(r.id)} />
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* ---- under 768px: the same eight facts as cards ---- */}
+      {/* ---- under 768px: the same facts as cards ---- */}
       {rows !== null && rows.length > 0 && (
         <div className="flex flex-col gap-2 md:hidden">
-          {rows.map(r => (r.has_agreement ? (
+          {rows.map(r => (
             <button key={r.id} type="button" onClick={() => openClient(r.id)}
               className="w-full rounded-inner border border-border p-3.5 text-left hover:bg-foreground/[0.04]">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 truncate text-[15px] font-semibold">{r.name}</span>
-                <Chip tone={MONTH_CHIP[r.status]} className="ml-auto shrink-0">{chipWords(r)}</Chip>
-              </div>
-              <div className="mt-2 grid grid-cols-4 gap-2 tabular-nums">
+              <span className="min-w-0 truncate text-[15px] font-semibold">{r.name}</span>
+              <div className="mt-2 grid grid-cols-3 gap-2 tabular-nums">
                 {[
-                  ['Promised', r.promised], ['Posted', r.posted],
-                  ['Sched.', r.scheduled], ['In prod.', r.in_production],
+                  ['Posted', r.posted], ['Sched.', r.scheduled], ['In prod.', r.in_production],
                 ].map(([label, v]) => (
                   <div key={String(label)}>
                     <p className="text-[12px] text-muted-foreground">{label}</p>
@@ -423,153 +389,83 @@ function MonthAcrossClients() {
                   </div>
                 ))}
               </div>
-              <div className="mt-2"><TypeChips row={r} /></div>
               <p className="mt-2 text-[12px] text-muted-foreground">
                 {r.last_post ? `Last post ${shortDate(r.last_post.at, r.tz)}` : 'No posts yet'}
                 {' · '}{r.views === null ? '—' : `${compactCount(r.views)} views`}
               </p>
             </button>
-          ) : (
-            <Link key={r.id} href={`/dashboard/clients/${r.id}/agreement`}
-              className="flex items-center gap-2 rounded-inner border border-dashed border-border p-3.5 text-[14px] text-muted-foreground hover:bg-foreground/[0.04]">
-              <span className="min-w-0 truncate font-medium">{r.name}</span>
-              <span className="ml-auto shrink-0 text-[13px]">{NO_AGREEMENT_LINE} →</span>
-            </Link>
-          )))}
+          ))}
         </div>
       )}
     </Panel>
   )
 }
 
-function MonthTableRow({ row, expanded, onToggle, onOpen }: {
-  row: MonthClientRow; expanded: boolean; onToggle: () => void; onOpen: () => void
-}) {
-  // no agreement on file: one muted row that is a to-do, not a measurement
-  if (!row.has_agreement) {
-    return (
-      <tr className="border-b border-border last:border-0">
-        <td className="py-2 pr-3 text-muted-foreground">{row.name}</td>
-        <td colSpan={7} className="px-3 py-2">
-          <Link href={`/dashboard/clients/${row.id}/agreement`}
-            className="text-[13px] text-muted-foreground underline-offset-4 hover:underline">
-            {NO_AGREEMENT_LINE} →
-          </Link>
-        </td>
-      </tr>
-    )
-  }
+function MonthTableRow({ row, onOpen }: { row: MonthClientRow; onOpen: () => void }) {
   const num = 'px-3 py-2 tabular-nums'
   return (
-    <>
-      <tr onClick={onOpen}
-        className="cursor-pointer border-b border-border hover:bg-foreground/[0.04]">
-        <td className="py-2 pr-3">
-          <span className="flex items-center gap-1.5">
-            <button type="button" aria-label={expanded ? 'Hide types' : 'Show types'}
-              aria-expanded={expanded}
-              onClick={e => { e.stopPropagation(); onToggle() }}
-              className="rounded p-0.5 text-muted-foreground hover:text-foreground">
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? '' : '-rotate-90'}`} />
-            </button>
-            <span className="truncate font-medium">{row.name}</span>
-          </span>
-        </td>
-        {/* the per-type breakdown is the chevron at the start of the row —
-            one tap, on any device, not a hover */}
-        <td className={`${num} font-semibold`}>{row.promised}</td>
-        <td className={`${num} font-semibold`}>{row.posted}</td>
-        <td className={`${num} text-muted-foreground`}>{row.scheduled}</td>
-        <td className={`${num} text-muted-foreground`}>{row.in_production}</td>
-        <td className="px-3 py-2">
-          <Chip tone={MONTH_CHIP[row.status]} className="shrink-0">{chipWords(row)}</Chip>
-        </td>
-        <td className="px-3 py-2 text-[13px] text-muted-foreground">
-          {row.last_post
-            ? (row.last_post.item_id
-                ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
-                    className="underline-offset-4 hover:underline">{shortDate(row.last_post.at, row.tz)}</Link>
-                : shortDate(row.last_post.at, row.tz))
-            : <span className="text-foreground/30">—</span>}
-        </td>
-        <td className={`${num} text-muted-foreground`}>
-          {row.views === null ? <span className="text-foreground/30">—</span> : compactCount(row.views)}
-        </td>
-      </tr>
-      {expanded && (
-        <tr className="border-b border-border bg-foreground/[0.03]">
-          <td />
-          <td colSpan={7} className="px-3 py-2"><TypeChips row={row} /></td>
-        </tr>
-      )}
-    </>
+    <tr onClick={onOpen}
+      className="cursor-pointer border-b border-border hover:bg-foreground/[0.04]">
+      <td className="py-2 pr-3"><span className="truncate font-medium">{row.name}</span></td>
+      <td className={`${num} font-semibold`}>{row.posted}</td>
+      <td className={`${num} text-muted-foreground`}>{row.scheduled}</td>
+      <td className={`${num} text-muted-foreground`}>{row.in_production}</td>
+      <td className="px-3 py-2 text-[13px] text-muted-foreground">
+        {row.last_post
+          ? (row.last_post.item_id
+              ? <Link href={`/dashboard/production/${row.last_post.item_id}`} onClick={e => e.stopPropagation()}
+                  className="underline-offset-4 hover:underline">{shortDate(row.last_post.at, row.tz)}</Link>
+              : shortDate(row.last_post.at, row.tz))
+          : <span className="text-foreground/30">—</span>}
+      </td>
+      <td className={`${num} text-muted-foreground`}>
+        {row.views === null ? <span className="text-foreground/30">—</span> : compactCount(row.views)}
+      </td>
+    </tr>
   )
 }
 
-/** Cross-client "who's behind this month" — pull becomes push. */
-function AtRiskThisMonth() {
-  const [rows, setRows] = useState<AtRiskClient[] | null>(null)
-  useEffect(() => {
-    fetch('/api/production/at-risk')
-      .then(r => (r.ok ? r.json() : { clients: [] }))
-      .then(j => setRows(j.clients ?? []))
-      .catch(() => setRows([]))
-  }, [])
-  if (rows === null) return <Skeleton className="h-24 w-full rounded-card" />
-  // every client still OWING something this month — not only the ones behind
-  // pace. The dot carries urgency; the numbers carry what's left to deliver.
-  const owing = rows.filter(c => c.has_agreement && c.lines.some(l => l.delivered < l.quota))
+/**
+ * "POSTS THIS MONTH" — one row per client account: what went out, what is
+ * booked, what did not go out, and how those posts did.
+ *
+ * The owner, 10 Sep 2026: "for super admin they can see totals posted per
+ * account and the metrics… if posted/scheduled then show that for the month".
+ * A super admin sees every account; an account manager sees the accounts of
+ * the clients they run. The counting is `monthPostsByAccount`, which asks the
+ * Posts page's own core, so the two screens cannot disagree about what "went
+ * out" means.
+ */
+function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
   return (
-    <Panel
-      title="Agreement gaps this month"
-      /* the table above is the ledger — every client, met or not. This card
-         is the alert: only what is still owed, and only where. Saying so
-         stops the two reading as the same list twice. */
-      right={<span className="shrink-0 text-[13px] text-muted-foreground">Only what’s still owed</span>}
-    >
-      {owing.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-muted-foreground">
-          Every agreement is fully delivered this month. Nice.
-        </p>
-      ) : (
+    <Panel title="Posts this month"
+      right={<span className="shrink-0 text-[13px] text-muted-foreground">Every account, in its client&rsquo;s month</span>}>
+      {rows === null && <Skeleton className="h-32 w-full rounded-inner" />}
+      {rows !== null && rows.length === 0 && (
+        <p className="py-6 text-center text-[13px] text-muted-foreground">{NO_POSTS_THIS_MONTH}</p>
+      )}
+      {rows !== null && rows.length > 0 && (
         <div className="flex flex-col gap-1">
-          {owing.map(c => {
-            const short = c.lines.filter(l => l.delivered < l.quota)
-            // what is still moving towards the gap — this sat in a hover-only
-            // title= per chip, which is where a phone never looks
-            const moving = short.reduce((acc, l) => ({
-              scheduled: acc.scheduled + (l.scheduled ?? 0),
-              approved: acc.approved + (l.approved ?? 0),
-              in_production: acc.in_production + (l.in_production ?? 0),
-            }), { scheduled: 0, approved: 0, in_production: 0 })
-            const movingWords = [
-              moving.scheduled > 0 ? `${moving.scheduled} scheduled` : null,
-              moving.approved > 0 ? `${moving.approved} approved` : null,
-              moving.in_production > 0 ? `${moving.in_production} in production` : null,
-            ].filter(Boolean).join(' · ')
+          {rows.map(r => {
+            const metrics = postMetricsLine(r, compactCount)
             return (
-              <Link key={c.id} href={`/dashboard/clients/${c.id}/agreement`}
-                className="flex flex-col gap-0.5 rounded-inner px-3 py-2.5 hover:bg-foreground/[0.04]">
-                <span className="flex items-center gap-3">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${PACE_DOT[c.worst] ?? 'bg-foreground/40'}`} />
-                  <span className="min-w-0 truncate text-[15px] font-semibold">{c.name}</span>
-                  <span className="ml-auto flex flex-wrap justify-end gap-1.5">
-                    {short.map(l => (
-                      <span key={l.type}
-                        className={`text-[12px] font-medium tabular-nums ${
-                          l.pace === 'behind' ? 'text-accent-red'
-                            : l.pace === 'tight' ? 'text-accent-amber'
-                              : 'text-muted-foreground'
-                        }`}>
-                        {l.label} {l.delivered}/{l.quota}
-                      </span>
-                    ))}
+              <div key={r.key} className="flex items-start gap-3 rounded-inner px-3 py-2.5 hover:bg-foreground/[0.04]">
+                <span className="mt-0.5 shrink-0">
+                  {r.platform
+                    ? <PlatformIcon platform={r.platform} size={20} />
+                    : <span className="flex h-5 w-5 items-center justify-center rounded-tile bg-tint-green">
+                        <Hand className="h-3 w-3" strokeWidth={1.8} />
+                      </span>}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="truncate text-[15px] font-semibold">{accountHandle(r)}</span>
+                    <span className="truncate text-[13px] text-muted-foreground">{r.client_name}</span>
                   </span>
+                  <span className="text-[13px] tabular-nums text-muted-foreground">{postCountsLine(r)}</span>
+                  {metrics && <span className="text-[12px] tabular-nums text-muted-foreground">{metrics}</span>}
                 </span>
-                <span className="pl-5 text-[12px] text-muted-foreground">
-                  {movingWords ? `On the way: ${movingWords}` : 'Nothing in the pipeline yet for what is still owed'}
-                </span>
-              </Link>
+              </div>
             )
           })}
         </div>
@@ -682,6 +578,15 @@ export default function OverviewPage() {
   // `buildOverview` reads `entries` only in its scheduler branch, so every
   // role's numbers are exactly what they were.
   const { rows: entryRows } = useTable<ScheduleEntry>('schedule_entries', { enabled })
+  /**
+   * WHAT EACH ACCOUNT POSTED THIS MONTH — managers only, so nobody else
+   * downloads these four tables. They are listened to whole, exactly as the
+   * boards listen to theirs (`useWorkTables`); the month is cut on the page,
+   * in each client's own zone, by `monthPostsByAccount`.
+   */
+  const { rows: jobRows } = useTable<PublishJob>('publish_jobs', { enabled: enabled && isManager })
+  const { rows: accountRows } = useTable<SocialAccount>('social_accounts', { enabled: enabled && isManager })
+  const { rows: analyticRows } = useTable<PostAnalytic>('post_analytics', { enabled: enabled && isManager })
 
   const data: Overview | null = useMemo(() => {
     if (!me || !viewer || live.loading) return null
@@ -749,6 +654,33 @@ export default function OverviewPage() {
   const role = data?.role
   const zone = viewerTz || me?.timezone || DEFAULT_TZ
   const todayKey = now ? dayKeyInZone(now, zone) : null
+
+  /**
+   * One row per client account: what went out, what is booked, what did not
+   * go out, what was posted by hand, and the month's numbers on top. Scoped
+   * with the same `accessibleClientIdsOf` the tiles use, so an account
+   * manager sees their clients and a super admin sees every one.
+   *
+   * `todayKey` is the dependency, not the ticking clock: the month only
+   * changes once a day, and re-counting every minute would be work nobody
+   * asked for.
+   */
+  const accountPosts = useMemo(() => {
+    if (!viewer || !isManager || live.loading || !todayKey) return null
+    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    return monthPostsByAccount({
+      now: `${todayKey}T12:00:00Z`,
+      accounts: accountRows,
+      clients: live.tables.clients.rows,
+      jobs: jobRows as unknown as MonthJob[],
+      byHand: byHandRows(live.tables.items.rows),
+      analytics: analyticRows,
+      clientIds: scoped,
+      defaultTz: DEFAULT_TZ,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, isManager, live.loading, live.tables.assignments.rows, live.tables.clients.rows,
+    live.tables.items.rows, jobRows, accountRows, analyticRows, todayKey])
 
   /** which clients have a channel connected — only a scheduler's tiles ask */
   const [connectedClientIds, setConnectedClientIds] = useState<Set<string>>(() => new Set())
@@ -1110,9 +1042,9 @@ export default function OverviewPage() {
 
       {data?.manager && (
         <>
-          {/* the ledger first, then the alert it summarises */}
+          {/* the ledger first, then what each account actually posted */}
           <MonthAcrossClients />
-          <AtRiskThisMonth />
+          <PostsThisMonth rows={accountPosts} />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* what is waiting on YOU, beside who else is behind */}
             <TeamLoadCard />

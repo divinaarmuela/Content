@@ -313,6 +313,9 @@ describe('the client’s copy of the page', () => {
     return getPortalPost('11111111-1111-4111-8111-111111111111', 'p1')
   }
 
+  // the first load of `portal-post` pulls the whole portal module graph in,
+  // which is over the 5-second default when the full suite is running (it
+  // passed alone every time, 10 Sep 2026) — so this one waits longer
   it('carries the numbers with the switch OFF, and not one handle', () => {
     return load(false).then(post => {
       expect(post).not.toBeNull()
@@ -328,7 +331,7 @@ describe('the client’s copy of the page', () => {
       expect(JSON.stringify(post)).not.toContain('zeddix')
       expect(JSON.stringify(post)).not.toContain('ana')
     })
-  })
+  }, 30_000)
 
   it('carries the people once the client’s Followers switch is on', () => {
     return load(true).then(post => {

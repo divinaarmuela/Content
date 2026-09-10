@@ -79,10 +79,13 @@ export type ComposeFlow = {
   windows: React.ReactNode
 }
 
-export function useComposeFlow({ clientId, data, role, suggested, reviewOnly, onShowDay }: {
+export function useComposeFlow({ clientId, data, role, userId, suggested, reviewOnly, onShowDay }: {
   clientId: string | null
   data: ScheduleData
   role: Role | null
+  /** who is looking — carried into the post window so its first-time
+   *  walkthrough runs once for this person and then never again */
+  userId?: string | null
   suggested: SuggestedTime[]
   /** "Show on calendar" from the window that follows a press: the page
    *  moves its week to that day (a 'YYYY-MM-DD' key in the client's zone) */
@@ -340,6 +343,7 @@ export function useComposeFlow({ clientId, data, role, suggested, reviewOnly, on
           accounts={data.accounts}
           suggested={suggested.slice(0, 3)}
           role={role}
+          userId={userId}
           clientSignsOff={data.clientSignsOff}
           locations={locations}
           clientName={(data.client as { name?: string | null } | null)?.name ?? null}

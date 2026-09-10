@@ -136,6 +136,8 @@ export function BoardCard({
     ? [{ id: card.owner_id, initials: initialsOf(names.get(card.owner_id) ?? (lines.assignee === 'You' ? 'You' : '')), name: names.get(card.owner_id) ?? lines.assignee }]
     : []
   const mayDelete = Boolean(canDelete && onDelete)
+  const settled = card.status === 'scheduled' || card.status === 'published'
+  const adhocPost = (card as { adhoc_post?: unknown }).adhoc_post === true
   const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete
 
   return (
@@ -267,10 +269,16 @@ export function BoardCard({
                   <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
                     {lines.link ? 'Replace the link' : 'Add a link'}
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
-                    Change the kind of work
-                  </DropdownMenuItem>
-                  {onHandTo && (
+                  {/* a booked or posted card has nobody left to hand it to and
+                      no kind left to change; an uploaded post's kind is "Post"
+                      (the owner, 10 Sep 2026: "why is Hand to shown on a
+                      posted card") */}
+                  {!settled && !adhocPost && (
+                    <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
+                      Change the kind of work
+                    </DropdownMenuItem>
+                  )}
+                  {onHandTo && !settled && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onHandTo(card)}>
                       <UserPlus className="h-4 w-4" /> Hand to…
                     </DropdownMenuItem>

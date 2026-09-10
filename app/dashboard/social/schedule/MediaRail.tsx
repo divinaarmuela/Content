@@ -125,7 +125,7 @@ export default function MediaRail({
   })
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div data-tour="media-rail" className="flex h-full min-h-0 flex-col gap-3">
       {/* the rail's one action */}
       <button
         type="button"

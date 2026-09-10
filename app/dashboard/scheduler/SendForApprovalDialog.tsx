@@ -127,20 +127,26 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
   const manager = mayPostWithoutApproval(me?.role ?? null, false)
   const [approvers, setApprovers] = useState<{ id: string; name: string }[]>([])
   const [approverId, setApproverId] = useState<string>('')
+  /** the manager buttons are the default; "ask somebody to check it" opens
+   *  the picker — an AM asking a super admin, or a super admin asking an AM
+   *  (the owner, 10 Sep 2026: "can an AM create the card themselves, ask a
+   *  super admin for review, then approve or self-approve and hand over") */
+  const [asking, setAsking] = useState(false)
   useEffect(() => {
-    if (!clientId || manager) return
+    if (!clientId) return
     let cancelled = false
     fetch(`/api/social/schedule/approvers?clientId=${encodeURIComponent(clientId)}`)
       .then(r => (r.ok ? r.json() : { people: [] }))
       .then((json: { people?: { id: string; name: string }[] }) => {
         if (cancelled) return
-        const people = json.people ?? []
+        // never yourself: asking yourself to check it is the Approve button
+        const people = (json.people ?? []).filter(p => p.id !== me?.id)
         setApprovers(people)
         setApproverId(prev => prev || people[0]?.id || '')
       })
       .catch(() => { if (!cancelled) setApprovers([]) })
     return () => { cancelled = true }
-  }, [clientId, manager])
+  }, [clientId, me?.id])
 
   const [busy, setBusy] = useState<'ask' | 'approve' | 'client' | null>(null)
   const send = async (decision: 'ask' | 'approve' | 'client') => {
@@ -296,14 +302,19 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
             </div>
 
             {/* ── 4. the decision ── */}
-            {!manager && (
+            {(!manager || asking) && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="approval-who">Who approves it?</Label>
+                <Label htmlFor="approval-who">Who checks it?</Label>
                 <select id="approval-who" value={approverId} onChange={e => setApproverId(e.target.value)}
                   className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]">
                   {approvers.length === 0 && <option value="">Nobody to ask yet</option>}
                   {approvers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+                {approvers.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground">
+                    Nobody else on this client can approve yet. Add an account manager on the client, or approve it yourself.
+                  </p>
+                )}
               </div>
             )}
 
@@ -312,6 +323,15 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
               {manager ? (
                 <>
+                  {asking ? (
+                    <Button type="button" variant="outline" className={secondary} disabled={!ready || !approverId} onClick={() => void send('ask')}>
+                      {busy === 'ask' ? 'Sending…' : `Ask ${approvers.find(p => p.id === approverId)?.name ?? 'them'} to check it`}
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="outline" className={secondary} disabled={!ready} onClick={() => setAsking(true)}>
+                      Ask somebody to check it
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" className={secondary} disabled={!ready} onClick={() => void send('client')}>
                     {busy === 'client' ? 'Sending…' : `Send to ${client?.name ?? 'the client'}`}
                   </Button>

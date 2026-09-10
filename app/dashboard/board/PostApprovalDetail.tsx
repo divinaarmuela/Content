@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, WorkKind } from '@/lib/db-types'
+import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, WorkflowActivity, WorkKind } from '@/lib/db-types'
 import { Button } from '@/components/ui/button'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
@@ -19,6 +19,10 @@ import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-cor
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
 import { fileBooking, outcomeWords, type OutcomeJob } from '../../lib/post-outcome-core'
+import {
+  historyLines, HISTORY_PREVIEW, NO_HISTORY, type HistoryJob,
+} from '../../lib/card-history-core'
+import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { networkName } from '../../lib/publish-core'
 import { uploadFiles } from '../uploadQueue'
 import { usePlayable } from '../social/usePlayable'
@@ -46,7 +50,10 @@ import CollapsibleCard from '../CollapsibleCard'
  *   3. every asset at full size, each with Replace and Remove, and Add
  *      another — a replaced file is a new version of the piece, so the
  *      history and the portal follow;
- *   4. what was said — the client's comments (labelled by the asset they are
+ *   4. what happened — the piece's own history, newest first: uploaded, sent
+ *      for approval and to whom, approved or sent back, handed on, booked on
+ *      a channel for a time, out or refused, posted by hand;
+ *   5. what was said — the client's comments (labelled by the asset they are
  *      about) and the team's notes, with a box to add one.
  *
  * No link to the Production card page: this IS the page for such a post.
@@ -105,6 +112,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const byContentItem = useMemo(() => ({ content_item_id: id }), [id])
   const { rows: fileJobs } = useTable<PublishJob>('publish_jobs', { by: byContentItem })
   const jobsById = useMemo(() => new Map<string, OutcomeJob>(fileJobs.map(j => [j.id, j as unknown as OutcomeJob])), [fileJobs])
+  // THE CARD'S OWN HISTORY — the audit trail for this item. `entity_id` is
+  // not an indexed column, so this is the whole table filtered in the
+  // browser, exactly as the boards already read it (`useWorkTables`).
+  const byEntity = useMemo(() => ({ entity_type: 'content_item', entity_id: id }), [id])
+  const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const adhoc = (item as { adhoc_post?: unknown } | null)?.adhoc_post === true
@@ -130,6 +142,28 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [comments, readsClient, team])
   const changeNote = (item as { change_note?: string | null } | null)?.change_note ?? null
   const changeAbout = changeNote ? splitSlideTag(changeNote) : null
+
+  /**
+   * "WHAT HAPPENED" — the piece's own history, for every team role.
+   *
+   * The owner, 10 Sep 2026: "are we showing the right logs on the post
+   * approval each card phases? showing the scheduler the right data and the
+   * AM or super admin". The thread below says what people SAID; this says
+   * what was DONE — uploaded, sent for approval and to whom, approved or sent
+   * back, handed on, booked on which channel for when, and what each channel
+   * did with it. The words are pinned in `card-history-core`.
+   *
+   * Times are the CLIENT's wall clock, like every other time on this card.
+   * It never reaches the client: they have their portal.
+   */
+  const [showAllHistory, setShowAllHistory] = useState(false)
+  const zone = client?.timezone || DEFAULT_TZ
+  const history = useMemo(() => historyLines({
+    activity: activity.map(r => ({ ...r, actor_name: team.find(u => u.id === r.actor_id)?.name ?? null })),
+    jobs: fileJobs as unknown as HistoryJob[],
+    postedSlides: (item as { posted_slides?: unknown } | null)?.posted_slides,
+    fmt: (iso: string) => formatInZone(iso, zone, 'full') ?? iso,
+  }), [activity, team, fileJobs, item, zone])
 
   const viewer = me ? { id: me.id, role: me.role } : null
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
@@ -395,7 +429,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               {a.label}
             </Button>
           ))}
-          {isManager && (
+          {/* nobody is handed a card the channel already holds or has posted
+              (the owner, 10 Sep 2026) */}
+          {isManager && status !== 'scheduled' && status !== 'published' && (
             <Button variant="outline" className={secondary} disabled={busy} onClick={() => setHanding(true)}>
               {handedTo.length > 0 ? `With ${handedTo.join(', ')} · change` : 'Hand to…'}
             </Button>
@@ -550,7 +586,34 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         </div>
       )}
 
-      {/* ── 4. what was said ── */}
+      {/* ── 4. what happened ── */}
+      <div className="flex flex-col gap-2 border-b border-border px-5 py-4">
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What happened</p>
+        {history.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">{NO_HISTORY}</p>
+        ) : (
+          <ol className="flex flex-col gap-1.5">
+            {(showAllHistory ? history : history.slice(0, HISTORY_PREVIEW)).map(l => (
+              <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+                <span>{l.text}</span>
+                <span className="text-[12px] text-muted-foreground">{formatInZone(l.at, zone, 'full') ?? ''}</span>
+                {l.href && (
+                  <a href={l.href} target="_blank" rel="noreferrer noopener"
+                    className="text-[12px] underline underline-offset-4">Live post</a>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+        {history.length > HISTORY_PREVIEW && (
+          <button type="button" onClick={() => setShowAllHistory(v => !v)}
+            className="w-fit text-[12px] font-semibold underline-offset-4 hover:underline">
+            {showAllHistory ? 'Show less' : `Show all ${history.length}`}
+          </button>
+        )}
+      </div>
+
+      {/* ── 5. what was said ── */}
       <div className="flex flex-col gap-3 px-5 py-4">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What was said</p>
         {changeAbout && changeAbout.index === null && (

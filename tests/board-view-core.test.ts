@@ -640,3 +640,16 @@ describe('the card says how much of it has gone out', () => {
     expect(l(undefined).posted).toBeNull()
   })
 })
+
+/* ── the three-dot menu never offers what a booked or posted card cannot take (10 Sep 2026) ── */
+
+import { readFileSync } from 'node:fs'
+
+describe('the card menu on a settled card', () => {
+  const src = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
+  it('hides Hand to and Change the kind of work once a card is booked or posted', () => {
+    expect(src).toContain("const settled = card.status === 'scheduled' || card.status === 'published'")
+    expect(src).toContain('{!settled && !adhocPost && (')
+    expect(src).toContain('{onHandTo && !settled && (')
+  })
+})

@@ -228,6 +228,9 @@ function NavLinks({ nav, onNavigate, part }: {
       <Link
         key={item.href}
         href={item.href}
+        // the walkthrough's last step points here: "what went out, and what
+        // did not" is a different page from the one the week is planned on
+        data-tour={item.href === '/dashboard/social/activity' ? 'nav-posts' : undefined}
         // NO PREFETCH (9 Sep 2026). With it on, every page load fetched the
         // RSC payload of every page in the rail — 100+ requests, three per
         // route — and the main thread stalled for seconds parsing them:

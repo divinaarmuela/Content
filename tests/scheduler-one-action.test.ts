@@ -69,8 +69,10 @@ describe('the one window: the files and the decision, nothing else (8 Sep 2026)'
   })
 
   it('offers the three decisions to the right people', () => {
-    // somebody who needs an approval picks who
-    expect(src).toMatch(/Who approves it\?/)
+    // somebody who needs an approval picks who — and a manager may ask
+    // somebody else to check it too (10 Sep 2026)
+    expect(src).toMatch(/Who checks it\?/)
+    expect(src).toMatch(/Ask somebody to check it/)
     expect(src).toMatch(/send\('ask'\)/)
     // a manager approves, or sends it to the client — the "send to client thing"
     expect(src).toMatch(/send\('approve'\)/)

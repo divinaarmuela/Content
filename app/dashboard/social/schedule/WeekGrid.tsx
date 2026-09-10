@@ -333,7 +333,7 @@ export default function WeekGrid({
     // scrolled independently — the wheel moved the grid until the grid hit
     // its end, and only then the page (the owner, 9 Sep 2026: "can't scroll
     // down properly until I touch the bottom line"). One scroller now.
-    <div ref={root} className="flex shrink-0">
+    <div ref={root} data-tour="week-grid" className="flex shrink-0">
       {/* the hour rail */}
       {/* every row is `shrink-0`: the rail is a flex column inside a box
           shorter than the day, and without it the rows were squeezed to fit

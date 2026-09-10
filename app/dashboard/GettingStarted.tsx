@@ -8,6 +8,7 @@ import {
   dismissKey, panelForPage, shouldShowPagePanel, type GettingStartedPage,
 } from '@/app/lib/getting-started-core'
 import type { Role } from '@/app/lib/identity-core'
+import { TOUR_ROLES, tourKeysToClear } from '@/app/lib/tour-core'
 
 /**
  * The first thing a new hire sees, and the only onboarding in the product.
@@ -26,6 +27,20 @@ import type { Role } from '@/app/lib/identity-core'
  * stick, or people stop pressing it.
  */
 const LOCAL_KEY = 'md-getting-started-dismissed'
+
+/**
+ * "Show me the tour" — the Schedule page's walkthrough, offered again.
+ *
+ * The two spotlight tours run themselves once per person and then stay quiet.
+ * This forgets that, for every account signed in on this browser, so the next
+ * visit to the Schedule page walks through it again. The Schedule page's own
+ * toolbar has the same button for anybody already standing on it.
+ */
+function forgetTours(): void {
+  try {
+    for (const key of tourKeysToClear(Object.keys(localStorage))) localStorage.removeItem(key)
+  } catch { /* private mode — there was nothing remembered to forget */ }
+}
 
 function localDismissed(): string[] {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]') } catch { return [] }
@@ -99,7 +114,18 @@ export default function GettingStarted({ role, page = 'overview' }: {
         ))}
       </ol>
 
-      <div className="mt-2 flex justify-end">
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        {/* only the people the walkthrough is written for, and only where the
+            posting week is a press away */}
+        {(TOUR_ROLES as readonly string[]).includes(role) && (page === 'overview' || page === 'scheduler') && (
+          <Link
+            href="/dashboard/social/schedule"
+            onClick={forgetTours}
+            className="mr-auto inline-flex min-h-11 items-center gap-1 text-secondary-13 font-medium text-foreground hover:underline"
+          >
+            Show me the tour of the Schedule page <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
         <Button variant="outline" size="sm" className="min-h-11" onClick={dismiss}>Got it</Button>
       </div>
     </section>

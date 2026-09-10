@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Images, Moon, StickyNote, Users, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Compass, Images, Moon, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -29,6 +29,8 @@ import { CLIENT_KEY, useComposeFlow, useSuggestedTimes } from './useComposeFlow'
 import ProfilesBar, { VIEWS, type ScheduleViewName } from './ProfilesBar'
 import { brandFor } from '../PlatformIcon'
 import WeekGrid, { StoriesStrip, WEEK_ROW_PX } from './WeekGrid'
+import Tour, { useTourOnce } from './Tour'
+import { SCHEDULE_TOUR } from '@/app/lib/tour-core'
 import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
 import { useSchedulePosts } from './useSchedulePosts'
 import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
@@ -111,7 +113,7 @@ export default function SchedulePage() {
    * time, a tile, a piece dragged onto a day, a file dropped on one.
    */
   const flow = useComposeFlow({
-    clientId, data, role: me?.role ?? null, suggested,
+    clientId, data, role: me?.role ?? null, userId: me?.id ?? null, suggested,
     // "Show on calendar" from the window that follows a press
     onShowDay: key => setAnchor(key),
   })
@@ -131,6 +133,19 @@ export default function SchedulePage() {
     arrivedOn.current = null
     flow.openItem(itemId)
   }, [data.posts, data.media, flow.openItem])
+
+  /**
+   * THE WALKTHROUGH, the first time somebody who posts opens this page.
+   *
+   * It waits for the week to have finished loading: a spotlight cut around a
+   * skeleton points at nothing. Skip, Escape and Done all end it, and it is
+   * remembered per person — "Show me the tour" on the toolbar brings it back.
+   */
+  const tour = useTourOnce('schedule', {
+    userId: me?.id ?? null,
+    role: me?.role ?? null,
+    ready: !data.loading && !data.error,
+  })
 
   /** what is happening to a file dropped straight onto the calendar */
   const [uploadNote, setUploadNote] = useState<string | null>(null)
@@ -649,6 +664,17 @@ export default function SchedulePage() {
                 <Users className="h-4 w-4" strokeWidth={1.8} aria-hidden />
                 Accounts and access
               </Link>
+              {/* the walkthrough runs itself once; after that it lives here,
+                  where somebody who wants it back can find it */}
+              <button
+                type="button"
+                onClick={tour.start}
+                title="Walk me through this page"
+                className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted md:flex"
+              >
+                <Compass className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                Show me the tour
+              </button>
               <span className="hidden text-[12px] font-semibold text-muted-foreground sm:inline">
                 {zoneLabel(tz)}
               </span>
@@ -802,6 +828,8 @@ export default function SchedulePage() {
           manager's own sign-off and the image editor: the SHARED flow, the
           same one the Scheduler page's single button opens in place. */}
       {flow.windows}
+
+      {tour.open && <Tour tour={SCHEDULE_TOUR} onClose={tour.close} />}
 
       {/* a file dropped straight onto the calendar says where it got to */}
       {uploadNote && (
