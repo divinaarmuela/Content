@@ -11,6 +11,13 @@ export type Me = {
   employment_type: 'employee' | 'contractor'
   timezone: string
   active: boolean
+  /**
+   * Present ONLY while somebody is acting as this person, and it names the
+   * REAL account at the keyboard. Everything else on `me` — the role, the
+   * name, the id — is the person being acted as, which is exactly why the
+   * rest of the dashboard needs no special case at all.
+   */
+  acting_for?: { id: string; name: string; email: string } | null
 }
 
 const TZ_SYNCED = 'md-tz-synced'

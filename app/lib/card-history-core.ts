@@ -22,6 +22,7 @@
  * reaches the client, who has their own portal.
  */
 
+import { auditActorName } from './act-as-core'
 import { networkName } from './publish-core'
 import { outcomesForJob, type OutcomeJob } from './post-outcome-core'
 import { readPostedSlides } from './posted-slides-core'
@@ -35,6 +36,8 @@ export type HistoryActivity = {
   new_value?: string | null
   detail?: string | null
   actor_name?: string | null
+  /** the real person, when this was done by somebody acting as the actor */
+  acting_by?: string | null
 }
 
 export type HistoryLine = {
@@ -48,7 +51,7 @@ export type HistoryLine = {
   href?: string | null
 }
 
-const WHO = (name?: string | null) => (name ?? '').trim() || 'someone'
+const WHO = (row: HistoryActivity) => auditActorName(row.actor_name, row.acting_by)
 
 /** the quote in a line, kept short so one line stays one line */
 const quote = (text: string | null | undefined, cap = 120) => {
@@ -63,7 +66,7 @@ const quote = (text: string | null | undefined, cap = 120) => {
  * says it better), a deletion, a link.
  */
 export function describeCardActivity(row: HistoryActivity): { text: string; at?: string; href?: string | null } | null {
-  const who = WHO(row.actor_name)
+  const who = WHO(row)
   switch (row.action) {
     case 'created':
       return { text: `Uploaded by ${who}` }

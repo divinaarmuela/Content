@@ -33,6 +33,9 @@ export async function GET() {
         employment_type: me.employment_type,
         timezone: me.timezone,
         active: me.active_status,
+        // present ONLY while somebody is acting as this person — it names the
+        // real account at the keyboard, so the shell can say so out loud
+        acting_for: me.acting_for ?? null,
         workday_start: data?.workday_start ?? '09:00',
         workday_end: data?.workday_end ?? '17:00',
         notification_prefs: data?.notification_prefs ?? { email: true },

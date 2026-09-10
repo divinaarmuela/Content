@@ -65,6 +65,21 @@ export type ContentItem = {
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
+/**
+ * The audit trail's one writer.
+ *
+ * WHILE SOMEBODY IS ACTING AS SOMEBODY ELSE, BOTH NAMES ARE KEPT. The actor
+ * stays the person being acted as, because the move really did happen to
+ * their card and their queue and every card, count and permission reads it
+ * that way. `acting_by` carries the real person's name alongside it, and the
+ * history line renders as "Renee Yap (Tech MD acting as them)" — an audit
+ * trail that can hide who pressed the button is not an audit trail.
+ *
+ * It is a plain extra field on the row rather than a schema change: the
+ * Realtime Database stores what it is given, `logActivity` is the only
+ * writer, and the readers spread the row straight through. Nothing in the
+ * pure `workflow-core` sees it at all.
+ */
 export async function logActivity(input: {
   actor: TeamUser | null
   clientId?: string | null
@@ -75,6 +90,7 @@ export async function logActivity(input: {
   newValue?: string
   detail?: string
 }) {
+  const actingBy = input.actor?.acting_for
   await table('workflow_activity').insert({
     actor_id: input.actor?.id ?? null,
     client_id: input.clientId ?? null,
@@ -84,6 +100,7 @@ export async function logActivity(input: {
     old_value: input.oldValue ?? null,
     new_value: input.newValue ?? null,
     detail: input.detail ?? null,
+    ...(actingBy ? { acting_by: actingBy.name || actingBy.email } : {}),
   })
 }
 

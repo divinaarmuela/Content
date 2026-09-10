@@ -17,6 +17,9 @@ const isProtectedRoute = createRouteMatcher([
   '/api/overview(.*)',
   '/api/assistant(.*)',
   '/api/boards(.*)',
+  // "act as this person" — signed-in only; the route itself then refuses
+  // every address but tech@
+  '/api/act-as(.*)',
 ])
 
 /**

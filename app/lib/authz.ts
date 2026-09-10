@@ -1,9 +1,11 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { table } from '@/lib/db'
 import type { TeamInvite, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import { parseAllowlist, isAllowlistedSuperAdmin, roleSatisfies, type Role } from './identity-core'
+import { ACT_AS_COOKIE, mayActAs, readActAs } from './act-as-core'
 
 export { TEAM_ROLES, parseAllowlist, isAllowlistedSuperAdmin, roleSatisfies } from './identity-core'
 export type { Role } from './identity-core'
@@ -18,6 +20,14 @@ export type TeamUser = {
   timezone: string
   client_id: string | null
   active_status: boolean
+  /**
+   * Set ONLY while somebody is acting as this person, and it describes the
+   * REAL signed-in account, not this row. Everything else about the TeamUser
+   * is the person being acted as, on purpose: their role, their clients and
+   * their pages are the whole point. This field is how the audit trail and
+   * the top bar say who is really at the keyboard.
+   */
+  acting_for?: { id: string; name: string; email: string }
 }
 
 export class AuthzError extends Error {
@@ -38,7 +48,7 @@ export class AuthzError extends Error {
  * arrive via an invite get the invite's role/assignments stamped exactly once
  * (the invite row flips to accepted atomically via a conditional update).
  */
-export async function resolveTeamUser(): Promise<TeamUser> {
+export async function resolveRealTeamUser(): Promise<TeamUser> {
   const { userId } = await auth()
   if (!userId) throw new AuthzError('Not signed in', 401)
 
@@ -137,6 +147,54 @@ export async function resolveTeamUser(): Promise<TeamUser> {
   }
 
   return created as unknown as TeamUser
+}
+
+/**
+ * "Act as this person", applied.
+ *
+ * The gate is the REAL email, checked on every single request — the cookie is
+ * only ever a name for who to become once that check has already passed, so a
+ * cookie copied onto anybody else's browser does nothing at all. Four more
+ * refusals, all silent (fall back to being yourself rather than erroring):
+ * a row that is gone, a deactivated one, a CLIENT row (the portal is a
+ * different surface with its own token auth, and nothing good comes of an
+ * agency session wearing a client hat), and yourself.
+ *
+ * Reading cookies outside a request context throws; a caller with no request
+ * (a scheduled job) is simply never acting as anybody.
+ */
+async function applyActAs(real: TeamUser): Promise<TeamUser> {
+  if (!mayActAs(real.email)) return real
+
+  let raw: string | undefined
+  try {
+    raw = (await cookies()).get(ACT_AS_COOKIE)?.value
+  } catch {
+    return real
+  }
+  const id = readActAs(raw)
+  if (!id || id === real.id) return real
+
+  const row = await table<TeamUserRow>('team_users').get(id)
+  if (!row || !row.active_status || row.role === 'client') return real
+
+  return {
+    ...(row as unknown as TeamUser),
+    acting_for: { id: real.id, name: real.name, email: real.email },
+  }
+}
+
+/**
+ * The identity every guard, route and page works from.
+ *
+ * Normally the signed-in person. While tech@ is acting as somebody, it is
+ * that somebody — so `requireRole`, `guard`, the client scoping and the page
+ * access all see their role, their clients and their pages with no special
+ * cases anywhere, which is the only way this could ever be trusted to show
+ * what they actually see.
+ */
+export async function resolveTeamUser(): Promise<TeamUser> {
+  return applyActAs(await resolveRealTeamUser())
 }
 
 /**

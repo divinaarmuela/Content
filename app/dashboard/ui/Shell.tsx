@@ -10,6 +10,7 @@ import {
   CalendarClock, CalendarDays, Search, GraduationCap,
 } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
+import { ActAsButton, ActingBar, useActAs } from './ActAs'
 import { visiblePages } from '@/app/lib/page-access-core'
 import { techMailto } from '@/app/lib/support-core'
 import { roleLabel, type Role } from '@/app/lib/identity-core'
@@ -364,6 +365,10 @@ export default function Shell({
   const [mobileOpen, setMobileOpen] = useState(false)
   // one pass over the nav for the rail, its pinned footer and the mobile sheet
   const nav = useMemo(() => resolveNav(role, granted, hidden, path), [role, granted, hidden, path])
+  // "act as this person": the server decides whether this exists at all —
+  // `allowed` is false for every account but the one address, and the API
+  // refuses regardless of what is rendered here
+  const actAs = useActAs()
 
   return (
     // `--dbx-chrome` is what the header and <main>'s own padding take out of
@@ -399,6 +404,14 @@ export default function Shell({
 
       {/* Main column */}
       <div className="md:pl-[232px]">
+        {actAs.acting && (
+          <ActingBar
+            acting={actAs.acting}
+            realName={actAs.realName}
+            busy={actAs.busy}
+            onStop={() => void actAs.stop()}
+          />
+        )}
         <header className="sticky top-0 z-20 flex h-[72px] items-center gap-3 bg-background/85 px-4 backdrop-blur sm:px-8">
           {/* Mobile nav — same nav, same filtering, 44px rows */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -455,6 +468,13 @@ export default function Shell({
             >
               {dark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.8} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
             </button>
+            {actAs.allowed && (
+              <ActAsButton
+                people={actAs.people}
+                busy={actAs.busy}
+                onPick={id => void actAs.start(id)}
+              />
+            )}
             <NotificationBell />
             <AvatarPill />
           </div>

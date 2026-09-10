@@ -9,6 +9,7 @@
  * never what column changed.
  */
 
+import { auditActorName } from './act-as-core'
 import { TRANSITIONS, type ItemStatus } from './workflow-core'
 
 /** The overlay an item wears. The same three the detail page branches on. */
@@ -24,11 +25,13 @@ export type ActivityRow = {
   detail?: string | null
   /** the person, already resolved — an id is not an audit trail anyone reads */
   actor_name?: string | null
+  /** the real person, when this was done by somebody acting as the actor */
+  acting_by?: string | null
 }
 
 export type ActivityLine = { id: string; at: string; text: string }
 
-const WHO = (name?: string | null) => name?.trim() || 'someone'
+const WHO = (row: ActivityRow) => auditActorName(row.actor_name, row.acting_by)
 
 /** What ARRIVING at each status is called, per overlay. */
 const ARRIVED: Record<ActivityKind, Partial<Record<ItemStatus, string>>> = {
@@ -70,7 +73,7 @@ const ARRIVED: Record<ActivityKind, Partial<Record<ItemStatus, string>>> = {
  * and anything from a table this item does not own.
  */
 export function describeActivity(row: ActivityRow, kind: ActivityKind): string | null {
-  const who = WHO(row.actor_name)
+  const who = WHO(row)
   switch (row.action) {
     case 'created':
       return `Created by ${who}`
