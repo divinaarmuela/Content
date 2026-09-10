@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     ]
     if (people.length === 0) {
       return NextResponse.json({
-        error: 'This client has no email on record and nobody on their portal — add a contact email on the client, or copy the link and send it yourself.',
+        error: 'This client has no email on record and nobody on their portal. Add a contact email on the client, or copy the link and send it yourself.',
       }, { status: 400 })
     }
 
@@ -106,11 +106,11 @@ export async function POST(req: Request) {
           subject,
           `<p>Hi ${escapeHtml(person.name)},</p>` +
           (reconnect && about
-            ? `<p>Your ${escapeHtml(about)} account&rsquo;s connection to our scheduler has run out — this happens when a password changes, or once a year on some networks. Nothing is posted until it is reconnected.</p>` +
-              `<p>The button below opens your connect page. Press <strong>Reconnect</strong> next to ${escapeHtml(about)} and sign in there, as you did the first time. You sign in on ${escapeHtml(about)}&rsquo;s own screen — we never see your password.</p>`
+            ? `<p>Your ${escapeHtml(about)} account&rsquo;s connection to our scheduler has run out. This happens when a password changes, or once a year on some networks. Nothing is posted until it is reconnected.</p>` +
+              `<p>The button below opens your connect page. Press <strong>Reconnect</strong> next to ${escapeHtml(about)} and sign in there, as you did the first time. You sign in on ${escapeHtml(about)}&rsquo;s own screen. We never see your password.</p>`
             : `<p>So we can post your content for you, we need your ${escapeHtml(list)} ${labels.length === 1 ? 'account' : 'accounts'} connected to our scheduler.</p>` +
-              `<p>The button below opens your connect page. Press <strong>Connect</strong> next to each network and sign in there — on the network&rsquo;s own screen, not ours. We never see your password, and you can disconnect at any time.</p>`) +
-          `<p style="color:#71717a;font-size:12px;">Keep this link — it is yours, it does not expire, and it is the same page to use if a connection ever needs renewing.</p>`,
+              `<p>The button below opens your connect page. Press <strong>Connect</strong> next to each network and sign in there, on the network&rsquo;s own screen, not ours. We never see your password, and you can disconnect at any time.</p>`) +
+          `<p style="color:#71717a;font-size:12px;">Keep this link. It is yours, it does not expire, and it is the same page to use if a connection ever needs renewing.</p>`,
           reconnect ? `Reconnect ${about ?? ''}`.trim() : 'Open my connect page',
           link,
         ),

@@ -73,7 +73,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       tidy()
       const label = brandFor(justConnected).label
       if (found) toast.success(`${label} connected. Thank you!`)
-      else toast.message(`${label} is not showing yet — give it a moment, then refresh this page.`)
+      else toast.message(`${label} is not showing yet. Give it a moment, then refresh this page.`)
     })()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,10 +115,10 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
           const line = !state.connected
             ? (waiting ? 'Finishing up…' : 'Not connected yet')
             : state.reconnect
-              ? `${state.who} — the connection has run out. Please sign in again.`
+              ? `${state.who}: the connection has run out. Please sign in again.`
               : state.soon
-                ? `${state.who} — ${state.reason ?? 'the connection runs out soon'}`
-                : `Connected — ${state.who}`
+                ? `${state.who}: ${state.reason ?? 'the connection runs out soon'}`
+                : `Connected: ${state.who}`
           return (
             <li key={platform} className="flex flex-col gap-2 rounded-inner border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex min-w-0 flex-1 items-center gap-4">

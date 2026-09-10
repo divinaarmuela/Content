@@ -97,7 +97,7 @@ export function returnErrorWords(error: string | null | undefined, label: string
   const e = String(error ?? '').trim().toLowerCase()
   if (!e) return null
   if (e.includes('denied') || e.includes('cancel')) {
-    return `The ${label} sign-in was cancelled — nothing was connected. Press Connect to try again.`
+    return `The ${label} sign-in was cancelled and nothing was connected. Press Connect to try again.`
   }
-  return `${label} did not finish connecting — nothing was changed. Press Connect to try again; if it keeps happening, reply to the email you got this link in.`
+  return `${label} did not finish connecting and nothing was changed. Press Connect to try again. If it keeps happening, reply to the email you got this link in.`
 }

@@ -158,8 +158,8 @@ describe('the same link reconnects (the owner: "what if the connection is gettin
 describe('the words for a sign-in that did not finish', () => {
   it('say nothing was changed, and what to press', async () => {
     const { returnErrorWords } = await import('../app/lib/connect-link-core')
-    expect(returnErrorWords('access_denied', 'Facebook')).toMatch(/cancelled — nothing was connected/)
-    expect(returnErrorWords('server_error', 'TikTok')).toMatch(/did not finish connecting — nothing was changed/)
+    expect(returnErrorWords('access_denied', 'Facebook')).toMatch(/cancelled and nothing was connected/)
+    expect(returnErrorWords('server_error', 'TikTok')).toMatch(/did not finish connecting and nothing was changed/)
     expect(returnErrorWords('', 'TikTok')).toBeNull()
     expect(returnErrorWords(null, 'TikTok')).toBeNull()
   })

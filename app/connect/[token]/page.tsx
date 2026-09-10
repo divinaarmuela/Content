@@ -31,7 +31,7 @@ import ConnectNetworks from './ConnectNetworks'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Connect your social accounts — MD Media',
+  title: 'Connect your social accounts | MD Media',
   robots: { index: false, follow: false },
 }
 
@@ -68,7 +68,7 @@ export default async function ConnectPage({ params, searchParams }: {
           <p className="max-w-prose text-[15px] leading-[1.5] opacity-80">
             Press <strong>Connect</strong> next to each network, sign in to it as you normally would, and
             allow MD Media to post on your behalf. You come straight back here. Nothing is posted
-            without your team’s process — this only lets the posts you approve go out.
+            without your team’s process. This only lets the posts you approve go out.
           </p>
         </header>
 
