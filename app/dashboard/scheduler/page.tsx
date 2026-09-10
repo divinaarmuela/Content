@@ -131,7 +131,7 @@ export default function SchedulerPage() {
       )}
 
       {!ready ? (
-        <div className="grid gap-3.5 md:grid-cols-2">
+        <div role="status" aria-label="Loading the board" aria-busy="true" className="grid gap-3.5 md:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-card" />)}
         </div>
       ) : (

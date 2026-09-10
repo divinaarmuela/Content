@@ -1231,7 +1231,7 @@ export default function NewPostDialog({
                 <MenuItem key={c.value} onClick={() => setTrial(c.value)}>
                   <span className="flex flex-col items-start leading-tight">
                     <span>Trial Reel — {c.label.replace(/^Non-followers first — /, '')}</span>
-                    <span className="text-[11px] font-normal text-muted-foreground">{c.help}</span>
+                    <span className="text-[12px] font-normal text-muted-foreground">{c.help}</span>
                   </span>
                 </MenuItem>
               ))}
@@ -1270,7 +1270,7 @@ export default function NewPostDialog({
             <Clock className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
             <span className="flex flex-col leading-[1.15]">
               <span className="text-[13px] font-semibold">Best times to post</span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[12px] text-muted-foreground">
                 When more of this client&rsquo;s followers are online
               </span>
             </span>
@@ -1520,7 +1520,7 @@ export default function NewPostDialog({
                     {/* the account's OWN ceiling, said before a long video is
                         sent to be refused by it */}
                     {group.platform === 'tiktok' && tiktokLimit && (
-                      <p className="text-[11px] text-muted-foreground">{tiktokLimit}</p>
+                      <p className="text-[12px] text-muted-foreground">{tiktokLimit}</p>
                     )}
                     {group.options.filter(o => o.key !== 'trialReel').map(o => (
                       <ExtraRow
@@ -2028,7 +2028,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
   const set = (v: unknown) => applyAll({ [option.field]: v } as ChannelExtras)
 
   const help = option.help
-    ? <p className="text-[11px] text-muted-foreground">{option.help}</p>
+    ? <p className="text-[12px] text-muted-foreground">{option.help}</p>
     : null
   const field = 'min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]'
 
@@ -2063,7 +2063,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
           {option.label}
         </label>
         {locked && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {`This account does not let “${rule?.label ?? option.label}” be changed.`}
           </p>
         )}
@@ -2114,7 +2114,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
             placeholder={option.placeholder ?? 'Paste the id'}
             className={field}
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {`We could not read this list from ${networkName(String(first.platform))} just now. `}
             Leave it empty and the network decides.
           </p>
@@ -2180,7 +2180,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
               placeholder="…or paste a Facebook Page ID"
               className={field}
             />
-            <p className={cn('text-[11px]', bad ? 'font-medium text-accent-red' : 'text-muted-foreground')}>
+            <p className={cn('text-[12px]', bad ? 'font-medium text-accent-red-deep' : 'text-muted-foreground')}>
               {bad
                 ? 'That does not look like a Page ID — it is a long number, not the @name.'
                 : locations.length > 0
@@ -2333,7 +2333,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
         {open && (
           <div className="flex flex-col gap-2.5">
             {pictures.length === 0 && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 Add the pictures first. Each one gets its own link.
               </p>
             )}
@@ -2447,7 +2447,7 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
             />
           )}
           {badUrn && (
-            <p className="text-[11px] font-medium text-accent-red">
+            <p role="alert" className="text-[12px] font-medium text-accent-red-deep">
               That does not look like a company page — pick one from the list, or paste
               its id, a plain number.
             </p>
@@ -2571,7 +2571,7 @@ function MusicRow({ option, accountId, chosenTrack, open, onToggle, onChange }: 
                   </label>
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 0 to 100 each. Leave them empty and Instagram plays both at full.
               </p>
             </div>
@@ -2626,18 +2626,18 @@ function MusicRow({ option, accountId, chosenTrack, open, onToggle, onChange }: 
                   ))}
                 </ul>
               ) : searched && !searching ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Nothing came back for that. Try fewer words, or the artist’s name.
                 </p>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Search Instagram’s catalogue, or press Search on an empty box for what is
                   trending.
                 </p>
               )}
             </>
           )}
-          {option.help && <p className="text-[11px] text-muted-foreground">{option.help}</p>}
+          {option.help && <p className="text-[12px] text-muted-foreground">{option.help}</p>}
         </div>
       )}
     </div>
@@ -2730,7 +2730,7 @@ function ListRow({ option, value, open, onToggle, onChange }: {
             placeholder={option.placeholder}
             className="min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]"
           />
-          {option.help && <p className="text-[11px] text-muted-foreground">{option.help}</p>}
+          {option.help && <p className="text-[12px] text-muted-foreground">{option.help}</p>}
         </>
       )}
     </div>

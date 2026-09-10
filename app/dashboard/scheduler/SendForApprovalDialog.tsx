@@ -220,7 +220,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
           data.error ? (
             <p className="rounded-inner border border-border bg-paper px-3 py-2 text-[13px]">{loadFailedMessage('your clients')}</p>
           ) : data.loading ? (
-            <p className="py-6 text-center text-[13px] text-muted-foreground">Loading your clients…</p>
+            <p role="status" className="py-6 text-center text-[13px] text-muted-foreground">Loading your clients…</p>
           ) : data.clients.length === 0 ? (
             <p className="py-6 text-center text-[13px] text-muted-foreground">You are not on any client yet.</p>
           ) : (
@@ -229,7 +229,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                 .sort((a, b) => Number(b.id === remembered) - Number(a.id === remembered) || a.name.localeCompare(b.name))
                 .map(c => (
                   <button key={c.id} type="button" onClick={() => pick(c.id)}
-                    className="flex min-h-11 items-center justify-between gap-3 rounded-inner border border-border bg-paper px-4 text-left text-[14px] font-semibold hover:bg-muted">
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-inner border border-border bg-paper px-4 text-left text-[14px] font-semibold hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue">
                     <span className="min-w-0 truncate">{c.name}</span>
                     {c.id === remembered && <span className="shrink-0 text-[11px] font-semibold uppercase text-muted-foreground">Last time</span>}
                   </button>
@@ -241,7 +241,9 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
             {data.clients.length > 1 && (
               <p className="text-[13px]">
                 For <span className="font-semibold">{client?.name}</span>
-                {' '}<button type="button" className="underline text-muted-foreground" onClick={() => { setClientId(null); setChosen([]) }}>change</button>
+                {' '}<button type="button" aria-label="Change the client this post is for"
+                  className="-my-2 inline-flex min-h-11 items-center underline text-muted-foreground"
+                  onClick={() => { setClientId(null); setChosen([]) }}>change</button>
               </p>
             )}
 
@@ -255,7 +257,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                 over ? 'border-foreground bg-muted' : 'border-border bg-paper',
               )}
             >
-              <Upload className="h-5 w-5 text-muted-foreground" />
+              <Upload className="h-5 w-5 text-muted-foreground" aria-hidden />
               <p className="text-[14px] font-semibold">Drop the photos or videos here</p>
               <p className="text-[13px] text-muted-foreground">or</p>
               <Button type="button" variant="outline" className={secondary} onClick={() => fileInput.current?.click()}>
@@ -279,8 +281,8 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                         for (const u of uploads) if (u.url === s.url) dismissUpload(u.id)
                         setChosen(prev => prev.filter(x => x.url !== s.url))
                       }}
-                      className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-cream">
-                      <X className="h-3 w-3" />
+                      className="absolute right-0.5 top-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-ink/80 text-cream hover:bg-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-cream">
+                      <X className="h-3.5 w-3.5" aria-hidden />
                     </button>
                   </div>
                 ))}
@@ -318,7 +320,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
               </div>
             )}
 
-            {problem && <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px]">{problem}</p>}
+            {problem && <p role="alert" className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px]">{problem}</p>}
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
               {manager ? (

@@ -134,6 +134,7 @@ export default function TimePicker({
       <button
         type="button"
         disabled={disabled}
+        aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
         className={cn(
@@ -149,6 +150,8 @@ export default function TimePicker({
         // bg-popover, not bg-surface: a panel that floats has to sit ABOVE the
         // card behind it in dark mode or it disappears into it
         <div data-time-panel
+          role="dialog"
+          aria-label="Pick the day and time"
           style={{ left: at.left, top: at.top }}
           // bg-popover WITHOUT its foreground left the calendar's day numbers on
           // the browser default — black digits on the dark panel, unreadable.
@@ -173,13 +176,15 @@ export default function TimePicker({
               month_caption: 'relative flex items-center justify-center pt-1',
               caption_label: 'text-[14px] font-semibold',
               nav: 'flex items-center',
+              // 44px, not 36: month-to-month is the control a thumb reaches
+              // for most on this panel
               button_previous:
-                'absolute left-0 top-0 flex h-[36px] w-[36px] items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
+                'absolute left-0 top-0 flex h-11 w-11 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
               button_next:
-                'absolute right-0 top-0 flex h-[36px] w-[36px] items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
+                'absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-full border border-border text-foreground hover:bg-muted',
               month_grid: 'mx-auto w-[280px] max-w-full border-collapse table-fixed',
               weekdays: 'flex',
-              weekday: 'h-[24px] w-[40px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
+              weekday: 'h-[24px] w-[40px] shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground',
               week: 'mt-1 flex',
               day: dayCell,
               day_button: 'block h-[40px] w-[40px] rounded-tile font-medium hover:bg-muted',
@@ -192,8 +197,8 @@ export default function TimePicker({
             components={{
               Chevron: ({ orientation }) =>
                 orientation === 'left'
-                  ? <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-                  : <ChevronRight className="h-4 w-4" strokeWidth={2} />,
+                  ? <ChevronLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  : <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />,
             }}
           />
 

@@ -72,7 +72,7 @@ export function CompactCard({ card, today, onOpen }: {
     >
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-[13px] font-semibold leading-tight">{lines.title}</span>
-        <span className={`truncate text-[11px] font-semibold uppercase tracking-[0.02em] ${tone === 'ink' ? 'text-cream/60' : 'text-muted-foreground'}`}>
+        <span className={`truncate text-[12px] font-semibold uppercase tracking-[0.02em] ${tone === 'ink' ? 'text-cream/70' : 'text-muted-foreground'}`}>
           {lines.client}
         </span>
       </span>
@@ -206,7 +206,8 @@ export function BoardCard({
             rel="noreferrer"
             className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground hover:bg-surface/80 [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream"
           >
-            {lines.link.label} <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} />
+            {lines.link.label} <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+            <span className="sr-only">opens in a new tab</span>
           </a>
         ) : (card as { adhoc_post?: unknown }).adhoc_post === true ? null : canEdit ? (
           <Button variant="outline" disabled={busy}
@@ -249,7 +250,7 @@ export function BoardCard({
               <Button variant="outline" size="icon" aria-label="More for this card" disabled={busy}
                 data-tour={tour ? 'board-card-action' : undefined}
                 className="h-11 w-11 rounded-full border-border bg-surface [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
-                <MoreHorizontal className="h-4 w-4" />
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
@@ -289,7 +290,7 @@ export function BoardCard({
                   )}
                   {onHandTo && !settled && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onHandTo(card)}>
-                      <UserPlus className="h-4 w-4" /> Hand to…
+                      <UserPlus className="h-4 w-4" aria-hidden /> Hand to…
                     </DropdownMenuItem>
                   )}
                 </>
@@ -297,9 +298,9 @@ export function BoardCard({
               {mayDelete && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="min-h-11 text-accent-red focus:text-accent-red"
+                  <DropdownMenuItem className="min-h-11 text-accent-red-deep focus:text-accent-red-deep"
                     onClick={() => onDelete!(card)}>
-                    <Trash2 className="h-4 w-4" /> Delete this card
+                    <Trash2 className="h-4 w-4" aria-hidden /> Delete this card
                   </DropdownMenuItem>
                 </>
               )}

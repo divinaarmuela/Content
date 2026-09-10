@@ -172,7 +172,7 @@ export default function MediaRail({
           </span>
           {/* the scheduler's question, answered in the heading (9 Sep 2026):
               what is approved and not yet posted */}
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[12px] text-muted-foreground">
             {filters.has('Unused') ? 'Approved, not yet posted' : 'Everything approved'}
           </span>
         </span>
@@ -230,7 +230,7 @@ export default function MediaRail({
                       </span>
                       <span className="flex min-w-0 flex-col leading-[1.2]">
                         <span className="truncate text-[13px] font-semibold">{m.title}</span>
-                        <span className="truncate text-[11px] text-muted-foreground">
+                        <span className="truncate text-[12px] text-muted-foreground">
                           {m.ok
                             ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
                             : m.reason}
@@ -244,12 +244,12 @@ export default function MediaRail({
                       onClick={() => toggleStar(m.itemId)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
                     >
-                      <Star className={cn('h-3.5 w-3.5', starred.has(m.itemId) && 'fill-accent-amber text-accent-amber')} strokeWidth={2} />
+                      <Star className={cn('h-4 w-4', starred.has(m.itemId) && 'fill-accent-amber text-accent-amber')} strokeWidth={2} aria-hidden />
                     </button>
                     {m.ok && (
                       <button type="button" onClick={() => openIt(m)} aria-label={isOpen ? 'Close folder' : 'Open folder'}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted">
-                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <FolderOpen className="h-4 w-4" />}
+                        {isOpen ? <ChevronDown className="h-4 w-4" aria-hidden /> : <FolderOpen className="h-4 w-4" aria-hidden />}
                       </button>
                     )}
                   </div>
@@ -283,16 +283,16 @@ export default function MediaRail({
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <button type="button" onClick={() => setTicked(new Set(chosen.length === m.slides.length ? [] : m.slides.map(sl => sl.url)))}
-                          className="text-[12px] font-semibold underline-offset-4 hover:underline">
+                          className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
                           {chosen.length === m.slides.length ? 'Untick all' : 'Tick all'}
                         </button>
                         <button
                           type="button"
                           disabled={chosen.length === 0}
                           onClick={() => onPick(m, chosen)}
-                          className="flex min-h-9 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background disabled:opacity-40"
+                          className="flex min-h-11 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background disabled:opacity-40"
                         >
-                          <Plus className="h-3.5 w-3.5" /> Post {chosen.length === m.slides.length ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
+                          <Plus className="h-3.5 w-3.5" aria-hidden /> Post {chosen.length === m.slides.length ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
                         </button>
                       </div>
                     </div>
@@ -303,17 +303,17 @@ export default function MediaRail({
                   {onRemove && (role === 'account_manager' || role === 'super_admin') && isOpen && (
                     removing === m.itemId ? (
                       <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1.5">
-                        <span className="text-[11px] font-semibold">Remove this piece and its files?</span>
+                        <span className="text-[12px] font-semibold">Remove this piece and its files?</span>
                         <span className="flex gap-1.5">
-                          <button type="button" onClick={() => setRemoving(null)} className="min-h-8 rounded-full border border-border px-2.5 text-[11px] font-semibold hover:bg-muted">Keep it</button>
-                          <button type="button" onClick={() => { setRemoving(null); void onRemove(m) }} className="min-h-8 rounded-full bg-accent-red px-2.5 text-[11px] font-semibold text-cream">Remove</button>
+                          <button type="button" onClick={() => setRemoving(null)} className="min-h-11 rounded-full border border-border px-2.5 text-[12px] font-semibold hover:bg-muted">Keep it</button>
+                          <button type="button" onClick={() => { setRemoving(null); void onRemove(m) }} className="min-h-11 rounded-full bg-accent-red px-2.5 text-[12px] font-semibold text-cream">Remove</button>
                         </span>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setRemoving(m.itemId)}
-                        className="min-h-8 w-full border-t border-border px-2 text-left text-[11px] font-semibold text-muted-foreground hover:bg-muted"
+                        className="min-h-11 w-full border-t border-border px-2 text-left text-[12px] font-semibold text-muted-foreground hover:bg-muted"
                       >
                         Remove this piece
                       </button>
@@ -326,7 +326,7 @@ export default function MediaRail({
                       type="button"
                       onClick={() => onApprove(m)}
                       title={m.reason ? `${m.title} — ${m.reason}` : m.title}
-                      className="min-h-9 w-full rounded-b-tile border-t border-border bg-cream/95 px-2 text-[11px] font-semibold text-ink hover:bg-cream"
+                      className="min-h-11 w-full rounded-b-tile border-t border-border bg-cream/95 px-2 text-[12px] font-semibold text-ink hover:bg-cream"
                     >
                       Approve without client
                     </button>
@@ -353,7 +353,7 @@ export default function MediaRail({
           className="flex min-h-10 flex-col items-center justify-center rounded-full border border-dashed border-border px-3 text-[13px] font-semibold hover:bg-muted"
         >
           <span>Drafts · {drafts}</span>
-          <span className="text-[11px] font-normal text-muted-foreground">Not on the calendar until scheduled</span>
+          <span className="text-[12px] font-normal text-muted-foreground">Not on the calendar until scheduled</span>
         </button>
       )}
     </div>

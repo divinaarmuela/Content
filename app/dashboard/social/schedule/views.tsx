@@ -48,7 +48,7 @@ function PostRow({ post, tz, onOpen, onDelete }: {
     <button
       type="button"
       onClick={() => onOpen(post)}
-      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      className="flex min-w-0 flex-1 items-center gap-3 rounded-inner text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
     >
       <Thumb
         slide={post.slides[0] ?? null}
@@ -78,15 +78,15 @@ function PostRow({ post, tz, onOpen, onDelete }: {
     {onDelete && post.live_status === 'draft' && (
       sure ? (
         <span className="flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => setSure(false)} className="min-h-9 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">Keep it</button>
-          <button type="button" onClick={() => onDelete(post)} className="min-h-9 rounded-full bg-accent-red px-3 text-[12px] font-semibold text-cream">Delete draft</button>
+          <button type="button" onClick={() => setSure(false)} className="min-h-11 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">Keep it</button>
+          <button type="button" onClick={() => onDelete(post)} className="min-h-11 rounded-full bg-accent-red px-3 text-[12px] font-semibold text-cream">Delete draft</button>
         </span>
       ) : (
         <button
           type="button"
           onClick={() => setSure(true)}
           aria-label="Delete this draft"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
         >
           <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         </button>
@@ -97,8 +97,12 @@ function PostRow({ post, tz, onOpen, onDelete }: {
 }
 
 const MARK_TONE: Record<ReturnType<typeof outcomeWords>['tone'], string> = {
-  done: 'text-accent-green', trouble: 'text-accent-red', waiting: 'text-muted-foreground',
-  moving: 'text-accent-blue-deep', quiet: 'text-muted-foreground',
+  // WORDS, not dots: these are sentences on a row, so they answer to the
+  // 4.5:1 text rule rather than the 3:1 one. The brand green (2.2:1 on
+  // white) and red (3.9:1) do not, so the readable pair carries the text and
+  // the blue borrows the same cream flip a Chip already uses in dark mode.
+  done: 'text-accent-green-deep', trouble: 'text-accent-red-deep', waiting: 'text-muted-foreground',
+  moving: 'text-accent-blue-deep dark:text-cream', quiet: 'text-muted-foreground',
 }
 const MARK_GLYPH: Record<ReturnType<typeof outcomeWords>['tone'], string> = {
   done: '✓', trouble: '✕', waiting: '·', moving: '…', quiet: '–',
@@ -282,12 +286,19 @@ export function MonthGrid({
                     onPointerUp={() => drag.endTouchIntent()}
                     onPointerCancel={() => drag.endTouchIntent()}
                     {...{ [POST_ID_ATTR]: p.id }}
+                    // the same sentence to the eye and to a screen reader:
+                    // the thumbnail's alt names the post but not where it
+                    // stands, which is the half that matters on a month cell
+                    aria-label={[
+                      p.item_title ?? 'Post', STATUS_WORDS[p.live_status], p.block_reason,
+                      drag.blockedReason(p) ?? 'Drag it to another day to move it',
+                    ].filter(Boolean).join(' · ')}
                     title={[
                       p.item_title ?? 'Post', STATUS_WORDS[p.live_status], p.block_reason,
                       drag.blockedReason(p) ?? 'Drag it to another day to move it',
                     ].filter(Boolean).join(' · ')}
                     className={cn(
-                      'relative h-11 w-11 overflow-hidden rounded-tile border border-border',
+                      'relative h-11 w-11 overflow-hidden rounded-tile border border-border focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
                       TONE_DIM[p.tone],
                       drag.moving?.postId === p.id && 'rotate-2 ring-2 ring-accent-blue',
                       drag.saving.has(p.id) && 'animate-pulse opacity-60',
@@ -328,8 +339,9 @@ export function PreviewGrid({ posts, tz, onOpen }: {
           key={p.id}
           type="button"
           onClick={() => onOpen(p)}
+          aria-label={`${p.item_title ?? 'Post'} · ${STATUS_WORDS[p.live_status]} · ${formatInZone(p.scheduled_for ?? '', tz, 'full') ?? 'No time yet'}`}
           title={`${p.item_title ?? 'Post'} · ${formatInZone(p.scheduled_for ?? '', tz, 'full') ?? ''}`}
-          className={cn('relative aspect-square overflow-hidden border border-border', TONE_DIM[p.tone])}
+          className={cn('relative aspect-square overflow-hidden border border-border focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue', TONE_DIM[p.tone])}
         >
           <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
           <StatusDot tone={p.tone} className="absolute left-1.5 top-1.5" />

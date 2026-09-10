@@ -39,8 +39,10 @@ module.exports = {
         'accent-blue': 'var(--dbx-blue)',
         'accent-blue-deep': 'var(--dbx-blue-deep)',
         'accent-green': 'var(--dbx-green)',
+        'accent-green-deep': 'var(--dbx-green-deep)',
         'accent-amber': 'var(--dbx-amber)',
         'accent-red': 'var(--dbx-red)',
+        'accent-red-deep': 'var(--dbx-red-deep)',
         // site accent — now var-driven so the dashboard (.dbx) can rescope it;
         // :root sets it to the same lama blue, so text-accent etc. is unchanged
         accent: {

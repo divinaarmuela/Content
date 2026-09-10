@@ -319,6 +319,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
   const mayMarkPosted = ['approved_for_scheduling', 'scheduled'].includes(String(item?.status ?? ''))
+  /** may this person hand the card on — a manager, and never once the channel
+   *  holds it. It is also the ONLY control the decision row can hold when the
+   *  card offers no action, so the row is drawn on this rather than on
+   *  `isManager`: a manager opening a posted card used to get an empty
+   *  bordered band where the buttons would have been. */
+  const mayHandOn = isManager && item?.status !== 'scheduled' && item?.status !== 'published'
   const markPosted = async () => {
     if (!item || handOn === null) return
     const s = slides[handOn]
@@ -363,7 +369,16 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     }
   }
 
-  if (!item) return <div className="p-5 text-[14px] text-muted-foreground">Loading…</div>
+  if (!item) {
+    // the drawer is about to be full height: hold the space rather than
+    // paint one line and shove everything down when the row lands
+    return (
+      <div role="status" aria-busy="true"
+        className="flex h-full min-h-[320px] items-center justify-center p-5 text-[14px] text-muted-foreground">
+        Loading…
+      </div>
+    )
+  }
   const status = String(item.status) as ItemStatus
   /** booked in or posted: the files are the channel's now */
   const frozenCard = status === 'scheduled' || status === 'published'
@@ -405,19 +420,20 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               assigned task" (not the editor, not the scheduler) */}
           {isManager && client?.share_token && (
             <a href={`/portal/${client.share_token}`} target="_blank" rel="noreferrer"
-              className="inline-flex h-9 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
-              Client portal <ExternalLink className="h-3.5 w-3.5" />
+              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
+              Client portal <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              <span className="sr-only">opens in a new tab</span>
             </a>
           )}
           <button type="button" onClick={onClose} aria-label="Close"
             className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted">
-            <X className="h-[18px] w-[18px]" />
+            <X className="h-[18px] w-[18px]" aria-hidden />
           </button>
         </div>
       </div>
 
       {/* ── 2. the decision ── */}
-      {(actions.primary || actions.more.length > 0 || isManager) && (
+      {(actions.primary || actions.more.length > 0 || mayHandOn) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-4">
           {actions.primary && (
             <Button className={primary} disabled={busy} onClick={() => card && act(card, actions.primary!)}>
@@ -431,7 +447,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           ))}
           {/* nobody is handed a card the channel already holds or has posted
               (the owner, 10 Sep 2026) */}
-          {isManager && status !== 'scheduled' && status !== 'published' && (
+          {mayHandOn && (
             <Button data-tour="hand-to" variant="outline" className={secondary} disabled={busy} onClick={() => setHanding(true)}>
               {handedTo.length > 0 ? `With ${handedTo.join(', ')} · change` : 'Hand to…'}
             </Button>
@@ -455,11 +471,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               scheduled how come I can add another") */}
           {!frozenCard && (
             <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
-              <Plus className="h-4 w-4" /> Add another
+              <Plus className="h-4 w-4" aria-hidden /> Add another
             </Button>
           )}
         </div>
-        {working && <p className="text-[13px] text-muted-foreground">{working}…</p>}
+        {working && <p role="status" className="text-[13px] text-muted-foreground">{working}…</p>}
         {slides.length === 0 && <p className="text-[14px] text-muted-foreground">No files yet.</p>}
         {slides.map((s, i) => {
           const about = said.filter(c => splitSlideTag(String(c.body ?? '')).index === i)
@@ -484,12 +500,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 {!gone && !frozenCard && (
                   <Button variant="outline" size="sm" className="h-9 rounded-full" disabled={working !== null}
                     onClick={() => { replacing.current = i; replaceInput.current?.click() }}>
-                    <RefreshCw className="h-3.5 w-3.5" /> Replace
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Replace
                   </Button>
                 )}
                 {!gone && !frozenCard && slides.length > 1 && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => remove(i)}>
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove
                   </Button>
                 )}
                 {postedUrls.has(s.url) && (handRecord(postedSlides, s.url) || !fileBooking(s.url, filePosts, jobsById)) && (
@@ -503,7 +519,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     the post that carries this file */}
                 {!handRecord(postedSlides, s.url) && <FileBookingChip url={s.url} posts={filePosts} jobsById={jobsById} />}
                 {handRecord(postedSlides, s.url)?.link && (
-                  <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer" className="text-[12px] underline underline-offset-4">Live post</a>
+                  <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer"
+                    className="inline-flex min-h-11 items-center text-[12px] underline underline-offset-4">
+                    Live post<span className="sr-only">, opens in a new tab</span>
+                  </a>
                 )}
                 {/* a file already booked or out through a channel is not
                     one to mark by hand (the owner, 9 Sep 2026) */}
@@ -514,7 +533,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 )}
                 {mayAskChange && !gone && changeOn !== i && (
                   <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setChangeOn(i); setChangeText('') }}>
-                    <MessageCircle className="h-3.5 w-3.5" /> Change this one
+                    <MessageCircle className="h-3.5 w-3.5" aria-hidden /> Change this one
                   </Button>
                 )}
               </figcaption>
@@ -531,8 +550,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     <input type="datetime-local" value={handAt} max={localNow()} onChange={e => setHandAt(e.target.value)}
                       className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
                   </label>
-                  <input value={handLink} onChange={e => setHandLink(e.target.value)} placeholder="https://www.instagram.com/p/… (optional)"
-                    className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]" />
+                  <label className="flex flex-col gap-1 text-[12px] font-semibold">
+                    Link to the live post <span className="font-normal text-muted-foreground">(optional)</span>
+                    <input value={handLink} onChange={e => setHandLink(e.target.value)} placeholder="https://www.instagram.com/p/…"
+                      className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
+                  </label>
                   <div className="flex items-center gap-2">
                     <Button className={primary} disabled={working !== null} onClick={() => void markPosted()}>It’s posted</Button>
                     <Button variant="ghost" className={secondary} onClick={() => setHandOn(null)}>Cancel</Button>
@@ -541,8 +563,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               )}
               {changeOn === i && (
                 <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-                  <textarea rows={2} autoFocus value={changeText} onChange={e => setChangeText(e.target.value)}
-                    placeholder={`What should change on ${s.type === 'video' ? 'video' : 'photo'} ${i + 1}?`}
+                  <label className="text-[12px] font-semibold" htmlFor={`change-${i}`}>
+                    What should change on {s.type === 'video' ? 'video' : 'photo'} {i + 1}?
+                  </label>
+                  <textarea id={`change-${i}`} rows={2} autoFocus value={changeText} onChange={e => setChangeText(e.target.value)}
+                    placeholder="Say what to change, in a line"
                     className="min-h-11 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
                   <div className="flex items-center gap-2">
                     <Button className={primary} disabled={working !== null || !changeText.trim()} onClick={() => void sendBack()}>Send back</Button>
@@ -559,7 +584,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                     </p>
                   ))}
                   {isManager && (
-                    <button type="button" onClick={() => replyAbout(i)} className="w-fit text-[12px] font-semibold underline-offset-4 hover:underline">
+                    <button type="button" onClick={() => replyAbout(i)} className="inline-flex min-h-11 w-fit items-center text-[12px] font-semibold underline-offset-4 hover:underline">
                       Reply to {client?.name ?? 'the client'} about this one
                     </button>
                   )}
@@ -599,15 +624,17 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 <span className="text-[12px] text-muted-foreground">{formatInZone(l.at, zone, 'full') ?? ''}</span>
                 {l.href && (
                   <a href={l.href} target="_blank" rel="noreferrer noopener"
-                    className="text-[12px] underline underline-offset-4">Live post</a>
+                    className="inline-flex min-h-11 items-center text-[12px] underline underline-offset-4">
+                    Live post<span className="sr-only">, opens in a new tab</span>
+                  </a>
                 )}
               </li>
             ))}
           </ol>
         )}
         {history.length > HISTORY_PREVIEW && (
-          <button type="button" onClick={() => setShowAllHistory(v => !v)}
-            className="w-fit text-[12px] font-semibold underline-offset-4 hover:underline">
+          <button type="button" onClick={() => setShowAllHistory(v => !v)} aria-expanded={showAllHistory}
+            className="inline-flex min-h-11 w-fit items-center text-[12px] font-semibold underline-offset-4 hover:underline">
             {showAllHistory ? 'Show less' : `Show all ${history.length}`}
           </button>
         )}
@@ -633,8 +660,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 <span className="font-semibold text-foreground">{nameOf(c.author_id) ?? 'Someone'}</span>
                 <span>{new Date(String(c.created_at)).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
                 {label && <span className="italic">on {label.toLowerCase()}</span>}
-                {(c as { visibility?: string }).visibility === 'client' && <Chip tone="blue" className="px-1.5 py-0.5 text-[10px]">Client sees this</Chip>}
-                {roleOf(c.author_id) === 'client' && <Chip tone="amber" className="px-1.5 py-0.5 text-[10px]">Client</Chip>}
+                {(c as { visibility?: string }).visibility === 'client' && <Chip tone="blue" className="px-2 py-0.5">Client sees this</Chip>}
+                {roleOf(c.author_id) === 'client' && <Chip tone="amber" className="px-2 py-0.5">Client</Chip>}
               </p>
               <p className="mt-1 whitespace-pre-wrap">{rest}</p>
             </div>
@@ -642,24 +669,25 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         })}
         {isManager && (
           <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1 w-fit text-[13px] font-semibold">
-            <button type="button" onClick={() => setToClient(false)}
-              className={cn('rounded-full px-3 py-1.5', !toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Note for the team</button>
-            <button type="button" onClick={() => setToClient(true)}
-              className={cn('rounded-full px-3 py-1.5', toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Reply to {client?.name ?? 'the client'}</button>
+            <button type="button" aria-pressed={!toClient} onClick={() => setToClient(false)}
+              className={cn('inline-flex min-h-11 items-center rounded-full px-3', !toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Note for the team</button>
+            <button type="button" aria-pressed={toClient} onClick={() => setToClient(true)}
+              className={cn('inline-flex min-h-11 items-center rounded-full px-3', toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Reply to {client?.name ?? 'the client'}</button>
           </div>
         )}
         {replyOn !== null && slides[replyOn] && (
           <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
             About {slides[replyOn].type === 'video' ? 'video' : 'photo'} {replyOn + 1} of {slides.length}
-            <button type="button" onClick={() => setReplyOn(null)} className="underline underline-offset-4">the whole post instead</button>
+            <button type="button" onClick={() => setReplyOn(null)} className="-my-2 inline-flex min-h-11 items-center underline underline-offset-4">the whole post instead</button>
           </p>
         )}
         <div className="flex items-end gap-2">
           <textarea ref={noteBox} rows={2} value={draft} onChange={e => setDraft(e.target.value)}
+            aria-label={isManager && toClient ? `A reply to ${client?.name ?? 'the client'}` : 'A note for the team'}
             placeholder={isManager && toClient ? `They see this on their portal — no email is sent` : 'A note for the team — @name to tag someone'}
             className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
           <Button className="h-11 w-11 rounded-full p-0" disabled={sending || !draft.trim()} onClick={() => void sendNote()} aria-label="Add note">
-            <MessageCircle className="h-4 w-4" />
+            <MessageCircle className="h-4 w-4" aria-hidden />
           </Button>
         </div>
       </div>
@@ -674,7 +702,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             </>
           ) : (
             <Button variant="ghost" className={secondary} onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="h-4 w-4" /> Delete
+              <Trash2 className="h-4 w-4" aria-hidden /> Delete
             </Button>
           )}
         </div>

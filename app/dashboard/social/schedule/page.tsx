@@ -609,7 +609,7 @@ export default function SchedulePage() {
               onClick={() => step(-1)}
               className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
             >
-              <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} />
+              <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
             </button>
             <button
               type="button"
@@ -617,7 +617,7 @@ export default function SchedulePage() {
               onClick={() => step(1)}
               className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"
             >
-              <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} />
+              <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
             </button>
             <span className="text-[16px] font-semibold">
               {monthView ? monthLabel(anchor ?? todayKey ?? '') : rangeLabel(grid.days)}
@@ -728,7 +728,9 @@ export default function SchedulePage() {
               {loadFailedMessage('the schedule')}
             </p>
           ) : data.loading ? (
-            <Skeleton className="min-h-0 w-full flex-1 rounded-inner" />
+            <div role="status" aria-label="Loading the week" aria-busy="true" className="flex min-h-0 flex-1 flex-col">
+              <Skeleton className="min-h-0 w-full flex-1 rounded-inner" />
+            </div>
           ) : view === 'Week' ? (
             <>
               {/* On a phone the week grid becomes the list: seven 44px columns

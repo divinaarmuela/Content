@@ -99,6 +99,14 @@ body:has(.dbx) {
   --dbx-green: #00C853;
   --dbx-amber: #FFB300;
   --dbx-red: #E53935;
+  /* READABLE red and green, for TEXT only. The brand red and green are
+     signal colours: on cream #E53935 is 3.9:1 and #00C853 is 2.2:1, so a
+     whole sentence written in either fails WCAG 1.4.3 (4.5:1). These two
+     are the same hues taken to a ratio a sentence can be read at — the same
+     job --dbx-blue-deep already does for blue. Fills and dots keep the
+     brand colours; only words move to these. */
+  --dbx-red-deep: #C62828;
+  --dbx-green-deep: #0A7A3D;
   --dbx-tint-blue: #DCE6FF;
   --dbx-tint-green: #D6F5E1;
   --dbx-tint-amber: #FFEFC2;
@@ -140,6 +148,10 @@ body:has(.dbx) {
   --dbx-surface: #141414;
   --dbx-border: rgba(249, 244, 235, 0.14);
   --dbx-muted: rgba(249, 244, 235, 0.62);
+  /* the same two, inverted for the dark canvas: a deep red or green on ink
+     is unreadable, so they lighten instead */
+  --dbx-red-deep: #FF8A87;
+  --dbx-green-deep: #56D98A;
   --dbx-tint-blue: #10203E;   /* #0057FF @ 18% on #141414 */
   --dbx-tint-green: #10341F;  /* #00C853 @ 18% */
   --dbx-tint-amber: #3E3110;  /* #FFB300 @ 18% */

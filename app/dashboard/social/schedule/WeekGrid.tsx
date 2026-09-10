@@ -522,7 +522,11 @@ export default function WeekGrid({
                       type="button"
                       onClick={e => { e.stopPropagation(); setMoreOpen(m => (m === key ? null : key)) }}
                       aria-expanded={moreOpen === key}
-                      className="ml-auto flex h-5 items-center rounded-full bg-foreground px-2 text-[10px] font-bold text-background shadow-sm hover:opacity-90"
+                      // 28px, not 20: a 20px pill missed WCAG 2.2's 24x24
+                      // pointer minimum. It cannot be 44 without covering the
+                      // tile it belongs to, so it takes the biggest size the
+                      // grid has room for and keeps 8px clear of the tiles.
+                      className="ml-auto flex h-7 items-center rounded-full bg-foreground px-2.5 text-[11px] font-bold text-background shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
                     >
                       +{o.count} more
                     </button>
@@ -544,7 +548,7 @@ export default function WeekGrid({
                             key={p.id}
                             type="button"
                             onClick={() => { setMoreOpen(null); onOpen(p) }}
-                            className="flex items-center gap-2 rounded-tile px-1.5 py-1 text-left hover:bg-muted"
+                            className="flex min-h-11 items-center gap-2 rounded-tile px-1.5 py-1 text-left hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
                           >
                             <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-9 w-9 shrink-0 rounded-tile" />
                             <span className="flex min-w-0 flex-1 flex-col">

@@ -136,7 +136,7 @@ export default function CoverPicker({
         )}
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="text-[13px] font-semibold">Cover</span>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[12px] text-muted-foreground">
             {current
               ? current.source === 'editor' ? 'From the video editor.' : 'Chosen here.'
               : 'None chosen — each network picks a frame itself.'}
@@ -155,7 +155,7 @@ export default function CoverPicker({
             disabled={busy !== null}
             onClick={() => setMode(m => (m === 'frames' ? 'closed' : 'frames'))}
             className={cn(
-              'min-h-9 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted disabled:opacity-50',
+              'min-h-11 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted disabled:opacity-50',
               mode === 'frames' && 'bg-foreground text-background hover:bg-foreground',
             )}
           >
@@ -165,7 +165,7 @@ export default function CoverPicker({
             type="button"
             disabled={busy !== null}
             onClick={() => file.current?.click()}
-            className="flex min-h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted disabled:opacity-50"
+            className="flex min-h-11 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted disabled:opacity-50"
           >
             <Upload className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Upload a picture
@@ -182,7 +182,7 @@ export default function CoverPicker({
               type="button"
               disabled={busy !== null}
               onClick={() => { onPick(null); setMode('closed') }}
-              className="flex min-h-9 items-center gap-1 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
+              className="flex min-h-11 items-center gap-1 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Remove
@@ -200,7 +200,7 @@ export default function CoverPicker({
               disabled={busy !== null && busy !== 'Reading the video'}
               onClick={() => void useFrame(f.at)}
               title={`${f.at}s`}
-              className="shrink-0 overflow-hidden rounded-tile border border-border hover:outline hover:outline-2 hover:outline-accent-blue"
+              className="shrink-0 overflow-hidden rounded-tile border border-border hover:outline hover:outline-2 hover:outline-accent-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={f.still} alt={`Frame at ${f.at} seconds`} className="h-[90px] w-auto" />
@@ -212,10 +212,12 @@ export default function CoverPicker({
         </div>
       )}
 
-      {busy && mode !== 'frames' && <p className="text-[12px] text-muted-foreground">{busy}…</p>}
-      {problem && <p className="text-[12px] font-medium text-accent-red">{problem}</p>}
+      {busy && mode !== 'frames' && <p role="status" className="text-[12px] text-muted-foreground">{busy}…</p>}
+      {/* the readable red, and said out loud: an upload that was refused has
+          to reach somebody who is not looking at this corner of the panel */}
+      {problem && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{problem}</p>}
 
-      <p className="text-[11px] leading-snug text-muted-foreground">
+      <p className="text-[12px] leading-snug text-muted-foreground">
         {takers.map(p => COVER_RULES[p].note).join(' ')}
       </p>
     </div>

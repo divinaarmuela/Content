@@ -338,7 +338,7 @@ export function Board({
           type="button"
           onClick={tour.start}
           title="Walk me through this page"
-          className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted md:inline-flex"
+          className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue md:inline-flex"
         >
           <Compass className="h-4 w-4" strokeWidth={1.8} aria-hidden />
           Show me the tour
@@ -351,7 +351,7 @@ export function Board({
           {onClearShow && (
             <Button variant="outline" size="sm" onClick={onClearShow}
               className="h-9 rounded-full border-border bg-surface px-3 text-[13px] font-semibold">
-              <X className="h-3.5 w-3.5" /> Show all
+              <X className="h-3.5 w-3.5" aria-hidden /> Show all
             </Button>
           )}
         </div>

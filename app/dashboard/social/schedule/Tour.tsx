@@ -215,7 +215,7 @@ export default function Tour({ tour, role = null, onClose }: {
         )}
         style={{ ...cardStyle, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
           {tour.name} · {shownNumber} of {total}
         </p>
         <p className="mt-1.5 text-[15px] font-semibold text-foreground">{step.title}</p>

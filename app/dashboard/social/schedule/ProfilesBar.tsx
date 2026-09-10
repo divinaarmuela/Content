@@ -119,6 +119,10 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
     <button
       type="button"
       aria-pressed={selected}
+      // pressing a warned channel opens the panel below it rather than
+      // filtering the week — the button has to announce which it does
+      aria-haspopup={warned && onReconnect ? 'dialog' : undefined}
+      aria-expanded={warned && onReconnect ? asking : undefined}
       title={broken ? `${name} — ${health?.reason ?? 'needs reconnecting'}` : soon ? `${name} — ${health?.reason}` : selected ? `Showing only ${name}` : `Show only ${name}`}
       onClick={() => { if (warned && onReconnect) setAsking(v => !v); else onPick() }}
       className="flex w-full flex-col items-center gap-1"
@@ -141,6 +145,7 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
         )}
         {(broken || soon) && (
           <span
+            role="img"
             aria-label={broken ? 'Needs reconnecting' : 'Connection runs out soon'}
             className={cn('absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full text-white', broken ? 'bg-accent-red' : 'bg-accent-amber')}
           >
@@ -148,12 +153,13 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
           </span>
         )}
       </span>
-      <span className={cn('w-full truncate text-center text-[11px] font-medium', broken ? 'text-accent-red' : 'text-muted-foreground')}>
+      <span className={cn('w-full truncate text-center text-[11px] font-medium', broken ? 'text-accent-red-deep' : 'text-muted-foreground')}>
         {broken ? 'Reconnect' : name}
       </span>
     </button>
     {asking && warned && onReconnect && (
-      <div className="absolute left-1/2 top-full z-30 mt-1 w-[220px] -translate-x-1/2 rounded-inner border border-border bg-popover p-3 text-left text-popover-foreground shadow-lg">
+      <div role="dialog" aria-label={`${name}: connection`}
+        className="absolute left-1/2 top-full z-30 mt-1 w-[220px] -translate-x-1/2 rounded-inner border border-border bg-popover p-3 text-left text-popover-foreground shadow-lg">
         <p className="text-[13px] font-semibold">
           {broken ? `${name} needs reconnecting` : `${name} — connection runs out soon`}
         </p>
@@ -165,26 +171,26 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
             signs in is who gets connected. Signing in as yourself puts your
             own account in the client's slot — and on Instagram replaces
             theirs (the owner, 9 Sep 2026: "what if team click reconnect"). */}
-        <p className="mt-1.5 rounded-inner bg-tint-amber px-2 py-1.5 text-[11px] leading-[1.4]">
+        <p className="mt-1.5 rounded-inner bg-tint-amber px-2 py-1.5 text-[12px] leading-[1.4]">
           Sign in as <strong>{name}</strong>, or as an admin on their page. Signing in as
           yourself connects <em>your</em> account instead.
         </p>
         <button type="button" onClick={() => { setAsking(false); onReconnect(account) }}
-          className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
-          <RefreshCw className="h-3.5 w-3.5" /> Reconnect {brandFor(platform).label}
+          className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full bg-foreground text-[13px] font-semibold text-background">
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Reconnect {brandFor(platform).label}
         </button>
         {/* no login for it? one press emails the client their own connect
             link, with Reconnect waiting on it — the way out of the popover
             that does not involve typing an email */}
         {onAskClient && (
           <button type="button" onClick={() => { setAsking(false); onAskClient(account) }}
-            className="mt-1 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-full border border-border text-[13px] font-semibold">
-            <Mail className="h-3.5 w-3.5" /> Email the client to reconnect
+            className="mt-1 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full border border-border text-[13px] font-semibold">
+            <Mail className="h-3.5 w-3.5" aria-hidden /> Email the client to reconnect
           </button>
         )}
         {soon && (
           <button type="button" onClick={() => { setAsking(false); onPick() }}
-            className="mt-1 flex min-h-9 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold">
+            className="mt-1 flex min-h-11 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold">
             {selected ? 'Show every channel' : `Show only ${name}`}
           </button>
         )}
@@ -205,10 +211,10 @@ function AccountSlot({ slot, selected, onPick, onReconnect, onAskClient, fallbac
               toast.error(e instanceof Error ? e.message : 'Could not check')
             } finally { setChecking(false) }
           }}
-          className="mt-1 flex min-h-9 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold disabled:opacity-60">
+          className="mt-1 flex min-h-11 w-full items-center justify-center rounded-full border border-border text-[13px] font-semibold disabled:opacity-60">
           {checking ? 'Checking…' : 'Already reconnected — check again'}
         </button>
-        <button type="button" onClick={() => setAsking(false)} className="mt-1 w-full text-[12px] text-muted-foreground underline-offset-4 hover:underline">Not now</button>
+        <button type="button" onClick={() => setAsking(false)} className="mt-1 flex min-h-11 w-full items-center justify-center text-[12px] text-muted-foreground underline-offset-4 hover:underline">Not now</button>
       </div>
     )}
     </div>
