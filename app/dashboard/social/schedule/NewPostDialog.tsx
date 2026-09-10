@@ -655,7 +655,9 @@ export default function NewPostDialog({
    */
   const instagramChannels = chosen.filter(a => String(a.platform) === 'instagram')
   const trial = postTrial(state.perChannel, instagramChannels)
-  const trialPossible = instagramChannels.length > 0 && kinds.includes('reel')
+  // judged on INSTAGRAM's kinds, not the lead channel's: a post led by
+  // TikTok with Instagram second can still be a Trial Reel
+  const trialPossible = instagramChannels.length > 0 && availableKinds('instagram', media).includes('reel')
   const setTrial = (strategy: 'MANUAL' | 'SS_PERFORMANCE' | '') => {
     for (const a of chosen) {
       dispatch({
@@ -1113,7 +1115,8 @@ export default function NewPostDialog({
                   {trial ? 'Trial Reel' : pickedKind ? KIND_WORD[pickedKind] : 'Auto publish'}
                 </>
               )}
-              width={220}
+              width={trialPossible ? 300 : 220}
+              disabled={locked}
             >
               <MenuItem
                 onClick={() => {
@@ -1704,9 +1707,11 @@ function problemsOf(e: unknown): string[] {
  * ref pointing at the dialog card, so clicking the caption box left the
  * channel list hanging open over the words being typed.
  */
-function Dropdown({ label, width, closeOnPick = true, children }: {
+function Dropdown({ label, width, closeOnPick = true, disabled = false, children }: {
   label: React.ReactNode
   width: number
+  /** a booked or posted post keeps its type — the menu shows it, and opens nothing */
+  disabled?: boolean
   /**
    * Does clicking inside the panel finish the job?
    *
@@ -1741,8 +1746,9 @@ function Dropdown({ label, width, closeOnPick = true, children }: {
       <button
         type="button"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen(o => !o)}
-        className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
+        className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted disabled:opacity-70 disabled:hover:bg-paper"
       >
         {label}
         <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
