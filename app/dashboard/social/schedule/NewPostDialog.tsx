@@ -10,6 +10,8 @@ import type { EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
 import { useTable } from '@/lib/db-client'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
+import { coverPatchFor, currentCover } from '@/app/lib/cover-core'
+import CoverPicker from './CoverPicker'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
@@ -1306,13 +1308,40 @@ export default function NewPostDialog({
               {shownSlide?.type === 'video' ? 'Edit video' : 'Edit image'}
             </button>
 
-            {/* The cover is a decision somebody already made in the editor;
-                saying so beats an empty box next to it. */}
-            {target.coverUrl && (
-              <p className="text-[12px] text-muted-foreground">
-                Cover: from the editor. That is the picture people see before
-                they press play.
-              </p>
+            {/* THE COVER, chosen here: a frame off the video or a picture of
+                your own, written into each channel's own cover field (the
+                owner, 10 Sep 2026). A single video only — a carousel's cover
+                is one of its pictures, chosen below. */}
+            {state.slides.length === 1 && state.slides[0].type === 'video' && chosen.length > 0 && (
+              <CoverPicker
+                videoUrl={state.slides[0].url}
+                playable={playable}
+                platforms={chosen.map(a => String(a.platform))}
+                current={currentCover(state.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), target.coverUrl)}
+                locked={locked}
+                onPick={url => {
+                  for (const a of chosen) {
+                    const patch = coverPatchFor(String(a.platform), url)
+                    if (Object.keys(patch).length) dispatch({ type: 'extra', channel: a.id, patch })
+                  }
+                }}
+              />
+            )}
+            {/* a TikTok photo post's cover is one of its pictures */}
+            {!locked && state.slides.length > 1 && chosen.some(a => String(a.platform) === 'tiktok') && shownSlide && (
+              <button
+                type="button"
+                onClick={() => {
+                  for (const a of chosen.filter(x => String(x.platform) === 'tiktok')) {
+                    dispatch({ type: 'extra', channel: a.id, patch: { photoCoverIndex: picked } })
+                  }
+                }}
+                className="flex min-h-9 items-center justify-center rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted"
+              >
+                {(state.perChannel[chosen.find(x => String(x.platform) === 'tiktok')?.id ?? '']?.photoCoverIndex ?? 0) === picked
+                  ? `Picture ${picked + 1} is the TikTok cover`
+                  : `Use picture ${picked + 1} as the TikTok cover`}
+              </button>
             )}
 
             {/* a Trial Reel is the one post type whose result the client
