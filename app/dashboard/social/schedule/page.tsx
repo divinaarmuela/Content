@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Images, Moon, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,7 @@ import PageTitle from '../../ui/PageTitle'
 import type { ScopeViewer } from '@/app/lib/scope-client'
 import type { ScheduleNote, SocialAccount } from '@/lib/db-types'
 import { toast } from 'sonner'
+import type { SchedulePostRow } from './useSchedulePosts'
 import MediaRail from './MediaRail'
 import NoteEditor from './NoteEditor'
 import { useDragSchedule } from './useDragSchedule'
@@ -378,6 +379,13 @@ export default function SchedulePage() {
    *  one of them out of it — "a draft nobody can find is a draft nobody
    *  finishes" (the owner, 9 Sep 2026: "saving as draft doesn't tell the
    *  user"). Only the List draws them; a grid has no cell for no-time. */
+  /** a draft thrown away from the List (the server refuses anything booked) */
+  const deleteDraft = useCallback(async (post: SchedulePostRow) => {
+    const res = await fetch(`/api/social/schedule/${post.id}`, { method: 'DELETE' })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { toast.error(String(json?.error ?? 'Could not delete that draft')); return }
+    toast.success('Draft deleted')
+  }, [])
   const inWeekOrUntimed = useMemo(
     () => channelPosts.filter(p => belongsInList(p, onOneOfDays(p.scheduled_for, tz, weekKeys))),
     [channelPosts, weekKeys, tz])
@@ -734,7 +742,7 @@ export default function SchedulePage() {
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
+                <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -754,7 +762,7 @@ export default function SchedulePage() {
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} />
+              <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">

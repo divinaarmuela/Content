@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
@@ -27,20 +28,27 @@ import { networkName } from '@/app/lib/publish-core'
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 /** A post as one line: media, time, what it is, where it goes. */
-function PostRow({ post, tz, onOpen }: {
+function PostRow({ post, tz, onOpen, onDelete }: {
   post: SchedulePostRow
   tz: string
   onOpen: (post: SchedulePostRow) => void
+  /** a draft can be thrown away from its row — the one place a draft is
+   *  listed now that the grids do not draw it (the owner, 10 Sep 2026:
+   *  "I uploaded files and exited the modal, there is no way to delete") */
+  onDelete?: (post: SchedulePostRow) => void
 }) {
+  const [sure, setSure] = useState(false)
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(post)}
+    <div
       className={cn(
-        'w-full text-left',
         'flex min-h-11 items-center gap-3 rounded-inner border border-border bg-surface px-3 py-2 transition-shadow hover:shadow-md',
         TONE_DIM[post.tone],
       )}
+    >
+    <button
+      type="button"
+      onClick={() => onOpen(post)}
+      className="flex min-w-0 flex-1 items-center gap-3 text-left"
     >
       <Thumb
         slide={post.slides[0] ?? null}
@@ -67,6 +75,24 @@ function PostRow({ post, tz, onOpen }: {
         <StatusDot tone={post.tone} />
       </span>
     </button>
+    {onDelete && post.live_status === 'draft' && (
+      sure ? (
+        <span className="flex shrink-0 items-center gap-1.5">
+          <button type="button" onClick={() => setSure(false)} className="min-h-9 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">Keep it</button>
+          <button type="button" onClick={() => onDelete(post)} className="min-h-9 rounded-full bg-accent-red px-3 text-[12px] font-semibold text-cream">Delete draft</button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setSure(true)}
+          aria-label="Delete this draft"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted"
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        </button>
+      )
+    )}
+    </div>
   )
 }
 
@@ -88,12 +114,14 @@ function OutcomeMark({ o }: { o: PlatformOutcome }) {
   )
 }
 
-export function ListView({ posts, tz, todayKey, onOpen }: {
+export function ListView({ posts, tz, todayKey, onOpen, onDelete }: {
   posts: SchedulePostRow[]
   tz: string
   /** the client's today, so the first headings read "Today" and "Tomorrow" */
   todayKey?: string | null
   onOpen: (post: SchedulePostRow) => void
+  /** throw a draft away from its row */
+  onDelete?: (post: SchedulePostRow) => void
 }) {
   const groups = groupForList(posts, tz, todayKey)
   if (groups.length === 0) return <Empty>Nothing planned in this week yet.</Empty>
@@ -104,7 +132,7 @@ export function ListView({ posts, tz, todayKey, onOpen }: {
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             {group.label}
           </h2>
-          {group.posts.map(p => <PostRow key={p.id} post={p} tz={tz} onOpen={onOpen} />)}
+          {group.posts.map(p => <PostRow key={p.id} post={p} tz={tz} onOpen={onOpen} onDelete={onDelete} />)}
         </section>
       ))}
     </div>

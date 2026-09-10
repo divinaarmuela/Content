@@ -3,8 +3,10 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, Batch, BatchComment, Client, ContentItem, IntakeForm, ItemComment,
-  MonthlyCommitment, ScheduleEntry, SocialAccount, SocialPost, TeamUserClient, WorkflowActivity,
+  MonthlyCommitment, PublishJob, ScheduleEntry, SocialAccount, SocialPost, TeamUserClient, WorkflowActivity,
 } from '@/lib/db-types'
+import { portalChannelLines, portalChannelWords, type PortalChannelLine } from './portal-channels-core'
+import type { OutcomeJob } from './post-outcome-core'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
   sanitiseCanvasCards, sanitiseShotList, sanitisePlannedDeliverables,
@@ -171,6 +173,10 @@ export type PortalCard = {
   posted_when: string | null
   /** the live post, once there is one */
   live_url: string | null
+  /** WHAT EACH CHANNEL DID (10 Sep 2026): booked for when, went out when,
+   *  did not go out, handed over as a draft, with the words already in the
+   *  client's clock */
+  channels: (PortalChannelLine & { words: string })[]
   /** the post's own page on the portal, once it has gone out — the numbers,
    *  the words and the people, in one place. Null on anything not posted. */
   post_id: string | null
@@ -358,7 +364,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   const backIds = items
     .filter(i => (i.status as ItemStatus) === 'internal_review')
     .map(i => i.id)
-  const [versionRows, scheduleRows, analyticsByItem, activityRows, postRows] = await Promise.all([
+  const [versionRows, scheduleRows, analyticsByItem, activityRows, postRows, jobRows] = await Promise.all([
     ids.length
       ? table<AssetVersion>('asset_versions')
           .list({ where: r => ids.includes(r.item_id), orderBy: [['version_number', 'desc']] })
@@ -386,7 +392,19 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
           .list({ where: r => ids.includes(r.item_id) })
           .catch(() => [] as SocialPost[])
       : Promise.resolve([] as SocialPost[]),
+    // the per-channel record behind each piece's posts
+    ids.length
+      ? table<PublishJob>('publish_jobs')
+          .list({ where: r => ids.includes(String(r.content_item_id ?? '')) })
+          .catch(() => [] as PublishJob[])
+      : Promise.resolve([] as PublishJob[]),
   ])
+  const jobsByItem = new Map<string, OutcomeJob[]>()
+  for (const j of jobRows) {
+    const key = String(j.content_item_id ?? '')
+    if (!key) continue
+    jobsByItem.set(key, [...(jobsByItem.get(key) ?? []), j as unknown as OutcomeJob])
+  }
 
   /** the post that went out for each piece — the newest, when there were two */
   const postByItem = new Map<string, string>()
@@ -680,6 +698,9 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       updated_at: p.updated_at,
       posted_when: postedWhen,
       live_url: live,
+      channels: facing
+        ? portalChannelLines(jobsByItem.get(p.id) ?? []).map(l => ({ ...l, words: portalChannelWords(l, scheduledWhen(l.at, tz)) }))
+        : [],
       post_id: p.status === 'published' ? postByItem.get(p.id) ?? null : null,
       metrics: p.metrics,
       actions: portalActions(p.status),
@@ -719,6 +740,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       updated_at: (b as { updated_at?: string }).updated_at ?? b.created_at ?? '',
       posted_when: null,
       live_url: null,
+      channels: [],
       post_id: null,
       metrics: null,
       actions: standing.actions,

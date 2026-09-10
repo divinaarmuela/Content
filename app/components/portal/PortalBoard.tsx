@@ -12,6 +12,7 @@ import Chip from '../../dashboard/ui/Chip'
 import type { PortalCard } from '../../lib/portal-data'
 import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
 import { portalPostHref } from '../../lib/post-page-core'
+import PlatformIcon from '../../dashboard/social/PlatformIcon'
 import { onCardLine } from '../../lib/canvas-comments-core'
 import { commentsBySlide, slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import {
@@ -387,6 +388,26 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           <p className={cn('flex items-center gap-1.5 text-[13px]', muted)}>
             <MapPin className="h-3.5 w-3.5 shrink-0" /> {card.shoot.location}
           </p>
+        )}
+        {/* what each channel did: booked, out, refused, a draft (10 Sep 2026) */}
+        {card.channels.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {card.channels.map(ch => (
+              <li key={`${ch.platform}-${ch.kind}`} className={cn('flex items-center gap-2 text-[13px]', ch.state === 'failed' ? 'font-semibold text-accent-red' : muted)}>
+                <PlatformIcon platform={ch.platform} size={16} className="shrink-0 rounded-full" />
+                <span>
+                  <span className="font-semibold text-foreground">{ch.network} {ch.kind.toLowerCase()}</span>
+                  {' \u00b7 '}{ch.words}
+                  {ch.url && (
+                    <>
+                      {' \u00b7 '}
+                      <a href={ch.url} target="_blank" rel="noreferrer noopener" className="underline-offset-4 hover:underline">See it</a>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
         {card.status === 'published' && card.metrics && (
           <div><PostMetricsRow item={{ metrics: card.metrics } as never} /></div>
