@@ -22,12 +22,15 @@
  */
 
 import {
-  asOrganizationUrn, COMMERCIAL_CONTENT_LABELS, DEFAULT_YOUTUBE_CATEGORY,
-  isPageId, isOrganizationUrn, kindTakesLocation,
-  networkName, PLATFORM_RULES, TIKTOK_CONSENT_LINE, TIKTOK_CONSENT_TICK,
+  asOrganizationUrn, cleanPollOptions, cleanVolume, COMMERCIAL_CONTENT_LABELS,
+  DEFAULT_YOUTUBE_CATEGORY, isPageId, isOrganizationUrn, kindTakesLocation,
+  networkName, PLATFORM_RULES, POLL_DURATIONS, POLL_OPTIONS_MAX, POLL_QUESTION_MAX,
+  POLL_OPTION_MAX, CARD_TEXT_MAX, CAROUSEL_CARDS_MAX,
+  TIKTOK_CONSENT_LINE, TIKTOK_CONSENT_TICK,
   TIKTOK_PRIVACY_LABELS, TIKTOK_PRIVACY_LEVELS, YOUTUBE_CATEGORIES,
   YOUTUBE_VISIBILITY_LABELS,
-  type CommercialContentType, type Platform, type PostKind, type PostOptions,
+  type CommercialContentType, type FacebookCarouselCard, type InstagramAudio,
+  type LinkedInPoll, type Platform, type PollDuration, type PostKind, type PostOptions,
   type TikTokPrivacy, type TrialGraduation, type UserTag, type YoutubeVisibility,
 } from './publish-core'
 import {
@@ -71,6 +74,8 @@ export type ChannelExtras = {
   muteAudio?: boolean
   isPaidPartnership?: boolean
   brandedContentSponsors?: string[]
+  /** a track from Instagram's own catalogue, on a Reel */
+  audio?: InstagramAudio
   /* Facebook and LinkedIn: only these countries see it */
   geoCountries?: string[]
   /* YouTube, and a Facebook Reel's title */
@@ -87,9 +92,19 @@ export type ChannelExtras = {
   organizationUrn?: string
   disableLinkPreview?: boolean
   documentTitle?: string
+  /** a question and two to four answers, instead of a post */
+  poll?: LinkedInPoll
+  /** somebody else's LinkedIn post, with our caption on top of it */
+  reshareUrl?: string
   /* Facebook */
   pageId?: string
   facebookDraft?: boolean
+  /** a link under each picture — Facebook's clickable carousel */
+  carouselCards?: FacebookCarouselCard[]
+  /** where the "See more" card at the end goes */
+  carouselLink?: string
+  /** Facebook's own number for a big-text background, on a text-only post */
+  textFormatPresetId?: string
   /* TikTok */
   privacyLevel?: TikTokPrivacy
   allowComment?: boolean
@@ -124,11 +139,14 @@ const EXTRA_KEY_MAP: Record<keyof ChannelExtras, true> = {
   trialGraduation: true, audioName: true,
   thumbOffset: true, userTags: true, isAiGenerated: true, commentsEnabled: true,
   muteAudio: true, isPaidPartnership: true, brandedContentSponsors: true,
+  audio: true,
   geoCountries: true,
   title: true, visibility: true, madeForKids: true, tags: true,
   categoryId: true, playlistId: true, containsSyntheticMedia: true, thumbnailUrl: true,
   organizationUrn: true, disableLinkPreview: true, documentTitle: true,
+  poll: true, reshareUrl: true,
   pageId: true, facebookDraft: true,
+  carouselCards: true, carouselLink: true, textFormatPresetId: true,
   privacyLevel: true, allowComment: true, allowDuet: true, allowStitch: true,
   commercialContentType: true, videoMadeWithAi: true, tiktokDraft: true,
   autoAddMusic: true, videoCoverTimestampMs: true, videoCoverImageUrl: true,
@@ -249,18 +267,24 @@ export function readPerChannel(v: unknown): Record<string, ChannelExtras> {
 
 /** What SHAPE each extra is stored as. Exhaustive on purpose: a new setting
  *  cannot be added to `ChannelExtras` without saying how it is read back. */
-const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'list' | 'people' | 'slides'> = {
+const EXTRA_SHAPE: Record<
+  keyof ChannelExtras,
+  'text' | 'flag' | 'number' | 'list' | 'people' | 'slides' | 'audio' | 'poll' | 'cards'
+> = {
   caption: 'text', kind: 'text', slides: 'slides',
   firstComment: 'text', collaborators: 'list', shareToFeed: 'flag', locationId: 'text',
   trialGraduation: 'text', audioName: 'text',
   thumbOffset: 'number', userTags: 'people', isAiGenerated: 'flag', commentsEnabled: 'flag',
   muteAudio: 'flag', isPaidPartnership: 'flag', brandedContentSponsors: 'list',
+  audio: 'audio',
   geoCountries: 'list',
   title: 'text', visibility: 'text', madeForKids: 'flag', tags: 'list',
   categoryId: 'text', playlistId: 'text', containsSyntheticMedia: 'flag',
   thumbnailUrl: 'text',
   organizationUrn: 'text', disableLinkPreview: 'flag', documentTitle: 'text',
+  poll: 'poll', reshareUrl: 'text',
   pageId: 'text', facebookDraft: 'flag',
+  carouselCards: 'cards', carouselLink: 'text', textFormatPresetId: 'text',
   privacyLevel: 'text', allowComment: 'flag', allowDuet: 'flag', allowStitch: 'flag',
   commercialContentType: 'text', videoMadeWithAi: 'flag', tiktokDraft: 'flag',
   autoAddMusic: 'flag', videoCoverTimestampMs: 'number', videoCoverImageUrl: 'text',
@@ -302,6 +326,74 @@ export function readUserTags(value: unknown): UserTag[] {
     out.push({ username, x: 0.5, y: 0.5 })
   }
   return out.slice(0, 20)
+}
+
+/**
+ * A track as it was stored: the id Instagram needs, and the words the window
+ * says it with. No id, no track — a chip with a title and nothing behind it
+ * is a Reel that posts in silence.
+ */
+export function readAudioChoice(value: unknown): InstagramAudio | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const r = value as Record<string, unknown>
+  const audioId = String(r.audioId ?? '').trim()
+  if (!audioId) return null
+  const artist = String(r.artist ?? '').trim()
+  const audioVolume = cleanVolume(r.audioVolume)
+  const videoVolume = cleanVolume(r.videoVolume)
+  return {
+    audioId,
+    title: String(r.title ?? '').trim() || 'Chosen sound',
+    ...(artist ? { artist } : {}),
+    ...(audioVolume === null ? {} : { audioVolume }),
+    ...(videoVolume === null ? {} : { videoVolume }),
+  }
+}
+
+/**
+ * A poll as it was stored.
+ *
+ * Kept whole rather than cleaned to death: a half-written poll (a question
+ * and one answer) has to survive a save, or somebody loses their work every
+ * time the window closes. It is `optionProblems` that refuses to POST one,
+ * not this.
+ */
+export function readPoll(value: unknown): LinkedInPoll | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const r = value as Record<string, unknown>
+  const question = String(r.question ?? '').trim().slice(0, POLL_QUESTION_MAX)
+  const options = cleanPollOptions(
+    (Array.isArray(r.options) ? r.options : []).map(o => String(o ?? '')),
+  ).slice(0, POLL_OPTIONS_MAX).map(o => o.slice(0, POLL_OPTION_MAX))
+  if (!question && options.length === 0) return null
+  const duration = String(r.duration ?? '')
+  return {
+    question,
+    options,
+    ...(POLL_DURATIONS.includes(duration as PollDuration)
+      ? { duration: duration as PollDuration } : {}),
+  }
+}
+
+/** The carousel's cards as they were stored, in order, one per picture. A
+ *  card with no link at all is dropped: it is a picture nobody can click. */
+export function readCarouselCards(value: unknown): FacebookCarouselCard[] {
+  if (!Array.isArray(value)) return []
+  const out: FacebookCarouselCard[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const r = raw as Record<string, unknown>
+    const link = String(r.link ?? '').trim()
+    if (!link) continue
+    const name = String(r.name ?? '').trim().slice(0, CARD_TEXT_MAX)
+    const description = String(r.description ?? '').trim().slice(0, CARD_TEXT_MAX)
+    out.push({
+      link,
+      ...(name ? { name } : {}),
+      ...(description ? { description } : {}),
+    })
+  }
+  return out.slice(0, CAROUSEL_CARDS_MAX)
 }
 
 export function readChannelExtras(raw: unknown): ChannelExtras {
@@ -354,6 +446,21 @@ export function readChannelExtras(raw: unknown): ChannelExtras {
         if (!Array.isArray(value)) break
         const people = readUserTags(value)
         if (people.length > 0) out[key] = people
+        break
+      }
+      case 'audio': {
+        const audio = readAudioChoice(value)
+        if (audio) out[key] = audio
+        break
+      }
+      case 'poll': {
+        const poll = readPoll(value)
+        if (poll) out[key] = poll
+        break
+      }
+      case 'cards': {
+        const cards = readCarouselCards(value)
+        if (cards.length > 0) out[key] = cards
         break
       }
       case 'slides':
@@ -487,11 +594,12 @@ export type MoreOptionKey =
   | 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
   | 'trialReel' | 'audioName'
   | 'igCover' | 'igTagPeople' | 'igComments' | 'igMute' | 'igAi' | 'igPaid' | 'igSponsors'
+  | 'igMusic'
   | 'geo'
   | 'ytTitle' | 'ytVisibility' | 'ytCategory' | 'ytPlaylist' | 'ytTags'
   | 'ytKids' | 'ytSynthetic' | 'ytThumbnail'
-  | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle'
-  | 'fbPage' | 'fbTitle' | 'fbDraft'
+  | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle' | 'liPoll' | 'liRepost'
+  | 'fbPage' | 'fbTitle' | 'fbDraft' | 'fbCards' | 'fbCardsLink' | 'fbTextBackground'
   | 'ttPrivacy' | 'ttComments' | 'ttDuet' | 'ttStitch' | 'ttCommercial'
   | 'ttAi' | 'ttDraft' | 'ttMusic' | 'ttCover' | 'ttDescription' | 'ttConsent'
 
@@ -502,6 +610,12 @@ export type OptionControl =
   | 'location' | 'collaborators' | 'consent'
   /** usernames of people tagged in the post — stored as `UserTag`s */
   | 'people'
+  /** search Instagram's catalogue, pick one track, set the two volumes */
+  | 'music'
+  /** a question, two to four answers, and how long it runs */
+  | 'poll'
+  /** one link, headline and line of words per picture in the post */
+  | 'cards'
 
 export type OptionChoice = { value: string; label: string }
 
@@ -533,6 +647,16 @@ type OptionSpec = Omit<MoreOption, 'platforms'> & {
   kinds?: PostKind[]
   /** …and whether it is a setting about video or about pictures */
   lead?: 'video' | 'image'
+  /**
+   * …and the three that only exist on a post with NOTHING attached.
+   *
+   * A LinkedIn poll, a LinkedIn repost and Facebook's big-text background are
+   * all refused outright by the network the moment a picture or a video is on
+   * the post. Offering them beside a video is offering a control that can
+   * only produce a refusal, so the row goes when there is media — which is
+   * exactly when `lead` is known.
+   */
+  needs?: 'noMedia'
 }
 
 const labelChoices = (labels: Record<string, string>): OptionChoice[] =>
@@ -623,6 +747,13 @@ const OPTION_SPECS: OptionSpec[] = [
     placeholder: 'Up to two Instagram usernames, separated by commas',
     help: 'Only sent with the Paid partnership label on.',
   },
+  {
+    key: 'igMusic', field: 'audio', control: 'music',
+    label: 'Add music', on: ['instagram'], kinds: ['reel'], lead: 'video',
+    placeholder: 'Search Instagram for a song',
+    help: 'Music from Instagram’s own catalogue, on a Reel. The account has to be '
+      + 'connected through Facebook for Instagram to hand the catalogue over.',
+  },
 
   /* ── YouTube ── */
   {
@@ -694,6 +825,19 @@ const OPTION_SPECS: OptionSpec[] = [
     label: 'Name for the PDF', on: ['linkedin'],
     placeholder: 'Shown on the document card',
   },
+  {
+    key: 'liPoll', field: 'poll', control: 'poll',
+    label: 'Ask a poll', on: ['linkedin'], needs: 'noMedia',
+    help: 'A question with two to four answers. LinkedIn will not take a poll with a '
+      + 'picture or video on the post, and a poll cannot be changed once it is up.',
+  },
+  {
+    key: 'liRepost', field: 'reshareUrl', control: 'text',
+    label: 'Repost an existing LinkedIn post', on: ['linkedin'], needs: 'noMedia',
+    placeholder: 'Paste the link to the LinkedIn post',
+    help: 'The caption becomes the comment above it. A repost cannot carry a '
+      + 'picture or video of its own.',
+  },
 
   /* ── Facebook ── */
   {
@@ -707,6 +851,25 @@ const OPTION_SPECS: OptionSpec[] = [
   {
     key: 'fbDraft', field: 'facebookDraft', control: 'toggle',
     label: 'Save it in Facebook as a draft instead of posting', on: ['facebook'],
+  },
+  {
+    key: 'fbCards', field: 'carouselCards', control: 'cards',
+    label: 'Put a link under each picture', on: ['facebook'], lead: 'image',
+    help: 'Facebook turns the pictures into cards people can click. One card per '
+      + 'picture, two to ten of them, pictures only.',
+  },
+  {
+    key: 'fbCardsLink', field: 'carouselLink', control: 'text',
+    label: 'Where the See more card goes', on: ['facebook'], lead: 'image',
+    placeholder: 'https://…',
+    help: 'The last card of the carousel. Facebook uses the first card’s link when '
+      + 'you leave this empty.',
+  },
+  {
+    key: 'fbTextBackground', field: 'textFormatPresetId', control: 'text',
+    label: 'Big-text background', on: ['facebook'], needs: 'noMedia',
+    placeholder: 'Facebook’s preset number',
+    help: 'Facebook’s preset number for a large-text background. Text-only posts.',
   },
 
   /* ── TikTok ── */
@@ -784,10 +947,12 @@ export function moreOptionsFor(
     if (spec.key === 'location' && !kindTakesLocation(kind ?? undefined)) continue
     if (spec.kinds && kind && !spec.kinds.includes(kind)) continue
     if (spec.lead && lead && spec.lead !== lead) continue
+    // media on the post at all is what these three cannot survive
+    if (spec.needs === 'noMedia' && lead) continue
     const on = list.filter(p => (spec.on as string[]).includes(p))
     if (on.length === 0) continue
     const rest = { ...spec } as Partial<OptionSpec>
-    delete rest.on; delete rest.kinds; delete rest.lead
+    delete rest.on; delete rest.kinds; delete rest.lead; delete rest.needs
     out.push({ ...(rest as Omit<MoreOption, 'platforms'>), platforms: on })
   }
   return out

@@ -388,6 +388,117 @@ export function optionProblems(
       + 'paste the page id, a plain number.')
   }
 
+  /* ── Instagram: a song on something that is not a Reel ── */
+  if (platform === 'instagram' && o.audio?.audioId?.trim()) {
+    if (o.kind && o.kind !== 'reel') {
+      out.push(
+        'Instagram only puts music from its catalogue on a Reel. Change the '
+        + 'post type to Reel, or take the music off.')
+    }
+    for (const [label, value] of [
+      ['track', o.audio.audioVolume], ['video', o.audio.videoVolume],
+    ] as const) {
+      if (value === undefined) continue
+      if (typeof value !== 'number' || !Number.isFinite(value)
+        || value < 0 || value > AUDIO_VOLUME_MAX) {
+        out.push(`The ${label} volume has to be a number from 0 to ${AUDIO_VOLUME_MAX}.`)
+      }
+    }
+  }
+
+  /* ── LinkedIn: a poll, and a repost, both of which are words alone ── */
+  if (platform === 'linkedin') {
+    const poll = o.poll
+    const asked = poll?.question?.trim() ?? ''
+    const answers = cleanPollOptions(poll?.options)
+    const hasPoll = Boolean(asked) || answers.length > 0
+    if (hasPoll) {
+      if (slides.length > 0) {
+        out.push(
+          'A LinkedIn poll cannot carry a picture or video, take the media '
+          + 'off or drop the poll.')
+      }
+      if (!asked) {
+        out.push('The LinkedIn poll needs a question.')
+      } else if (asked.length > POLL_QUESTION_MAX) {
+        out.push(
+          `The poll question is ${asked.length} letters. LinkedIn takes ${POLL_QUESTION_MAX}.`)
+      }
+      if (answers.length < POLL_OPTIONS_MIN || answers.length > POLL_OPTIONS_MAX) {
+        out.push(
+          `A LinkedIn poll needs ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers `
+          + `to choose from. This one has ${answers.length}.`)
+      }
+      const tooLong = answers.filter(a => a.length > POLL_OPTION_MAX)
+      if (tooLong.length > 0) {
+        out.push(
+          `Each poll answer takes ${POLL_OPTION_MAX} letters, and "${tooLong[0]}" is longer.`)
+      }
+      if (String(o.reshareUrl ?? '').trim()) {
+        out.push('A LinkedIn post is either a poll or a repost, not both. Take one off.')
+      }
+    }
+    const reshare = String(o.reshareUrl ?? '').trim()
+    if (reshare) {
+      if (slides.length > 0) {
+        out.push(
+          'A LinkedIn repost cannot carry a picture or video of its own, take '
+          + 'the media off or drop the repost.')
+      }
+      if (!isReshareTarget(reshare)) {
+        out.push(
+          'That does not look like a LinkedIn post. Copy the link to the post '
+          + 'from LinkedIn, or paste its urn:li:share id.')
+      }
+    }
+  }
+
+  /* ── Facebook: the link carousel, and the big-text background ── */
+  if (platform === 'facebook') {
+    const cards = Array.isArray(o.carouselCards) ? o.carouselCards : []
+    if (cards.length > 0) {
+      const images = slides.filter(m => m.type === 'image').length
+      if (cards.length < CAROUSEL_CARDS_MIN || cards.length > CAROUSEL_CARDS_MAX) {
+        out.push(
+          `A Facebook carousel takes ${CAROUSEL_CARDS_MIN} to ${CAROUSEL_CARDS_MAX} `
+          + `cards. This one has ${cards.length}.`)
+      }
+      if (slides.length > 0 && images !== slides.length) {
+        out.push('A Facebook carousel is pictures only. Take the video out, or drop the cards.')
+      } else if (slides.length > 0 && images !== cards.length) {
+        out.push(
+          `A Facebook carousel needs one card per picture. This post has ${images} `
+          + `${images === 1 ? 'picture' : 'pictures'} and ${cards.length} `
+          + `${cards.length === 1 ? 'card' : 'cards'}.`)
+      }
+      const missing = cards.findIndex(c => !isWebLink(c?.link))
+      if (missing >= 0) {
+        out.push(`Card ${missing + 1} needs a web address, starting with https.`)
+      }
+      const long = cards.findIndex(c => String(c?.name ?? '').trim().length > CARD_TEXT_MAX
+        || String(c?.description ?? '').trim().length > CARD_TEXT_MAX)
+      if (long >= 0) {
+        out.push(`Card ${long + 1} has more than ${CARD_TEXT_MAX} letters on it.`)
+      }
+    } else if (String(o.carouselLink ?? '').trim()) {
+      out.push('The "See more" link only shows on a carousel, and this post has no cards.')
+    }
+    const preset = String(o.textFormatPresetId ?? '').trim()
+    if (preset) {
+      if (!isTextFormatPresetId(preset)) {
+        out.push('A Facebook background is a plain number, Facebook’s own preset id.')
+      }
+      if (slides.length > 0 || cards.length > 0) {
+        out.push(
+          'Facebook only puts a big-text background on a post with no pictures '
+          + 'or video. Take the media off, or take the background off.')
+      }
+      if (!String(caption ?? '').trim() && !o.caption?.trim()) {
+        out.push('A big-text background needs some words to put on it.')
+      }
+    }
+  }
+
   /* ── LinkedIn: a document title with no document on it ── */
   if (platform === 'linkedin' && o.documentTitle?.trim() && slides.length > 0
     && !slides.some(m => m.type === 'document')) {
@@ -482,6 +593,16 @@ export type PostOptions = {
   isPaidPartnership?: boolean
   /** Up to two sponsors, Instagram usernames — only with the label above. */
   brandedContentSponsors?: string[]
+  /**
+   * A track from Instagram's own audio catalogue, on a REEL.
+   *
+   * Sent as `audioConfiguration`. It is not the same thing as `audioName`,
+   * which only renames the sound the video already has: this attaches a
+   * licensed song (or somebody else's original sound) that Instagram itself
+   * holds, and the account has to be connected with Facebook Login for
+   * Instagram to hand the catalogue over at all.
+   */
+  audio?: InstagramAudio
 
   /* ── YouTube (and a Facebook Reel, which also carries a title) ─────── */
 
@@ -506,6 +627,19 @@ export type PostOptions = {
   disableLinkPreview?: boolean
   /** The name shown on a PDF/document post. */
   documentTitle?: string
+  /**
+   * A poll instead of a post — a question and two to four answers.
+   *
+   * LinkedIn will not take a poll with a picture, a video or a repost on it,
+   * and a poll cannot be edited once it is up.
+   */
+  poll?: LinkedInPoll
+  /**
+   * Share somebody else's LinkedIn post, with our caption as the comment on
+   * top of it. A post link or a `urn:li:share` / `ugcPost` / `groupPost` URN.
+   * Cannot carry media of its own.
+   */
+  reshareUrl?: string
 
   /* ── Facebook ──────────────────────────────────────────────────────── */
 
@@ -513,6 +647,19 @@ export type PostOptions = {
   pageId?: string
   /** Save it in Facebook unpublished instead of posting it. */
   facebookDraft?: boolean
+  /**
+   * A link under every picture — Facebook's clickable carousel.
+   *
+   * One card per picture in the post, in the same order, two to ten of them.
+   * Sent inside `facebookSettings`.
+   */
+  carouselCards?: FacebookCarouselCard[]
+  /** Where the "See more" card at the end of the carousel goes. Facebook
+   *  uses the first card's link when nobody sets one. */
+  carouselLink?: string
+  /** Facebook's own number for a big-text background. TEXT-ONLY posts:
+   *  Facebook answers a preset with media or cards on it with a 400. */
+  textFormatPresetId?: string
 
   /* ── TikTok ────────────────────────────────────────────────────────────
    *
@@ -547,6 +694,141 @@ export type PostOptions = {
    * until it is ticked, and the flags themselves are always sent true.
    */
   tiktokConsent?: boolean
+}
+
+/* ── Instagram's audio catalogue ────────────────────────────────────────── */
+
+/**
+ * A track picked out of Instagram's catalogue, as the composer holds it.
+ *
+ * `audioId` is the only part Instagram is told; the title and the artist are
+ * carried so the window can say what was picked without asking the network
+ * again, and so a person reading the post back a month later sees a song
+ * rather than a number.
+ */
+export type InstagramAudio = {
+  audioId: string
+  title: string
+  /** the artist for licensed music, or the account name for an original sound */
+  artist?: string
+  /** how loud the track is, 0 to 100. Instagram uses 100 when nobody says. */
+  audioVolume?: number
+  /** how loud the video's own sound stays underneath, 0 to 100. 0 mutes it. */
+  videoVolume?: number
+}
+
+export const AUDIO_VOLUME_MAX = 100
+
+/** A volume as Instagram takes it: a whole number from 0 to 100, or nothing. */
+export function cleanVolume(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null
+  return Math.min(AUDIO_VOLUME_MAX, Math.max(0, Math.round(v)))
+}
+
+/* ── LinkedIn polls ─────────────────────────────────────────────────────── */
+
+export type PollDuration = 'ONE_DAY' | 'THREE_DAYS' | 'SEVEN_DAYS' | 'FOURTEEN_DAYS'
+
+export type LinkedInPoll = {
+  question: string
+  /** two to four answers, in the order they are shown */
+  options: string[]
+  duration?: PollDuration
+}
+
+/** How long a poll runs, in the words a person picks from. */
+export const POLL_DURATION_LABELS: Record<PollDuration, string> = {
+  ONE_DAY: '1 day',
+  THREE_DAYS: '3 days',
+  SEVEN_DAYS: '7 days',
+  FOURTEEN_DAYS: '14 days',
+}
+export const POLL_DURATIONS = Object.keys(POLL_DURATION_LABELS) as PollDuration[]
+/** What LinkedIn runs a poll for when nobody chooses. */
+export const DEFAULT_POLL_DURATION: PollDuration = 'SEVEN_DAYS'
+export const POLL_QUESTION_MAX = 140
+export const POLL_OPTION_MAX = 30
+export const POLL_OPTIONS_MIN = 2
+export const POLL_OPTIONS_MAX = 4
+
+/** The answers as LinkedIn takes them: trimmed, no blanks, no repeats. */
+export function cleanPollOptions(list: readonly string[] | null | undefined): string[] {
+  const out: string[] = []
+  for (const raw of Array.isArray(list) ? list : []) {
+    const option = String(raw ?? '').trim()
+    if (option && !out.includes(option)) out.push(option)
+  }
+  return out
+}
+
+/**
+ * Is this something LinkedIn can reshare — a post link, or one of its URNs?
+ *
+ * A person copying a post's link gets a `linkedin.com/…` address; a person
+ * reading the API gets `urn:li:share:123`. Both are real; anything else is a
+ * post that LinkedIn refuses rather than explains.
+ */
+export function isReshareTarget(v: string | null | undefined): boolean {
+  const value = String(v ?? '').trim()
+  if (/^urn:li:(share|ugcPost|groupPost):\d+$/.test(value)) return true
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'https:' || url.protocol === 'http:')
+      && /(^|\.)linkedin\.com$/i.test(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+/* ── Facebook link carousels ────────────────────────────────────────────── */
+
+/** One card of a Facebook link carousel: the picture is the post's, in order;
+ *  this is what sits under it. */
+export type FacebookCarouselCard = {
+  link: string
+  /** the headline. Facebook takes 255 letters and shows about 35. */
+  name?: string
+  /** the line under it. 255 letters, about 30 shown. */
+  description?: string
+}
+
+export const CAROUSEL_CARDS_MIN = 2
+export const CAROUSEL_CARDS_MAX = 10
+/** what Facebook takes for a card's headline and its line underneath */
+export const CARD_TEXT_MAX = 255
+
+/** Is this a web address a card can point at? */
+export function isWebLink(v: string | null | undefined): boolean {
+  try {
+    const url = new URL(String(v ?? '').trim())
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+/** Cards as Facebook takes them: a real link each, the text clamped. */
+export function cleanCarouselCards(
+  list: readonly FacebookCarouselCard[] | null | undefined,
+): FacebookCarouselCard[] {
+  const out: FacebookCarouselCard[] = []
+  for (const raw of Array.isArray(list) ? list : []) {
+    const link = String(raw?.link ?? '').trim()
+    if (!isWebLink(link)) continue
+    const name = String(raw?.name ?? '').trim().slice(0, CARD_TEXT_MAX)
+    const description = String(raw?.description ?? '').trim().slice(0, CARD_TEXT_MAX)
+    out.push({
+      link,
+      ...(name ? { name } : {}),
+      ...(description ? { description } : {}),
+    })
+  }
+  return out.slice(0, CAROUSEL_CARDS_MAX)
+}
+
+/** Facebook's text-background preset: digits, nothing else. */
+export function isTextFormatPresetId(v: string | null | undefined): boolean {
+  return /^\d{1,25}$/.test(String(v ?? '').trim())
 }
 
 export type TrialGraduation = 'MANUAL' | 'SS_PERFORMANCE'
@@ -765,6 +1047,9 @@ const FIELD_PLATFORMS: Record<string, Platform[]> = {
   muteAudio: ['instagram'],
   isPaidPartnership: ['instagram'],
   brandedContentSponsors: ['instagram'],
+  audioConfiguration: ['instagram'],
+  poll: ['linkedin'],
+  reshareUrl: ['linkedin'],
   title: ['youtube', 'facebook'],
   visibility: ['youtube'],
   madeForKids: ['youtube'],
@@ -804,8 +1089,26 @@ export function tagsLength(tags: readonly string[] | null | undefined): number {
  *   - Facebook: "reel" and "story" both exist, and the DEFAULT is a feed
  *     video. Choosing Reel used to send nothing, so a Facebook "Reel" went out
  *     as an ordinary feed video every time. */
-export function toPlatformData(o: PostOptions, platform?: Platform): Record<string, unknown> | null {
+export function toPlatformData(
+  o: PostOptions,
+  platform?: Platform,
+  /**
+   * The media THIS channel is actually posting, when the caller knows it.
+   *
+   * Three of the newer settings are refused outright by the network when the
+   * post has media on it — a LinkedIn poll, a LinkedIn repost, and Facebook's
+   * big-text background — so they are dropped rather than sent, the same way
+   * a location is dropped off a Story. A caller that hands over no media at
+   * all is trusted; `validatePost` and `optionProblems` are what refuse the
+   * combination before it ever gets here.
+   */
+  media?: readonly MediaItem[] | null,
+): Record<string, unknown> | null {
   const out: Record<string, unknown> = {}
+  const slides = Array.isArray(media) ? media : []
+  /** does this post carry files at all — the thing three settings cannot */
+  const hasMedia = slides.length > 0
+  const imageCount = slides.filter(m => m.type === 'image').length
   /** write a field only where the network HAS it. A caller that names no
    *  platform gets the unguarded shape — every real caller names one. */
   const put = (field: string, value: unknown) => {
@@ -853,6 +1156,20 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   if (o.audioName?.trim() && o.kind === 'reel') {
     put('audioName', o.audioName.trim())
   }
+  // A CATALOGUE TRACK IS A REEL SETTING TOO. Instagram takes
+  // `audioConfiguration` on a Reel and nowhere else, and the volumes are
+  // whole numbers from 0 to 100 — anything else is a 400 rather than a
+  // rounding. They travel only when somebody moved them: leaving them out is
+  // Instagram's own 100.
+  if (o.audio?.audioId?.trim() && o.kind === 'reel') {
+    const audioVolume = cleanVolume(o.audio.audioVolume)
+    const videoVolume = cleanVolume(o.audio.videoVolume)
+    put('audioConfiguration', {
+      audioId: String(o.audio.audioId).trim(),
+      ...(audioVolume === null ? {} : { audioVolume }),
+      ...(videoVolume === null ? {} : { videoVolume }),
+    })
+  }
 
   /* ── YouTube ── */
   if (o.title?.trim()) {
@@ -878,11 +1195,47 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   }
   if (o.disableLinkPreview !== undefined) put('disableLinkPreview', o.disableLinkPreview)
   if (o.documentTitle?.trim()) put('documentTitle', o.documentTitle.trim())
+  // a poll and a repost are both posts made of WORDS: LinkedIn refuses
+  // either one the moment a picture or a video is attached, so a post that
+  // has grown media since the choice was made sends neither
+  if (o.poll?.question?.trim() && !hasMedia) {
+    const options = cleanPollOptions(o.poll.options)
+    if (options.length >= POLL_OPTIONS_MIN) {
+      put('poll', {
+        question: o.poll.question.trim().slice(0, POLL_QUESTION_MAX),
+        options: options.slice(0, POLL_OPTIONS_MAX).map(x => x.slice(0, POLL_OPTION_MAX)),
+        duration: o.poll.duration ?? DEFAULT_POLL_DURATION,
+      })
+    }
+  }
+  if (isReshareTarget(o.reshareUrl) && !hasMedia) {
+    put('reshareUrl', String(o.reshareUrl).trim())
+  }
 
   /* ── Facebook ── */
   if (o.pageId) put('pageId', String(o.pageId))
-  // Zernio nests Facebook's draft flag one level down, under its own key
-  if (o.facebookDraft) put('facebookSettings', { draft: true })
+  /**
+   * FACEBOOK'S OWN BLOCK IS ONE OBJECT, NOT THREE.
+   *
+   * The draft flag, the link carousel and the big-text background all live
+   * under `facebookSettings`, so they are gathered here and written once —
+   * writing them one at a time would leave the last one standing and quietly
+   * throw the others away.
+   */
+  const facebookSettings: Record<string, unknown> = {}
+  if (o.facebookDraft) facebookSettings.draft = true
+  const cards = cleanCarouselCards(o.carouselCards)
+  // one card per picture, in the same order: a count that does not match the
+  // pictures is a 400, so a set that has changed under the cards is dropped
+  if (cards.length >= CAROUSEL_CARDS_MIN && (!hasMedia || imageCount === cards.length)) {
+    facebookSettings.carouselCards = cards
+    if (isWebLink(o.carouselLink)) facebookSettings.carouselLink = String(o.carouselLink).trim()
+  }
+  // …and the background, which is the opposite: text and nothing else
+  if (isTextFormatPresetId(o.textFormatPresetId) && !hasMedia && !facebookSettings.carouselCards) {
+    facebookSettings.textFormatPresetId = String(o.textFormatPresetId).trim()
+  }
+  if (Object.keys(facebookSettings).length > 0) put('facebookSettings', facebookSettings)
   // Instagram only, and never on a Story: Instagram REFUSES a Story carrying
   // a location rather than ignoring it, so sending it there would turn a
   // harmless extra into a post that never goes out.
@@ -1069,7 +1422,12 @@ export function buildPostBody(input: {
   const body: ZernioPostBody = {
     content: input.caption,
     platforms: input.targets.map(t => {
-      const chosen = t.options ? toPlatformData(t.options, t.platform) : null
+      // WITH THE MEDIA THIS CHANNEL IS ACTUALLY POSTING. A LinkedIn poll and
+      // a Facebook carousel are both decided by what is attached, and this
+      // channel may have its own set — judging them on everybody's would send
+      // a poll on a post that has a video on it for this channel alone.
+      const ownMedia = t.options?.media?.length ? t.options.media : input.media
+      const chosen = t.options ? toPlatformData(t.options, t.platform, ownMedia) : null
       // YouTube refuses a video with no title and no category, so a post
       // nobody opened the options for still carries both — under whatever
       // was actually chosen, never over it
@@ -1085,11 +1443,10 @@ export function buildPostBody(input: {
        * Shorts have no custom thumbnail at all — YouTube ignores it there —
        * so nothing is attached to one.
        */
-      const media = t.options?.media?.length ? t.options.media : input.media
       const wantsThumb = t.platform === 'youtube' && t.options?.thumbnailUrl?.trim()
-        && t.options?.kind !== 'reel' && media.length > 0
+        && t.options?.kind !== 'reel' && ownMedia.length > 0
       const customMedia = wantsThumb
-        ? media.map((m, i) => (i === 0 ? { ...m, thumbnail: t.options!.thumbnailUrl!.trim() } : m))
+        ? ownMedia.map((m, i) => (i === 0 ? { ...m, thumbnail: t.options!.thumbnailUrl!.trim() } : m))
         : t.options?.media?.length ? t.options.media : null
 
       return {

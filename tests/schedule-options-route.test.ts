@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
-import { readCreatorInfo } from '../app/lib/publisher'
+import { readAudioTracks, readCreatorInfo } from '../app/lib/publisher'
 
 /**
  * WHAT EACH CHANNEL ITSELF ALLOWS.
@@ -46,6 +46,7 @@ vi.mock('../app/lib/authz', () => {
 })
 
 const options = await import('../app/api/social/schedule/options/route')
+const audio = await import('../app/api/social/schedule/audio/route')
 
 const CLIENT = 'c1'
 const AM = { id: 'u-am', role: 'account_manager', email: 'am@x.invalid', name: 'Ada', clerk_user_id: null }
@@ -68,6 +69,10 @@ beforeEach(() => {
         id: 'acc-yt', client_id: CLIENT, platform: 'youtube', provider_account_id: 'prov-yt',
         name: 'Acme on YouTube', username: 'acme', avatar_url: null, active: true,
       },
+      {
+        id: 'acc-ig', client_id: CLIENT, platform: 'instagram', provider_account_id: 'prov-ig',
+        name: 'Acme on Instagram', username: 'acme', avatar_url: null, active: true,
+      },
     ] as unknown as Row[],
     team_users: [AM, SCHEDULER].map(u => ({
       ...u, active_status: true, employment_type: 'employee',
@@ -83,6 +88,10 @@ afterEach(() => {
   fake.restore()
   vi.restoreAllMocks()
 })
+
+const getAudio = (query: string) => audio.GET(
+  new Request(`https://x.test/api/social/schedule/audio${query}`))
+  .then(async r => ({ status: r.status, body: await r.json() as Record<string, never> }))
 
 const get = (query: string) => options.GET(
   new Request(`https://x.test/api/social/schedule/options${query}`))
@@ -219,6 +228,76 @@ describe('reading TikTok’s creator info', () => {
     expect(flat.maxVideoDurationSec).toBe(180)
     expect(flat.commercial).toEqual([{ value: 'brand_content', label: 'Paid partnership' }])
   })
+
+  it('reads TikTok’s own answer to "may this account post again today"', () => {
+    // the live capture says yes; an answer that is missing is NOT a yes
+    expect(readCreatorInfo(LIVE_CREATOR_INFO).canPostMore).toBe(true)
+    expect(readCreatorInfo({ creator: { nickname: 'x', canPostMore: false } }).canPostMore)
+      .toBe(false)
+    expect(readCreatorInfo({}).canPostMore).toBeNull()
+  })
+})
+
+/**
+ * INSTAGRAM'S AUDIO CATALOGUE.
+ *
+ * The id is Meta's own and cannot be invented, so what the search hands back
+ * is the whole of what the window may offer. `downloadUrl` is dropped on
+ * purpose: it is a preview Meta expires after about a day and a half, and a
+ * post scheduled for next week would hold a dead link.
+ */
+describe('reading the audio catalogue', () => {
+  it('reads the documented shape, music and original sounds alike', () => {
+    expect(readAudioTracks({
+      audio: [
+        {
+          audioId: '482851939985510', title: 'Summer Nights', audioType: 'music',
+          durationInMs: 182000, displayArtist: 'The Example Band',
+          downloadUrl: 'https://scontent.invalid/o1/v.mp4',
+        },
+        {
+          audioId: '99', title: 'Original audio', audioType: 'original',
+          durationInMs: 15000, igUsername: 'acme',
+        },
+      ],
+    })).toEqual([
+      {
+        audioId: '482851939985510', title: 'Summer Nights', audioType: 'music',
+        durationMs: 182000, artist: 'The Example Band',
+      },
+      { audioId: '99', title: 'Original audio', audioType: 'original', durationMs: 15000, artist: 'acme' },
+    ])
+  })
+
+  it('drops a row with no id, and never repeats one', () => {
+    expect(readAudioTracks({ audio: [{ title: 'No id' }, { audioId: 'a' }, { audioId: 'a' }] }))
+      .toEqual([{ audioId: 'a', title: 'Untitled sound', audioType: 'music', durationMs: null, artist: null }])
+    expect(readAudioTracks(null)).toEqual([])
+  })
+})
+
+describe('the audio route', () => {
+  it('hands a scheduler the catalogue for this client’s Instagram channel', async () => {
+    const res = await getAudio('?accountId=acc-ig&q=summer')
+    expect(res.status).toBe(200)
+    expect((res.body.tracks as unknown as { audioId: string }[])[0].audioId).toBe('dry-run-audio')
+    expect(res.body.needsFacebookLogin).toBe(false)
+  })
+
+  it('answers a channel that is not Instagram with an empty list, not an error', async () => {
+    const res = await getAudio('?accountId=acc-yt')
+    expect(res.status).toBe(200)
+    expect(res.body.tracks).toEqual([])
+  })
+
+  it('is scoped exactly like the options route beside it', async () => {
+    as({ id: 'u-cl', role: 'client', email: 'cl@x.invalid', name: 'Cass', clerk_user_id: null })
+    expect((await getAudio('?accountId=acc-ig')).status).toBe(403)
+    as({ id: 'u-ed', role: 'editor', email: 'ed@x.invalid', name: 'Ash', clerk_user_id: null })
+    expect((await getAudio('?accountId=acc-ig')).status).toBe(404)
+    as(SCHEDULER)
+    expect((await getAudio('')).status).toBe(400)
+  })
 })
 
 describe('the options route', () => {
@@ -236,6 +315,16 @@ describe('the options route', () => {
     })
     expect(res.body.maxVideoDurationSec).toBe(3600)
     expect((res.body.creator as unknown as { name: string }).name).toBe('Dry run creator')
+    // TikTok's own yes-or-no about the rest of its 24 hours
+    expect(res.body.canPostMore).toBe(true)
+  })
+
+  it('tells the window how much of the day an Instagram account has left', async () => {
+    // the total is the NETWORK's, never one of ours: Meta's prose and Meta's
+    // API disagree about the cap and the API is the one that refuses the post
+    const res = await get('?accountId=acc-ig')
+    expect(res.status).toBe(200)
+    expect(res.body.quota).toEqual({ used: 1, total: 100 })
   })
 
   it('answers a channel with nothing of its own with empty lists, not an error', async () => {

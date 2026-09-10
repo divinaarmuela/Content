@@ -910,6 +910,123 @@ describe('what the options themselves get wrong, in plain words', () => {
       [{ url: 'https://x/a.pdf', type: 'document' }])).toEqual([])
   })
 
+  /* ── Instagram's catalogue music: a Reel setting, with two volumes ── */
+
+  it('says catalogue music only goes on a Reel', () => {
+    const track = { audioId: '482851939985510', title: 'Summer Nights' }
+    expect(problems('instagram', { kind: 'carousel', audio: track }, img(3)).join(' '))
+      .toMatch(/only puts music from its catalogue on a Reel/)
+    expect(problems('instagram', { kind: 'story', audio: track }, vid(1)).join(' '))
+      .toMatch(/only puts music from its catalogue on a Reel/)
+    expect(problems('instagram', { kind: 'reel', audio: track }, vid(1))).toEqual([])
+  })
+
+  it('holds the two volumes to 0 to 100', () => {
+    const at = (audioVolume: number) => problems('instagram', {
+      kind: 'reel', audio: { audioId: '1', title: 'A song', audioVolume },
+    }, vid(1)).join(' ')
+    expect(at(140)).toMatch(/0 to 100/)
+    expect(at(-1)).toMatch(/0 to 100/)
+    expect(at(0)).toBe('')
+    expect(at(100)).toBe('')
+  })
+
+  /* ── LinkedIn polls and reposts: posts made of words ── */
+
+  it('refuses a LinkedIn poll that carries media', () => {
+    const poll = { question: 'Which one?', options: ['A', 'B'] }
+    expect(problems('linkedin', { poll }, img(1)).join(' '))
+      .toMatch(/poll cannot carry a picture or video/)
+    expect(problems('linkedin', { poll }, [])).toEqual([])
+  })
+
+  it('counts the poll’s question and its answers the way LinkedIn does', () => {
+    expect(problems('linkedin', { poll: { question: 'x'.repeat(180), options: ['A', 'B'] } }, [])
+      .join(' ')).toMatch(/180 letters. LinkedIn takes 140/)
+    expect(problems('linkedin', { poll: { question: 'Which?', options: ['Only one'] } }, [])
+      .join(' ')).toMatch(/2 to 4 answers to choose from. This one has 1/)
+    expect(problems('linkedin', {
+      poll: { question: 'Which?', options: ['A', 'B', 'C', 'D', 'E'] },
+    }, []).join(' ')).toMatch(/This one has 5/)
+    expect(problems('linkedin', {
+      poll: { question: 'Which?', options: ['A', 'x'.repeat(40)] },
+    }, []).join(' ')).toMatch(/Each poll answer takes 30 letters/)
+    // a poll with answers and no question is half typed, and says so
+    expect(problems('linkedin', { poll: { question: '', options: ['A', 'B'] } }, []).join(' '))
+      .toMatch(/needs a question/)
+  })
+
+  it('will not take a poll and a repost on one post', () => {
+    expect(problems('linkedin', {
+      poll: { question: 'Which?', options: ['A', 'B'] },
+      reshareUrl: 'https://www.linkedin.com/posts/someone_a-post',
+    }, []).join(' ')).toMatch(/either a poll or a repost/)
+  })
+
+  it('knows a LinkedIn post link from something somebody pasted by mistake', () => {
+    for (const url of [
+      'https://www.linkedin.com/posts/someone_a-post-id',
+      'https://linkedin.com/feed/update/urn:li:activity:7',
+      'urn:li:share:123',
+      'urn:li:ugcPost:123',
+      'urn:li:groupPost:123',
+    ]) {
+      expect(problems('linkedin', { reshareUrl: url }, []), url).toEqual([])
+    }
+    for (const url of ['https://example.invalid/post', 'linkedin', 'urn:li:share:abc']) {
+      expect(problems('linkedin', { reshareUrl: url }, []).join(' '), url)
+        .toMatch(/does not look like a LinkedIn post/)
+    }
+  })
+
+  it('refuses a repost that carries media of its own', () => {
+    expect(problems('linkedin', { reshareUrl: 'urn:li:share:123' }, vid(1)).join(' '))
+      .toMatch(/repost cannot carry a picture or video/)
+  })
+
+  /* ── Facebook's link carousel and its big-text background ── */
+
+  it('needs one carousel card per picture, and pictures only', () => {
+    const cards = [
+      { link: 'https://example.invalid/1' },
+      { link: 'https://example.invalid/2' },
+    ]
+    expect(problems('facebook', { carouselCards: cards }, img(2))).toEqual([])
+    expect(problems('facebook', { carouselCards: cards }, img(3)).join(' '))
+      .toMatch(/3 pictures and 2 cards/)
+    expect(problems('facebook', { carouselCards: cards }, vid(1)).join(' '))
+      .toMatch(/pictures only/)
+    expect(problems('facebook', { carouselCards: [cards[0]] }, img(1)).join(' '))
+      .toMatch(/2 to 10 cards/)
+  })
+
+  it('says which card is missing its link, and which is too wordy', () => {
+    expect(problems('facebook', {
+      carouselCards: [{ link: 'https://example.invalid/1' }, { link: 'not a link' }],
+    }, img(2)).join(' ')).toMatch(/Card 2 needs a web address/)
+    expect(problems('facebook', {
+      carouselCards: [
+        { link: 'https://example.invalid/1' },
+        { link: 'https://example.invalid/2', name: 'x'.repeat(300) },
+      ],
+    }, img(2)).join(' ')).toMatch(/Card 2 has more than 255 letters/)
+  })
+
+  it('mentions the See more link only when there are no cards under it', () => {
+    expect(problems('facebook', { carouselLink: 'https://example.invalid/all' }, img(2)).join(' '))
+      .toMatch(/only shows on a carousel/)
+  })
+
+  it('keeps the big-text background to a post made of words', () => {
+    expect(problems('facebook', { textFormatPresetId: '123456' }, [])).toEqual([])
+    expect(problems('facebook', { textFormatPresetId: '123456' }, img(1)).join(' '))
+      .toMatch(/no pictures or video/)
+    expect(problems('facebook', { textFormatPresetId: 'blue' }, []).join(' '))
+      .toMatch(/plain number/)
+    expect(optionProblems('facebook', { textFormatPresetId: '123456' }, [], '').join(' '))
+      .toMatch(/needs some words/)
+  })
+
   it('judges an options-blind caller on the media and the words alone', () => {
     // the ad-hoc publish endpoint knows nothing about per-network options; it
     // must not start refusing every TikTok post for a tick it never collects

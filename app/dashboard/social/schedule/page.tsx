@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Images, StickyNote, Users, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Images, Moon, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -79,6 +79,10 @@ export default function SchedulePage() {
       : new URLSearchParams(window.location.search).get('client')) || null)
   const [channel, setChannel] = useState<string | null>(null)
   const [view, setView] = usePersistedChoice<ScheduleViewName>(VIEW_KEY, VIEWS, 'Week', 'view')
+  /** the week opens at 6 am with no scroll; midnight to 5 am is one press
+   *  away, and remembered (the owner, 10 Sep 2026) */
+  const [night, setNight] = usePersistedChoice<'hide' | 'show'>('schedule.night', ['hide', 'show'], 'hide')
+  const hours = useMemo(() => ({ fromHour: night === 'show' ? 0 : 6, toHour: 23 }), [night])
   /** any day in the week (or month) on screen, as a 'YYYY-MM-DD' key */
   const [anchor, setAnchor] = useState<string | null>(null)
   /** the clock, for the now-line — a minute is close enough to "now" */
@@ -141,6 +145,7 @@ export default function SchedulePage() {
    */
   const drag = useDragSchedule({
     tz: data.tz,
+    hours,
     onMove: async (postId, at) => {
       const res = await fetch(`/api/social/schedule/${postId}/reschedule`, {
         method: 'POST',
@@ -330,8 +335,8 @@ export default function SchedulePage() {
     // the whole day: a midnight post was off the grid and could not be
     // dragged or dropped (the owner, 9 Sep 2026: "want to schedule it at
     // 12 am but no way"); the grid opens scrolled to 6 am
-    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX, fromHour: 0, toHour: 23 }),
-    [anchor, todayKey, tz])
+    () => scheduleWeekGrid({ start: anchor ?? todayKey ?? '', tz, rowPx: WEEK_ROW_PX, fromHour: hours.fromHour, toHour: hours.toHour }),
+    [anchor, todayKey, tz, hours])
   const monthView = view === 'Month'
   const monthKey = (anchor ?? todayKey ?? '').slice(0, 7)
 
@@ -590,6 +595,21 @@ export default function SchedulePage() {
             </span>
 
             <div className="ml-auto flex items-center gap-2">
+              {view === 'Week' && (
+                <button
+                  type="button"
+                  aria-pressed={night === 'show'}
+                  onClick={() => setNight(night === 'show' ? 'hide' : 'show')}
+                  title={night === 'show' ? 'Hide midnight to 5 am' : 'Show midnight to 5 am'}
+                  className={cn(
+                    'hidden min-h-11 items-center gap-2 rounded-full border border-border px-4 text-[13px] font-semibold md:flex',
+                    night === 'show' ? 'bg-foreground text-background' : 'bg-surface hover:bg-muted',
+                  )}
+                >
+                  <Moon className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                  Night hours
+                </button>
+              )}
               {view === 'Week' && (
                 <button
                   type="button"

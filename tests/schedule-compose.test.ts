@@ -173,6 +173,8 @@ describe('More options never offers what the provider cannot do', () => {
         'trialReel', 'audioName',
         // …and the rest of Instagram's own switches (10 Sep 2026)
         'igCover', 'igTagPeople', 'igComments', 'igMute', 'igAi', 'igPaid', 'igSponsors',
+        // catalogue music, a Reel setting like the two above it
+        'igMusic',
       ])
   })
 
@@ -184,7 +186,12 @@ describe('More options never offers what the provider cannot do', () => {
     // LinkedIn takes a first comment, a company page, a link preview and a
     // document name — and none of Instagram's
     expect(moreOptionsFor(['linkedin']).map(o => o.key))
-      .toEqual(['firstComment', 'geo', 'liOrganization', 'liLinkPreview', 'liDocumentTitle'])
+      .toEqual([
+        'firstComment', 'geo', 'liOrganization', 'liLinkPreview', 'liDocumentTitle',
+        // a poll and a repost: posts made of words, offered while nothing is
+        // attached and gone the moment something is
+        'liPoll', 'liRepost',
+      ])
     expect(moreOptionsFor(['youtube']).map(o => o.key)).toEqual([
       'firstComment', 'ytTitle', 'ytVisibility', 'ytCategory', 'ytPlaylist',
       'ytTags', 'ytKids', 'ytSynthetic', 'ytThumbnail',
@@ -209,6 +216,39 @@ describe('More options never offers what the provider cannot do', () => {
     for (const kind of ['feed', 'reel', 'carousel'] as const) {
       expect(moreOptionsFor(['instagram'], kind).map(o => o.key)).toContain('location')
     }
+  })
+
+  /**
+   * THE THREE THAT ONLY EXIST ON A POST WITH NOTHING ATTACHED.
+   *
+   * A LinkedIn poll, a LinkedIn repost and Facebook's big-text background are
+   * refused OUTRIGHT by the network once a file is on the post. A row offered
+   * beside a video is a control whose only possible result is a refusal.
+   */
+  it('takes the poll, the repost and the background away once there is media', () => {
+    for (const lead of ['video', 'image'] as const) {
+      const linkedin = moreOptionsFor(['linkedin'], null, lead).map(o => o.key)
+      expect(linkedin).not.toContain('liPoll')
+      expect(linkedin).not.toContain('liRepost')
+      expect(moreOptionsFor(['facebook'], null, lead).map(o => o.key))
+        .not.toContain('fbTextBackground')
+    }
+    // …and offers them on a post with nothing on it yet
+    expect(moreOptionsFor(['linkedin'], null, null).map(o => o.key)).toContain('liPoll')
+    expect(moreOptionsFor(['facebook'], null, null).map(o => o.key)).toContain('fbTextBackground')
+  })
+
+  it('offers the Facebook link carousel only over pictures', () => {
+    expect(moreOptionsFor(['facebook'], null, 'image').map(o => o.key))
+      .toEqual(expect.arrayContaining(['fbCards', 'fbCardsLink']))
+    expect(moreOptionsFor(['facebook'], null, 'video').map(o => o.key)).not.toContain('fbCards')
+  })
+
+  it('offers catalogue music on a Reel, and nowhere else', () => {
+    expect(moreOptionsFor(['instagram'], 'reel', 'video').map(o => o.key)).toContain('igMusic')
+    expect(moreOptionsFor(['instagram'], 'carousel', 'image').map(o => o.key)).not.toContain('igMusic')
+    expect(moreOptionsFor(['instagram'], 'story', 'video').map(o => o.key)).not.toContain('igMusic')
+    expect(moreOptionsFor(['facebook'], 'reel', 'video').map(o => o.key)).not.toContain('igMusic')
   })
 
   it('never offers a location anywhere but Instagram', () => {

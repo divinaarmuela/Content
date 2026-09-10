@@ -30,7 +30,6 @@ import type { SchedulePostRow } from './useSchedulePosts'
 /** an hour of the week, in pixels — the page passes it to the grid */
 export const WEEK_ROW_PX = 72
 /** the Shell's sticky top bar (h-[72px]) — what sticky day headers sit under */
-const TOP_BAR_PX = 72
 /** a tile: shorter than an hour, so it never straddles the next hour line */
 const TILE_PX = 64
 
@@ -322,25 +321,12 @@ export default function WeekGrid({
   /* FIRST LIGHT AT 6 AM. The grid runs the whole day now (midnight posts
      were unreachable), so on a fresh week the page is scrolled to 6 am —
      the night rows are above, one flick away. */
+  // NO SCROLL ON OPEN. The week used to scroll the page so 6 am sat under
+  // the day headers, which took the title and the toolbar off the screen the
+  // moment somebody opened Schedule (the owner, 10 Sep 2026: "when I click
+  // schedule it scrolls me down"). The grid now STARTS at 6 am instead, and
+  // the toolbar's "Night hours" switch draws midnight to 5 am when wanted.
   const root = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    // the nearest box that scrolls (the page's), moved so 6 am sits under
-    // the day headers. `scrollIntoView` on a child of the sticky rail did
-    // nothing reliable; arithmetic on the scroller does.
-    const el = root.current
-    if (!el) return
-    const frame = requestAnimationFrame(() => {
-      // the PAGE scrolls (measured 9 Sep 2026: no box between the grid and
-      // the window scrolls), so 6 am goes just under the sticky day header,
-      // which itself sits under the 72px top bar
-      const top = el.getBoundingClientRect().top + window.scrollY + 6 * grid.rowPx - TOP_BAR_PX
-      // `instant`: the page scrolls smoothly by default (globals.css), and a
-      // smooth jump on mount is cancelled by the page settling a frame later
-      // — measured at 5px of the 760 asked for (10 Sep 2026)
-      window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [grid.days[0]?.iso, grid.rowPx])
 
   return (
     // NOT a scroller of its own: it sits inside the page's scroller and

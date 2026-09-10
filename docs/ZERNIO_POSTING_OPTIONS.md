@@ -39,7 +39,7 @@ not ignored, it is a post that never happens.
 | Instagram | `igAi` — "Made with AI" | `isAiGenerated` | `isAiGenerated` |
 | Instagram | `igPaid` — "Paid partnership" | `isPaidPartnership` | `isPaidPartnership` (needs Facebook Login on the account) |
 | Instagram | `igSponsors` — "Sponsors" | `brandedContentSponsors` | `brandedContentSponsors` (max 2; only with the label on) |
-| Instagram | NOT OFFERED: `audioConfiguration` (catalog music) — needs the account reconnected with Facebook Login and a music search; a build of its own | | |
+| Instagram | `igMusic` — "Add music" (search box, results, chip with two volume boxes; Reels only) | `audio` (`{ audioId, title, artist?, audioVolume?, videoVolume? }`) | `audioConfiguration: { audioId, audioVolume?, videoVolume? }` — Reels only. Volumes are whole numbers 0-100 and travel only when moved; Instagram uses 100 for both. Needs the account connected with **Facebook Login**: otherwise the search 400s with `instagram_audio_requires_facebook_login` and the row says so in one sentence. `audioName` is a different thing (renaming the video's OWN sound) and is unchanged |
 | Facebook, LinkedIn | `geo` — "Only show it in these countries" | `geoCountries` | `geoRestriction.countries` (ISO alpha-2, max 25; never on a Story) |
 | YouTube | `ytTitle` — "Video title" | `title` | `title` (clamped to 100) |
 | YouTube | `ytVisibility` — "Who can watch" | `visibility` | `visibility` |
@@ -53,10 +53,15 @@ not ignored, it is a post that never happens.
 | LinkedIn | `liOrganization` — "Post as a company page" (fetched) | `organizationUrn` | `organizationUrn` |
 | LinkedIn | `liLinkPreview` — "Hide the link preview" | `disableLinkPreview` | `disableLinkPreview` |
 | LinkedIn | `liDocumentTitle` — "Name for the PDF" | `documentTitle` | `documentTitle` |
+| LinkedIn | `liPoll` — "Ask a poll" (question, 2-4 answers, 1/3/7/14 days). Only offered while the post has NO media | `poll` | `poll: { question, options, duration }` — question 1-140, each answer 1-30, `SEVEN_DAYS` when nobody picks. Refused with media or a repost, and cannot be edited after |
+| LinkedIn | `liRepost` — "Repost an existing LinkedIn post". Only offered while the post has NO media | `reshareUrl` | `reshareUrl` — a linkedin.com post link or `urn:li:share|ugcPost|groupPost:<digits>`. The caption becomes the commentary. Refused with media |
 | LinkedIn | `firstComment` | `firstComment` | `firstComment` |
 | Facebook | `fbPage` — "Which Page" (fetched) | `pageId` | `pageId` |
 | Facebook | `fbTitle` — "Reel title" (Reels only) | `title` | `title` |
 | Facebook | `fbDraft` — "Save it in Facebook as a draft…" | `facebookDraft` | `facebookSettings.draft` |
+| Facebook | `fbCards` — "Put a link under each picture" (one row per picture: link, headline, description) | `carouselCards` | `facebookSettings.carouselCards: [{ link, name?, description? }]` — 2-10, one per image in `mediaItems`, pictures only. `name`/`description` 255 |
+| Facebook | `fbCardsLink` — "Where the See more card goes" | `carouselLink` | `facebookSettings.carouselLink` — only with the cards; Facebook uses the first card's link when empty |
+| Facebook | `fbTextBackground` — "Big-text background" (digits). Only offered while the post has NO media | `textFormatPresetId` | `facebookSettings.textFormatPresetId` — TEXT-ONLY feed posts; 400 with media, cards or no words. The cards win when both are set |
 | Facebook | `firstComment`, `shareToFeed`, post type | `firstComment`, `shareToFeed`, `kind` | `firstComment`, `shareToFeed`, `contentType: 'reel'\|'story'` |
 | TikTok | `ttPrivacy` — "Who can see it" (creator's own list, else the four documented) | `privacyLevel` | `tiktokSettings.privacy_level` |
 | TikTok | `ttComments` / `ttDuet` / `ttStitch` (default on; stitch on video only) | `allowComment` / `allowDuet` / `allowStitch` | `allow_comment` / `allow_duet` / `allow_stitch` |
@@ -82,9 +87,22 @@ Read through `publisher.channelOptions(accountId, platform)`; under
 | Network | Zernio | Comes back as | What it draws |
 |---|---|---|---|
 | YouTube | `GET /accounts/{id}/youtube-playlists` | `playlists` | the playlist picker |
+| Instagram | `GET /accounts/{id}/instagram/publishing-limit` | `quota: { used, total }` | "Instagram: 87 of 100 posts left today", and a refusal at zero |
+| Instagram | `GET /accounts/{id}/instagram/audio?audioType=music&q=` (its own route, `/api/social/schedule/audio`) | `{ tracks, needsFacebookLogin }` | the music search on the `igMusic` row |
 | LinkedIn | `GET /accounts/{id}/linkedin-organizations` | `organizations` | the company-page picker |
 | Facebook | `GET /accounts/{id}/facebook-page` | `pages` | the Page picker |
-| TikTok | `GET /accounts/{id}` (creator info) | `privacy`, `interactions`, `commercial` | who can see it, and which interactions the ACCOUNT allows |
+| TikTok | `GET /accounts/{id}` (creator info) | `privacy`, `interactions`, `commercial`, `canPostMore` | who can see it, which interactions the ACCOUNT allows, and whether it may post again today |
+
+## What is left of today
+
+`quota-core.ts` — pure, tested in `tests/quota-core.test.ts`. Instagram
+answers `{ quotaUsage, quotaTotal, quotaDurationSeconds }`; TikTok's creator
+info answers `creator.canPostMore`. **The total is always the network's own**:
+Meta's prose and Meta's live API disagree about the cap, and the live one is
+what refuses the post. The composer shows one line per channel, and an account
+with nothing left disables Schedule with a sentence naming the handle, the
+limit and when to book it instead. No answer is NO ANSWER, never "the day is
+free".
 
 ## Defaults, so a post can go out untouched
 
@@ -110,6 +128,15 @@ the publisher would refuse:
 - TikTok paid partnership + "only the account itself"
 - TikTok description > 4,000, or a cover picture that is not one of the post's
 - LinkedIn document name with no PDF in the post
+- Instagram catalogue music on anything but a Reel, or a volume outside 0-100
+- LinkedIn poll with media, no question, a question over 140, fewer than 2 or
+  more than 4 answers, an answer over 30, or a poll and a repost together
+- LinkedIn repost with media, or a link that is not a LinkedIn post
+- Facebook carousel cards that do not match the pictures one for one, a card
+  with no web address, a card over 255 letters, a "See more" link with no
+  cards under it
+- Facebook big-text background with media, with cards, with no words, or an id
+  that is not a plain number
 
 ## The cover picture
 

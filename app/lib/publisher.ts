@@ -1,4 +1,5 @@
 import 'server-only'
+import { readQuota, type PostingQuota } from './quota-core'
 import {
   asOrganizationUrn, buildPostBody, classifyResponse, mediaTypeFor,
   COMMERCIAL_CONTENT_LABELS, TIKTOK_PRIVACY_LABELS,
@@ -99,6 +100,15 @@ export interface Publisher {
   channelOptions(
     providerAccountId: string, platform: string, mediaType?: 'video' | 'photo',
   ): Promise<ChannelOptions>
+  /** Search Instagram's audio catalogue for a Reel's music. An empty `q`
+   *  lists what is trending. Needs the account connected with Facebook
+   *  Login — see `InstagramAudioResult.needsFacebookLogin`. */
+  searchInstagramAudio(
+    providerAccountId: string, q?: string | null, audioType?: InstagramAudioType,
+  ): Promise<InstagramAudioResult>
+  /** What is left of this Instagram account's rolling 24 hours, or null when
+   *  the network would not say. */
+  publishingLimit(providerAccountId: string): Promise<PostingQuota | null>
 }
 
 /**
@@ -139,6 +149,85 @@ export type ChannelOptions = {
   maxVideoDurationSec: number | null
   /** TikTok: who the account is, for a screen that wants to show it */
   creator: { name: string | null; avatarUrl: string | null } | null
+  /**
+   * Instagram: how much of the account's rolling 24 hours is used.
+   *
+   * The total is the network's own — Meta's prose and Meta's API disagree
+   * about the cap, and the API is the one that refuses the post.
+   */
+  quota?: PostingQuota | null
+  /** TikTok: may this account post again inside its own 24 hours. TikTok
+   *  answers yes or no and gives no numbers. */
+  canPostMore?: boolean | null
+}
+
+/** Instagram's catalogue holds licensed music and other people's original
+ *  sounds, and they are searched separately. */
+export type InstagramAudioType = 'music' | 'original'
+
+/** One track as the catalogue describes it. */
+export type InstagramAudioTrack = {
+  audioId: string
+  title: string
+  audioType: string
+  /** how long the track is, when Meta said */
+  durationMs: number | null
+  /** the artist for music, the account name for an original sound */
+  artist: string | null
+}
+
+/**
+ * What a search came back with.
+ *
+ * `needsFacebookLogin` is a first-class answer rather than an error: Meta
+ * hosts the catalogue on graph.facebook.com only, so an Instagram account
+ * connected the classic way cannot reach it at all, and the window has to
+ * say so in a sentence instead of showing an empty list that looks like
+ * "no results".
+ */
+export type InstagramAudioResult = {
+  tracks: InstagramAudioTrack[]
+  needsFacebookLogin: boolean
+}
+
+/** The error code Zernio returns on a 400 when the account was connected
+ *  with Instagram Login rather than Facebook Login. */
+export const AUDIO_NEEDS_FACEBOOK = 'instagram_audio_requires_facebook_login'
+
+/**
+ * Read the catalogue's answer: `{ audio: [{ audioId, title, audioType,
+ * durationInMs, displayArtist | igUsername, downloadUrl }] }`.
+ *
+ * `downloadUrl` is deliberately dropped. It is a preview Meta expires after
+ * about a day and a half, and storing one against a scheduled post would
+ * give the window a dead link to play a week later; the id is what the post
+ * actually needs, and it is re-validated before publishing.
+ */
+export function readAudioTracks(raw: unknown): InstagramAudioTrack[] {
+  const j = (raw ?? {}) as Record<string, unknown>
+  const list: unknown[] = Array.isArray(j.audio) ? j.audio
+    : Array.isArray(j.data) ? j.data
+      : Array.isArray(raw) ? raw as unknown[] : []
+  const out: InstagramAudioTrack[] = []
+  const seen = new Set<string>()
+  for (const row of list) {
+    const r = (row ?? {}) as Record<string, unknown>
+    const audioId = String(r.audioId ?? r.audio_id ?? r.id ?? '').trim()
+    if (!audioId || seen.has(audioId)) continue
+    seen.add(audioId)
+    const duration = r.durationInMs ?? r.duration_in_ms ?? r.durationMs
+    const artist = [r.displayArtist, r.display_artist, r.igUsername, r.ig_username, r.artist]
+      .find(v => typeof v === 'string' && v.trim())
+    out.push({
+      audioId,
+      title: String(r.title ?? r.name ?? '').trim() || 'Untitled sound',
+      audioType: String(r.audioType ?? r.audio_type ?? 'music'),
+      durationMs: typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+        ? Math.trunc(duration) : null,
+      artist: typeof artist === 'string' ? artist.trim() : null,
+    })
+  }
+  return out.slice(0, 50)
 }
 
 export type TikTokInteractions = {
@@ -166,6 +255,7 @@ export const NO_CHANNEL_OPTIONS: ChannelOptions = {
   playlists: [], organizations: [], pages: [], privacy: [],
   commercial: [], interactions: null, interactionRules: null,
   maxVideoDurationSec: null, creator: null,
+  quota: null, canPostMore: null,
 }
 
 /**
@@ -210,6 +300,8 @@ export function readCreatorInfo(raw: unknown): {
   interactionRules: TikTokInteractionRules | null
   maxVideoDurationSec: number | null
   creator: { name: string | null; avatarUrl: string | null } | null
+  /** TikTok's own answer to "may this account post again today" */
+  canPostMore: boolean | null
 } {
   const j = (raw ?? {}) as Record<string, unknown>
   const info = (j.creatorInfo ?? j.creator_info ?? j) as Record<string, unknown>
@@ -303,8 +395,16 @@ export function readCreatorInfo(raw: unknown): {
   const avatarUrl = typeof who.avatarUrl === 'string' ? who.avatarUrl
     : typeof who.avatar_url === 'string' ? who.avatar_url : null
   const creator = name || avatarUrl ? { name, avatarUrl } : null
+  // TikTok's rolling 24 hours, as a yes or a no. Absent is NOT "yes": an
+  // account we could not ask about is not an account we know is free, and
+  // the window says nothing rather than promising a post can go.
+  const more = who.canPostMore ?? who.can_post_more
+  const canPostMore = typeof more === 'boolean' ? more : null
 
-  return { privacy, commercial, interactions, interactionRules, maxVideoDurationSec, creator }
+  return {
+    privacy, commercial, interactions, interactionRules, maxVideoDurationSec,
+    creator, canPostMore,
+  }
 }
 
 /** Rows come back from the provider under whichever names that endpoint uses;
@@ -733,6 +833,12 @@ class ZernioPublisher implements Publisher {
   ): Promise<ChannelOptions> {
     const out: ChannelOptions = { ...NO_CHANNEL_OPTIONS }
     const account = encodeURIComponent(id)
+    if (platform === 'instagram') {
+      // what is left of the account's rolling 24 hours. Instagram counts
+      // every kind of post together, and a post booked past the cap fails
+      // hours later with nobody watching.
+      out.quota = await this.publishingLimit(id)
+    }
     if (platform === 'youtube') {
       const json = await this.getJson(`/accounts/${account}/youtube-playlists`) as Record<string, unknown> | null
       out.playlists = readChoices(json?.playlists ?? json, {
@@ -769,8 +875,50 @@ class ZernioPublisher implements Publisher {
       out.interactionRules = info.interactionRules
       out.maxVideoDurationSec = info.maxVideoDurationSec
       out.creator = info.creator
+      out.canPostMore = info.canPostMore
     }
     return out
+  }
+
+  /**
+   * Instagram's audio catalogue.
+   *
+   * NOT through `getJson`, which swallows every failure as "no answer". The
+   * one failure that matters here is a 400 saying the account was connected
+   * the classic way: an empty list would read as "no songs called that", and
+   * the person would search again, and again. The code comes back as a fact
+   * the window can put in a sentence.
+   */
+  async searchInstagramAudio(
+    id: string, q?: string | null, audioType: InstagramAudioType = 'music',
+  ): Promise<InstagramAudioResult> {
+    const params = new URLSearchParams({ audioType })
+    if (String(q ?? '').trim()) params.set('q', String(q).trim())
+    try {
+      const res = await fetch(
+        `${BASE}/accounts/${encodeURIComponent(id)}/instagram/audio?${params.toString()}`,
+        { headers: this.headers() })
+      const text = await res.text()
+      const json = text.trim().startsWith('{') || text.trim().startsWith('[')
+        ? JSON.parse(text) as Record<string, unknown> : {}
+      if (!res.ok) {
+        const said = JSON.stringify(json)
+        return {
+          tracks: [],
+          needsFacebookLogin: res.status === 400 && said.includes(AUDIO_NEEDS_FACEBOOK),
+        }
+      }
+      return { tracks: readAudioTracks(json), needsFacebookLogin: false }
+    } catch {
+      return { tracks: [], needsFacebookLogin: false }
+    }
+  }
+
+  /** `{ quotaUsage, quotaTotal, quotaDurationSeconds }` — the live cap, which
+   *  is the one that refuses the post. */
+  async publishingLimit(id: string): Promise<PostingQuota | null> {
+    return readQuota(
+      await this.getJson(`/accounts/${encodeURIComponent(id)}/instagram/publishing-limit`))
   }
 
   async createPost(input: CreatePostInput): Promise<PublishOutcome> {
@@ -853,6 +1001,12 @@ class UnconfiguredPublisher implements Publisher {
   async channelOptions(): Promise<ChannelOptions> {
     return { ...NO_CHANNEL_OPTIONS }
   }
+
+  async searchInstagramAudio(): Promise<InstagramAudioResult> {
+    return { tracks: [], needsFacebookLogin: false }
+  }
+
+  async publishingLimit(): Promise<PostingQuota | null> { return null }
 }
 
 /**
@@ -895,7 +1049,10 @@ function dryRunPublisher(): Publisher {
           // the REAL response's shape, read through the same parser: an
           // account whose own answer to all three interactions is "no", which
           // is what the live capture this was verified against says
-          creator: { nickname: 'Dry run creator', avatarUrl: 'https://dry-run.invalid/a.jpg' },
+          creator: {
+            nickname: 'Dry run creator', avatarUrl: 'https://dry-run.invalid/a.jpg',
+            canPostMore: true,
+          },
           privacyLevels: [
             { value: 'PUBLIC_TO_EVERYONE', label: 'Public To Everyone' },
             { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Mutual Follow Friends' },
@@ -917,16 +1074,27 @@ function dryRunPublisher(): Publisher {
         })
         : {
           privacy: [], commercial: [], interactions: null, interactionRules: null,
-          maxVideoDurationSec: null, creator: null,
+          maxVideoDurationSec: null, creator: null, canPostMore: null,
         }
       return {
         playlists: platform === 'youtube' ? [{ value: 'dry-run-playlist', label: 'Dry run playlist' }] : [],
         organizations: platform === 'linkedin'
           ? [{ value: 'urn:li:organization:1', label: 'Dry run company' }] : [],
         pages: platform === 'facebook' ? [{ value: `dry-run-page-${id}`, label: 'Dry run Page' }] : [],
+        // a day with room left in it, so a dry run exercises the line
+        // without ever blocking the button
+        quota: platform === 'instagram' ? { used: 1, total: 100 } : null,
         ...tiktok,
       }
     },
+    searchInstagramAudio: async (): Promise<InstagramAudioResult> => ({
+      tracks: [{
+        audioId: 'dry-run-audio', title: 'Dry run sound', audioType: 'music',
+        durationMs: 30_000, artist: 'Dry run artist',
+      }],
+      needsFacebookLogin: false,
+    }),
+    publishingLimit: async (): Promise<PostingQuota | null> => ({ used: 1, total: 100 }),
   })
 }
 

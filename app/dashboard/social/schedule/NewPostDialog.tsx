@@ -15,7 +15,8 @@ import CoverPicker from './CoverPicker'
 import {
   approvalLine, clockPillLabel, composerReducer, composerWait, footerActions, groupOptions,
   isPostingNow, initialComposer, mediaApprovalBadge, moreOptionsFor, optionsFromExtras,
-  readPerChannel, readUserTags, PAGE_ID_HELP, sentForReviewLine,
+  readAudioChoice, readCarouselCards, readPerChannel, readPoll, readUserTags,
+  PAGE_ID_HELP, sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
   type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
 import {
@@ -24,8 +25,12 @@ import {
 } from '@/app/lib/social-schedule-core'
 import {
   autoKindFor, availableKinds, isOrganizationUrn, isPageId, isPlatform, networkName,
-  TIKTOK_CONSENT_LINE, type MediaItem, type Platform, type PostKind,
+  DEFAULT_POLL_DURATION, POLL_DURATION_LABELS, POLL_DURATIONS, POLL_OPTIONS_MAX,
+  POLL_OPTIONS_MIN, POLL_QUESTION_MAX, POLL_OPTION_MAX,
+  TIKTOK_CONSENT_LINE, type FacebookCarouselCard, type InstagramAudio, type MediaItem,
+  type Platform, type PollDuration, type PostKind,
 } from '@/app/lib/publish-core'
+import { quotaWords } from '@/app/lib/quota-core'
 import { copiesToPrepare } from '@/app/lib/encode-ahead-core'
 import { copyAheadWords } from '@/app/lib/shrink-core'
 import { PLATFORM_MEDIA, type AssetProbe } from '@/app/lib/media-fit-core'
@@ -36,7 +41,7 @@ import {
   buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO,
 } from '@/app/lib/post-preview-core'
 import PostPreviewPane from '@/app/components/social/PostPreview'
-import type { ChannelOptions } from '@/app/lib/publisher'
+import type { ChannelOptions, InstagramAudioTrack } from '@/app/lib/publisher'
 import { mayPublish as roleMayPublish, type Role } from '@/app/lib/identity-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { formatInZone } from '@/app/lib/timezone-core'
@@ -729,7 +734,13 @@ export default function NewPostDialog({
   const [lists, setLists] = useState<Record<string, ChannelOptions>>({})
   const asked = useRef<Set<string>>(new Set())
   const needsList = useMemo(
-    () => new Set(options.filter(o => o.source).flatMap(o => o.platforms)), [options])
+    () => new Set([
+      ...options.filter(o => o.source).flatMap(o => o.platforms),
+      // …and the two networks that also answer "how much of today is left".
+      // That answer is not a menu on a row, so it would never be asked for
+      // otherwise, and a post booked past the cap fails hours later.
+      'instagram', 'tiktok',
+    ]), [options])
   const askedKind = mediaLead === 'image' ? 'photo' : 'video'
   useEffect(() => {
     let live = true
@@ -770,6 +781,33 @@ export default function NewPostDialog({
     }
     return () => { live = false }
   }, [chosen, needsList, askedKind])
+
+  /**
+   * HOW MUCH OF TODAY EACH ACCOUNT HAS LEFT.
+   *
+   * Instagram counts every kind of post together and stops at its own number;
+   * TikTok answers the same question with a yes or a no. Both are read from
+   * what the provider just said — never a number of ours — and an account
+   * with nothing left stops the button rather than being sent to fail hours
+   * later, with a sentence saying when it can go instead.
+   */
+  const caps = useMemo(() => {
+    const lines: { id: string; line: string }[] = []
+    const stops: string[] = []
+    for (const account of chosen) {
+      const listed = lists[account.id]
+      if (!listed) continue
+      const { line, problem } = quotaWords({
+        platform: String(account.platform),
+        handle: account.username ?? account.name,
+        quota: listed.quota,
+        canPostMore: listed.canPostMore,
+      })
+      if (line) lines.push({ id: account.id, line })
+      if (problem) stops.push(problem)
+    }
+    return { lines, stops }
+  }, [chosen, lists])
 
   /**
    * The longest video THIS TikTok account may post.
@@ -1365,6 +1403,17 @@ export default function NewPostDialog({
               <p className="text-[12px] text-muted-foreground">{preparingCopy}</p>
             )}
 
+            {/* HOW MUCH OF TODAY IS LEFT, per channel. Instagram counts every
+                kind of post together and stops at its own number; a post
+                booked past it fails hours after everybody has gone home. */}
+            {caps.lines.length > 0 && (
+              <div className="flex flex-col gap-0.5">
+                {caps.lines.map(l => (
+                  <p key={l.id} className="text-[12px] text-muted-foreground">{l.line}</p>
+                ))}
+              </div>
+            )}
+
             {/* what each channel will do with these files — said here, where
                 the file can still be swapped, not in a client's feed */}
             {state.slides.length > 0 && checkPlatforms.length > 0 && (
@@ -1497,9 +1546,9 @@ export default function NewPostDialog({
             sticks to the bottom and is always visible, and only one message
             sits above it — a question you are being asked wins over a problem
             you already know about. */}
-        {!confirm && (problems.length > 0 || shownChecks.length > 0 || note) && (
+        {!confirm && (problems.length > 0 || shownChecks.length > 0 || caps.stops.length > 0 || note) && (
           <div className="flex flex-col gap-1.5 px-3.5">
-            {[...problems, ...(problems.length === 0 ? shownChecks : [])].map(p => (
+            {[...problems, ...(problems.length === 0 ? [...caps.stops, ...shownChecks] : [])].map(p => (
               <p key={p} className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
                 {p}
               </p>
@@ -1695,7 +1744,8 @@ export default function NewPostDialog({
             ) : (
               <SplitButton
                 label={busy ? 'Working…' : primary.label}
-                disabled={busy || unmoved || (wait ? shownChecks.length > 0 : !check.ok)}
+                disabled={busy || unmoved || caps.stops.length > 0
+                  || (wait ? shownChecks.length > 0 : !check.ok)}
                 onPrimary={() => void run(primary.key)}
                 items={menuItems.map(m => ({ key: m.key, label: m.label }))}
                 onPick={k => void run(k as FooterActionKey)}
@@ -2102,6 +2152,180 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
     )
   }
 
+  /* ── a song out of Instagram's own catalogue ── */
+  if (option.control === 'music') {
+    return (
+      <MusicRow
+        option={option}
+        accountId={first.id}
+        chosenTrack={readAudioChoice(held)}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+        onChange={track => set(track ?? undefined)}
+      />
+    )
+  }
+
+  /* ── a question with two to four answers, instead of a post ── */
+  if (option.control === 'poll') {
+    const poll = readPoll(held) ?? { question: '', options: ['', ''] }
+    const answers = poll.options.length >= POLL_OPTIONS_MIN
+      ? poll.options
+      : [...poll.options, ...Array(POLL_OPTIONS_MIN - poll.options.length).fill('')]
+    const write = (next: { question?: string; options?: string[]; duration?: PollDuration }) => {
+      const question = next.question ?? poll.question
+      const options = (next.options ?? answers).map(a => a.trim()).filter(Boolean)
+      const duration = next.duration ?? poll.duration
+      set(question.trim() || options.length > 0
+        ? { question, options, ...(duration ? { duration } : {}) }
+        : undefined)
+    }
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
+        >
+          <Plus className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
+          {option.label}
+          {!open && poll.question && (
+            <span className="truncate text-[12px] font-normal text-muted-foreground">
+              — {poll.question}
+            </span>
+          )}
+        </button>
+        {open && (
+          <div className="flex flex-col gap-1.5">
+            <input
+              value={poll.question}
+              maxLength={POLL_QUESTION_MAX}
+              onChange={e => write({ question: e.target.value })}
+              placeholder="What are you asking?"
+              className={field}
+            />
+            {answers.map((answer, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input
+                  value={answer}
+                  maxLength={POLL_OPTION_MAX}
+                  onChange={e => write({
+                    options: answers.map((a, at) => (at === i ? e.target.value : a)),
+                  })}
+                  placeholder={`Answer ${i + 1}`}
+                  className={field}
+                />
+                {answers.length > POLL_OPTIONS_MIN && (
+                  <button
+                    type="button"
+                    aria-label={`Take answer ${i + 1} off`}
+                    onClick={() => write({ options: answers.filter((_, at) => at !== i) })}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                  </button>
+                )}
+              </div>
+            ))}
+            {answers.length < POLL_OPTIONS_MAX && (
+              <button
+                type="button"
+                onClick={() => write({ options: [...answers, ''] })}
+                className="flex min-h-9 w-fit items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                Add an answer
+              </button>
+            )}
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-muted-foreground">
+                How long it runs
+              </span>
+              <select
+                value={poll.duration ?? DEFAULT_POLL_DURATION}
+                onChange={e => write({ duration: e.target.value as PollDuration })}
+                className={field}
+              >
+                {POLL_DURATIONS.map(d => (
+                  <option key={d} value={d}>{POLL_DURATION_LABELS[d]}</option>
+                ))}
+              </select>
+            </label>
+            {help}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /* ── a link under each picture: Facebook's clickable carousel ── */
+  if (option.control === 'cards') {
+    const pictures = state.slides.filter(sl => sl.type !== 'video')
+    const cards = readCarouselCards(held)
+    const write = (index: number, patch: Partial<FacebookCarouselCard>) => {
+      const next: FacebookCarouselCard[] = pictures.map((_, i) => {
+        const card: FacebookCarouselCard = cards[i] ?? { link: '' }
+        return i === index ? { ...card, ...patch } : card
+      })
+      const kept = next.filter(c => c.link.trim() || c.name?.trim() || c.description?.trim())
+      set(kept.length > 0 ? next : undefined)
+    }
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
+        >
+          <Plus className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
+          {option.label}
+          {!open && cards.length > 0 && (
+            <span className="text-[12px] font-normal text-muted-foreground">
+              — {cards.length} of {pictures.length}
+            </span>
+          )}
+        </button>
+        {open && (
+          <div className="flex flex-col gap-2.5">
+            {pictures.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Add the pictures first. Each one gets its own link.
+              </p>
+            )}
+            {pictures.map((picture, i) => (
+              <div key={`${picture.url}-${i}`} className="flex gap-2">
+                <div className="h-[52px] w-[42px] shrink-0 overflow-hidden rounded-tile bg-foreground/[0.06]">
+                  <Thumb slide={picture} label={`Picture ${i + 1}`} className="h-full w-full" />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <input
+                    value={cards[i]?.link ?? ''}
+                    onChange={e => write(i, { link: e.target.value.trim() })}
+                    placeholder={`Where picture ${i + 1} goes: https://…`}
+                    className={field}
+                  />
+                  <input
+                    value={cards[i]?.name ?? ''}
+                    onChange={e => write(i, { name: e.target.value })}
+                    placeholder="Headline"
+                    className={field}
+                  />
+                  <input
+                    value={cards[i]?.description ?? ''}
+                    onChange={e => write(i, { description: e.target.value })}
+                    placeholder="A line under it"
+                    className={field}
+                  />
+                </div>
+              </div>
+            ))}
+            {help}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   /* ── a list of words: tags, collaborators ── */
   if (option.control === 'tags' || option.control === 'collaborators') {
     return (
@@ -2185,6 +2409,191 @@ function ExtraRow({ option, channels, state, dispatch, locations, lists }: {
           )}
           {help}
         </>
+      )}
+    </div>
+  )
+}
+
+/** A track's length as a person reads it: 3:04. */
+function trackLength(ms: number | null): string {
+  if (!ms || ms <= 0) return ''
+  const total = Math.round(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/**
+ * INSTAGRAM'S OWN MUSIC, searched from inside the post.
+ *
+ * The id is Meta's and cannot be invented, so this searches and offers what
+ * comes back and nothing else. The one failure worth a sentence is the
+ * account being connected the classic way: Meta serves the catalogue only to
+ * Instagram accounts connected through Facebook, and an empty list would read
+ * as "no songs called that" while somebody searched again and again.
+ *
+ * The two volumes are Instagram's: the track, and how much of the video's own
+ * sound stays under it. Untouched, Instagram uses 100 for both, so nothing is
+ * sent until somebody moves one.
+ */
+function MusicRow({ option, accountId, chosenTrack, open, onToggle, onChange }: {
+  option: MoreOption
+  accountId: string
+  chosenTrack: InstagramAudio | null
+  open: boolean
+  onToggle: () => void
+  onChange: (track: InstagramAudio | null) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [tracks, setTracks] = useState<InstagramAudioTrack[]>([])
+  const [searching, setSearching] = useState(false)
+  const [needsFacebook, setNeedsFacebook] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const field = 'min-h-11 w-full rounded-full border border-border bg-surface px-3 text-[13px]'
+
+  const search = () => {
+    setSearching(true)
+    setSearched(true)
+    fetch(`/api/social/schedule/audio?accountId=${encodeURIComponent(accountId)}`
+      + `&audioType=music&q=${encodeURIComponent(query.trim())}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((json: { tracks?: InstagramAudioTrack[]; needsFacebookLogin?: boolean } | null) => {
+        setTracks(json?.tracks ?? [])
+        setNeedsFacebook(json?.needsFacebookLogin === true)
+      })
+      .catch(() => { setTracks([]); setNeedsFacebook(false) })
+      .finally(() => setSearching(false))
+  }
+
+  const volume = (which: 'audioVolume' | 'videoVolume', raw: string) => {
+    if (!chosenTrack) return
+    const value = Number(raw)
+    onChange({
+      ...chosenTrack,
+      [which]: raw.trim() && Number.isFinite(value)
+        ? Math.min(100, Math.max(0, Math.round(value)))
+        : undefined,
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex min-h-11 items-center gap-2.5 text-left text-[14px] font-medium"
+      >
+        <Plus className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden />
+        {option.label}
+        {!open && chosenTrack && (
+          <span className="truncate text-[12px] font-normal text-muted-foreground">
+            — {chosenTrack.title}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1.5">
+          {chosenTrack ? (
+            <div className="flex flex-col gap-2 rounded-inner border border-border p-2.5">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                  {chosenTrack.title}
+                  {chosenTrack.artist && (
+                    <span className="font-normal text-muted-foreground"> · {chosenTrack.artist}</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Take the music off"
+                  onClick={() => onChange(null)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['audioVolume', 'Track volume'],
+                  ['videoVolume', 'Video sound'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                    {label}
+                    <input
+                      value={chosenTrack[key] === undefined ? '' : String(chosenTrack[key])}
+                      inputMode="numeric"
+                      onChange={e => volume(key, e.target.value)}
+                      placeholder="100"
+                      className="min-h-9 w-16 rounded-full border border-border bg-surface px-2.5 text-center text-[13px] text-foreground"
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                0 to 100 each. Leave them empty and Instagram plays both at full.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-1.5">
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); search() } }}
+                  placeholder={option.placeholder ?? 'Search for a song'}
+                  className={field}
+                />
+                <button
+                  type="button"
+                  onClick={search}
+                  disabled={searching}
+                  className="min-h-11 shrink-0 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50"
+                >
+                  {searching ? 'Looking' : 'Search'}
+                </button>
+              </div>
+              {needsFacebook ? (
+                <p className="rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2 text-[12px] font-medium">
+                  Music needs this Instagram account reconnected through Facebook. Use the
+                  connect link and pick Facebook Login.
+                </p>
+              ) : tracks.length > 0 ? (
+                <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+                  {tracks.map(track => (
+                    <li key={track.audioId}>
+                      <button
+                        type="button"
+                        onClick={() => onChange({
+                          audioId: track.audioId,
+                          title: track.title,
+                          ...(track.artist ? { artist: track.artist } : {}),
+                        })}
+                        className="flex w-full min-h-11 items-center gap-2 rounded-inner px-2 text-left hover:bg-muted"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                          {track.title}
+                          {track.artist && (
+                            <span className="text-muted-foreground"> · {track.artist}</span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {trackLength(track.durationMs)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : searched && !searching ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Nothing came back for that. Try fewer words, or the artist’s name.
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Search Instagram’s catalogue, or press Search on an empty box for what is
+                  trending.
+                </p>
+              )}
+            </>
+          )}
+          {option.help && <p className="text-[11px] text-muted-foreground">{option.help}</p>}
+        </div>
       )}
     </div>
   )

@@ -45,6 +45,10 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
   muteAudio: true,
   isPaidPartnership: true,
   brandedContentSponsors: ['sponsorco'],
+  audio: {
+    audioId: '482851939985510', title: 'Summer Nights', artist: 'The Example Band',
+    audioVolume: 80, videoVolume: 40,
+  },
   geoCountries: ['NZ'],
   title: 'The video title',
   visibility: 'unlisted',
@@ -57,8 +61,16 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
   organizationUrn: 'urn:li:organization:99',
   disableLinkPreview: true,
   documentTitle: 'The deck',
+  poll: { question: 'Which one next?', options: ['Webhooks', 'SDKs'], duration: 'THREE_DAYS' },
+  reshareUrl: 'https://www.linkedin.com/posts/someone_a-post-id',
   pageId: '456789',
   facebookDraft: true,
+  carouselCards: [
+    { link: 'https://example.invalid/one', name: 'The first', description: 'One' },
+    { link: 'https://example.invalid/two', name: 'The second', description: 'Two' },
+  ],
+  carouselLink: 'https://example.invalid/all',
+  textFormatPresetId: '123456',
   privacyLevel: 'FOLLOWER_OF_CREATOR',
   allowComment: false,
   allowDuet: false,
@@ -77,6 +89,14 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
 /** every key the window can set, bar the media set, which is applied with the
  *  platform's own limits rather than forwarded */
 const SET_BY_THE_WINDOW = CHANNEL_EXTRA_KEYS.filter(k => k !== 'slides')
+
+/** the object-shaped extras: the one string that proves THIS field is in the
+ *  body, since none of them is a bare word to search for */
+const NEEDLE: Record<string, string> = {
+  audio: '482851939985510',
+  poll: 'Which one next?',
+  carouselCards: 'https://example.invalid/one',
+}
 
 /** what the provider calls the flags, where its name differs from ours */
 const SNAKE: Record<string, string> = {
@@ -170,6 +190,15 @@ describe('every posting option the window collects reaches the job', () => {
     // a cover PICTURE and a cover MOMENT are mutually exclusive, so this run
     // sends the moment; the picture has its own test above
     videoCoverImageUrl: 'the picture beats the moment — one of the two travels',
+    // …and the five that CANNOT travel with media on the post. This body has
+    // a video in it, so each of them is dropped on purpose — the network
+    // refuses the combination rather than ignoring the field. The two tests
+    // below build the bodies where they do travel.
+    poll: 'LinkedIn refuses a poll with media — proved on the no-media body below',
+    reshareUrl: 'LinkedIn refuses a repost with media — proved on the no-media body below',
+    carouselCards: 'one card per PICTURE, and this body is a video — proved below',
+    carouselLink: 'only travels with the cards',
+    textFormatPresetId: 'text-only posts — proved on the text-only body below',
   }
 
   it('every field ends up in the body somewhere, or is named as one that does not', () => {
@@ -194,7 +223,10 @@ describe('every posting option the window collects reaches the job', () => {
       if (NEVER_IN_THE_BODY[key]) continue
       const value = EVERY_EXTRA[key]
       const first = Array.isArray(value) ? value[0] : value
-      const needle = first && typeof first === 'object' ? String((first as { username: string }).username) : String(first)
+      const needle = NEEDLE[key]
+        ?? (first && typeof first === 'object'
+          ? String((first as { username: string }).username)
+          : String(first))
       // a boolean's own word is too common to search for, so those are found
       // by the provider's name for them instead
       const found = typeof value === 'boolean'
@@ -231,6 +263,8 @@ describe('every posting option the window collects reaches the job', () => {
       muteAudio: true,
       isPaidPartnership: true,
       brandedContentSponsors: ['sponsorco'],
+      // the catalogue track, which only Instagram has and only on a Reel
+      audioConfiguration: { audioId: '482851939985510', audioVolume: 80, videoVolume: 40 },
     })
     expect(dataFor('instagram').title).toBeUndefined()
     expect(dataFor('instagram').organizationUrn).toBeUndefined()
@@ -247,14 +281,22 @@ describe('every posting option the window collects reaches the job', () => {
     })
     expect(dataFor('youtube').collaborators).toBeUndefined()
 
-    // LinkedIn
+    // LinkedIn — the poll and the repost, both of which this body can carry
+    // because it has no media on it
     expect(dataFor('linkedin')).toMatchObject({
       organizationUrn: 'urn:li:organization:99',
       disableLinkPreview: true,
       documentTitle: 'The deck',
       firstComment: '#hashtags',
       geoRestriction: { countries: ['NZ'] },
+      poll: {
+        question: 'Which one next?', options: ['Webhooks', 'SDKs'], duration: 'THREE_DAYS',
+      },
+      reshareUrl: 'https://www.linkedin.com/posts/someone_a-post-id',
     })
+    // …and neither of them anywhere else
+    expect(dataFor('instagram').poll).toBeUndefined()
+    expect(dataFor('facebook').reshareUrl).toBeUndefined()
 
     // Facebook — including the Reel title and the draft flag, which Zernio
     // nests one level down under its own key
@@ -262,10 +304,22 @@ describe('every posting option the window collects reaches the job', () => {
       contentType: 'reel',
       pageId: '456789',
       title: 'The video title',
-      facebookSettings: { draft: true },
+      // ONE `facebookSettings` OBJECT, not three that overwrite each other
+      facebookSettings: {
+        draft: true,
+        carouselCards: [
+          { link: 'https://example.invalid/one', name: 'The first', description: 'One' },
+          { link: 'https://example.invalid/two', name: 'The second', description: 'Two' },
+        ],
+        carouselLink: 'https://example.invalid/all',
+      },
       firstComment: '#hashtags',
       geoRestriction: { countries: ['NZ'] },
     })
+    // the background and the cards cannot both be on one post; the cards win
+    // because they are the ones with pictures behind them
+    expect((dataFor('facebook').facebookSettings as Record<string, unknown>).textFormatPresetId)
+      .toBeUndefined()
     // Facebook's guide has no shareToFeed and no thumbOffset (10 Sep 2026)
     expect(dataFor('facebook').shareToFeed).toBeUndefined()
     expect(dataFor('facebook').thumbOffset).toBeUndefined()
@@ -290,6 +344,67 @@ describe('every posting option the window collects reaches the job', () => {
       photo_cover_index: 1,
       description: 'Words for the pictures',
     })
+  })
+
+  it('the big-text background travels on a post with no media and no cards', () => {
+    // the one combination Facebook takes it in: words, and nothing else
+    const target = targetsFor(
+      post({ 'acc-fb': { textFormatPresetId: '123456' } }),
+      [account({ id: 'acc-fb', platform: 'facebook', provider_account_id: 'prov-fb' })],
+    )[0]
+    const body = buildPostBody({
+      caption: 'Words on a colour', media: [], targets: [target], scheduledFor: null,
+    })
+    expect(body.platforms[0].platformSpecificData)
+      .toMatchObject({ facebookSettings: { textFormatPresetId: '123456' } })
+  })
+
+  it('none of the three survives media being attached', () => {
+    // a poll, a repost and a background are all refused OUTRIGHT by the
+    // network once there is a file on the post — so they are dropped rather
+    // than sent to fail hours later
+    const targets = [
+      targetsFor(
+        post({ 'acc-li': { poll: { question: 'Which?', options: ['A', 'B'] }, reshareUrl: 'https://www.linkedin.com/posts/x_y' } }),
+        [account({ id: 'acc-li', platform: 'linkedin', provider_account_id: 'prov-li' })],
+      )[0],
+      targetsFor(
+        post({ 'acc-fb': { textFormatPresetId: '123456' } }),
+        [account({ id: 'acc-fb', platform: 'facebook', provider_account_id: 'prov-fb' })],
+      )[0],
+    ]
+    const body = buildPostBody({
+      caption: 'With a picture on it',
+      media: [{ url: 'https://media.invalid/a.jpg', type: 'image' }],
+      targets, scheduledFor: null,
+    })
+    expect(JSON.stringify(body)).not.toContain('poll')
+    expect(JSON.stringify(body)).not.toContain('reshareUrl')
+    expect(JSON.stringify(body)).not.toContain('textFormatPresetId')
+  })
+
+  it('a carousel card set that no longer matches the pictures is not sent', () => {
+    const cards = [
+      { link: 'https://example.invalid/one' },
+      { link: 'https://example.invalid/two' },
+    ]
+    const target = (media: { url: string; type: 'image' | 'video' }[]) => buildPostBody({
+      caption: 'Two links',
+      media,
+      targets: targetsFor(
+        post({ 'acc-fb': { carouselCards: cards } }),
+        [account({ id: 'acc-fb', platform: 'facebook', provider_account_id: 'prov-fb' })],
+      ),
+      scheduledFor: null,
+    }).platforms[0].platformSpecificData as Record<string, unknown> | undefined
+    // two pictures, two cards
+    expect(target([
+      { url: 'https://media.invalid/1.jpg', type: 'image' },
+      { url: 'https://media.invalid/2.jpg', type: 'image' },
+    ])?.facebookSettings).toMatchObject({ carouselCards: cards })
+    // one picture, two cards — Facebook answers that with a 400
+    expect(JSON.stringify(target([{ url: 'https://media.invalid/1.jpg', type: 'image' }]) ?? {}))
+      .not.toContain('carouselCards')
   })
 
   // 9 Sep 2026: the editor's cover reached Instagram and YouTube as
