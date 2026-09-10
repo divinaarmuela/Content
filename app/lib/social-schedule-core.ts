@@ -1177,6 +1177,30 @@ export function postTileFacts(
 
 /* ── what is on screen ──────────────────────────────────────────────────── */
 
+/**
+ * A DRAFT IS NOT A PLAN. A file somebody uploaded and walked away from is
+ * saved as a draft with a default time, and drawn on the week grid it
+ * looked like something booked for that hour (the owner, 10 Sep 2026: "if
+ * an admin or AM uploaded a file and just leaves it, don't show it on the
+ * calendar… we have yet to schedule that"). So the grids — week, month,
+ * preview, stories — draw only posts somebody has moved past draft:
+ * waiting for approval, approved, scheduled, posted, did not go out. The
+ * List still shows drafts, wherever their time is, and the rail counts them,
+ * so a draft nobody can find is still a draft somebody can finish.
+ */
+export function showsOnGrid(post: { live_status: SocialPostStatus }): boolean {
+  return post.live_status !== 'draft'
+}
+
+/** Belongs in this week's List: on one of its days, or with no time yet, or
+ *  a draft (which the grids never show, so the List is where it lives). */
+export function belongsInList(
+  post: { live_status: SocialPostStatus; scheduled_for: string | null },
+  onTheseDays: boolean,
+): boolean {
+  return !post.scheduled_for || post.live_status === 'draft' || onTheseDays
+}
+
 /** Does this instant fall on one of these days, in the client's zone? */
 export function onOneOfDays(
   iso: string | null | undefined,

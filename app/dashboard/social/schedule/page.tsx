@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  matchesChannel, mayEditNote, nowLineTop, onOneOfDays, scheduleWeekGrid,
+  matchesChannel, mayEditNote, nowLineTop, belongsInList, onOneOfDays, showsOnGrid, scheduleWeekGrid,
 } from '@/app/lib/social-schedule-core'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
@@ -362,16 +362,19 @@ export default function SchedulePage() {
 
   const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
 
+  /** what the grids draw: everything past draft (`showsOnGrid`) */
+  const planned = useMemo(() => channelPosts.filter(showsOnGrid), [channelPosts])
+  const draftCount = useMemo(() => channelPosts.filter(p => p.live_status === 'draft').length, [channelPosts])
   const inWeek = useMemo(
-    () => channelPosts.filter(p => onOneOfDays(p.scheduled_for, tz, weekKeys)),
-    [channelPosts, weekKeys, tz])
+    () => planned.filter(p => onOneOfDays(p.scheduled_for, tz, weekKeys)),
+    [planned, weekKeys, tz])
   /** the week's posts AND the ones with no time yet: the List has a "No time
    *  yet" group for exactly those, and the week filter used to keep every
    *  one of them out of it — "a draft nobody can find is a draft nobody
    *  finishes" (the owner, 9 Sep 2026: "saving as draft doesn't tell the
    *  user"). Only the List draws them; a grid has no cell for no-time. */
   const inWeekOrUntimed = useMemo(
-    () => channelPosts.filter(p => !p.scheduled_for || onOneOfDays(p.scheduled_for, tz, weekKeys)),
+    () => channelPosts.filter(p => belongsInList(p, onOneOfDays(p.scheduled_for, tz, weekKeys))),
     [channelPosts, weekKeys, tz])
 
   const weekNotes = useMemo(
@@ -505,6 +508,8 @@ export default function SchedulePage() {
     <MediaRail
       media={data.media}
       waiting={data.waiting}
+      drafts={draftCount}
+      onDrafts={() => setView('List')}
       loading={data.loading}
       role={me?.role ?? null}
       postWithoutApproval={data.postWithoutApproval}
@@ -715,7 +720,7 @@ export default function SchedulePage() {
           ) : view === 'Month' ? (
             <MonthGrid
               month={monthKey}
-              posts={channelPosts}
+              posts={planned}
               tz={tz}
               todayKey={todayKey}
               onOpen={flow.openPost}
@@ -733,7 +738,7 @@ export default function SchedulePage() {
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost} />
+              <PreviewGrid posts={planned} tz={tz} onOpen={flow.openPost} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">

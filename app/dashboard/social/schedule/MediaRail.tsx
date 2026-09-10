@@ -71,10 +71,13 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, loading, role, postWithoutApproval, onNew, onPick, onApprove,
+  media, waiting, drafts = 0, onDrafts, loading, role, postWithoutApproval, onNew, onPick, onApprove,
 }: {
   media: RailMedia[]
   waiting: number
+  /** posts saved and left — never drawn on a grid; the List is where they are */
+  drafts?: number
+  onDrafts?: () => void
   loading: boolean
   /** the viewer's role — an account manager or a super admin may sign a piece
    *  off without the client from here */
@@ -317,6 +320,16 @@ export default function MediaRail({
       <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
         Waiting for approval · {waiting}
       </div>
+      {drafts > 0 && (
+        <button
+          type="button"
+          onClick={onDrafts}
+          className="flex min-h-10 flex-col items-center justify-center rounded-full border border-dashed border-border px-3 text-[13px] font-semibold hover:bg-muted"
+        >
+          <span>Drafts · {drafts}</span>
+          <span className="text-[11px] font-normal text-muted-foreground">Not on the calendar until scheduled</span>
+        </button>
+      )}
     </div>
   )
 }

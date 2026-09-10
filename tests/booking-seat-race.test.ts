@@ -27,7 +27,11 @@ const rows = () => ({
   }] as unknown as Row[],
 })
 
-const at = (h: number) => `2026-09-10T0${h}:00:00.000Z`
+// a day that is always tomorrow: the seat code keeps only FUTURE ranges
+// (`booking.ts`: "a past range is never kept"), so a fixed date here turned
+// into four failures the morning it went by (10 Sep 2026)
+const DAY = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+const at = (h: number) => `${DAY}T0${h}:00:00.000Z`
 const slot = (h: number) => ({
   resource_id: 'res-1', service_id: 'svc-1',
   start_at: at(h), end_at: at(h + 1),
@@ -57,7 +61,7 @@ describe('bookings_no_overlap under a race', () => {
     const off = fake.onBeforeWrite('/mdm/tables/booking_seats/res-1__1', async () => {
       off()
       fake!.tree().mdm.tables.booking_seats['res-1__1'].ranges.push({
-        booking_id: 'rival', start: '2026-09-10T01:30:00.000Z', end: '2026-09-10T02:30:00.000Z',
+        booking_id: 'rival', start: `${DAY}T01:30:00.000Z`, end: `${DAY}T02:30:00.000Z`,
         at: new Date().toISOString(),
       })
     })

@@ -411,3 +411,20 @@ describe('Month view pages by month', () => {
     expect(monthLabel('nonsense')).toBe('')
   })
 })
+
+/* ── a draft is not a plan: off the grids, in the List (10 Sep 2026) ────── */
+
+describe('drafts stay off the calendar grids', () => {
+  it('the grids draw everything past draft; the List keeps drafts wherever their time is', async () => {
+    const { showsOnGrid, belongsInList } = await import('@/app/lib/social-schedule-core')
+    expect(showsOnGrid({ live_status: 'draft' })).toBe(false)
+    for (const s of ['pending', 'approved', 'scheduled', 'published', 'failed', 'changes'] as const) {
+      expect(showsOnGrid({ live_status: s })).toBe(true)
+    }
+    // a draft with a time in another week still belongs in this week's List
+    expect(belongsInList({ live_status: 'draft', scheduled_for: '2026-09-20T02:00:00Z' }, false)).toBe(true)
+    expect(belongsInList({ live_status: 'scheduled', scheduled_for: '2026-09-20T02:00:00Z' }, false)).toBe(false)
+    expect(belongsInList({ live_status: 'approved', scheduled_for: null }, false)).toBe(true)
+    expect(belongsInList({ live_status: 'scheduled', scheduled_for: '2026-09-08T02:00:00Z' }, true)).toBe(true)
+  })
+})
