@@ -71,6 +71,8 @@ export type ChannelExtras = {
   muteAudio?: boolean
   isPaidPartnership?: boolean
   brandedContentSponsors?: string[]
+  /* Facebook and LinkedIn: only these countries see it */
+  geoCountries?: string[]
   /* YouTube, and a Facebook Reel's title */
   title?: string
   visibility?: YoutubeVisibility
@@ -122,6 +124,7 @@ const EXTRA_KEY_MAP: Record<keyof ChannelExtras, true> = {
   trialGraduation: true, audioName: true,
   thumbOffset: true, userTags: true, isAiGenerated: true, commentsEnabled: true,
   muteAudio: true, isPaidPartnership: true, brandedContentSponsors: true,
+  geoCountries: true,
   title: true, visibility: true, madeForKids: true, tags: true,
   categoryId: true, playlistId: true, containsSyntheticMedia: true, thumbnailUrl: true,
   organizationUrn: true, disableLinkPreview: true, documentTitle: true,
@@ -252,6 +255,7 @@ const EXTRA_SHAPE: Record<keyof ChannelExtras, 'text' | 'flag' | 'number' | 'lis
   trialGraduation: 'text', audioName: 'text',
   thumbOffset: 'number', userTags: 'people', isAiGenerated: 'flag', commentsEnabled: 'flag',
   muteAudio: 'flag', isPaidPartnership: 'flag', brandedContentSponsors: 'list',
+  geoCountries: 'list',
   title: 'text', visibility: 'text', madeForKids: 'flag', tags: 'list',
   categoryId: 'text', playlistId: 'text', containsSyntheticMedia: 'flag',
   thumbnailUrl: 'text',
@@ -483,6 +487,7 @@ export type MoreOptionKey =
   | 'firstComment' | 'collaborators' | 'shareToFeed' | 'location'
   | 'trialReel' | 'audioName'
   | 'igCover' | 'igTagPeople' | 'igComments' | 'igMute' | 'igAi' | 'igPaid' | 'igSponsors'
+  | 'geo'
   | 'ytTitle' | 'ytVisibility' | 'ytCategory' | 'ytPlaylist' | 'ytTags'
   | 'ytKids' | 'ytSynthetic' | 'ytThumbnail'
   | 'liOrganization' | 'liLinkPreview' | 'liDocumentTitle'
@@ -560,7 +565,7 @@ const OPTION_SPECS: OptionSpec[] = [
   },
   {
     key: 'shareToFeed', field: 'shareToFeed', control: 'toggle',
-    label: 'Also show the Reel in the feed', on: ['instagram', 'facebook'],
+    label: 'Also show the Reel in the feed', on: ['instagram'],
   },
   {
     key: 'location', field: 'locationId', control: 'location',
@@ -584,7 +589,7 @@ const OPTION_SPECS: OptionSpec[] = [
   },
   {
     key: 'igCover', field: 'thumbOffset', control: 'seconds', label: 'Cover frame',
-    on: ['instagram', 'facebook'], kinds: ['reel'], lead: 'video',
+    on: ['instagram'], kinds: ['reel'], lead: 'video',
     help: 'How many seconds into the video the cover picture is taken from. '
       + 'A cover picture chosen in the video editor is used instead when there is one.',
   },
@@ -665,6 +670,14 @@ const OPTION_SPECS: OptionSpec[] = [
     help: 'A JPEG, PNG or GIF, 1280 x 720, up to 2 MB. YouTube only takes a custom cover on a phone-verified channel: '
       + 'on an unverified one the video still posts with an ordinary cover, and Zernio stops sending covers to that channel for seven days. '
       + 'Shorts cannot have one.',
+  },
+
+  {
+    key: 'geo', field: 'geoCountries', control: 'tags',
+    label: 'Only show it in these countries', on: ['facebook', 'linkedin'],
+    kinds: ['feed', 'reel', 'carousel'],
+    placeholder: 'Two-letter country codes, separated by commas: AU, NZ',
+    help: 'People outside these countries cannot see the post at all. Up to 25 countries. On LinkedIn it works on a company page with 300 or more followers in those countries.',
   },
 
   /* ── LinkedIn ── */

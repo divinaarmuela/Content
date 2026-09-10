@@ -360,6 +360,23 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
         const isFuture = Boolean(
           job.scheduled_for && new Date(job.scheduled_for).getTime() > Date.now()
         )
+        // a 207 "partial": some channels live, some refused, in this very
+        // body — say which, the way the reconcile does, rather than "posted"
+        const rows = outcome.platforms ?? []
+        const refused = !isFuture && rows.some(r => String(r.status ?? '').toLowerCase() === 'failed' && !isStillProcessing(r))
+        if (refused) {
+          const told = describeRemoteOutcome('partial', rows)
+          await settle({
+            status: 'failed',
+            provider_post_id: outcome.postId,
+            attempts: job.attempts + 1,
+            error: told.error,
+            ...(told.permalink ? { permalink: told.permalink } : {}),
+            platform_results: resultsFromRemote(job as unknown as OutcomeJob, rows, 'failed', new Date().toISOString()),
+          })
+          await healthAfterFailure(job.client_id)
+          return 'failed'
+        }
         await settle({
           status: isFuture ? 'scheduled' : 'published',
           provider_post_id: outcome.postId,
@@ -370,7 +387,9 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           // per-channel verdict replaces this on the next reconcile
           platform_results: isFuture
             ? perChannel('scheduled', { at: job.scheduled_for })
-            : perChannel('published'),
+            : rows.length
+              ? resultsFromRemote(job as unknown as OutcomeJob, rows, 'published', new Date().toISOString())
+              : perChannel('published'),
         })
         if (isFuture) return 'scheduled'
         // close the loop back into production: the board and the scheduler
@@ -420,7 +439,15 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
         return 'queued'
 
       case 'permanent':
-        await settle({ status: 'failed', attempts: job.attempts + 1, error: outcome.message, platform_results: perChannel('failed', { reason: outcome.message }) })
+        await settle({
+          status: 'failed', attempts: job.attempts + 1, error: outcome.message,
+          // a 207 that failed still created the post at the provider; keep
+          // its id so the record can be looked at, and its per-channel rows
+          ...(outcome.postId ? { provider_post_id: outcome.postId } : {}),
+          platform_results: outcome.platforms?.length
+            ? resultsFromRemote(job as unknown as OutcomeJob, outcome.platforms, 'failed', new Date().toISOString())
+            : perChannel('failed', { reason: outcome.message }),
+        })
         // a post that failed on a dead token must turn the account's icon
         // red NOW and tell the team — not at tomorrow's 7 am check. The
         // provider is asked for its verdict rather than the error string

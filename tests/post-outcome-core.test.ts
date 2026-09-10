@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   byHandRows, cardBookingLine, clientStats, fileBooking, kindWords, kindsLine, outcomesForJob, parseOutcomeSentence, postsTabs,
-  readPlatformResults, resultsForAll, resultsFromRemote, sortForTab,
+  readPlatformResults, resultsForAll, resultsFromRemote, sortForTab, outcomeWords, DRAFT_KIND,
   type OutcomeJob,
 } from '../app/lib/post-outcome-core'
 
@@ -188,5 +188,21 @@ describe('a channel the provider has not reported on', () => {
     ], 'published', '2026-09-09T15:20:08Z')
     expect(r.find(o => o.platform === 'instagram')?.status).toBe('published')
     expect(r.find(o => o.platform === 'tiktok')?.status).toBe('pending')
+  })
+})
+
+/* ── a draft handed to the creator is not a post that went out (10 Sep 2026) ── */
+
+describe('drafts and plain reasons', () => {
+  it('names a TikTok inbox draft as a draft, from our own options and from the provider\u2019s flag', () => {
+    const ours = outcomesForJob(job({ status: 'published', published_at: 'x', targets: [{ platform: 'tiktok', options: { tiktokDraft: true } }] }))
+    expect(ours[0].kind).toBe(DRAFT_KIND)
+    expect(outcomeWords(ours[0]).label).toMatch(/Handed over as a draft/)
+    const theirs = resultsFromRemote(job(), [{ platform: 'tiktok', status: 'published', platformSpecificData: { isDraft: true } }], 'published', 'x')
+    expect(theirs.find(o => o.platform === 'tiktok')?.kind).toBe(DRAFT_KIND)
+  })
+  it('the refusal reason is the plain sentence, not the provider\u2019s', () => {
+    const r = resultsFromRemote(job(), [{ platform: 'tiktok', status: 'failed', errorMessage: 'You have created too many posts in the last 24 hours via the API.' }], 'failed', 'x')
+    expect(r.find(o => o.platform === 'tiktok')?.reason).toMatch(/daily limit for posts made through apps/)
   })
 })

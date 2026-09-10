@@ -455,6 +455,14 @@ export type PostOptions = {
    */
   locationId?: string
 
+  /**
+   * Only people in these countries see the post — Facebook feed posts,
+   * videos and Reels (not Stories) and LinkedIn organization pages (300+
+   * followers in the countries). ISO 3166-1 alpha-2 codes, up to 25. Sent as
+   * `geoRestriction.countries`.
+   */
+  geoCountries?: string[]
+
   /* ── Instagram ─────────────────────────────────────────────────────── */
 
   /**
@@ -710,6 +718,12 @@ export function postWarnings(input: {
       `up to ${REEL_REQUIREMENTS.maxSeconds}s, ${REEL_REQUIREMENTS.formats}.`
     )
   }
+  if ((input.kinds ?? {}).tiktok === 'carousel' || (('tiktok' in (input.kinds ?? {})) && input.media.length > 0 && input.media.every(m => m.type === 'image'))) {
+    warnings.push(
+      `TikTok shows a photo post's title as the first ${TIKTOK_PHOTO_TITLE_MAX} characters of the caption with the hashtags taken out`
+      + `${input.caption.trim() ? ` — here "${tiktokPhotoTitle(input.caption)}"` : ''}. The whole caption goes under it as the description.`,
+    )
+  }
   if (reelOn.includes('youtube')) {
     warnings.push(
       'A YouTube Short is a vertical 9:16 video of up to 3 minutes — YouTube decides it is a Short from the file. '
@@ -734,11 +748,14 @@ export function postWarnings(input: {
  * `toPlatformData`, is the whole guard.
  */
 const FIELD_PLATFORMS: Record<string, Platform[]> = {
-  shareToFeed: ['instagram', 'facebook'],
+  // Facebook's guide has no `shareToFeed` and no `thumbOffset` — Meta answers
+  // an unknown field with a 400 (the docs audit of 10 Sep 2026)
+  shareToFeed: ['instagram'],
   firstComment: ['instagram', 'facebook', 'threads', 'linkedin', 'youtube'],
   collaborators: ['instagram'],
   instagramThumbnail: ['instagram'],
-  thumbOffset: ['instagram', 'facebook'],
+  thumbOffset: ['instagram'],
+  geoRestriction: ['facebook', 'linkedin'],
   isAiGenerated: ['instagram'],
   userTags: ['instagram'],
   locationId: ['instagram'],
@@ -810,6 +827,10 @@ export function toPlatformData(o: PostOptions, platform?: Platform): Record<stri
   if (o.thumbnailUrl) put('instagramThumbnail', o.thumbnailUrl)
   if (typeof o.thumbOffset === 'number') put('thumbOffset', o.thumbOffset)
   if (o.isAiGenerated) put('isAiGenerated', true)
+  if (o.geoCountries?.length && o.kind !== 'story') {
+    const countries = cleanCountries(o.geoCountries)
+    if (countries.length) put('geoRestriction', { countries })
+  }
   // the rest of Instagram's own switches (docs.zernio.com/platforms/instagram,
   // read 10 Sep 2026): each travels only when it says something the network
   // would not do on its own
@@ -933,6 +954,7 @@ export type TikTokSettings = {
   video_cover_image_url?: string
   /** which picture of a photo post is the cover */
   photo_cover_index?: number
+  media_type?: 'video' | 'photo'
   /** a photo post's own description */
   description?: string
 }
@@ -949,7 +971,14 @@ export type TikTokSettings = {
  * A cover PICTURE beats a cover MOMENT: sending both is ambiguous, and the
  * picture is the more deliberate of the two.
  */
-export function tiktokSettingsFor(o?: PostOptions | null): TikTokSettings {
+export function tiktokSettingsFor(
+  o?: PostOptions | null,
+  /** the post's caption and whether this is a PHOTO post: TikTok shows the
+   *  first 90 characters of `content` as a photo post's title with the
+   *  hashtags stripped, and the whole caption belongs in `description` —
+   *  which the app never copied there (the docs audit of 10 Sep 2026) */
+  post?: { caption?: string | null; photo?: boolean },
+): TikTokSettings {
   const opts = o ?? {}
   const settings: TikTokSettings = {
     ...TIKTOK_DEFAULTS,
@@ -974,8 +1003,18 @@ export function tiktokSettingsFor(o?: PostOptions | null): TikTokSettings {
   }
   if (opts.tiktokDescription?.trim()) {
     settings.description = opts.tiktokDescription.trim().slice(0, TIKTOK_DESCRIPTION_MAX)
+  } else if (post?.photo && post.caption?.trim()) {
+    settings.description = post.caption.trim().slice(0, TIKTOK_DESCRIPTION_MAX)
   }
+  if (post?.photo) settings.media_type = 'photo'
   return settings
+}
+
+/** TikTok's photo-post title: the first 90 characters of the caption, with
+ *  hashtags and links stripped — what the network does to `content`. */
+export const TIKTOK_PHOTO_TITLE_MAX = 90
+export function tiktokPhotoTitle(caption: string | null | undefined): string {
+  return String(caption ?? '').replace(/#[^\s#]+/g, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, TIKTOK_PHOTO_TITLE_MAX)
 }
 
 /**
@@ -1069,7 +1108,11 @@ export function buildPostBody(input: {
   // does, the post has to be split rather than the second one's choices
   // silently thrown away.
   const tiktok = input.targets.find(t => t.platform === 'tiktok')
-  if (tiktok) body.tiktokSettings = tiktokSettingsFor(tiktok.options)
+  if (tiktok) {
+    const ttMedia = tiktok.options?.media?.length ? tiktok.options.media : input.media
+    const photo = ttMedia.length > 0 && ttMedia.every(m => m.type === 'image')
+    body.tiktokSettings = tiktokSettingsFor(tiktok.options, { caption: tiktok.options?.caption ?? input.caption, photo })
+  }
   // YouTube's tags ride at the top level as well — inside the platform entry
   // Zernio ignores them and says so in `warnings` (10 Sep 2026)
   const youtube = input.targets.find(t => t.platform === 'youtube' && t.options?.tags?.length)
@@ -1095,10 +1138,12 @@ export function buildPostBody(input: {
  * or we would spin forever on a post that already went out.
  */
 export type PublishOutcome =
-  | { kind: 'published'; postId: string; replayed: boolean }
+  /** `platforms`: the provider's per-channel rows when it sent them — a
+   *  207 "partial" carries one live channel and one refused in the same body */
+  | { kind: 'published'; postId: string; replayed: boolean; platforms?: RemotePlatformRow[] }
   | { kind: 'duplicate'; postId: string | null }
   | { kind: 'retryable'; message: string }
-  | { kind: 'permanent'; message: string }
+  | { kind: 'permanent'; message: string; postId?: string | null; platforms?: RemotePlatformRow[] }
 
 export function classifyResponse(
   status: number,
@@ -1114,7 +1159,18 @@ export function classifyResponse(
   }
   if (status >= 200 && status < 300) {
     if (!postId) return { kind: 'retryable', message: 'Provider returned no post id' }
-    return { kind: 'published', postId, replayed: false }
+    // 207 IS A 2XX AND IT MEANS "CREATED BUT NOT PUBLISHED": every one of
+    // Zernio's platform guides says to branch on `post.status` as well as the
+    // code. A post that failed on every channel was being recorded as posted
+    // until the next sweep (the docs audit of 10 Sep 2026).
+    const rows = Array.isArray(post.platforms) ? post.platforms as RemotePlatformRow[] : []
+    const said = String(post.status ?? '').toLowerCase()
+    if (said === 'failed') {
+      const why = rows.map(r => String(r.errorMessage ?? r.error ?? '').trim()).find(Boolean)
+        ?? messageFrom(b, 'The provider could not publish it')
+      return { kind: 'permanent', message: platformErrorWords(why), postId, platforms: rows }
+    }
+    return { kind: 'published', postId, replayed: false, ...(rows.length ? { platforms: rows } : {}) }
   }
   if (status === 409) {
     return { kind: 'duplicate', postId }
@@ -1124,6 +1180,50 @@ export function classifyResponse(
   }
   // 400/401/403/404 — bad payload, bad key, unknown account. Retrying cannot help.
   return { kind: 'permanent', message: messageFrom(b, `Provider rejected the post (${status})`) }
+}
+
+/**
+ * THE PROVIDER'S DOCUMENTED ERRORS, AS A PERSON WOULD SAY THEM — with what to
+ * do. Read off the "Common errors" tables of Zernio's TikTok, Instagram,
+ * Facebook and LinkedIn guides on 10 Sep 2026. Anything not listed is
+ * returned as the provider wrote it.
+ */
+const PLATFORM_ERROR_WORDS: readonly [RegExp, string][] = [
+  [/at capacity|active user quota/i, 'TikTok is at capacity for new posting accounts right now — it clears within a few hours. Move the post later, or turn on "Send it to the TikTok inbox as a draft" in More options, which is not affected.'],
+  [/too many posts in the last 24 hours/i, 'This account has hit TikTok\'s daily limit for posts made through apps. Wait for the day to roll over, or post it in the TikTok app.'],
+  [/5 pending drafts/i, 'TikTok allows five waiting drafts per account per day. Finish or discard some in the TikTok app — waiting does not free the slot.'],
+  [/timeout waiting for platform/i, 'The network took too long to process the upload, which is normal for a big video. Check the post again in a few minutes before doing anything.'],
+  [/privacy level .* not available/i, 'That privacy setting is not one this TikTok account allows. Open More options and pick one of the offered ones.'],
+  [/spam_risk|potentially risky/i, 'TikTok\'s moderation flagged this post. Review the caption and video — moderation through apps is stricter than in the TikTok app.'],
+  [/duplicate content|duplicate of urn/i, 'The network sees this as a repeat of a recent post. Change the caption or the media, then send it again.'],
+  [/download failed|cannot process video from this url|unable to fetch video|media fetch failed/i, 'The network could not download the file. Attach it again from the library and try once more.'],
+  [/missing required tiktok permissions|reconnect with all required scopes/i, 'TikTok needs the account reconnected with every permission granted. Use the connect link.'],
+  [/access token expired|tokens? expired|please reconnect/i, 'The account\'s connection has run out. Reconnect it from the Schedule page, then send the post again.'],
+  [/maximum of 100 posts per day/i, 'Instagram allows 100 posts per account per day, every kind counted. Move this one to tomorrow.'],
+  [/blocked your request/i, 'Instagram blocked the request as automation. Wait a while, vary the content, then try again.'],
+  [/photos should be smaller than 4mb/i, 'Facebook takes pictures up to 4 MB as JPEG or PNG. Attach a smaller export.'],
+  [/missing or invalid image file/i, 'Facebook could not read the picture. Attach it again as a JPEG or PNG under 4 MB.'],
+  [/confirm your identity/i, 'Facebook wants the Page owner to confirm their identity in the Facebook app before it publishes. Ask them to open the Page in the app and complete it, then send again.'],
+  [/max retries reached|preflight checks/i, 'The network refused it three times running, which is usually temporary. Send it again in a little while.'],
+  [/cannot mix media types/i, 'LinkedIn takes pictures, one video or one document in a post — never together. Split them into separate posts.'],
+  [/video processing failed/i, 'LinkedIn could not process the video: it needs H.264, within the length limit, and a shape between 1:2.4 and 2.4:1.'],
+  [/trial reels require/i, 'Instagram only allows Trial Reels on accounts with 1,000 or more followers. Change the type to Reel and send it again.'],
+]
+
+/** Two-letter country codes, upper case, de-duplicated, at most 25. */
+export function cleanCountries(list: readonly string[] | null | undefined): string[] {
+  const out: string[] = []
+  for (const raw of list ?? []) {
+    const code = String(raw ?? '').trim().toUpperCase()
+    if (/^[A-Z]{2}$/.test(code) && !out.includes(code)) out.push(code)
+  }
+  return out.slice(0, 25)
+}
+
+export function platformErrorWords(message: string | null | undefined): string {
+  const text = String(message ?? '').trim()
+  for (const [re, words] of PLATFORM_ERROR_WORDS) if (re.test(text)) return words
+  return text
 }
 
 function messageFrom(b: Record<string, unknown>, fallback: string): string {
@@ -1151,6 +1251,8 @@ export type RemotePlatformRow = {
   platform?: string; name?: string; status?: string
   errorMessage?: string | null; error?: string | null
   platformPostUrl?: string | null
+  /** `isDraft: true` — handed to the creator's inbox / Publishing Tools, not live */
+  platformSpecificData?: { isDraft?: boolean } | null
 }
 
 /**

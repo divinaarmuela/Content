@@ -40,6 +40,7 @@ not ignored, it is a post that never happens.
 | Instagram | `igPaid` — "Paid partnership" | `isPaidPartnership` | `isPaidPartnership` (needs Facebook Login on the account) |
 | Instagram | `igSponsors` — "Sponsors" | `brandedContentSponsors` | `brandedContentSponsors` (max 2; only with the label on) |
 | Instagram | NOT OFFERED: `audioConfiguration` (catalog music) — needs the account reconnected with Facebook Login and a music search; a build of its own | | |
+| Facebook, LinkedIn | `geo` — "Only show it in these countries" | `geoCountries` | `geoRestriction.countries` (ISO alpha-2, max 25; never on a Story) |
 | YouTube | `ytTitle` — "Video title" | `title` | `title` (clamped to 100) |
 | YouTube | `ytVisibility` — "Who can watch" | `visibility` | `visibility` |
 | YouTube | `ytCategory` — "Category" (13 plain names) | `categoryId` | `categoryId` |

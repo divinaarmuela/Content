@@ -217,11 +217,12 @@ export const PLATFORM_MEDIA: Record<Platform, PlatformMedia> = {
       minWidth: 1280, minHeight: 720,
     },
     byKind: {
-      // Meta's Facebook Reels spec is 3 to 90 seconds; Zernio's guide says 60,
-      // which is the STORY ceiling for a reel shared to a Page's story
+      // Zernio's Facebook guide (read 10 Sep 2026): a Reel is 3 to 60
+      // seconds. The app used to allow 90 on Meta's own spec, and the
+      // uploader in between is Zernio's — its ceiling is the one that refuses
       reel: {
         video: {
-          minSeconds: 3, maxSeconds: 90, overlong: 'reject',
+          minSeconds: 3, maxSeconds: 60, overlong: 'reject',
           aspectMin: VERTICAL_MIN, aspectMax: VERTICAL_MAX, aspectName: '9:16 vertical',
         },
       },

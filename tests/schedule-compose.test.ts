@@ -184,7 +184,7 @@ describe('More options never offers what the provider cannot do', () => {
     // LinkedIn takes a first comment, a company page, a link preview and a
     // document name — and none of Instagram's
     expect(moreOptionsFor(['linkedin']).map(o => o.key))
-      .toEqual(['firstComment', 'liOrganization', 'liLinkPreview', 'liDocumentTitle'])
+      .toEqual(['firstComment', 'geo', 'liOrganization', 'liLinkPreview', 'liDocumentTitle'])
     expect(moreOptionsFor(['youtube']).map(o => o.key)).toEqual([
       'firstComment', 'ytTitle', 'ytVisibility', 'ytCategory', 'ytPlaylist',
       'ytTags', 'ytKids', 'ytSynthetic', 'ytThumbnail',

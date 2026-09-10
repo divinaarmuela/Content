@@ -4,7 +4,7 @@ import {
   availableKinds, autoKindFor, describeRemoteOutcome, isStillProcessing, SUPPORTED_PLATFORMS,
   cleanTags, optionProblems, tagsLength, tiktokSettingsFor, youtubeDefaults,
   asOrganizationUrn, isOrganizationUrn,
-  TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX, postWarnings,
+  TIKTOK_DEFAULTS, YOUTUBE_TITLE_MAX, postWarnings, tiktokPhotoTitle, cleanCountries, platformErrorWords,
 } from '../app/lib/publish-core'
 
 const img = (n = 1) => Array.from({ length: n }, (_, i) => ({ url: `https://x/${i}.jpg`, type: 'image' as const }))
@@ -940,5 +940,50 @@ describe('the Short warning', () => {
     const ig = postWarnings({ caption: 'a', media: [{ url: 'https://x/a.mp4', type: 'video' }], kinds: { instagram: 'reel' } })
     expect(ig.join(' ')).toMatch(/Reels should be/)
     expect(ig.join(' ')).not.toMatch(/Short/)
+  })
+})
+
+/* ── the 207 envelope, TikTok photo posts, drafts, plain errors (10 Sep 2026) ── */
+
+describe('what the docs audit of 10 Sep 2026 found', () => {
+  it('a 2xx whose post says failed is a failure, with the channel\u2019s reason in plain words', () => {
+    const out = classifyResponse(207, { message: 'Post created but publishing failed', post: {
+      _id: 'p7', status: 'failed',
+      platforms: [{ platform: 'tiktok', status: 'failed', errorMessage: 'TikTok direct posting is at capacity right now. Use tiktokSettings.draft: true instead' }],
+    } })
+    expect(out.kind).toBe('permanent')
+    if (out.kind === 'permanent') {
+      expect(out.message).toMatch(/at capacity .* clears within a few hours/)
+      expect(out.postId).toBe('p7')
+      expect(out.platforms).toHaveLength(1)
+    }
+  })
+  it('a 2xx partial carries its rows through', () => {
+    const out = classifyResponse(207, { post: { _id: 'p8', status: 'partial', platforms: [
+      { platform: 'instagram', status: 'published' }, { platform: 'tiktok', status: 'failed', errorMessage: 'Duplicate content detected.' },
+    ] } })
+    expect(out.kind).toBe('published')
+    if (out.kind === 'published') expect(out.platforms).toHaveLength(2)
+  })
+  it('a TikTok photo post carries the caption as its description and says it is a photo post', () => {
+    const s = tiktokSettingsFor({}, { caption: 'Full recap #travel', photo: true })
+    expect(s.description).toBe('Full recap #travel')
+    expect(s.media_type).toBe('photo')
+    expect(tiktokSettingsFor({}, { caption: 'Video caption', photo: false }).description).toBeUndefined()
+    expect(tiktokPhotoTitle('Weekend across the coast #travel #roadtrip https://x.y/z')).toBe('Weekend across the coast')
+  })
+  it('says what the network will show as a photo post title', () => {
+    const w = postWarnings({ caption: 'Weekend across the coast #travel', media: [{ url: 'https://x/a.jpg', type: 'image' }, { url: 'https://x/b.jpg', type: 'image' }], kinds: { tiktok: 'carousel' } })
+    expect(w.join(' ')).toMatch(/first 90 characters .* "Weekend across the coast"/)
+  })
+  it('country targeting is cleaned and never on a Story', () => {
+    expect(cleanCountries([' au', 'NZ', 'nz', 'USA', ''])).toEqual(['AU', 'NZ'])
+    expect(toPlatformData({ geoCountries: ['au'] }, 'facebook')).toEqual({ geoRestriction: { countries: ['AU'] } })
+    expect(toPlatformData({ geoCountries: ['au'], kind: 'story' }, 'facebook')?.geoRestriction).toBeUndefined()
+    expect(toPlatformData({ geoCountries: ['au'] }, 'instagram')).toBeNull()
+  })
+  it('turns the documented errors into a sentence with the fix, and leaves the rest alone', () => {
+    expect(platformErrorWords('Content is a duplicate of urn:li:share:7200')).toMatch(/repeat of a recent post/)
+    expect(platformErrorWords('Something nobody documented')).toBe('Something nobody documented')
   })
 })

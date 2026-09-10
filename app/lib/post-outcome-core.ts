@@ -17,7 +17,7 @@
  * by-hand rows from the cards, and the per-client numbers. No I/O.
  */
 
-import { networkName, type MediaItem } from './publish-core'
+import { networkName, platformErrorWords, type MediaItem } from './publish-core'
 import { isTrialTarget } from './trial-reel-core'
 import { readPostedSlides } from './posted-slides-core'
 
@@ -41,7 +41,7 @@ export type PlatformOutcome = {
 export type OutcomeJob = {
   id?: string
   status?: string | null
-  targets?: { platform: string; options?: { kind?: string; media?: MediaItem[] | null; trialGraduation?: string | null } | null }[] | null
+  targets?: { platform: string; options?: { kind?: string; media?: MediaItem[] | null; trialGraduation?: string | null; tiktokDraft?: boolean | null; facebookDraft?: boolean | null } | null }[] | null
   media?: MediaItem[] | null
   scheduled_for?: string | null
   published_at?: string | null
@@ -93,9 +93,17 @@ function targetsOf(job: OutcomeJob): { platform: string; kind: string }[] {
       // a Reel going to non-followers first is a Trial Reel everywhere it is
       // named — the Posts page, the calendar's list, the card (10 Sep 2026)
       const trial = kind === 'Reel' && isTrialTarget(t.platform, { kind: 'reel', trialGraduation: t.options?.trialGraduation })
-      return { platform: t.platform.toLowerCase(), kind: trial ? 'Trial Reel' : kind }
+      // a draft handed to the creator is not a post that went out: TikTok's
+      // inbox and Facebook's Publishing Tools both come back "published"
+      // with isDraft (the docs audit of 10 Sep 2026)
+      const p = t.platform.toLowerCase()
+      const draft = (p === 'tiktok' && t.options?.tiktokDraft === true) || (p === 'facebook' && t.options?.facebookDraft === true)
+      return { platform: p, kind: draft ? DRAFT_KIND : trial ? 'Trial Reel' : kind }
     })
 }
+
+/** The kind word for a post handed over as a draft, not published. */
+export const DRAFT_KIND = 'Draft, handed to the creator'
 
 /** Is any channel of this job a Trial Reel? */
 export function jobIsTrial(job: OutcomeJob): boolean {
@@ -121,6 +129,7 @@ export type RemoteRow = {
   errorMessage?: string | null; error?: string | null
   platformPostUrl?: string | null
   publishedAt?: string | null
+  platformSpecificData?: { isDraft?: boolean } | null
 }
 
 const LIVE = ['published', 'posted', 'success']
@@ -166,10 +175,12 @@ export function resultsFromRemote(
   return out
 }
 
-function fromRow(platform: string, kind: string, r: RemoteRow, at: string, fallback: OutcomeStatus): PlatformOutcome {
+function fromRow(platform: string, kindIn: string, r: RemoteRow, at: string, fallback: OutcomeStatus): PlatformOutcome {
+  let kind = kindIn
   const status = String(r.status ?? '').toLowerCase()
   const why = String(r.errorMessage ?? r.error ?? '').trim()
   const stillProcessing = /still processing/i.test(why)
+  if (r.platformSpecificData?.isDraft === true) kind = DRAFT_KIND
   let verdict: OutcomeStatus
   if (LIVE.includes(status)) verdict = 'published'
   else if (status === 'failed' && !stillProcessing) verdict = 'failed'
@@ -177,7 +188,7 @@ function fromRow(platform: string, kind: string, r: RemoteRow, at: string, fallb
   else verdict = fallback
   return {
     platform, kind, status: verdict,
-    reason: verdict === 'failed' ? (why || 'no reason given') : null,
+    reason: verdict === 'failed' ? (platformErrorWords(why) || 'no reason given') : null,
     url: r.platformPostUrl ?? null,
     at: verdict === 'published' ? (r.publishedAt ?? at) : at,
   }
@@ -273,7 +284,9 @@ export function parseOutcomeSentence(error: string | null | undefined): { live: 
 /** the one word a mark on screen needs */
 export function outcomeWords(o: PlatformOutcome): { label: string; tone: 'done' | 'waiting' | 'trouble' | 'moving' | 'quiet' } {
   switch (o.status) {
-    case 'published': return { label: 'Went out', tone: 'done' }
+    case 'published': return o.kind === DRAFT_KIND
+      ? { label: 'Handed over as a draft — not live until they post it', tone: 'waiting' }
+      : { label: 'Went out', tone: 'done' }
     case 'scheduled': return { label: 'Scheduled', tone: 'waiting' }
     case 'failed': return { label: 'Did not go out', tone: 'trouble' }
     case 'pending': return { label: 'Still going out', tone: 'moving' }

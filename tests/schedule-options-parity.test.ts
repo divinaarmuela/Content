@@ -45,6 +45,7 @@ const EVERY_EXTRA: Required<Omit<ChannelExtras, 'slides'>> = {
   muteAudio: true,
   isPaidPartnership: true,
   brandedContentSponsors: ['sponsorco'],
+  geoCountries: ['NZ'],
   title: 'The video title',
   visibility: 'unlisted',
   madeForKids: true,
@@ -252,6 +253,7 @@ describe('every posting option the window collects reaches the job', () => {
       disableLinkPreview: true,
       documentTitle: 'The deck',
       firstComment: '#hashtags',
+      geoRestriction: { countries: ['NZ'] },
     })
 
     // Facebook — including the Reel title and the draft flag, which Zernio
@@ -262,8 +264,11 @@ describe('every posting option the window collects reaches the job', () => {
       title: 'The video title',
       facebookSettings: { draft: true },
       firstComment: '#hashtags',
-      shareToFeed: true,
+      geoRestriction: { countries: ['NZ'] },
     })
+    // Facebook's guide has no shareToFeed and no thumbOffset (10 Sep 2026)
+    expect(dataFor('facebook').shareToFeed).toBeUndefined()
+    expect(dataFor('facebook').thumbOffset).toBeUndefined()
 
     // TikTok: nothing in platformSpecificData at all — every one of its
     // settings is TOP LEVEL, which is Zernio's one special case
