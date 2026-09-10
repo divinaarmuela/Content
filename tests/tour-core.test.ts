@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  firstStep, nextStep, POST_WINDOW_TOUR, SCHEDULE_TOUR, shouldRunTour, stepCount, stepNumber,
+  firstStep, nextStep, POST_APPROVAL_TOUR, POST_WINDOW_TOUR, SCHEDULE_TOUR, shouldRunTour,
+  stepBody, stepCount, stepIsForRole, stepNumber,
   TOURS, TOUR_SEEN_PREFIX, tourKey, tourKeysToClear, type TourStep,
 } from '@/app/lib/tour-core'
 
@@ -21,17 +22,37 @@ describe('the tours themselves', () => {
     ])
   })
 
+  it('covers the Post approval board, from the columns to the drawer', () => {
+    expect(POST_APPROVAL_TOUR.steps.map(s => s.target)).toEqual([
+      'board-lanes', 'board-new-post', 'board-card', 'board-card-action',
+      'post-drawer', 'post-by-hand', 'hand-to',
+    ])
+  })
+
+  it('names the five columns and says what each one means', () => {
+    const columns = POST_APPROVAL_TOUR.steps.find(s => s.target === 'board-lanes')!.body
+    for (const label of ['Draft', 'Internal check', 'With client', 'Ready to post', 'Posted']) {
+      expect(columns, label).toContain(label)
+    }
+  })
+
   it('is registered under its own id', () => {
     expect(TOURS.schedule).toBe(SCHEDULE_TOUR)
     expect(TOURS['post-window']).toBe(POST_WINDOW_TOUR)
+    expect(TOURS['post-approval']).toBe(POST_APPROVAL_TOUR)
   })
 
-  const steps: TourStep[] = [...SCHEDULE_TOUR.steps, ...POST_WINDOW_TOUR.steps]
+  const steps: TourStep[] = [...SCHEDULE_TOUR.steps, ...POST_WINDOW_TOUR.steps, ...POST_APPROVAL_TOUR.steps]
 
   it('says one short thing per step, with no em dashes and no jargon', () => {
     for (const s of steps) {
       expect(s.title.length, s.title).toBeLessThanOrEqual(40)
       expect(s.body.length, s.title).toBeLessThanOrEqual(240)
+      for (const [role, body] of Object.entries(s.bodyByRole ?? {})) {
+        expect(body.length, `${s.title} (${role})`).toBeLessThanOrEqual(240)
+        expect(body, `${s.title} (${role})`).not.toMatch(/[—–]/)
+        expect(body.trim().endsWith('.'), `${s.title} (${role})`).toBe(true)
+      }
       expect(s.body, s.title).not.toMatch(/[—–]/)
       expect(s.title, s.title).not.toMatch(/[—–]/)
       expect(s.body, s.title).not.toMatch(/\b(asset|CTA|SKU|onboarding|leverage|utilise)\b/i)
@@ -49,6 +70,77 @@ describe('the tours themselves', () => {
     expect(list.body).toMatch(/drafts only appear in the List/i)
     const time = POST_WINDOW_TOUR.steps.find(s => s.target === 'post-time')!
     expect(time.body).toMatch(/earliest safe time/i)
+  })
+})
+
+describe("a step that is only some people's", () => {
+  const columns = POST_APPROVAL_TOUR.steps.find(s => s.target === 'board-lanes')!
+  const handTo = POST_APPROVAL_TOUR.steps.find(s => s.target === 'hand-to')!
+  const newPost = POST_APPROVAL_TOUR.steps.find(s => s.target === 'board-new-post')!
+
+  it("is everybody's when it names no roles", () => {
+    expect(stepIsForRole(columns, 'scheduler')).toBe(true)
+    expect(stepIsForRole(columns, 'super_admin')).toBe(true)
+    expect(stepIsForRole(columns, null)).toBe(true)
+  })
+
+  it("is only the named roles' when it names some", () => {
+    expect(stepIsForRole(handTo, 'account_manager')).toBe(true)
+    expect(stepIsForRole(handTo, 'super_admin')).toBe(true)
+    expect(stepIsForRole(handTo, 'scheduler')).toBe(false)
+    expect(stepIsForRole(handTo, 'general')).toBe(false)
+    // the role has not arrived yet: better a step short than a wrong one
+    expect(stepIsForRole(handTo, null)).toBe(false)
+  })
+
+  it('says a manager a different sentence, and everybody else the plain one', () => {
+    expect(stepBody(newPost, 'scheduler')).toBe(newPost.body)
+    expect(stepBody(newPost, 'general')).toBe(newPost.body)
+    expect(stepBody(newPost, null)).toBe(newPost.body)
+    expect(stepBody(newPost, 'account_manager')).toMatch(/approve them yourself/i)
+    expect(stepBody(newPost, 'super_admin')).toBe(stepBody(newPost, 'account_manager'))
+  })
+
+  it('tells a scheduler to send the files on, and a manager what they may answer', () => {
+    const buttons = POST_APPROVAL_TOUR.steps.find(s => s.target === 'board-card-action')!
+    expect(stepBody(buttons, 'scheduler')).toMatch(/one button/i)
+    expect(stepBody(buttons, 'account_manager')).toMatch(/nothing the channel already holds can be deleted/i)
+  })
+})
+
+describe('walking a tour as one role', () => {
+  const steps = POST_APPROVAL_TOUR.steps
+  const all = () => true
+
+  it("walks a scheduler past the manager's step, forwards and back", () => {
+    const handTo = steps.findIndex(s => s.target === 'hand-to')
+    const byHand = steps.findIndex(s => s.target === 'post-by-hand')
+    expect(nextStep(steps, byHand, 1, all, 'scheduler')).toBeNull()
+    expect(nextStep(steps, byHand, 1, all, 'super_admin')).toBe(handTo)
+    expect(nextStep(steps, handTo, -1, all, 'super_admin')).toBe(byHand)
+  })
+
+  it('counts and numbers only the steps that role really sees', () => {
+    expect(stepCount(steps, all, 'super_admin')).toBe(steps.length)
+    expect(stepCount(steps, all, 'scheduler')).toBe(steps.length - 1)
+    const last = steps.length - 1
+    expect(stepNumber(steps, last, all, 'super_admin')).toBe(steps.length)
+    // the scheduler's last step is the one before the manager's
+    expect(stepNumber(steps, last - 1, all, 'scheduler')).toBe(steps.length - 1)
+  })
+
+  it('skips a missing target and a wrong role the same way', () => {
+    // an empty board with nothing open: only the columns and the upload
+    const present = (t: string) => t === 'board-lanes' || t === 'board-new-post'
+    expect(firstStep(steps, present, 'scheduler')).toBe(0)
+    expect(stepCount(steps, present, 'scheduler')).toBe(2)
+    expect(nextStep(steps, 0, 1, present, 'scheduler')).toBe(1)
+    expect(nextStep(steps, 1, 1, present, 'scheduler')).toBeNull()
+  })
+
+  it('opens for a manager on a board where only their own step is drawn', () => {
+    expect(firstStep(steps, t => t === 'hand-to', 'super_admin')).toBe(steps.length - 1)
+    expect(firstStep(steps, t => t === 'hand-to', 'scheduler')).toBeNull()
   })
 })
 

@@ -3,6 +3,9 @@ import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   test: {
+    // route tests import whole module graphs; under a full-suite load the
+    // 5-second default timed out a different handful every run (10 Sep 2026)
+    testTimeout: 60_000,
     // An agent's isolated worktree lives under .claude/worktrees and carries a
     // full copy of this suite; collecting it doubles every run and reports a
     // mid-edit copy's failures as ours.

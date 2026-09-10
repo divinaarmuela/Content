@@ -371,7 +371,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const secondary = 'h-11 rounded-full px-4 text-[14px] font-semibold'
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">
       {/* ── 1. what and where ── */}
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 pb-4 pt-5">
         <div className="min-w-0">
@@ -432,7 +432,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           {/* nobody is handed a card the channel already holds or has posted
               (the owner, 10 Sep 2026) */}
           {isManager && status !== 'scheduled' && status !== 'published' && (
-            <Button variant="outline" className={secondary} disabled={busy} onClick={() => setHanding(true)}>
+            <Button data-tour="hand-to" variant="outline" className={secondary} disabled={busy} onClick={() => setHanding(true)}>
               {handedTo.length > 0 ? `With ${handedTo.join(', ')} · change` : 'Hand to…'}
             </Button>
           )}
@@ -508,7 +508,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 {/* a file already booked or out through a channel is not
                     one to mark by hand (the owner, 9 Sep 2026) */}
                 {mayMarkPosted && !postedUrls.has(s.url) && !fileBooking(s.url, filePosts, jobsById) && handOn !== i && (
-                  <Button variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink(''); setHandAt(localNow()) }}>
+                  <Button data-tour={i === 0 ? 'post-by-hand' : undefined} variant="ghost" size="sm" className="h-9 rounded-full" disabled={working !== null} onClick={() => { setHandOn(i); setHandLink(''); setHandAt(localNow()) }}>
                     Posted by hand
                   </Button>
                 )}

@@ -42,6 +42,7 @@ export default function NewPostButton() {
   return (
     <>
       <Button
+        data-tour="board-new-post"
         className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
         onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" /> New post

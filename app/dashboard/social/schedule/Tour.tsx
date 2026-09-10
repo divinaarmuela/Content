@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  firstStep, nextStep, shouldRunTour, stepCount, stepNumber, tourKey,
+  firstStep, nextStep, shouldRunTour, stepBody, stepCount, stepNumber, tourKey,
   type Tour as TourData, type TourId,
 } from '@/app/lib/tour-core'
 import type { Role } from '@/app/lib/identity-core'
@@ -50,8 +50,12 @@ function boxOf(el: HTMLElement): Spot {
   return { top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 }
 }
 
-export default function Tour({ tour, onClose }: {
+export default function Tour({ tour, role = null, onClose }: {
   tour: TourData
+  /** whose tour this is: a step marked for other roles is walked past like a
+   *  target that is not on the screen, and a step with a sentence of its own
+   *  for this role says that one instead */
+  role?: Role | null
   /** the tour is over, however it ended — the caller writes down that this
    *  person has now seen it */
   onClose: () => void
@@ -80,17 +84,17 @@ export default function Tour({ tour, onClose }: {
   useEffect(() => {
     if (started.current) return
     started.current = true
-    const first = firstStep(tour.steps, present)
+    const first = firstStep(tour.steps, present, role)
     if (first === null) { onClose(); return }
     setIndex(first)
-  }, [tour.steps, present, onClose])
+  }, [tour.steps, present, role, onClose])
 
   const step = index === null ? null : tour.steps[index] ?? null
 
   const go = useCallback((direction: 1 | -1) => {
     setIndex(current => {
       if (current === null) return current
-      const next = nextStep(tour.steps, current, direction, present)
+      const next = nextStep(tour.steps, current, direction, present, role)
       if (next === null) {
         // forward past the last step is "Done"; back past the first stays put
         if (direction === 1) onClose()
@@ -98,7 +102,7 @@ export default function Tour({ tour, onClose }: {
       }
       return next
     })
-  }, [tour.steps, present, onClose])
+  }, [tour.steps, present, role, onClose])
 
   /** measure the current step's element, and keep measuring while the page
    *  settles: a scroll that has not finished reports the old box */
@@ -146,10 +150,10 @@ export default function Tour({ tour, onClose }: {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [go, onClose])
 
-  const total = stepCount(tour.steps, present)
-  const shownNumber = index === null ? 0 : stepNumber(tour.steps, index, present)
-  const last = index !== null && nextStep(tour.steps, index, 1, present) === null
-  const first = index !== null && nextStep(tour.steps, index, -1, present) === null
+  const total = stepCount(tour.steps, present, role)
+  const shownNumber = index === null ? 0 : stepNumber(tour.steps, index, present, role)
+  const last = index !== null && nextStep(tour.steps, index, 1, present, role) === null
+  const first = index !== null && nextStep(tour.steps, index, -1, present, role) === null
 
   if (!step || index === null) return null
 
@@ -215,7 +219,7 @@ export default function Tour({ tour, onClose }: {
           {tour.name} · {shownNumber} of {total}
         </p>
         <p className="mt-1.5 text-[15px] font-semibold text-foreground">{step.title}</p>
-        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{step.body}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{stepBody(step, role)}</p>
 
         <div className="mt-3.5 flex items-center gap-2">
           <button

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { X } from 'lucide-react'
+import { Compass, X } from 'lucide-react'
+import Tour, { useTourOnce } from '../social/schedule/Tour'
+import { POST_APPROVAL_TOUR } from '../../lib/tour-core'
 import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
 import {
   COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
@@ -190,6 +192,33 @@ export function Board({
     [dragging, page, viewer],
   )
 
+  /**
+   * THE WALKTHROUGH, the first time somebody who posts opens this board.
+   *
+   * Wired here rather than on the page because the board is the page: the
+   * same three lanes, cards and drawer are drawn on Post approval,
+   * Production and Editor, and every step names something this component
+   * owns. The one step that does not — "New post", which lives in the Post
+   * approval page's own header — simply has no target elsewhere and is
+   * walked past. An editor is not on the tour's list of roles and never
+   * sees it.
+   */
+  const tour = useTourOnce('post-approval', {
+    userId: viewer.id || null,
+    role: viewer.role,
+    ready: true,
+  })
+
+  /** the ONE card the spotlight points at: the first card in the first open
+   *  lane that has any. A folded lane's compact card carries no buttons, so
+   *  it is no use to the two steps about them. */
+  const firstCardId = useMemo(() => {
+    for (const g of grouped) {
+      if (!g.lane.folded && g.cards.length > 0) return g.cards[0].id
+    }
+    return null
+  }, [grouped])
+
   const drop = (laneKey: PageLaneKey) => {
     const card = dragging
     setDragging(null)
@@ -226,6 +255,7 @@ export function Board({
           <div
             key={c.id}
             role="listitem"
+            data-tour={c.id === firstCardId ? 'board-card' : undefined}
             draggable={!busyId}
             onDragStart={e => {
               e.dataTransfer.effectAllowed = 'move'
@@ -253,6 +283,7 @@ export function Board({
                 onOpen={open}
                 onAction={act}
                 onMove={act}
+                tour={c.id === firstCardId}
                 onLink={setLinkFor}
                 onKind={setKindFor}
                 // handing a card over is an edit of it — same right as the
@@ -300,6 +331,20 @@ export function Board({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* the walkthrough runs itself once; after that it lives here, above
+          the board it explains, where somebody who wants it back can find it */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={tour.start}
+          title="Walk me through this page"
+          className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted md:inline-flex"
+        >
+          <Compass className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+          Show me the tour
+        </button>
+      </div>
+
       {show && (
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
           <span>Showing <span className="font-semibold text-foreground">{SHOW_LABELS[show]}</span> — {shown.length} of {cards.length}</span>
@@ -312,11 +357,13 @@ export function Board({
         </div>
       )}
 
-      <LaneBoard
-        lanes={lanes}
-        initialLane={initialColumn ? laneOf(page, initialColumn) : undefined}
-        ariaLabel={ariaLabel}
-      />
+      <div data-tour="board-lanes">
+        <LaneBoard
+          lanes={lanes}
+          initialLane={initialColumn ? laneOf(page, initialColumn) : undefined}
+          ariaLabel={ariaLabel}
+        />
+      </div>
 
       {dialogs}
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
@@ -326,6 +373,8 @@ export function Board({
         onClose={() => setHandToFor(null)} />
       {/* the live listener drops the row once the server has removed it */}
       <DeleteDialog card={deleteFor} onClose={() => setDeleteFor(null)} />
+
+      {tour.open && <Tour tour={POST_APPROVAL_TOUR} role={viewer.role} onClose={tour.close} />}
     </div>
   )
 }

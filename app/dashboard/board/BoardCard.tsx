@@ -82,7 +82,7 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking,
+  statsHref, booking, tour,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -113,6 +113,14 @@ export function BoardCard({
   /** "Booked on TikTok, Instagram · Thu 12:00 pm" — where the files are
    *  booked or went out, so a card in Ready to post or Posted says so */
   booking?: string | null
+  /**
+   * This is the card the walkthrough points at — the first one on the board,
+   * and only that one, or the spotlight would have a dozen candidates. It
+   * marks the two controls it talks about: the button that does the next
+   * thing and, behind it, the dots. Both carry the SAME key, so a card whose
+   * stage offers no button still has something to point at.
+   */
+  tour?: boolean
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const [briefOpen, setBriefOpen] = useState(false)
@@ -221,14 +229,14 @@ export function BoardCard({
         )}
 
         {primary && (
-          <Button disabled={busy}
+          <Button disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, primary) }}
             className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
             {busy ? 'Saving…' : primary.label}
           </Button>
         )}
         {!primary && more.length > 0 && (
-          <Button variant="outline" disabled={busy}
+          <Button variant="outline" disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, more[0]) }}
             className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
             {busy ? 'Saving…' : more[0].label}
@@ -239,6 +247,7 @@ export function BoardCard({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" aria-label="More for this card" disabled={busy}
+                data-tour={tour ? 'board-card-action' : undefined}
                 className="h-11 w-11 rounded-full border-border bg-surface [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>

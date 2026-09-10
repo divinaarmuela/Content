@@ -20,7 +20,7 @@ import type { Role } from './identity-core'
  * the part worth testing.
  */
 
-export type TourId = 'schedule' | 'post-window'
+export type TourId = 'schedule' | 'post-window' | 'post-approval'
 
 export type TourStep = {
   /** the value of the `data-tour` attribute on the element to point at */
@@ -29,6 +29,20 @@ export type TourStep = {
   title: string
   /** ONE sentence. Two is a paragraph, and a paragraph does not get read. */
   body: string
+  /**
+   * Whose step this is. Left out, everybody on the tour sees it; given, only
+   * these roles do and everybody else walks straight past it, exactly as
+   * they walk past a target that is not on the screen. "Hand to" is a
+   * manager's button, and a scheduler being told about a button they do not
+   * have is a scheduler being taught to distrust the walkthrough.
+   */
+  roles?: readonly Role[]
+  /**
+   * The same step, said differently to different people. A scheduler uploads
+   * files and sends them on; a manager uploads files and answers them. One
+   * sentence each, and `body` is what anybody not named here reads.
+   */
+  bodyByRole?: Partial<Record<Role, string>>
 }
 
 export type Tour = {
@@ -114,9 +128,76 @@ export const POST_WINDOW_TOUR: Tour = {
   ],
 }
 
+/**
+ * Tour 3: the Post approval board, in the order the work moves across it.
+ *
+ * The same board is drawn on the Post approval page, on Production and on
+ * Editor, so the steps only ever name things the board itself owns; the
+ * "New post" button belongs to the Post approval page alone and is simply
+ * missing elsewhere, which is a target that is not on the screen and is
+ * walked past like any other.
+ *
+ * Three steps live inside the card's own drawer. They are shown when the
+ * drawer is open and skipped when it is not, which is why "Open a card"
+ * comes first among them.
+ */
+export const POST_APPROVAL_TOUR: Tour = {
+  id: 'post-approval',
+  name: 'The Post approval board',
+  steps: [
+    {
+      target: 'board-lanes',
+      title: 'The columns',
+      body: 'Draft is still being made, Internal check is with an account manager, With client is with them, Ready to post is signed off and needs a time, and Posted is booked in or already live.',
+    },
+    {
+      target: 'board-new-post',
+      title: 'Starting a post',
+      body: 'Upload the files here, then send them to your account manager to check.',
+      bodyByRole: {
+        account_manager: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them.',
+        super_admin: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them.',
+      },
+    },
+    {
+      target: 'board-card',
+      title: 'One piece of work',
+      body: 'The face of a card carries the title, the stage it is at, where and when it is booked, and how much of it has gone out so far.',
+    },
+    {
+      target: 'board-card-action',
+      title: 'The button and the dots',
+      body: 'Your one button does the next thing; the dots hold the rest.',
+      bodyByRole: {
+        account_manager: 'Approve, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted.',
+        super_admin: 'Approve, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted.',
+      },
+    },
+    {
+      target: 'post-drawer',
+      title: 'The card, opened',
+      body: 'Open a card for the files, what happened to it step by step, and what was said.',
+    },
+    {
+      target: 'post-by-hand',
+      title: 'Posted it yourself',
+      // everybody on this tour posts; an editor never sees the board at all
+      roles: ['scheduler', 'general', 'account_manager', 'super_admin'],
+      body: 'If you posted a file yourself, mark it here with the link so the card and the client know.',
+    },
+    {
+      target: 'hand-to',
+      title: 'Handing it over',
+      roles: ['account_manager', 'super_admin'],
+      body: 'Hand a ready post to a scheduler; they book it on the Schedule page.',
+    },
+  ],
+}
+
 export const TOURS: Record<TourId, Tour> = {
   schedule: SCHEDULE_TOUR,
   'post-window': POST_WINDOW_TOUR,
+  'post-approval': POST_APPROVAL_TOUR,
 }
 
 /** The localStorage prefix. Exported so "Show me again" can clear every tour
@@ -148,41 +229,71 @@ export function shouldRunTour(role: Role | null | undefined, seen: boolean): boo
 }
 
 /**
- * The next step in `direction` whose target is actually on the screen.
+ * Is this step this person's at all?
+ *
+ * A step with no `roles` is everybody's. A step with `roles` belongs to
+ * those roles only, and to nobody while the role is still unknown: better a
+ * step short than a scheduler told about a manager's button.
+ */
+export function stepIsForRole(step: TourStep, role: Role | null | undefined): boolean {
+  if (!step.roles) return true
+  if (!role) return false
+  return step.roles.includes(role)
+}
+
+/** The sentence this person reads: their own if the step wrote one for them,
+ *  otherwise the plain one. */
+export function stepBody(step: TourStep, role: Role | null | undefined): string {
+  return (role && step.bodyByRole?.[role]) || step.body
+}
+
+/** A step is walked past for either reason, and they are the same reason as
+ *  far as the walk is concerned: it is not this person's step. */
+function shown(step: TourStep, role: Role | null | undefined, present: (target: string) => boolean): boolean {
+  return stepIsForRole(step, role) && present(step.target)
+}
+
+/**
+ * The next step in `direction` whose target is actually on the screen AND
+ * belongs to this person.
  *
  * `null` means the tour is over that way: forward past the last present step
  * finishes it, backward past the first one leaves Back with nothing to do.
  * `present` is asked per step rather than given as a list because the page
  * changes underneath the tour — a channel connects, the view switches — and
- * the answer has to be the one true at the moment of the press.
+ * the answer has to be the one true at the moment of the press. `role` is
+ * optional so the two tours that are the same for everybody can ignore it.
  */
 export function nextStep(
   steps: readonly TourStep[],
   from: number,
   direction: 1 | -1,
   present: (target: string) => boolean,
+  role?: Role | null,
 ): number | null {
   for (let i = from + direction; i >= 0 && i < steps.length; i += direction) {
-    if (present(steps[i].target)) return i
+    if (shown(steps[i], role, present)) return i
   }
   return null
 }
 
-/** Where a tour starts: its first step that is on the screen, or null when
- *  none of them are and the tour should not open at all. */
+/** Where a tour starts: its first step that is on the screen and theirs, or
+ *  null when none are and the tour should not open at all. */
 export function firstStep(
   steps: readonly TourStep[],
   present: (target: string) => boolean,
+  role?: Role | null,
 ): number | null {
-  return nextStep(steps, -1, 1, present)
+  return nextStep(steps, -1, 1, present, role)
 }
 
 /** "Step 2 of 5", counting only the steps this person will actually be shown. */
 export function stepCount(
   steps: readonly TourStep[],
   present: (target: string) => boolean,
+  role?: Role | null,
 ): number {
-  return steps.filter(s => present(s.target)).length
+  return steps.filter(s => shown(s, role, present)).length
 }
 
 /** Which of those they are on, 1-based. */
@@ -190,8 +301,9 @@ export function stepNumber(
   steps: readonly TourStep[],
   index: number,
   present: (target: string) => boolean,
+  role?: Role | null,
 ): number {
-  return steps.slice(0, index + 1).filter(s => present(s.target)).length
+  return steps.slice(0, index + 1).filter(s => shown(s, role, present)).length
 }
 
 /**

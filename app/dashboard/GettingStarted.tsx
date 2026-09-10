@@ -29,12 +29,13 @@ import { TOUR_ROLES, tourKeysToClear } from '@/app/lib/tour-core'
 const LOCAL_KEY = 'md-getting-started-dismissed'
 
 /**
- * "Show me the tour" — the Schedule page's walkthrough, offered again.
+ * "Show me the tour" — the walkthroughs, offered again.
  *
- * The two spotlight tours run themselves once per person and then stay quiet.
- * This forgets that, for every account signed in on this browser, so the next
- * visit to the Schedule page walks through it again. The Schedule page's own
- * toolbar has the same button for anybody already standing on it.
+ * The spotlight tours (the Schedule page, the post window, the Post approval
+ * board) run themselves once per person and then stay quiet. This forgets
+ * that, for every account signed in on this browser and for every tour, so
+ * the next visit to either page walks through it again. Both pages carry the
+ * same button for anybody already standing on one.
  */
 function forgetTours(): void {
   try {
@@ -115,16 +116,26 @@ export default function GettingStarted({ role, page = 'overview' }: {
       </ol>
 
       <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-        {/* only the people the walkthrough is written for, and only where the
-            posting week is a press away */}
+        {/* only the people the walkthroughs are written for, and only where
+            the two pages they walk are a press away */}
         {(TOUR_ROLES as readonly string[]).includes(role) && (page === 'overview' || page === 'scheduler') && (
-          <Link
-            href="/dashboard/social/schedule"
-            onClick={forgetTours}
-            className="mr-auto inline-flex min-h-11 items-center gap-1 text-secondary-13 font-medium text-foreground hover:underline"
-          >
-            Show me the tour of the Schedule page <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="mr-auto flex flex-wrap items-center gap-x-4">
+            <Link
+              href="/dashboard/social/schedule"
+              onClick={forgetTours}
+              className="inline-flex min-h-11 items-center gap-1 text-secondary-13 font-medium text-foreground hover:underline"
+            >
+              Show me the tour of the Schedule page <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            {/* the same offer for the board the posts are approved on */}
+            <Link
+              href="/dashboard/scheduler"
+              onClick={forgetTours}
+              className="inline-flex min-h-11 items-center gap-1 text-secondary-13 font-medium text-foreground hover:underline"
+            >
+              Show me the tour of Post approval <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         )}
         <Button variant="outline" size="sm" className="min-h-11" onClick={dismiss}>Got it</Button>
       </div>
