@@ -337,6 +337,15 @@ export default function NewPostDialog({
 
   const chosen = useMemo(
     () => accounts.filter(a => state.channels.includes(a.id)), [accounts, state.channels])
+  /** a booked or posted post whose accounts have since been removed still
+   *  went somewhere: the record says where (the owner removed the TikTok
+   *  and Facebook accounts from Zernio on 10 Sep 2026, and last night's
+   *  posted post read "Choose a channel") */
+  const wentTo = useMemo(
+    () => (chosen.length === 0 && post && (post.live_status === 'scheduled' || post.live_status === 'published'))
+      ? [...new Set([...post.outcomes.map(o => o.platform), ...post.platforms])]
+      : [],
+    [chosen.length, post])
   const platforms = useMemo(
     () => [...new Set(chosen.map(a => String(a.platform)))], [chosen])
 
@@ -604,9 +613,13 @@ export default function NewPostDialog({
 
   /** everything genuinely wrong, minus the one sentence the quiet wait line
    *  says better ("Still being made" over media uploaded a minute ago) */
-  const shownChecks = wait
+  const shownChecks = (wait
     ? check.problems.filter(p => p !== wait.replaces)
-    : check.problems
+    : check.problems)
+    // a booked or posted post is not being checked: its refusals are about a
+    // send that already happened ("Choose at least one channel", "That time
+    // has already gone" on last night's post, 10 Sep 2026)
+    .filter(() => !(status === 'scheduled' || status === 'published'))
 
   /**
    * THE POST AS EACH NETWORK WILL SHOW IT.
@@ -1133,13 +1146,13 @@ export default function NewPostDialog({
           <Dropdown
             label={(
               <>
-                {chosen[0]
-                  ? <PlatformIcon platform={String(chosen[0].platform)} size={26} className="rounded-full" />
+                {chosen[0] || wentTo[0]
+                  ? <PlatformIcon platform={String(chosen[0]?.platform ?? wentTo[0])} size={26} className="rounded-full" />
                   : <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-foreground/10"><Plus className="h-3 w-3" aria-hidden /></span>}
                 <span className="flex flex-col items-start leading-[1.1]">
-                  <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : 'Choose a channel'}</span>
+                  <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : wentTo[0] ? wentTo.map(networkName).join(', ') : 'Choose a channel'}</span>
                   <span className="text-[11px] font-medium text-muted-foreground">
-                    {chosen.length > 1 ? `and ${chosen.length - 1} more` : (chosen[0]?.platform ?? 'none yet')}
+                    {chosen.length > 1 ? `and ${chosen.length - 1} more` : chosen[0]?.platform ?? (wentTo[0] ? 'account no longer connected' : 'none yet')}
                   </span>
                 </span>
               </>
