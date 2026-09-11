@@ -1,5 +1,35 @@
 # Project state — as at 4 September 2026
 
+## Playbook build — 11 September 2026
+
+The Team's Playbook (July 2026) and Abby's rule of 11 Sep (AM/designer/editor
+→ Joy → scheduler) now shape three pages. Roles are unchanged; Joy is a
+person flagged Quality reviewer, Abby a person flagged Ops contact, and each
+client names its default schedulers (Cath, Raven).
+
+- **Post approval**: Draft · Internal check · Quality check · With client ·
+  Ready to post · Posted. Only a quality reviewer or super admin passes the
+  gate; on pass the card is handed to the client's schedulers. `delivered_at`
+  is the playbook's delivery date ("Sent to client 11 Sept" on the card).
+- **Editor**: In progress · For review · Quality check · With client · For
+  handoff · Done. Acknowledge, Flag a deadline risk, which shoot and
+  deliverable, Pick the final from Google Drive (read-only copy-in), Source
+  files (Dropbox). Internal tasks live here too.
+- **Shoots** (was Shoot brief boards): one card per shoot in the SOP's six
+  stages — Draft · Shared with team · Confirmed · Reminder sent · Shoot day ·
+  Footage handed over. Nine-part checklist, seven-day clock with a daily
+  nudge (Inngest `shootBriefLate`, re-synced), acknowledgements, one Go
+  sign-off that also books, Footage handed over fills the editor's cards.
+  The Milanote-style plan canvas stays on the shoot page. The old List and
+  Board views are gone.
+- Overview: Quality check tile, "waiting on you" split from "nobody asked
+  yet", Shoot plans late tile.
+
+Not modelled by choice: Drive month-folder moves (read-only ruling), Canva
+link + page number, the 24-hour blocker nudges, the monthly delivery
+snapshot, the onboarding board.
+
+
 ## THE DASHBOARD ONLY READS GOOGLE DRIVE — 4 Sep 2026
 
 **The ruling, in the owner's words:** "didn't I tell you there should be no
