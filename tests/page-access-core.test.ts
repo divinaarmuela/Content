@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   GRANTABLE_PAGES, GRANT_ONLY_PAGES, canSeePage, canSeeSubpage, defaultAllows,
-  isGrantablePage, normaliseGrantedPages, SCHEDULE_PAGE, socialParentOf, subpageKey, visiblePages,
+  isGrantablePage, normaliseGrantedPages, POSTS_PAGE, SCHEDULE_PAGE, socialParentOf, subpageKey, visiblePages,
 } from '../app/lib/page-access-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -82,10 +82,15 @@ describe('defaultAllows — one page per role', () => {
     }
   })
 
-  it('keeps a scheduler on Scheduler and Schedule', () => {
+  it('keeps a scheduler on Scheduler, Schedule and Posts', () => {
     expect(defaultAllows('scheduler', '/dashboard')).toBe(true)
     expect(defaultAllows('scheduler', '/dashboard/scheduler')).toBe(true)
     expect(defaultAllows('scheduler', SCHEDULE_PAGE)).toBe(true)
+    // the owner, 11 Sep 2026: "so they can know what's posted and what's not"
+    expect(defaultAllows('scheduler', POSTS_PAGE)).toBe(true)
+    expect(defaultAllows('general', POSTS_PAGE)).toBe(true)
+    expect(canSeePage('scheduler', POSTS_PAGE, [])).toBe(true)
+    expect(defaultAllows('editor', POSTS_PAGE)).toBe(false)
     for (const href of [
       '/dashboard/editor', '/dashboard/production', '/dashboard/calendar', '/dashboard/social',
       '/dashboard/files', '/dashboard/clients', '/dashboard/social/inbox',

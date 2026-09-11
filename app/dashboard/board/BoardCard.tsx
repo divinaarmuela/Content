@@ -276,9 +276,14 @@ export function BoardCard({
               {canEdit && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
-                    {lines.link ? 'Replace the link' : 'Add a link'}
-                  </DropdownMenuItem>
+                  {/* the link is where a shoot's work lives (a Drive or
+                      Dropbox folder); an uploaded post carries its files,
+                      so it has nothing to link (the owner, 11 Sep 2026) */}
+                  {!adhocPost && (
+                    <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
+                      {lines.link ? 'Replace the link' : 'Add a link'}
+                    </DropdownMenuItem>
+                  )}
                   {/* a booked or posted card has nobody left to hand it to and
                       no kind left to change; an uploaded post's kind is "Post"
                       (the owner, 10 Sep 2026: "why is Hand to shown on a

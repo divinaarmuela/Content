@@ -5,6 +5,7 @@ import { byHandRows } from '../../../lib/post-outcome-core'
 import { slidesOf } from '../../../lib/version-files-core'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { mayPublish } from '../../../lib/identity-core'
+import { visibleClientIds } from '../../../lib/production-access'
 import { queuePublishJob, runPublishJob } from '../../../lib/publish'
 import { inngest } from '../../../inngest/client'
 import {
@@ -131,9 +132,18 @@ export async function GET(req: Request) {
     }
     const url = new URL(req.url)
     const clientId = url.searchParams.get('clientId')
+    // THE CLIENTS THIS PERSON MAY SEE (11 Sep 2026): an account manager's
+    // Posts page lists their clients' posts, the way their Overview and
+    // their client list do; a scheduler and a super admin see every client
+    // (`visibleClientIds` answers null for them). A client asked for by id
+    // that is not theirs comes back empty rather than refused by name.
+    const mine = await visibleClientIds(user)
+    const maySee = (id: string | null | undefined) => mine === null || mine.includes(String(id ?? ''))
 
     const rows = await table<PublishJob>('publish_jobs').list({
-      where: clientId ? j => j.client_id === clientId : undefined,
+      where: clientId
+        ? j => j.client_id === clientId && maySee(j.client_id)
+        : mine === null ? undefined : j => maySee(j.client_id),
       orderBy: [['created_at', 'desc']],
       limit: Math.min(Number(url.searchParams.get('limit') ?? 40), 200),
     })
@@ -165,7 +175,7 @@ export async function GET(req: Request) {
     const items = await table<ContentItem>('content_items').list({
       where: i => itemIds.has(i.id)
         || (Array.isArray((i as { posted_slides?: { hand?: unknown } }).posted_slides?.hand)
-          && (!clientId || i.client_id === clientId)),
+          && (!clientId || i.client_id === clientId) && maySee(i.client_id)),
     }).catch(() => [] as ContentItem[])
     const titleOf = new Map(items.map(i => [i.id, i.title ?? null]))
     const handItems = items.filter(i => Array.isArray((i as { posted_slides?: { hand?: unknown } }).posted_slides?.hand))

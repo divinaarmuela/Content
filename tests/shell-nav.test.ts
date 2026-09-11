@@ -109,7 +109,9 @@ describe('resolveNav by role', () => {
       '/dashboard/start',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
-    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule'])
+    // Schedule and Posts, and nothing else of Social (the owner, 11 Sep
+    // 2026: "scheduler should see posts page")
+    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule', '/dashboard/social/activity'])
     expect(nav.allowed.has('/dashboard/social')).toBe(false)
     // and the rail knows where they are
     expect(nav.current).toBe('/dashboard/social/schedule')

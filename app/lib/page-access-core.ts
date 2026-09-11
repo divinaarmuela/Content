@@ -76,6 +76,12 @@ export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
  * its own here.
  */
 export const SCHEDULE_PAGE = '/dashboard/social/schedule'
+/** The Posts page — what went out and what did not, channel by channel.
+ *  A scheduler's second Social page (the owner, 11 Sep 2026: "scheduler
+ *  should see posts page … so they can know what's posted and what's not"). */
+export const POSTS_PAGE = '/dashboard/social/activity'
+/** the Social children a scheduler holds without holding Social */
+const SCHEDULER_SOCIAL_PAGES = [SCHEDULE_PAGE, POSTS_PAGE]
 const SOCIAL_PAGE = '/dashboard/social'
 
 /** The Social page a child href rides on, or null for anything else. */
@@ -94,7 +100,7 @@ const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/notificati
  * role now sees the one page that is their job and nothing beside it:
  *
  *   editor          → Editor
- *   scheduler       → Scheduler, Schedule
+ *   scheduler       → Scheduler, Schedule, Posts
  *   account_manager → their clients' pages (everything but business
  *                     development: Leads and Audience stay grantable)
  *   super_admin     → everything, plus Leads
@@ -112,24 +118,25 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === 'client') return false
   // a grant-only page is never default, however senior the role
   if (GRANT_ONLY_PAGES.has(href)) return false
-  // a Social child is nobody's default but the scheduler's Schedule: everyone
-  // else reaches the children THROUGH Social (canSeePage falls back to the
-  // parent), so hiding Social hides all of it in one move
-  if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && href === SCHEDULE_PAGE
+  // a Social child is nobody's default but the scheduler's Schedule and
+  // Posts: everyone else reaches the children THROUGH Social (canSeePage
+  // falls back to the parent), so hiding Social hides all of it in one move
+  if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && SCHEDULER_SOCIAL_PAGES.includes(href)
   if (role === 'editor') {
     return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
   if (role === 'scheduler') {
-    // both: the Scheduler board is their own five columns ("where is my
-    // page, the columns one"), Schedule is where they upload and send
-    return [...PERSONAL_PAGES, '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
+    // all three: the Scheduler board is their own five columns ("where is
+    // my page, the columns one"), Schedule is where they upload and send,
+    // Posts is where they see what went out
+    return [...PERSONAL_PAGES, '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
   }
   if (role === 'general') {
     // the owner, 9 Sep 2026: "Overview, Clients, Production, Editor, Post
     // approval and Schedule" — the whole making-and-posting run, none of the
     // managing. The client subpages ride on Clients, except credentials.
     if (href === '/dashboard/clients' || (href.startsWith('/dashboard/clients/:id/') && href !== '/dashboard/clients/:id/credentials')) return true
-    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', SCHEDULE_PAGE].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable

@@ -52,8 +52,8 @@ export const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
   // THE SCHEDULER PAGE IS THE MANAGER'S APPROVAL BOARD: what schedulers have
   // sent, waiting on a yes. It is on a manager's sidebar and NOT on a
-  // scheduler's — theirs is Schedule, where they upload and send
-  // (page-access-core decides who sees it).
+  // scheduler's — theirs is Schedule, where they upload and send, and Posts,
+  // where they see what went out (page-access-core decides who sees it).
   { href: '/dashboard/scheduler',  label: 'Post approval',    icon: CalendarCheck },
   { href: '/dashboard/bookings',   label: 'Bookings',         icon: CalendarClock },
   { href: '/dashboard/activity',   label: 'Asana activity',   icon: Activity },

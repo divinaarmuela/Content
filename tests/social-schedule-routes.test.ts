@@ -732,6 +732,33 @@ describe('the approval lock', () => {
     expect(res.status).toBe(403)
   })
 
+  it('lists an account manager their clients’ posts, and a scheduler every client’s (11 Sep 2026)', async () => {
+    const job = (id: string, client_id: string) => ({
+      id, client_id, content_item_id: null, status: 'published', caption: id, media: [], targets: [{ platform: 'instagram' }],
+      scheduled_for: null, published_at: '2026-09-10T03:00:00Z', created_at: '2026-09-10T02:00:00Z', updated_at: '2026-09-10T03:00:00Z',
+      attempts: 1, error: null, permalink: null, provider_post_id: null, timezone: 'Australia/Melbourne',
+    })
+    fake.restore()
+    fake = seed()
+    const tables = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
+    ;(tables.publish_jobs ??= {})['j-mine'] = job('j-mine', CLIENT)
+    tables.publish_jobs['j-theirs'] = job('j-theirs', 'c-other')
+    // the access helpers insist on a real id, as every real team row has
+    const ADA = { ...AM, id: '5e1f0d2c-2b3a-4c4d-8e5f-6a7b8c9d0e1f' }
+    tables.team_users[ADA.id] = { ...tables.team_users[AM.id] as object, id: ADA.id }
+    tables.team_user_clients[`${ADA.id}__${CLIENT}`] = { id: `${ADA.id}__${CLIENT}`, team_user_id: ADA.id, client_id: CLIENT }
+    as(ADA)
+    const mine = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
+    expect(mine.status).toBe(200)
+    expect(mine.body.jobs.map((j: any) => j.id)).toEqual(['j-mine'])
+    // asking for the other client by id is answered with nothing, not refused by name
+    const asked = await json(adhoc.GET(new Request('https://x.test/api/social/publish?clientId=c-other')))
+    expect(asked.body.jobs).toEqual([])
+    as(SCHEDULER)
+    const all = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
+    expect(all.body.jobs.map((j: any) => j.id).sort()).toEqual(['j-mine', 'j-theirs'])
+  })
+
   it('leaves a post with no item linked exactly as it was', async () => {
     fake.restore()
     fake = seed({ posting_approval_state: 'pending' })
