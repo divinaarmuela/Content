@@ -141,3 +141,24 @@ export function resolveKindForWrite(
 export function isValidOwner(member: { role: string; active_status?: boolean } | null): boolean {
   return member !== null && member.active_status !== false && member.role !== 'client'
 }
+
+/**
+ * The work kind a card MADE FROM A SHOOT PLAN LINE should wear, from what the
+ * line is. A "Launch photo set" used to be filed as "Video edit" because the
+ * default kind is the editor's (the live role-play of 11 Sep 2026); a still
+ * or a carousel is the designer's work in the playbook, so it is "Graphics".
+ * Anything moving, or unknown, stays with the editor.
+ */
+export function kindSlugForContentType(contentType: string | null | undefined): 'edit' | 'graphics' {
+  const t = String(contentType ?? '').toLowerCase()
+  return t === 'static' || t === 'carousel' ? 'graphics' : 'edit'
+}
+
+/** The id of the active kind with this slug, or the default rule's answer. */
+export function kindIdForContentType(kinds: WorkKind[], contentType: string | null | undefined): string | null {
+  const slug = kindSlugForContentType(contentType)
+  const match = kinds.find(k => k.slug === slug && k.active)
+  if (match) return match.id
+  const fallback = resolveKindForWrite(kinds, undefined)
+  return fallback.ok ? fallback.id : null
+}

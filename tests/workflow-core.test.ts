@@ -626,3 +626,31 @@ describe('a new version on a piece the client already approved', () => {
     }
   })
 })
+
+/* ── the scheduler hears about a card when they can open it (11 Sep 2026) ── */
+
+describe('who is told when a card leaves the quality check', () => {
+  it('tells the schedulers at the client’s approval, not while the card is with the client', () => {
+    expect(TRANSITION_NOTIFICATIONS['quality_check>client_review']).not.toContain('assigned_schedulers')
+    expect(TRANSITION_NOTIFICATIONS['quality_check>client_review']).toContain('client_users')
+    expect(TRANSITION_NOTIFICATIONS['client_review>approved_for_scheduling']).toContain('assigned_schedulers')
+    // a client who does not sign off: the pass IS the approval, so they are told now
+    expect(TRANSITION_NOTIFICATIONS['quality_check>approved_for_scheduling']).toContain('assigned_schedulers')
+  })
+})
+
+/* ── one button for the reviewer at the manager's stages (11 Sep 2026) ── */
+
+describe('the quality reviewer at Internal check', () => {
+  it('is offered Send to client and never the gate she already is', () => {
+    const roles = ['account_manager', 'quality_reviewer'] as Parameters<typeof presentTransitions>[0]
+    for (const from of ['internal_review', 'revision_complete'] as const) {
+      const p = presentTransitions(roles, from, availableTransitionsAs(roles, from), { clientApprovalRequired: true })
+      expect(p.primary?.to).toBe('client_review')
+      expect([p.primary, ...p.secondary].some(t => t?.to === 'quality_check')).toBe(false)
+    }
+    // a plain manager still sends to the gate
+    const am = ['account_manager'] as Parameters<typeof presentTransitions>[0]
+    expect(presentTransitions(am, 'internal_review', availableTransitionsAs(am, 'internal_review'), { clientApprovalRequired: true }).primary?.to).toBe('quality_check')
+  })
+})

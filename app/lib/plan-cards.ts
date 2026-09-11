@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { Batch, ContentItem, WorkKind as WorkKindRow } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { planCards } from './deliverable-group-core'
-import { resolveKindForWrite, type WorkKind } from './work-kinds-core'
+import { kindIdForContentType, type WorkKind } from './work-kinds-core'
 import { logActivity } from './workflow'
 import { announceItemChange } from './production-live'
 
@@ -28,8 +28,6 @@ export async function ensurePlanCards(
   const wanted = planCards({ id: batch.id, client_id: batch.client_id }, batch.planned_deliverables)
   if (wanted.length === 0) return []
   const kinds = await table<WorkKindRow>('work_kinds').list() as unknown as WorkKind[]
-  const kind = resolveKindForWrite(kinds, undefined)
-  const workKindId = kind.ok ? kind.id : null
   const items = table<ContentItem>('content_items')
   const created: ContentItem[] = []
   for (const card of wanted) {
@@ -54,7 +52,8 @@ export async function ensurePlanCards(
       raw_assets_url: null,
       brief: null,
       raw_assets: [],
-      work_kind_id: workKindId,
+      // a photo set is the designer's, a reel the editor's (11 Sep 2026)
+      work_kind_id: kindIdForContentType(kinds, card.content_type),
     } as unknown as ContentItem
     const claimed = await items.claim(card.id, cur => (cur ? null : row))
     if (claimed.claimed) created.push(claimed.row)

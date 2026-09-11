@@ -92,6 +92,13 @@ afterAll(async () => {
   await table('notification_log').removeWhere((r: any) => typeof r.entity_id === 'string' && r.entity_id.startsWith(itemId))
 })
 
+/** a super admin stands in for the quality reviewer (Abby's rule, 11 Sep
+ *  2026): a real-shaped UUID nobody has, `.invalid`, never a recipient */
+const SUPER: TeamUser = {
+  id: 'a0000000-0000-4000-8000-0000000000a1', role: 'super_admin',
+  email: 'zz-superadmin@mdmedia-test.invalid', name: 'ZZ Super admin', clerk_user_id: null,
+} as TeamUser
+
 describe('the funnel, role by role', () => {
   it('scoping: AM and editor see the test client; scheduler is status-scoped', async () => {
     expect(await accessibleClientIds(am)).toContain(TEST_CLIENT_ID)
@@ -137,8 +144,11 @@ describe('the funnel, role by role', () => {
     expect((await performTransition(editor, await freshItem(), 'revision_complete')).status).toBe('revision_complete')
   })
 
-  it('AM: sends it to the client portal', async () => {
-    expect((await performTransition(am, await freshItem(), 'client_review')).status).toBe('client_review')
+  it('AM: sends it for quality check; the quality reviewer sends it to the client portal', async () => {
+    // the gate (Abby's rule, 11 Sep 2026): an AM cannot send to the client themselves
+    await expect(performTransition(am, await freshItem(), 'client_review')).rejects.toThrow()
+    expect((await performTransition(am, await freshItem(), 'quality_check')).status).toBe('quality_check')
+    expect((await performTransition(SUPER, await freshItem(), 'client_review')).status).toBe('client_review')
   })
 
   it('comment visibility: client never sees internal notes, editor never sees client notes, scheduler sees none', async () => {
@@ -173,7 +183,8 @@ describe('the funnel, role by role', () => {
       file_url: 'https://example.com/preview-v3.mp4',
     })
     expect((await performTransition(editor, await freshItem(), 'revision_complete')).status).toBe('revision_complete')
-    expect((await performTransition(am, await freshItem(), 'client_review')).status).toBe('client_review')
+    expect((await performTransition(am, await freshItem(), 'quality_check')).status).toBe('quality_check')
+    expect((await performTransition(SUPER, await freshItem(), 'client_review')).status).toBe('client_review')
   })
 
   it('client: approves for scheduling', async () => {

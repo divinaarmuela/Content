@@ -82,6 +82,12 @@ const SLIDES = [
 const BROUGHT_IN = { url: file('three.jpg'), name: 'three.jpg', type: 'image' as const }
 
 let am: TeamUser, editor: TeamUser, scheduler: TeamUser
+/** a super admin stands in for the quality reviewer (Abby's rule, 11 Sep
+ *  2026): a real-shaped UUID nobody has, `.invalid`, never a recipient */
+const SUPER: TeamUser = {
+  id: 'a0000000-0000-4000-8000-0000000000a1', role: 'super_admin',
+  email: 'zz-superadmin@mdmedia-test.invalid', name: 'ZZ Super admin', clerk_user_id: null,
+} as TeamUser
 
 /* ── the teardown lists ─────────────────────────────────────────────────── */
 
@@ -315,14 +321,27 @@ describe('a planned post, live', () => {
     })
     remember(draft)
 
-    /* a scheduler may not skip it — they could not have approved it either */
-    await expect(sendForApproval(scheduler, draft.id, { mode: 'direct' }))
-      .rejects.toThrow(/account manager/)
-    expect((await postRow(draft.id)).status).toBe('draft')
+    /* the pieces were approved on the board, so a scheduler posts them with
+       no second approval at all (the owner, 8 Sep 2026): the gate is not
+       consulted and the post is marked cleared by the assets' approval */
+    const viaBoard = await sendForApproval(scheduler, draft.id, { mode: 'direct' })
+    remember(viaBoard)
+    for (const j of viaBoard.publish_job_ids) created.jobs.add(j)
+    expect(viaBoard.status).toBe('scheduled')
+    expect(viaBoard.approval_mode).toBe('assets')
+    await cancelPost(scheduler, draft.id)
 
-    /* the account manager may, and it goes THROUGH the machine: the item
+    /* the account manager may too, and it goes THROUGH the machine: the item
        records the ask and the answer, and the post says how it was cleared */
-    const straight = await sendForApproval(am, draft.id, {
+    const draft2 = await createPost(am, {
+      item_id: itemId,
+      slides: SLIDES,
+      caption: `${TAG} — straight out, by the manager`,
+      channels: [channelId],
+      scheduled_for: nowPlus(4),
+    })
+    remember(draft2)
+    const straight = await sendForApproval(am, draft2.id, {
       mode: 'direct', note: `${TAG} cleared by me`,
     })
     remember(straight)
@@ -333,7 +352,7 @@ describe('a planned post, live', () => {
     expect((await itemRow(itemId)).posting_approval_state).toBe('approved')
     console.log(`[B] booked without asking — job ${straight.publish_job_ids[0]}`)
 
-    await cancelPost(am, draft.id)
+    await cancelPost(am, draft2.id)
   })
 
   it('the manager posts media the client has not signed off, in one request', async () => {
@@ -350,20 +369,27 @@ describe('a planned post, live', () => {
     })
     remember(draft)
 
-    const straight = await sendForApproval(am, draft.id, { mode: 'direct' })
+    // THE QUALITY CHECK STANDS IN THE WAY (Abby, 11 Sep 2026): a manager who
+    // is not the quality reviewer sends the piece to the gate and is told so
+    await expect(sendForApproval(am, draft.id, { mode: 'direct' })).rejects.toThrow(/quality check/)
+    expect((await itemRow(itemId)).status).toBe('quality_check')
+    expect((await postRow(draft.id)).status).toBe('draft')
+    // the super admin stands in for the reviewer and goes straight through
+    const straight = await sendForApproval(SUPER, draft.id, { mode: 'direct' })
     remember(straight)
     for (const j of straight.publish_job_ids) created.jobs.add(j)
     expect(straight.status).toBe('scheduled')
     expect(straight.approval_mode).toBe('self')
     const item = await itemRow(itemId)
-    expect(item.status).toBe('approved_for_scheduling')
+    // every file of the piece is in the post, so the card is booked in (9 Sep 2026)
+    expect(item.status).toBe('scheduled')
     expect(item.posting_approval_state).toBe('approved')
-    console.log('[B2] media signed off and the post booked, in one request')
+    console.log('[B2] sent to the gate by the manager, signed off and booked by the reviewer')
 
-    await cancelPost(am, draft.id)
+    await cancelPost(SUPER, draft.id)
   })
 
-  it('a file the client has never seen makes a version and goes back to them', async () => {
+  it('a file the post has never carried makes a version and takes the post’s approval back', async () => {
     const { itemId } = await makePiece('a new file')
     const draft = await createPost(scheduler, {
       item_id: itemId,
@@ -390,8 +416,10 @@ describe('a planned post, live', () => {
     })
     expect(added.created).toBe(true)
     expect(added.version_number).toBe(2)
-    expect(added.status).toBe('client_review')
-    expect(added.message).toMatch(/client has to approve it/)
+    // new media on a post is a change to the POST (8 Sep 2026): the piece
+    // stays approved and the post's own gate goes back to pending
+    expect(added.status).toBe('approved_for_scheduling')
+    expect(added.message).toMatch(/Saved as version 2/)
 
     const versions = await table<AssetVersion>('asset_versions')
       .list({ fresh: true, where: v => v.item_id === itemId })
@@ -407,13 +435,11 @@ describe('a planned post, live', () => {
     expect(after.status).toBe('draft')
     expect(after.sent_at).toBeNull()
     expect((await itemRow(itemId)).posting_approval_state).not.toBe('approved')
-    console.log(`[C] version ${added.version_number} — the piece went back to the client`)
+    console.log(`[C] version ${added.version_number} — the post's approval went back to pending`)
 
-    // as the MANAGER: a scheduler cannot even see a piece that has gone back
-    // to the client, which is the production board's own rule and exactly what
-    // "the piece went back to them" is supposed to mean
-    await expect(cancelPost(scheduler, draft.id)).rejects.toThrow(/not found/i)
-    await cancelPost(am, draft.id)
+    // the piece stayed approved, so the scheduler still holds it and can
+    // take their own post off the calendar
+    await cancelPost(scheduler, draft.id)
   })
 
   it('editing the words of an approved post asks for the yes again', async () => {

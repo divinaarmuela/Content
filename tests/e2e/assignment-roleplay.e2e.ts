@@ -202,6 +202,20 @@ afterAll(async () => {
     .catch(() => 0)
 })
 
+/** a super admin stands in for the quality reviewer (Abby's rule, 11 Sep
+ *  2026): a real-shaped UUID nobody has, `.invalid`, never a recipient */
+const SUPER: TeamUser = {
+  id: 'a0000000-0000-4000-8000-0000000000a1', role: 'super_admin',
+  email: 'zz-superadmin@mdmedia-test.invalid', name: 'ZZ Super admin', clerk_user_id: null,
+} as TeamUser
+
+/** internal check → quality check (the AM) → approved (the reviewer): the
+ *  two presses the gate made of the AM's old one (11 Sep 2026) */
+async function gatePass(id: string) {
+  await performTransition(am, await fresh(id), 'quality_check')
+  return performTransition(SUPER, await fresh(id), 'approved_for_scheduling')
+}
+
 describe('rights follow assignment, not job title', () => {
   it('the account manager who OWNS the edit may mark revisions done; a scheduler may not', async () => {
     const id = await makeItem({ owner_id: am.id })
@@ -234,7 +248,7 @@ describe('rights follow assignment, not job title', () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    expect((await performTransition(am, await fresh(id), 'approved_for_scheduling')).status)
+    expect((await gatePass(id)).status)
       .toBe('approved_for_scheduling')
 
     // the AM hands it to the editor, not to the scheduling team
@@ -257,7 +271,7 @@ describe('rights follow assignment, not job title', () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [editor.id] })
 
     // through the REAL code path the API route uses — the route is a thin
@@ -286,7 +300,7 @@ describe('rights follow assignment, not job title', () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [] })
     await upsertSchedule({
       item_id: id, platform: 'instagram', scheduler_id: scheduler.id,
@@ -342,7 +356,7 @@ describe('a shoot brief never reaches the Scheduler', () => {
 
     // a booked shoot is the end of the brief — the content items publish, not it
     await expect(performTransition(am, await fresh(briefId), 'published'))
-      .rejects.toThrow(/end of the brief/i)
+      .rejects.toThrow(/end of the (brief|plan)/i)
   })
 })
 
@@ -609,7 +623,7 @@ describe('a scheduler handed an item off the client team', () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     await offClient(scheduler.id, async () => {
@@ -661,7 +675,8 @@ describe('tagging: "@Name" reaches anyone on the team, and the tag is the assign
 
     // exactly what POST /comments writes, then notifies
     const comment = await table('item_comments').insert({
-      item_id: itemId, author_id: am.id, visibility: 'internal', body: text, assigned_to: tagged[0].id,
+      // exactly as POST /comments writes it: an open tag is `resolved: false`
+      item_id: itemId, author_id: am.id, visibility: 'internal', body: text, assigned_to: tagged[0].id, resolved: false,
     } as any)
     commentId = comment.id
     await notifyTagged({
@@ -780,16 +795,15 @@ describe('final-post approval: the caption gets its own yes before anything queu
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E final caption — exactly as it will post' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
     await upsertScheduleEntry(scheduler, await fresh(id), {
       platform: 'instagram',
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
     })
 
-    // the AM holds no scheduling here — sending is not their move
-    await expect(actOnPostingApproval(am, await fresh(id) as unknown as Item, { action: 'send' }))
-      .rejects.toThrow(/scheduling/i)
+    // (an account manager MAY send a post on — `maySendPostApproval`, since
+    // the client_too flow of 8 Sep 2026 — so that refusal is no longer a rule)
 
     // the scheduler HOLDING the item sends the post for approval
     const sent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
@@ -824,7 +838,7 @@ describe('final-post approval: the caption gets its own yes before anything queu
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption, first attempt' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
@@ -845,14 +859,15 @@ describe('final-post approval: the caption gets its own yes before anything queu
     // the scheduler re-sends after fixing — pending again, the old note wiped
     const resent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
     expect(resent.posting_approval_state).toBe('pending')
-    expect(resent.posting_approval_note).toBeNull()
+    // a cleared note is absent on the row (the store keeps no nulls)
+    expect(resent.posting_approval_note ?? null).toBeNull()
   })
 
   it('client_too routes it to the portal pile; approval empties it', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption for the client' })
     await addVersion(editor, id, v(1))
     await performTransition(editor, await fresh(id), 'internal_review')
-    await performTransition(am, await fresh(id), 'approved_for_scheduling')
+    await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
     const sent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, {

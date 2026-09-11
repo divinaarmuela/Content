@@ -757,8 +757,13 @@ export async function performTransition(
       entityType: 'content_item', entityId: item.id,
       action: 'schedule_handoff', detail: `default schedulers: ${defaults.join(', ')}`,
     })
-    if (!system) {
-      // the same "please schedule this" the Hand to… dialog sends
+    // the same "please schedule this" the Hand to… dialog sends — but only
+    // once there is something to book: a card passed to the CLIENT is one
+    // the scheduler cannot open yet, and "needs a posting date" before the
+    // client's yes was the wrong email at the wrong time (the live role-play
+    // of 11 Sep 2026). They hold the card now and are told at the approval
+    // (the `assigned_schedulers` audience on client_review → approved).
+    if (!system && to === 'approved_for_scheduling') {
       void notifyScheduleHandoff(actor, { ...item, scheduler_ids: defaults, status: to }, defaults)
         .catch(e => console.error('default scheduler handoff notification error:', e))
     }

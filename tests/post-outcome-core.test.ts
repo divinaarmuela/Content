@@ -206,3 +206,14 @@ describe('drafts and plain reasons', () => {
     expect(r.find(o => o.platform === 'tiktok')?.reason).toMatch(/daily limit for posts made through apps/)
   })
 })
+
+/* ── a queued job is booked for its time, not for the minute it was queued (11 Sep 2026) ── */
+
+describe('the time on a queued channel', () => {
+  it('is the booked time, the same as once the provider holds it', () => {
+    const queued = outcomesForJob(job({ status: 'queued', scheduled_for: '2026-09-13T06:56:00Z', updated_at: '2026-09-11T06:56:00Z', platform_results: null }))
+    expect(queued.every(o => o.at === '2026-09-13T06:56:00Z')).toBe(true)
+    const held = outcomesForJob(job({ status: 'scheduled', scheduled_for: '2026-09-13T06:56:00Z', updated_at: '2026-09-11T06:56:00Z', platform_results: null }))
+    expect(held.every(o => o.at === '2026-09-13T06:56:00Z')).toBe(true)
+  })
+})

@@ -75,12 +75,12 @@ const IDS = {
  *  The id is a UUID nobody has, so a notification could never resolve to a
  *  real inbox — and a super admin is only ever the ACTOR here. */
 const SUPER: TeamUser = {
-  id: 'zz000000-0000-4000-8000-000000000001', role: 'super_admin',
+  id: 'a0000000-0000-4000-8000-0000000000a1', role: 'super_admin',
   email: 'zz-superadmin@mdmedia-test.invalid', name: 'ZZ Super admin', clerk_user_id: null,
 } as TeamUser
 /** …and a second scheduler, who must see NONE of it */
 const OTHER: TeamUser = {
-  id: 'zz000000-0000-4000-8000-000000000002', role: 'scheduler',
+  id: 'a0000000-0000-4000-8000-0000000000a2', role: 'scheduler',
   email: 'zz-other-scheduler@mdmedia-test.invalid', name: 'ZZ Other', clerk_user_id: null,
 } as TeamUser
 
@@ -108,9 +108,17 @@ const postsOf = async () => table<SocialPost>('social_posts').list({ fresh: true
 
 /** every notification about this item, since the run began */
 async function toldAbout(): Promise<{ recipient_email: string; subject: string; event_type: string; entity_id: string }[]> {
-  const rows = await table<{ id: string; entity_id?: string; recipient_email?: string; subject?: string; event_type?: string; created_at?: string }>('notification_log')
+  const rows = await table<{ id: string; entity_id?: string; recipient_email?: string; subject?: string; event_type?: string; created_at?: string; status?: string; error?: string }>('notification_log')
     .list({ fresh: true, where: n => String(n.created_at ?? '') >= runStart && (String(n.entity_id ?? '').includes(itemId) || String(n.recipient_email ?? '').endsWith('.invalid')) })
-  return rows.map(r => ({ recipient_email: String(r.recipient_email ?? ''), subject: String(r.subject ?? ''), event_type: String(r.event_type ?? ''), entity_id: String(r.entity_id ?? '') }))
+  // With nobody flagged as the quality reviewer the super admins stand in
+  // for her, and the kill switch REFUSES their rows before any mail moves;
+  // a refused row is the switch working, not a leak (11 Sep 2026). Nothing
+  // to a real address may ever be 'sent' — that is checked here, every time.
+  const leaked = rows.filter(r => !String(r.recipient_email ?? '').endsWith('.invalid') && String(r.status ?? '') === 'sent')
+  if (leaked.length > 0) throw new Error(`a real inbox was emailed: ${leaked.map(r => r.recipient_email).join(', ')}`)
+  return rows
+    .filter(r => !/EMAIL_TEST_ONLY/.test(String(r.error ?? '')))
+    .map(r => ({ recipient_email: String(r.recipient_email ?? ''), subject: String(r.subject ?? ''), event_type: String(r.event_type ?? ''), entity_id: String(r.entity_id ?? '') }))
 }
 let assignments: TeamUserClient[] = []
 const seenBy = (who: TeamUser, rows: ContentItem[]) =>
@@ -185,7 +193,9 @@ describe('three roles, one post, live', () => {
     const amActs = cardActions(card, { id: am.id, role: 'account_manager' } as never)
     console.log('[2] AM actions:', JSON.stringify([amActs.primary, ...amActs.more]))
     console.log('[2] scheduler actions:', JSON.stringify((() => { const a = cardActions(card, { id: scheduler.id, role: 'scheduler' } as never); return [a.primary, ...a.more] })()))
-    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(true)
+    // the gate (11 Sep 2026): the AM's button sends it for quality check, never approves
+    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'quality_check')).toBe(true)
+    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(false)
     const schActs = cardActions(card, { id: scheduler.id, role: 'scheduler' } as never)
     expect([schActs.primary, ...schActs.more].some(a => a?.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(false)
     console.log('[2] visibility and buttons are right for all four people')
@@ -194,7 +204,10 @@ describe('three roles, one post, live', () => {
   it('2b. the AM sends it to the client; the client comments on one photo from the portal; only the AM reads it', async () => {
     as(am)
     const before = (await toldAbout()).length
-    const sent = await performTransition(am, (await itemRow()) as never, 'client_review', { note: 'Have a look' })
+    // the AM sends it for quality check; the super admin, standing in for the
+    // quality reviewer, sends it to the client (Abby's rule, 11 Sep 2026)
+    expect((await performTransition(am, (await itemRow()) as never, 'quality_check', { note: 'Have a look' })).status).toBe('quality_check')
+    const sent = await performTransition(SUPER, (await itemRow()) as never, 'client_review', { note: 'Have a look' })
     expect(sent.status).toBe('client_review')
     await new Promise(r => setTimeout(r, 1000))
     const told = (await toldAbout()).slice(before)

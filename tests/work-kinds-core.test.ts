@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  isValidOwner, orderAssignees, resolveKindForWrite, validateKindInput, type WorkKind,
-} from '../app/lib/work-kinds-core'
+  isValidOwner, orderAssignees, resolveKindForWrite, validateKindInput, type WorkKind, kindSlugForContentType, kindIdForContentType } from '../app/lib/work-kinds-core'
 
 describe('validateKindInput', () => {
   it('accepts a clean kind and normalises the slug', () => {
@@ -69,5 +68,28 @@ describe('isValidOwner', () => {
     expect(isValidOwner({ role: 'client' })).toBe(false)
     expect(isValidOwner({ role: 'editor', active_status: false })).toBe(false)
     expect(isValidOwner(null)).toBe(false)
+  })
+})
+
+/* ── a plan line's card wears the kind its content implies (11 Sep 2026) ── */
+
+describe('kindSlugForContentType', () => {
+  it('files stills and carousels as Graphics and everything moving as Video edit', () => {
+    expect(kindSlugForContentType('static')).toBe('graphics')
+    expect(kindSlugForContentType('carousel')).toBe('graphics')
+    expect(kindSlugForContentType('reel')).toBe('edit')
+    expect(kindSlugForContentType('video')).toBe('edit')
+    expect(kindSlugForContentType('story')).toBe('edit')
+    expect(kindSlugForContentType(null)).toBe('edit')
+  })
+  it('finds the active kind by slug and falls back to the default rule', () => {
+    const kinds = [
+      { id: 'k-edit', slug: 'edit', name: 'Video edit', active: true, sort_order: 0 },
+      { id: 'k-gfx', slug: 'graphics', name: 'Graphics', active: true, sort_order: 1 },
+    ] as never
+    expect(kindIdForContentType(kinds, 'static')).toBe('k-gfx')
+    expect(kindIdForContentType(kinds, 'reel')).toBe('k-edit')
+    const noGraphics = [{ id: 'k-edit', slug: 'edit', name: 'Video edit', active: true, sort_order: 0 }] as never
+    expect(kindIdForContentType(noGraphics, 'static')).toBe('k-edit')
   })
 })

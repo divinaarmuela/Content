@@ -395,8 +395,14 @@ export function presentTransitions(
   // "Send back to myself", which read as a note-to-self rather than the
   // reject button it is. One name for one action; the dialog says who it
   // reaches.
+  // the quality reviewer's own check IS the quality check (and a super admin
+  // stands in for her): at the manager's stages "Send for quality check"
+  // beside "Send to client" was two buttons for one decision (the live walk
+  // of 11 Sep 2026), so the gate's own edge is not offered to them
+  const isGate = roles.includes(QUALITY_HAT) || roles.includes('super_admin')
   const visible = transitions
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
+    .filter(t => !(isGate && t.to === 'quality_check'))
 
   const turn = turns[from]
   const holdsTurn = ctx.viewerHoldsTurn !== undefined
@@ -530,7 +536,11 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'revision_complete>quality_check': ['quality_reviewers', 'owner_editor'],
   // out of it: the same three every route to the client tells, plus the
   // schedulers it was handed to, who now know it is coming
-  'quality_check>client_review': ['client_users', 'account_managers', 'owner_editor', 'assigned_schedulers'],
+  // NOT the schedulers: a card with the client is one they cannot open yet
+  // (their view starts at approval), and "needs a posting date" arrived
+  // before there was anything to book — the live role-play of 11 Sep 2026.
+  // They are handed the card silently here and told at the approval below.
+  'quality_check>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'quality_check>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'quality_check>revision_required': ['owner_editor', 'account_managers'],
   'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],

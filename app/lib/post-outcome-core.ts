@@ -239,8 +239,11 @@ export function outcomesForJob(job: OutcomeJob): PlatformOutcome[] {
     // the job says gone
     return status === 'cancelled' ? stored.map(o => ({ ...o, status: 'cancelled', at: job.updated_at ?? o.at })) : stored
   }
+  // a job still in OUR queue is booked for its time too: the client's line
+  // read "going out Fri 11 Sept, 5:00 pm" — the minute it was queued — for
+  // a post booked for the Sunday (the live role-play of 11 Sep 2026)
   const at = status === 'published' ? job.published_at ?? job.updated_at ?? null
-    : status === 'scheduled' ? job.scheduled_for ?? null
+    : status === 'scheduled' || status === 'queued' ? job.scheduled_for ?? job.updated_at ?? null
     : job.updated_at ?? job.created_at ?? null
   const all = resultsForAll(job, status, {
     at,
