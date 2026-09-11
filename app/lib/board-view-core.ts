@@ -46,6 +46,8 @@ export type BoardViewCard = {
   owner_id: string | null
   scheduler_ids?: unknown
   due_date: string | null
+  /** the playbook's delivery date: when the final first reached the client */
+  delivered_at?: string | null
   current_version_number?: number | null
   /** which of the card's files have gone out (`posted-slides-core`) */
   posted_slides?: unknown
@@ -113,6 +115,8 @@ export type CardLines = {
   brief: string | null
   /** "2 of 4 posted" while a piece is part-way out; null otherwise */
   posted: string | null
+  /** "Sent to client 11 Sept" — the playbook's delivery date, once stamped */
+  delivered: string | null
   /** who is holding it: a name, "You", or "Nobody yet" */
   assignee: string
   assigneeId: string | null
@@ -164,6 +168,10 @@ export function cardLines(
     link: card.link_url ? { url: card.link_url, label: linkLabel(card.link_kind) } : null,
     brief: card.brief?.trim() ? card.brief.trim() : null,
     posted: postedLine(readPostedSlides(card.posted_slides)),
+    // DELIVERED is the moment the final was sent to the client (the
+    // playbook: "that's the moment our obligation is met"), so the card says
+    // it in those words and keeps saying it through Ready to post and Posted
+    delivered: card.delivered_at && shortDate(card.delivered_at) ? `Sent to client ${shortDate(card.delivered_at)}` : null,
     assignee,
     assigneeId: card.owner_id ?? null,
     due,

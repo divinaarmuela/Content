@@ -168,6 +168,7 @@ export function BoardCard({
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
+        {lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
       </>}
       note={<>

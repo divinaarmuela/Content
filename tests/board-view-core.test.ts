@@ -693,3 +693,18 @@ describe('the card menu on a settled card', () => {
     expect(src).toContain('{onHandTo && !settled && (')
   })
 })
+
+/* ── the playbook's delivery date on the card face (11 Sep 2026) ── */
+
+describe('the Sent to client line', () => {
+  it('says when the final first reached the client, and nothing before that', () => {
+    const base = {
+      id: 'c1', client_id: 'k', title: 'Reel 1', status: 'approved_for_scheduling', owner_id: null,
+      due_date: null, work_kinds: null, clients: { name: 'Acme' },
+    } as unknown as Parameters<typeof cardLines>[0]
+    const opts = { today: '2026-09-11', viewerId: 'me' }
+    expect(cardLines(base, opts).delivered).toBeNull()
+    expect(cardLines({ ...base, delivered_at: '2026-09-11T03:00:00Z' }, opts).delivered)
+      .toMatch(/^Sent to client /)
+  })
+})

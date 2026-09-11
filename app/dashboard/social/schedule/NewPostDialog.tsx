@@ -20,7 +20,7 @@ import {
   readAudioChoice, readCarouselCards, readPerChannel, readPoll, readUserTags,
   PAGE_ID_HELP, sentForReviewLine,
   type ChannelExtras, type ComposerState, type FooterActionKey, type MoreOption,
-  type OptionChoice, type SavedLocation, durationWords } from '@/app/lib/schedule-compose-core'
+  type OptionChoice, type SavedLocation, durationWords, QUALITY_GATE_LINE } from '@/app/lib/schedule-compose-core'
 import {
   CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED, mayPostWithoutApproval, tileTone, validateComposition,
   type SocialPostStatus, type SuggestedTime,
@@ -989,7 +989,19 @@ export default function NewPostDialog({
       }
       const res = await fetch(`/api/social/schedule/${id}/schedule`, { method: 'POST' })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new ComposeProblem(json)
+      if (!res.ok) {
+        // NOT A REFUSAL: a manager who is not the quality reviewer pressed
+        // Schedule and the piece went to the reviewer instead (Abby's rule,
+        // 11 Sep 2026). The post is saved; the window says so in green and
+        // closes, rather than showing a red line for a good outcome.
+        const problem = new ComposeProblem(json)
+        if (problem.problems.includes(QUALITY_GATE_LINE)) {
+          setNote(QUALITY_GATE_LINE)
+          finished('draft', id)
+          return
+        }
+        throw problem
+      }
       setNote('Booked in with the channel.')
       finished(what === 'now' ? 'now' : 'booked', id)
     } catch (e) {

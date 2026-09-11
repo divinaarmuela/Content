@@ -1614,3 +1614,8 @@ export function durationWords(seconds: number): string {
   if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`)
   return parts.join(' ')
 }
+
+/** What the server says when a manager's one-press Schedule sent the piece
+ *  to the quality reviewer instead: a green outcome, not a refusal. The
+ *  window matches this sentence and closes with it as the note. */
+export const QUALITY_GATE_LINE = 'Sent for quality check — the post can be scheduled once the quality reviewer passes it'

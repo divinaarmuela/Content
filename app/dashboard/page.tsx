@@ -33,7 +33,8 @@ import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
-import { boardHref, overviewTiles, type BoardViewCard } from '../lib/board-view-core'
+import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from '../lib/board-view-core'
+import { briefIsLate, type SopShoot } from '../lib/shoot-sop-core'
 import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -576,10 +577,27 @@ export default function OverviewPage() {
       : live.tables.clients.rows.filter(c => scoped.includes(c.id)).length
     const weekAgo = Date.now() - 7 * 86_400_000
     const leadsWeek = leadRows.filter(l => new Date(l.created_at).getTime() >= weekAgo).length
-    return overviewTiles({
+    const out: OverviewTile[] = overviewTiles({
       viewer, cards, today: todayKey, postingToday, connectedClientIds, clientCount, leadsWeek, mayLeads,
     })
-  }, [viewer, live.loading, postCards, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
+    // SHOOT PLANS LATE (the playbook's one-week rule, 11 Sep 2026): a shoot
+    // under seven days out whose plan has not been shared. Shown to the
+    // people who can fix it — managers, super admins and general users —
+    // with the count even when it is zero, so "no plan is late" is said
+    // rather than left to be inferred from a missing tile.
+    if (viewer.role === 'super_admin' || viewer.role === 'account_manager' || viewer.role === 'general') {
+      const late = live.batches.filter(b => briefIsLate(b as unknown as SopShoot, todayKey)).length
+      out.push({
+        key: 'shoots-late',
+        title: 'Shoot plans late',
+        tone: late > 0 ? 'amber' : 'paper',
+        href: '/dashboard/production?view=shoots',
+        actionLabel: 'Open the shoots',
+        stats: [{ value: late, label: 'not shared 7 days before the shoot' }],
+      })
+    }
+    return out
+  }, [viewer, live.loading, live.batches, postCards, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
   /* MiniCalendar reads a Date with the BROWSER's own calendar. This hands it
      one whose local year/month/day are the viewer zone's today, so the filled
      cell and the markers can never disagree about which day it is. */

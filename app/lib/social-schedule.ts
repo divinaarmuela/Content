@@ -26,8 +26,7 @@ import {
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
 } from './publish-core'
 import {
-  isPostingNow, optionsFromExtras, readChannelExtras, type ChannelExtras,
-} from './schedule-compose-core'
+  isPostingNow, optionsFromExtras, readChannelExtras, type ChannelExtras, QUALITY_GATE_LINE } from './schedule-compose-core'
 import {
   applySlideLimit, canReschedule, channelBlockReason,
   coverForSlide, eligibility, MIN_LEAD_MS, POST_NOW_WINDOW_MS, TOO_SOON,
@@ -82,7 +81,7 @@ const postLockKey = (itemId: string) => `social_post__${itemId}`
 /** A refusal that carries every problem at once, so the composer can list
  *  them rather than revealing them one at a time. */
 /** what a manager is told when their Schedule press sent the piece to the gate */
-export const QUALITY_GATE_LINE = 'Sent for quality check — the post can be scheduled once the quality reviewer passes it'
+export { QUALITY_GATE_LINE }
 
 export class ComposeError extends AuthzError {
   problems: string[]
