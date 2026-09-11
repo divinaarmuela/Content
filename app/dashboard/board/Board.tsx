@@ -88,9 +88,17 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 
 export function Board({
   cards, viewer, page, names, kinds, today, onOpen, initialColumn, show, onClearShow,
-  postingToday, connectedClientIds, ariaLabel, onAcknowledge,
+  postingToday, connectedClientIds, ariaLabel, onAcknowledge, filters, filterNote, laneEmpty,
 }: {
   cards: BoardCardRow[]
+  /** the Client / People controls, drawn in the board's header row — the
+   *  page owns the choice and hands the board the cards already narrowed */
+  filters?: React.ReactNode
+  /** "Showing Ada's cards for Acme — 4 of 20", when narrowed */
+  filterNote?: string | null
+  /** an empty column's sentence while narrowed: "No cards for Ada in With
+   *  client" — the plain empty would be a lie about the board */
+  laneEmpty?: (laneLabel: string) => string | null
   /** the Editor page's "Acknowledge" — recorded on the card's history */
   onAcknowledge?: (card: BoardCardRow) => void
   viewer: BoardViewer
@@ -306,7 +314,7 @@ export function Board({
         ))}
         {inLane.length === 0 && (
           <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
-            {dropLabel?.ok ? `Drop here — ${dropLabel.action.label}` : lane.empty}
+            {dropLabel?.ok ? `Drop here — ${dropLabel.action.label}` : (laneEmpty?.(lane.label) ?? lane.empty)}
           </div>
         )}
       </div>
@@ -317,7 +325,7 @@ export function Board({
       key,
       title: lane.label,
       count: inLane.length,
-      empty: lane.empty,
+      empty: laneEmpty?.(lane.label) ?? lane.empty,
       cards: [],
       replace: zone,
       // only worth saying when there IS something here and older ones are
@@ -336,7 +344,10 @@ export function Board({
     <div className="flex flex-col gap-3">
       {/* the walkthrough runs itself once; after that it lives here, above
           the board it explains, where somebody who wants it back can find it */}
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* who is doing what: the client and the person, for the people
+            whose job is to look across everyone (the owner, 11 Sep 2026) */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{filters}</div>
         <button
           type="button"
           onClick={tour.start}
@@ -348,6 +359,9 @@ export function Board({
         </button>
       </div>
 
+      {filterNote && !show && (
+        <p className="text-[13px] text-muted-foreground">{filterNote}</p>
+      )}
       {show && (
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
           <span>Showing <span className="font-semibold text-foreground">{SHOW_LABELS[show]}</span> — {shown.length} of {cards.length}</span>

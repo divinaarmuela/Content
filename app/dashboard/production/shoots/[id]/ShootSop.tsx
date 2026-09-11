@@ -187,7 +187,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
 
         {manager ? (
           <label className="flex flex-col gap-1 text-[12px] font-semibold">
-            Editor — the footage is handed to them
+            Editor: who edits the footage after the shoot
             <Select value={batch.editor_id ?? 'none'} onValueChange={v => void onPatch('editor_id', v === 'none' ? null : v)}>
               <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Editor"><SelectValue placeholder="Pick the editor" /></SelectTrigger>
               <SelectContent>
@@ -201,7 +201,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
         )}
 
         <ul className="flex flex-col gap-1.5" aria-label="People on the shoot">
-          {crew.length === 0 && <li className="text-[13px] text-muted-foreground">Nobody yet. {manager ? 'Add the videographer, the presenter — everyone who has to read the plan.' : 'The account manager adds the team.'}</li>}
+          {crew.length === 0 && <li className="text-[13px] text-muted-foreground">Nobody on the day yet. {manager ? 'Add the videographer, the presenter and anyone else on set.' : 'The account manager adds the crew.'}</li>}
           {crew.map(c => (
             <li key={c.id} className="flex min-h-11 items-center gap-2 text-[14px]">
               {c.acknowledged_at
@@ -232,9 +232,9 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
         {manager && addable.length > 0 && (
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-[12px] font-semibold">
-              Add someone to the shoot
+              Crew on the day: videographer, presenter, anyone on set
               <Select value={adding} onValueChange={v => setAdding(v ?? '')}>
-                <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Add someone to the shoot"><SelectValue placeholder="Pick a person" /></SelectTrigger>
+                <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Crew on the day"><SelectValue placeholder="Pick a person" /></SelectTrigger>
                 <SelectContent>
                   {addable.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                 </SelectContent>
@@ -246,7 +246,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
             </Button>
           </div>
         )}
-        <p className="text-[12px] text-muted-foreground">Everyone added must read the plan before the shoot is confirmed. They are emailed when it is shared.</p>
+        <p className="text-[12px] text-muted-foreground">Each person here is emailed the plan when it is shared, and must press “I’ve read the plan” before the shoot can be confirmed.</p>
       </CardContent>
     </Card>
   )

@@ -14,6 +14,11 @@ import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
+import { BoardFilters } from '../board/BoardFilters'
+import { useBoardFilters } from '../board/useBoardFilters'
+import {
+  applyFilters, clientsOnCards, filterWords, filteredEmpty, mayFilterPeople, peopleOnCards, validChoice,
+} from '../../lib/people-filter-core'
 import WaitingOnYou from './WaitingOnYou'
 
 /**
@@ -92,13 +97,33 @@ export default function SchedulerPage() {
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
     [live.tables.team.rows])
 
-  const cards = useMemo(() => {
+  const allCards = useMemo(() => {
     if (!viewer) return [] as BoardCardRow[]
     // the same cards Production shows, minus shoot briefs — those are plans
     // for a shoot, not something to post
     const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
     return pageCards('scheduler', rows, viewer, today)
   }, [live.items, viewer, today])
+  /* ── who is doing what: the Client and People filters, for the people whose
+        job is to look across everyone's work (the owner, 11 Sep 2026) ── */
+  const mayFilter = viewer !== null && mayFilterPeople(viewer)
+  const filter = useBoardFilters('scheduler')
+  const who = useMemo(
+    () => new Map(live.tables.team.rows.map(u => [u.id, { name: u.name || u.email, role: String(u.role ?? '') }])),
+    [live.tables.team.rows])
+  const clientNames = useMemo(() => new Map(live.tables.clients.rows.map(c => [c.id, c.name])), [live.tables.clients.rows])
+  const clientRows = useMemo(() => clientsOnCards(allCards, clientNames), [allCards, clientNames])
+  const peopleRows = useMemo(() => peopleOnCards(allCards, who), [allCards, who])
+  // a remembered or linked id that is not on the board is nobody
+  const chosen = useMemo(() => ({
+    client: mayFilter ? validChoice(filter.client, clientRows) : null,
+    person: mayFilter ? validChoice(filter.person, peopleRows) : null,
+  }), [mayFilter, filter.client, filter.person, clientRows, peopleRows])
+  const filterNames = {
+    person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
+    client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
+  }
+  const cards = useMemo(() => applyFilters(allCards, chosen), [allCards, chosen])
   const ready = viewer !== null && !live.loading && today !== null
 
   /**
@@ -149,6 +174,12 @@ export default function SchedulerPage() {
           postingToday={postingToday}
           connectedClientIds={connectedClientIds}
           ariaLabel="Every card, by stage"
+          filters={mayFilter ? (
+            <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
+              onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear} />
+          ) : undefined}
+          filterNote={filterWords(chosen, filterNames, cards.length, allCards.length)}
+          laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
       )}
       {/* the card, beside the board — the board stays live behind it */}

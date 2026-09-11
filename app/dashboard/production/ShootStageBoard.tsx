@@ -63,9 +63,12 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, plans, names, role, viewerId, today, onMove, busyId,
+  shoots, itemCounts, plans, names, role, viewerId, today, onMove, busyId, laneEmpty,
 }: {
   shoots: StageShoot[]
+  /** an empty column's sentence while the page is narrowed to a client or a
+   *  person — "No cards for Ada in Shared with team" */
+  laneEmpty?: (laneLabel: string) => string | null
   /** cards already pointed at each shoot — a deliverable is a line OR a card */
   itemCounts: Map<string, number>
   /** where each shoot's PLAN DOCUMENT is in its own approval (being written,
@@ -197,7 +200,7 @@ export function ShootStageBoard({
       key: st.key,
       title: st.label,
       count: inLane.length,
-      empty: st.empty,
+      empty: laneEmpty?.(st.label) ?? st.empty,
       cards: inLane.map(card),
       hint: <span className="sr-only">{st.meaning}</span>,
       drop: {

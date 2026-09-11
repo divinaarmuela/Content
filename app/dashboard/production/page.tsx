@@ -5,10 +5,12 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import { CalendarDays, Kanban, Plus, Search } from 'lucide-react'
+import { BoardFilters } from '../board/BoardFilters'
+import { useBoardFilters } from '../board/useBoardFilters'
+import {
+  applyFilters, clientsOnCards, filterWords, filteredEmpty, mayFilterPeople, peopleOnCards, validChoice,
+} from '../../lib/people-filter-core'
 import type { BatchStatus } from '../../lib/batch-brief-core'
 import type { ItemStatus } from '../../lib/workflow-core'
 import { isBriefTask } from '../../lib/work-pages-core'
@@ -60,7 +62,6 @@ type Shoot = StageShoot & {
 }
 
 export default function ProductionPage() {
-  const [clientFilter, setClientFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [planOpen, setPlanOpen] = useState(false)
 
@@ -68,7 +69,7 @@ export default function ProductionPage() {
   // anyone on the team plans a shoot — the shoot page decides whose it then is
   const canPlan = can('scheduler')
   const isManager = can('account_manager')
-  const viewer = useMemo(() => (me ? { id: me.id, role: me.role } : null), [me])
+  const viewer = useMemo(() => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
   const team = useTeamMembers(isManager)
 
   const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'stage', 'view')
@@ -119,9 +120,28 @@ export default function ProductionPage() {
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
     [live.tables.team.rows])
 
-  const visibleShoots = useMemo(() => (shoots ?? []).filter(s =>
-    (clientFilter === 'all' || s.client_id === clientFilter)
-    && (!search || s.title.toLowerCase().includes(search.toLowerCase()))), [shoots, clientFilter, search])
+  /* ── who is doing what: the Client and People filters. Everyone here may
+        pick a client (the page always could); narrowing to a person is for
+        managers, super admins and the quality reviewer (11 Sep 2026) ── */
+  const mayFilterPerson = viewer !== null && mayFilterPeople(viewer)
+  const filter = useBoardFilters('shoots')
+  const who = useMemo(
+    () => new Map(live.tables.team.rows.map(u => [u.id, { name: u.name || u.email, role: String(u.role ?? '') }])),
+    [live.tables.team.rows])
+  const clientNames = useMemo(() => new Map(clients.map(c => [c.id, c.name])), [clients])
+  const clientRows = useMemo(() => clientsOnCards(shoots ?? [], clientNames), [shoots, clientNames])
+  const peopleRows = useMemo(() => (mayFilterPerson ? peopleOnCards(shoots ?? [], who) : []), [mayFilterPerson, shoots, who])
+  const chosen = useMemo(() => ({
+    client: validChoice(filter.client, clientRows),
+    person: mayFilterPerson ? validChoice(filter.person, peopleRows) : null,
+  }), [filter.client, filter.person, clientRows, peopleRows, mayFilterPerson])
+  const filterNames = {
+    person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
+    client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
+  }
+  const visibleShoots = useMemo(() => applyFilters(shoots ?? [], chosen).filter(s =>
+    !search || s.title.toLowerCase().includes(search.toLowerCase())), [shoots, chosen, search])
+  const filterNote = filterWords(chosen, filterNames, visibleShoots.length, (shoots ?? []).length)
 
   /**
    * Move a shoot along the playbook's timeline — the drag on the board. The
@@ -208,13 +228,8 @@ export default function ProductionPage() {
               { value: 'date', label: 'By date', icon: CalendarDays },
             ]}
           />
-          <Select value={clientFilter} onValueChange={v => v && setClientFilter(v)}>
-            <SelectTrigger className="h-11 w-44 rounded-full border-border bg-surface px-4" aria-label="Which client"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
+            onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear} />
           <div className="relative">
             <Search className="absolute left-4 top-[15px] h-4 w-4 text-muted-foreground" aria-hidden />
             <Input value={search} onChange={e => setSearch(e.target.value)}
@@ -224,6 +239,8 @@ export default function ProductionPage() {
           </div>
         </div>
       </div>
+
+      {filterNote && <p className="text-[13px] text-muted-foreground">{filterNote}</p>}
 
       {needsSchema && (
         <div className="rounded-card bg-tint-amber p-5 text-[15px]">
@@ -262,6 +279,7 @@ export default function ProductionPage() {
           today={today}
           onMove={moveShoot}
           busyId={stageBusy}
+          laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
       )}
 

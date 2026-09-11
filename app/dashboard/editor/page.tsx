@@ -14,6 +14,11 @@ import { useTeamMembers } from '../production/workHooks'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
+import { BoardFilters } from '../board/BoardFilters'
+import { useBoardFilters } from '../board/useBoardFilters'
+import {
+  applyFilters, clientsOnCards, filterWords, filteredEmpty, mayFilterPeople, peopleOnCards, validChoice,
+} from '../../lib/people-filter-core'
 import { NewCardDialog } from '../board/BoardDialogs'
 import { toast } from 'sonner'
 import { flagsOf } from '../../lib/card-flag-core'
@@ -54,7 +59,7 @@ export default function EditorPage() {
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
     [live.tables.team.rows])
 
-  const cards = useMemo(() => {
+  const allCards = useMemo(() => {
     if (!viewer) return [] as BoardCardRow[]
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
@@ -80,6 +85,26 @@ export default function EditorPage() {
     })
     return pageCards('editor', rows, viewer, today)
   }, [live.items, live.tables.batches.rows, live.tables.activity.rows, viewer, today])
+  /* ── who is doing what: the Client and People filters, for managers, super
+        admins and the quality reviewer; an editor sees only their own cards
+        and has nothing to narrow (the owner, 11 Sep 2026) ── */
+  const mayFilter = viewer !== null && mayFilterPeople(viewer)
+  const filter = useBoardFilters('editor')
+  const who = useMemo(
+    () => new Map(live.tables.team.rows.map(u => [u.id, { name: u.name || u.email, role: String(u.role ?? '') }])),
+    [live.tables.team.rows])
+  const clientNames = useMemo(() => new Map(live.tables.clients.rows.map(c => [c.id, c.name])), [live.tables.clients.rows])
+  const clientRows = useMemo(() => clientsOnCards(allCards, clientNames), [allCards, clientNames])
+  const peopleRows = useMemo(() => peopleOnCards(allCards, who), [allCards, who])
+  const chosen = useMemo(() => ({
+    client: mayFilter ? validChoice(filter.client, clientRows) : null,
+    person: mayFilter ? validChoice(filter.person, peopleRows) : null,
+  }), [mayFilter, filter.client, filter.person, clientRows, peopleRows])
+  const filterNames = {
+    person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
+    client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
+  }
+  const cards = useMemo(() => applyFilters(allCards, chosen), [allCards, chosen])
 
   /** "Acknowledge" — one press, one activity row, and the prompt goes */
   const acknowledge = async (card: BoardCardRow) => {
@@ -134,6 +159,12 @@ export default function EditorPage() {
           onClearShow={clearShow}
           ariaLabel="Your cards, by stage"
           onAcknowledge={acknowledge}
+          filters={mayFilter ? (
+            <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
+              onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear} />
+          ) : undefined}
+          filterNote={filterWords(chosen, filterNames, cards.length, allCards.length)}
+          laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
       )}
 
