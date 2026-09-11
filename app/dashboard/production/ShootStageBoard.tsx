@@ -223,7 +223,7 @@ export function ShootStageBoard({
         </div>
         <p className="text-[17px] font-semibold">No shoots yet</p>
         <p className="max-w-sm text-[15px] text-muted-foreground">
-          A shoot starts as a plan. Press New card, then New shoot plan.
+          A shoot starts as a plan. Press New shoot plan.
         </p>
       </div>
     )

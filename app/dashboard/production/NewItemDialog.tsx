@@ -232,7 +232,7 @@ export default function NewShootPlanDialog({
         <DialogHeader>
           <DialogTitle>New shoot plan <HelpHint term="shoot_plan" /></DialogTitle>
           <DialogDescription className="text-secondary-13">
-            One shoot, one card. * required
+            One shoot, one plan. The nine parts of the plan are filled in on the plan page after this. * required
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -253,12 +253,12 @@ export default function NewShootPlanDialog({
           {/* a plan belongs to a shoot. Without this picker "New shoot plan"
               silently created a SECOND shoot beside the one already there. */}
           <div className="grid gap-1.5">
-            <Label>Which shoot? <HelpHint term="shoot" /></Label>
+            <Label>Shoot <HelpHint term="shoot" /></Label>
             <Select value={draft.batch_id || 'new'}
               onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'new' ? '' : v ?? '' }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="new">…or start a new shoot</SelectItem>
+                <SelectItem value="new">A new shoot</SelectItem>
                 {briefableShoots.map(b => (
                   <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
                 ))}
@@ -268,10 +268,10 @@ export default function NewShootPlanDialog({
               {!draft.client_id
                 ? 'Choose a client to see their shoots.'
                 : briefableShoots.length === 0
-                  ? 'A new shoot is created with it.'
+                  ? 'A new shoot is made with this plan.'
                   : draft.batch_id
-                    ? 'Attaches to that shoot.'
-                    : 'A new shoot is created with it.'}
+                    ? 'The plan goes on that shoot.'
+                    : 'A new shoot is made with this plan.'}
             </p>
           </div>
           <div className="grid gap-1.5 sm:col-span-2">
@@ -281,11 +281,11 @@ export default function NewShootPlanDialog({
           {/* the requirement, right under the title. Stored as `brief`, and
               it goes to whoever is assigned. */}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>What needs doing</Label>
+            <Label>What this shoot is for</Label>
             <Textarea rows={3} value={draft.brief}
               placeholder="Going with the garden concept — see the moodboard for tone…"
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
-            <p className="text-[12px] text-muted-foreground">What the person making this needs to know — it goes to them.</p>
+            <p className="text-[12px] text-muted-foreground">The objective in a line or two. The shot list, script and the rest are written on the plan page.</p>
           </div>
           <div className="grid gap-1.5">
             <Label>Priority</Label>
@@ -297,7 +297,7 @@ export default function NewShootPlanDialog({
             </Select>
           </div>
           <div className="grid gap-1.5">
-            <Label>Target shoot date</Label>
+            <Label>Shoot date</Label>
             <Input type="date" value={draft.due_date} onChange={e => setDraft(d => ({ ...d, due_date: e.target.value }))} className="font-mono" />
             {/* the picker's order follows the browser's locale — echo the
                 date back in words so 09/15 is seen as 15 September */}
@@ -309,11 +309,11 @@ export default function NewShootPlanDialog({
           </div>
           {isManager && (
             <div className="grid gap-1.5">
-              <Label>Who&rsquo;s doing this?</Label>
+              <Label>Account manager for this shoot</Label>
               <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Nobody yet — anyone can pick it up</SelectItem>
+                  <SelectItem value="none">Nobody yet — assign one later</SelectItem>
                   {(() => {
                     const suggested = briefKind ? team.filter(m => briefKind.default_roles.includes(m.role)) : []
                     const ids = new Set(suggested.map(m => m.id))
@@ -341,7 +341,7 @@ export default function NewShootPlanDialog({
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Plan link <span className="text-secondary-13 font-normal text-muted-foreground">(Milanote or anywhere)</span></Label>
+            <Label>Outside plan link <span className="text-secondary-13 font-normal text-muted-foreground">(optional — the plan is built on the plan page; add this only if it also lives somewhere else)</span></Label>
             <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
               onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-secondary-13" />
           </div>

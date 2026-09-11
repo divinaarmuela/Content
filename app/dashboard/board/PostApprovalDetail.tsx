@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, WorkflowActivity, WorkKind } from '@/lib/db-types'
+import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
 import { Button } from '@/components/ui/button'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
@@ -120,6 +120,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const byEntity = useMemo(() => ({ entity_type: 'content_item', entity_id: id }), [id])
   const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
+  // WHO LOOKS AFTER THIS CLIENT — named on every open card, so an editor or
+  // a scheduler knows who to ask (the owner, 11 Sep 2026: "does it mention
+  // the AM manager name"). Read live from the client's team links.
+  const byClient = useMemo(() => ({ client_id: item?.client_id ?? '' }), [item?.client_id])
+  const { rows: clientLinks } = useTable<TeamUserClient>('team_user_clients', { by: byClient })
   const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const adhoc = (item as { adhoc_post?: unknown } | null)?.adhoc_post === true
   // the encoder's .mp4 copy of a master when one exists — a camera .mov
@@ -130,6 +135,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
   const slides = useMemo(() => slidesOf(latest), [latest])
   const nameOf = (uid: string | null | undefined) => team.find(u => u.id === uid)?.name ?? null
+  const managerNames = clientLinks
+    .map(l => team.find(u => u.id === l.team_user_id))
+    .filter((u): u is TeamUser => !!u && u.role === 'account_manager' && u.active_status !== false)
+    .map(u => u.name || u.email)
   const roleOf = (uid: string | null | undefined) => team.find(u => u.id === uid)?.role ?? null
   /**
    * WHO READS WHAT. The client's words are the manager's to read (the owner,
@@ -396,6 +405,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             {client?.name ?? ''} · {adhoc ? 'Post' : (kind?.name ?? 'Work')}
           </p>
           <h2 className="text-section-title truncate">{item.title}</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {managerNames.length > 0
+              ? `Account manager: ${managerNames.join(', ')}`
+              : 'No account manager on this client yet'}
+          </p>
           {!adhoc && (
             <div className="mt-1.5 flex flex-col gap-1 text-[13px]">
               {(item as { brief?: string | null }).brief && (

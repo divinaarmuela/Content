@@ -700,13 +700,6 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               )}
             </div>
           )}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="new-link">Link (optional)</Label>
-            <Input id="new-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/…" className={field} />
-            {link.trim() !== '' && (
-              <p className="text-[13px] text-muted-foreground">{linkCheck.ok ? `This is a ${linkCheck.label} link.` : linkCheck.reason}</p>
-            )}
-          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-due">Due (optional)</Label>

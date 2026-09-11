@@ -48,20 +48,20 @@ describe('New shoot plan form — one shoot, one card', () => {
     expect(SRC.match(/fetch\('\/api\/production\/items'/g)).toHaveLength(1)
   })
 
-  it('"What needs doing" is one box, right under the title, above priority', () => {
+  it('"What this shoot is for" is one box, right under the title, above priority', () => {
     const title = SRC.indexOf('<Label>Title *</Label>')
-    const box = SRC.indexOf('<Label>What needs doing</Label>')
+    const box = SRC.indexOf('<Label>What this shoot is for</Label>')
     const priority = SRC.indexOf('<Label>Priority</Label>')
     expect(title).toBeGreaterThan(-1)
     expect(box).toBeGreaterThan(title)
     expect(box).toBeLessThan(priority)
     // one label — not "Editing notes" / "Note to reviewer"
-    expect(SRC.match(/What needs doing/g)).toHaveLength(1)
+    expect(SRC.match(/What this shoot is for/g)).toHaveLength(1)
     expect(SRC).not.toMatch(/Editing notes/)
     expect(SRC).not.toMatch(/Note to reviewer/)
     // still stored as `brief`, still 3 rows
     expect(SRC).toMatch(/<Textarea rows=\{3\} value=\{draft\.brief\}/)
-    expect(SRC).toMatch(/it goes to them/)
+    expect(SRC).toMatch(/written on the plan page/)
   })
 
   it('is only ever the shoot-plan form — no regular-card or task branch, no kind chooser', () => {
@@ -86,7 +86,7 @@ describe('New shoot plan form — one shoot, one card', () => {
 
   it('says what it is: New shoot plan — one shoot, one card', () => {
     expect(SRC).toMatch(/<DialogTitle>New shoot plan <HelpHint term="shoot_plan" \/><\/DialogTitle>/)
-    expect(SRC).toMatch(/One shoot, one card\. \* required/)
+    expect(SRC).toMatch(/One shoot, one plan\. .*\* required/)
     expect(SRC).toMatch(/Create the shoot plan/)
     // every control is 44px
     expect(SRC.match(/className="h-11 rounded-full/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
