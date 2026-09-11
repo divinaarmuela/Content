@@ -12,6 +12,8 @@ import {
   type MoveRole, type ShootStage, type SopShoot,
 } from '../../lib/shoot-sop-core'
 import { LaneBoard, type Lane } from './LaneBoard'
+import { BRIEF_KIND_LABELS } from '../../lib/brief-task-core'
+import type { ItemStatus } from '../../lib/workflow-core'
 import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
 import Chip from '../ui/Chip'
 
@@ -42,6 +44,15 @@ const TONE: Partial<Record<ShootStage, WorkTone>> = {
   footage_handed: 'green',
 }
 
+/** the plan's approval, as a colour: with the client is blue, approved is
+ *  green, sent back is amber, and being written is quiet */
+function planTone(status: ItemStatus): 'blue' | 'green' | 'amber' | 'muted' {
+  if (status === 'client_review') return 'blue'
+  if (status === 'approved_for_scheduling' || status === 'scheduled' || status === 'published') return 'green'
+  if (status === 'revision_required' || status === 'client_changes_requested') return 'amber'
+  return 'muted'
+}
+
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/)
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '') || name.slice(0, 2)).toUpperCase()
@@ -52,11 +63,15 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, names, role, viewerId, today, onMove, busyId,
+  shoots, itemCounts, plans, names, role, viewerId, today, onMove, busyId,
 }: {
   shoots: StageShoot[]
   /** cards already pointed at each shoot — a deliverable is a line OR a card */
   itemCounts: Map<string, number>
+  /** where each shoot's PLAN DOCUMENT is in its own approval (being written,
+   *  with the client, approved) — the one line that used to need the old
+   *  work board to read; the moves are on the shoot page */
+  plans?: Map<string, ItemStatus>
   names: Map<string, string>
   role: MoveRole
   viewerId: string
@@ -148,6 +163,9 @@ export function ShootStageBoard({
               <Chip tone={ack.complete ? 'green' : 'amber'}>{ack.words}</Chip>
             )}
             {s.shoot_date && <Chip><CalendarDays className="h-3.5 w-3.5" aria-hidden />{whenShort(s.shoot_date)}</Chip>}
+            {plans?.get(s.id) && (
+              <Chip tone={planTone(plans.get(s.id)!)}>{BRIEF_KIND_LABELS[plans.get(s.id)!]}</Chip>
+            )}
           </>}
           note={note}
           actions={moves.length > 0 ? (

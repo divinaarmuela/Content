@@ -134,41 +134,41 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
 }
 
 const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
-  heading: 'Production, in three steps',
+  heading: 'Shoots, in three steps',
   steps: [
     {
       title: 'Make a shoot plan',
-      body: 'Press New card ▾ → New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
+      body: 'Press New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
     },
     {
-      title: 'Get it signed off',
-      body: 'Send the plan for review, then share it with the client. Cards move left to right across the board as they get approved.',
+      title: 'Fill it in, share it, get it signed off',
+      body: 'Open the shoot: fill the nine parts of the plan, pick the editor and crew, share it at least seven days before the day, then send it to the client. The card moves right as each step is done.',
     },
     {
-      title: 'Book the date, then add the pieces',
-      body: 'Open the plan to book the filming date. After the shoot, add the reels and carousels — they land on the Editor board.',
+      title: 'Go, shoot, hand over',
+      body: 'Once everyone has read the plan, press Go — that books the date. After the day, move the shoot to Footage handed over and the editor gets their cards.',
     },
   ],
 }
 
 const PRODUCTION_FOR_EDITORS: GettingStartedPanel = {
-  heading: 'Production, in three steps',
+  heading: 'Shoots, in three steps',
   steps: [
     {
-      title: 'A card is one thing to make',
-      body: 'One reel, one graphic, one piece of research — with one link to where it lives. Four reels is four cards. Cards move left to right across the five columns as they get checked.',
-      href: '/dashboard/production',
-      linkLabel: 'See the board',
-    },
-    {
-      title: 'Shoots are their own cards',
-      body: 'A shoot card is one filming day: the date, the location, the shot list and the folder. The cards made from it appear on your Editor board once it is booked.',
+      title: 'A shoot is one card',
+      body: 'One filming day: the date, the location, the shot list and the plan. You see the shoots you are on.',
       href: '/dashboard/production',
       linkLabel: 'See the shoots',
     },
     {
-      title: 'Make a card with New card',
-      body: 'Press New card ▾, type what it is, and paste the link when the work is ready. A card with nobody on it says "Nobody yet" — open it to make it yours.',
+      title: 'Read the plan and say so',
+      body: 'Open the shoot and press "I\u2019ve read the plan". The shoot cannot go ahead until everyone on it has.',
+      href: '/dashboard/production',
+      linkLabel: 'See the shoots',
+    },
+    {
+      title: 'Your cards are on the Editor page',
+      body: 'When the footage is handed over, the cards for that shoot land on your Editor page, owned by you, with the deadline on them. Press New card there for anything else you are making.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },

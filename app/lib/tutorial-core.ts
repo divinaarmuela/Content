@@ -237,16 +237,16 @@ const EDITOR: Tutorial = {
     {
       title: 'Shoots and shoot plans',
       see: [
-        'Shoot brief boards is where filming days live. A shoot card is one day: the date, the location, the shot list, the folder.',
-        'A shoot plan is the concept and shot list for that day, on its own planning board — the one the client sees on their portal.',
+        'Shoots is where filming days live. One card is one shoot, in six columns from Draft to Footage handed over.',
+        'Open a shoot for its plan: the concept, shot list and references on the planning board — the one the client sees on their portal — plus who has read it and the go-ahead.',
         'You see the shoots you are on and the plans you made or were given.',
       ],
       actions: [
-        'Open Shoot brief boards in the sidebar.',
-        'To plan a shoot yourself: New card ▾ → New shoot plan. Making the plan sets up the shoot too.',
+        'Open Shoots in the sidebar.',
+        'To plan a shoot yourself: press New shoot plan. Making the plan sets up the shoot too.',
       ],
       href: '/dashboard/production',
-      linkLabel: 'Open Shoot brief boards',
+      linkLabel: 'Open Shoots',
     },
     {
       title: 'Where answers arrive',
@@ -268,13 +268,13 @@ const GENERAL: Tutorial = {
   job: 'Do the cards that are yours — and book your own in when they are ready.',
   intro: 'You see the work assigned to you, the work you made, and the shoots you own. A card you own is yours to carry from Draft all the way to Posted.',
   home: '/dashboard/production',
-  homeLabel: 'Open Shoot brief boards',
+  homeLabel: 'Open Shoots',
   steps: [
     {
       title: 'Three pages, one piece of work',
       see: [
-        'Shoot brief boards: shoots, shoot plans and tasks — the planning side.',
-        'Editor: the pieces being made, in five columns from Draft to Posted.',
+        'Shoots: every filming day, from the first plan to the footage handed over.',
+        'Editor: everything being made — pieces and tasks — from In progress to Done.',
         'Schedule: the posting calendar for one client at a time.',
         'The same card can appear on more than one of them, wearing a different hat on each.',
       ],
@@ -282,21 +282,21 @@ const GENERAL: Tutorial = {
         'Open each of the three from the sidebar once, so you know the shape of them.',
       ],
       href: '/dashboard/production',
-      linkLabel: 'Open Shoot brief boards',
+      linkLabel: 'Open Shoots',
     },
     {
       title: 'Make a card, or take one',
       see: [
-        'New card ▾ on Shoot brief boards makes a shoot plan, a task, or a piece.',
+        'New card on the Editor page makes a task or a piece; New shoot plan on Shoots makes a shoot.',
         'A card you make stays on your board even if you hand it to someone else.',
         'A card with nobody on it says "Nobody yet".',
       ],
       actions: [
-        'Press New card ▾ and choose what you are making.',
+        'Press New card on the Editor page and choose what you are making.',
         'Name it for what it is; paste the link when the work is ready.',
       ],
-      href: '/dashboard/production',
-      linkLabel: 'Open Shoot brief boards',
+      href: '/dashboard/editor',
+      linkLabel: 'Open the Editor page',
     },
     {
       title: 'Add the link and hand it on',
@@ -342,7 +342,7 @@ const GENERAL: Tutorial = {
 
 const MANAGER: Tutorial = {
   job: 'Run your clients: plan the shoots, check the work, get it posted.',
-  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is three places: Shoot brief boards, the Editor board’s Internal check column, and Schedule.',
+  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is three places: Shoots, the Post approval board, and Schedule.',
   home: '/dashboard',
   homeLabel: 'Open the Overview',
   steps: [
@@ -359,19 +359,19 @@ const MANAGER: Tutorial = {
       linkLabel: 'Open Clients',
     },
     {
-      title: 'Shoot brief boards: plan a shoot',
+      title: 'Shoots: plan a shoot',
       see: [
-        'Shoots, shoot plans and tasks for your clients, in five columns from Draft to Posted, plus a strip of booked and finished shoots.',
+        'One card per shoot for your clients, in the playbook’s six columns: Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage handed over.',
         'A shoot plan is the concept and shot list for one filming day, drawn on a planning board — the same board the client sees, open, on their portal once you share it.',
-        'Mine · Unassigned · Everyone at the top narrows the board to your own work, the unclaimed pool, or all of it.',
+        'Open a shoot for the nine-part checklist, who has read the plan, the plan’s own sign-off, and Go. By date shows the same shoots on a calendar.',
       ],
       actions: [
-        'Press New card ▾ → New shoot plan. Making the plan sets up the shoot; you never create the shoot separately.',
+        'Press New shoot plan. Making the plan sets up the shoot; you never create the shoot separately.',
         'Write the concept and shot list, then share the plan with the client.',
         'Once they approve, open the plan and book the filming date.',
       ],
       href: '/dashboard/production',
-      linkLabel: 'Open Shoot brief boards',
+      linkLabel: 'Open Shoots',
     },
     {
       title: 'The Editor board: your column is Internal check',

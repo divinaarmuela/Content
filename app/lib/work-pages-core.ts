@@ -203,9 +203,10 @@ export function activeBriefTasks<T extends WorkItem>(items: T[]): T[] {
 export function backLinkFor(
   i: { status: ItemStatus; work_kinds?: { slug?: string; uses_media?: boolean } | null },
 ): { href: string; label: string } {
-  // a brief lives on Production whatever its status — its "approved" is a
-  // shoot to book, not a post to schedule
-  if (isBriefTask(i) || isInternalTask(i)) return { href: '/dashboard/production', label: 'Shoot brief boards' }
+  // a plan lives with its shoot whatever its status — its "approved" is a
+  // shoot to book, not a post to schedule; an internal task is an ordinary
+  // card on the Editor page (Shoots holds filming days only, 11 Sep 2026)
+  if (isBriefTask(i)) return { href: '/dashboard/production', label: 'Shoots' }
   if (SCHEDULER_STATUSES.includes(i.status)) return { href: '/dashboard/scheduler', label: 'Scheduler' }
   return { href: '/dashboard/editor', label: 'Editor' }
 }

@@ -23,8 +23,8 @@ describe('Getting started, per page', () => {
     expect(panelForPage('editor', 'account_manager')?.heading).toMatch(/reviewers/)
     expect(panelForPage('scheduler', 'scheduler')).toBe(panelForRole('scheduler'))
     expect(panelForPage('production', 'account_manager')?.steps[0].title).toBe('Make a shoot plan')
-    expect(panelForPage('production', 'editor')?.steps[0].title).toBe('A card is one thing to make')
-    expect(panelForPage('production', 'editor')?.steps[2].body).toMatch(/New card/)
+    expect(panelForPage('production', 'editor')?.steps[0].title).toBe('A shoot is one card')
+    expect(panelForPage('production', 'editor')?.steps[2].body).toMatch(/Editor page/)
   })
 
   it('clients and nobody get nothing', () => {

@@ -14,8 +14,9 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8')
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')
 
 describe('the three pages hand the board their page, and the board makes the lanes', () => {
+  // Shoots (production) no longer draws the work board at all — it is one
+  // card per shoot in the playbook's own columns (11 Sep 2026)
   it.each([
-    ['app/dashboard/production/page.tsx', 'production'],
     ['app/dashboard/editor/page.tsx', 'editor'],
     ['app/dashboard/scheduler/page.tsx', 'scheduler'],
   ])('%s says page="%s" and passes no column list', (rel, page) => {
@@ -24,7 +25,7 @@ describe('the three pages hand the board their page, and the board makes the lan
     expect(src).not.toMatch(/columns=\{/)
     expect(src).not.toMatch(/pageColumns/)
     // Posted keeps the last two weeks: every page passes today into pageCards
-    expect(src).toMatch(/pageCards\('(production|editor|scheduler)', rows, viewer, today\)/)
+    expect(src).toMatch(/pageCards\('(editor|scheduler)', rows, viewer, today\)/)
   })
 
   it('the board groups by lane, drops on lanes, and maps a column deep link to its lane', () => {

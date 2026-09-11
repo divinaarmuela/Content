@@ -27,8 +27,9 @@ const BOARD = 'app/dashboard/board/Board.tsx'
 const WORK_CARD = 'app/dashboard/ui/WorkCard.tsx'
 const SHEET = 'app/dashboard/board/CardSheet.tsx'
 const DETAIL = 'app/dashboard/production/[id]/CardDetail.tsx'
+// Shoots (production) opens a shoot's own page, not a card sheet — it holds
+// no cards any more (11 Sep 2026)
 const PAGES = [
-  'app/dashboard/production/page.tsx',
   'app/dashboard/editor/page.tsx',
   'app/dashboard/scheduler/page.tsx',
 ]
@@ -75,10 +76,10 @@ describe('the three boards host the sheet, and the address carries the card', ()
     })
   }
 
-  it('the Production list rows open the sheet too', () => {
+  it('the Shoots page opens a shoot on its own page and draws no card sheet', () => {
     const src = code(read('app/dashboard/production/page.tsx'))
-    expect(src).toMatch(/onOpen=\{\(\) => sheet\.open\(t\.id\)\}/)
-    expect(src).not.toContain('href={`/dashboard/production/${t.id}`}')
+    expect(src).not.toContain('<CardSheet')
+    expect(src).toContain('<ShootStageBoard')
   })
 
   it('the hook writes ?card= with replaceState and reads it back', () => {

@@ -48,7 +48,7 @@ export const NAV_MAIN: NavItem[] = [
   { href: '/dashboard/website',    label: 'Website',          icon: Globe },
   // one board became three pages, each answering one question: which shoots
   // am I planning, what is mine to edit, what is mine to post
-  { href: '/dashboard/production', label: 'Shoot brief boards', icon: Camera },
+  { href: '/dashboard/production', label: 'Shoots',           icon: Camera },
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
   // THE SCHEDULER PAGE IS THE MANAGER'S APPROVAL BOARD: what schedulers have
   // sent, waiting on a yes. It is on a manager's sidebar and NOT on a
@@ -120,7 +120,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/social/analytics': 'Analytics',
   '/dashboard/social/automations': 'Automations',
   '/dashboard/website':       'Website',
-  '/dashboard/production':    'Shoot brief boards',
+  '/dashboard/production':    'Shoots',
   '/dashboard/editor':        'Editor',
   '/dashboard/bookings':      'Bookings',
   '/dashboard/production/availability': 'Availability',

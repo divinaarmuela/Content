@@ -710,7 +710,6 @@ export function boardHref(
   opts: { column?: BoardColumnKey; show?: ShowFilter } = {},
 ): string {
   const params = new URLSearchParams()
-  if (page === 'production') params.set('view', 'board')
   if (opts.column) params.set('column', opts.column)
   if (opts.show) params.set('show', opts.show)
   const q = params.toString()
@@ -803,7 +802,9 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   // own line. The tile still opens the lens that shows both.
   const decide: OverviewTile = {
     key: 'decide', title: 'Needs your decision', tone: 'amber',
-    href: boardHref('production', { show: 'decide' }), actionLabel: 'Decide',
+    // the deciding board is Post approval: Shoots holds filming days only
+    // (the owner, 11 Sep 2026: "it's confusing")
+    href: boardHref('scheduler', { show: 'decide' }), actionLabel: 'Decide',
     stats: [
       { value: count(cards, c => matchesShow(c, 'decide', ctx) && !nobodyAskedYet(c)), label: 'waiting on you' },
       { value: count(cards, c => matchesShow(c, 'decide', ctx) && nobodyAskedYet(c)), label: 'nobody asked yet' },
@@ -813,7 +814,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   // quality reviewer, and how much of it nobody was asked to look at
   const quality: OverviewTile = {
     key: 'quality', title: 'Quality check', tone: 'amber',
-    href: boardHref('production', { column: 'quality_check' }), actionLabel: 'See them',
+    href: boardHref('scheduler', { column: 'quality_check' }), actionLabel: 'See them',
     stats: [
       { value: count(cards, c => c.status === 'quality_check'), label: 'waiting on a quality reviewer' },
       { value: count(cards, c => c.status === 'quality_check' && nobodyAskedYet(c)), label: 'not asked to anyone' },
@@ -821,7 +822,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   }
   const withClients: OverviewTile = {
     key: 'with_client', title: 'With clients', tone: 'blue',
-    href: boardHref('production', { column: 'with_client' }), actionLabel: 'See them',
+    href: boardHref('scheduler', { column: 'with_client' }), actionLabel: 'See them',
     stats: [{ value: count(cards, c => c.status === 'client_review'), label: 'waiting on a client' }],
   }
   const clients: OverviewTile = {
@@ -834,7 +835,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     const tiles: OverviewTile[] = [
       {
         key: 'glance', title: 'The agency at a glance', tone: 'paper',
-        href: boardHref('production'), actionLabel: 'Board',
+        href: boardHref('scheduler'), actionLabel: 'Board',
         stats: BOARD_COLUMNS.map(c => ({ value: inColumn(c.key), label: c.label.toLowerCase() })),
       },
       decide, quality, withClients,

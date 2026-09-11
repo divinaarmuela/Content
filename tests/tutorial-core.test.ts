@@ -85,7 +85,7 @@ describe('the words are the screen’s words', () => {
   it('names the pages as the sidebar names them', () => {
     for (const r of ROLES) {
       const text = everyLine(r)
-      for (const name of ['Post approval', 'Schedule', 'Shoot brief boards', 'Editor', 'Notifications']) {
+      for (const name of ['Post approval', 'Schedule', 'Shoots', 'Editor', 'Notifications']) {
         if (text.includes(name)) expect(titles, `${name} is a page title`).toContain(name)
       }
       // the old name must not come back through the tutorial

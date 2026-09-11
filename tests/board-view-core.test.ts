@@ -502,7 +502,7 @@ describe('the Overview\'s lenses', () => {
   })
 
   it('a board address carries the view, the column and the lens', () => {
-    expect(boardHref('production', { column: 'with_client' })).toBe('/dashboard/production?view=board&column=with_client')
+    expect(boardHref('production', { column: 'with_client' })).toBe('/dashboard/production?column=with_client')
     expect(boardHref('editor', { show: 'due' })).toBe('/dashboard/editor?show=due')
     expect(boardHref('scheduler')).toBe('/dashboard/scheduler')
   })
@@ -547,11 +547,11 @@ describe('each role\'s Overview', () => {
     expect(tiles[0].stats[0].value).toBe(4)
     // c is a check nobody was asked for: not "waiting on you", but on its own line
     expect(tiles[1].stats).toEqual([{ value: 0, label: 'waiting on you' }, { value: 1, label: 'nobody asked yet' }])
-    expect(tiles[1].href).toBe('/dashboard/production?view=board&show=decide')
+    expect(tiles[1].href).toBe('/dashboard/scheduler?show=decide')
     expect(tiles[2].key).toBe('quality')
-    expect(tiles[2].href).toBe('/dashboard/production?view=board&column=quality_check')
+    expect(tiles[2].href).toBe('/dashboard/scheduler?column=quality_check')
     expect(tiles[3].stats[0].value).toBe(1)          // d
-    expect(tiles[3].href).toBe('/dashboard/production?view=board&column=with_client')
+    expect(tiles[3].href).toBe('/dashboard/scheduler?column=with_client')
   })
 
   it('a super admin: the agency at a glance, plus Leads', () => {

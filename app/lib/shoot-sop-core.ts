@@ -10,7 +10,7 @@
  * in; Ops sends the reminder the day before; after the shoot the footage is
  * handed to the editor with priorities and a deadline.
  *
- * The Shoot brief boards page draws those as six columns. A column is never
+ * The Shoots page draws those as six columns. A column is never
  * a stored status — it is READ off the stamps on the shoot and the
  * calendar (`shootStage`), so a shoot can never sit in a column its data
  * contradicts, and dragging a card is asking for the stamp the next column

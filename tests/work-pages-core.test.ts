@@ -244,10 +244,10 @@ describe('claiming', () => {
 })
 
 describe('backLinkFor — back goes where you came from', () => {
-  it('a brief always goes back to Production, approved or not', () => {
+  it('a plan always goes back to Shoots, approved or not', () => {
     expect(backLinkFor(brief({ status: 'approved_for_scheduling' })))
-      .toEqual({ href: '/dashboard/production', label: 'Shoot brief boards' })
-    expect(backLinkFor(brief({ status: 'draft_uploaded' })).label).toBe('Shoot brief boards')
+      .toEqual({ href: '/dashboard/production', label: 'Shoots' })
+    expect(backLinkFor(brief({ status: 'draft_uploaded' })).label).toBe('Shoots')
   })
   it('a signed-off content item goes back to the scheduler queue', () => {
     for (const status of SCHEDULER_STATUSES) {

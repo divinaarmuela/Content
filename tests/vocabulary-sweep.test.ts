@@ -402,18 +402,16 @@ describe('one vocabulary — the board’s', () => {
   })
 })
 
-describe('the Production list speaks the board\'s five columns', () => {
-  // The List view used to carry its own five stage names — "Writing · Ready
-  // for review · Being revised · With client · Approved — book the shoot" —
-  // beside the Board's five, and a quota card ("Title · 2 of 5", a fill bar,
-  // "Add the next reel") with pieces nested inside it. A card is one thing;
-  // the columns are defined once.
+describe("the Shoots page is shoots only, in the playbook’s six columns", () => {
+  // It used to be four views of three kinds of thing — shoots, the plan
+  // documents behind them and internal tasks — with two sets of five stage
+  // names. The owner: "it's confusing" (11 Sep 2026). Now one card per shoot,
+  // in the SOP's own columns, and nothing else on the page.
   const page = readFileSync(join(APP, 'dashboard', 'production', 'page.tsx'), 'utf8')
 
-  it('draws its lanes from BOARD_COLUMNS and columnOf, with the board\'s empty sentences', () => {
-    expect(page).toMatch(/lanes=\{BOARD_COLUMNS\.map\(/)
-    expect(page).toMatch(/columnOf\(b\.status\) === column\.key/)
-    expect(page).toMatch(/empty: COLUMN_EMPTY\[column\.key\]/)
+  it('draws the SOP board and never the work board, the list, or the old lane names', () => {
+    expect(page).toMatch(/<ShootStageBoard/)
+    expect(page).not.toMatch(/BOARD_COLUMNS|LaneBoard|<Board|pageCards|taskCard|briefCard|planlessShoots/)
     expect(page).not.toMatch(/BRIEF_LANES|TASK_LANES|EDITOR_LANES|LANE_EMPTY/)
     for (const old of ['Writing', 'Ready for review', 'Being revised', 'Approved — book the shoot']) {
       expect(page, `old lane name "${old}" still on the page`).not.toMatch(new RegExp(`['"\`]${old}`))
@@ -425,15 +423,17 @@ describe('the Production list speaks the board\'s five columns', () => {
     expect(page).not.toMatch(/Show the pieces|Hide the pieces|No pieces yet|removes the promise/)
   })
 
-  it('the header button says New card, and the scope sentence names the real switch', () => {
-    expect(page).toMatch(/> New card <ChevronDown/)
-    expect(page).not.toMatch(/New item/)
-    expect(page).not.toMatch(/Nobody&rsquo;s/)
-    expect(page).toMatch(/Mine, Unassigned and Everyone/)
+  it('offers two ways to look at the same shoots, and one button: New shoot plan', () => {
+    expect(page).toMatch(/label: 'By stage'/)
+    expect(page).toMatch(/label: 'By date'/)
+    expect(page).not.toMatch(/label: 'List'|label: 'Board'/)
+    expect(page).toMatch(/New shoot plan/)
+    expect(page).not.toMatch(/> New card/)
+    expect(page).not.toMatch(/ScopeSwitch|Mine, Unassigned and Everyone/)
   })
 
-  it('deleting a shoot says its cards stay, not its pieces', () => {
-    expect(page).toMatch(/stay'\} on the board\./)
-    expect(page).not.toMatch(/piece\$\{/)
+  it('an old view address still lands somewhere: calendar → date, anything else → the columns', () => {
+    expect(page).toMatch(/const VIEWS = \['stage', 'date'\] as const/)
+    expect(page).toMatch(/get\('view'\) === 'calendar'\) setView\('date'\)/)
   })
 })
