@@ -15,6 +15,7 @@ import { shouldAutoWrap } from './shoot-lifecycle-core'
 import {
   actingRoles,
   checkTransitionAs,
+  schedulerIdsOf,
   clientArrivalLine,
   versionSatisfiesSubmission,
   TRANSITIONS,
@@ -23,6 +24,7 @@ import {
   STATUS_LABELS,
   type ItemStatus,
   type Audience,
+  type Hat,
   itemPath,
 } from './workflow-core'
 import type { Role } from './identity-core'
@@ -157,6 +159,15 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users').list({
         where: u => u.role === 'client' && u.client_id === item.client_id && u.active_status,
       })
+    case 'quality_reviewers': {
+      // everyone flagged as a quality reviewer (Joy); with nobody flagged the
+      // super admins hear, because they stand in for her
+      const flagged = await table<TeamUserRow>('team_users')
+        .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client' })
+      if (flagged.length > 0) return flagged
+      return table<TeamUserRow>('team_users')
+        .list({ where: u => u.role === 'super_admin' && u.active_status })
+    }
     case 'creator': {
       // whoever raised the card. They are the person the client's answer is
       // really for, and they are not always its owner or its manager.
@@ -165,6 +176,22 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.id === id && u.active_status && u.role !== 'client' })
     }
+  }
+}
+
+/** The client's default schedulers (`clients.default_scheduler_ids`), active
+ *  team members only — a stale id or a client account is dropped. */
+export async function defaultSchedulersOf(clientId: string): Promise<string[]> {
+  try {
+    const client = await table<{ id: string; default_scheduler_ids?: unknown }>('clients').get(clientId)
+    const ids = (Array.isArray(client?.default_scheduler_ids) ? client!.default_scheduler_ids : [])
+      .map(x => String(x ?? '')).filter(Boolean).slice(0, 20)
+    if (ids.length === 0) return []
+    const rows = await table<TeamUserRow>('team_users').list({ where: u => ids.includes(u.id) })
+    return rows.filter(u => u.active_status && u.role !== 'client').map(u => u.id)
+  } catch (e) {
+    console.error('default schedulers: could not read the client', e instanceof Error ? e.message : e)
+    return []
   }
 }
 
@@ -545,10 +572,10 @@ export async function performTransition(
   // rights follow ASSIGNMENT, not job title: the hats this actor wears on
   // THIS item decide the move, so an editor handed a scheduling job can
   // schedule it and an editor who holds nothing here can move nothing
-  const hats = system
+  const hats: Hat[] = system
     ? []
-    : [...new Set([
-      ...actingRoles({ id: actor.id, role: actor.role }, item),
+    : [...new Set<Hat>([
+      ...actingRoles({ id: actor.id, role: actor.role, quality_reviewer: actor.quality_reviewer === true }, item),
       ...(opts?.grantedHats ?? []),
     ])]
 
@@ -683,9 +710,28 @@ export async function performTransition(
   // leaves all of their Overviews at once. One write, so it can never be
   // left half-done.
   const asked = askedPatch(opts?.reviewerIds ?? null)
+  // DELIVERED (the Team's Playbook): the moment the final is sent to the
+  // client is the delivery date — "that's the moment our obligation is
+  // met". Stamped once, the first time, and never moved: a piece that goes
+  // back and forth was still delivered the first time it went. A client who
+  // does not approve their own posts is delivered to at the approval instead.
+  const deliveredNow = !isBriefTask && !isInternal
+    && !(before as { delivered_at?: unknown }).delivered_at
+    && (to === 'client_review' || (to === 'approved_for_scheduling' && from !== 'client_review' && item.client_approval_required === false))
+  // WHO SCHEDULES IT (Abby, 11 Sep 2026: "Joy will assign to either Cath &
+  // Raven for scheduling"): a card leaving the quality check with nobody
+  // named is handed to the client's default schedulers, in the same write.
+  const defaults = (from === 'quality_check' && to !== 'revision_required' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal)
+    ? await defaultSchedulersOf(item.client_id)
+    : []
   let updated: ContentItemRow | null
   try {
-    updated = await table<ContentItemRow>('content_items').update(item.id, { status: to, ...asked })
+    updated = await table<ContentItemRow>('content_items').update(item.id, {
+      status: to,
+      ...asked,
+      ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
+      ...(defaults.length > 0 ? { scheduler_ids: defaults } : {}),
+    })
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)
   }
@@ -705,6 +751,18 @@ export async function performTransition(
     newValue: to,
     detail: system ? actor.label : check.rule.label,
   })
+  if (defaults.length > 0) {
+    await logActivity({
+      actor: system ? null : actor, clientId: item.client_id,
+      entityType: 'content_item', entityId: item.id,
+      action: 'schedule_handoff', detail: `default schedulers: ${defaults.join(', ')}`,
+    })
+    if (!system) {
+      // the same "please schedule this" the Hand to… dialog sends
+      void notifyScheduleHandoff(actor, { ...item, scheduler_ids: defaults, status: to }, defaults)
+        .catch(e => console.error('default scheduler handoff notification error:', e))
+    }
+  }
 
   // approvals history for the decisions that matter
   if (!system && (to === 'approved_for_scheduling' || to === 'client_changes_requested')) {
@@ -764,7 +822,7 @@ export async function performTransition(
   const audiences = (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
-  const schedulerIds = (opts?.schedulerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
+  const schedulerIds = [...(opts?.schedulerIds ?? []).filter(x => typeof x === 'string'), ...defaults].slice(0, 20)
   void (async () => {
     for (const audience of audiences) {
       let people = await resolveAudience(audience, item)

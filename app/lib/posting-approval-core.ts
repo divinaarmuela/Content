@@ -21,7 +21,7 @@
  * The server enforces these rules; the posting card draws them. Both read
  * this one module, so the button and the write can never disagree.
  */
-import type { Role } from './identity-core'
+import type { Hat } from './workflow-core'
 
 export const POSTING_APPROVAL_STATES = ['draft', 'pending', 'approved', 'changes'] as const
 export type PostingApprovalState = (typeof POSTING_APPROVAL_STATES)[number]
@@ -125,7 +125,7 @@ export function stateAfterPostEdit(current: unknown): PostingApprovalState | nul
 /** May these hats SEND a post for approval? The scheduling hat (whoever was
  *  handed it, whatever their title), the item's owner (who wears 'editor'),
  *  or a super admin. */
-export function maySendPostApproval(hats: readonly Role[]): boolean {
+export function maySendPostApproval(hats: readonly Hat[]): boolean {
   // …and the account manager: after reviewing a scheduler's post they send
   // it ON to the client (`client_too`), which is a send
   return hats.includes('scheduler') || hats.includes('editor')
@@ -135,7 +135,7 @@ export function maySendPostApproval(hats: readonly Role[]): boolean {
 /** May these hats APPROVE the post (or ask for changes)? The client's account
  *  manager or a super admin — the client's own yes arrives through the portal
  *  wearing the client hat. */
-export function mayApprovePost(hats: readonly Role[]): boolean {
+export function mayApprovePost(hats: readonly Hat[]): boolean {
   return hats.includes('account_manager') || hats.includes('super_admin') || hats.includes('client')
 }
 
@@ -190,7 +190,7 @@ export function awaitsClientPostApproval(row: {
  */
 export type ApprovalStep = 'send' | 'resend' | 'waiting' | 'decide' | 'open'
 
-export function approvalStep(state: unknown, hats: readonly Role[]): ApprovalStep {
+export function approvalStep(state: unknown, hats: readonly Hat[]): ApprovalStep {
   const s = parseApprovalState(state)
   if (s === 'approved') return 'open'
   if (s === 'pending') return mayApprovePost(hats) ? 'decide' : 'waiting'

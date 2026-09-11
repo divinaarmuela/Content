@@ -19,6 +19,7 @@ import { roleLabel } from '@/app/lib/identity-core'
 
 type Manager = { team_user_id: string; name: string; email: string; role: string }
 type Eligible = { id: string; name: string; email: string; role: string; client_count: number }
+type Person = { id: string; name: string; email: string; role: string }
 
 const initials = (name: string, email: string) =>
   (name || email).split(/[\s@.]+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
@@ -33,14 +34,37 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
   const [managers, setManagers] = useState<Manager[] | null>(null)
   const [eligible, setEligible] = useState<Eligible[]>([])
   const [canManage, setCanManage] = useState(false)
+  /** WHO SCHEDULES FOR THIS CLIENT (the Team's Playbook: Joy assigns to Cath
+   *  or Raven) — a card that passes the quality check is handed to them */
+  const [defaultSchedulers, setDefaultSchedulers] = useState<Person[]>([])
+  const [schedulers, setSchedulers] = useState<Person[]>([])
+  const [canSetSchedulers, setCanSetSchedulers] = useState(false)
+  const [savingSchedulers, setSavingSchedulers] = useState(false)
   const [picked, setPicked] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const apply = (json: { managers?: Manager[]; eligible?: Eligible[]; can_manage?: boolean }) => {
+  const apply = (json: { managers?: Manager[]; eligible?: Eligible[]; can_manage?: boolean; default_schedulers?: Person[]; schedulers?: Person[]; can_set_schedulers?: boolean }) => {
     setManagers(json.managers ?? [])
     setEligible(json.eligible ?? [])
     if (json.can_manage !== undefined) setCanManage(json.can_manage)
+    if (json.default_schedulers) setDefaultSchedulers(json.default_schedulers)
+    if (json.schedulers) setSchedulers(json.schedulers)
+    if (json.can_set_schedulers !== undefined) setCanSetSchedulers(json.can_set_schedulers)
+  }
+
+  const toggleScheduler = async (id: string) => {
+    const have = defaultSchedulers.some(p => p.id === id)
+    const next = have ? defaultSchedulers.filter(p => p.id !== id).map(p => p.id) : [...defaultSchedulers.map(p => p.id), id]
+    setSavingSchedulers(true)
+    const res = await fetch(`/api/clients/${clientId}/managers`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ default_scheduler_ids: next }),
+    })
+    setSavingSchedulers(false)
+    if (!res.ok) { toast.error((await res.json().catch(() => ({}))).error ?? 'Could not save who schedules'); return }
+    apply(await res.json())
+    toast.success(have ? 'Taken off the scheduling for this client' : 'Will be handed this client\u2019s posts')
   }
 
   const load = useCallback(async () => {
@@ -186,6 +210,47 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
         <p className="mt-3 text-secondary-13 text-muted-foreground">
           Nobody with an account manager role is available to assign. Add one on the Team page first.
         </p>
+      )}
+
+      {/* ── who schedules for this client ── */}
+      {!hideWhenIdle && (
+        <div className="mt-5 border-t border-border pt-4">
+          <h3 className="text-body-15 font-semibold">Who schedules for this client</h3>
+          <p className="mt-0.5 text-secondary-13 text-muted-foreground">
+            {defaultSchedulers.length === 0
+              ? canSetSchedulers
+                ? 'Nobody yet. Pick who is handed this client\u2019s posts once they pass the quality check.'
+                : 'Nobody has been picked yet.'
+              : 'A post that passes the quality check is handed to them, ready to book in.'}
+          </p>
+          {schedulers.length === 0 ? (
+            <p className="mt-2 text-secondary-13 text-muted-foreground">Nobody with a scheduler role yet. Add one on the Team page first.</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Who schedules for this client">
+              {schedulers.map(p => {
+                const on = defaultSchedulers.some(d => d.id === p.id)
+                return (
+                  <button key={p.id} type="button" aria-pressed={on}
+                    disabled={!canSetSchedulers || savingSchedulers}
+                    onClick={() => void toggleScheduler(p.id)}
+                    className={
+                      'inline-flex min-h-11 items-center gap-2 rounded-full border px-3 text-body-15 transition-colors disabled:cursor-default ' +
+                      (on ? 'border-accent-blue/25 bg-tint-blue text-foreground' : 'border-border text-muted-foreground hover:bg-foreground/[0.04]')
+                    }>
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
+                      {initials(p.name, p.email)}
+                    </span>
+                    <span className="flex flex-col leading-[1.15] text-left" title={p.email}>
+                      <span>{p.name || p.email}</span>
+                      {p.name && <span className="text-[12px] text-muted-foreground">{p.email}</span>}
+                    </span>
+                    {on && <Check className="h-4 w-4 shrink-0" aria-hidden />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

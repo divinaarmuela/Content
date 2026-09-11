@@ -148,15 +148,15 @@ export const POST_APPROVAL_TOUR: Tour = {
     {
       target: 'board-lanes',
       title: 'The columns',
-      body: 'Draft is still being made, Internal check is with an account manager, With client is with them, Ready to post is signed off and needs a time, and Posted is booked in or already live.',
+      body: 'Draft is still being made, Internal check is with an account manager, Quality check is with the quality reviewer, With client is with them, Ready to post is signed off and needs a time, and Posted is booked in or already live.',
     },
     {
       target: 'board-new-post',
       title: 'Starting a post',
       body: 'Upload the files here, then send them to your account manager to check.',
       bodyByRole: {
-        account_manager: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them.',
-        super_admin: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them.',
+        account_manager: 'Upload files here and send them for the quality check, or ask somebody to check them first. The quality reviewer sends them on to the client or the scheduler.',
+        super_admin: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them. Everybody else’s uploads pass the quality reviewer first.',
       },
     },
     {
@@ -169,8 +169,8 @@ export const POST_APPROVAL_TOUR: Tour = {
       title: 'The button and the dots',
       body: 'Your one button does the next thing; the dots hold the rest.',
       bodyByRole: {
-        account_manager: 'Approve, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted.',
-        super_admin: 'Approve, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted.',
+        account_manager: 'Send it for quality check, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted. Only the quality reviewer passes it to the client.',
+        super_admin: 'Pass it, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted. You can pass the quality check when the reviewer is away.',
       },
     },
     {

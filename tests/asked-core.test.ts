@@ -46,9 +46,9 @@ describe('who was asked, read off the card', () => {
 
 describe('the words beside Who', () => {
   it('says who and what for, in the stage’s own words', () => {
-    expect(askedWords({ asked_ids: ['u-am'], status: 'internal_review' }, NAMES, STATUS_TURN))
+    expect(askedWords({ asked_ids: ['u-am'], status: 'internal_review' }, NAMES, STATUS_TURN as never))
       .toBe('With Divina to check')
-    expect(askedWords({ asked_ids: ['u-sc'], status: 'approved_for_scheduling' }, NAMES, STATUS_TURN))
+    expect(askedWords({ asked_ids: ['u-sc'], status: 'approved_for_scheduling' }, NAMES, STATUS_TURN as never))
       .toBe('With Sam to post')
   })
 
@@ -60,7 +60,7 @@ describe('the words beside Who', () => {
   })
 
   it('draws nothing when nobody was asked', () => {
-    expect(askedWords({ asked_ids: null, status: 'internal_review' }, NAMES, STATUS_TURN)).toBeNull()
+    expect(askedWords({ asked_ids: null, status: 'internal_review' }, NAMES, STATUS_TURN as never)).toBeNull()
   })
 
   it('the card says it beside Who, never instead of it', () => {
@@ -86,10 +86,13 @@ describe('whose turn it is', () => {
   const AM2 = { id: 'u-am2', role: 'account_manager' as const }
   const SUPER = { id: 'u-boss', role: 'super_admin' as const }
 
-  it('with nobody asked, every manager on the client still holds the turn', () => {
+  it('with nobody asked, every manager on the client MAY take it — and it is nobody\u2019s turn yet', () => {
+    // the owner, 11 Sep 2026: "the Your turn is confusing when it's not assigned"
     const card = { owner_id: 'u-ed' }
-    expect(whoseTurn('internal_review', card, AM).mine).toBe(true)
-    expect(whoseTurn('internal_review', card, AM2).mine).toBe(true)
+    expect(whoseTurn('internal_review', card, AM)).toMatchObject({ mine: false, unassigned: true, may: true })
+    expect(whoseTurn('internal_review', card, AM2)).toMatchObject({ mine: false, unassigned: true, may: true })
+    // the only manager on the client holds it by elimination
+    expect(whoseTurn('internal_review', card, AM, undefined, { sole: true }).mine).toBe(true)
   })
 
   it('with one manager asked, it is theirs and not the other’s', () => {
@@ -129,10 +132,14 @@ describe('the Overview counts it for the people asked, and nobody else', () => {
     expect(decideCount('u-am3', [card(['u-am', 'u-am2'])])).toBe(0)
   })
 
-  it('with nobody asked it behaves exactly as it did — everyone counts it', () => {
+  it('with nobody asked it is on nobody\u2019s "waiting on you" — it is the empty seat, on its own line', () => {
+    // the owner, 11 Sep 2026: "the Your turn is confusing when it's not assigned"
     const cards = [card(null)]
-    expect(decideCount('u-am', cards)).toBe(1)
-    expect(decideCount('u-am3', cards)).toBe(1)
+    expect(decideCount('u-am', cards)).toBe(0)
+    expect(decideCount('u-am3', cards)).toBe(0)
+    const tiles = overviewTiles({ viewer: { id: 'u-am', role: 'account_manager' }, cards, today, clientCount: 0 })
+    const decide = tiles.find(t => t.key === 'decide')!
+    expect(decide.stats[1]).toEqual({ value: 1, label: 'nobody asked yet' })
   })
 
   it('the same rule runs the board’s lens', () => {
@@ -273,16 +280,16 @@ describe('asked, then answered — the round trip', () => {
 
   it('one of them approves — and it is gone for BOTH, in the same write as the move', async () => {
     fake = seed('internal_review', [AM.id, AM2.id])
-    // Yusuf never opens it; Divina approves
-    const r = await move('approved_for_scheduling')
+    // Yusuf never opens it; Divina sends it on to the quality check
+    const r = await move('quality_check')
     await drain()
     expect(r.status).toBe(200)
-    expect(item().status).toBe('approved_for_scheduling')
+    expect(item().status).toBe('quality_check')
     expect(item().asked_ids ?? null).toBeNull()
     expect(item().asked_at ?? null).toBeNull()
     // …so neither of them still has it waiting on them
     const card = item() as never
-    expect(whoseTurn('approved_for_scheduling', card, AM).mine).toBe(false)
+    expect(whoseTurn('quality_check', card, AM).mine).toBe(false)
     expect(matchesShow(card, 'decide', { viewer: AM2, today: '2026-09-07' })).toBe(false)
   })
 
@@ -294,15 +301,15 @@ describe('asked, then answered — the round trip', () => {
     expect(r.status).toBe(200)
     expect(item().status).toBe('internal_review')
     expect(item().asked_ids ?? null).toBeNull()
-    // the role rule is back in charge: both managers hold the turn
-    expect(whoseTurn('internal_review', item() as never, AM).mine).toBe(true)
-    expect(whoseTurn('internal_review', item() as never, AM2).mine).toBe(true)
+    // the role rule is back in charge: both managers MAY take it, neither is named
+    expect(whoseTurn('internal_review', item() as never, AM)).toMatchObject({ mine: false, unassigned: true, may: true })
+    expect(whoseTurn('internal_review', item() as never, AM2)).toMatchObject({ mine: false, unassigned: true, may: true })
   })
 
   it('the move and the clear are ONE write — never a second round trip', async () => {
     const src = (await import('node:fs')).readFileSync(
       (await import('node:path')).join(process.cwd(), 'app', 'lib', 'workflow.ts'), 'utf8')
-    expect(src).toMatch(/update\(item\.id, \{ status: to, \.\.\.asked \}\)/)
+    expect(src).toMatch(/update\(item\.id, \{\s*status: to,\s*\.\.\.asked,/)
   })
 
   it('sending a card back clears the ask too', async () => {

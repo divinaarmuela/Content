@@ -125,6 +125,10 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
   const [note, setNote] = useState('')
   const signsOff = Boolean(client?.client_approval_required)
   const manager = mayPostWithoutApproval(me?.role ?? null, false)
+  /** THE QUALITY CHECK (Abby, 11 Sep 2026): a manager's upload goes to the
+   *  quality reviewer before the client or a scheduler. Only a manager who
+   *  IS the reviewer, or a super admin, clears it here themselves. */
+  const passesQuality = me?.role === 'super_admin' || me?.quality_reviewer === true
   const [approvers, setApprovers] = useState<{ id: string; name: string }[]>([])
   const [approverId, setApproverId] = useState<string>('')
   /** the manager buttons are the default; "ask somebody to check it" opens
@@ -205,7 +209,8 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
             <h2 className="text-section-title">New post</h2>
             <p className="text-[13px] text-muted-foreground">
               {!clientId ? 'Who is this post for?'
-                : manager ? 'Add the files, then approve it or send it to the client.'
+                : manager && passesQuality ? 'Add the files, then approve it or send it to the client.'
+                : manager ? 'Add the files, then send them for the quality check.'
                 : 'Add the files, then send it to whoever approves it.'}
             </p>
           </div>
@@ -334,15 +339,19 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                       Ask somebody to check it
                     </Button>
                   )}
-                  <Button type="button" variant="outline" className={secondary} disabled={!ready} onClick={() => void send('client')}>
-                    {busy === 'client' ? 'Sending…' : `Send to ${client?.name ?? 'the client'}`}
-                  </Button>
+                  {passesQuality && (
+                    <Button type="button" variant="outline" className={secondary} disabled={!ready} onClick={() => void send('client')}>
+                      {busy === 'client' ? 'Sending…' : `Send to ${client?.name ?? 'the client'}`}
+                    </Button>
+                  )}
                   {/* the client's "signs off every post" switch no longer takes
                       this button away from a manager (the owner, 9 Sep 2026)
                       — it is the line underneath, a reminder to send it on
-                      when they mean to */}
+                      when they mean to. A manager without the quality hat
+                      presses the same decision and the server lands the piece
+                      in Quality check, so the button says that. */}
                   <Button type="button" className={primary} disabled={!ready} onClick={() => void send('approve')}>
-                    {busy === 'approve' ? 'Approving…' : 'Approve — ready to post'}
+                    {busy === 'approve' ? 'Sending…' : passesQuality ? 'Approve — ready to post' : 'Send for quality check'}
                   </Button>
                 </>
               ) : (

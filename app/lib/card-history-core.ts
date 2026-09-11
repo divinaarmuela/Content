@@ -77,7 +77,11 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
     case 'claimed':
       return { text: String(row.detail ?? '').includes('scheduling') ? `Scheduling taken by ${who}` : `Taken by ${who}` }
     case 'schedule_handoff':
-      return { text: `Handed to a scheduler by ${who}` }
+      return { text: String(row.detail ?? '').startsWith('default') ? `Handed to the client\u2019s schedulers` : `Handed to a scheduler by ${who}` }
+    case 'acknowledged':
+      return { text: `Acknowledged by ${who}` }
+    case 'deadline_risk':
+      return { text: `Deadline risk flagged by ${who}${quote(row.detail)}` }
     case 'sent_back':
       return { text: `Sent back for changes by ${who}${quote(row.detail)}` }
     case 'posted_by_hand': {
@@ -119,8 +123,10 @@ function statusLine(row: HistoryActivity, who: string): { text: string } | null 
   switch (to) {
     case 'internal_review':
       return { text: `Sent for approval to the team by ${who}` }
+    case 'quality_check':
+      return { text: `Sent for quality check by ${who}` }
     case 'client_review':
-      return { text: `Sent for approval to the client by ${who}` }
+      return { text: from === 'quality_check' ? `Passed quality check and sent to the client by ${who}` : `Sent for approval to the client by ${who}` }
     case 'revision_required':
     case 'client_changes_requested':
       return { text: `Changes asked for by ${to === 'client_changes_requested' ? `the client, logged by ${who}` : who}` }
@@ -130,7 +136,9 @@ function statusLine(row: HistoryActivity, who: string): { text: string } | null 
       return {
         text: from === 'client_review'
           ? `Approved by the client, logged by ${who}`
-          : `Approved by ${who}`,
+          : from === 'quality_check'
+            ? `Passed quality check and approved by ${who}`
+            : `Approved by ${who}`,
       }
     case 'scheduled':
       return { text: `Booked in by ${who}` }

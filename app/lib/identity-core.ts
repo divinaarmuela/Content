@@ -28,7 +28,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   super_admin: 'Super admin',
   account_manager: 'Account manager',
   general: 'General',
-  editor: 'Editor',
+  editor: 'Editor or designer',
   scheduler: 'Scheduler',
   client: 'Client',
 }

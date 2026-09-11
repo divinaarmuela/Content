@@ -1,11 +1,11 @@
 'use client'
 
-import { whoseTurn, type ActingItem, type ItemStatus } from '../../lib/workflow-core'
-import type { Role } from '../../lib/identity-core'
+import { whoseTurn, type ActingItem, type ActingViewer, type Hat, type ItemStatus } from '../../lib/workflow-core'
 
 const HAT_WORD: Record<string, string> = {
   editor: 'editor',
   account_manager: 'account manager',
+  quality_reviewer: 'quality reviewer',
   client: 'client',
   scheduler: 'scheduler',
 }
@@ -20,12 +20,12 @@ const HAT_WORD: Record<string, string> = {
 export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTask, onOpenComments }: {
   status: ItemStatus
   item: ActingItem
-  viewer: { id: string; role: Role }
+  viewer: ActingViewer
   ownerName?: string
   /** whose turn each status is. A brief hands over to nobody at the end, so
    *  Production passes BRIEF_STATUS_TURN — otherwise a booked shoot would sit
    *  there waiting on a scheduler who is never coming. */
-  turns?: Record<ItemStatus, Role | null>
+  turns?: Record<ItemStatus, Hat | null>
   /** a shoot plan cannot be claimed — only an account manager picks it up */
   brief?: boolean
   /** somebody tagged the viewer in a comment here and it is not done yet —
@@ -61,8 +61,15 @@ export function TurnChip({ status, item, viewer, ownerName, turns, brief, openTa
     // …and say what the viewer can actually DO about it: a brief is assigned
     // by a manager (claim-core refuses to let anyone take one), and the
     // scheduling seat is schedulers-only, not "anyone".
+    // …a check nobody was asked for is an empty seat too (the owner, 11 Sep
+    // 2026: "the Your turn is confusing when it's not assigned"): "Ask
+    // somebody to check it" is the way to name someone
     const word = brief
       ? 'Nobody on it — assign an account manager'
+      : turn.hat === 'quality_reviewer'
+        ? 'Needs a quality check — nobody asked yet'
+      : turn.hat === 'account_manager'
+        ? 'Needs a check — nobody asked yet'
       : turn.hat === 'scheduler'
         ? 'Nobody on it — any scheduler can take it'
         : 'Nobody on it — anyone can take it'

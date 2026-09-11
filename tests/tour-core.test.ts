@@ -97,8 +97,9 @@ describe("a step that is only some people's", () => {
     expect(stepBody(newPost, 'scheduler')).toBe(newPost.body)
     expect(stepBody(newPost, 'general')).toBe(newPost.body)
     expect(stepBody(newPost, null)).toBe(newPost.body)
-    expect(stepBody(newPost, 'account_manager')).toMatch(/approve them yourself/i)
-    expect(stepBody(newPost, 'super_admin')).toBe(stepBody(newPost, 'account_manager'))
+    // the manager sends uploads for the quality check; the super admin may still clear them (11 Sep 2026)
+    expect(stepBody(newPost, 'account_manager')).toMatch(/quality check/i)
+    expect(stepBody(newPost, 'super_admin')).toMatch(/approve them yourself/i)
   })
 
   it('tells a scheduler to send the files on, and a manager what they may answer', () => {

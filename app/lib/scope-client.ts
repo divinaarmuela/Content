@@ -21,6 +21,7 @@
  */
 
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
+import { isOnShoot } from './shoot-sop-core'
 import { askedIdsOf } from './asked-core'
 import type { ScopeViewer } from './production-access-core'
 
@@ -40,7 +41,7 @@ export type ScopeItem = {
 }
 
 export type ScopeAssignment = { team_user_id: string; client_id: string }
-export type ScopeBatch = { id: string; client_id: string; owner_id?: string | null }
+export type ScopeBatch = { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown }
 
 /**
  * The extra context assignment needs and a plain item array cannot carry:
@@ -219,7 +220,8 @@ export function heldBatchIdsOf(
       held.add(i.batch_id)
     }
   }
-  for (const b of batches) if (b.owner_id === viewer.id) held.add(b.id)
+  // owned outright, or ON it — its editor or its crew (the Shoot Brief SOP)
+  for (const b of batches) if (b.owner_id === viewer.id || isOnShoot(b, viewer.id)) held.add(b.id)
   for (const id of taggedBatchIds) if (id) held.add(id)
   return held
 }
@@ -274,7 +276,12 @@ export function visibleItems<T extends ScopeItem>(
     : null
   const kindSlugById = new Map((ctx.workKinds ?? []).map(k => [k.id, k.slug]))
 
+  // THE QUALITY REVIEWER'S DESK (the Team's Playbook, 11 Sep 2026): every
+  // card waiting in the gate is theirs to check, whoever's client it is and
+  // whatever their own role says — the hat is worn on every item
+  const inGate = (r: ScopeItem) => viewer.quality_reviewer === true && r.status === 'quality_check'
   const scoped = items.filter(r => {
+    if (inGate(r)) return true
     if (clientIds !== null) {
       if (viewer.role === 'client') {
         if (!clientIds.includes(r.client_id)) return false
@@ -303,7 +310,8 @@ export function visibleItems<T extends ScopeItem>(
   const ownedBatches = new Set((ctx.batches ?? []).filter(b => b.owner_id === viewer.id).map(b => b.id))
   const own = (viewer.role === 'scheduler' || viewer.role === 'general' || viewer.role === 'editor')
     ? scoped.filter(r =>
-      r.owner_id === viewer.id
+      inGate(r)
+      || r.owner_id === viewer.id
       || schedulerIdsOf(r).includes(viewer.id)
       || askedIdsOf(r as never).includes(viewer.id)
       || taggedItems.has(r.id)
@@ -314,7 +322,7 @@ export function visibleItems<T extends ScopeItem>(
   if (viewer.role !== 'scheduler' || ctx.schedulerPostFilter === false) return own
   // the scheduler post-filter, exactly as the route applies it after the join
   return own.filter(r => {
-    if (r.owner_id === viewer.id) return true
+    if (r.owner_id === viewer.id || inGate(r)) return true
     if (slugOf(r, kindSlugById) === 'shoot_brief') return false
     const ids = schedulerIdsOf(r)
     return ids.length === 0 || ids.includes(viewer.id)
@@ -391,6 +399,8 @@ export function itemIsVisible(
   ctx: ScopeContext = {},
 ): boolean {
   if (!item) return false
+  // the quality reviewer opens anything in the gate
+  if (viewer.quality_reviewer === true && item.status === 'quality_check') return true
   if (viewer.role === 'scheduler') {
     if (!(SCHEDULER_STATUSES as readonly string[]).includes(item.status)
       && item.owner_id !== viewer.id) return false

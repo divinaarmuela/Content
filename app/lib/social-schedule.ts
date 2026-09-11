@@ -81,6 +81,9 @@ const postLockKey = (itemId: string) => `social_post__${itemId}`
 
 /** A refusal that carries every problem at once, so the composer can list
  *  them rather than revealing them one at a time. */
+/** what a manager is told when their Schedule press sent the piece to the gate */
+export const QUALITY_GATE_LINE = 'Sent for quality check — the post can be scheduled once the quality reviewer passes it'
+
 export class ComposeError extends AuthzError {
   problems: string[]
   constructor(problems: string[], status = 400) {
@@ -1260,7 +1263,7 @@ export async function scheduleWithoutApproval(
   const { post, item: loaded } = await loadPostForUser(user, id)
   let item = loaded
   assertCompose(user, item)
-  const hats = actingRoles({ id: user.id, role: user.role }, item)
+  const hats = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, item)
   /* TWO WAYS THROUGH THIS DOOR. A manager's, which performs the post's own
    * sign-off in their name below; and the board's — the pieces were approved
    * on the board, so a scheduler posts them with no second approval at all.
@@ -1323,6 +1326,20 @@ export async function scheduleWithoutApproval(
    * the check above has already refused it with "With the client now".
    */
   if (!viaBoard && usable.needsClientApproval) {
+    /**
+     * THE QUALITY CHECK STANDS BETWEEN A MANAGER AND THE SCHEDULE PRESS
+     * (Abby, 11 Sep 2026: everything goes through Joy BEFORE scheduling). A
+     * manager who is not a quality reviewer sends the piece to the gate
+     * here, and is told so in plain words rather than refused; a quality
+     * reviewer or a super admin holds the edge and goes straight through.
+     */
+    const passesQuality = hats.includes('quality_reviewer') || hats.includes('super_admin')
+    if (!passesQuality && item.status !== 'quality_check') {
+      await performTransition(user, item as never, 'quality_check', { note }).catch(e => {
+        console.error('schedule — could not send the piece for quality check:', e)
+      })
+      throw new ComposeError([QUALITY_GATE_LINE], 409)
+    }
     item = await performTransition(
       user, item as never, 'approved_for_scheduling', { note },
     ) as unknown as ContentItem

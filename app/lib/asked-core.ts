@@ -62,7 +62,8 @@ export function waitingOnViewer(item: AskedItem | null | undefined, viewerId: st
 }
 
 /** What the people asked were asked FOR, in the words of the stage. */
-export const ASKED_VERB: Record<Role, string> = {
+export const ASKED_VERB: Record<Role | 'quality_reviewer', string> = {
+  quality_reviewer: 'to quality check',
   super_admin: 'to check',
   account_manager: 'to check',
   general: 'to make and post',
@@ -93,7 +94,7 @@ export function askedWords(
   item: AskedItem & { status?: string },
   names: ReadonlyMap<string, string>,
   /** whose turn each status is — `STATUS_TURN`, or a brief's own vocabulary */
-  turns: Record<string, Role | null>,
+  turns: Record<string, Role | 'quality_reviewer' | null>,
 ): string | null {
   const ids = askedIdsOf(item)
   if (ids.length === 0) return null

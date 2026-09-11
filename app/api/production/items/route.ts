@@ -49,6 +49,7 @@ export async function GET(req: Request) {
       id: user.id,
       role: user.role,
       client_id: (user as { client_id?: string | null }).client_id ?? null,
+      quality_reviewer: user.quality_reviewer === true,
     }
     // the same tables the boards subscribe to (see useLiveWork.ts), read once
     // inside this request's cache

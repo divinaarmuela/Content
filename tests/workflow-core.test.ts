@@ -45,9 +45,31 @@ describe('checkTransition — role gates', () => {
     expect(checkTransition('editor', 'draft_uploaded', 'internal_review').ok).toBe(true)
     expect(checkTransition('scheduler', 'draft_uploaded', 'internal_review').ok).toBe(false)
   })
-  it('only AM sends to client; editor cannot', () => {
-    expect(checkTransition('account_manager', 'internal_review', 'client_review').ok).toBe(true)
+  it('the AM sends to the quality check; only the quality reviewer sends to the client; an editor neither', () => {
+    // the Team's Playbook (11 Sep 2026): AM / designer / editor → Joy → scheduler
+    expect(checkTransition('account_manager', 'internal_review', 'quality_check').ok).toBe(true)
+    expect(checkTransition('account_manager', 'internal_review', 'client_review').ok).toBe(false)
+    expect(checkTransition('account_manager', 'internal_review', 'approved_for_scheduling').ok).toBe(false)
+    expect(checkTransitionAs(['quality_reviewer'], 'internal_review', 'client_review').ok).toBe(true)
+    expect(checkTransitionAs(['quality_reviewer'], 'quality_check', 'client_review').ok).toBe(true)
+    expect(checkTransitionAs(['quality_reviewer'], 'quality_check', 'approved_for_scheduling').ok).toBe(true)
+    expect(checkTransitionAs(['account_manager'], 'quality_check', 'client_review').ok).toBe(false)
+    // a manager may still pull work back out of the gate
+    expect(checkTransitionAs(['account_manager'], 'quality_check', 'revision_required').ok).toBe(true)
     expect(checkTransition('editor', 'internal_review', 'client_review').ok).toBe(false)
+    expect(checkTransition('editor', 'quality_check', 'client_review').ok).toBe(false)
+  })
+  it('the quality hat is a flag on the person, worn on every item, and a super admin stands in', () => {
+    expect(actingRoles({ id: ME, role: 'account_manager', quality_reviewer: true }, { owner_id: THEM }))
+      .toEqual(['account_manager', 'quality_reviewer'])
+    expect(actingRoles({ id: ME, role: 'editor', quality_reviewer: true }, { owner_id: THEM })).toEqual(['quality_reviewer'])
+    expect(actingRoles({ id: ME, role: 'editor', quality_reviewer: false }, { owner_id: THEM })).toEqual([])
+    expect(checkTransition('super_admin', 'quality_check', 'client_review').ok).toBe(true)
+    expect(whoseTurn('quality_check', { owner_id: THEM }, { id: ME, role: 'super_admin' }).may).toBe(true)
+    expect(whoseTurn('quality_check', { owner_id: THEM }, { id: ME, role: 'account_manager', quality_reviewer: true }).may).toBe(true)
+    expect(whoseTurn('quality_check', { owner_id: THEM }, { id: ME, role: 'account_manager' }).may).toBe(false)
+    expect(STATUS_TURN.quality_check).toBe('quality_reviewer')
+    expect(CLIENT_LABELS.quality_check).toBe('In production')
   })
   it('client can approve or request changes only from client_review', () => {
     expect(checkTransition('client', 'client_review', 'approved_for_scheduling').ok).toBe(true)
@@ -79,9 +101,11 @@ describe('availableTransitions', () => {
     expect(av[0].to).toBe('internal_review')
     expect(av[0].requires).toBe('reviewable_asset')
   })
-  it('AM sees three choices from internal_review', () => {
+  it('AM sees two choices from internal_review: the gate, or changes', () => {
     const tos = availableTransitions('account_manager', 'internal_review').map(a => a.to).sort()
-    expect(tos).toEqual(['approved_for_scheduling', 'client_review', 'revision_required'])
+    expect(tos).toEqual(['quality_check', 'revision_required'])
+    const qa = availableTransitionsAs(['quality_reviewer'], 'quality_check').map(a => a.to).sort()
+    expect(qa).toEqual(['approved_for_scheduling', 'client_review', 'revision_required'])
   })
   it('client sees nothing from internal statuses', () => {
     expect(availableTransitions('client', 'internal_review')).toHaveLength(0)
@@ -340,7 +364,10 @@ describe('presentTransitions — one obvious button, or none', () => {
         for (const owner of [ME, THEM, null]) {
           const p = present(role, { owner_id: owner, scheduler_ids: [] }, from)
           expect(p.secondary.filter(s => s.to === p.primary?.to)).toEqual([])
-          if (p.primary) expect(p.primary.to).toBe(PRIMARY_ACTION[from])
+          // a super admin's own check IS the quality check, so from the
+          // manager's stages their button goes where the gate would send it
+          const skips = role === 'super_admin' && PRIMARY_ACTION[from] === 'quality_check'
+          if (p.primary) expect(skips ? ['client_review', 'quality_check'] : [PRIMARY_ACTION[from]]).toContain(p.primary.to)
         }
       }
     }
@@ -367,7 +394,7 @@ describe('presentTransitions — one obvious button, or none', () => {
     // it used to become "Send back to myself" for the owner, which read as a
     // note to self rather than the request-for-changes it is
     const p = present('account_manager', { owner_id: ME }, 'revision_complete')
-    expect(p.primary?.label).toBe('Looks good — send to client')
+    expect(p.primary?.label).toBe('Looks good — send for quality check')
     expect(p.secondary.map(s => s.label)).toEqual(['Ask for more changes'])
   })
 
@@ -375,8 +402,12 @@ describe('presentTransitions — one obvious button, or none', () => {
     const strict = present('account_manager', { owner_id: THEM }, 'internal_review')
     expect(strict.secondary.concat(strict.primary ? [strict.primary] : []).map(t => t.to))
       .not.toContain('approved_for_scheduling')
-    const relaxed = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false })
+    // …and only the quality reviewer holds it at all
+    const relaxed = presentTransitions(['quality_reviewer'], 'quality_check',
+      availableTransitionsAs(['quality_reviewer'], 'quality_check'), { clientApprovalRequired: false })
     expect(relaxed.secondary.map(t => t.to)).toContain('approved_for_scheduling')
+    const relaxedAm = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false })
+    expect(relaxedAm.secondary.map(t => t.to)).not.toContain('approved_for_scheduling')
   })
 
   it('a client review is the client’s move: they get the primary, the manager does not', () => {
@@ -466,24 +497,41 @@ describe('a new version while the piece is with the client', () => {
 
 describe('whoseTurn', () => {
   it('names the hat, whether it is mine, and whether the seat is empty', () => {
+    // NOBODY ASKED IS NOBODY'S TURN (the owner, 11 Sep 2026): a check with
+    // nobody named is an empty seat the manager MAY take, not "Your turn"
     expect(whoseTurn('internal_review', { owner_id: THEM }, me('account_manager')))
-      .toEqual({ hat: 'account_manager', mine: true, unassigned: false })
+      .toEqual({ hat: 'account_manager', mine: false, unassigned: true, may: true })
+    // …asked by name, it is theirs; the only manager on the client, theirs by elimination
+    expect(whoseTurn('internal_review', { owner_id: THEM, asked_ids: [ME] }, me('account_manager')))
+      .toEqual({ hat: 'account_manager', mine: true, unassigned: false, may: true })
+    expect(whoseTurn('internal_review', { owner_id: THEM }, me('account_manager'), STATUS_TURN, { sole: true }))
+      .toEqual({ hat: 'account_manager', mine: true, unassigned: true, may: true })
+    // a manager checking their OWN card is named by owning it
+    expect(whoseTurn('internal_review', { owner_id: ME }, me('account_manager')).mine).toBe(true)
+    // the quality seat reads the same way, for the reviewer and the super admin
+    expect(whoseTurn('quality_check', { owner_id: THEM }, { id: ME, role: 'editor', quality_reviewer: true }))
+      .toEqual({ hat: 'quality_reviewer', mine: false, unassigned: true, may: true })
+    expect(whoseTurn('quality_check', { owner_id: THEM }, me('super_admin')))
+      .toEqual({ hat: 'quality_reviewer', mine: false, unassigned: true, may: true })
+    expect(whoseTurn('quality_check', { owner_id: THEM, asked_ids: [ME] }, me('super_admin')).mine).toBe(true)
     expect(whoseTurn('draft_uploaded', { owner_id: THEM }, me('editor')))
-      .toEqual({ hat: 'editor', mine: false, unassigned: false })
+      .toEqual({ hat: 'editor', mine: false, unassigned: false, may: false })
     expect(whoseTurn('draft_uploaded', { owner_id: null }, me('editor')))
-      .toEqual({ hat: 'editor', mine: true, unassigned: true })
+      .toEqual({ hat: 'editor', mine: true, unassigned: true, may: true })
     expect(whoseTurn('approved_for_scheduling', { owner_id: THEM, scheduler_ids: [] }, me('editor')))
-      .toEqual({ hat: 'scheduler', mine: false, unassigned: true })
+      .toEqual({ hat: 'scheduler', mine: false, unassigned: true, may: false })
     expect(whoseTurn('approved_for_scheduling', { owner_id: THEM, scheduler_ids: [ME] }, me('editor')))
-      .toEqual({ hat: 'scheduler', mine: true, unassigned: false })
+      .toEqual({ hat: 'scheduler', mine: true, unassigned: false, may: true })
     expect(whoseTurn('published', { owner_id: ME }, me('super_admin')))
-      .toEqual({ hat: null, mine: false, unassigned: false })
+      .toEqual({ hat: null, mine: false, unassigned: false, may: false })
   })
 
   it('a super admin is asked the same question as everyone else', () => {
-    // reviewing IS their job, wherever it lands
-    expect(whoseTurn('internal_review', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
-    expect(whoseTurn('client_changes_requested', { owner_id: THEM }, me('super_admin')).mine).toBe(true)
+    // reviewing IS their job, wherever it lands — but an unasked check is an
+    // empty seat to them too, not "Your turn" (the owner, 11 Sep 2026)
+    expect(whoseTurn('internal_review', { owner_id: THEM }, me('super_admin'))).toMatchObject({ mine: false, unassigned: true, may: true })
+    expect(whoseTurn('client_changes_requested', { owner_id: THEM }, me('super_admin'))).toMatchObject({ mine: false, unassigned: true, may: true })
+    expect(whoseTurn('internal_review', { owner_id: THEM, asked_ids: [ME] }, me('super_admin')).mine).toBe(true)
     // an edit or a post is theirs only when the item names them — otherwise a
     // board of forty items would wear forty "Your turn" chips and say nothing
     expect(whoseTurn('draft_uploaded', { owner_id: THEM }, me('super_admin')).mine).toBe(false)
@@ -494,19 +542,19 @@ describe('whoseTurn', () => {
     expect(whoseTurn('client_review', { owner_id: THEM }, me('super_admin')).mine).toBe(false)
     // an empty seat is still reported as empty, whoever is looking
     expect(whoseTurn('draft_uploaded', { owner_id: null }, me('super_admin')))
-      .toEqual({ hat: 'editor', mine: false, unassigned: true })
+      .toEqual({ hat: 'editor', mine: false, unassigned: true, may: false })
   })
 
   it('a BRIEF hands its last stages to the account manager, not to an empty scheduler seat', () => {
     const brief = { owner_id: ME, scheduler_ids: [] }
     expect(whoseTurn('approved_for_scheduling', brief, me('account_manager'), BRIEF_STATUS_TURN))
-      .toEqual({ hat: 'account_manager', mine: true, unassigned: false })
+      .toEqual({ hat: 'account_manager', mine: true, unassigned: false, may: true })
     // the asset table reads the same item as a shoot waiting on nobody
     expect(whoseTurn('approved_for_scheduling', brief, me('account_manager')))
-      .toEqual({ hat: 'scheduler', mine: false, unassigned: true })
+      .toEqual({ hat: 'scheduler', mine: false, unassigned: true, may: false })
     // and a booked shoot is finished, whatever the status word says
     expect(whoseTurn('scheduled', brief, me('account_manager'), BRIEF_STATUS_TURN))
-      .toEqual({ hat: null, mine: false, unassigned: false })
+      .toEqual({ hat: null, mine: false, unassigned: false, may: false })
   })
 })
 

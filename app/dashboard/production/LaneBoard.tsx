@@ -23,6 +23,20 @@ export type Lane = {
    * carrying the count. A folded lane is a quieter, narrower column.
    */
   folded?: boolean
+  /**
+   * a DROP TARGET: the board that owns the lanes decides what a drop means
+   * and whether this lane can take the card being held; the lane only
+   * draws it — lit when it can, dimmed when it cannot
+   */
+  drop?: {
+    active: boolean
+    over: boolean
+    dimmed: boolean
+    label: string
+    onDragOver: (e: React.DragEvent) => void
+    onDragLeave: () => void
+    onDrop: (e: React.DragEvent) => void
+  }
 }
 
 /**
@@ -59,17 +73,35 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
   }, [lanes, picked])
 
   /** the cards of one lane, with the column's own words when it is empty */
-  const stack = (lane: Lane) => (
-    <>
-      {lane.replace ?? lane.cards}
-      {lane.count === 0 && !lane.replace && (
-        <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
-          {lane.empty}
-        </div>
-      )}
-      {lane.footer}
-    </>
-  )
+  const stack = (lane: Lane) => {
+    const inner = (
+      <>
+        {lane.replace ?? lane.cards}
+        {lane.count === 0 && !lane.replace && (
+          <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
+            {lane.empty}
+          </div>
+        )}
+        {lane.footer}
+      </>
+    )
+    if (!lane.drop) return inner
+    const d = lane.drop
+    return (
+      <div
+        role="list"
+        aria-label={d.label}
+        onDragOver={d.onDragOver}
+        onDragLeave={d.onDragLeave}
+        onDrop={d.onDrop}
+        className={`flex min-h-[120px] flex-col gap-2.5 rounded-inner transition-colors ${
+          d.active ? (d.over ? 'bg-tint-green ring-2 ring-accent-green' : 'bg-tint-green') : d.dimmed ? 'opacity-60' : ''
+        }`}
+      >
+        {inner}
+      </div>
+    )
+  }
 
   const column = (lane: Lane, index: number) => {
     void index

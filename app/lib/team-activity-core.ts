@@ -28,7 +28,7 @@
 
 import { DEFAULT_TZ, dayKeyInZone, fromZonedInput } from './timezone-core'
 import {
-  STATUS_LABELS, STATUS_TURN, schedulerIdsOf, whoseTurn,
+  STATUS_LABELS, STATUS_TURN, schedulerIdsOf, whoseTurn, type Hat,
   type ActingItem, type ItemStatus,
 } from './workflow-core'
 import {
@@ -73,7 +73,7 @@ export function overlayOf(item: { work_kinds?: KindShape }): ItemOverlay {
 }
 
 /** The turn table this item is judged by — its own vocabulary, not the asset's. */
-export function turnsFor(overlay: ItemOverlay): Record<ItemStatus, Role | null> {
+export function turnsFor(overlay: ItemOverlay): Record<ItemStatus, Hat | null> {
   if (overlay === 'brief') return BRIEF_STATUS_TURN
   if (overlay === 'task') return TASK_STATUS_TURN
   return STATUS_TURN

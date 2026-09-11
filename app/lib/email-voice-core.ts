@@ -1,4 +1,4 @@
-import { STATUS_MEANING, STATUS_TURN, type ItemStatus } from './workflow-core'
+import { STATUS_MEANING, STATUS_TURN, type Hat, type ItemStatus } from './workflow-core'
 import type { Role } from './identity-core'
 
 /**
@@ -31,6 +31,7 @@ const TURN_SUBJECT: Partial<Record<ItemStatus, (title: string) => string>> = {
   internal_review: t => `${t} needs your review`,
   revision_required: t => `${t} needs changes`,
   revision_complete: t => `${t} is fixed — check it again`,
+  quality_check: t => `${t} is ready for your quality check`,
   client_review: t => `${t} is ready for you to look at`,
   client_changes_requested: t => `The client asked for changes on ${t}`,
   approved_for_scheduling: t => `${t} needs a posting date`,
@@ -52,7 +53,7 @@ export function transitionSubject(opts: {
   stageLabel: string
   recipientRole: Role | null
   /** override for shoot plans and internal tasks, whose turns differ */
-  turns?: Record<ItemStatus, Role | null>
+  turns?: Record<ItemStatus, Hat | null>
 }): string {
   const turns = opts.turns ?? STATUS_TURN
   const yours = opts.recipientRole !== null && turns[opts.to] === opts.recipientRole

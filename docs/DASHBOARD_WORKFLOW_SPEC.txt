@@ -52,6 +52,11 @@ Own assigned client delivery and act as gatekeeper between internal team and cli
 Assigned client projects, all internal comments for assigned work, client comments, Drive links, scheduling status.
 Review assets, request revisions, send items to client, approve for scheduling, assign scheduler, respond to client comments.
 Should not bypass internal quality control or send unapproved work to scheduler.
+Quality reviewer (a flag on a person — Joy; a super admin may stand in)
+Quality-review every graphic, story, reel and caption BEFORE scheduling (Team's Playbook, 11 Sep 2026: AM/designer/editor → Joy → scheduler).
+Cards in Quality check, with their files, brief and the account manager's notes.
+Pass to the client or straight to Ready to post; ask for changes. On a pass the card is handed to the client's default schedulers.
+Should not receive work an account manager has not checked.
 Editor
 Prepare edited assets and action revision requests.
 Assigned projects, internal comments/tasks, Dropbox and Drive upload fields relevant to their work.

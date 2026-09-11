@@ -122,6 +122,7 @@ export function sinceWords(stamp: string | null | undefined, today: string): str
 export const CHECK_LINES: Partial<Record<ItemStatus, string>> = {
   internal_review: 'Waiting on your check',
   revision_complete: 'The changes are in — waiting on your check',
+  quality_check: 'Waiting on your quality check',
   client_changes_requested: 'The client asked for changes — waiting on you',
 }
 export const CHECK_LINE_FALLBACK = 'Waiting on you'
@@ -138,7 +139,10 @@ export function askedLine(status: ItemStatus): string {
 
 /** The statuses whose next move is a decision by the team, not by a client. */
 export const CHECK_STATUSES: readonly ItemStatus[] =
-  ['internal_review', 'revision_complete', 'client_changes_requested']
+  ['internal_review', 'revision_complete', 'client_changes_requested', 'quality_check']
+/** the empty seat: a check nobody was asked for (the owner, 11 Sep 2026) */
+export const UNASKED_LINE = 'Needs a check — nobody asked yet'
+export const UNASKED_QUALITY_LINE = 'Needs a quality check — nobody asked yet'
 
 /* ── one card, weighed ─────────────────────────────────────────────────── */
 
@@ -227,6 +231,21 @@ export function waitingRow(
       since: sinceWords(stamp, today),
       onYou: true,
       who: 'you',
+      actions: cardAnswers(card, viewer),
+      open: { kind: 'card', id: card.id },
+      stamp,
+    }
+  }
+  // 3b. THE EMPTY SEAT: a check nobody was asked for. Shown to everyone who
+  //     could take it, with the answers, but never counted as theirs.
+  if (CHECK_STATUSES.includes(card.status) && turn.unassigned && turn.may) {
+    return {
+      ...base,
+      kind: 'check',
+      line: card.status === 'quality_check' ? UNASKED_QUALITY_LINE : UNASKED_LINE,
+      since: sinceWords(stamp, today),
+      onYou: false,
+      who: 'manager',
       actions: cardAnswers(card, viewer),
       open: { kind: 'card', id: card.id },
       stamp,

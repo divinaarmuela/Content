@@ -29,6 +29,7 @@ import { usePlayable } from '../social/usePlayable'
 import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
+import EditorCardTools from './EditorCardTools'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -165,7 +166,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     fmt: (iso: string) => formatInZone(iso, zone, 'full') ?? iso,
   }), [activity, team, fileJobs, item, zone])
 
-  const viewer = me ? { id: me.id, role: me.role } : null
+  const viewer = me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer ?? { id: '', role: 'scheduler' }, onClose)
   const card = item as unknown as BoardViewCard | null
@@ -598,6 +599,19 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         <input ref={addInput} type="file" multiple accept="image/*,video/*" className="hidden"
           onChange={e => { void onAddPicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
       </div>
+
+      {/* ── the editor's own tools: which shoot, acknowledge, a deadline at
+          risk, a file from Google Drive, the source files (11 Sep 2026) ── */}
+      {!adhoc && viewer && (
+        <EditorCardTools
+          item={item as unknown as { id: string; client_id: string; owner_id: string | null; batch_id: string | null; group_id?: string | null; link_url?: string | null; status: string }}
+          viewer={viewer}
+          activity={activity}
+          frozen={frozenCard}
+          working={working !== null}
+          onFilesFromDrive={files => void writeVersion([...slides, ...files], `Added ${files.length} from Drive`)}
+        />
+      )}
 
       {/* ── the brand: colours, fonts, voice, logo files — for the editor and
           the scheduler as much as the manager (the owner, 9 Sep 2026: "make

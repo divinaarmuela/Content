@@ -13,6 +13,8 @@ const JARGON = /internal|revision|draft_|_review|scheduling|graphic|status|asset
 describe('the five columns, in the client’s words', () => {
   it('are five, and cover every status exactly once', () => {
     expect(PORTAL_COLUMNS).toHaveLength(5)
+    // the quality check is the agency's business: to the client it is a last look, like the manager's check
+    expect(PORTAL_COLUMNS.find(c => c.key === 'checking')?.statuses).toContain('quality_check')
     const seen = PORTAL_COLUMNS.flatMap(c => c.statuses)
     expect([...seen].sort()).toEqual([...ALL_STATUSES].sort())
     expect(new Set(seen).size).toBe(seen.length)
@@ -21,7 +23,7 @@ describe('the five columns, in the client’s words', () => {
   it('carry the same statuses as the team’s five columns', () => {
     const by = Object.fromEntries(PORTAL_COLUMNS.map(c => [c.key, c.statuses]))
     expect(by.making).toEqual(['draft_uploaded'])
-    expect(by.checking).toEqual(['internal_review', 'revision_required', 'revision_complete'])
+    expect(by.checking).toEqual(['internal_review', 'revision_required', 'revision_complete', 'quality_check'])
     expect(by.your_review).toEqual(['client_review', 'client_changes_requested'])
     expect(by.approved).toEqual(['approved_for_scheduling'])
     expect(by.posted).toEqual(['scheduled', 'published'])

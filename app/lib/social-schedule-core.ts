@@ -98,6 +98,7 @@ const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
   internal_review: 'Still being made',
   revision_required: 'Changes in progress',
   revision_complete: 'Changes in progress',
+  quality_check: 'Waiting for the quality check',
   client_review: WITH_THE_CLIENT_NOW,
   client_changes_requested: 'Changes in progress',
   published: 'Already posted',
@@ -118,7 +119,7 @@ const NOT_ELIGIBLE: Partial<Record<ItemStatus, string>> = {
  * press, and the question that goes with it
  * (`APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES`).
  */
-export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review']
+export const APPROVE_WITHOUT_CLIENT_STATUSES: ItemStatus[] = ['internal_review', 'quality_check']
 
 /**
  * …and the statuses the DELIBERATE two-press "Approve without client" still

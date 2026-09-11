@@ -88,7 +88,7 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   if (!item || kind?.slug === 'shoot_brief' || isInternalKind(kind)) return null
 
   const status = item.status as ItemStatus
-  const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
+  const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check'].includes(status)
   const [version, comments, amName, lastMove] = await Promise.all([
     clientFacing
       ? table<AssetVersion>('asset_versions')

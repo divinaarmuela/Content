@@ -110,7 +110,7 @@ describe('the person picker', () => {
   it('groups by what people do, editors and schedulers first', () => {
     const groups = handToGroups(TEAM)
     expect(groups.map(g => g.role)).toEqual(['editor', 'scheduler', 'account_manager'])
-    expect(groups.map(g => g.label)).toEqual(['Editor', 'Scheduler', 'Account manager'])
+    expect(groups.map(g => g.label)).toEqual(['Editor or designer', 'Scheduler', 'Account manager'])
   })
 
   it('a SCHEDULER is an ordinary choice — this is how work reaches their page', () => {

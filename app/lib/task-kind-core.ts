@@ -11,6 +11,7 @@
 import type { Role } from './identity-core'
 import {
   checkTransitionAs, offeredTransitionsFrom, STATUS_MEANING, STATUS_TURN, TRANSITIONS,
+  type Hat,
   type ItemStatus, type TransitionCheck,
 } from './workflow-core'
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
@@ -30,6 +31,7 @@ export const TASK_KIND_LABELS: Record<ItemStatus, string> = {
   internal_review: 'Ready for checking',
   revision_required: 'Being changed',
   revision_complete: 'Changes made — check again',
+  quality_check: 'Being checked',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
   approved_for_scheduling: 'Done',
@@ -46,7 +48,7 @@ export const TASK_STATUS_MEANING: Record<ItemStatus, string> = {
 }
 
 /** Nobody's turn once it is done — a task never hands over to a scheduler. */
-export const TASK_STATUS_TURN: Record<ItemStatus, Role | null> = {
+export const TASK_STATUS_TURN: Record<ItemStatus, Hat | null> = {
   ...STATUS_TURN,
   approved_for_scheduling: null,
   scheduled: null,
@@ -72,6 +74,13 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
   'draft_uploaded>internal_review': { label: 'Submit for review', roles: ['editor', 'account_manager'] },
   'internal_review>approved_for_scheduling': { label: 'Approve — done', roles: ['account_manager'] },
   'revision_complete>approved_for_scheduling': { label: 'Approve — done', roles: ['account_manager'] },
+  // a task is research, a deck, a strategy note: the quality check is for
+  // content that goes out. The manager sends it to the client themselves,
+  // and the gate is simply not on a task's road.
+  'internal_review>client_review': { label: 'Send to client', roles: ['account_manager'] },
+  'revision_complete>client_review': { label: 'Looks good — send to client', roles: ['account_manager'] },
+  'internal_review>quality_check': { blocked: true },
+  'revision_complete>quality_check': { blocked: true },
   // the client's own yes, recorded — not the manager approving it themselves
   'client_review>approved_for_scheduling': { label: 'Client approved — mark done', roles: ['client', 'account_manager'] },
   // a task has nothing to schedule or publish — Done is the end, for everyone
@@ -80,7 +89,7 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
 }
 
 export function checkTaskTransitionAs(
-  roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus, to: ItemStatus,
   /** the app's own move — see `checkTransitionAs`. An internal task has the
    *  same `auto` edges an asset does (a new draft saved while the piece is
    *  with the client pulls it back), and this wrapper has to be able to say
@@ -92,7 +101,9 @@ export function checkTaskTransitionAs(
   const override = TASK_TRANSITION_OVERRIDES[`${from}>${to}`]
   if (!override) return checkTransitionAs(roles, from, to, opts)
   if ('blocked' in override) {
-    return { ok: false, reason: 'A task ends when it is approved — there is nothing to schedule or publish' }
+    return { ok: false, reason: to === 'quality_check'
+      ? 'A task has no quality check — the manager sends it on themselves'
+      : 'A task ends when it is approved — there is nothing to schedule or publish' }
   }
   if (!roles.includes('super_admin') && !override.roles.some(r => roles.includes(r))) {
     return { ok: false, reason: `${roles.join('/') || 'nobody'} may not perform "${override.label}"` }
@@ -103,7 +114,7 @@ export function checkTaskTransitionAs(
 }
 
 export function availableTaskTransitionsAs(
-  roles: readonly Role[], from: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
   return offeredTransitionsFrom(from)
     .map(to => {

@@ -134,7 +134,7 @@ const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 
 /** The statuses that mean the work is sitting with someone for approval —
  *  the rail's footer count. */
-const WAITING_STATUSES = ['client_review', 'internal_review']
+const WAITING_STATUSES = ['client_review', 'internal_review', 'quality_check']
 
 export type ScheduleData = {
   /** the clients this person may pick between, by name */

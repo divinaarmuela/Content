@@ -1,8 +1,10 @@
 /**
- * THE FIVE COLUMNS — defined once, drawn everywhere.
+ * THE SIX COLUMNS — defined once, drawn everywhere.
  *
- * Nine statuses is how the state machine thinks; five columns is how a
- * person sees the board. Production, Editor, Scheduler and the client
+ * Ten statuses is how the state machine thinks; six columns is how a
+ * person sees the board. The sixth, Quality check, arrived with the Team's
+ * Playbook (11 Sep 2026): every piece passes a quality reviewer between the
+ * account manager's check and the client. Production, Editor, Scheduler and the client
  * portal all read this file for what a column is called, what it means and
  * which statuses sit under it — so the same card is in the same column on
  * every screen, and nobody ever re-derives the mapping in a page.
@@ -19,8 +21,9 @@ import {
   type ItemStatus,
 } from './workflow-core'
 import type { Role } from './identity-core'
+import type { Hat } from './workflow-core'
 
-export type BoardColumnKey = 'draft' | 'internal_check' | 'with_client' | 'ready_to_post' | 'posted'
+export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'posted'
 
 export type BoardColumn = {
   key: BoardColumnKey
@@ -45,6 +48,12 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
     label: 'Internal check',
     meaning: 'An account manager is checking it, or changes are being made.',
     statuses: ['internal_review', 'revision_required', 'revision_complete'],
+  },
+  {
+    key: 'quality_check',
+    label: 'Quality check',
+    meaning: 'The quality reviewer is checking it before it goes to the client or a scheduler.',
+    statuses: ['quality_check'],
   },
   {
     key: 'with_client',
@@ -92,7 +101,7 @@ export function statusesIn(column: BoardColumnKey): readonly ItemStatus[] {
 /**
  * Which columns a ROLE is shown.
  *
- * Every team role sees all five — the owner's rule is "all pages should have
+ * Every team role sees all six — the owner's rule is "all pages should have
  * the columns", so an editor watches their card go on to the client and out
  * the door, and a scheduler sees what is coming before it is ready. How a
  * PAGE arranges them — the stages that person works given room, the rest
@@ -145,7 +154,7 @@ export type MoveDecision =
  * as the buttons, never a copy of them — so a drag can do nothing a button
  * could not. Refused moves carry the machine's own plain sentence.
  */
-export function canMoveTo(card: BoardCard, column: BoardColumnKey, hats: readonly Role[]): MoveDecision {
+export function canMoveTo(card: BoardCard, column: BoardColumnKey, hats: readonly Hat[]): MoveDecision {
   const target = COLUMN_BY_KEY[column]
   const from = card.status
   if (COLUMN_OF_STATUS[from] === column) {
@@ -169,7 +178,7 @@ export function canMoveTo(card: BoardCard, column: BoardColumnKey, hats: readonl
 
 /** Every column a card may be dragged to by these hats, with the status it
  *  would land on — what a board highlights while a card is being dragged. */
-export function reachableColumns(card: BoardCard, hats: readonly Role[]): { column: BoardColumnKey; to: ItemStatus; label: string }[] {
+export function reachableColumns(card: BoardCard, hats: readonly Hat[]): { column: BoardColumnKey; to: ItemStatus; label: string }[] {
   const out: { column: BoardColumnKey; to: ItemStatus; label: string }[] = []
   for (const c of BOARD_COLUMNS) {
     const d = canMoveTo(card, c.key, hats)

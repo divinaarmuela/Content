@@ -441,7 +441,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     const status = i.status as ItemStatus
     const latest = latestByItem.get(i.id)
     // clients only get preview media once the item has reached client review
-    const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'].includes(status)
+    const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check'].includes(status)
     const a = status === 'published' ? analyticsByItem.get(i.id) ?? null : null
     // the whole carousel, so the card can show it is one — three thumbnails
     // and a count is enough; the rest is what opening it is for
@@ -791,7 +791,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // approve it, which is the page contradicting itself.
     plans_awaiting: shoots.filter(s => s.plan_state === 'awaiting_you').length,
     changes_requested: bucket(['client_changes_requested']),
-    in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete']),
+    in_production: bucket(['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check']),
     approved: bucket(['approved_for_scheduling']),
     scheduled: bucket(['scheduled']),
     published,

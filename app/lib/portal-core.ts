@@ -38,7 +38,7 @@ export const PORTAL_COLUMNS: PortalColumn[] = [
   { key: 'making', title: 'Being made', hint: 'The team is on it.', statuses: ['draft_uploaded'] },
   {
     key: 'checking', title: 'Being checked', hint: 'A last look before it comes to you.',
-    statuses: ['internal_review', 'revision_required', 'revision_complete'],
+    statuses: ['internal_review', 'revision_required', 'revision_complete', 'quality_check'],
   },
   {
     key: 'your_review', title: 'Your review', hint: 'Approve it, or ask for a change.',
@@ -122,6 +122,7 @@ export function cardLine(
     case 'internal_review':
     case 'revision_required':
     case 'revision_complete':
+    case 'quality_check':
       return 'Getting a last check before it comes to you.'
     case 'client_review':
       return 'Ready for you — open it, then approve or ask for a change.'

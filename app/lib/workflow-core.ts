@@ -11,17 +11,33 @@ import { askedIdsOf, type AskedItem } from './asked-core'
 
 export const ITEM_STATUSES = [
   'draft_uploaded', 'internal_review', 'revision_required', 'revision_complete',
+  // THE QUALITY CHECK (the Team's Playbook, and Abby's rule of 11 Sep 2026):
+  // every graphic, story, reel and caption passes a quality reviewer (Joy)
+  // after the account manager's check and before the client or a scheduler
+  // ever sees it. AM / designer / editor → Joy → scheduler.
+  'quality_check',
   'client_review', 'client_changes_requested', 'approved_for_scheduling',
   'scheduled', 'published',
 ] as const
 export type ItemStatus = (typeof ITEM_STATUSES)[number]
+
+/**
+ * A HAT is a role, or the one flag that is not a role: the QUALITY REVIEWER.
+ *
+ * Joy keeps whatever role she has; `team_users.quality_reviewer` says she
+ * may pass work out of the quality check, and a super admin may always
+ * stand in. It is a hat and not a role because a role decides pages and
+ * permissions everywhere; this decides one gate.
+ */
+export type Hat = Role | 'quality_reviewer'
+export const QUALITY_HAT: Hat = 'quality_reviewer'
 
 /** Extra evidence a transition needs before it is legal. */
 export type TransitionRequirement = 'reviewable_asset' | 'schedule_entry' | 'live_url'
 
 type TransitionRule = {
   /** who may perform it (super_admin always may, checked separately) */
-  roles: Role[]
+  roles: Hat[]
   requires?: TransitionRequirement
   /** human label for buttons/logs */
   label: string
@@ -50,16 +66,31 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     // one name for one action, on all three overlays: the button that sends
     // work back for changes is "Ask for changes", never the assignee's name
     revision_required: { roles: ['account_manager'], label: 'Ask for changes' },
-    client_review: { roles: ['account_manager'], label: 'Send to client' },
-    approved_for_scheduling: { roles: ['account_manager'], label: 'Approve without client' },
+    // the account manager's check done, the piece goes to the quality
+    // reviewer — never straight to the client or a scheduler
+    quality_check: { roles: ['account_manager'], label: 'Send for quality check' },
+    // …unless the person checking IS the quality reviewer, whose check is
+    // the quality check: the two edges below stay for that one hat (and for
+    // shoot plans and internal tasks, which wear their own words on them and
+    // have no quality gate)
+    client_review: { roles: ['quality_reviewer'], label: 'Send to client' },
+    approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Approve without client' },
   },
   revision_required: {
     revision_complete: { roles: ['editor'], requires: 'reviewable_asset', label: 'Revisions done' },
   },
   revision_complete: {
-    client_review: { roles: ['account_manager'], label: 'Looks good — send to client' },
+    quality_check: { roles: ['account_manager'], label: 'Looks good — send for quality check' },
     revision_required: { roles: ['account_manager'], label: 'Ask for more changes' },
-    approved_for_scheduling: { roles: ['account_manager'], label: 'Approve without client' },
+    client_review: { roles: ['quality_reviewer'], label: 'Looks good — send to client' },
+    approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Approve without client' },
+  },
+  quality_check: {
+    // the gate itself: only the quality reviewer (or a super admin standing
+    // in) passes work out of it; a manager may still pull it back for changes
+    client_review: { roles: ['quality_reviewer'], label: 'Passed — send to client' },
+    approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Passed — approve without client' },
+    revision_required: { roles: ['quality_reviewer', 'account_manager'], label: 'Ask for changes' },
   },
   client_review: {
     // A NEW VERSION LANDED WHILE THE CLIENT WAS LOOKING AT THE OLD ONE.
@@ -124,6 +155,9 @@ export const CLIENT_LABELS: Record<ItemStatus, string> = {
   internal_review: 'In production',
   revision_required: 'In production',
   revision_complete: 'In production',
+  // the quality check is how the agency works, not something the client is
+  // asked to wait on by name
+  quality_check: 'In production',
   client_review: 'Needs your review',
   client_changes_requested: 'Changes in progress',
   approved_for_scheduling: 'Approved',
@@ -151,6 +185,7 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   internal_review: 'Ready for checking',
   revision_required: 'Being changed',
   revision_complete: 'Changes made — check again',
+  quality_check: 'Quality check',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
   // NOT "Approved": beside "Signed off. Needs a posting time." that read as
@@ -167,6 +202,7 @@ export const STATUS_MEANING: Record<ItemStatus, string> = {
   internal_review: 'Waiting for an account manager to check it.',
   revision_required: 'Changes were asked for; the editor is making them.',
   revision_complete: 'The changes are in; an account manager needs to look again.',
+  quality_check: 'Waiting for the quality reviewer to check it before it goes to the client or a scheduler.',
   client_review: 'Waiting for the client to approve or ask for changes.',
   client_changes_requested: 'An account manager decides: send it for revision, or fix it and resend.',
   approved_for_scheduling: 'Signed off. Needs a posting time.',
@@ -175,11 +211,12 @@ export const STATUS_MEANING: Record<ItemStatus, string> = {
 }
 
 /** Whose move it is at each stage — the hat, not the person. */
-export const STATUS_TURN: Record<ItemStatus, Role | null> = {
+export const STATUS_TURN: Record<ItemStatus, Hat | null> = {
   draft_uploaded: 'editor',
   internal_review: 'account_manager',
   revision_required: 'editor',
   revision_complete: 'account_manager',
+  quality_check: 'quality_reviewer',
   client_review: 'client',
   client_changes_requested: 'account_manager',
   approved_for_scheduling: 'scheduler',
@@ -203,12 +240,22 @@ export function schedulerIdsOf(item: { scheduler_ids?: unknown }): string[] {
  * an item does let you act on it, whatever your title. Account manager is the
  * exception — reviewing IS the job, and it is not per-item.
  */
-export function actingRoles(viewer: { id: string; role: Role }, item: ActingItem): Role[] {
+export type ActingViewer = {
+  id: string
+  role: Role
+  /** `team_users.quality_reviewer`: may pass work out of the quality check */
+  quality_reviewer?: boolean | null
+}
+
+export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   if (viewer.role === 'client') return ['client']
   if (viewer.role === 'super_admin') return ['super_admin']
 
-  const roles: Role[] = []
+  const roles: Hat[] = []
   if (viewer.role === 'account_manager') roles.push('account_manager')
+  // the quality hat is a flag on the person, worn on every item: checking is
+  // the job, the way reviewing is an account manager's
+  if (viewer.quality_reviewer === true) roles.push(QUALITY_HAT)
 
   const owner = item.owner_id
   // the open pool for an unowned item is editors and AMs; a scheduler picking
@@ -221,7 +268,7 @@ export function actingRoles(viewer: { id: string; role: Role }, item: ActingItem
   // …and a general user books in what nobody was handed, like a scheduler
   if (ids.includes(viewer.id) || (ids.length === 0 && (viewer.role === 'scheduler' || viewer.role === 'general'))) roles.push('scheduler')
 
-  const order: Role[] = ['account_manager', 'editor', 'scheduler']
+  const order: Hat[] = ['account_manager', QUALITY_HAT, 'editor', 'scheduler']
   return order.filter(r => roles.includes(r))
 }
 
@@ -233,7 +280,7 @@ export type TransitionCheck =
  *  perform any defined transition (doc: admin can override statuses) but never
  *  an undefined one. */
 export function checkTransitionAs(
-  roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus, to: ItemStatus,
   opts?: {
     /** this IS the app's own move, not a person pressing something. Without
      *  it an `auto` edge is refused outright — `auto` used to mean only "do
@@ -257,11 +304,11 @@ export function checkTransitionAs(
 
 /** The label a rule wears for these hats. The client's own words win when the
  *  viewer IS the client; otherwise the first hat with wording of its own. */
-function labelFor(rule: TransitionRule, roles: readonly Role[]): string {
+function labelFor(rule: TransitionRule, roles: readonly Hat[]): string {
   if (!rule.labelFor) return rule.label
   if (roles.includes('client') && rule.labelFor.client) return rule.labelFor.client
   for (const r of roles) {
-    const l = rule.labelFor[r]
+    const l = r === QUALITY_HAT ? undefined : rule.labelFor[r as Role]
     if (l) return l
   }
   // a super admin acting on the team's side of a client decision is doing the
@@ -275,7 +322,7 @@ function labelFor(rule: TransitionRule, roles: readonly Role[]): string {
 
 /** Transitions available to these hats from a given status (for buttons). */
 export function availableTransitionsAs(
-  roles: readonly Role[], from: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus,
 ): { to: ItemStatus; label: string; requires?: TransitionRequirement }[] {
   const outs = TRANSITIONS[from] ?? {}
   return (Object.entries(outs) as [ItemStatus, TransitionRule][])
@@ -308,9 +355,10 @@ export function availableTransitions(role: Role, from: ItemStatus): { to: ItemSt
 /** The one move that IS the point at each stage — everything else is a detour. */
 export const PRIMARY_ACTION: Partial<Record<ItemStatus, ItemStatus>> = {
   draft_uploaded: 'internal_review',
-  internal_review: 'client_review',
+  internal_review: 'quality_check',
   revision_required: 'revision_complete',
-  revision_complete: 'client_review',
+  revision_complete: 'quality_check',
+  quality_check: 'client_review',
   client_review: 'approved_for_scheduling',
   client_changes_requested: 'revision_required',
   approved_for_scheduling: 'scheduled',
@@ -327,7 +375,7 @@ export type Presented = { to: ItemStatus; label: string }
  * they may take, none of them urged.
  */
 export function presentTransitions(
-  roles: readonly Role[],
+  roles: readonly Hat[],
   from: ItemStatus,
   transitions: Presented[],
   ctx: {
@@ -341,7 +389,7 @@ export function presentTransitions(
   /** whose turn each status is. A brief hands over to nobody at the end — its
    *  surfaces pass BRIEF_STATUS_TURN so the account manager who must book the
    *  shoot gets the button, instead of a scheduler who will never come. */
-  turns: Record<ItemStatus, Role | null> = STATUS_TURN,
+  turns: Record<ItemStatus, Hat | null> = STATUS_TURN,
 ): { primary: Presented | null; secondary: Presented[] } {
   // NOTE: the owner-reviewing-their-own-work case used to relabel this
   // "Send back to myself", which read as a note-to-self rather than the
@@ -355,7 +403,13 @@ export function presentTransitions(
     ? ctx.viewerHoldsTurn
     : roles.includes('super_admin') || (turn !== null && roles.includes(turn))
   const wanted = PRIMARY_ACTION[from]
-  const primary = holdsTurn && wanted ? visible.find(t => t.to === wanted) ?? null : null
+  // the quality reviewer's own check IS the quality check: from the
+  // manager's stages their obvious button goes where the gate would have
+  // sent it, one press instead of two
+  const skipsGate = wanted === 'quality_check' && (roles.includes(QUALITY_HAT) || roles.includes('super_admin'))
+  const primary = holdsTurn && wanted
+    ? (skipsGate ? visible.find(t => t.to === 'client_review') ?? visible.find(t => t.to === wanted) : visible.find(t => t.to === wanted)) ?? null
+    : null
 
   return { primary, secondary: visible.filter(t => t !== primary) }
 }
@@ -375,27 +429,50 @@ export function presentTransitions(
  * lets them do anything.
  */
 export function whoseTurn(
-  status: ItemStatus, item: ActingItem, viewer: { id: string; role: Role },
-  turns: Record<ItemStatus, Role | null> = STATUS_TURN,
-): { hat: Role | null; mine: boolean; unassigned: boolean } {
+  status: ItemStatus, item: ActingItem, viewer: ActingViewer,
+  turns: Record<ItemStatus, Hat | null> = STATUS_TURN,
+  opts?: {
+    /** this viewer is the ONLY manager (or the only quality reviewer) for
+     *  the client, so an unasked check is theirs by elimination */
+    sole?: boolean
+  },
+): { hat: Hat | null; mine: boolean; unassigned: boolean; may: boolean } {
   const hat = turns[status]
   // SOMEBODY WAS ASKED. Then it is their turn and nobody else's — including
   // the other managers on the client, who would otherwise all be told the
   // card is waiting on them. With nobody asked, the role rule below stands.
   const asked = askedIdsOf(item)
-  const mine = hat === null ? false
+  /** does this viewer WEAR the hat — could they act, whoever was asked */
+  const may = hat === null ? false
     : asked.length > 0 ? asked.includes(viewer.id)
     : viewer.role === 'super_admin'
-      ? hat === 'account_manager'
+      // a super admin stands in for the quality reviewer the way they stand
+      // in for the manager: the check is theirs wherever it lands
+      ? hat === 'account_manager' || hat === QUALITY_HAT
         || (hat === 'editor' && item.owner_id === viewer.id)
         || (hat === 'scheduler' && schedulerIdsOf(item).includes(viewer.id))
       : actingRoles(viewer, item).includes(hat)
-  const unassigned = hat === 'editor'
-    ? !item.owner_id
-    : hat === 'scheduler'
-      ? schedulerIdsOf(item).length === 0
-      : false
-  return { hat, mine, unassigned }
+  /**
+   * NOBODY ASKED IS NOBODY'S TURN (the owner, 11 Sep 2026: "the Your turn is
+   * confusing when it's not assigned"). A check with nobody named used to
+   * read "Your turn" to every manager on the client and every super admin
+   * at once. Now it reads as an empty seat — "Needs a check, nobody asked
+   * yet" — and is somebody's only when they were asked, own the card
+   * themselves, or are the only person who could check it (`sole`). The
+   * asset table only: a shoot plan's stages are the account manager's by
+   * design, and its owner is the manager holding it.
+   */
+  const reviewHat = hat === 'account_manager' || hat === QUALITY_HAT
+  const nobodyAsked = turns === STATUS_TURN && reviewHat && asked.length === 0
+    && !(hat === 'account_manager' && !!item.owner_id && item.owner_id === viewer.id)
+  const mine = nobodyAsked ? may && opts?.sole === true : may
+  const unassigned = nobodyAsked ? true
+    : hat === 'editor'
+      ? !item.owner_id
+      : hat === 'scheduler'
+        ? schedulerIdsOf(item).length === 0
+        : false
+  return { hat, mine, unassigned, may }
 }
 
 /**
@@ -437,7 +514,7 @@ export function clientArrivalLine(from: ItemStatus): string {
 /** `creator` is whoever raised the card (`assigned_by`). They hear about
  *  anything the CLIENT does to it, because they are the person who will be
  *  asked about it — owner's rule, 6 Sep 2026. */
-export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator'
+export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator' | 'quality_reviewers'
 export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatus}`, Audience[]>> = {
   // 'owner_editor' is the item's OWNER whatever their role (anyone can carry a
   // task) — every move an item makes reaches the person assigned to it, and
@@ -447,6 +524,15 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'internal_review>revision_required': ['owner_editor'],
   'revision_required>revision_complete': ['account_managers'],
   'revision_complete>revision_required': ['owner_editor'],
+  // into the quality check: the reviewers hear, and so does the person who
+  // made it — the card left their desk
+  'internal_review>quality_check': ['quality_reviewers', 'owner_editor'],
+  'revision_complete>quality_check': ['quality_reviewers', 'owner_editor'],
+  // out of it: the same three every route to the client tells, plus the
+  // schedulers it was handed to, who now know it is coming
+  'quality_check>client_review': ['client_users', 'account_managers', 'owner_editor', 'assigned_schedulers'],
+  'quality_check>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'quality_check>revision_required': ['owner_editor', 'account_managers'],
   'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
   'client_review>client_changes_requested': ['account_managers', 'creator'], // NEVER the editor directly

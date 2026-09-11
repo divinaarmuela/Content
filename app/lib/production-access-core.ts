@@ -19,7 +19,13 @@ import { visibleComments } from './comment-access-core'
 import type { Role } from './identity-core'
 
 /** The viewer, as much of them as the pure rules ever need. */
-export type ScopeViewer = { id: string; role: Role; client_id?: string | null }
+export type ScopeViewer = {
+  id: string
+  role: Role
+  client_id?: string | null
+  /** the quality reviewer sees every card in Quality check, whoever's client it is */
+  quality_reviewer?: boolean | null
+}
 
 type VersionRow = {
   id: string; version_number: number; created_at: string

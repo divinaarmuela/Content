@@ -39,6 +39,7 @@ const ARRIVED: Record<ActivityKind, Partial<Record<ItemStatus, string>>> = {
     internal_review: 'Submitted for review',
     revision_required: 'Changes requested',
     revision_complete: 'Revisions done',
+    quality_check: 'Sent for quality check',
     client_review: 'Sent to the client',
     client_changes_requested: 'Client changes logged',
     approved_for_scheduling: 'Approved',

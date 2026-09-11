@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CHECK_LINES, CHECK_LINE_FALLBACK, CHECK_STATUSES, CLIENT_LINE,
   askedLine, countOnYou, othersLabel, postHref, sinceWords, splitWaiting,
-  waitingRow, waitingRows, waitingTitle,
+  waitingRow, waitingRows, waitingTitle, UNASKED_LINE, UNASKED_QUALITY_LINE,
 } from '../app/lib/waiting-core'
 import {
   POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE,
@@ -106,9 +106,17 @@ describe('a post sent for its final sign-off', () => {
 })
 
 describe("a piece waiting on the team's own check", () => {
-  it('is on the manager, worded by the stage it is stuck at', () => {
+  /** the manager, asked by name — the row is theirs */
+  const askedManager = (status: (typeof CHECK_STATUSES)[number]) =>
+    card({ status, asked_ids: ['am'], asked_at: '2026-09-07T00:00:00.000Z' })
+  /** who checks at each stage: the quality reviewer in the gate, a manager elsewhere */
+  const joy: BoardViewer = { id: 'joy', role: 'editor', quality_reviewer: true }
+  const checker = (status: (typeof CHECK_STATUSES)[number]) => (status === 'quality_check' ? joy : manager)
+
+  it('is on the person asked, worded by the stage it is stuck at', () => {
     for (const status of CHECK_STATUSES) {
-      const row = waitingRow(card({ status }), manager, TODAY)!
+      const who = checker(status)
+      const row = waitingRow(card({ status, asked_ids: [who.id], asked_at: '2026-09-07T00:00:00.000Z' }), who, TODAY)!
       expect(row.kind).toBe('check')
       expect(row.onYou).toBe(true)
       expect(row.line).toBe(CHECK_LINES[status] ?? CHECK_LINE_FALLBACK)
@@ -116,18 +124,34 @@ describe("a piece waiting on the team's own check", () => {
     }
   })
 
+  it('with nobody asked it is the empty seat: shown to whoever could take it, with the answers, never as theirs', () => {
+    // the owner, 11 Sep 2026: "the Your turn is confusing when it's not assigned"
+    const row = waitingRow(card({ status: 'internal_review' }), manager, TODAY)!
+    expect(row.kind).toBe('check')
+    expect(row.onYou).toBe(false)
+    expect(row.who).toBe('manager')
+    expect(row.line).toBe(UNASKED_LINE)
+    expect(row.actions.length).toBeGreaterThan(0)
+    const gate = waitingRow(card({ status: 'quality_check' }), joy, TODAY)!
+    expect(gate.onYou).toBe(false)
+    expect(gate.line).toBe(UNASKED_QUALITY_LINE)
+    // a manager without the quality hat is not shown the gate's seat at all
+    expect(waitingRow(card({ status: 'quality_check' }), manager, TODAY)).toBeNull()
+  })
+
   it('offers only moves the machine already allows', () => {
     for (const status of CHECK_STATUSES) {
-      const c = card({ status })
-      const row = waitingRow(c, manager, TODAY)!
-      const legal = availableTransitionsAs(actingRoles(manager, c), status).map(t => t.to)
+      const who = checker(status)
+      const c = status === 'quality_check' ? card({ status, asked_ids: ['joy'], asked_at: '2026-09-07T00:00:00.000Z' }) : askedManager(status)
+      const row = waitingRow(c, who, TODAY)!
+      const legal = availableTransitionsAs(actingRoles(who, c), status).map(t => t.to)
       for (const action of row.actions) {
         // a send-back is the machine's revision_required edge, asked for with
         // words; everything else is a plain transition
         expect(legal).toContain(action.to)
       }
       // …and it is the same set the board's own card would draw
-      const board = cardActions(c, manager)
+      const board = cardActions(c, who)
       expect(row.actions[0]).toEqual(board.primary)
     }
   })
@@ -216,12 +240,13 @@ describe('the list itself', () => {
   })
 
   it('puts this person\'s own first, longest wait at the top of each half', () => {
-    expect(rows().map(r => r.id)).toEqual(['d', 'b', 'a'])
-    expect(countOnYou(rows())).toBe(2)
+    // b is a check nobody was asked for: shown, but with the others, not as yours
+    expect(rows().map(r => r.id)).toEqual(['d', 'a', 'b'])
+    expect(countOnYou(rows())).toBe(1)
   })
 
   it('counts itself in its heading', () => {
-    expect(waitingTitle(rows())).toBe('2 waiting on you · 1 with someone else')
+    expect(waitingTitle(rows())).toBe('1 waiting on you · 2 with someone else')
   })
 
   it('says something honest when nothing is on this person', () => {
@@ -232,12 +257,14 @@ describe('the list itself', () => {
 
   it('splits into what can be answered and what is out with somebody else', () => {
     const { yours, others } = splitWaiting(rows())
-    expect(yours.map(r => r.id)).toEqual(['d', 'b'])
-    expect(others.map(r => r.id)).toEqual(['a'])
+    expect(yours.map(r => r.id)).toEqual(['d'])
+    expect(others.map(r => r.id)).toEqual(['a', 'b'])
     // a card yours to answer carries its answers; a POST yours to answer
     // carries none here — it is answered on Schedule — but is still yours
     expect(yours.every(r => r.actions.length > 0 || r.kind === 'post')).toBe(true)
-    expect(others.every(r => r.actions.length === 0)).toBe(true)
+    // the empty seat still carries its answers — anyone who could take it can
+    expect(others.find(r => r.id === 'b')!.actions.length).toBeGreaterThan(0)
+    expect(others.find(r => r.id === 'a')!.actions).toEqual([])
   })
 
   it('names the folded half by who actually holds it', () => {

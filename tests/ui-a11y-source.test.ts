@@ -40,9 +40,13 @@ const FILES = [
   'app/dashboard/board/BoardCard.tsx',
   'app/dashboard/board/PostApprovalDetail.tsx',
   'app/dashboard/board/BoardDialogs.tsx',
+  'app/dashboard/board/EditorCardTools.tsx',
   'app/dashboard/scheduler/page.tsx',
   'app/dashboard/scheduler/NewPostButton.tsx',
   'app/dashboard/scheduler/SendForApprovalDialog.tsx',
+  'app/dashboard/production/ShootStageBoard.tsx',
+  'app/dashboard/production/shoots/[id]/ShootSop.tsx',
+  'app/dashboard/production/LaneBoard.tsx',
 ]
 
 /** the file, with block and line comments taken out */

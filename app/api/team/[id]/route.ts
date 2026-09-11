@@ -38,6 +38,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (body.workday_start) patch.workday_start = body.workday_start
       if (body.workday_end) patch.workday_end = body.workday_end
       if (typeof body.active_status === 'boolean') patch.active_status = body.active_status
+      // the playbook's two hats — flags on a person, never a role
+      if (typeof body.quality_reviewer === 'boolean') patch.quality_reviewer = body.quality_reviewer
+      if (typeof body.ops_contact === 'boolean') patch.ops_contact = body.ops_contact
       if ('name' in body) patch.name = String(body.name ?? '')
 
       const data = await table('team_users').update(id, patch)

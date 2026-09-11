@@ -1,0 +1,268 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { seedDb } from './helpers/fake-db'
+import type { Row } from '@/lib/db-types'
+import { roleSatisfies, type Role } from '../app/lib/identity-core'
+import { planCardId } from '../app/lib/deliverable-group-core'
+
+/**
+ * THE SHOOT BRIEF SOP, END TO END THROUGH THE ROUTES.
+ *
+ * An AM writes the nine parts and shares the brief; the crew and the editor
+ * acknowledge it; the AM ticks alignment and the client, and signs it off
+ * as go; after the day the footage is handed over and the editor gets the
+ * cards. Every refusal is in plain words; every write is idempotent.
+ */
+
+const emails: Record<string, unknown>[] = []
+const AM = 'a1a1a1a1-0000-4000-8000-000000000001'
+const ED = 'e1e1e1e1-0000-4000-8000-000000000001'
+const VG = 'c1c1c1c1-0000-4000-8000-000000000001'
+const OPS = 'f1f1f1f1-0000-4000-8000-000000000001'
+const OUT = 'd1d1d1d1-0000-4000-8000-000000000001'
+
+let who: { id: string; name: string; role: Role; client_id: string | null } =
+  { id: AM, name: 'Priya Patel', role: 'account_manager', client_id: null }
+const as = (id: string, role: Role, name = 'Someone') => { who = { id, name, role, client_id: null } }
+
+vi.mock('../app/lib/mailer', () => ({
+  notify: vi.fn(async (m: Record<string, unknown>) => { emails.push(m); return 'sent' }),
+  renderEmail: (h: string, b: string, _cta: string, href: string) => `${h}${b}${href}`,
+  escapeHtml: (s: string) => s,
+}))
+vi.mock('../app/lib/workflow', () => ({ logActivity: vi.fn(), performTransition: vi.fn(), notifyBatchTransition: vi.fn() }))
+vi.mock('../app/lib/production-live', () => ({ announceItemChange: vi.fn(), announceBatchChange: vi.fn() }))
+vi.mock('../app/lib/gdrive-hooks', () => ({ onShootDateChanged: vi.fn(), onBatchCreated: vi.fn() }))
+vi.mock('../app/lib/authz', () => ({
+  roleSatisfies,
+  requireRole: async (required: Role) => {
+    if (!roleSatisfies(who.role, required)) {
+      const e = new Error('Insufficient permissions') as Error & { status: number }
+      e.status = 403
+      throw e
+    }
+    return { ...who, email: `${who.id.slice(0, 4)}@x.invalid`, active_status: true, clerk_user_id: null }
+  },
+  AuthzError: class AuthzError extends Error {
+    status: number
+    constructor(message: string, status: number) { super(message); this.status = status }
+  },
+  authzErrorResponse: (e: unknown) => ({
+    error: e instanceof Error ? e.message : 'error',
+    status: (e as { status?: number })?.status ?? 500,
+  }),
+}))
+
+const detail = await import('../app/api/production/batches/[id]/route')
+const stage = await import('../app/api/production/batches/[id]/stage/route')
+const ack = await import('../app/api/production/batches/[id]/acknowledge/route')
+const { runBriefLateNudge } = await import('../app/lib/shoot-sop-notify')
+
+const dayShift = (n: number) => new Date(Date.now() + n * 86_400_000)
+  .toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
+
+const brief = (over: Record<string, unknown> = {}) => ({
+  id: 'b-1', client_id: 'c-1', title: 'Golf Day', status: 'brief', owner_id: AM,
+  shoot_date: dayShift(10), call_time: '7:30 am', location: 'Royal Melbourne',
+  shot_list: [{ id: 's1', text: 'Drone over the 1st', done: false }],
+  planned_deliverables: [{ id: 'l1', title: 'Hero reel' }, { id: 'l2', title: 'Photo set' }],
+  objective: 'Spring membership drive', script: 'Three points', talent: 'Sam', props_wardrobe: 'Polos',
+  client_availability: 'GM 8–10', editor_priorities: 'Hero reel first', edit_deadline: dayShift(14),
+  editor_id: ED, crew_ids: [VG], acknowledgements: [], canvas_cards: [], reference_media: [],
+  created_at: '2026-09-01T00:00:00.000Z',
+  ...over,
+})
+
+let fake: ReturnType<typeof seedDb>
+const seed = (over: Record<string, unknown> = {}) => seedDb({
+  clients: [{ id: 'c-1', name: 'ZZ TEST', timezone: 'Australia/Melbourne' }] as unknown as Row[],
+  batches: [brief(over)] as unknown as Row[],
+  team_users: [
+    { id: AM, name: 'Priya Patel', email: 'am@zz.invalid', role: 'account_manager', active_status: true },
+    { id: ED, name: 'Sam Editor', email: 'sam@zz.invalid', role: 'editor', active_status: true },
+    { id: VG, name: 'Vik Camera', email: 'vik@zz.invalid', role: 'general', active_status: true },
+    { id: OPS, name: 'Abby Ops', email: 'abby@zz.invalid', role: 'super_admin', active_status: true, ops_contact: true },
+    { id: OUT, name: 'Kit Outsider', email: 'kit@zz.invalid', role: 'editor', active_status: true },
+  ] as unknown as Row[],
+  team_user_clients: [{ id: 'l1', team_user_id: AM, client_id: 'c-1' }] as unknown as Row[],
+  work_kinds: [], content_items: [], workflow_activity: [], batch_comments: [], item_comments: [],
+  shoot_proposals: [],
+})
+
+beforeEach(() => { emails.length = 0; as(AM, 'account_manager', 'Priya Patel'); fake = seed() })
+afterEach(() => fake.restore())
+
+const P = (id: string) => ({ params: Promise.resolve({ id }) })
+const json = async (r: Response | Promise<Response | undefined>) => { const res = (await r)!; return { status: res.status, body: await res.json() as any } }
+const move = (to: string, id = 'b-1') => json(stage.POST(new Request('https://x.test/stage', { method: 'POST', body: JSON.stringify({ to }) }), P(id)))
+const edit = (body: Record<string, unknown>, id = 'b-1') => json(detail.PATCH(new Request('https://x.test/b', { method: 'PATCH', body: JSON.stringify(body) }), P(id)))
+const open = (id = 'b-1') => json(detail.GET(new Request('https://x.test/b'), P(id)))
+const acknowledge = (id = 'b-1') => json(ack.POST(new Request('https://x.test/ack', { method: 'POST' }), P(id)))
+const batch = () => fake.rows('batches').find(b => b.id === 'b-1') as any
+const cards = () => fake.rows('content_items') as any[]
+
+describe('sharing the brief', () => {
+  it('refuses a half-written brief in the SOP’s words, and shares a complete one', async () => {
+    fake.restore(); fake = seed({ talent: null, script: '' })
+    const no = await move('shared')
+    expect(no.status).toBe(422)
+    expect(no.body.error).toMatch(/script or talking points, talent or presenter still to fill in/)
+    expect(batch().brief_shared_at).toBeUndefined()
+
+    await edit({ talent: 'Sam', script: 'Three points' })
+    const yes = await move('shared')
+    expect(yes.status).toBe(200)
+    expect(yes.body.stage).toBe('shared')
+    expect(batch().brief_shared_by).toBe(AM)
+    // everyone on the shoot is asked to read it — never the AM who wrote it
+    expect(emails.map(e => e.recipientEmail).sort()).toEqual(['sam@zz.invalid', 'vik@zz.invalid'])
+    expect(emails[0].subject).toBe('Read the plan: Golf Day')
+  })
+  it('a scheduler cannot move a shoot', async () => {
+    as(VG, 'scheduler')
+    const r = await move('shared')
+    expect(r.status).toBe(422)
+    expect(r.body.error).toMatch(/Only the team on the shoot/)
+  })
+})
+
+describe('acknowledging', () => {
+  it('one press by somebody on the shoot, idempotent; an outsider is refused', async () => {
+    as(VG, 'general', 'Vik Camera')
+    expect((await acknowledge()).status).toBe(200)
+    expect((await acknowledge()).status).toBe(200)
+    expect(batch().acknowledgements).toHaveLength(1)
+    expect(batch().acknowledgements[0].user_id).toBe(VG)
+    as(OUT, 'editor', 'Kit Outsider')
+    const r = await acknowledge()
+    expect(r.status).toBe(403)
+  })
+  it('the crew and the editor can OPEN the shoot, with who has read it; the team list is the manager’s', async () => {
+    as(VG, 'general', 'Vik Camera')
+    await acknowledge()
+    as(ED, 'editor', 'Sam Editor')
+    const r = await open()
+    expect(r.status).toBe(200)
+    expect(r.body.crew.map((c: any) => [c.name, !!c.acknowledged_at])).toEqual([['Vik Camera', true], ['Sam Editor', false]])
+    expect(r.body.editor_name).toBe('Sam Editor')
+    expect(r.body.team).toEqual([])
+    as(OUT, 'editor', 'Kit Outsider')
+    expect((await open()).status).toBe(403)
+    as(AM, 'account_manager')
+    expect((await open()).body.team.map((t: any) => t.name)).toContain('Sam Editor')
+  })
+  it('a manager can take an acknowledgement back', async () => {
+    as(ED, 'editor'); await acknowledge()
+    as(AM, 'account_manager')
+    const r = await json(ack.DELETE(new Request('https://x.test/ack', { method: 'DELETE', body: JSON.stringify({ user_id: ED }) }), P('b-1')))
+    expect(r.status).toBe(200)
+    // the database keeps no empty arrays — absent reads as nobody
+    expect(batch().acknowledgements ?? []).toEqual([])
+  })
+})
+
+describe('go', () => {
+  it('only an AM, and only once the brief is shared, the ticks are in and everyone has acknowledged', async () => {
+    as(ED, 'editor')
+    expect((await move('confirmed')).body.error).toMatch(/account manager/)
+    as(AM, 'account_manager')
+    expect((await move('confirmed')).body.error).toBe('Share the plan with the team first')
+    await move('shared')
+    expect((await move('confirmed')).body.error).toMatch(/Aligned with the strategist/)
+    await edit({ aligned: true, client_confirmed: true })
+    expect((await move('confirmed')).body.error).toMatch(/2 of 2 on the shoot have not acknowledged/)
+    as(VG, 'general'); await acknowledge()
+    as(ED, 'editor'); await acknowledge()
+    as(AM, 'account_manager')
+    const go = await move('confirmed')
+    expect(go.status).toBe(200)
+    expect(batch().go_by).toBe(AM)
+    // one press: the shoot is booked by go, its plan's lines are cards now
+    expect(batch().status).toBe('locked')
+    expect(batch().locked_by).toBe(AM)
+    expect(cards().map(c => c.title).sort()).toEqual(['Hero reel', 'Photo set'])
+    // the reminder follows — and it IS the reminder: call time and location
+    // to everyone on the shoot, not a stamp
+    emails.length = 0
+    expect((await move('reminder_sent')).status).toBe(200)
+    expect(batch().reminder_sent_at).toBeTruthy()
+    const reminders = emails.filter(e => e.eventType === 'shoot_reminder')
+    expect(reminders.map(e => e.recipientEmail).sort()).toEqual(['sam@zz.invalid', 'vik@zz.invalid'])
+    expect(String(reminders[0].bodyHtml)).toMatch(/Call time:<\/strong> 7:30 am/)
+    expect(String(reminders[0].bodyHtml)).toMatch(/Location:<\/strong> Royal Melbourne/)
+  })
+  it('the ticks and the people are the AM’s to set', async () => {
+    as(ED, 'editor')
+    expect((await edit({ aligned: true })).status).toBe(403)
+    expect((await edit({ crew_ids: [OUT] })).status).toBe(403)
+    as(AM, 'account_manager')
+    expect((await edit({ editor_id: VG })).body.error).toMatch(/one of the editors/)
+    expect((await edit({ crew_ids: [VG, OUT, 'nobody'] })).status).toBe(200)
+    expect(batch().crew_ids).toEqual([VG, OUT])
+  })
+})
+
+describe('the handover: Production → Editor', () => {
+  it('waits for the day, needs the editor, then makes the cards the editor’s — once', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x' })
+    expect((await move('footage_handed')).body.error).toBe('The shoot has not happened yet')
+
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1), editor_id: null })
+    expect((await move('footage_handed')).body.error).toMatch(/Name the editor/)
+
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1) })
+    as(VG, 'general', 'Vik Camera')
+    const r = await move('footage_handed')
+    expect(r.status).toBe(200)
+    expect(r.body.handed).toEqual({ total: 2 })
+    const made = cards()
+    expect(made).toHaveLength(2)
+    expect(made.map(c => [c.title, c.owner_id, c.due_date, c.brief, c.status, c.batch_id]).sort()).toEqual([
+      ['Hero reel', ED, dayShift(14), 'Hero reel first', 'draft_uploaded', 'b-1'],
+      ['Photo set', ED, dayShift(14), 'Hero reel first', 'draft_uploaded', 'b-1'],
+    ])
+    expect(made.map(c => c.id).sort()).toEqual([planCardId('b-1', 'l1'), planCardId('b-1', 'l2')].sort())
+    // the editor is told, once, with the count and the date
+    const told = emails.filter(e => e.eventType === 'shoot_footage_in')
+    expect(told).toHaveLength(1)
+    expect(told[0].recipientEmail).toBe('sam@zz.invalid')
+    expect(String(told[0].subject)).toMatch(/Footage is in: Golf Day — 2 cards yours, due/)
+
+    // dragging again: already there, and nothing is made twice
+    const again = await move('footage_handed')
+    expect(again.status).toBe(422)
+    expect(cards()).toHaveLength(2)
+  })
+  it('a card that already exists keeps its owner; only its empty fields are filled', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1) })
+    const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
+    ;(t.content_items ??= {})[planCardId('b-1', 'l1')] = {
+      id: planCardId('b-1', 'l1'), client_id: 'c-1', batch_id: 'b-1', title: 'Hero reel', status: 'draft_uploaded',
+      owner_id: OUT, due_date: null, brief: null, created_at: 'x', updated_at: 'x',
+    }
+    const r = await move('footage_handed')
+    expect(r.status).toBe(200)
+    const hero = cards().find(c => c.id === planCardId('b-1', 'l1'))
+    expect(hero.owner_id).toBe(OUT)
+    expect(hero.due_date).toBe(dayShift(14))
+    expect(hero.brief).toBe('Hero reel first')
+    // one card made for the other line, so the editor holds one
+    expect(r.body.handed).toEqual({ total: 1 })
+  })
+})
+
+describe('the 7-day rule', () => {
+  it('tells the AM and Ops once about a late brief, and nobody about a shared one', async () => {
+    fake.restore(); fake = seed({ shoot_date: dayShift(3) })
+    const first = await runBriefLateNudge()
+    expect(first).toEqual({ late: 1, told: 2 })
+    expect(emails.map(e => e.recipientEmail).sort()).toEqual(['abby@zz.invalid', 'am@zz.invalid'])
+    expect(String(emails[0].subject)).toMatch(/Plan is late — needed 7 days before the shoot: Golf Day/)
+    expect(batch().late_nudged_at).toBeTruthy()
+    emails.length = 0
+    expect(await runBriefLateNudge()).toEqual({ late: 0, told: 0 })
+    expect(emails).toHaveLength(0)
+
+    fake.restore(); fake = seed({ shoot_date: dayShift(3), brief_shared_at: 'x' })
+    expect(await runBriefLateNudge()).toEqual({ late: 0, told: 0 })
+  })
+})

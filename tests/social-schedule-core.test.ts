@@ -702,7 +702,8 @@ describe('Approve without client', () => {
    * this pair was split to close.
    */
   it('covers one more status than the ONE-PRESS path does', () => {
-    expect(APPROVE_WITHOUT_CLIENT_STATUSES).toEqual(['internal_review'])
+    // …and the quality check, which the reviewer's own press clears in one go
+    expect(APPROVE_WITHOUT_CLIENT_STATUSES).toEqual(['internal_review', 'quality_check'])
     expect(APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES)
       .toEqual(['internal_review', 'client_review'])
     expect(APPROVE_WITHOUT_CLIENT_STATUSES).not.toContain('client_review')

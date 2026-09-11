@@ -807,8 +807,31 @@ export const accountHealthDaily = inngest.createFunction(
   })
 )
 
+/**
+ * The Shoot Brief SOP's 7-day rule, every morning: a shoot inside seven
+ * days whose brief is still being written is late, and the AM and Ops are
+ * told once (the stamp is claimed before the mail goes). A NEW function —
+ * after deploying, `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`
+ * (CLAUDE.md trap 5b) or it never runs.
+ */
+export const shootBriefLate = inngest.createFunction(
+  {
+    id: 'shoot-brief-late',
+    name: 'Shoot brief 7-day rule',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 30 8 * * *' }],
+    retries: 1,
+  },
+  async ({ step }) => withRequestCache(async () => {
+    return step.run('nudge', async () => {
+      const { runBriefLateNudge } = await import('../lib/shoot-sop-notify')
+      return runBriefLateNudge()
+    })
+  })
+)
+
 export const functions = [
   dueReminders,
+  shootBriefLate,
   accountHealthDaily,
   driveMirrorFile,
   scanInboxScheduled,

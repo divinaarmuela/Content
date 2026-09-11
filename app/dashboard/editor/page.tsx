@@ -15,6 +15,8 @@ import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { NewCardDialog } from '../board/BoardDialogs'
+import { toast } from 'sonner'
+import { flagsOf } from '../../lib/card-flag-core'
 
 /**
  * THE EDITOR PAGE: your cards, from draft to the client.
@@ -34,7 +36,7 @@ import { NewCardDialog } from '../board/BoardDialogs'
 export default function EditorPage() {
   const { me, noAccount } = useRole()
   const viewer = useMemo<BoardViewer | null>(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role } : null), [me])
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
   const live = useWorkRows(viewer)
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   /** who may start a card here — managers, and a general user (their own work) */
@@ -56,9 +58,42 @@ export default function EditorPage() {
     if (!viewer) return [] as BoardCardRow[]
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
-    const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
+    const base = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
+    // WHAT THE VIDEO EDITORS SOP ASKS OF A CARD, read off what is already on
+    // the wire: which shoot it came from (the shoot board makes these
+    // cards), whether the holder acknowledged it, and a standing risk
+    const shootTitle = new Map(live.tables.batches.rows.map(b => [b.id, String(b.title ?? '')]))
+    const activityByItem = new Map<string, typeof live.tables.activity.rows>()
+    for (const a of live.tables.activity.rows) {
+      if (a.entity_type !== 'content_item') continue
+      const key = String(a.entity_id ?? '')
+      activityByItem.set(key, [...(activityByItem.get(key) ?? []), a])
+    }
+    const rows = base.map(c => {
+      const flags = flagsOf(activityByItem.get(c.id) ?? [], viewer.id)
+      return {
+        ...c,
+        shoot_title: c.batch_id ? (shootTitle.get(c.batch_id) ?? null) : null,
+        acknowledged: flags.acknowledged,
+        risk: flags.risk,
+      }
+    })
     return pageCards('editor', rows, viewer, today)
-  }, [live.items, viewer, today])
+  }, [live.items, live.tables.batches.rows, live.tables.activity.rows, viewer, today])
+
+  /** "Acknowledge" — one press, one activity row, and the prompt goes */
+  const acknowledge = async (card: BoardCardRow) => {
+    try {
+      const res = await fetch(`/api/production/items/${card.id}/flag`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'acknowledged' }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not acknowledge it')
+      toast.success('Acknowledged — the team knows you are on it')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not acknowledge it')
+    }
+  }
 
   const ready = viewer !== null && !live.loading && today !== null
 
@@ -69,8 +104,8 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? 'Everything still being made, Draft to With client, with what is done folded in at the end. Check the work at its link, then send it on or send it back.'
-          : 'Your cards: Draft, Internal check and With client, with what is done folded in at the end. Each one says what needs doing and where the work lives — add the link, then press Ready for checking.'}
+          ? 'Everything still being made, In progress to With client, with what is done folded in at the end. Check the work, then send it on for the quality check or send it back.'
+          : 'Your cards, the playbook way: In progress, For review, Quality check, With client, For handoff and Done. Acknowledge a new card the day it lands, upload the final export, then press Ready for checking.'}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
@@ -98,6 +133,7 @@ export default function EditorPage() {
           show={show}
           onClearShow={clearShow}
           ariaLabel="Your cards, by stage"
+          onAcknowledge={acknowledge}
         />
       )}
 

@@ -47,7 +47,7 @@ import WaitingOnYou from './WaitingOnYou'
 export default function SchedulerPage() {
   const { me, noAccount } = useRole()
   const viewer = useMemo<BoardViewer | null>(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role } : null), [me])
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
   // schedulerPostFilter off: the board shows the whole scoped list and the
   // columns say what each card is
   const live = useWorkRows(viewer, { schedulerPostFilter: false })

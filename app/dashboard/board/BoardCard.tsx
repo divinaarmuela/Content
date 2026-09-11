@@ -16,6 +16,7 @@ import {
 import Chip from '../ui/Chip'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
+import { riskChip } from '../../lib/card-flag-core'
 
 /**
  * ONE CARD ON THE BOARD.
@@ -82,7 +83,7 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking, tour,
+  statsHref, booking, tour, onAcknowledge,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -121,8 +122,15 @@ export function BoardCard({
    * stage offers no button still has something to point at.
    */
   tour?: boolean
+  /** "Acknowledge": the holder says they have seen it and are on it (the
+   *  Video Editors SOP). Offered on a card that is theirs and not yet
+   *  acknowledged; the page records it. */
+  onAcknowledge?: (card: BoardViewCard) => void
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
+  const risk = riskChip(card.risk ?? null)
+  const askAck = !!onAcknowledge && card.owner_id === viewer.id && card.acknowledged === false
+    && columnOf(card.status) === 'draft'
   const [briefOpen, setBriefOpen] = useState(false)
   const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
   const { primary, more } = cardActions(card, viewer)
@@ -160,8 +168,15 @@ export function BoardCard({
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
+        {risk && <Chip tone="red">{risk}</Chip>}
       </>}
       note={<>
+        {card.shoot_title && (
+          <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">From the shoot: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{card.shoot_title}</span></span>
+        )}
+        {askAck && (
+          <span className="mb-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">New — press Acknowledge so the team knows you are on it.</span>
+        )}
         {lines.brief && (
           <span
             className={`mb-1 block whitespace-pre-line text-foreground [[data-tone=ink]_&]:text-cream ${briefOpen ? '' : 'line-clamp-2'}`}
@@ -229,6 +244,13 @@ export function BoardCard({
           </Button>
         )}
 
+        {askAck && (
+          <Button variant="outline" disabled={busy}
+            onClick={e => { e.preventDefault(); onAcknowledge!(card) }}
+            className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            Acknowledge
+          </Button>
+        )}
         {primary && (
           <Button disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, primary) }}

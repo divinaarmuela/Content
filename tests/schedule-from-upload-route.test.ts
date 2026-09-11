@@ -92,7 +92,10 @@ const CLIENT = 'c1'
 const AM = { id: 'u-am', role: 'account_manager', email: 'am@x.invalid', name: 'Ada', clerk_user_id: null }
 const SCHEDULER = { id: 'u-sch', role: 'scheduler', email: 'sch@x.invalid', name: 'Sam', clerk_user_id: null }
 
-const as = (who: typeof AM) => { Object.assign(h.user, who) }
+/** the quality reviewer's hat is a flag, so it has to be put DOWN between people */
+const as = (who: typeof AM & { quality_reviewer?: boolean }) => { Object.assign(h.user, { quality_reviewer: false }, who) }
+/** Ada again, flagged as the quality reviewer (Joy's hat on a manager) */
+const QA = { ...AM, quality_reviewer: true }
 
 const FILE = {
   url: `${BASE}/1712345678901-ab12cd-spring_launch.jpg`,
@@ -183,7 +186,23 @@ afterEach(() => {
 /* ── the account manager ────────────────────────────────────────────────── */
 
 describe('an account manager posts a file with no piece behind it', () => {
-  it('makes the piece, the version and the post — and needs nobody', async () => {
+  // THE QUALITY CHECK (Abby, 11 Sep 2026): a manager's upload is checked by
+  // the quality reviewer before it is scheduled, like everything else
+  it('sends the piece for quality check — the manager is not the last word any more', async () => {
+    const made = await upload()
+    expect(made.status).toBe(200)
+    expect(made.body.needs_approval).toBe(true)
+    expect(items()[0].status).toBe('quality_check')
+    expect(made.body.message).toContain('quality check')
+    // it went the ordinary way: internal check, then the gate, in this person's name
+    const trail = (fake.rows('workflow_activity') as any[]).map(a => `${a.action}:${a.new_value ?? ''}`)
+    expect(trail).toContain('status_change:internal_review')
+    expect(trail).toContain('status_change:quality_check')
+    expect(trail.some(t => t.includes('approved_for_scheduling'))).toBe(false)
+  })
+
+  it('makes the piece, the version and the post — and, as the quality reviewer, needs nobody', async () => {
+    as(QA)
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(false)
@@ -215,6 +234,7 @@ describe('an account manager posts a file with no piece behind it', () => {
   })
 
   it('records the sign-off as this person’s own, on the ordinary edge', async () => {
+    as(QA)
     await upload()
     const log = fake.rows('workflow_activity') as any[]
     const trail = log.map(a => `${a.action}:${a.new_value ?? ''}`)
@@ -225,6 +245,7 @@ describe('an account manager posts a file with no piece behind it', () => {
   })
 
   it('composes and books the post in, with no approval step in the way', async () => {
+    as(QA)
     const made = await upload()
     const id = made.body.post.id as string
 
@@ -298,7 +319,8 @@ describe('a client who signs off every post', () => {
   // the owner, 9 Sep 2026: an account manager's upload clears itself and
   // schedules straight out, "even when the client has that lock" — the
   // switch is the line under the button, not a second person to wait on
-  it('does not slow an account manager down', async () => {
+  it('does not slow the quality reviewer down', async () => {
+    as(QA)
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(false)
@@ -409,15 +431,28 @@ describe('an upload that carries its decision', () => {
     expect((await upload({ decision: 'client' })).status).toBe(403)
     expect(items()).toHaveLength(0)
   })
-  it('a manager approves on the spot: Ready to post', async () => {
+  it('a manager approving on the spot sends it to the quality check first', async () => {
     as(AM)
+    const made = await upload({ decision: 'approve', title: 'Doors' })
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('quality_check')
+    expect(made.body.message).toContain('quality check')
+  })
+  it('the quality reviewer approves on the spot: Ready to post', async () => {
+    as(QA)
     const made = await upload({ decision: 'approve', title: 'Doors' })
     expect(made.status).toBe(200)
     expect(items()[0].status).toBe('approved_for_scheduling')
     expect(made.body.message).toContain('Schedule page')
   })
-  it('a manager sends it to the client: With client', async () => {
+  it('a manager sending it to the client sends it to the quality check first', async () => {
     as(AM)
+    const made = await upload({ decision: 'client', note: 'Have a look' })
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('quality_check')
+  })
+  it('the quality reviewer sends it to the client: With client', async () => {
+    as(QA)
     const made = await upload({ decision: 'client', note: 'Have a look' })
     expect(made.status).toBe(200)
     expect(items()[0].status).toBe('client_review')

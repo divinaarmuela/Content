@@ -87,7 +87,7 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
     // gate the board uses — only a piece that has reached them
     const item = await table<ContentItem>('content_items').get(row.item_id)
     if (!item || item.client_id !== who.id) return null
-    const hidden = ['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete']
+    const hidden = ['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check']
     if (hidden.includes(String(item.status))) return null
 
     const [clientRow, versions, analyticRows] = await Promise.all([

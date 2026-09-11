@@ -30,6 +30,8 @@ import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
 import LocationSearch from './LocationSearch'
 import PlanReviewCard from './PlanReviewCard'
+import { BriefParts, GoPanel, TeamPanel, type CrewRow, type TeamRow } from './ShootSop'
+import type { ShootStage, SopShoot } from '../../../../lib/shoot-sop-core'
 import {
   availableBatchTransitions, sanitiseCanvasCards,
   type BatchStatus, type CanvasCard, type ReferenceMedia, type ShotRow,
@@ -56,7 +58,7 @@ type Batch = {
   drive_folder_id?: string | null
   drive_url?: string | null
   clients: { name: string } | null
-}
+} & SopShoot
 type ItemLite = { id: string; title: string; status: string; work_kinds?: { slug?: string } | null }
 
 const CONTENT_TYPE_OPTIONS = Object.entries(TYPE_LABELS) as [ContentType, string][]
@@ -103,6 +105,14 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const [dateDraft, setDateDraft] = useState({ shoot_date: '', reason: '' })
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [portalToken, setPortalToken] = useState<string | null>(null)
+  // the Shoot Brief SOP: who is on the shoot and who has read it, the team
+  // to pick from (managers), and who is looking
+  const [crew, setCrew] = useState<CrewRow[]>([])
+  const [team, setTeam] = useState<TeamRow[]>([])
+  const [viewerId, setViewerId] = useState('')
+  const [sopNames, setSopNames] = useState<{ go_by?: string | null; shared_by?: string | null; handed_by?: string | null }>({})
+  const [today, setToday] = useState<string | null>(null)
+  useEffect(() => { setToday(new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })) }, [])
 
   /** Stamped so a slow answer from an older request cannot overwrite a newer
    *  one — the poll, the realtime hint and every save all call this. */
@@ -124,6 +134,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
     setLastEdited({ name: json.last_edited_by_name ?? null, at: json.last_edited_at ?? null })
     setRole(json.viewer_role ?? '')
     setPortalToken(json.portal_token ?? null)
+    setCrew(Array.isArray(json.crew) ? json.crew : [])
+    setTeam(Array.isArray(json.team) ? json.team : [])
+    setViewerId(String(json.viewer_id ?? ''))
+    setSopNames({ go_by: json.go_by_name ?? null, shared_by: json.brief_shared_by_name ?? null, handed_by: json.footage_handed_by_name ?? null })
   }, [id, router])
   useEffect(() => { void load() }, [load])
   useProductionLive(useCallback(() => { void load() }, [load]))
@@ -222,6 +236,62 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const editShots = (next: ShotRow[]) => {
     setBatch(b => (b ? { ...b, shot_list: next } : b))
     shotSaver.current?.push(next)
+  }
+
+  /** a move along the playbook's timeline — Share, Go, Reminder, Footage */
+  const moveStage = async (to: ShootStage) => {
+    setBusy(`stage:${to}`)
+    try {
+      const res = await fetch(`/api/production/batches/${id}/stage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not move it')
+      const handed = json.handed as { total: number } | null
+      toast.success(handed
+        ? `${json.moved} — ${handed.total} card${handed.total === 1 ? '' : 's'} now with the editor, on the Editor page`
+        : String(json.moved ?? 'Done'))
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not move it')
+    } finally {
+      setBusy(null)
+    }
+  }
+  const acknowledge = async () => {
+    setBusy('ack')
+    try {
+      const res = await fetch(`/api/production/batches/${id}/acknowledge`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not save')
+      toast.success('Thanks — you have read the plan')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setBusy(null)
+    }
+  }
+  const unacknowledge = async (userId: string) => {
+    setBusy('unack')
+    try {
+      const res = await fetch(`/api/production/batches/${id}/acknowledge`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not undo it')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not undo it')
+    } finally {
+      setBusy(null)
+    }
+  }
+  /** a field save that reloads, so the crew list and the ticks follow */
+  const patchThenLoad = async (field: string, value: unknown) => {
+    const ok = await patch(field, value, true)
+    if (ok) void load()
+    return ok
   }
 
   const transition = async (to: BatchStatus, label: string) => {
@@ -426,6 +496,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── working column ── */}
         <div className="flex flex-col gap-4">
+          {/* THE BRIEF, AS THE PLAYBOOK DEFINES IT: nine parts, each ticked
+              as it is filled in. The shoot cannot leave Drafting without them. */}
+          <BriefParts batch={batch} canEdit={canEdit} itemCount={deliverableItems.length} onPatch={patchThenLoad} />
+
           <Card>
             <CardContent className="p-4">
               <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Concept & notes</p>
@@ -494,6 +568,15 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
         {/* ── rail ── */}
         <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+          {/* where the shoot is on the playbook's timeline, and the one next move */}
+          {today && (
+            <GoPanel batch={batch} role={role as never} viewerId={viewerId} today={today}
+              itemCount={deliverableItems.length} busy={busy !== null} names={sopNames}
+              onPatch={patchThenLoad} onMove={moveStage} />
+          )}
+          <TeamPanel batch={batch} crew={crew} team={team} viewerId={viewerId} role={role as never}
+            busy={busy !== null} onPatch={patchThenLoad} onAck={acknowledge} onUnack={unacknowledge} />
+
           <Card>
             <CardContent className="flex flex-col gap-3 p-4">
               <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Shoot details</p>

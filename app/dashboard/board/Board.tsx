@@ -88,9 +88,11 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 
 export function Board({
   cards, viewer, page, names, kinds, today, onOpen, initialColumn, show, onClearShow,
-  postingToday, connectedClientIds, ariaLabel,
+  postingToday, connectedClientIds, ariaLabel, onAcknowledge,
 }: {
   cards: BoardCardRow[]
+  /** the Editor page's "Acknowledge" — recorded on the card's history */
+  onAcknowledge?: (card: BoardCardRow) => void
   viewer: BoardViewer
   /** which page this is — it decides the lanes (`pageLanes`) */
   page: BoardPage
@@ -297,6 +299,7 @@ export function Board({
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
                 booking={bookingByItem.get(c.id) ?? null}
+                onAcknowledge={onAcknowledge ? card => onAcknowledge(card as BoardCardRow) : undefined}
               />
             )}
           </div>

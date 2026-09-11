@@ -14,13 +14,13 @@ import type { Role } from '../app/lib/identity-core'
  * disagree with it, and that every surface reading them gets the same answer.
  */
 
-const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'with_client', 'ready_to_post', 'posted']
+const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'posted']
 
-describe('the five columns', () => {
-  it('are exactly five, in board order, with plain labels and one-line meanings', () => {
+describe('the six columns', () => {
+  it('are exactly six, in board order, with plain labels and one-line meanings', () => {
     expect(BOARD_COLUMNS.map(c => c.key)).toEqual(KEYS)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Internal check', 'With client', 'Ready to post', 'Posted',
+      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Posted',
     ])
     for (const c of BOARD_COLUMNS) {
       expect(c.meaning.length).toBeGreaterThan(10)
@@ -60,13 +60,13 @@ describe('the five columns', () => {
 })
 
 describe('columnsForRole — the same board, a different lens', () => {
-  it('an editor sees all five — their work, end to end', () => {
+  it('an editor sees all six — their work, end to end', () => {
     expect(columnsForRole('editor')).toEqual(KEYS)
   })
-  it('a scheduler sees all five — what is coming, too', () => {
+  it('a scheduler sees all six — what is coming, too', () => {
     expect(columnsForRole('scheduler')).toEqual(KEYS)
   })
-  it('account managers and super admins see all five', () => {
+  it('account managers and super admins see all six', () => {
     expect(columnsForRole('account_manager')).toEqual(KEYS)
     expect(columnsForRole('super_admin')).toEqual(KEYS)
   })
@@ -95,7 +95,7 @@ describe('groupByColumn', () => {
     expect(g[0].cards.map(c => c.id)).toEqual(['a', 'd'])
     expect(g[1].cards.map(c => c.id)).toEqual(['c'])
     expect(g[2].cards).toEqual([])
-    expect(g[4].cards.map(c => c.id)).toEqual(['b'])
+    expect(g[5].cards.map(c => c.id)).toEqual(['b'])
   })
   it('limits itself to the columns it is given (the portal asks for one)', () => {
     const g = groupByColumn(cards, columnsForRole('client'))
@@ -121,9 +121,13 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
     if (!d.ok) expect(d.reason).toBe('editor may not perform "Send to client"')
   })
 
-  it('a manager dropping on With client sends it to the client', () => {
-    expect(canMoveTo({ status: 'internal_review' }, 'with_client', AM))
-      .toEqual({ ok: true, to: 'client_review', label: 'Send to client' })
+  it('a manager dropping on Quality check sends it to the quality reviewer, who sends it to the client', () => {
+    expect(canMoveTo({ status: 'internal_review' }, 'quality_check', AM))
+      .toEqual({ ok: true, to: 'quality_check', label: 'Send for quality check' })
+    expect(canMoveTo({ status: 'internal_review' }, 'with_client', AM).ok).toBe(false)
+    expect(canMoveTo({ status: 'quality_check' }, 'with_client', ['quality_reviewer']))
+      .toEqual({ ok: true, to: 'client_review', label: 'Passed — send to client' })
+    expect(canMoveTo({ status: 'quality_check' }, 'with_client', AM).ok).toBe(false)
   })
 
   it('a multi-status column is entered at the FIRST status the person may reach', () => {
@@ -210,8 +214,10 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
   })
 
   it('reachableColumns lists where a drag may land', () => {
-    expect(reachableColumns({ status: 'internal_review' }, AM).map(r => r.column))
-      .toEqual(['ready_to_post', 'with_client'].sort((a, b) => KEYS.indexOf(a as BoardColumnKey) - KEYS.indexOf(b as BoardColumnKey)))
+    expect(reachableColumns({ status: 'internal_review' }, AM).map(r => r.column)).toEqual(['quality_check'])
+    // the reviewer may also send it back: Internal check is where "Ask for changes" lands
+    expect(reachableColumns({ status: 'quality_check' }, ['quality_reviewer']).map(r => r.column))
+      .toEqual(['internal_check', 'with_client', 'ready_to_post'])
     expect(reachableColumns({ status: 'published' }, SA)).toEqual([])
   })
 })

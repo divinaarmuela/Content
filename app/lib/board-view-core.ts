@@ -16,13 +16,13 @@
 import { postedLine, readPostedSlides } from './posted-slides-core'
 import {
   actingRoles, availableTransitionsAs, presentTransitions, whoseTurn, STATUS_LABELS,
-  type ItemStatus,
+  type ActingViewer, type Hat, type ItemStatus,
 } from './workflow-core'
 import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, type BoardColumnKey,
 } from './board-core'
 import { linkLabel, versionWord } from './card-link-core'
-import { askedWords, waitingOnViewer } from './asked-core'
+import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import {
   awaitsClientPostApproval, mayApprovePost, parseApprovalState,
@@ -70,9 +70,19 @@ export type BoardViewCard = {
   /** …and whether the CLIENT was the one asked, which decides whose wait the
    *  card names when the viewer is not the one deciding */
   posting_client_required?: unknown
+  /** the shoot this card came from (`batch_id`), and its name when the page
+   *  has it — an editor is told which shoot's footage this is */
+  batch_id?: string | null
+  shoot_title?: string | null
+  /** THE VIDEO EDITORS SOP: the holder acknowledges a card the day it lands,
+   *  and flags a deadline risk the moment they see one. Read off the card's
+   *  activity by the page (`card-flag-core.flagsOf`). */
+  acknowledged?: boolean
+  risk?: string | null
 }
 
-export type BoardViewer = { id: string; role: Role }
+/** who is looking: their role, and whether they hold the quality hat */
+export type BoardViewer = ActingViewer
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -256,11 +266,11 @@ export const BOOKED_LABEL = 'Booked in'
 /** the post has gone out */
 export const POSTED_LABEL = 'Posted'
 
-const isManagerHat = (hats: readonly Role[]) =>
+const isManagerHat = (hats: readonly Hat[]) =>
   hats.includes('account_manager') || hats.includes('super_admin')
 
 /** The action a legal move `to` becomes on the card, for these hats. */
-export function actionFor(to: ItemStatus, label: string, hats: readonly Role[]): CardAction {
+export function actionFor(to: ItemStatus, label: string, hats: readonly Hat[]): CardAction {
   // a manager sending work back says what to change — the send-back route
   // asks for the words and tells the assignee; "Log the client's changes"
   // from With client is the first half of that same route
@@ -290,7 +300,9 @@ export function cardActions(
   const turn = whoseTurn(card.status, card, viewer)
   const { primary, secondary } = presentTransitions(hats, card.status, offered, {
     clientApprovalRequired: card.client_approval_required !== false,
-    viewerHoldsTurn: turn.mine,
+    // an unasked check is nobody's TURN, but the button still belongs to
+    // whoever wears the hat: a manager can always pick the empty seat up
+    viewerHoldsTurn: turn.mine || (turn.unassigned && turn.may),
   })
   const all: CardAction[] = []
   const push = (a: CardAction) => { if (!all.some(b => sameAction(a, b))) all.push(a) }
@@ -348,7 +360,7 @@ function needsClientFirst(card: BoardViewCard, to: ItemStatus): boolean {
  * logged first, then the card is sent for revision), but the send-back route
  * walks both steps, so the board offers it as the one move it is.
  */
-function sendBackFromClient(card: BoardViewCard, column: BoardColumnKey, hats: readonly Role[]): boolean {
+function sendBackFromClient(card: BoardViewCard, column: BoardColumnKey, hats: readonly Hat[]): boolean {
   return column === 'internal_check' && card.status === 'client_review' && isManagerHat(hats)
 }
 
@@ -483,6 +495,7 @@ export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up'
 export const LANE_EMPTY: Record<PageLaneKey, string> = {
   draft: 'Nothing being made.',
   internal_check: 'Nothing waiting on a check.',
+  quality_check: 'Nothing waiting on a quality check.',
   with_client: 'Nothing with a client.',
   ready_to_post: 'Nothing ready to post.',
   posted: 'Nothing booked in or posted.',
@@ -494,6 +507,7 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
 export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   draft: LANE_EMPTY.draft,
   internal_check: LANE_EMPTY.internal_check,
+  quality_check: LANE_EMPTY.quality_check,
   with_client: LANE_EMPTY.with_client,
   ready_to_post: LANE_EMPTY.ready_to_post,
   posted: LANE_EMPTY.posted,
@@ -519,6 +533,22 @@ const laneOfColumn = (key: BoardColumnKey): PageLane => ({
 })
 
 /**
+ * THE EDITOR'S OWN NAMES FOR THE SAME COLUMNS (the Video Editors SOP: In
+ * Progress → For Review → For Handoff → Done). The columns, the statuses
+ * and the moves are identical to every other page; only the words on the
+ * lane headers change, so an editor reads their SOP on their own board and
+ * a manager looking at the same card sees it in the same place.
+ */
+export const EDITOR_LANE_LABELS: Partial<Record<BoardColumnKey, string>> = {
+  draft: 'In progress',
+  internal_check: 'For review',
+  quality_check: 'Quality check',
+  with_client: 'With client',
+  ready_to_post: 'For handoff',
+  posted: 'Done',
+}
+
+/**
  * HOW EACH PAGE ARRANGES THE FIVE COLUMNS.
  *
  * The five stages are one board — the same card is in the same column on
@@ -542,8 +572,15 @@ export function pageLanes(page: BoardPage): PageLane[] {
   // client and out the door, a scheduler sees what is coming before it is
   // ready. What differs per page is WHICH CARDS are shown (pageCards) and
   // which button each role gets, never which stages exist.
-  void page
-  return BOARD_COLUMNS.map(c => laneOfColumn(c.key))
+  const lanes = BOARD_COLUMNS.map(c => laneOfColumn(c.key))
+  if (page !== 'editor') return lanes
+  return lanes.map(l => ({
+    ...l,
+    label: EDITOR_LANE_LABELS[l.key as BoardColumnKey] ?? l.label,
+    // the editor's part is done once the card is handed on: Done is a
+    // narrow rail, not a working column
+    folded: l.key === 'posted',
+  }))
 }
 
 /** The lane a column sits in on this page — how a `?column=` link lands. */
@@ -617,6 +654,10 @@ export const SHOW_LABELS: Record<ShowFilter, string> = {
 }
 
 export const DECIDE_STATUSES: readonly ItemStatus[] = ['internal_review', 'revision_complete', 'client_changes_requested']
+/** a check with nobody named: on the board's lens, but on nobody's "yours" count */
+export function nobodyAskedYet(card: BoardViewCard): boolean {
+  return askedIdsOf(card as never).length === 0
+}
 export const CAME_BACK_STATUSES: readonly ItemStatus[] = ['revision_required', 'client_changes_requested']
 
 export type ShowContext = {
@@ -749,10 +790,26 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     ]
   }
 
+  // HONEST COUNTS (the owner, 11 Sep 2026): a check nobody was asked for
+  // is not "waiting on you" — it is waiting on somebody, and says so on its
+  // own line. The tile still opens the lens that shows both.
   const decide: OverviewTile = {
     key: 'decide', title: 'Needs your decision', tone: 'amber',
     href: boardHref('production', { show: 'decide' }), actionLabel: 'Decide',
-    stats: [{ value: count(cards, c => matchesShow(c, 'decide', ctx)), label: 'waiting on you' }],
+    stats: [
+      { value: count(cards, c => matchesShow(c, 'decide', ctx) && !nobodyAskedYet(c)), label: 'waiting on you' },
+      { value: count(cards, c => matchesShow(c, 'decide', ctx) && nobodyAskedYet(c)), label: 'nobody asked yet' },
+    ],
+  }
+  // THE QUALITY CHECK, for the people who run it: what is waiting on the
+  // quality reviewer, and how much of it nobody was asked to look at
+  const quality: OverviewTile = {
+    key: 'quality', title: 'Quality check', tone: 'amber',
+    href: boardHref('production', { column: 'quality_check' }), actionLabel: 'See them',
+    stats: [
+      { value: count(cards, c => c.status === 'quality_check'), label: 'waiting on a quality reviewer' },
+      { value: count(cards, c => c.status === 'quality_check' && nobodyAskedYet(c)), label: 'not asked to anyone' },
+    ],
   }
   const withClients: OverviewTile = {
     key: 'with_client', title: 'With clients', tone: 'blue',
@@ -772,7 +829,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
         href: boardHref('production'), actionLabel: 'Board',
         stats: BOARD_COLUMNS.map(c => ({ value: inColumn(c.key), label: c.label.toLowerCase() })),
       },
-      decide, withClients,
+      decide, quality, withClients,
     ]
     if (input.mayLeads !== false) {
       tiles.push({
@@ -787,5 +844,5 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   }
 
   // account manager
-  return [clients, decide, withClients]
+  return [clients, decide, quality, withClients]
 }

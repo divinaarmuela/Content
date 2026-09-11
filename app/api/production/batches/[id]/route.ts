@@ -12,6 +12,7 @@ import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
+import { acksOf, peopleOnShoot } from '../../../../lib/shoot-sop-core'
 
 /** Load a brief the caller may touch, or answer with the right refusal. */
 async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
@@ -48,6 +49,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ])
     const items = await attachOne(itemRows, 'work_kind_id', 'work_kinds', ['slug'])
     const personById = new Map(people.map(u => [u.id, u]))
+    const nameOf = (uid: string | null | undefined) => {
+      const p = uid ? personById.get(uid) : null
+      return p ? (p.name || p.email) : null
+    }
+    // THE PEOPLE ON THE SHOOT (the Shoot Brief SOP): the crew and the editor,
+    // each with whether they have read the brief — for everyone who can open
+    // the shoot, because "3 of 5 acknowledged" is the card's line. The pickers
+    // (who can be the editor, who is on the crew) are the manager's, so the
+    // team list goes only to them.
+    const acked = new Map(acksOf(loaded.batch).map(a => [a.user_id, a.at]))
+    const crew = peopleOnShoot(loaded.batch).map(uid => ({
+      id: uid, name: nameOf(uid) ?? 'Someone', role: personById.get(uid)?.role ?? null,
+      acknowledged_at: acked.get(uid) ?? null,
+    }))
+    const team = roleSatisfies(user.role, 'account_manager')
+      ? people.filter(p => p.active_status === true && p.role !== 'client')
+          .map(p => ({ id: p.id, name: p.name || p.email, role: p.role }))
+      : []
     const lockedBy = loaded.batch.locked_by ? personById.get(loaded.batch.locked_by) ?? null : null
     const editedBy = loaded.batch.last_edited_by ? personById.get(loaded.batch.last_edited_by) ?? null : null
     // the client's portal link, for the "Copy portal link" button — an AM
@@ -65,6 +84,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       last_edited_at: loaded.batch.last_edited_at ?? null,
       proposal: proposal ?? null,
       viewer_role: user.role,
+      viewer_id: user.id,
+      crew,
+      team,
+      editor_name: nameOf(loaded.batch.editor_id),
+      go_by_name: nameOf(loaded.batch.go_by),
+      brief_shared_by_name: nameOf(loaded.batch.brief_shared_by),
+      footage_handed_by_name: nameOf(loaded.batch.footage_handed_by),
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -139,6 +165,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: 'Only an account manager can change the owner' }, { status: 403 })
       }
       patch.owner_id = body.owner_id || null
+    }
+    // ── the Shoot Brief SOP's nine parts (the ones the brief did not hold) ──
+    for (const [field, max] of [
+      ['objective', 2000], ['script', 8000], ['call_time', 60], ['talent', 1000],
+      ['props_wardrobe', 2000], ['client_availability', 1000], ['editor_priorities', 2000],
+    ] as const) {
+      if (field in body) patch[field] = String(body[field] ?? '').trim().slice(0, max) || null
+    }
+    if ('edit_deadline' in body) {
+      const d = body.edit_deadline ? String(body.edit_deadline).slice(0, 10) : ''
+      if (d && Number.isNaN(new Date(`${d}T00:00:00`).getTime())) {
+        return NextResponse.json({ error: 'Enter a valid editor deadline' }, { status: 422 })
+      }
+      patch.edit_deadline = d || null
+    }
+    // ── the people on the shoot: the AM's call ──
+    if ('editor_id' in body || 'crew_ids' in body) {
+      if (!roleSatisfies(user.role, 'account_manager')) {
+        return NextResponse.json({ error: 'Only an account manager picks who is on the shoot' }, { status: 403 })
+      }
+      const team = await table<TeamUser>('team_users').list({ where: u => u.active_status === true && u.role !== 'client' })
+      const byId = new Map(team.map(u => [u.id, u]))
+      if ('editor_id' in body) {
+        const eid = body.editor_id ? String(body.editor_id) : ''
+        if (eid && byId.get(eid)?.role !== 'editor') {
+          return NextResponse.json({ error: 'The editor on a shoot has to be one of the editors' }, { status: 422 })
+        }
+        patch.editor_id = eid || null
+      }
+      if ('crew_ids' in body) {
+        const raw: string[] = Array.isArray(body.crew_ids) ? body.crew_ids.map(String) : []
+        patch.crew_ids = [...new Set(raw.filter(uid => byId.has(uid)))]
+      }
+    }
+    // ── the AM's two ticks on the way to "go" ──
+    for (const [flag, col] of [['aligned', 'aligned_at'], ['client_confirmed', 'client_confirmed_at']] as const) {
+      if (flag in body) {
+        if (!roleSatisfies(user.role, 'account_manager')) {
+          return NextResponse.json({ error: 'Only an account manager confirms that' }, { status: 403 })
+        }
+        patch[col] = body[flag] === true ? new Date().toISOString() : null
+      }
     }
     if ('shared_with_client' in body) {
       // showing a shoot plan on the client portal is an AM call

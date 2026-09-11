@@ -11,7 +11,7 @@
 import type { Role } from './identity-core'
 import {
   checkTransitionAs, offeredTransitionsFrom, STATUS_TURN, TRANSITIONS,
-  type ItemStatus, type TransitionCheck,
+  type Hat, type ItemStatus, type TransitionCheck,
 } from './workflow-core'
 
 export const SHOOT_BRIEF_SLUG = 'shoot_brief'
@@ -24,6 +24,8 @@ export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
   internal_review: 'Plan ready for checking',
   revision_required: 'Plan being changed',
   revision_complete: 'Plan changes made — check again',
+  // a plan has no quality gate; the label exists so the dictionary is whole
+  quality_check: 'Plan being checked',
   client_review: 'Plan with client',
   client_changes_requested: 'Client wants plan changes',
   approved_for_scheduling: 'Plan approved — book the shoot',
@@ -42,7 +44,7 @@ export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
  * for changes. And it ends with an account manager booking the shoot: no
  * scheduler ever touches one, and a booked brief is finished.
  */
-export const BRIEF_STATUS_TURN: Record<ItemStatus, Role | null> = {
+export const BRIEF_STATUS_TURN: Record<ItemStatus, Hat | null> = {
   ...STATUS_TURN,
   draft_uploaded: 'account_manager',
   revision_required: 'account_manager',
@@ -57,6 +59,7 @@ export const BRIEF_STATUS_MEANING: Record<ItemStatus, string> = {
   internal_review: 'Waiting for an account manager to check the plan.',
   revision_required: 'Changes were asked for; the plan is being reworked.',
   revision_complete: 'The changes are in; an account manager needs to look again.',
+  quality_check: 'The plan is being checked.',
   client_review: 'Waiting for the client to approve the plan or ask for changes.',
   client_changes_requested: 'An account manager decides: rework the plan, or reshare it as is.',
   approved_for_scheduling: 'The plan is signed off. Book the shoot — pick the date on the shoot page.',
@@ -90,6 +93,10 @@ export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   'client_review>client_changes_requested': { label: "Log the client's changes", roles: ['client', 'account_manager'] },
   'client_changes_requested>revision_required': { label: 'Send plan for revision', roles: ['account_manager'] },
   'client_changes_requested>client_review': { label: 'No change needed — reshare', roles: ['account_manager'] },
+  // a shoot PLAN is checked by the account manager and the client, never by
+  // the content quality reviewer — the gate is not on a plan's road
+  'internal_review>quality_check': { blocked: true },
+  'revision_complete>quality_check': { blocked: true },
   // booking = the date is locked on the shoot; an AM makes the call
   'approved_for_scheduling>scheduled': { label: 'Book the shoot', roles: ['account_manager'], requires: 'batch_locked' },
   // a brief never "publishes" — booked is its end state, for everyone
@@ -99,7 +106,7 @@ export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
 export type BriefTransitionCheck = TransitionCheck & { requires?: 'batch_locked' }
 
 export function checkBriefTaskTransitionAs(
-  roles: readonly Role[], from: ItemStatus, to: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus, to: ItemStatus,
   /** the app's own move — see `checkTransitionAs`. A shoot brief reaches the
    *  same `auto` edges an asset does (a new version saved while the client is
    *  looking pulls the brief back for the manager's check), so this has to be
@@ -111,7 +118,9 @@ export function checkBriefTaskTransitionAs(
   const override = BRIEF_TRANSITION_OVERRIDES[`${from}>${to}`]
   if (!override) return checkTransitionAs(roles, from, to, opts)
   if ('blocked' in override) {
-    return { ok: false, reason: 'A booked shoot is the end of the plan — its cards get posted, not the plan' }
+    return { ok: false, reason: to === 'quality_check'
+      ? 'A shoot plan has no quality check — the account manager shares it with the client'
+      : 'A booked shoot is the end of the plan — its cards get posted, not the plan' }
   }
   if (!roles.includes('super_admin') && !override.roles.some(r => roles.includes(r))) {
     return { ok: false, reason: `${roles.join('/') || 'nobody'} may not perform "${override.label}"` }
@@ -134,7 +143,7 @@ export function checkBriefTaskTransition(role: Role, from: ItemStatus, to: ItemS
  *  dropped every edge whose base roles differ (an account manager could never
  *  see "Brief revisions done" because the base edge is editors-only). */
 export function availableBriefTaskTransitionsAs(
-  roles: readonly Role[], from: ItemStatus,
+  roles: readonly Hat[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
   return offeredTransitionsFrom(from)
     .map(to => {

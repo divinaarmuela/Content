@@ -530,11 +530,23 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const [due, setDue] = useState('')
   const [owner, setOwner] = useState(viewer.id)
   const [busy, setBusy] = useState(false)
+  /** WHICH SHOOT THIS IS FROM (the owner, 11 Sep 2026: "make sure editing
+   *  we can choose from which shoot") — the client's shoots, and the
+   *  deliverable on that shoot the card answers for, when the shoot has them */
+  const [shootId, setShootId] = useState('')
+  const [groupId, setGroupId] = useState('')
+  const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
+  const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
+  const shoots = shootRows.filter(b => b.client_id === clientId && b.status !== 'wrapped')
+  const groups = groupRows.filter(g => g.batch_id === shootId)
   useEffect(() => {
     if (!open) return
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
+    setShootId(''); setGroupId('')
   }, [open, defaultClientId, clients, viewer.id])
+  useEffect(() => { setShootId(''); setGroupId('') }, [clientId])
+  useEffect(() => { setGroupId('') }, [shootId])
 
   const linkCheck = linkKindOf(link)
   const canSave = !!clientId && !!title.trim() && !!normaliseKindName(kind) && (link.trim() === '' || linkCheck.ok)
@@ -553,6 +565,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           owner_id: owner || null,
           ...(brief.trim() ? { brief: brief.trim() } : {}),
           ...(due ? { due_date: due } : {}),
+          ...(shootId ? { batch_id: shootId } : {}),
+          ...(groupId ? { group_id: groupId } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
           // link is where the work is from
@@ -612,6 +626,32 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
             <Label htmlFor="new-kind">Kind of work</Label>
             <KindInput id="new-kind" value={kind} onChange={setKind} kinds={kinds} />
           </div>
+          {shoots.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="new-shoot">Which shoot is this from?</Label>
+                <Select value={shootId || 'none'} onValueChange={v => setShootId(v && v !== 'none' ? v : '')}>
+                  <SelectTrigger id="new-shoot" className={field}><SelectValue placeholder="No shoot" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not from a shoot</SelectItem>
+                    {shoots.map(b => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {groups.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="new-group">Which deliverable?</Label>
+                  <Select value={groupId || 'none'} onValueChange={v => setGroupId(v && v !== 'none' ? v : '')}>
+                    <SelectTrigger id="new-group" className={field}><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not one in particular</SelectItem>
+                      {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.title}{g.target ? ` (${g.target})` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-link">Link (optional)</Label>
             <Input id="new-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/…" className={field} />

@@ -607,6 +607,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     if (turn.unassigned) {
       return isBrief ? 'Unassigned — an account manager will pick it up'
         : turn.hat === 'scheduler' ? 'Unassigned — any scheduler can take it'
+        : turn.hat === 'account_manager' ? 'nobody asked yet — any account manager can check it'
+        : turn.hat === 'quality_reviewer' ? 'nobody asked yet — the quality reviewer checks it'
         : 'Unassigned — anyone can take it'
     }
     if (turn.mine) return 'You'

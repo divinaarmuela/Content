@@ -48,6 +48,8 @@ import { ClaimButton } from './ClaimButton'
 import { ScopeSwitch } from './ScopeSwitch'
 import { TurnChip } from './TurnChip'
 import { LaneBoard, type Lane } from './LaneBoard'
+import { ShootStageBoard, type StageShoot } from './ShootStageBoard'
+import { STAGE_LABEL as SOP_STAGE_LABEL, type ShootStage } from '../../lib/shoot-sop-core'
 import CommentsDrawer, { CommentsButton, useCommentsDrawer } from '../../components/comments/CommentsDrawer'
 import PageTitle from '../ui/PageTitle'
 import Chip, { type ChipTone } from '../ui/Chip'
@@ -97,13 +99,15 @@ function credits(i: { created_by?: string | null; approved_by?: string | null })
 }
 
 const SCOPE_KEY = 'md-production-scope'
-const VIEW_KEY = 'md-production-view'
+// a new key: the Shoots board (the playbook's timeline) is the first view
+// now, and a remembered "list" from before must not hide it
+const VIEW_KEY = 'md-production-view-2'
 const RANGE_KEY = 'md-production-cal-range'
 /** List is the shoots, plans and tasks in their own columns; Board is the
  *  five-column work board every page shares; Calendar is the same rows by
  *  date. A remembered "board" from before this change opens the work board,
  *  which is the view the owner asked for. */
-const VIEWS = ['list', 'board', 'calendar'] as const
+const VIEWS = ['shoots', 'list', 'board', 'calendar'] as const
 const RANGES = ['month', 'week'] as const
 
 function whenShort(iso: string | null) {
@@ -171,7 +175,7 @@ export default function ProductionPage() {
   // and a fresh object per render re-ran that on every keystroke in the
   // search box
   const viewer: Viewer | null = useMemo(
-    () => (me ? { id: me.id, role: me.role } : null), [me])
+    () => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
 
   // names for "waiting on …" and the Assign… menu — managers only. One
   // `/api/team` fetch, shared with the two New-work dialogs below.
@@ -180,7 +184,8 @@ export default function ProductionPage() {
   const [scope, setScope] = usePersistedScope(SCOPE_KEY, role)
   // the board and the calendar are two readings of the same page, and which
   // one you were on is worth remembering between visits
-  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'list', 'view')
+  const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'shoots', 'view')
+  const [stageBusy, setStageBusy] = useState<string | null>(null)
   const [range, setRange] = usePersistedChoice(RANGE_KEY, RANGES, 'month')
   // the work board: the column and the lens named in the address, today's
   // date (read after mount — the page prerenders), and the new-card dialog
@@ -316,6 +321,40 @@ export default function ProductionPage() {
     setScope(new Set<ScopeMode>([...scope, 'mine']))
     toast.message('Showing yours, so the new work is on screen.')
   }
+
+  /**
+   * Move a shoot along the playbook's timeline — the drag on the Shoots
+   * board. The stamp lands the instant the write commits (the listener
+   * repaints); a refusal leaves the card where it was, in the SOP's words.
+   */
+  const moveShoot = async (s: StageShoot, to: ShootStage) => {
+    setStageBusy(s.id)
+    try {
+      const res = await fetch(`/api/production/batches/${s.id}/stage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not move it')
+      const handed = json.handed as { total: number } | null
+      toast.success(handed
+        ? `${s.title} → ${SOP_STAGE_LABEL[to]} — ${handed.total} card${handed.total === 1 ? '' : 's'} now with the editor`
+        : `${s.title} → ${SOP_STAGE_LABEL[to]}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not move it')
+    } finally {
+      setStageBusy(null)
+    }
+  }
+  /** cards pointed at each shoot, bar the shoot's own plan — a deliverable
+   *  is a line on the plan or a card */
+  const itemCountByShoot = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of live.items as unknown as BriefTask[]) {
+      if (!i.batch_id || i.work_kinds?.slug === 'shoot_brief') continue
+      m.set(i.batch_id, (m.get(i.batch_id) ?? 0) + 1)
+    }
+    return m
+  }, [live.items])
 
   const matches = (clientId: string, title: string) =>
     (clientFilter === 'all' || clientId === clientFilter)
@@ -673,6 +712,7 @@ export default function ProductionPage() {
             value={view}
             onChange={setView}
             options={[
+              { value: 'shoots', label: 'Shoots', icon: Camera },
               { value: 'list', label: 'List', icon: ListChecks },
               { value: 'board', label: 'Board', icon: Kanban },
               { value: 'calendar', label: 'Calendar', icon: CalendarDays },
@@ -707,7 +747,24 @@ export default function ProductionPage() {
         </div>
       )}
 
-      {view === 'board' ? (
+      {view === 'shoots' ? (
+        !viewer || shoots === null || today === null ? (
+          <div className="flex gap-3.5 overflow-x-hidden" role="status" aria-busy="true" aria-label="Loading the shoots">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[200px] flex-1 rounded-card" />)}
+          </div>
+        ) : (
+          <ShootStageBoard
+            shoots={visibleShoots as unknown as StageShoot[]}
+            itemCounts={itemCountByShoot}
+            names={teamNames}
+            role={viewer.role}
+            viewerId={viewer.id}
+            today={today}
+            onMove={moveShoot}
+            busyId={stageBusy}
+          />
+        )
+      ) : view === 'board' ? (
         !viewer || live.loading || today === null ? (
           <div className="flex gap-3.5 overflow-x-hidden">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[220px] flex-1 rounded-card" />)}

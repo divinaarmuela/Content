@@ -41,6 +41,9 @@ type Member = {
   workday_end: string
   client_id: string | null
   active_status: boolean
+  /** the playbook's two hats — flags, never roles */
+  quality_reviewer?: boolean
+  ops_contact?: boolean
 }
 type Invite = {
   id: string
@@ -342,7 +345,12 @@ export default function TeamPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{roleLabel(m.role)}</Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline" className={ROLE_STYLE[m.role] ?? ''}>{roleLabel(m.role)}</Badge>
+                      {/* the two playbook hats sit beside the role, never inside it */}
+                      {m.quality_reviewer && <Badge variant="outline" className="bg-tint-green text-foreground border-accent-green/30">Quality reviewer</Badge>}
+                      {m.ops_contact && <Badge variant="outline" className="bg-tint-amber text-foreground border-accent-amber/35">Ops contact</Badge>}
+                    </div>
                   </TableCell>
                   <TableCell className="text-body-15 capitalize text-muted-foreground">{m.employment_type}</TableCell>
                   {/* the zone AND what o'clock it is there: "Asia/Manila" is a
@@ -454,7 +462,7 @@ export default function TeamPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="account_manager">Account manager</SelectItem>
-                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="editor">Editor or designer</SelectItem>
                   <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
                   <SelectItem value="client">Client user</SelectItem>
@@ -548,7 +556,7 @@ export default function TeamPage() {
                 <SelectContent>
                   <SelectItem value="super_admin">Super admin</SelectItem>
                   <SelectItem value="account_manager">Account manager</SelectItem>
-                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="editor">Editor or designer</SelectItem>
                   <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
                   <SelectItem value="client">Client user</SelectItem>
@@ -590,6 +598,33 @@ export default function TeamPage() {
                 ariaLabel="Workday end time"
               />
             </div>
+            {editDraft.role !== 'client' && (
+              <div className="grid gap-3 sm:col-span-2">
+                {/* THE TWO HATS FROM THE TEAM'S PLAYBOOK (11 Sep 2026). Flags on
+                    a person: Joy keeps her role and gains the quality check;
+                    Abby keeps hers and is the one the blocker ladder copies. */}
+                <div className="flex items-start justify-between gap-3 rounded-inner border border-border p-3">
+                  <div className="min-w-0">
+                    <Label htmlFor="edit-quality">Quality reviewer</Label>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      Checks every graphic, story, reel and caption before it goes to the client or a scheduler. Cards wait for them in Quality check.
+                    </p>
+                  </div>
+                  <Switch id="edit-quality" checked={editDraft.quality_reviewer === true}
+                    onCheckedChange={v => setEditDraft(d => ({ ...d, quality_reviewer: v }))} />
+                </div>
+                <div className="flex items-start justify-between gap-3 rounded-inner border border-border p-3">
+                  <div className="min-w-0">
+                    <Label htmlFor="edit-ops">Ops contact</Label>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      Copied when something has been blocked for 12 hours, and told again at 24. One person, usually Ops.
+                    </p>
+                  </div>
+                  <Switch id="edit-ops" checked={editDraft.ops_contact === true}
+                    onCheckedChange={v => setEditDraft(d => ({ ...d, ops_contact: v }))} />
+                </div>
+              </div>
+            )}
             {(editDraft.role === 'account_manager' || editDraft.role === 'editor') && clients.length > 0 && (
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Assigned clients</Label>

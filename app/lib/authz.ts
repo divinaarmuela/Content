@@ -20,6 +20,10 @@ export type TeamUser = {
   timezone: string
   client_id: string | null
   active_status: boolean
+  /** may pass work out of the quality check (the Team's Playbook: Joy) */
+  quality_reviewer?: boolean | null
+  /** the ops contact the 24-hour blocker ladder copies (Abby) */
+  ops_contact?: boolean | null
   /**
    * Set ONLY while somebody is acting as this person, and it describes the
    * REAL signed-in account, not this row. Everything else about the TeamUser

@@ -38,11 +38,11 @@ describe('checkBriefTaskTransition', () => {
   })
 
   it('non-overridden edges behave exactly like the base machine', () => {
+    // ('internal_review → client_review' IS overridden — a plan is shared by the
+    // account manager, while a piece of content passes the quality reviewer)
     const edges: [ItemStatus, ItemStatus][] = [
-      ['internal_review', 'revision_required'],
-      ['internal_review', 'client_review'],
-      ['client_review', 'approved_for_scheduling'],
       ['client_review', 'client_changes_requested'],
+      ['approved_for_scheduling', 'client_review'],
     ]
     const roles = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client'] as const
     for (const [from, to] of edges) {

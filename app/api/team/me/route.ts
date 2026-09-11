@@ -30,6 +30,9 @@ export async function GET() {
         email: me.email,
         name: me.name,
         role: me.role,
+        // the two playbook hats: passes the quality check; the ops contact
+        quality_reviewer: data?.quality_reviewer === true,
+        ops_contact: data?.ops_contact === true,
         employment_type: me.employment_type,
         timezone: me.timezone,
         active: me.active_status,

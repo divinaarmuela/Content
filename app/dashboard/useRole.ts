@@ -8,6 +8,10 @@ export type Me = {
   email: string
   name: string
   role: Role
+  /** may pass work out of the quality check (Joy); a super admin always may */
+  quality_reviewer?: boolean
+  /** the ops contact the blocker ladder copies (Abby) */
+  ops_contact?: boolean
   employment_type: 'employee' | 'contractor'
   timezone: string
   active: boolean

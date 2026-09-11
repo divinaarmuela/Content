@@ -89,7 +89,10 @@ const SCHEDULER = { id: 'u-sch', role: 'scheduler', email: 'sch@x.invalid', name
 const OWNER = { id: 'u-ed', role: 'editor', email: 'ed@x.invalid', name: 'Eden', clerk_user_id: null }
 const STRANGER = { id: 'u-ed2', role: 'editor', email: 'ed2@x.invalid', name: 'Kit', clerk_user_id: null }
 
-const as = (who: typeof AM) => { Object.assign(h.user, who) }
+/** the quality reviewer's hat is a flag, so it has to be put DOWN between people */
+const as = (who: typeof AM & { quality_reviewer?: boolean }) => { Object.assign(h.user, { quality_reviewer: false }, who) }
+/** Ada again, flagged as the quality reviewer (Joy's hat on a manager) */
+const QA = { ...AM, quality_reviewer: true }
 
 const SLIDES = [
   { url: 'https://media.mdmmarketing.com.au/one.jpg', name: 'one.jpg', type: 'image' },
@@ -552,9 +555,21 @@ describe('an account manager posts media the client has not signed off', () => {
     fake = seed({ status: 'internal_review', client_approval_required: true })
   }
 
-  it('does the media sign-off and the post approval in ONE request', async () => {
+  it('a manager who is not the quality reviewer sends the piece to the gate, and is told so', async () => {
+    // Abby, 11 Sep 2026: everything goes through Joy BEFORE scheduling
     waiting()
     as(AM)
+    const id = (await create()).body.post.id as string
+    const direct = await post(id, { mode: 'direct' })
+    expect(direct.status).toBe(409)
+    expect(String(direct.body.error)).toContain('quality check')
+    expect((fake.rows('content_items')[0] as any).status).toBe('quality_check')
+    expect(jobs()).toHaveLength(0)
+  })
+
+  it('does the media sign-off and the post approval in ONE request', async () => {
+    waiting()
+    as(QA)
     const made = await create()
     expect(made.status).toBe(200)
     const id = made.body.post.id as string
@@ -577,7 +592,7 @@ describe('an account manager posts media the client has not signed off', () => {
 
   it('…and records WHO signed the media off, on the ordinary activity trail', async () => {
     waiting()
-    as(AM)
+    as(QA)
     const id = (await create()).body.post.id as string
     await post(id, { mode: 'direct' })
 
@@ -1426,7 +1441,7 @@ describe('an approval says who really gave it', () => {
   it('lets the manager sign off on a client who signs every post off', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' }, { client_approval_required: true })
-    as(AM)
+    as(QA)
     const done = await move('approved_for_scheduling')
     expect(done.status).toBe(200)
     expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
@@ -1436,7 +1451,7 @@ describe('an approval says who really gave it', () => {
   it('\u2026and allows it on an ordinary client, with the flag unset', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' })
-    as(AM)
+    as(QA)
     const done = await move('approved_for_scheduling')
     expect(done.status).toBe(200)
     expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
@@ -1455,7 +1470,7 @@ describe('an approval says who really gave it', () => {
   it('does not hold a manager up when the client row cannot be read', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' })
-    as(AM)
+    as(QA)
     const undo = failReadsNaming('/clients/')
     try {
       const done = await move('approved_for_scheduling')
@@ -1559,7 +1574,7 @@ describe('the client\u2019s own "signs off every post" switch', () => {
   it('turns the exception ON, and the gates follow it in the same breath', async () => {
     fake.restore()
     fake = seed({ status: 'internal_review' })
-    as(AM)
+    as(QA)
     expect((await read()).body.client_approval_required).toBe(false)
 
     const saved = await write({ on: true })

@@ -328,6 +328,25 @@ export async function createPostFromFiles(
       console.error('upload post — could not submit the new piece for review:', e)
     }
   }
+  /**
+   * THE QUALITY CHECK (Abby, 11 Sep 2026): a manager's upload goes to the
+   * quality reviewer before the client or a scheduler, exactly like a card
+   * on the board. A manager who IS a quality reviewer (or a super admin)
+   * holds the edge straight through, and their upload is checked by the
+   * person who would have checked it anyway.
+   */
+  const throughGate = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, current)
+  const passesQuality = throughGate.includes('quality_reviewer') || throughGate.includes('super_admin')
+  if ((decision === 'client' || decision === 'approve') && !passesQuality && String(current.status) === 'internal_review') {
+    try {
+      current = await performTransition(user, current as never, 'quality_check', {
+        note: note ?? UPLOAD_ADHOC_REASON,
+        skipAudiences: ['owner_editor'],
+      }) as unknown as ContentItem
+    } catch (e) {
+      console.error('upload post — could not send the new piece for quality check:', e)
+    }
+  }
   if (decision === 'client' && String(current.status) === 'internal_review') {
     try {
       current = await performTransition(user, current as never, 'client_review', { note }) as unknown as ContentItem
@@ -376,6 +395,8 @@ export async function createPostFromFiles(
       ? 'Approved — it is on the Schedule page, ready to book in.'
       : decision === 'ask'
         ? 'Sent for approval. It is in Internal check until they answer.'
+        : String(current.status) === 'quality_check'
+          ? 'Sent for quality check — it goes to the client or the scheduler once the quality reviewer passes it.'
         : decision === 'client'
           ? `Sent to ${client.name} — it is in With client until they answer.`
           : signsOff

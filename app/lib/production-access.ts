@@ -3,6 +3,7 @@ import { table } from '@/lib/db'
 import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
+import { isOnShoot } from './shoot-sop-core'
 
 /**
  * Every id the access helpers build a query around passes through here.
@@ -30,11 +31,13 @@ export function assertUuid(id: string): string {
  */
 export async function canOpenBatch(
   user: TeamUser,
-  batch: { id: string; client_id: string; owner_id?: string | null },
+  batch: { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown },
 ): Promise<boolean> {
   const ids = await batchClientIds(user)
   if (ids === null || ids.includes(batch.client_id) || batch.owner_id === user.id) return true
   if (user.role === 'client') return false
+  // on the shoot — its editor or its crew (the Shoot Brief SOP, 11 Sep 2026)
+  if (isOnShoot(batch, user.id)) return true
   const me = assertUuid(user.id)
   const held = await table<ContentItem>('content_items').list({
     by: { batch_id: batch.id },
@@ -92,18 +95,21 @@ export async function openTaggedIds(user: TeamUser): Promise<{ items: string[]; 
 export async function heldBatchIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client') return []
   const me = assertUuid(user.id)
-  const [viaItems, owned, tagged] = await Promise.all([
+  const [viaItems, owned, tagged, onShoot] = await Promise.all([
     table<ContentItem>('content_items').list({
       where: r => r.batch_id != null && (r.owner_id === me || schedulerIdsOf(r).includes(me)),
       limit: 500,
     }),
     table<Batch>('batches').list({ by: { owner_id: user.id }, limit: 500 }),
     taggedBatchIds(user),
+    // the shoots this person is ON — their editor, or on their crew
+    table<Batch>('batches').list({ where: r => isOnShoot(r, me), limit: 500 }),
   ])
   return [...new Set([
     ...viaItems.map(r => r.batch_id as string),
     ...owned.map(r => r.id),
     ...tagged,
+    ...onShoot.map(r => r.id),
   ].filter(Boolean))]
 }
 
@@ -166,6 +172,8 @@ export async function assignedItemsFilter(
     || schedulerIdsOf(item).includes(me)
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
+    // the quality reviewer's desk
+    || (user.quality_reviewer === true && item.status === 'quality_check')
 }
 
 /** The item ids assignment opens, for the surfaces that filter in memory
@@ -239,6 +247,16 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
     throw new AuthzError(e instanceof Error ? e.message : 'Item not found', 500)
   }
   if (!item) throw new AuthzError('Item not found', 404)
+
+  // the quality reviewer's desk: a card in the gate opens for them whoever's
+  // client it is (the Team's Playbook, 11 Sep 2026)
+  if (user.quality_reviewer === true && item.status === 'quality_check') {
+    return item as ContentItem & Record<string, unknown> & {
+      status: ItemStatus
+      scheduler_ids?: string[] | null
+      raw_assets?: { url: string; name: string }[] | null
+    }
+  }
 
   if (user.role === 'scheduler') {
     if (
