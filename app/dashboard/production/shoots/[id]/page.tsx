@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  ArrowLeft, Camera, Check, Link as LinkIcon, Lock, MoreHorizontal, Plus, Trash2, X, FileDown,
+  ArrowLeft, Check, Link as LinkIcon, Lock, MoreHorizontal, Plus, Trash2, X, FileDown,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -461,7 +461,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                 })
                 const json = await res.json()
                 if (!res.ok) throw new Error(json.error ?? 'Could not create the shoot plan')
-                toast.success('Shoot plan created — it is on the Production board')
+                toast.success('Shoot plan created')
                 void load()
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Could not create the shoot plan')
@@ -501,13 +501,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="p-4">
-              <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Concept & notes</p>
+              <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Notes for the team</p>
               <textarea
                 key={batch.concept ?? ''}
                 defaultValue={batch.concept ?? ''}
                 disabled={!canEdit}
                 rows={5}
-                placeholder="What's the idea? Moodboard notes, talent, wardrobe, props, hooks…"
+                placeholder="Anything else the team should know before the day."
                 onBlur={e => { const v = e.target.value; if (v !== (batch.concept ?? '')) void patch('concept', v) }}
                 className="w-full resize-y bg-transparent text-body-15 leading-relaxed outline-none placeholder:text-muted-foreground"
               />
@@ -691,7 +691,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
 
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
-              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Production</p>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">The editor’s card</p>
               {batch.status === 'brief' ? (
                 <p className="text-body-15 text-muted-foreground">
                   Pressing Go books the shoot and makes the editor’s one card, briefed with “What is coming out of this shoot”.
@@ -702,13 +702,13 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       not a deliverable — counting it told an account manager
                       there was a piece of content when there was none */}
                   <p className="text-body-15">
-                    <span className="font-mono tabular-nums">{deliverableItems.length}</span> item{deliverableItems.length === 1 ? '' : 's'} in production
+                    <span className="font-mono tabular-nums">{deliverableItems.length}</span> card{deliverableItems.length === 1 ? '' : 's'} on Editor
                     {deliverableItems.length === 0 && (
-                      <span className="text-muted-foreground"> — nothing made from this shoot yet</span>
+                      <span className="text-muted-foreground"> — none yet; Go makes it</span>
                     )}
                   </p>
                   {deliverableItems.slice(0, 5).map(it => (
-                    <Link key={it.id} href={`/dashboard/production/${it.id}`}
+                    <Link key={it.id} href={`/dashboard/editor?card=${it.id}`}
                       className="flex items-center gap-2 text-body-15 hover:underline">
                       <Check className={`h-3.5 w-3.5 ${['published', 'scheduled'].includes(it.status) ? 'text-accent-green' : 'text-muted-foreground'}`} />
                       <span className="truncate">{it.title}</span>
@@ -716,15 +716,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   ))}
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" variant="outline" asChild>
-                      <Link href="/dashboard/editor">View on Editor</Link>
+                      <Link href="/dashboard/editor">Open on Editor</Link>
                     </Button>
-                    {canEdit && role !== 'scheduler' && (
-                      <Button size="sm" asChild>
-                        <Link href={`/dashboard/editor?new_for_shoot=${batch.id}&client=${batch.client_id}`}>
-                          <Camera className="h-3.5 w-3.5" /> Create items
-                        </Link>
-                      </Button>
-                    )}
                   </div>
                 </>
               )}
@@ -745,7 +738,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                       }}
                     />
                     Visible on the client portal
-                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when you share the plan for approval. This only shows it — it asks the client for nothing. The board below goes with it, open, and the client can comment on any card of it.</span>
+                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when the plan is shared with the client. They can see the plan and comment on the canvas.</span>
                   </label>
                 </>
               ) : (
@@ -780,12 +773,12 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {/* ── the board: the Milanote-style canvas ── */}
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline gap-3">
-          <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Board</p>
+          <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Plan canvas</p>
           {canEdit ? (
             <input
               key={batch.board_name ?? ''}
               defaultValue={batch.board_name ?? ''}
-              placeholder="Name this board…"
+              placeholder="Name this canvas…"
               maxLength={80}
               className="min-w-0 flex-1 bg-transparent text-body-15 font-medium outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               onBlur={e => {

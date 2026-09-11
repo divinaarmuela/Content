@@ -324,7 +324,7 @@ export function BoardCard({
                       so it has nothing to link (the owner, 11 Sep 2026) */}
                   {!adhocPost && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
-                      {lines.link ? 'Replace the link' : 'Add a link'}
+                      {lines.link ? 'Change the Drive folder' : 'Drive folder to post from'}
                     </DropdownMenuItem>
                   )}
                   {/* a booked or posted card has nobody left to hand it to and

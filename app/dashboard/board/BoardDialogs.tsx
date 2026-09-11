@@ -101,10 +101,9 @@ export function LinkDialog({ card, onClose, onSaved }: {
     <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{card?.link_url ? 'Replace the link' : 'Add the link'}</DialogTitle>
+          <DialogTitle>{card?.link_url ? 'Change the Drive folder' : 'Drive folder to post from'}</DialogTitle>
           <DialogDescription>
-            Paste the Google Drive or Dropbox link to the work.
-            {card?.link_url ? ' Replacing it makes a new version.' : ''}
+            Paste the Google Drive or Dropbox folder the scheduler posts from.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
@@ -644,7 +643,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New card</DialogTitle>
-          <DialogDescription>One thing to make, for one client, with a link to where it lives.</DialogDescription>
+          <DialogDescription>One card for one client. Say what needs doing and attach the files to work from.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -687,7 +686,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   </SelectContent>
                 </Select>
               </div>
-              {groups.length > 0 && (
+              {!simple && groups.length > 0 && (
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="new-group">Which deliverable?</Label>
                   <Select value={groupId || 'none'} onValueChange={v => setGroupId(v && v !== 'none' ? v : '')}>
@@ -739,7 +738,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               <Label htmlFor="new-due">Due (optional)</Label>
               <Input id="new-due" type="date" value={due} onChange={e => setDue(e.target.value)} className={field} />
             </div>
-            {isManager && (
+            {isManager && !simple && (
               <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[14px] sm:col-span-2">
                 <input type="checkbox" className="h-4 w-4 accent-foreground" checked={deliverOnlyCard} onChange={e => setDeliverOnlyCard(e.target.checked)} />
                 <span>Deliver only — the client posts this themselves, nobody here schedules it</span>

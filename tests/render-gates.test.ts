@@ -102,3 +102,35 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| slides\.length === 0\}/)
   })
 })
+
+/* ── the page inventory of 11 Sep 2026 (page-inventory-audit skill) ── */
+
+describe('leftovers the SOP never asked for are gone', () => {
+  const NEW_PLAN = 'app/dashboard/production/NewItemDialog.tsx'
+  const DIALOGS = 'app/dashboard/board/BoardDialogs.tsx'
+  const CARD = 'app/dashboard/board/BoardCard.tsx'
+
+  it('New shoot plan asks only what the SOP asks: no priority, no existing-shoot picker, no outside link', () => {
+    expect(src(NEW_PLAN)).not.toMatch(/<Label>Priority<\/Label>|A new shoot<\/SelectItem>|Outside plan link|milanote\.com/)
+    expect(src(NEW_PLAN)).toMatch(/Account manager for this shoot/)
+  })
+  it('the shoot page has no link to the old Drive folder or the old card page, and no "Create items"', () => {
+    expect(src(SHOOT)).not.toMatch(/Open Drive folder|Create items|new_for_shoot|dashboard\/production\/\$\{it\.id\}/)
+    expect(src(SHOOT)).toMatch(/dashboard\/editor\?card=\$\{it\.id\}/)
+    expect(src(SHOOT)).toMatch(/Plan canvas/)
+    expect(src(SHOOT)).toMatch(/Notes for the team/)
+  })
+  it('the card link is the scheduler\u2019s Drive folder, in those words', () => {
+    expect(src(CARD)).toMatch(/Drive folder to post from/)
+    expect(src(CARD)).not.toMatch(/'Add a link'|'Replace the link'/)
+    expect(src(DIALOGS)).toMatch(/Drive folder to post from/)
+    expect(src(DIALOGS)).not.toMatch(/'Add the link'/)
+  })
+  it('the Editor\u2019s New card (simple) has no kind, deliverable or deliver-only picker', () => {
+    const s = src(DIALOGS)
+    expect(s).toMatch(/\{!simple && \(\s*<div className="flex flex-col gap-2">\s*<Label htmlFor="new-kind">Kind of work/)
+    expect(s).toMatch(/\{!simple && groups\.length > 0 &&/)
+    expect(s).toMatch(/\{isManager && !simple && \(/)
+    expect(src(EDITOR)).toMatch(/<NewCardDialog[\s\S]*?simple\s*\/>/)
+  })
+})

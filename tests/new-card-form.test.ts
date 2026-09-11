@@ -48,13 +48,15 @@ describe('New shoot plan form — one shoot, one card', () => {
     expect(SRC.match(/fetch\('\/api\/production\/items'/g)).toHaveLength(1)
   })
 
-  it('"What this shoot is for" is one box, right under the title, above priority', () => {
+  it('"What this shoot is for" is one box, right under the title, above the shoot date', () => {
     const title = SRC.indexOf('<Label>Title *</Label>')
     const box = SRC.indexOf('<Label>What this shoot is for</Label>')
-    const priority = SRC.indexOf('<Label>Priority</Label>')
+    const date = SRC.indexOf('<Label>Shoot date</Label>')
     expect(title).toBeGreaterThan(-1)
     expect(box).toBeGreaterThan(title)
-    expect(box).toBeLessThan(priority)
+    expect(box).toBeLessThan(date)
+    // the SOP never asks for a priority, an existing-shoot picker or an outside plan link on a NEW shoot plan
+    expect(SRC).not.toMatch(/<Label>Priority<\/Label>|A new shoot<\/SelectItem>|Outside plan link/)
     // one label — not "Editing notes" / "Note to reviewer"
     expect(SRC.match(/What this shoot is for/g)).toHaveLength(1)
     expect(SRC).not.toMatch(/Editing notes/)

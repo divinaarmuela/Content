@@ -151,12 +151,6 @@ export default function NewShootPlanDialog({
     }))
   }, [open, presetClient, presetBatch])
 
-  // the shoots a plan may attach to: this client's, not finished, and not
-  // already carrying one (the DB has a one-plan-per-shoot unique index)
-  const briefableShoots = batches.filter(b =>
-    (!draft.client_id || b.client_id === draft.client_id)
-    && (b.status ?? 'brief') !== 'wrapped'
-    && !(briefedBatchIds ?? []).includes(b.id))
 
   const createPlan = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
@@ -257,30 +251,6 @@ export default function NewShootPlanDialog({
           </div>
           {/* the brand, the moment a client is picked (9 Sep 2026) */}
           {draft.client_id && <div className="sm:col-span-2"><BrandCard clientId={draft.client_id} /></div>}
-          {/* a plan belongs to a shoot. Without this picker "New shoot plan"
-              silently created a SECOND shoot beside the one already there. */}
-          <div className="grid gap-1.5">
-            <Label>Shoot <HelpHint term="shoot" /></Label>
-            <Select value={draft.batch_id || 'new'}
-              onValueChange={v => setDraft(d => ({ ...d, batch_id: v === 'new' ? '' : v ?? '' }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">A new shoot</SelectItem>
-                {briefableShoots.map(b => (
-                  <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[12px] text-muted-foreground">
-              {!draft.client_id
-                ? 'Choose a client to see their shoots.'
-                : briefableShoots.length === 0
-                  ? 'A new shoot is made with this plan.'
-                  : draft.batch_id
-                    ? 'The plan goes on that shoot.'
-                    : 'A new shoot is made with this plan.'}
-            </p>
-          </div>
           <div className="grid gap-1.5 sm:col-span-2">
             <Label>Title *</Label>
             <Input value={draft.title} placeholder="e.g. October clinic day" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
@@ -293,15 +263,6 @@ export default function NewShootPlanDialog({
               placeholder="Going with the garden concept — see the moodboard for tone…"
               onChange={e => setDraft(d => ({ ...d, brief: e.target.value }))} />
             <p className="text-[12px] text-muted-foreground">The objective in a line or two. The shot list, script and the rest are written on the plan page.</p>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Priority</Label>
-            <Select value={draft.priority} onValueChange={v => v && setDraft(d => ({ ...d, priority: v }))}>
-              <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {['low', 'normal', 'high', 'urgent'].map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
           <div className="grid gap-1.5">
             <Label>Shoot date</Label>
@@ -347,11 +308,6 @@ export default function NewShootPlanDialog({
               </Select>
             </div>
           )}
-          <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Outside plan link <span className="text-secondary-13 font-normal text-muted-foreground">(optional — the plan is built on the plan page; add this only if it also lives somewhere else)</span></Label>
-            <Input value={draft.brief_url} placeholder="https://app.milanote.com/…"
-              onChange={e => setDraft(d => ({ ...d, brief_url: e.target.value }))} className="font-mono text-secondary-13" />
-          </div>
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-5 text-[14px] font-semibold" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
