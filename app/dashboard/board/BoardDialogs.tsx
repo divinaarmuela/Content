@@ -25,7 +25,7 @@ import {
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
 import { linkKindOf } from '../../lib/card-link-core'
-import { findKindByName, normaliseKindName } from '../../lib/work-kinds-core'
+import { findKindByName, kindIdForContentType, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
 import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
@@ -532,8 +532,12 @@ export type PersonChoice = { id: string; name: string; email: string }
  * A new card: one deliverable, one client, one link. Kind is free text.
  * Managers can hand it to somebody; everyone else makes it their own.
  */
-export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated }: {
+export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false }: {
   open: boolean
+  /** the Editor page's popup: no "Kind of work" to pick — a card for an
+   *  editor is a video edit, or graphics when the files are stills (the
+   *  owner, 11 Sep 2026: "Kind of work, what's this") */
+  simple?: boolean
   onOpenChange: (o: boolean) => void
   clients: readonly ClientChoice[]
   kinds: readonly KindRow[]
@@ -580,13 +584,17 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
 
   const linkCheck = linkKindOf(link)
   const folderCheck = linkKindOf(folder)
-  const canSave = !!clientId && !!title.trim() && !!normaliseKindName(kind) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
+  const canSave = !!clientId && !!title.trim() && (simple || !!normaliseKindName(kind)) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
 
   const save = async () => {
     if (!canSave) return
     setBusy(true)
     try {
-      const kindRow = await adoptKind(kind, kinds)
+      // an editor's card: graphics when every file is a still, else a video edit
+      const derived = simple
+        ? kindIdForContentType(kinds as never, workFiles.length > 0 && workFiles.every(f => f.type.startsWith('image/')) ? 'static' : 'video')
+        : null
+      const kindRow = simple && derived ? { id: derived } : await adoptKind(simple ? 'Video edit' : kind, kinds)
       // the files go up first, so the card is made with them on it and the
       // editor's "yours to make" email lists them
       const rawAssets = workFiles.length > 0
@@ -661,10 +669,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               placeholder="What the person making this needs to know — it goes to them."
               className="rounded-[20px] border-border bg-surface px-4 py-3" />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="new-kind">Kind of work</Label>
-            <KindInput id="new-kind" value={kind} onChange={setKind} kinds={kinds} />
-          </div>
+          {!simple && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-kind">Kind of work</Label>
+              <KindInput id="new-kind" value={kind} onChange={setKind} kinds={kinds} />
+            </div>
+          )}
           {shoots.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">

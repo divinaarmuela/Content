@@ -473,16 +473,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           </Button>
         </div>
       )}
-      {/* only when the folder actually exists — an integration that is off
-          should leave no trace on this page at all */}
-      {batch.drive_url && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <a href={batch.drive_url} target="_blank" rel="noreferrer noopener"
-            className="w-fit font-mono text-[12px] uppercase tracking-wider text-accent-blue-deep underline decoration-dotted">
-            Open Drive folder →
-          </a>
-        </div>
-      )}
 
       {/* THE review lifecycle — the "what's the next move" card, moved here so
           the plan lives on ONE page: write it above, send it for review here,

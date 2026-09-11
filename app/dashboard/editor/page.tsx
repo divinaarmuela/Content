@@ -194,6 +194,7 @@ export default function EditorPage() {
           kinds={live.tables.workKinds.rows}
           team={team}
           viewer={{ ...viewer, name: me?.name }}
+          simple
         />
       )}
     </div>
