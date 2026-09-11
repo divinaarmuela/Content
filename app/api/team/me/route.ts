@@ -24,6 +24,15 @@ export async function GET() {
     try {
       const me = await resolveTeamUser()
       const data = await table<TeamUser>('team_users').get(me.id)
+      // IS A QUALITY REVIEWER SET AT ALL? Until somebody is flagged, every
+      // quality check falls to the super admins (the stand-in rule), and the
+      // Overview says so to them. Asked only for a super admin — nobody else
+      // can set one — so the extra read is theirs alone.
+      const reviewerSet = me.role === 'super_admin'
+        ? (await table<TeamUser>('team_users')
+          .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client', limit: 1 })
+          .catch(() => [] as TeamUser[])).length > 0
+        : undefined
 
       return NextResponse.json({
         id: me.id,
@@ -33,6 +42,7 @@ export async function GET() {
         // the two playbook hats: passes the quality check; the ops contact
         quality_reviewer: data?.quality_reviewer === true,
         ops_contact: data?.ops_contact === true,
+        ...(reviewerSet === undefined ? {} : { quality_reviewer_set: reviewerSet }),
         employment_type: me.employment_type,
         timezone: me.timezone,
         active: me.active_status,

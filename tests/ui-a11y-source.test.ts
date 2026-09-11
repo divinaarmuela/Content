@@ -42,6 +42,8 @@ const FILES = [
   'app/dashboard/board/BoardDialogs.tsx',
   'app/dashboard/board/EditorCardTools.tsx',
   'app/dashboard/board/BoardFilters.tsx',
+  'app/dashboard/ui/NoReviewerBanner.tsx',
+  'app/dashboard/board/FilesToWorkFrom.tsx',
   'app/dashboard/scheduler/page.tsx',
   'app/dashboard/scheduler/NewPostButton.tsx',
   'app/dashboard/scheduler/SendForApprovalDialog.tsx',

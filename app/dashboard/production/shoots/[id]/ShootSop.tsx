@@ -10,9 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  BRIEF_ITEMS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, briefItemFilled, clockWords,
-  goReady, hasAcknowledged, peopleOnShoot, shootStage, stageMove, type BriefItemKey, type MoveRole,
-  type ShootStage, type SopShoot,
+  BRIEF_ITEMS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
+  clockWords, goReady, hasAcknowledged, overrideWords, peopleOnShoot, shootStage, stageMove, type BriefItemKey,
+  type MoveRole, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
 import Chip from '../../../ui/Chip'
 
@@ -64,6 +64,8 @@ export function BriefParts({ batch, canEdit, itemCount, onPatch }: {
   const row = (key: BriefItemKey, field: React.ReactNode) => {
     const item = BRIEF_ITEMS.find(i => i.key === key)!
     const on = tick(key)
+    // the plan built on the canvas counts, and the row says so
+    const fromCanvas = briefItemSource(batch, key, { itemCount }) === 'canvas'
     return (
       <div key={key} className="flex gap-3">
         <Tick on={on} />
@@ -71,7 +73,8 @@ export function BriefParts({ batch, canEdit, itemCount, onPatch }: {
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[15px] font-semibold">{item.label}</span>
             <span className="text-[12px] text-muted-foreground">{item.hint}</span>
-            <span className="sr-only">{on ? 'filled in' : 'still to fill in'}</span>
+            {fromCanvas && <Chip tone="green" className="text-[12px]">from the canvas</Chip>}
+            <span className="sr-only">{on ? (fromCanvas ? 'filled in, on the canvas' : 'filled in') : 'still to fill in'}</span>
           </div>
           {field}
         </div>
@@ -263,14 +266,19 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
   busy: boolean
   names: { go_by?: string | null; shared_by?: string | null; handed_by?: string | null }
   onPatch: (field: string, value: unknown) => Promise<boolean>
-  onMove: (to: ShootStage) => Promise<void>
+  onMove: (to: ShootStage, opts?: { reason?: string }) => Promise<void>
 }) {
   const manager = isManager(role)
   const stage = shootStage(batch, today)
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
-  const go = goReady(batch, { itemCount })
-  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount } }, 'now', viewerId)
+  // NO BRIEF, NO SHOOT: a plan shared late cannot be confirmed by an AM; a
+  // super admin says why and goes ahead — the reason is kept on the shoot
+  const [reason, setReason] = useState('')
+  const go = goReady(batch, { itemCount, role, overrideReason: reason })
+  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason }, 'now', viewerId)
+  const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount }).needsOverride
+  const wentLate = overrideWords(batch)
   const next: { to: ShootStage; label: string; primary: boolean }[] = [
     { to: 'shared', label: 'Share the plan with the team', primary: true },
     { to: 'confirmed', label: 'Confirm — it is go', primary: true },
@@ -299,6 +307,7 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
         {meaning && <p className="text-[13px] text-muted-foreground">{meaning}</p>}
         {names.shared_by && batch.brief_shared_at && <p className="text-[12px] text-muted-foreground">Shared by {names.shared_by}</p>}
         {names.go_by && batch.go_at && <p className="text-[12px] text-muted-foreground">Confirmed as go by {names.go_by}</p>}
+        {wentLate && <Chip tone="amber" className="w-fit">{wentLate}</Chip>}
         {names.handed_by && batch.footage_handed_at && <p className="text-[12px] text-muted-foreground">Footage handed over by {names.handed_by}</p>}
 
         {manager && stage !== 'footage_handed' && (
@@ -321,9 +330,18 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
             {go.reasons.map(r => <li key={r} className="flex gap-2"><span aria-hidden>·</span>{r}</li>)}
           </ul>
         )}
+        {askOverride && (
+          <label className="flex flex-col gap-1 text-[12px] font-semibold">
+            Why is it going ahead late? Ops is told, with your reason.
+            <Input value={reason} onChange={e => setReason(e.target.value)} maxLength={300}
+              placeholder="One line — the client moved the date, the crew is already booked…"
+              className="h-11 text-[15px] font-normal" aria-label="Reason for going ahead late" />
+          </label>
+        )}
 
         {shown.map(n => {
           const check = can(n.to)
+          const overriding = n.to === 'confirmed' && askOverride
           return (
             <div key={n.to} className="flex flex-col gap-1">
               <Button
@@ -332,8 +350,8 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
                   : 'h-11 rounded-full px-5 text-[14px] font-semibold'}
                 variant={n.primary ? 'default' : 'outline'}
                 disabled={busy || !check.ok}
-                onClick={() => void onMove(n.to)}>
-                {n.label}
+                onClick={() => void onMove(n.to, overriding ? { reason: reason.trim() } : undefined)}>
+                {overriding ? 'Go anyway (super admin)' : n.label}
               </Button>
               {!check.ok && <p className="text-[12px] text-muted-foreground">{check.reason}</p>}
             </div>

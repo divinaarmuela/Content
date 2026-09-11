@@ -23,7 +23,7 @@ import {
 import type { Role } from './identity-core'
 import type { Hat } from './workflow-core'
 
-export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'posted'
+export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted'
 
 export type BoardColumn = {
   key: BoardColumnKey
@@ -67,13 +67,31 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
     meaning: 'Signed off. Needs a posting time.',
     statuses: ['approved_for_scheduling'],
   },
+  // BOOKED IN is its own column (11 Sep 2026). A post the channel holds for
+  // Sunday used to sit under "Posted" with only a chip to say it was not
+  // out yet; a glance at the board read it as live. The column header now
+  // says the truth. "Booked in" is the owner's word for it, never
+  // "Scheduled".
+  {
+    key: 'booked',
+    label: 'Booked in',
+    meaning: 'The channel has it and will post it at its time.',
+    statuses: ['scheduled'],
+  },
   {
     key: 'posted',
     label: 'Posted',
-    meaning: 'Booked in, or already live.',
-    statuses: ['scheduled', 'published'],
+    meaning: 'Already live.',
+    statuses: ['published'],
   },
 ]
+
+/** The columns past the point of doing: booked with the channel, or live. */
+export const OUT_COLUMNS: readonly BoardColumnKey[] = ['booked', 'posted']
+/** Is this status out of the team's hands — booked in or already posted? */
+export function isOut(status: ItemStatus): boolean {
+  return OUT_COLUMNS.includes(COLUMN_OF_STATUS[status])
+}
 
 const COLUMN_BY_KEY: Record<BoardColumnKey, BoardColumn> = Object.fromEntries(
   BOARD_COLUMNS.map(c => [c.key, c]),

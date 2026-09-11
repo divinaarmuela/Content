@@ -30,6 +30,7 @@ import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import EditorCardTools from './EditorCardTools'
+import FilesToWorkFrom from './FilesToWorkFrom'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -460,11 +461,20 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           onClose={() => setHanding(false)} />
       )}
 
-      {/* ── 3. the files ── */}
+      {/* ── 2b. what the editor works FROM (a manager adds; 11 Sep 2026) ── */}
+      {!adhoc && isManager !== undefined && (
+        <FilesToWorkFrom
+          item={item as unknown as { id: string; raw_assets?: unknown; raw_assets_url?: string | null }}
+          isManager={isManager}
+          frozen={frozenCard}
+        />
+      )}
+
+      {/* ── 3. the files: the versions the editor made ── */}
       <div className="flex flex-col gap-4 border-b border-border px-5 py-4">
         <div className="flex items-center justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {slides.length} {slides.length === 1 ? 'file' : 'files'}{latest ? ` · version ${latest.version_number}` : ''}
+            {adhoc ? '' : 'Versions · '}{slides.length} {slides.length === 1 ? 'file' : 'files'}{latest ? ` · version ${latest.version_number}` : ''}
             {postedSlides && postedSlides.posted > 0 ? ` · ${postedSlides.posted} of ${postedSlides.total} posted` : ''}
           </p>
           {/* a card booked in or posted takes no new files: what the channel

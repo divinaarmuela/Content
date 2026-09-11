@@ -3,6 +3,7 @@ import {
   BRIEF_ITEMS, LATE_WORDS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, canSeeShoot,
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageMove, withAck, withoutAck, type SopShoot,
+  briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
 } from '../app/lib/shoot-sop-core'
 import { planCardId } from '../app/lib/deliverable-group-core'
 
@@ -239,5 +240,82 @@ describe('who sees a shoot', () => {
   it('a client sees only their own shoots', () => {
     expect(canSeeShoot({ id: 'x', role: 'client', client_id: 'c-1' }, b, [])).toBe(true)
     expect(canSeeShoot({ id: 'x', role: 'client', client_id: 'c-2' }, b, [])).toBe(false)
+  })
+})
+
+/* ── the plan built on the canvas counts (11 Sep 2026) ── */
+
+describe('the checklist reads the canvas', () => {
+  const card = (kind: string, text: string) => ({ id: text, kind, x: 0, y: 0, w: 200, z: 1, text })
+  it('a heading or a card that names the shot list or the script ticks the item, and says where from', () => {
+    const b = complete({ shot_list: [], script: '', canvas_cards: [card('label', 'Shot list'), card('note', 'Talking points: three, approved')] })
+    expect(canvasSays(b)).toEqual({ shotList: true, script: true })
+    expect(briefChecklist(b).complete).toBe(true)
+    expect(briefItemSource(b, 'shot_list')).toBe('canvas')
+    expect(briefItemSource(b, 'script')).toBe('canvas')
+    // the fields still win the credit when they are filled
+    expect(briefItemSource(complete(), 'shot_list')).toBe('field')
+    expect(briefItemSource(complete({ shot_list: [], script: '', canvas_cards: [] }), 'shot_list')).toBeNull()
+  })
+  it('a picture, a link or an unrelated note is not a shot list', () => {
+    const b = complete({ shot_list: [], script: '', canvas_cards: [card('image', 'shot list'), card('note', 'Mood: warm, golden hour'), { kind: 'note' }, null] })
+    expect(canvasSays(b)).toEqual({ shotList: false, script: false })
+    expect(briefChecklist(b).missing.map(m => m.key)).toEqual(['shot_list', 'script'])
+    expect(canvasSays({ canvas_cards: 'nope' })).toEqual({ shotList: false, script: false })
+  })
+})
+
+/* ── no brief, no shoot — enforced (11 Sep 2026) ── */
+
+describe('a plan shared late', () => {
+  const ready = (over: Partial<SopShoot> = {}) => complete({
+    aligned_at: 'x', client_confirmed_at: 'x',
+    acknowledgements: [{ user_id: VG, at: 'x' }, { user_id: ED, at: 'x' }],
+    ...over,
+  })
+  it('counts the lead days and says the SOP sentence', () => {
+    expect(shareLeadDays(complete({ brief_shared_at: '2026-09-17T09:00:00Z' }))).toBe(4)
+    expect(sharedLate(complete({ brief_shared_at: '2026-09-17T09:00:00Z' }))).toBe(true)
+    expect(sharedLate(complete({ brief_shared_at: '2026-09-14T09:00:00Z' }))).toBe(false)
+    expect(sharedLate(complete())).toBe(false)
+    expect(sharedLateWords(complete({ brief_shared_at: '2026-09-17T09:00:00Z' })))
+      .toBe('The plan was shared 4 days before the shoot — the playbook needs 7. A super admin can override with a reason.')
+  })
+  it('an account manager cannot confirm it as go; a super admin can, with a reason, and it is kept', () => {
+    const late = ready({ brief_shared_at: '2026-09-17T09:00:00Z' })
+    const am = goReady(late, { role: 'account_manager' })
+    expect(am.ok).toBe(false)
+    expect(am.needsOverride).toBe(true)
+    expect(am.reasons).toEqual([sharedLateWords(late)])
+    expect(goReady(late, { role: 'super_admin' }).ok).toBe(false)
+    expect(goReady(late, { role: 'super_admin', overrideReason: '  ' }).needsOverride).toBe(true)
+    expect(goReady(late, { role: 'super_admin', overrideReason: 'Client moved the date' }).ok).toBe(true)
+    // the override is only the last thing in the way — with more missing it is not offered
+    expect(goReady({ ...late, aligned_at: null }, { role: 'account_manager' }).needsOverride).toBe(false)
+    const refused = stageMove(late, 'confirmed', { role: 'super_admin', today: TODAY }, 'now', AM)
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) expect(refused.needsOverride).toBe(true)
+    const went = stageMove(late, 'confirmed', { role: 'super_admin', today: TODAY, overrideReason: 'Client moved the date' }, 'now', AM)
+    expect(went.ok).toBe(true)
+    if (went.ok) {
+      expect(went.patch.go_override_reason).toBe('Client moved the date')
+      expect(went.patch.go_override_by).toBe(AM)
+      expect(went.label).toMatch(/went ahead late/)
+    }
+    expect(overrideWords({ go_override_reason: 'Client moved the date' })).toBe('Went ahead late — Client moved the date')
+    expect(overrideWords({ go_override_reason: null })).toBeNull()
+    // a plan shared on time carries no reason
+    const onTime = stageMove(ready({ brief_shared_at: '2026-09-12T09:00:00Z' }), 'confirmed', { role: 'account_manager', today: TODAY }, 'now', AM)
+    expect(onTime.ok).toBe(true)
+    if (onTime.ok) expect(onTime.patch.go_override_reason).toBeUndefined()
+  })
+  it('a shoot already go is never re-judged, and Ops is nudged once about a late share', () => {
+    const done = ready({ brief_shared_at: '2026-09-17T09:00:00Z', go_at: 'x' })
+    expect(goReady(done, { role: 'account_manager' }).ok).toBe(true)
+    const late = complete({ id: 'late', brief_shared_at: '2026-09-17T09:00:00Z' })
+    const told = complete({ id: 'told', brief_shared_at: '2026-09-17T09:00:00Z', late_share_nudged_at: 'x' })
+    const fine = complete({ id: 'fine', brief_shared_at: '2026-09-12T09:00:00Z' })
+    const closed = complete({ id: 'closed', brief_shared_at: '2026-09-17T09:00:00Z', status: 'wrapped' })
+    expect(lateShareNudgeTargets([late, told, fine, closed]).map(b => b.id)).toEqual(['late'])
   })
 })

@@ -4,8 +4,7 @@ import type { Batch, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-ty
 import type { TeamUser } from './authz'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import {
-  LATE_WORDS, acksOf, daysUntilShoot, lateNudgeTargets, peopleOnShoot, type HandoverPlan,
-} from './shoot-sop-core'
+  LATE_WORDS, acksOf, daysUntilShoot, lateNudgeTargets, peopleOnShoot, type HandoverPlan, lateShareNudgeTargets, shareLeadDays } from './shoot-sop-core'
 
 /**
  * WHO IS TOLD WHAT, ALONG THE SHOOT BRIEF SOP — the server half.
@@ -147,11 +146,36 @@ export async function notifyShootReminder(actor: TeamUser, batch: Batch): Promis
 export async function runBriefLateNudge(): Promise<{ late: number; told: number }> {
   const today = melbourneToday()
   const candidates = await table<Batch>('batches').list({
-    where: r => !!r.shoot_date && r.status !== 'wrapped' && !r.late_nudged_at,
+    where: r => !!r.shoot_date && r.status !== 'wrapped' && (!r.late_nudged_at || !r.late_share_nudged_at),
     limit: 500,
   })
-  const late = lateNudgeTargets(candidates, today)
+  const late = lateNudgeTargets(candidates.filter(r => !r.late_nudged_at), today)
   let told = 0
+  // A PLAN SHARED LATE is late too (11 Sep 2026): shared with three days to
+  // go is not the 7-day rule kept. Told once per shoot, on its own stamp.
+  const sharedLateOnes = lateShareNudgeTargets(candidates)
+  for (const b of sharedLateOnes) {
+    const stamped = await table<Batch>('batches').claim(b.id, cur =>
+      cur && !cur.late_share_nudged_at ? { ...cur, late_share_nudged_at: new Date().toISOString() } : null)
+    if (!stamped.claimed) continue
+    const lead = shareLeadDays(b) ?? 0
+    const people = await managersAndOps(b)
+    for (const p of people) {
+      const r = await notify({
+        eventType: 'shoot_brief_late', entityType: 'batch',
+        entityId: `${b.id}#shared-late`,
+        recipientId: p.id, recipientEmail: p.email,
+        subject: `⚠️ Plan shared late: ${b.title}`,
+        bodyHtml: renderEmail(
+          `${escapeHtml(b.title)} — the plan was shared late`,
+          `<p>The plan went to the team <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before the shoot. The playbook needs 7.</p>` +
+          '<p>An account manager cannot confirm it as go now. A super admin can go ahead with a reason, or the shoot date moves.</p>',
+          'Open the shoot plan', shootUrl(b.id),
+        ),
+      })
+      if (r === 'sent') told++
+    }
+  }
   for (const b of late) {
     const stamped = await table<Batch>('batches').claim(b.id, cur =>
       cur && !cur.late_nudged_at ? { ...cur, late_nudged_at: new Date().toISOString() } : null)
@@ -175,7 +199,38 @@ export async function runBriefLateNudge(): Promise<{ late: number; told: number 
       if (r === 'sent') told++
     }
   }
-  return { late: late.length, told }
+  return { late: late.length + sharedLateOnes.length, told }
+}
+
+/**
+ * A super admin went ahead with a plan shared late. Ops (and the client's
+ * managers) are told once, with the reason — the record the playbook asks
+ * for when a rule is bent ("if it isn't in writing, it doesn't exist").
+ */
+export async function notifyGoOverride(actor: TeamUser, batch: Batch): Promise<number> {
+  const reason = String(batch.go_override_reason ?? '').trim()
+  if (!reason) return 0
+  const people = await managersAndOps(batch)
+  const lead = shareLeadDays(batch) ?? 0
+  let sent = 0
+  for (const p of people) {
+    if (p.id === actor.id) continue
+    const r = await notify({
+      actorName: actor.name, actorEmail: actor.email,
+      eventType: 'shoot_go_override', entityType: 'batch',
+      entityId: `${batch.id}#override`,
+      recipientId: p.id, recipientEmail: p.email,
+      subject: `Went ahead late: ${batch.title}`,
+      bodyHtml: renderEmail(
+        `${escapeHtml(batch.title)} — confirmed as go, late`,
+        `<p>${escapeHtml(actor.name || actor.email)} confirmed the shoot with the plan shared <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before it (the playbook needs 7).</p>` +
+        `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>`,
+        'Open the shoot plan', shootUrl(batch.id),
+      ),
+    })
+    if (r === 'sent') sent++
+  }
+  return sent
 }
 
 /** how many on the shoot have acknowledged, by name — for the log line */

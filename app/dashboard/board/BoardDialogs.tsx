@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NETWORK_LABEL } from '../../lib/publish-core'
 import BrandCard from '../production/BrandCard'
 import { toast } from 'sonner'
@@ -29,6 +29,7 @@ import { findKindByName, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
 import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
+import { uploadFiles } from '../uploadQueue'
 
 /**
  * THE FEW THINGS A CARD ASKS FOR.
@@ -535,6 +536,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  deliverable on that shoot the card answers for, when the shoot has them */
   const [shootId, setShootId] = useState('')
   const [groupId, setGroupId] = useState('')
+  /** FILES TO WORK FROM (the owner, 11 Sep 2026: "she will show the files
+   *  there"): a manager hands the editor the footage, stills or references
+   *  with the card, and/or the folder they live in */
+  const [workFiles, setWorkFiles] = useState<File[]>([])
+  const [folder, setFolder] = useState('')
+  const workInput = useRef<HTMLInputElement | null>(null)
   const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
   const shoots = shootRows.filter(b => b.client_id === clientId && b.status !== 'wrapped')
@@ -543,19 +550,25 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     if (!open) return
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
-    setShootId(''); setGroupId('')
+    setShootId(''); setGroupId(''); setWorkFiles([]); setFolder('')
   }, [open, defaultClientId, clients, viewer.id])
   useEffect(() => { setShootId(''); setGroupId('') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])
 
   const linkCheck = linkKindOf(link)
-  const canSave = !!clientId && !!title.trim() && !!normaliseKindName(kind) && (link.trim() === '' || linkCheck.ok)
+  const folderCheck = linkKindOf(folder)
+  const canSave = !!clientId && !!title.trim() && !!normaliseKindName(kind) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
 
   const save = async () => {
     if (!canSave) return
     setBusy(true)
     try {
       const kindRow = await adoptKind(kind, kinds)
+      // the files go up first, so the card is made with them on it and the
+      // editor's "yours to make" email lists them
+      const rawAssets = workFiles.length > 0
+        ? (await uploadFiles(workFiles, { purpose: 'social' }).done).map(({ file, url }) => ({ url, name: file.name }))
+        : []
       const res = await fetch('/api/production/items', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -567,6 +580,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           ...(due ? { due_date: due } : {}),
           ...(shootId ? { batch_id: shootId } : {}),
           ...(groupId ? { group_id: groupId } : {}),
+          ...(rawAssets.length > 0 ? { raw_assets: rawAssets } : {}),
+          ...(folder.trim() ? { raw_assets_url: folder.trim() } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
           // link is where the work is from
@@ -649,6 +664,39 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                     </SelectContent>
                   </Select>
                 </div>
+              )}
+            </div>
+          )}
+          {isManager && (
+            <div className="flex flex-col gap-2 rounded-[20px] border border-border p-3">
+              <Label htmlFor="new-work-files">Files to work from (optional)</Label>
+              <p className="text-[13px] text-muted-foreground">Footage, stills or references for the person making this. They are told when the card lands.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={busy}
+                  onClick={() => workInput.current?.click()}>
+                  Choose files
+                </Button>
+                <input id="new-work-files" ref={workInput} type="file" multiple accept="image/*,video/*" className="hidden"
+                  onChange={e => { setWorkFiles(w => [...w, ...Array.from(e.target.files ?? [])]); e.target.value = '' }} />
+                {workFiles.length > 0 && (
+                  <span className="text-[13px] text-muted-foreground">{workFiles.length} {workFiles.length === 1 ? 'file' : 'files'} chosen</span>
+                )}
+              </div>
+              {workFiles.length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {workFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 text-[13px]">
+                      <span className="truncate">{f.name}</span>
+                      <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setWorkFiles(w => w.filter((_, k) => k !== i))}
+                        className="inline-flex min-h-11 shrink-0 items-center px-2 text-muted-foreground underline-offset-4 hover:underline">Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Label htmlFor="new-folder">Or the folder they live in</Label>
+              <Input id="new-folder" value={folder} onChange={e => setFolder(e.target.value)} placeholder="https://drive.google.com/… or Dropbox" className={field} />
+              {folder.trim() !== '' && (
+                <p className="text-[13px] text-muted-foreground">{folderCheck.ok ? `This is a ${folderCheck.label} link.` : folderCheck.reason}</p>
               )}
             </div>
           )}

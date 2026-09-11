@@ -8,7 +8,7 @@ import type {
 import { requireSignedIn, requireRole, authzErrorResponse, AuthzError } from '../../../../lib/authz'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
-import { logActivity, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
+import { logActivity, notifyFilesToWorkFrom, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
 import { actingRoles } from '../../../../lib/workflow-core'
 import { canEditItemFields } from '../../../../lib/item-edit-core'
 import { askedPatch, NOBODY_ASKED } from '../../../../lib/asked-core'
@@ -282,6 +282,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } else {
         notifyJobAssigned(user, data as unknown as Parameters<typeof notifyJobAssigned>[1])
       }
+    }
+    // the editor is told what landed for them to work from (11 Sep 2026) —
+    // once per save, never for a re-assignment (that email says it already)
+    const folderAdded = 'raw_assets_url' in patch && !!patch.raw_assets_url
+      && String(patch.raw_assets_url) !== String((current as { raw_assets_url?: string | null }).raw_assets_url ?? '')
+    if ((addedAssets.length > 0 || folderAdded) && !('owner_id' in patch)) {
+      notifyFilesToWorkFrom(user, data as unknown as Parameters<typeof notifyFilesToWorkFrom>[1], addedAssets, folderAdded ? String(patch.raw_assets_url) : null)
     }
     // every new file lands in the item's Drive folder too — queued, never
     // awaited: a slow Drive must not slow a save

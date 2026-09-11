@@ -148,7 +148,7 @@ export const POST_APPROVAL_TOUR: Tour = {
     {
       target: 'board-lanes',
       title: 'The columns',
-      body: 'Draft is still being made, Internal check is with an account manager, Quality check is with the quality reviewer, With client is with them, Ready to post is signed off and needs a time, and Posted is booked in or already live.',
+      body: 'Draft is being made, Internal check is with an account manager, Quality check is with the reviewer, With client is with them, Ready to post needs a time, Booked in means the channel has it, and Posted is live.',
     },
     {
       target: 'board-new-post',

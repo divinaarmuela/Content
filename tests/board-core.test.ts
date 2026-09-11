@@ -14,14 +14,17 @@ import type { Role } from '../app/lib/identity-core'
  * disagree with it, and that every surface reading them gets the same answer.
  */
 
-const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'posted']
+const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted']
 
-describe('the six columns', () => {
-  it('are exactly six, in board order, with plain labels and one-line meanings', () => {
+describe('the seven columns', () => {
+  it('are exactly seven, in board order, with plain labels and one-line meanings', () => {
     expect(BOARD_COLUMNS.map(c => c.key)).toEqual(KEYS)
+    // "Booked in", never "Scheduled" — the owner's word for a post the
+    // channel holds (11 Sep 2026: a booked post sat under Posted and read as live)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Posted',
+      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted',
     ])
+    expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Scheduled')
     for (const c of BOARD_COLUMNS) {
       expect(c.meaning.length).toBeGreaterThan(10)
       expect(c.meaning.split('\n')).toHaveLength(1)
@@ -36,7 +39,8 @@ describe('the six columns', () => {
     expect(statusesIn('internal_check')).toEqual(['internal_review', 'revision_required', 'revision_complete'])
     expect(statusesIn('with_client')).toEqual(['client_review', 'client_changes_requested'])
     expect(statusesIn('ready_to_post')).toEqual(['approved_for_scheduling'])
-    expect(statusesIn('posted')).toEqual(['scheduled', 'published'])
+    expect(statusesIn('booked')).toEqual(['scheduled'])
+    expect(statusesIn('posted')).toEqual(['published'])
   })
 
   it('every ItemStatus belongs to exactly one column', () => {
@@ -60,13 +64,13 @@ describe('the six columns', () => {
 })
 
 describe('columnsForRole — the same board, a different lens', () => {
-  it('an editor sees all six — their work, end to end', () => {
+  it('an editor sees all seven — their work, end to end', () => {
     expect(columnsForRole('editor')).toEqual(KEYS)
   })
-  it('a scheduler sees all six — what is coming, too', () => {
+  it('a scheduler sees all seven — what is coming, too', () => {
     expect(columnsForRole('scheduler')).toEqual(KEYS)
   })
-  it('account managers and super admins see all six', () => {
+  it('account managers and super admins see all seven', () => {
     expect(columnsForRole('account_manager')).toEqual(KEYS)
     expect(columnsForRole('super_admin')).toEqual(KEYS)
   })
@@ -95,7 +99,7 @@ describe('groupByColumn', () => {
     expect(g[0].cards.map(c => c.id)).toEqual(['a', 'd'])
     expect(g[1].cards.map(c => c.id)).toEqual(['c'])
     expect(g[2].cards).toEqual([])
-    expect(g[5].cards.map(c => c.id)).toEqual(['b'])
+    expect(g[6].cards.map(c => c.id)).toEqual(['b'])
   })
   it('limits itself to the columns it is given (the portal asks for one)', () => {
     const g = groupByColumn(cards, columnsForRole('client'))
@@ -147,8 +151,10 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
   })
 
   it('a scheduler books a ready card in, and cannot pull it back', () => {
-    expect(canMoveTo({ status: 'approved_for_scheduling' }, 'posted', SC))
+    expect(canMoveTo({ status: 'approved_for_scheduling' }, 'booked', SC))
       .toEqual({ ok: true, to: 'scheduled', label: 'Mark scheduled' })
+    // Posted is only for what is live: a ready card cannot be dragged there
+    expect(canMoveTo({ status: 'approved_for_scheduling' }, 'posted', SC).ok).toBe(false)
     const back = canMoveTo({ status: 'approved_for_scheduling' }, 'with_client', SC)
     expect(back.ok).toBe(false)
   })

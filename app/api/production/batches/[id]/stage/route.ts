@@ -9,7 +9,7 @@ import { announceBatchChange, announceItemChange } from '../../../../../lib/prod
 import { ensurePlanCards } from '../../../../../lib/plan-cards'
 import { onShootDateChanged } from '../../../../../lib/gdrive-hooks'
 import { notifyBatchTransition } from '../../../../../lib/workflow'
-import { notifyBriefShared, notifyFootageHanded, notifyShootReminder } from '../../../../../lib/shoot-sop-notify'
+import { notifyBriefShared, notifyFootageHanded, notifyGoOverride, notifyShootReminder } from '../../../../../lib/shoot-sop-notify'
 import {
   SHOOT_STAGES, handoverPlan, shootStage, stageMove, type ShootStage,
 } from '../../../../../lib/shoot-sop-core'
@@ -54,8 +54,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const today = melbourneToday()
     const now = new Date().toISOString()
     const itemCount = await table<ContentItem>('content_items').count({ by: { batch_id: id } })
-    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount } }, now, user.id)
-    if (!move.ok) return NextResponse.json({ error: move.reason }, { status: 422 })
+    const overrideReason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : null
+    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason }, now, user.id)
+    // NO BRIEF, NO SHOOT: a plan shared late is refused; the sentence says a
+    // super admin can go ahead with a reason, and this is the request that
+    // was missing one — a 400, not a rule they can never satisfy
+    if (!move.ok) return NextResponse.json({ error: move.reason, needsOverride: move.needsOverride === true }, { status: move.needsOverride ? 400 : 422 })
 
     const from = shootStage(batch, today)
     const moved = await batches.claim(id, cur => {
@@ -90,6 +94,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       try { await ensurePlanCards(user, updated) } catch (e) { console.error('plan cards after go:', e) }
       notifyBatchTransition(user, updated, 'brief', 'locked')
       onShootDateChanged(updated)
+    }
+    if (to === 'confirmed' && updated.go_override_reason && updated.go_override_by === user.id) {
+      await logActivity({
+        actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
+        action: 'sop_go_override', detail: String(updated.go_override_reason),
+      })
+      await notifyGoOverride(user, updated).catch(e => console.error('go override notify:', e))
     }
     let handed: { total: number } | null = null
     if (to === 'shared') {

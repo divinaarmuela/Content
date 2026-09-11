@@ -239,11 +239,12 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   }
 
   /** a move along the playbook's timeline — Share, Go, Reminder, Footage */
-  const moveStage = async (to: ShootStage) => {
+  const moveStage = async (to: ShootStage, opts?: { reason?: string }) => {
     setBusy(`stage:${to}`)
     try {
       const res = await fetch(`/api/production/batches/${id}/stage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, ...(opts?.reason ? { reason: opts.reason } : {}) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Could not move it')

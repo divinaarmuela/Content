@@ -12,6 +12,7 @@ import { useRole } from '../useRole'
 import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
+import NoReviewerBanner from '../ui/NoReviewerBanner'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import { BoardFilters } from '../board/BoardFilters'
@@ -148,6 +149,7 @@ export default function SchedulerPage() {
   return (
     <div className="flex flex-col gap-4">
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
+      {ready && <NoReviewerBanner me={me} />}
 
       {/* everything stuck on a decision, before the board that holds it —
           hidden entirely when nothing is waiting */}

@@ -40,6 +40,8 @@ import { needsNewVersion } from './claim-core'
 import { handoverSubject, tidyNote } from './hand-over-core'
 import { askedPatch, NOBODY_ASKED } from './asked-core'
 import { mirrorLatestVersionSoon } from './gdrive-mirror'
+import { STAND_IN_MARK } from './card-history-core'
+import { type RawAsset as WorkFile, rawAssetKind } from './raw-assets-core'
 import type { Slide } from './version-files-core'
 
 export type ContentItem = {
@@ -212,6 +214,72 @@ export function sanitiseRawAssets(raw: unknown): { url: string; name: string }[]
  * start. Fired when an item is created with an owner, or re-assigned.
  * Fire-and-forget like every notification; never blocks the write.
  */
+/** Everyone flagged as a quality reviewer, active, on the team. */
+async function flaggedReviewers(): Promise<{ id: string; email: string; name: string }[]> {
+  const rows = await table<TeamUserRow>('team_users')
+    .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client' })
+    .catch(() => [] as TeamUserRow[])
+  return rows.map(u => ({ id: u.id, email: u.email, name: u.name || u.email }))
+}
+
+/** "Akmal passed 'Launch reel' in your place" — so the reviewer knows what
+ *  went past her while she was away. */
+async function notifyStandInPass(
+  actor: TeamUser, item: ContentItem, reviewers: { id: string; email: string; name: string }[], to: ItemStatus,
+) {
+  const where = to === 'client_review' ? 'sent it to the client' : 'approved it'
+  const subject = `${item.title} — passed in your place`
+  await Promise.all(reviewers.filter(r => r.id !== actor.id).map(r => notify({
+    actorName: actor.name, actorEmail: actor.email, actorClerkId: actor.clerk_user_id,
+    eventType: 'quality_stand_in', entityType: 'content_item',
+    entityId: `${item.id}#standin#${r.id}#${Date.now()}`,
+    recipientId: r.id, recipientEmail: r.email,
+    subject,
+    bodyHtml: renderEmail(
+      subject,
+      `<p>${escapeHtml(actor.name || actor.email)} passed <strong>${escapeHtml(item.title)}</strong> through the quality check in your place and ${where}.</p>`
+      + `<p>Nothing is needed from you — this is so you know what went past you.</p>`,
+      OPEN_ITEM_CTA,
+      `${DASHBOARD_URL}${itemPath(item)}`,
+    ),
+  })))
+}
+
+/**
+ * "Files to work from" landed on the editor's card (the owner, 11 Sep 2026:
+ * "she will show the files there"). The card's holder is told once per
+ * batch of files; the manager who added them is not told about their own.
+ */
+export function notifyFilesToWorkFrom(actor: TeamUser, item: ContentItem, added: WorkFile[], folder: string | null) {
+  if (!item.owner_id || item.owner_id === actor.id) return
+  if (added.length === 0 && !folder) return
+  void (async () => {
+    const owner = await table<TeamUserRow>('team_users').get(item.owner_id!)
+    if (!owner || !owner.active_status) return
+    const what = added.length > 0
+      ? `${added.length} ${added.length === 1 ? 'file' : 'files'}${folder ? ' and a folder link' : ''}`
+      : 'a folder link'
+    const subject = `${item.title}: ${what} to work from`
+    await notify({
+      actorName: actor.name, actorEmail: actor.email, actorClerkId: actor.clerk_user_id,
+      eventType: 'files_to_work_from', entityType: 'content_item',
+      entityId: `${item.id}#files#${Date.now()}`,
+      recipientId: owner.id, recipientEmail: owner.email,
+      subject,
+      bodyHtml: renderEmail(
+        subject,
+        `<p>${escapeHtml(actor.name || actor.email)} added ${escapeHtml(what)} to <strong>${escapeHtml(item.title)}</strong> for you to work from.</p>`
+        + (added.length > 0
+          ? `<p>${added.slice(0, 20).map(a => `<a href="${escapeHtml(a.url)}">${escapeHtml(a.name || a.url)}</a> (${rawAssetKind(a)})`).join('<br>')}</p>`
+          : '')
+        + (folder ? `<p><strong>Folder:</strong> <a href="${escapeHtml(folder)}">${escapeHtml(folder)}</a></p>` : ''),
+        OPEN_ITEM_CTA,
+        `${DASHBOARD_URL}${itemPath(item)}`,
+      ),
+    })
+  })().catch(e => console.error('files-to-work-from notification error:', e))
+}
+
 export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
   if (!item.owner_id || item.owner_id === actor.id) return
   void (async () => {
@@ -739,6 +807,17 @@ export async function performTransition(
     throw new AuthzError('This item was just updated by someone else — refresh and try again', 409)
   }
 
+  // A SUPER ADMIN PASSING THE QUALITY CHECK IN THE REVIEWER'S PLACE (the
+  // owner, 11 Sep 2026: "yes super admin can pass quality check"). Allowed,
+  // no reason asked — but written into the history as a stand-in and told
+  // to every flagged reviewer, so Joy knows what went past her. With nobody
+  // flagged the super admin IS the reviewer, and nothing is marked.
+  const standIns = !system
+    && actor.role === 'super_admin' && actor.quality_reviewer !== true
+    && from === 'quality_check' && (to === 'client_review' || to === 'approved_for_scheduling')
+    && !isBriefTask && !isInternal
+    ? await flaggedReviewers()
+    : []
   await logActivity({
     // no actor_id for the system, and the label carries who told us instead —
     // "Posted by Instagram" reads correctly in a trail of human names
@@ -749,8 +828,12 @@ export async function performTransition(
     action: 'status_change',
     oldValue: from,
     newValue: to,
-    detail: system ? actor.label : check.rule.label,
+    detail: system ? actor.label : standIns.length > 0 ? `${check.rule.label} · ${STAND_IN_MARK}` : check.rule.label,
   })
+  if (!system && standIns.length > 0) {
+    void notifyStandInPass(actor, { ...item, status: to }, standIns, to)
+      .catch(e => console.error('stand-in pass notification error:', e))
+  }
   if (defaults.length > 0) {
     await logActivity({
       actor: system ? null : actor, clientId: item.client_id,

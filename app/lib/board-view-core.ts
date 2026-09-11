@@ -19,7 +19,7 @@ import {
   type ActingViewer, type Hat, type ItemStatus,
 } from './workflow-core'
 import {
-  BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, type BoardColumnKey,
+  BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey,
 } from './board-core'
 import { linkLabel, versionWord } from './card-link-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
@@ -141,7 +141,8 @@ export function cardLines(
   opts: { names?: Map<string, string>; today: string; viewerId?: string },
 ): CardLines {
   const names = opts.names ?? new Map<string, string>()
-  const posted = columnOf(card.status) === 'posted'
+  // booked in or posted: the date is met, so nothing here is overdue
+  const posted = isOut(card.status)
   const dueKey = card.due_date ? card.due_date.slice(0, 10) : null
   const dueNow = !!dueKey && dueKey <= opts.today && !posted
   const dueText = shortDate(card.due_date)
@@ -491,7 +492,7 @@ export function pageCards<T extends BoardViewCard>(
     if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => mine(c) && fresh(c))
     // a manager on the Editor page sees the making, not the posting
     return cards.filter(c => fresh(c)
-      && (mine(c) || (columnOf(c.status) !== 'ready_to_post' && columnOf(c.status) !== 'posted')))
+      && (mine(c) || (columnOf(c.status) !== 'ready_to_post' && !isOut(c.status))))
   }
   return cards.filter(fresh)
 }
@@ -506,7 +507,8 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
   quality_check: 'Nothing waiting on a quality check.',
   with_client: 'Nothing with a client.',
   ready_to_post: 'Nothing ready to post.',
-  posted: 'Nothing booked in or posted.',
+  booked: 'Nothing booked in.',
+  posted: 'Nothing posted yet.',
   done: 'Nothing done yet.',
   coming_up: 'Nothing coming up.',
 }
@@ -518,6 +520,7 @@ export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   quality_check: LANE_EMPTY.quality_check,
   with_client: LANE_EMPTY.with_client,
   ready_to_post: LANE_EMPTY.ready_to_post,
+  booked: LANE_EMPTY.booked,
   posted: LANE_EMPTY.posted,
 }
 
@@ -553,6 +556,7 @@ export const EDITOR_LANE_LABELS: Partial<Record<BoardColumnKey, string>> = {
   quality_check: 'Quality check',
   with_client: 'With client',
   ready_to_post: 'For handoff',
+  booked: 'Done',
   posted: 'Done',
 }
 
@@ -582,13 +586,13 @@ export function pageLanes(page: BoardPage): PageLane[] {
   // which button each role gets, never which stages exist.
   const lanes = BOARD_COLUMNS.map(c => laneOfColumn(c.key))
   if (page !== 'editor') return lanes
-  return lanes.map(l => ({
-    ...l,
-    label: EDITOR_LANE_LABELS[l.key as BoardColumnKey] ?? l.label,
-    // the editor's part is done once the card is handed on: Done is a
-    // narrow rail, not a working column
-    folded: l.key === 'posted',
-  }))
+  // the editor's part is done once the card is handed on: Booked in and
+  // Posted fold into one narrow "Done" rail, not two working columns
+  const working = lanes.filter(l => !OUT_COLUMNS.includes(l.key as BoardColumnKey))
+  return [
+    ...working.map(l => ({ ...l, label: EDITOR_LANE_LABELS[l.key as BoardColumnKey] ?? l.label })),
+    { key: 'done', label: 'Done', columns: [...OUT_COLUMNS], folded: true, empty: LANE_EMPTY.done },
+  ]
 }
 
 /** The lane a column sits in on this page — how a `?column=` link lands. */
@@ -683,7 +687,7 @@ export function matchesShow(card: BoardViewCard, show: ShowFilter, ctx: ShowCont
     case 'mine': return card.owner_id === ctx.viewer.id
     case 'due': {
       const key = card.due_date ? card.due_date.slice(0, 10) : null
-      return !!key && key <= ctx.today && columnOf(card.status) !== 'posted'
+      return !!key && key <= ctx.today && !isOut(card.status)
     }
     case 'back': return CAME_BACK_STATUSES.includes(card.status)
     // "Needs your decision" means YOURS. When somebody was asked in
@@ -757,7 +761,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
       {
         key: 'assigned', title: 'Assigned to you', tone: 'green',
         href: boardHref('editor'), actionLabel: 'Editor',
-        stats: [{ value: count(mine, c => columnOf(c.status) !== 'posted'), label: 'to work on' }],
+        stats: [{ value: count(mine, c => !isOut(c.status)), label: 'to work on' }],
       },
       {
         key: 'due', title: 'Due now', tone: 'amber',

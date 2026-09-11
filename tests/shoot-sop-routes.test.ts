@@ -266,3 +266,54 @@ describe('the 7-day rule', () => {
     expect(await runBriefLateNudge()).toEqual({ late: 0, told: 0 })
   })
 })
+
+/* ── no brief, no shoot — enforced on the route (11 Sep 2026) ── */
+
+describe('a plan shared late', () => {
+  const SUPER = 'a5a5a5a5-0000-4000-8000-000000000001'
+  const sharedLateReady = () => {
+    fake.restore()
+    fake = seed({
+      shoot_date: dayShift(4), brief_shared_at: new Date().toISOString(), aligned_at: 'x', client_confirmed_at: 'x',
+      acknowledgements: [{ user_id: VG, at: 'x' }, { user_id: ED, at: 'x' }],
+    })
+  }
+  it('an account manager is refused in the SOP\u2019s words; a super admin without a reason gets a 400', async () => {
+    sharedLateReady()
+    const am = await move('confirmed')
+    expect(am.status).toBe(400)
+    expect(am.body.error).toBe('The plan was shared 4 days before the shoot — the playbook needs 7. A super admin can override with a reason.')
+    expect(am.body.needsOverride).toBe(true)
+    as(SUPER, 'super_admin', 'Divina')
+    expect((await move('confirmed')).status).toBe(400)
+    expect(batch().go_at).toBeFalsy()
+  })
+  it('a super admin goes ahead with a reason: kept on the shoot, logged, Ops told once', async () => {
+    sharedLateReady()
+    as(SUPER, 'super_admin', 'Divina')
+    emails.length = 0
+    const went = await json(stage.POST(new Request('https://x.test/stage', {
+      method: 'POST', body: JSON.stringify({ to: 'confirmed', reason: 'Client moved the date' }),
+    }), P('b-1')))
+    expect(went.status).toBe(200)
+    expect(went.body.moved).toMatch(/went ahead late/)
+    expect(batch().go_by).toBe(SUPER)
+    expect(batch().go_override_reason).toBe('Client moved the date')
+    expect(batch().go_override_by).toBe(SUPER)
+    const told = emails.filter(e => e.eventType === 'shoot_go_override')
+    expect(told.map(e => e.recipientEmail).sort()).toEqual(['abby@zz.invalid', 'am@zz.invalid'])
+    expect(String(told[0].bodyHtml)).toMatch(/Reason:<\/strong> Client moved the date/)
+    expect(String(told[0].bodyHtml)).toMatch(/4 days/)
+  })
+  it('the morning nudge tells the AM and Ops once that a plan was shared late', async () => {
+    fake.restore(); fake = seed({ shoot_date: dayShift(3), brief_shared_at: new Date().toISOString() })
+    emails.length = 0
+    expect(await runBriefLateNudge()).toEqual({ late: 1, told: 2 })
+    expect(emails.map(e => e.recipientEmail).sort()).toEqual(['abby@zz.invalid', 'am@zz.invalid'])
+    expect(String(emails[0].subject)).toBe('\u26a0\ufe0f Plan shared late: Golf Day')
+    expect(String(emails[0].bodyHtml)).toMatch(/3 days<\/strong> before the shoot/)
+    expect(batch().late_share_nudged_at).toBeTruthy()
+    emails.length = 0
+    expect(await runBriefLateNudge()).toEqual({ late: 0, told: 0 })
+  })
+})

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  channelLines, describeCardActivity, historyLines, HISTORY_PREVIEW,
+  channelLines, describeCardActivity, historyLines, HISTORY_PREVIEW, isStandIn, STAND_IN_MARK,
   type HistoryActivity, type HistoryJob,
 } from '../app/lib/card-history-core'
 
@@ -30,6 +30,17 @@ describe('one activity row in the card’s words', () => {
       .toBe('Sent for approval to the team by Ana')
     expect(say({ action: 'status_change', new_value: 'client_review' }))
       .toBe('Sent for approval to the client by Ana')
+  })
+
+  it('says when a super admin passed the quality check in the reviewer’s place', () => {
+    expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'client_review', detail: `Passed — send to client · ${STAND_IN_MARK}` }))
+      .toBe("Passed by Ana in the reviewer's place and sent to the client")
+    expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'approved_for_scheduling', detail: STAND_IN_MARK }))
+      .toBe("Passed by Ana in the reviewer's place and approved")
+    // the reviewer's own pass reads as before
+    expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'client_review', detail: 'Passed — send to client' }))
+      .toBe('Passed quality check and sent to the client by Ana')
+    expect(isStandIn(null)).toBe(false)
   })
 
   it('separates the team’s approval from the client’s', () => {

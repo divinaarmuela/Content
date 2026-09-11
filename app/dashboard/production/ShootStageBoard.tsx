@@ -8,7 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clockWords, shootStage, stageMove,
+  SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clockWords, overrideWords, shootStage, stageMove,
   type MoveRole, type ShootStage, type SopShoot,
 } from '../../lib/shoot-sop-core'
 import { LaneBoard, type Lane } from './LaneBoard'
@@ -166,6 +166,7 @@ export function ShootStageBoard({
               <Chip tone={ack.complete ? 'green' : 'amber'}>{ack.words}</Chip>
             )}
             {s.shoot_date && <Chip><CalendarDays className="h-3.5 w-3.5" aria-hidden />{whenShort(s.shoot_date)}</Chip>}
+            {overrideWords(s) && <Chip tone="amber">{overrideWords(s)}</Chip>}
             {plans?.get(s.id) && (
               <Chip tone={planTone(plans.get(s.id)!)}>{BRIEF_KIND_LABELS[plans.get(s.id)!]}</Chip>
             )}

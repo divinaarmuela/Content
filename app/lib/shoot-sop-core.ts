@@ -49,6 +49,13 @@ export type SopShoot = {
   reminder_sent_at?: string | null
   footage_handed_at?: string | null
   late_nudged_at?: string | null
+  /** the Milanote-style canvas: the checklist reads shot list and script
+   *  off it too, so building the plan there counts */
+  canvas_cards?: unknown
+  /** a super admin went ahead with a plan shared late, and said why */
+  go_override_reason?: string | null
+  go_override_by?: string | null
+  late_share_nudged_at?: string | null
 }
 
 export type Ack = { user_id: string; at: string }
@@ -110,12 +117,53 @@ export type ChecklistInput = {
   itemCount?: number
 }
 
+/* ── what the canvas says ──────────────────────────────────────────────── */
+
+/** A card on the canvas that carries words: a heading, a note, a to-do. */
+type CanvasWords = { kind: string; text: string }
+
+function canvasWords(b: Pick<SopShoot, 'canvas_cards'>): CanvasWords[] {
+  if (!Array.isArray(b.canvas_cards)) return []
+  const out: CanvasWords[] = []
+  for (const c of b.canvas_cards) {
+    if (!c || typeof c !== 'object') continue
+    const kind = String((c as { kind?: unknown }).kind ?? '')
+    const t = text((c as { text?: unknown }).text)
+    if (['label', 'note', 'todo'].includes(kind) && t) out.push({ kind, text: t })
+  }
+  return out
+}
+
+/**
+ * The plan built on the canvas counts. An AM who lays the shot list out as
+ * cards under a "Shot list" heading, or pins the script as a note, has done
+ * the work — the checklist must not say otherwise (the live walk of 11 Sep
+ * 2026). A heading or a card that names the thing is the signal: "Shot
+ * list", "Shots", "Scene 1 …" for the shot list; "Script", "Talking points"
+ * for the script.
+ */
+export function canvasSays(b: Pick<SopShoot, 'canvas_cards'>): { shotList: boolean; script: boolean } {
+  const words = canvasWords(b)
+  return {
+    shotList: words.some(w => /\bshot\s*list\b|\bshots?\b|\bscene\s*\d/i.test(w.text)),
+    script: words.some(w => /\bscript\b|\btalking\s*points?\b/i.test(w.text)),
+  }
+}
+
+/** Where a tick came from — so the row can say "from the canvas". */
+export function briefItemSource(b: SopShoot, key: BriefItemKey, input: ChecklistInput = {}): 'field' | 'canvas' | null {
+  if (!briefItemFilled(b, key, input)) return null
+  if (key === 'shot_list') return Array.isArray(b.shot_list) && b.shot_list.length > 0 ? 'field' : 'canvas'
+  if (key === 'script') return text(b.script).length > 0 ? 'field' : 'canvas'
+  return 'field'
+}
+
 export function briefItemFilled(b: SopShoot, key: BriefItemKey, input: ChecklistInput = {}): boolean {
   switch (key) {
     case 'objective': return text(b.objective).length > 0
     case 'deliverables': return (Array.isArray(b.planned_deliverables) && b.planned_deliverables.length > 0) || (input.itemCount ?? 0) > 0
-    case 'shot_list': return Array.isArray(b.shot_list) && b.shot_list.length > 0
-    case 'script': return text(b.script).length > 0
+    case 'shot_list': return (Array.isArray(b.shot_list) && b.shot_list.length > 0) || canvasSays(b).shotList
+    case 'script': return text(b.script).length > 0 || canvasSays(b).script
     case 'when_where': return text(b.shoot_date).length > 0 && text(b.call_time).length > 0 && text(b.location).length > 0
     case 'talent': return text(b.talent).length > 0
     case 'props': return text(b.props_wardrobe).length > 0
@@ -254,10 +302,25 @@ export function withoutAck(b: SopShoot, userId: string): Ack[] {
 
 /* ── the Go sign-off ───────────────────────────────────────────────────── */
 
-export type GoCheck = { ok: boolean; reasons: string[] }
+export type GoCheck = {
+  ok: boolean
+  reasons: string[]
+  /** the only thing in the way is the 7-day rule: a super admin may go
+   *  ahead with a reason */
+  needsOverride: boolean
+}
 
-/** §3.4: the shoot is not "go" until the AM has verified all four. */
-export function goReady(b: SopShoot, input: ChecklistInput = {}): GoCheck {
+export type GoInput = ChecklistInput & {
+  /** who is pressing — a super admin may override the 7-day rule */
+  role?: MoveRole
+  /** the super admin's one line on why it goes ahead late */
+  overrideReason?: string | null
+}
+
+/** §3.4: the shoot is not "go" until the AM has verified all four — and,
+ *  since 11 Sep 2026, the plan was shared 7 days before the shoot ("no
+ *  brief, no shoot"). A shoot already go is never re-judged. */
+export function goReady(b: SopShoot, input: GoInput = {}): GoCheck {
   const reasons: string[] = []
   const list = briefChecklist(b, input)
   if (!list.complete) reasons.push(`The plan is not complete — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in`)
@@ -266,7 +329,15 @@ export function goReady(b: SopShoot, input: ChecklistInput = {}): GoCheck {
   const ack = ackState(b)
   if (ack.total === 0) reasons.push('Add the people on this shoot — nobody has been asked to read the plan')
   else if (!ack.complete) reasons.push(`${ack.missing.length} of ${ack.total} on the shoot have not acknowledged the plan`)
-  return { ok: reasons.length === 0, reasons }
+  let needsOverride = false
+  if (!b.go_at && sharedLate(b)) {
+    const overridden = input.role === 'super_admin' && text(input.overrideReason).length > 0
+    if (!overridden) {
+      reasons.push(sharedLateWords(b))
+      needsOverride = true
+    }
+  }
+  return { ok: reasons.length === 0, reasons, needsOverride: needsOverride && reasons.length === 1 }
 }
 
 /* ── booking, as go does it ────────────────────────────────────────────── */
@@ -290,11 +361,13 @@ export type MoveInput = {
   role: MoveRole
   today: string
   checklist?: ChecklistInput
+  /** a super admin's reason for going ahead with a plan shared late */
+  overrideReason?: string | null
 }
 
 export type MoveResult =
   | { ok: true; patch: Record<string, unknown>; label: string }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; needsOverride?: boolean }
 
 const isManager = (r: MoveRole) => r === 'account_manager' || r === 'super_admin'
 const canEdit = (r: MoveRole) => isManager(r) || r === 'editor' || r === 'general'
@@ -334,19 +407,21 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
     case 'confirmed': {
       if (!isManager(input.role)) return { ok: false, reason: 'Only an account manager signs a shoot off as go' }
       if (from === 'drafting') return { ok: false, reason: 'Share the plan with the team first' }
-      const go = goReady(b, input.checklist)
-      if (!go.ok) return { ok: false, reason: go.reasons[0] }
+      const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason })
+      if (!go.ok) return { ok: false, reason: go.reasons[0], needsOverride: go.needsOverride }
+      const overrode = sharedLate(b) && input.role === 'super_admin' && text(input.overrideReason).length > 0
       return {
         ok: true,
         patch: {
           go_at: now, go_by: actorId,
+          ...(overrode ? { go_override_reason: text(input.overrideReason), go_override_by: actorId } : {}),
           ...(b.brief_shared_at ? {} : { brief_shared_at: now, brief_shared_by: actorId }),
           // THE SOP HAS ONE SIGN-OFF: go books the shoot too. An AM who
           // booked early is left as they are; an unbooked shoot with a date
           // is booked here, never refused for being unbooked.
           ...bookingPatch(b, now, actorId),
         },
-        label: 'Shoot confirmed — it is go',
+        label: overrode ? 'Shoot confirmed — went ahead late, with a reason' : 'Shoot confirmed — it is go',
       }
     }
     case 'reminder_sent': {
@@ -428,6 +503,43 @@ export function handoverPlan(b: SopShoot, items: readonly HandoverItem[]): Hando
 /** The shoots whose brief is late and who have not been told yet. */
 export function lateNudgeTargets<T extends SopShoot>(shoots: readonly T[], today: string): T[] {
   return shoots.filter(b => briefIsLate(b, today) && !b.late_nudged_at)
+}
+
+/* ── shared late ───────────────────────────────────────────────────────── */
+
+/** How many days before the shoot the plan was shared — null until both
+ *  dates exist. 7 or more is on time. */
+export function shareLeadDays(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>): number | null {
+  const shot = text(b.shoot_date).slice(0, 10)
+  const shared = text(b.brief_shared_at).slice(0, 10)
+  if (!shot || !shared) return null
+  const a = Date.parse(`${shot}T00:00:00Z`)
+  const s = Date.parse(`${shared}T00:00:00Z`)
+  if (!Number.isFinite(a) || !Number.isFinite(s)) return null
+  return Math.round((a - s) / DAY_MS)
+}
+
+/** Shared, but with fewer than 7 days to the shoot. */
+export function sharedLate(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>): boolean {
+  const n = shareLeadDays(b)
+  return n !== null && n < BRIEF_LEAD_DAYS
+}
+
+/** The SOP's sentence, with the number in it. */
+export function sharedLateWords(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>): string {
+  const n = Math.max(0, shareLeadDays(b) ?? 0)
+  return `The plan was shared ${n} day${n === 1 ? '' : 's'} before the shoot — the playbook needs ${BRIEF_LEAD_DAYS}. A super admin can override with a reason.`
+}
+
+/** Shoots shared late that Ops has not yet been told about — once each. */
+export function lateShareNudgeTargets<T extends SopShoot>(shoots: readonly T[]): T[] {
+  return shoots.filter(b => sharedLate(b) && !b.late_share_nudged_at && b.status !== 'wrapped')
+}
+
+/** The chip on a shoot a super admin took ahead late. */
+export function overrideWords(b: Pick<SopShoot, 'go_override_reason'>): string | null {
+  const r = text(b.go_override_reason)
+  return r ? `Went ahead late — ${r}` : null
 }
 
 /* ── visibility ────────────────────────────────────────────────────────── */

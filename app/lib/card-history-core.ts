@@ -117,9 +117,22 @@ function handDetail(detail: string | null | undefined): { at: string | null; lin
   return { at: at && !Number.isNaN(Date.parse(at)) ? at : null, link }
 }
 
+/** The mark the workflow puts on a status change a super admin made out of
+ *  the quality check while a reviewer was flagged — they stood in for her. */
+export const STAND_IN_MARK = "in the reviewer's place"
+export function isStandIn(detail: string | null | undefined): boolean {
+  return String(detail ?? '').includes(STAND_IN_MARK)
+}
+
 function statusLine(row: HistoryActivity, who: string): { text: string } | null {
   const to = String(row.new_value ?? '')
   const from = String(row.old_value ?? '')
+  // a super admin who passed the quality check for the reviewer says so
+  // (the owner, 11 Sep 2026: "yes super admin can pass quality check" —
+  // allowed, and written down so the reviewer can see it)
+  if (from === 'quality_check' && isStandIn(row.detail) && (to === 'client_review' || to === 'approved_for_scheduling')) {
+    return { text: `Passed by ${who} ${STAND_IN_MARK}${to === 'client_review' ? ' and sent to the client' : ' and approved'}` }
+  }
   switch (to) {
     case 'internal_review':
       return { text: `Sent for approval to the team by ${who}` }

@@ -16,6 +16,7 @@ import type { Role } from '../lib/identity-core'
 import TeamLoadCard from './TeamLoadCard'
 import PageTitle from './ui/PageTitle'
 import TintCard from './ui/TintCard'
+import NoReviewerBanner from './ui/NoReviewerBanner'
 import Stat from './ui/Stat'
 import Chip, { type ChipTone } from './ui/Chip'
 import MiniCalendar, { type Marker } from './ui/MiniCalendar'
@@ -44,6 +45,9 @@ import {
   accountHandle, monthPostsByAccount, postCountsLine, postMetricsLine,
   NO_POSTS_THIS_MONTH, type AccountPostsRow, type MonthJob,
 } from '../lib/overview-posts-core'
+import {
+  monthStages, NO_STAGES_THIS_MONTH, stagesLine, stagesTone, type ClientStagesRow, type StageCommitment,
+} from '../lib/overview-stages-core'
 
 type ItemLite = {
   id: string; title: string; status: ItemStatus; content_type: string
@@ -289,6 +293,37 @@ const shortDate = (iso: string, tz?: string | null) =>
  * Posts page's own core, so the two screens cannot disagree about what "went
  * out" means.
  */
+/**
+ * Produced · delivered · published this month, per client — the three words
+ * the Team's Playbook asks for and no synonym. "3 of 4 delivered" is the
+ * month's promise against the delivery stamp; amber once the month is mostly
+ * gone and delivery is short.
+ */
+function StagesThisMonth({ rows, clients }: { rows: ClientStagesRow[] | null; clients: readonly { id: string; timezone?: string | null }[] }) {
+  const now = new Date().toISOString()
+  const tzOf = (id: string) => clients.find(c => c.id === id)?.timezone || DEFAULT_TZ
+  return (
+    <Panel title="Produced, delivered, published this month"
+      right={<span className="shrink-0 text-[13px] text-muted-foreground">Delivered means the final was sent to the client</span>}>
+      {rows === null && <Skeleton className="h-24 w-full rounded-inner" />}
+      {rows !== null && rows.length === 0 && (
+        <p className="py-6 text-center text-[13px] text-muted-foreground">{NO_STAGES_THIS_MONTH}</p>
+      )}
+      {rows !== null && rows.length > 0 && (
+        <ul className="flex flex-col divide-y divide-border">
+          {rows.map(r => (
+            <li key={r.client_id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+              <Link href={`/dashboard/clients/${r.client_id}`}
+                className="min-w-0 truncate text-[14px] font-semibold underline-offset-4 hover:underline">{r.client_name}</Link>
+              <Chip tone={stagesTone(r, now, tzOf(r.client_id))}>{stagesLine(r)}</Chip>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
 function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
   return (
     <Panel title="Posts this month"
@@ -329,7 +364,7 @@ function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
 
 /** The board at a glance — the same six columns, with the same words. */
 const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
-  draft: 'muted', internal_check: 'amber', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', posted: 'blue',
+  draft: 'muted', internal_check: 'amber', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green',
 }
 
 /** Per-status counts folded into the five columns — `columnOf` is the one
@@ -535,6 +570,7 @@ export default function OverviewPage() {
   }, [viewer, isManager, live.loading, live.tables.assignments.rows, live.tables.clients.rows,
     live.tables.items.rows, jobRows, accountRows, analyticRows, todayKey])
 
+
   /** which clients have a channel connected — only a scheduler's tiles ask */
   const [connectedClientIds, setConnectedClientIds] = useState<Set<string>>(() => new Set())
   useEffect(() => {
@@ -561,6 +597,29 @@ export default function OverviewPage() {
     () => (live.items as unknown as BoardViewCard[])
       .filter(c => ((c as { work_kinds?: { slug?: string } | null }).work_kinds?.slug ?? '') !== 'shoot_brief'),
     [live.items])
+  /**
+   * THE PLAYBOOK'S THREE COUNTED STAGES, per client, this month: produced,
+   * delivered, published — against what the month's agreement promised.
+   * Read from the activity log and the cards' delivery stamps
+   * (`overview-stages-core`), so "delivered" here is the same stamp the card
+   * wears. Managers and super admins only; scoped to their clients.
+   */
+  const { rows: commitmentRows } = useTable<StageCommitment & { id: string }>('monthly_commitments', { enabled: enabled && isManager })
+  const stageRows = useMemo(() => {
+    if (!viewer || !isManager || live.loading || !todayKey) return null
+    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    return monthStages({
+      now: new Date().toISOString(),
+      items: postCards.map(c => ({ id: c.id, client_id: c.client_id, status: c.status, delivered_at: c.delivered_at ?? null })),
+      activity: live.tables.activity.rows,
+      clients: live.tables.clients.rows,
+      commitments: commitmentRows,
+      clientIds: scoped,
+      defaultTz: DEFAULT_TZ,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, isManager, live.loading, live.tables.assignments.rows, live.tables.clients.rows,
+    live.tables.activity.rows, postCards, commitmentRows, todayKey])
   const postPipeline = useMemo(() => {
     const out: Record<string, number> = {}
     for (const c of postCards) out[String(c.status)] = (out[String(c.status)] ?? 0) + 1
@@ -732,6 +791,9 @@ export default function OverviewPage() {
       {/* the only onboarding in the product — three steps for this role, each
           a real link, dismissed per person and per role */}
       {!loading && !live.error && <GettingStarted role={(role ?? null) as Role | null} />}
+      {/* nobody flagged as the quality reviewer: every check comes to the
+          super admins until one is set (11 Sep 2026) */}
+      {!loading && <NoReviewerBanner me={me} />}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_336px]">
         {/* ── the page ── */}
@@ -914,6 +976,7 @@ export default function OverviewPage() {
         <>
           {/* the ledger first, then what each account actually posted */}
           <PostsThisMonth rows={accountPosts} />
+          <StagesThisMonth rows={stageRows} clients={live.tables.clients.rows} />
           <div className="grid gap-6 lg:grid-cols-2">
             {/* what is waiting on YOU, beside who else is behind */}
             <TeamLoadCard />
