@@ -12,6 +12,7 @@
  * and "media", never "graphic".
  */
 
+import { PORTAL_DELIVERED_LINE } from './deliver-only-core'
 import { ITEM_STATUSES, type ItemStatus } from './workflow-core'
 import { LINK_LABELS, linkKindOf, type LinkKind } from './card-link-core'
 
@@ -113,9 +114,12 @@ export function kindWord(contentType: string | null | undefined): string | null 
  */
 export function cardLine(
   status: ItemStatus,
-  opts: { postedWhen?: string | null; progress?: string | null } = {},
+  opts: { postedWhen?: string | null; progress?: string | null; selfPosts?: boolean } = {},
 ): string {
   if (opts.progress) return opts.progress
+  // DELIVER ONLY (the playbook's clients who post their own, 11 Sep 2026):
+  // approved means the finals are theirs now, not "we'll book a time"
+  if (status === 'approved_for_scheduling' && opts.selfPosts) return PORTAL_DELIVERED_LINE
   switch (status) {
     case 'draft_uploaded':
       return 'Being made now.'

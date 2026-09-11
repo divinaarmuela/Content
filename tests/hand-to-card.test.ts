@@ -190,7 +190,7 @@ describe('"Hand to…" is offered where it belongs and nowhere else', () => {
   })
 
   it('the board hands the opener down only for a card this person may edit', () => {
-    expect(board).toMatch(/onHandTo=\{canEdit\(c\) \? setHandToFor : undefined\}/)
+    expect(board).toMatch(/onHandTo=\{canEdit\(c\) && \(isManager \|\| viewer\.role === 'general'\) \? setHandToFor : undefined\}/)
   })
 
   it('the side panel offers the same item, gated by the same rule as the route', () => {

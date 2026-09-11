@@ -5,7 +5,7 @@ import {
 import type { Role } from '../app/lib/identity-core'
 
 const PAGES: GettingStartedPage[] = ['overview', 'editor', 'scheduler', 'production', 'item']
-const STAFF: Role[] = ['editor', 'scheduler', 'account_manager', 'super_admin']
+const STAFF: Role[] = ['editor', 'scheduler', 'general', 'account_manager', 'super_admin']
 
 /** the words the owner banned from every screen */
 const JARGON = /\b(batch|kind|hat|ad-hoc|reconcile|uses_media|brief task|asset)\b/i
@@ -20,11 +20,17 @@ describe('Getting started, per page', () => {
 
   it('the work pages explain themselves in the role’s own words', () => {
     expect(panelForPage('editor', 'editor')).toBe(panelForRole('editor'))
-    expect(panelForPage('editor', 'account_manager')?.heading).toMatch(/reviewers/)
+    expect(panelForPage('editor', 'account_manager')?.heading).toMatch(/managers/)
     expect(panelForPage('scheduler', 'scheduler')).toBe(panelForRole('scheduler'))
     expect(panelForPage('production', 'account_manager')?.steps[0].title).toBe('Make a shoot plan')
     expect(panelForPage('production', 'editor')?.steps[0].title).toBe('A shoot is one card')
     expect(panelForPage('production', 'editor')?.steps[2].body).toMatch(/Editor page/)
+    // a general user makes and posts: their board panel is their own, and Shoots is the crew's
+    expect(panelForPage('scheduler', 'general')?.steps[1].title).toBe('You make, others check')
+    expect(panelForPage('production', 'general')?.steps[0].title).toBe('A shoot is one card')
+    expect(panelForPage('editor', 'general')).toBe(panelForRole('editor'))
+    // a manager's Post approval panel is their own three steps
+    expect(panelForPage('scheduler', 'account_manager')).toBe(panelForRole('account_manager'))
   })
 
   it('clients and nobody get nothing', () => {

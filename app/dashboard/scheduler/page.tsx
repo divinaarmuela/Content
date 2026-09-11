@@ -185,7 +185,11 @@ export default function SchedulerPage() {
         />
       )}
       {/* the card, beside the board — the board stays live behind it */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} />
+      {/* ONE drawer for every card (the render audit of 11 Sep 2026): a card
+          from a shoot used to open the old production drawer here, without
+          the delivery date, Files to work from, the account manager line or
+          the editor's tools. The full card page is one press away inside. */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} simple />
     </div>
   )
 }

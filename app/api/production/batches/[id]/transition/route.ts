@@ -7,7 +7,7 @@ import { canOpenBatch } from '../../../../../lib/production-access'
 import { logActivity, notifyBatchTransition, performTransition } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../../lib/gdrive-hooks'
-import { ensurePlanCards } from '../../../../../lib/plan-cards'
+import { ensureShootCard } from '../../../../../lib/plan-cards'
 import {
   BATCH_STATUSES, batchSatisfiesLock, checkBatchTransition, type BatchStatus,
 } from '../../../../../lib/batch-brief-core'
@@ -95,13 +95,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
     // ── the plan becomes work ──
-    // Every line of "what is coming out of this shoot" becomes its own card,
-    // in Draft, now that the shoot is booked. Claimed by a fixed id per line,
+    // The shoot gets its ONE card, in Draft, now that it is booked — titled
+    // with the shoot, briefed with what is coming out. Claimed by a fixed id,
     // so undoing and re-booking makes no second card. Best-effort like the
     // plan's own move above: the booking has already landed.
     if (to === 'locked') {
       try {
-        await ensurePlanCards(user, updated)
+        await ensureShootCard(user, updated)
       } catch (e) {
         console.error('plan cards after booking:', e)
       }

@@ -23,6 +23,7 @@
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { isOnShoot } from './shoot-sop-core'
 import { askedIdsOf } from './asked-core'
+import { deliverOnly } from './deliver-only-core'
 import type { ScopeViewer } from './production-access-core'
 
 export type { ScopeViewer } from './production-access-core'
@@ -38,6 +39,8 @@ export type ScopeItem = {
   scheduler_ids?: unknown
   work_kind_id?: string | null
   work_kinds?: { slug?: string | null } | null
+  /** deliver only: the client posts this themselves — never a scheduler's */
+  deliver_only?: unknown
 }
 
 export type ScopeAssignment = { team_user_id: string; client_id: string }
@@ -52,6 +55,9 @@ export type ScopeBatch = { id: string; client_id: string; owner_id?: string | nu
  */
 export type ScopeContext = {
   batches?: ScopeBatch[]
+  /** the clients who post their own content (`clients.posts_own_content`):
+   *  their approved cards are delivered, not a scheduler's to see */
+  selfPostingClientIds?: ReadonlySet<string>
   /** the other items in hand — a shoot is HELD through an item on it, so
    *  `itemIsVisible` needs the neighbours to know whether this row's shoot
    *  is one of them */
@@ -138,6 +144,8 @@ export function createdItemIdsOf(
 export function scopeContextOf(input: {
   viewer: ScopeViewer
   batches?: ScopeBatch[]
+  /** client rows, for the deliver-only rule — only `posts_own_content` is read */
+  clients?: readonly { id: string; posts_own_content?: unknown }[]
   workKinds?: { id: string; slug: string }[]
   /** already-resolved tag ids — the server's way */
   taggedItemIds?: Iterable<string>
@@ -170,6 +178,7 @@ export function scopeContextOf(input: {
   ]
   return {
     batches: input.batches ?? [],
+    selfPostingClientIds: new Set((input.clients ?? []).filter(c => c.posts_own_content === true).map(c => c.id)),
     workKinds: input.workKinds ?? [],
     taggedItemIds: [...new Set(itemTags)],
     taggedBatchIds: [...new Set(batchTags)],
@@ -291,6 +300,13 @@ export function visibleItems<T extends ScopeItem>(
     // for other people's items
     if (viewer.role === 'scheduler'
       && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === viewer.id)) {
+      return false
+    }
+    // DELIVER ONLY (11 Sep 2026): the client posts it, so an approved card
+    // for them is never a scheduler's — by the card's own word, or the
+    // client's setting when the card says nothing
+    if (viewer.role === 'scheduler' && r.status === 'approved_for_scheduling'
+      && deliverOnly(r, ctx.selfPostingClientIds?.has(r.client_id) ? { posts_own_content: true } : null)) {
       return false
     }
     return true

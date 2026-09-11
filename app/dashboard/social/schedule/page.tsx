@@ -404,6 +404,18 @@ export default function SchedulePage() {
   const inWeekOrUntimed = useMemo(
     () => channelPosts.filter(p => belongsInList(p, onOneOfDays(p.scheduled_for, tz, weekKeys))),
     [channelPosts, weekKeys, tz])
+  /** the List narrowed to the posts waiting on an approval, any week —
+   *  pressed from the rail's "Waiting for approval · N" */
+  const [onlyWaiting, setOnlyWaiting] = useState(false)
+  const listPosts = useMemo(
+    () => (onlyWaiting ? channelPosts.filter(p => p.live_status === 'pending') : inWeekOrUntimed),
+    [onlyWaiting, channelPosts, inWeekOrUntimed])
+  const listNote = onlyWaiting ? (
+    <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[13px] text-muted-foreground">
+      Showing the {listPosts.length === 1 ? 'post' : `${listPosts.length} posts`} waiting for approval.
+      <button type="button" onClick={() => setOnlyWaiting(false)} className="min-h-11 font-semibold underline underline-offset-4">Show all</button>
+    </p>
+  ) : null
 
   const weekNotes = useMemo(
     () => data.notes.filter(n => onOneOfDays(n.at, tz, weekKeys)),
@@ -537,7 +549,8 @@ export default function SchedulePage() {
       media={data.media}
       waiting={data.waiting}
       drafts={draftCount}
-      onDrafts={() => setView('List')}
+      onDrafts={() => { setOnlyWaiting(false); setView('List') }}
+      onWaiting={() => { setOnlyWaiting(true); setView('List') }}
       loading={data.loading}
       role={me?.role ?? null}
       postWithoutApproval={data.postWithoutApproval}
@@ -776,7 +789,8 @@ export default function SchedulePage() {
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
-                <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
+                {listNote}
+                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -796,7 +810,8 @@ export default function SchedulePage() {
             />
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ListView posts={inWeekOrUntimed} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
+              {listNote}
+                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">

@@ -107,6 +107,16 @@ export async function listDriveMedia(itemId: string): Promise<DriveListing> {
 /** The pictures and video in one folder and its first subfolders. One reader,
  *  whether the folder came from a piece or from the client. */
 async function listMediaIn(folderId: string): Promise<DriveListing> {
+  return listMediaInFolder(folderId)
+}
+
+/** The same list for a folder a scheduler was HANDED (the card's own Drive
+ *  link) — the caller has already checked they may see the card. */
+export async function listFolderMedia(folderId: string): Promise<DriveListing> {
+  return listMediaInFolder(folderId)
+}
+
+async function listMediaInFolder(folderId: string): Promise<DriveListing> {
   const auth = await accessToken()
   if (!auth.ok) {
     return { ok: false, message: 'Google Drive needs reconnecting — ask an admin to sign it in again.' }

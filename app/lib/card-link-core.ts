@@ -36,6 +36,14 @@ const DROPBOX_HOSTS = new Set(['dropbox.com', 'www.dropbox.com'])
  * as a plain "Link" — a Frame.io review or a Vimeo cut is still where the
  * work lives.
  */
+/** The folder id inside a Google Drive folder link, or null for anything
+ *  else — the post window's Drive tab opens on it. */
+export function driveFolderIdFromUrl(raw: string | null | undefined): string | null {
+  const text = String(raw ?? '').trim()
+  const m = /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([A-Za-z0-9_-]{10,})/.exec(text)
+  return m ? m[1] : null
+}
+
 export function linkKindOf(raw: string | null | undefined): LinkCheck {
   const text = String(raw ?? '').trim()
   if (!text) return { ok: false, reason: 'Paste a link first' }

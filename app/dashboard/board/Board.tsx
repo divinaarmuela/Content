@@ -194,7 +194,11 @@ export function Board({
   )
 
   const laneLayout = useMemo(() => pageLanes(page), [page])
-  const grouped = useMemo(() => groupByLane(laneLayout, shown), [laneLayout, shown])
+  // the Delivered column is drawn only when a card is in it — a team with no
+  // client who posts their own never sees an eighth column
+  const grouped = useMemo(
+    () => groupByLane(laneLayout, shown).filter(g => g.lane.key !== 'delivered' || g.cards.length > 0),
+    [laneLayout, shown])
 
   /** the lanes a drag may land on right now */
   const reachable = useMemo(
@@ -298,7 +302,10 @@ export function Board({
                 onKind={setKindFor}
                 // handing a card over is an edit of it — same right as the
                 // link and the kind, and the PATCH route says so too
-                onHandTo={canEdit(c) ? setHandToFor : undefined}
+                // …and only for the people the hand-off route lets in: an
+                // editor who owns a card was offered the button and refused
+                // by the server (the render audit of 11 Sep 2026)
+                onHandTo={canEdit(c) && (isManager || viewer.role === 'general') ? setHandToFor : undefined}
                 // the DELETE route is manager-only, so the menu entry is too —
                 // a person never sees a button the server would refuse
                 // …and never on a card the channel holds or has published

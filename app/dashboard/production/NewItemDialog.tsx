@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useRole } from '../useRole'
 import { toastOpen } from '../toastLink'
 import HelpHint from '../HelpHint'
+import { STAGE_STRIP } from '../../lib/shoot-sop-core'
 import type { TeamMember } from './workHooks'
 
 export type ClientRow = { id: string; name: string }
@@ -78,8 +79,10 @@ export default function NewShootPlanDialog({
 
   // managers assign the plan to somebody at creation; that person gets the
   // job-pack email (what needs doing + the target date)
-  const { can } = useRole()
-  const isManager = can('account_manager')
+  const { can, role } = useRole()
+  // managers, and a general user (who raises shoots for any client), name
+  // the account manager at creation
+  const isManager = can('account_manager') || role === 'general'
   // the page usually hands the team in (it fetched `/api/team` already); the
   // fetch below is only the fallback for a caller that has none — and it
   // never fires while the dialog is closed
@@ -234,6 +237,10 @@ export default function NewShootPlanDialog({
           <DialogDescription className="text-secondary-13">
             One shoot, one plan. The nine parts of the plan are filled in on the plan page after this. * required
           </DialogDescription>
+          {/* what follows, so the person creating it knows the road */}
+          <p className="text-[12px] text-muted-foreground" aria-label="The stages a shoot goes through">
+            Then: {STAGE_STRIP.map(s => s.label).join(' › ')}
+          </p>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">

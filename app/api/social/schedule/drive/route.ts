@@ -3,7 +3,8 @@ import { withRequestCache } from '@/lib/db'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { loadItemForUser } from '@/app/lib/production-access'
 import { assertClientAccess } from '@/app/lib/social-schedule'
-import { importDriveFile, listClientDriveMedia, listDriveMedia } from '@/app/lib/schedule-drive'
+import { importDriveFile, listClientDriveMedia, listDriveMedia, listFolderMedia } from '@/app/lib/schedule-drive'
+import { driveFolderIdFromUrl } from '@/app/lib/card-link-core'
 
 // bringing a file across is a download and an upload back to back
 export const maxDuration = 300
@@ -39,7 +40,15 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Which piece or client?' }, { status: 400 })
       }
       let listing
-      if (itemId) {
+      if (itemId && q.get('from') === 'link') {
+        // THE FOLDER THE CARD CARRIES (11 Sep 2026): a scheduler handed a
+        // Drive link posts from it. The id is read off the card's own link,
+        // never taken from the address.
+        const item = await loadItemForUser(user, itemId)
+        const folderId = driveFolderIdFromUrl((item as { link_url?: string | null }).link_url)
+        if (!folderId) return NextResponse.json({ error: 'This card has no Google Drive folder on it' }, { status: 200 })
+        listing = await listFolderMedia(folderId)
+      } else if (itemId) {
         await loadItemForUser(user, itemId)
         listing = await listDriveMedia(itemId)
       } else {

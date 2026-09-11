@@ -399,7 +399,10 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
   // without a reader.
   const { rows: team } = useTable<TeamUser>('team_users', { enabled: open })
 
-  useEffect(() => { setTo(''); setNote('') }, [card])
+  /** the Drive or Dropbox folder the scheduler posts from (the owner, 11 Sep
+   *  2026: "we might assign the scheduler by giving them the drive link") */
+  const [postFolder, setPostFolder] = useState('')
+  useEffect(() => { setTo(''); setNote(''); setPostFolder('') }, [card])
 
   const people: HandTo[] = team
     .filter(u => u.active_status !== false && u.role !== 'client')
@@ -411,6 +414,15 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
     if (!card || !chosen) return
     setBusy(true)
     try {
+      // the folder first, so the hand-over email can name it
+      if (postFolder.trim()) {
+        const check = linkKindOf(postFolder)
+        if (!check.ok) throw new Error(check.reason)
+        const put = await fetch(`/api/production/items/${card.id}/link`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: check.url }),
+        })
+        if (!put.ok) throw new Error(await readError(put, 'Could not save the folder'))
+      }
       const words = note.trim()
       const brief = briefAfterHandover(
         card.brief ?? null,
@@ -494,6 +506,14 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
               This is added to “what needs doing” on the card. Nothing already there is replaced.
             </p>
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="hand-to-folder">Drive folder they post from (optional)</Label>
+            <Input id="hand-to-folder" value={postFolder} onChange={e => setPostFolder(e.target.value)}
+              placeholder="https://drive.google.com/drive/folders/…" className={field} />
+            <p className="text-[13px] text-muted-foreground">
+              It goes on the card and in their email, and the post window’s Drive tab opens on it.
+            </p>
+          </div>
         </div>
         <DialogFooter>
           <Button disabled={busy || !chosen} onClick={hand} className={primary}>
@@ -541,6 +561,9 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  with the card, and/or the folder they live in */
   const [workFiles, setWorkFiles] = useState<File[]>([])
   const [folder, setFolder] = useState('')
+  /** DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
+   *  themselves — the card ends at their approval, no scheduler */
+  const [deliverOnlyCard, setDeliverOnlyCard] = useState(false)
   const workInput = useRef<HTMLInputElement | null>(null)
   const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
@@ -582,6 +605,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           ...(groupId ? { group_id: groupId } : {}),
           ...(rawAssets.length > 0 ? { raw_assets: rawAssets } : {}),
           ...(folder.trim() ? { raw_assets_url: folder.trim() } : {}),
+          ...(deliverOnlyCard ? { deliver_only: true } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
           // link is where the work is from
@@ -705,6 +729,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               <Label htmlFor="new-due">Due (optional)</Label>
               <Input id="new-due" type="date" value={due} onChange={e => setDue(e.target.value)} className={field} />
             </div>
+            {isManager && (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[14px] sm:col-span-2">
+                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={deliverOnlyCard} onChange={e => setDeliverOnlyCard(e.target.checked)} />
+                <span>Deliver only — the client posts this themselves, nobody here schedules it</span>
+              </label>
+            )}
             {isManager && team.length > 0 && (
               <div className="flex flex-col gap-2">
                 <Label>Who</Label>

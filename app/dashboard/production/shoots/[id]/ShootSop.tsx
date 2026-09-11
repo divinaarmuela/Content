@@ -10,9 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import {
-  BRIEF_ITEMS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  clockWords, goReady, hasAcknowledged, overrideWords, peopleOnShoot, shootStage, stageMove, type BriefItemKey,
-  type MoveRole, type ShootStage, type SopShoot,
+  BRIEF_ITEMS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
+  clockWords, goReady, handoverReady, hasAcknowledged, nextStepWords, overrideWords, peopleOnShoot, shootStage, stageIndex, stageMove,
+  type BriefItemKey, type MoveRole, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
 import Chip from '../../../ui/Chip'
 
@@ -42,6 +42,54 @@ export type CrewRow = { id: string; name: string; role: string | null; acknowled
 export type TeamRow = { id: string; name: string; role: string }
 
 const isManager = (r: MoveRole) => r === 'account_manager' || r === 'super_admin'
+/** who staffs a shoot: managers, and a general user who raised it */
+const picksTeam = (r: MoveRole) => isManager(r) || r === 'general'
+
+/* ── the flow, on the page ─────────────────────────────────────────────── */
+
+/**
+ * THE SIX STAGES ACROSS THE TOP, and one line under them saying what
+ * happens next and who does it (the owner, 11 Sep 2026: "you need to
+ * explain to be in the shoot creation page"). The words come from
+ * `nextStepWords`, the same rules the buttons obey.
+ */
+export function StageStrip({ batch, today, role, itemCount }: {
+  batch: SopShoot
+  today: string
+  role: MoveRole
+  itemCount: number
+}) {
+  const stage = shootStage(batch, today)
+  const at = stageIndex(stage)
+  const line = nextStepWords(batch, today, { itemCount, role })
+  return (
+    <div className="flex flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-1.5" aria-label="Where this shoot is">
+        {STAGE_STRIP.map((s, i) => {
+          const done = i < at
+          const now = i === at
+          return (
+            <li key={s.key} className="flex items-center gap-1">
+              <span
+                aria-current={now ? 'step' : undefined}
+                className={
+                  'inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold ' +
+                  (now ? 'bg-foreground text-background' : done ? 'text-foreground' : 'text-muted-foreground')
+                }
+              >
+                {done && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />}
+                {s.label}
+                <span className="sr-only">{now ? ' — now' : done ? ' — done' : ' — to come'}</span>
+              </span>
+              {i < STAGE_STRIP.length - 1 && <span aria-hidden className="text-muted-foreground">›</span>}
+            </li>
+          )
+        })}
+      </ol>
+      <p className="text-[14px]" role="status">{line}</p>
+    </div>
+  )
+}
 
 /* ── the nine parts ────────────────────────────────────────────────────── */
 
@@ -106,7 +154,7 @@ export function BriefParts({ batch, canEdit, itemCount, onPatch }: {
             {Array.isArray(batch.planned_deliverables) && batch.planned_deliverables.length > 0
               ? `${batch.planned_deliverables.length} line${batch.planned_deliverables.length === 1 ? '' : 's'} in “What is coming out of this shoot”`
               : itemCount > 0 ? `${itemCount} card${itemCount === 1 ? '' : 's'} pointed at this shoot`
-              : 'Add the exact outputs under “What is coming out of this shoot” on the right.'}
+              : 'Add the outputs under “What is coming out of this shoot” — on the right, or below on a phone. One line is one card: “5 reels” is one card with five files.'}
           </p>
         ))}
         {row('shot_list', (
@@ -161,6 +209,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
   onUnack: (userId: string) => Promise<void>
 }) {
   const manager = isManager(role)
+  const picks = picksTeam(role)
   const ack = ackState(batch)
   const onShoot = peopleOnShoot(batch).includes(viewerId)
   const mine = hasAcknowledged(batch, viewerId)
@@ -188,7 +237,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
             )
         )}
 
-        {manager ? (
+        {picks ? (
           <label className="flex flex-col gap-1 text-[12px] font-semibold">
             Editor: who edits the footage after the shoot
             <Select value={batch.editor_id ?? 'none'} onValueChange={v => void onPatch('editor_id', v === 'none' ? null : v)}>
@@ -204,7 +253,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
         )}
 
         <ul className="flex flex-col gap-1.5" aria-label="People on the shoot">
-          {crew.length === 0 && <li className="text-[13px] text-muted-foreground">Nobody on the day yet. {manager ? 'Add the videographer, the presenter and anyone else on set.' : 'The account manager adds the crew.'}</li>}
+          {crew.length === 0 && <li className="text-[13px] text-muted-foreground">Nobody on the day yet. {picks ? 'Add the videographer, the presenter and anyone else on set.' : 'The account manager adds the crew.'}</li>}
           {crew.map(c => (
             <li key={c.id} className="flex min-h-11 items-center gap-2 text-[14px]">
               {c.acknowledged_at
@@ -221,7 +270,7 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
                   Undo
                 </button>
               )}
-              {manager && c.id !== batch.editor_id && (
+              {picks && c.id !== batch.editor_id && (
                 <button type="button" aria-label={`Take ${c.name} off the shoot`} disabled={busy}
                   onClick={() => void onPatch('crew_ids', crewIds.filter(id => id !== c.id))}
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-accent-red-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue">
@@ -232,7 +281,10 @@ export function TeamPanel({ batch, crew, team, viewerId, role, busy, onPatch, on
           ))}
         </ul>
 
-        {manager && addable.length > 0 && (
+        {picks && addable.length === 0 && (
+          <p className="text-[13px] text-muted-foreground">Everyone on the team is already on this shoot. New people are added on the Team page.</p>
+        )}
+        {picks && addable.length > 0 && (
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex min-w-0 flex-1 flex-col gap-1 text-[12px] font-semibold">
               Crew on the day: videographer, presenter, anyone on set
@@ -279,11 +331,18 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
   const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount }).needsOverride
   const wentLate = overrideWords(batch)
+  // WHERE THE FOOTAGE LIVES: whoever has it pastes the folder — the crew
+  // included, whatever their role (the owner, 11 Sep 2026: "how do they get
+  // the dropbox link"). It reaches every card as "Files to work from" when
+  // the footage is handed over, and the editor's email carries it.
+  const mayPasteFolder = isManager(role) || role === 'editor' || role === 'general' || peopleOnShoot(batch).includes(viewerId)
+  const [folder, setFolder] = useState(batch.footage_url ?? '')
+  const folderShown = stage !== 'drafting'
   const next: { to: ShootStage; label: string; primary: boolean }[] = [
     { to: 'shared', label: 'Share the plan with the team', primary: true },
     { to: 'confirmed', label: 'Confirm — it is go', primary: true },
     { to: 'reminder_sent', label: 'Reminder sent to everyone', primary: false },
-    { to: 'footage_handed', label: 'Footage handed to the editor', primary: true },
+    { to: 'footage_handed', label: 'Footage is in', primary: true },
   ]
   const shown = next.filter(n => {
     if (n.to === 'shared') return stage === 'drafting'
@@ -339,6 +398,30 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
           </label>
         )}
 
+        {folderShown && (
+          <label className="flex flex-col gap-1 text-[12px] font-semibold">
+            Footage folder <span className="font-normal text-muted-foreground">(Dropbox or Drive — whoever has the footage pastes it; the editor gets it on their card)</span>
+            {mayPasteFolder ? (
+              <Input
+                key={batch.footage_url ?? ''}
+                value={folder}
+                onChange={e => setFolder(e.target.value)}
+                onBlur={() => { const v = folder.trim(); if (v !== (batch.footage_url ?? '')) void onPatch('footage_url', v || null) }}
+                placeholder="https://www.dropbox.com/… or https://drive.google.com/…"
+                className="h-11 text-[15px] font-normal"
+                aria-label="Footage folder link"
+                inputMode="url"
+              />
+            ) : (
+              <span className="text-[14px] font-normal">
+                {batch.footage_url
+                  ? <a href={batch.footage_url} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">Open the footage folder</a>
+                  : 'Not pasted yet.'}
+              </span>
+            )}
+          </label>
+        )}
+
         {shown.map(n => {
           const check = can(n.to)
           const overriding = n.to === 'confirmed' && askOverride
@@ -357,8 +440,15 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
             </div>
           )
         })}
+        {(stage === 'confirmed' || stage === 'reminder_sent' || stage === 'shoot_day') && (
+          <p className="text-[13px] text-muted-foreground">
+            {handoverReady(batch)
+              ? 'The editor’s cards are on the Editor page already; the footage follows the shoot. The morning after the shoot it is handed over by itself — press “Footage is in” only if it is in early.'
+              : 'Name the editor, the priorities and the deadline so the card can be theirs — the handover waits on those three.'}
+          </p>
+        )}
         {stage === 'footage_handed' && (
-          <p className="text-[13px]">The work is on the Editor page, owned by the editor{batch.edit_deadline ? `, due ${batch.edit_deadline}` : ''}.</p>
+          <p className="text-[13px]">Footage should be in — the editor has been told. The work is on the Editor page{batch.edit_deadline ? `, due ${batch.edit_deadline}` : ''}.</p>
         )}
       </CardContent>
     </Card>

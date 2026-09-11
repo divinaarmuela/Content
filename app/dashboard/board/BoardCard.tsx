@@ -1,5 +1,6 @@
 'use client'
 
+import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ExternalLink, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
@@ -11,12 +12,12 @@ import {
 import { statusesIn, columnOf } from '../../lib/board-core'
 import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
-  type BoardViewCard, type BoardViewer, type CardAction,
-} from '../../lib/board-view-core'
+  type BoardViewCard, type BoardViewer, type CardAction, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
+import { footageAfterWords } from '../../lib/shoot-sop-core'
 
 /**
  * ONE CARD ON THE BOARD.
@@ -169,11 +170,12 @@ export function BoardCard({
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
+        {lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
       </>}
       note={<>
         {card.shoot_title && (
-          <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">From the shoot: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{card.shoot_title}</span></span>
+          <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">From the shoot: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{card.shoot_title}</span>{card.shoot_date && footageAfterWords({ shoot_date: card.shoot_date }, today) ? ` · ${footageAfterWords({ shoot_date: card.shoot_date }, today)}` : ''}</span>
         )}
         {askAck && (
           <span className="mb-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">New — press Acknowledge so the team knows you are on it.</span>
@@ -252,13 +254,20 @@ export function BoardCard({
             Acknowledge
           </Button>
         )}
-        {primary && (
-          <Button disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
-            onClick={e => { e.preventDefault(); onAction(card, primary) }}
-            className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
-            {busy ? 'Saving…' : primary.label}
-          </Button>
-        )}
+        {primary && (() => {
+          // an empty card cannot go for checking: say "Upload the final
+          // first" on the button rather than a refusal after the press
+          const blocked = primary.kind === 'transition' && primary.to === 'internal_review' && needsWorkFirst(card)
+          return (
+            <Button disabled={busy || blocked} data-tour={tour ? 'board-card-action' : undefined}
+              title={blocked ? UPLOAD_FIRST : undefined}
+              aria-label={blocked ? `${primary.label} — ${UPLOAD_FIRST}` : undefined}
+              onClick={e => { e.preventDefault(); if (!blocked) onAction(card, primary) }}
+              className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
+              {busy ? 'Saving…' : blocked ? UPLOAD_FIRST : primary.label}
+            </Button>
+          )
+        })()}
         {!primary && more.length > 0 && (
           <Button variant="outline" disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, more[0]) }}

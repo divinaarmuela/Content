@@ -1,3 +1,4 @@
+import { selfPostingClientIds } from '@/app/lib/deliver-only'
 import { NextResponse } from 'next/server'
 import { table, encodeKey, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -70,6 +71,7 @@ export async function GET() {
         assignments,
         {
           batches,
+          selfPostingClientIds: await selfPostingClientIds(),
           taggedItemIds: itemTags,
           taggedBatchIds: batchTags,
           createdItemIds: createdIds,

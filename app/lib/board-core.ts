@@ -22,8 +22,9 @@ import {
 } from './workflow-core'
 import type { Role } from './identity-core'
 import type { Hat } from './workflow-core'
+import { isDelivered } from './deliver-only-core'
 
-export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted'
+export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted' | 'delivered'
 
 export type BoardColumn = {
   key: BoardColumnKey
@@ -84,10 +85,21 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
     meaning: 'Already live.',
     statuses: ['published'],
   },
+  // DELIVERED (the Team's Playbook, 11 Sep 2026): a client who posts their
+  // own content gets the finals at their approval and nobody here books
+  // them. No status of its own — an approved card lands here by the
+  // deliver-only rule (`cardColumn`), and the column is drawn only when
+  // something is in it, so a team with no such client never sees it.
+  {
+    key: 'delivered',
+    label: 'Delivered',
+    meaning: 'Sent to the client, who posts it themselves.',
+    statuses: [],
+  },
 ]
 
 /** The columns past the point of doing: booked with the channel, or live. */
-export const OUT_COLUMNS: readonly BoardColumnKey[] = ['booked', 'posted']
+export const OUT_COLUMNS: readonly BoardColumnKey[] = ['booked', 'posted', 'delivered']
 /** Is this status out of the team's hands — booked in or already posted? */
 export function isOut(status: ItemStatus): boolean {
   return OUT_COLUMNS.includes(COLUMN_OF_STATUS[status])
@@ -104,6 +116,17 @@ const COLUMN_OF_STATUS: Record<ItemStatus, BoardColumnKey> = Object.fromEntries(
 /** The column a status sits in. Every status has exactly one. */
 export function columnOf(status: ItemStatus): BoardColumnKey {
   return COLUMN_OF_STATUS[status]
+}
+
+/** The column a CARD sits in: its status's column, except that an approved
+ *  card for a client who posts their own content is Delivered, not Ready
+ *  to post (`deliver-only-core`). Every board, count and drop reads this. */
+export function cardColumn(card: {
+  status: ItemStatus
+  deliver_only?: unknown
+  clients?: { posts_own_content?: unknown } | null
+}): BoardColumnKey {
+  return isDelivered(card, card.clients) ? 'delivered' : columnOf(card.status)
 }
 
 /** A column's own row of the table above. */

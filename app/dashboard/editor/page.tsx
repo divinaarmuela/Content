@@ -68,6 +68,7 @@ export default function EditorPage() {
     // the wire: which shoot it came from (the shoot board makes these
     // cards), whether the holder acknowledged it, and a standing risk
     const shootTitle = new Map(live.tables.batches.rows.map(b => [b.id, String(b.title ?? '')]))
+    const shootDate = new Map(live.tables.batches.rows.map(b => [b.id, (b as { shoot_date?: string | null }).shoot_date ?? null]))
     const activityByItem = new Map<string, typeof live.tables.activity.rows>()
     for (const a of live.tables.activity.rows) {
       if (a.entity_type !== 'content_item') continue
@@ -79,6 +80,7 @@ export default function EditorPage() {
       return {
         ...c,
         shoot_title: c.batch_id ? (shootTitle.get(c.batch_id) ?? null) : null,
+        shoot_date: c.batch_id ? (shootDate.get(c.batch_id) ?? null) : null,
         acknowledged: flags.acknowledged,
         risk: flags.risk,
       }

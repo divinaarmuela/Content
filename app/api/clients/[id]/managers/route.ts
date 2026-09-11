@@ -26,7 +26,7 @@ async function loadState(clientId: string) {
       orderBy: [['name', 'asc']],
     }),
     table<TeamUserClient>('team_user_clients').list(),
-    table<{ id: string; default_scheduler_ids?: unknown }>('clients').get(clientId),
+    table<{ id: string; default_scheduler_ids?: unknown; posts_own_content?: unknown }>('clients').get(clientId),
     table<TeamUser>('team_users').list({
       by: { active_status: true },
       where: r => SCHEDULING_ROLES.includes(r.role),
@@ -63,6 +63,8 @@ async function loadState(clientId: string) {
       .filter(u => defaultIds.includes(u.id))
       .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })),
     schedulers: schedulers.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })),
+    // DELIVER ONLY: this client posts their own content (the playbook's Bond Street)
+    posts_own_content: client?.posts_own_content === true,
   }
 }
 
@@ -84,7 +86,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? await table<TeamUser>('team_users').list({ where: r => wanted.includes(r.id) && r.active_status && SCHEDULING_ROLES.includes(r.role) })
       : []
     const ids = wanted.filter((w: string) => people.some(p => p.id === w))
-    const saved = await table('clients').update(id, { default_scheduler_ids: ids })
+    const patchRow: Record<string, unknown> = {}
+    if (Array.isArray(body?.default_scheduler_ids)) patchRow.default_scheduler_ids = ids
+    if (typeof body?.posts_own_content === 'boolean') patchRow.posts_own_content = body.posts_own_content
+    if (Object.keys(patchRow).length === 0) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
+    const saved = await table('clients').update(id, patchRow)
     if (!saved) return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     return NextResponse.json(await loadState(id))
   } catch (e) {

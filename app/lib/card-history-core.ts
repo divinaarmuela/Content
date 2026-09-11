@@ -22,6 +22,7 @@
  * reaches the client, who has their own portal.
  */
 
+import { DELIVERED_ACTION, DELIVERED_LINE } from './deliver-only-core'
 import { auditActorName } from './act-as-core'
 import { networkName } from './publish-core'
 import { outcomesForJob, type OutcomeJob } from './post-outcome-core'
@@ -80,6 +81,8 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       return { text: String(row.detail ?? '').startsWith('default') ? `Handed to the client\u2019s schedulers` : `Handed to a scheduler by ${who}` }
     case 'acknowledged':
       return { text: `Acknowledged by ${who}` }
+    case DELIVERED_ACTION:
+      return { text: DELIVERED_LINE }
     case 'deadline_risk':
       return { text: `Deadline risk flagged by ${who}${quote(row.detail)}` }
     case 'sent_back':

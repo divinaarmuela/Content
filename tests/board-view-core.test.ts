@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BOOKED_LABEL, NEEDS_CLIENT_REASON, POSTED_LABEL, READY_FOR_CHECK_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
   COLUMN_EMPTY, LANE_EMPTY, OLDER_POSTS_NOTE, POSTED_DAYS,
-  applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, initialsOf, isAssignedTo,
+  applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, initialsOf, isAssignedTo, needsWorkFirst, UPLOAD_FIRST,
   laneOf, moveTargets, overviewTiles, pageCards, pageLanes, reachableLanes, recentlyPosted, shortDate,
   postApprovalOffer, postWaitingLine,
   POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE, POST_WAITING_MANAGER,
@@ -263,7 +263,7 @@ describe('what each page shows', () => {
     card({ id: 'u', owner_id: 'ed', status: 'internal_review', work_kinds: { name: 'Copy', slug: 'task' } }),
   ]
 
-  it('Production is everything the person may see, in seven lanes', () => {
+  it('Production is everything the person may see, in eight lanes', () => {
     expect(pageCards('production', rows, manager).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
     expect(pageLanes('production').map(l => l.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
@@ -293,17 +293,17 @@ describe('what each page shows', () => {
   })
 })
 
-describe('the lanes each page arranges the seven columns into', () => {
+describe('the lanes each page arranges the eight columns into', () => {
   const PAGES: BoardPage[] = ['production', 'editor', 'scheduler']
 
-  it('Production is seven lanes, one column each, none folded', () => {
+  it('Production is eight lanes, one column each, none folded', () => {
     const lanes = pageLanes('production')
     expect(lanes.map(l => l.columns)).toEqual(BOARD_COLUMNS.map(c => [c.key]))
     expect(lanes.every(l => !l.folded)).toBe(true)
     expect(lanes.map(l => l.label)).toEqual(BOARD_COLUMNS.map(c => c.label))
   })
 
-  it('Production and Post approval have the same seven lanes — one column each', () => {
+  it('Production and Post approval have the same eight lanes — one column each', () => {
     // the owner's standing rule: work needs an internal check and the client's
     // word whoever is looking, so no page hides a stage. What differs is which
     // CARDS are shown and which button each role gets. Booked in is its own
@@ -323,7 +323,7 @@ describe('the lanes each page arranges the seven columns into', () => {
     const lanes = pageLanes('editor')
     expect(lanes.map(l => l.label)).toEqual(['In progress', 'For review', 'Quality check', 'With client', 'For handoff', 'Done'])
     expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, false, true])
-    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['internal_check'], ['quality_check'], ['with_client'], ['ready_to_post'], ['booked', 'posted']])
+    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['internal_check'], ['quality_check'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page
     expect(lanes.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
   })
@@ -721,5 +721,22 @@ describe('the Sent to client line', () => {
     expect(cardLines(base, opts).delivered).toBeNull()
     expect(cardLines({ ...base, delivered_at: '2026-09-11T03:00:00Z' }, opts).delivered)
       .toMatch(/^Sent to client /)
+  })
+})
+
+/* ── the tutorial walk of 11 Sep 2026 ── */
+
+describe('a general user\u2019s Overview and an empty card', () => {
+  it('gives a general user their own tiles, never the manager\u2019s decision tiles', () => {
+    const general = { id: 'u-general', role: 'general' as const }
+    const tiles = overviewTiles({ viewer: general, cards: [], today: TODAY })
+    expect(tiles.map(t => t.key)).toEqual(['assigned', 'due', 'ready'])
+    expect(tiles.some(t => /decision|quality/i.test(t.title))).toBe(false)
+  })
+  it('says an empty card needs the final before it goes for checking', () => {
+    expect(needsWorkFirst({ current_version_number: null, link_url: null })).toBe(true)
+    expect(needsWorkFirst({ current_version_number: 1, link_url: null })).toBe(false)
+    expect(needsWorkFirst({ current_version_number: 0, link_url: 'https://drive.google.com/x' })).toBe(false)
+    expect(UPLOAD_FIRST).toBe('Upload the final first')
   })
 })

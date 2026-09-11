@@ -131,6 +131,10 @@ export function ShootStageBoard({
       ? `Still to fill in: ${list.missing.map(m => m.label.toLowerCase()).join(', ')}`
       : stage === 'shared' && !ack.complete && ack.total > 0
       ? `Waiting on: ${ack.missing.map(id => names.get(id) ?? 'someone').join(', ')}`
+      : (stage === 'confirmed' || stage === 'reminder_sent') && editorName
+      ? `${editorName} has the card — footage after the shoot${s.edit_deadline ? ` · due ${whenShort(s.edit_deadline)}` : ''}`
+      : stage === 'shoot_day' && editorName
+      ? `Footage goes to ${editorName} the morning after`
       : stage === 'footage_handed' && editorName
       ? `With ${editorName}${s.edit_deadline ? ` · due ${whenShort(s.edit_deadline)}` : ''}`
       : null

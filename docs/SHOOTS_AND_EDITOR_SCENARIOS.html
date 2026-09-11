@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shoots and Editing Scenarios</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  :root{
+    --ink:#161412; --paper:#FBFAF6; --muted:#6B665E; --line:#DDD8CE;
+    --red:#C62828; --tint-green:#D6F5E1; --tint-amber:#FFF0C7; --tint-blue:#DCE6FF; --tint-red:#FBE3E1;
+  }
+  @page{ size:A4; margin:16mm 14mm 18mm 14mm; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink)}
+  body{font-family:"Instrument Sans",system-ui,Arial,sans-serif;font-size:10.5pt;line-height:1.45}
+  h1,h2,h3{font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;text-wrap:balance;margin:0}
+  h1{font-size:30pt;font-weight:700;line-height:1.05;letter-spacing:-.01em}
+  h2{font-size:17pt;font-weight:700;margin:18pt 0 6pt;padding-top:8pt;border-top:2px solid var(--ink);break-after:avoid}
+  h3{font-size:12pt;font-weight:700;margin:12pt 0 4pt;break-after:avoid}
+  p{margin:0 0 6pt}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:8pt;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .lede{font-size:12pt;max-width:62ch;margin:8pt 0 0}
+  .meta{display:flex;gap:18pt;margin-top:10pt;color:var(--muted);font-size:9pt}
+  .strip{display:flex;gap:4pt;margin:10pt 0 4pt;font-family:"JetBrains Mono",monospace;font-size:8pt}
+  .strip span{flex:1;border:1px solid var(--line);padding:5pt 6pt;text-align:center;background:#fff;border-radius:3pt}
+  .strip span.auto{background:var(--tint-blue)}
+  .legend{font-size:8.5pt;color:var(--muted);margin-bottom:8pt}
+  table{width:100%;border-collapse:collapse;margin:4pt 0 10pt;font-size:9.5pt;break-inside:auto}
+  th{font-family:"JetBrains Mono",monospace;font-size:7.5pt;letter-spacing:.1em;text-transform:uppercase;text-align:left;color:var(--muted);padding:4pt 6pt;border-bottom:1.5px solid var(--ink)}
+  td{vertical-align:top;padding:6pt 6pt;border-bottom:1px solid var(--line)}
+  tr{break-inside:avoid}
+  td.n{font-family:"JetBrains Mono",monospace;font-size:8pt;color:var(--muted);white-space:nowrap;width:18pt;padding-right:0}
+  td.s{font-weight:600;width:24%}
+  .chip{display:inline-block;border-radius:99pt;padding:1pt 6pt;font-size:8.5pt;font-weight:600;background:#EFEBE3;white-space:nowrap}
+  .chip.g{background:var(--tint-green)} .chip.a{background:var(--tint-amber)} .chip.b{background:var(--tint-blue)} .chip.r{background:var(--tint-red);color:var(--red)}
+  .who{color:var(--muted)}
+  .rule{font-size:9.5pt;border-left:3px solid var(--red);padding:4pt 8pt;margin:8pt 0;background:#fff}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12pt}
+  ul{margin:2pt 0 6pt 14pt;padding:0} li{margin:0 0 2pt}
+  .foot{margin-top:14pt;padding-top:6pt;border-top:1px solid var(--line);font-size:8.5pt;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<p class="eyebrow">MD Media · Agency OS · Team reference</p>
+<h1>Shoots and Editing Scenarios</h1>
+<p class="lede">Every situation the Shoots page and the Editor page are built to handle, what you press, what the app does by itself, who is told, and what shows on screen. Written to the Team's Playbook (July 2026) and the quality-review rule of 11 September 2026: account manager or designer or editor, then Joy, then the scheduler.</p>
+<div class="meta"><span>Version 11 Sep 2026</span><span>Pages: Shoots · Editor · Post approval · Client portal</span><span>Roles: super admin, account manager, general, editor or designer, quality reviewer, scheduler, client</span></div>
+
+<h2>The shoot, stage by stage</h2>
+<div class="strip"><span>Draft</span><span>Shared with team</span><span>Confirmed</span><span>Reminder sent</span><span class="auto">Shoot day</span><span class="auto">Footage in</span></div>
+<p class="legend">Blue stages move by themselves on the calendar. The others move when a person presses the button on the shoot page. Nothing needs to be dragged; dragging on the board is a second way to do the same thing.</p>
+<div class="rule"><strong>The one-week rule.</strong> The plan must be shared with the team at least 7 days before the shoot. A late plan turns the card red, tells the AM and Abby once a day, and blocks Go. Only a super admin can go ahead late, with a reason that stays on the card.</div>
+
+<table>
+<tr><th></th><th>Situation</th><th>What you do</th><th>What the app does</th><th>Who is told</th></tr>
+<tr><td class="n">1</td><td class="s">A super admin sets up a shoot and gives it to an AM</td><td>Shoots › New shoot plan: client, title, what the shoot is for, shoot date, account manager. Create.</td><td>Shoot appears in <span class="chip">Draft</span>, "2 of 9 filled". Its page opens with the six stages across the top and "Next: fill the plan".</td><td class="who">The AM</td></tr>
+<tr><td class="n">2</td><td class="s">An AM or a general user starts their own shoot</td><td>Same popup. A general user can also name the AM, editor and crew.</td><td>Same as above. The creator always sees the shoot.</td><td class="who">The AM, if someone else</td></tr>
+<tr><td class="n">3</td><td class="s">The plan is for a shoot that already exists</td><td>In the popup pick the existing shoot under "Shoot" instead of "A new shoot".</td><td>The plan goes on that shoot; no second shoot is made.</td><td class="who">—</td></tr>
+<tr><td class="n">4</td><td class="s">Filling the nine parts</td><td>On the plan page type into each row: objective, deliverables, shot list, script, date with call time and location, talent, props and wardrobe, client availability, editor priorities and edit deadline. Build the shot list and mood board on the canvas.</td><td>Each row ticks as it is filled. A shot list or script written on the canvas ticks too, marked "from the canvas". The card counts "6 of 9 filled" and names what is missing.</td><td class="who">—</td></tr>
+<tr><td class="n">5</td><td class="s">Naming who is on the shoot</td><td>Editor: who edits the footage after the shoot. Crew on the day: videographer, presenter, anyone on set.</td><td>They appear on the card. Nobody is emailed until the plan is shared.</td><td class="who">—</td></tr>
+<tr><td class="n">6</td><td class="s">Sharing before the plan is complete</td><td>Press Share the plan with 7 of 9.</td><td>Refused: "Not yet — script, talent still to fill in. Nothing moves forward on half-information."</td><td class="who">—</td></tr>
+<tr><td class="n">7</td><td class="s">Sharing the plan</td><td>Press Share the plan with 9 of 9.</td><td>Moves to <span class="chip">Shared with team</span>. Everyone on the shoot gets "I've read the plan". Card reads "0 of 2 acknowledged".</td><td class="who">Editor and crew: "Read the plan"</td></tr>
+<tr><td class="n">8</td><td class="s">The plan is shared late (under 7 days out)</td><td>Nothing extra; it still shares.</td><td>Card turns red: "Plan is late — needed 7 days before the shoot". Go is refused for the AM.</td><td class="who">AM and Abby, once</td></tr>
+<tr><td class="n">9</td><td class="s">The client must sign the plan off</td><td>On the plan page: Send plan for review (a teammate checks it), then Share plan with client, or Log the client's approval if they said yes elsewhere.</td><td>The card wears a chip: <span class="chip b">Plan with client</span>, <span class="chip g">Plan approved</span> or <span class="chip a">Client wants plan changes</span>. The client sees it on their portal and approves or asks for changes.</td><td class="who">The client; then the AM</td></tr>
+<tr><td class="n">10</td><td class="s">Someone has not read the plan</td><td>Press Go anyway.</td><td>Refused: "Yusuf has not read the plan yet". The card names who is missing.</td><td class="who">—</td></tr>
+<tr><td class="n">11</td><td class="s">Everyone has read it; the AM confirms</td><td>Tick "Aligned with the strategist" and "Client and location confirmed". Press Confirm — it is go.</td><td>One press books the shoot and moves it to <span class="chip g">Confirmed</span>. The shoot becomes the editor's one card now: titled with the shoot, owned by the named editor, due on the edit deadline, briefed with everything coming out and the priorities, marked "Shoot on 21 Sept — footage after that". Every final goes onto that card as a file.</td><td class="who">The editor: "You're on Acme launch — your card is ready, shoot on 21 Sept, due 25 Sept"</td></tr>
+<tr><td class="n">12</td><td class="s">The plan is late and the shoot must still happen</td><td>A super admin types a one-line reason and presses Go anyway (super admin).</td><td>Booked and confirmed. The card wears <span class="chip a">Went ahead late — reason</span>; the reason stays in the history.</td><td class="who">Abby and the client's managers, once</td></tr>
+<tr><td class="n">13</td><td class="s">The editor is not known yet</td><td>Leave Editor as "Not picked yet" and confirm as usual.</td><td>The card is still made, with nobody on it. It sits in Draft on Post approval as "Nobody on it — anyone can take it". No editor sees it yet. The morning after the shoot the AM is asked once to name one.</td><td class="who">The AM, after the shoot</td></tr>
+<tr><td class="n">14</td><td class="s">The editor is named after Go</td><td>Pick the editor on the shoot page, or Hand to… on the card.</td><td>The shoot's card gets that editor, the deadline and the priorities at once.</td><td class="who">The editor</td></tr>
+<tr><td class="n">15</td><td class="s">The day before</td><td>Abby presses Reminder sent.</td><td>Moves to <span class="chip">Reminder sent</span>.</td><td class="who">Editor and crew: call time, address, talent, props</td></tr>
+<tr><td class="n">16</td><td class="s">Shoot day</td><td>Nothing.</td><td>Moves to <span class="chip b">Shoot day</span> by itself. "Shooting today", then "Shot yesterday".</td><td class="who">—</td></tr>
+<tr><td class="n">17</td><td class="s">The footage comes in</td><td>Whoever uploaded it pastes the Dropbox or Drive folder into "Footage folder" on the shoot page. Press Footage is in if it is ready early.</td><td>The morning after the shoot the shoot moves to <span class="chip b">Footage in</span> by itself. The shoot's card gets the folder under "Files to work from" and reads "Footage should be in".</td><td class="who">The editor: "Footage should be in — start the edit. Footage folder: link"</td></tr>
+<tr><td class="n">18</td><td class="s">Abby wants the editor to work from specific files</td><td>Open a card, "Files to work from": upload clips or stills, or paste the folder.</td><td>Thumbnails and the folder show on the card above the editor's versions.</td><td class="who">The editor</td></tr>
+<tr><td class="n">19</td><td class="s">The shoot date moves</td><td>Change the date on the shoot page.</td><td>The seven-day clock and the stage are recalculated. Cards keep their edit deadline until you change it.</td><td class="who">—</td></tr>
+<tr><td class="n">20</td><td class="s">Who sees a shoot</td><td>—</td><td>Its creator, the AM on it, the editor and crew, the client's account managers, general users, and every super admin. Nobody else, and never another client's team.</td><td class="who">—</td></tr>
+<tr><td class="n">21</td><td class="s">Finding one shoot or one person's shoots</td><td>On the Shoots board: Client picker, People picker, search, or By date.</td><td>The board narrows; the address carries the choice so a link can be shared.</td><td class="who">—</td></tr>
+</table>
+
+<h2>The editor, card by card</h2>
+<div class="strip"><span>In progress</span><span>For review</span><span>Quality check</span><span>With client</span><span>For handoff</span><span>Done</span></div>
+<p class="legend">These are the Editor page columns. An editor or designer sees only their own cards. An account manager sees every card for their clients; a super admin every card.</p>
+<div class="rule"><strong>One shoot, one card. Finals only.</strong> A shoot makes one card for the editor, holding every final as a file. A card takes pictures and videos. Raw footage, project files and source files stay on the hard drive and Dropbox; the card carries a link to them. Nothing reaches a scheduler without Joy or a super admin passing it.</div>
+
+<table>
+<tr><th></th><th>Situation</th><th>What you do</th><th>What the app does</th><th>Who is told</th></tr>
+<tr><td class="n">1</td><td class="s">A card lands from a shoot</td><td>Open it. Press Acknowledge the same day.</td><td>One card for the whole shoot sits in <span class="chip">In progress</span> with the shoot's name, the deadline, and "what needs doing" listing everything coming out plus the priorities, and "Footage after the shoot" until the day passes. Each final is uploaded onto it; the card counts "3 of 6 finals in". Acknowledge is one press.</td><td class="who">—</td></tr>
+<tr><td class="n">2</td><td class="s">A manager makes a card by hand</td><td>Editor › New card: client, title, what needs doing, kind of work, which shoot, which deliverable, files to work from or the folder, due date, who.</td><td>Lands in the editor's In progress with Acknowledge.</td><td class="who">The editor</td></tr>
+<tr><td class="n">3</td><td class="s">The deadline is at risk</td><td>Press Flag a deadline risk, one line why.</td><td>A red chip on the card.</td><td class="who">The client's account managers</td></tr>
+<tr><td class="n">4</td><td class="s">Uploading the final</td><td>Upload the export, or Pick the final from Google Drive, or paste a link. Add the Dropbox source-files link.</td><td>A numbered version. A playable preview is made at once. Drive files are copied in; the app never writes to Drive.</td><td class="who">—</td></tr>
+<tr><td class="n">5</td><td class="s">Pressing Ready for checking with no file</td><td>—</td><td>Refused: "Attach the work first". The button stays until a file or a link is on the card.</td><td class="who">—</td></tr>
+<tr><td class="n">6</td><td class="s">Ready for checking</td><td>Press it.</td><td>Moves to <span class="chip">For review</span>. On Post approval the same card sits in Internal check with "Needs a check — nobody asked yet".</td><td class="who">The client's account managers</td></tr>
+<tr><td class="n">7</td><td class="s">The AM checks it</td><td>AM reviews caption, message, cover, timing. Presses Send for quality check, or Ask for changes with a note, or Ask somebody to check it to name a reviewer.</td><td>Moves to <span class="chip">Quality check</span>. The AM can no longer send straight to the client.</td><td class="who">Joy. If nobody is flagged, the super admins</td></tr>
+<tr><td class="n">8</td><td class="s">Joy passes it</td><td>Joy presses Passed — send to client, or Passed — approve without client for clients who do not sign off.</td><td>Moves to <span class="chip">With client</span> and "Sent to client 11 Sept" is stamped once: the delivery date. A super admin can pass it in Joy's place; the history says so.</td><td class="who">The client on the portal; Joy if a super admin stood in</td></tr>
+<tr><td class="n">9</td><td class="s">Joy or the AM sends it back</td><td>Ask for changes, with what to change.</td><td>Back to <span class="chip a">For review</span> for the editor with "Your turn" and the note in their words.</td><td class="who">The editor</td></tr>
+<tr><td class="n">10</td><td class="s">Revisions done</td><td>Upload version 2, press Revisions done.</td><td>Back to the AM, then Joy again.</td><td class="who">The account managers</td></tr>
+<tr><td class="n">11</td><td class="s">The client approves</td><td>On their portal: open each file, Approve. Or the AM logs their approval.</td><td>Moves to <span class="chip g">For handoff</span> on Editor and Ready to post on Post approval. Handed to the client's default schedulers.</td><td class="who">Schedulers: "needs a posting date". AM and editor: "now Ready to post"</td></tr>
+<tr><td class="n">12</td><td class="s">The client asks for changes</td><td>They write it on the portal, on the whole post or on one file.</td><td>Back to the editor with the client's words; the card shows "Changes in progress" to the client.</td><td class="who">The editor and the AM</td></tr>
+<tr><td class="n">13</td><td class="s">A new version after approval</td><td>Upload again on an approved card.</td><td>The approval is taken back: through Joy and the client again, because the approved pictures changed. A booked post must be cancelled first.</td><td class="who">The account managers</td></tr>
+<tr><td class="n">14</td><td class="s">The client posts their own content</td><td>Once per client: "This client posts their own content". Per card: the Deliver only box.</td><td>After the client approves, the card stops in <span class="chip g">Delivered</span> on Post approval, Done on Editor. No scheduler sees it. The portal reads "Approved — yours to post" with Download per file and the caption.</td><td class="who">The client; the AM</td></tr>
+<tr><td class="n">15</td><td class="s">Handing the card to a different editor</td><td>Three-dot menu › Hand to…, pick the person, optional note.</td><td>The card moves to their page.</td><td class="who">The new editor</td></tr>
+<tr><td class="n">16</td><td class="s">A designer's work: carousel, static, story</td><td>Same as an editor; the role is the same.</td><td>The card's kind is Graphics; a shoot whose plan is all stills and carousels makes a Graphics card, one with anything moving a Video edit card.</td><td class="who">—</td></tr>
+<tr><td class="n">17</td><td class="s">Research, strategy or copy with nothing to post</td><td>New card with that kind of work.</td><td>Runs In progress › For review › Done. Never reaches Joy or a scheduler.</td><td class="who">—</td></tr>
+<tr><td class="n">18</td><td class="s">The card is booked and then posted</td><td>Nothing on the editor's side.</td><td>Editor shows <span class="chip">Done</span>. Post approval shows Booked in, then Posted when every channel is live, with each channel's link. A posted file can never be changed here.</td><td class="who">The editor: "posted"</td></tr>
+<tr><td class="n">19</td><td class="s">A manager wants to see who is doing what</td><td>Post approval or Editor: Client picker and People picker at the top.</td><td>Each person lists with their card count; the board narrows; the address carries it.</td><td class="who">—</td></tr>
+<tr><td class="n">20</td><td class="s">Whose move is it</td><td>Read the chip on the card.</td><td><span class="chip g">Your turn</span> means you were asked by name or it is your seat. <span class="chip">Needs a check — nobody asked yet</span> means any manager can take it. "Waiting on Martin" names who holds it.</td><td class="who">—</td></tr>
+</table>
+
+<h2>Who sees what</h2>
+<div class="cols">
+<div>
+<h3>Shoots</h3>
+<ul>
+<li><strong>Super admin</strong>: every shoot, every move.</li>
+<li><strong>Account manager</strong>: their clients' shoots, every move.</li>
+<li><strong>General</strong>: every shoot; can create, staff and move.</li>
+<li><strong>Editor or crew</strong>: shoots they are on; read the plan, acknowledge, paste the footage folder. Cannot move a shoot.</li>
+<li><strong>Scheduler</strong>: only if named as crew.</li>
+<li><strong>Client</strong>: the plan on their portal when it is shared with them; never the team's stages.</li>
+</ul>
+</div>
+<div>
+<h3>Editor and Post approval</h3>
+<ul>
+<li><strong>Super admin</strong>: every card; may pass quality check.</li>
+<li><strong>Account manager</strong>: their clients' cards; checks and sends to Joy.</li>
+<li><strong>Quality reviewer</strong> (Joy): every card in Quality check for every client, plus their own role's cards.</li>
+<li><strong>Editor or designer</strong>: only cards they own, through every stage.</li>
+<li><strong>General</strong>: their own cards; every client's Ready to post queue.</li>
+<li><strong>Scheduler</strong>: cards handed to them from Ready to post on, plus their own uploads. Never a deliver-only card.</li>
+<li><strong>Client</strong>: their own cards on the portal as Being made, Being checked, Needs your review, Changes in progress, Approved, Delivered or Posted.</li>
+</ul>
+</div>
+</div>
+
+<h2>Set up once</h2>
+<ul>
+<li>Team page: switch on <strong>Quality reviewer</strong> for Joy and <strong>Ops contact</strong> for Abby. Until Joy is flagged, every quality check goes to the super admins and a banner says so.</li>
+<li>Each client's page: <strong>Who schedules for this client</strong> (Cath, Raven), and <strong>This client posts their own content</strong> where that is true.</li>
+<li>Editors and designers hold the editor role; schedulers the scheduler role. Joy keeps whatever role she has.</li>
+</ul>
+
+<p class="foot">Every step above writes a line in the card's or shoot's "What happened" with who and when. The whole chain from New shoot plan to Posted is re-run on the live database against the test client before each release.</p>
+</body>
+</html>

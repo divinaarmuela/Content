@@ -44,7 +44,7 @@ export const GLOSSARY = {
   },
   wrapped: {
     title: 'Wrapped',
-    body: 'The shoot is closed out and everything promised from it has been delivered. You can still make new cards from its footage later.',
+    body: 'The shoot is closed out: the footage was handed to the editor and everything promised from it has been delivered. You can still make new cards from its footage later.',
   },
   deliverable: {
     title: 'Deliverable',

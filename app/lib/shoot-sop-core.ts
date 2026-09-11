@@ -17,7 +17,7 @@
  * means (`stageMove`), refused in words when the SOP says no.
  */
 
-import { planCards, type PlanCard } from './deliverable-group-core'
+import { planCards, type PlanCard, shootCard, deliverablesBrief } from './deliverable-group-core'
 
 /* ── the shoot, as these rules read it ─────────────────────────────────── */
 
@@ -56,6 +56,12 @@ export type SopShoot = {
   go_override_reason?: string | null
   go_override_by?: string | null
   late_share_nudged_at?: string | null
+  /** the morning after the shoot the footage was handed over by itself and
+   *  the editor told — once */
+  footage_due_nudged_at?: string | null
+  /** where the footage lives — the Dropbox or Drive folder whoever has it
+   *  pasted on the shoot page; handed to every card as "Files to work from" */
+  footage_url?: string | null
 }
 
 export type Ack = { user_id: string; at: string }
@@ -221,6 +227,12 @@ export const SHOOT_STAGES: readonly { key: ShootStage; label: string; meaning: s
 ]
 
 export const STAGE_LABEL: Record<ShootStage, string> = Object.fromEntries(SHOOT_STAGES.map(s => [s.key, s.label])) as Record<ShootStage, string>
+
+/** The same six stages as a strip across the shoot page — the column word,
+ *  with the last one short enough to sit in a row. */
+export const STAGE_STRIP: readonly { key: ShootStage; label: string }[] = SHOOT_STAGES.map(s => ({
+  key: s.key, label: s.key === 'footage_handed' ? 'Footage in' : s.label,
+}))
 
 const STAGE_ORDER: ShootStage[] = SHOOT_STAGES.map(s => s.key)
 export const stageIndex = (s: ShootStage) => STAGE_ORDER.indexOf(s)
@@ -455,7 +467,7 @@ export type HandoverItem = {
 }
 
 export type HandoverPlan = {
-  /** deliverables on the plan with no card yet — each becomes one card */
+  /** the shoot's one card, when the shoot has no deliverable card yet */
   create: (PlanCard & { owner_id: string; due_date: string; brief: string })[]
   /** cards that exist, with only the empty fields filled */
   fill: { id: string; patch: { owner_id?: string; due_date?: string; brief?: string } }[]
@@ -464,15 +476,16 @@ export type HandoverPlan = {
 }
 
 /**
- * Which deliverables become which cards when the footage is handed over.
+ * What the handover makes and fills.
  *
- * Every line of the plan already has a fixed card id (`planCardId`) and the
- * booking may have made the card; a line whose card is missing is made now,
- * owned by the editor, due on the editor deadline, briefed with the editor
- * priorities. Cards that exist keep what they have and get only their empty
- * fields filled. The shoot's own plan card is paperwork and is never handed
- * to anyone. Idempotent by construction: the same input plans nothing the
- * second time.
+ * ONE SHOOT, ONE CARD (11 Sep 2026): a shoot with no deliverable card yet
+ * gets its one card now — titled with the shoot, owned by the editor, due on
+ * the editor deadline, briefed with the list of what is coming out and the
+ * priorities. Cards that exist (the one card, or the older one-per-line
+ * cards, or cards made by hand and pointed at the shoot) keep what they have
+ * and get only their empty fields filled. The shoot's own plan card is
+ * paperwork and is never handed to anyone. Idempotent by construction: the
+ * same input plans nothing the second time.
  */
 export function handoverPlan(b: SopShoot, items: readonly HandoverItem[]): HandoverPlan {
   const editor = b.editor_id ?? ''
@@ -480,9 +493,12 @@ export function handoverPlan(b: SopShoot, items: readonly HandoverItem[]): Hando
   const brief = text(b.editor_priorities)
   const byId = new Map(items.filter(i => i.batch_id === b.id).map(i => [i.id, i]))
   const create: HandoverPlan['create'] = []
-  for (const card of planCards({ id: b.id, client_id: b.client_id }, b.planned_deliverables)) {
-    if (byId.has(card.id)) continue
-    create.push({ ...card, owner_id: editor, due_date: due, brief })
+  const hasDeliverable = [...byId.values()].some(i => i.work_kinds?.slug !== 'shoot_brief')
+  const one = shootCard({ id: b.id, client_id: b.client_id, title: b.title ?? null }, b.planned_deliverables)
+  if (!hasDeliverable && one) {
+    const { planned: _planned, lines, ...card } = one
+    void _planned
+    create.push({ ...card, owner_id: editor, due_date: due, brief: deliverablesBrief(lines.map((t, i) => ({ id: String(i), title: t })), brief) })
   }
   const fill: HandoverPlan['fill'] = []
   let held = create.length
@@ -560,4 +576,117 @@ export function canSeeShoot(
   if (viewer.role === 'client') return viewer.client_id === b.client_id
   if (clientIdsOfViewer.includes(b.client_id)) return true
   return isOnShoot(b, viewer.id)
+}
+
+/* ── the one line under the strip: what happens next, and who ─────────── */
+
+function shortDay(iso: string | null | undefined): string | null {
+  const d = text(iso).slice(0, 10)
+  if (!d) return null
+  const t = new Date(`${d}T00:00:00`)
+  return Number.isNaN(t.getTime()) ? null : t.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * THE FLOW, ON THE PAGE (the owner, 11 Sep 2026: "you need to explain to
+ * be in the shoot creation page"). One sentence for where the shoot is and
+ * what the next move is, naming who makes it. Read by the strip on the
+ * shoot page and by the board card; the same rules `stageMove` and
+ * `goReady` keep, so it never promises a button the route would refuse.
+ */
+export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): string {
+  const stage = shootStage(b, today)
+  const when = shortDay(b.shoot_date)
+  const due = shortDay(b.edit_deadline)
+  switch (stage) {
+    case 'drafting': {
+      const list = briefChecklist(b, input)
+      if (!list.complete) {
+        return `Next: fill in the plan — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to go — then share it with the team. Refused until all nine parts are filled.`
+      }
+      return 'Next: share the plan with the team. Everyone on it is emailed and asked to read it.'
+    }
+    case 'shared': {
+      const ack = ackState(b)
+      if (ack.total === 0) return 'Next: add the editor and the crew, so there is somebody to read the plan.'
+      if (!ack.complete) return `Next: everyone on the shoot presses “I’ve read the plan” — waiting on ${ack.missing.length} of ${ack.total}.`
+      if (!b.aligned_at || !b.client_confirmed_at) return 'Next: the account manager ticks “Aligned with the strategist” and “Client and location confirmed”, then presses Go.'
+      if (!b.go_at && sharedLate(b)) return `${sharedLateWords(b)}`
+      return 'Next: the account manager presses Go. That books the shoot and puts the editor’s card on the Editor page.'
+    }
+    case 'confirmed':
+      return `Confirmed${when ? ` for ${when}` : ''}. The editor’s card is on the Editor page${due ? `, due ${due}` : ''}. Next: Ops presses Reminder sent the day before the shoot.`
+    case 'reminder_sent':
+      return `Reminder sent. Next: the shoot${when ? ` on ${when}` : ''}. Nothing to press until then.`
+    case 'shoot_day': {
+      const days = daysUntilShoot(b, today)
+      if (days === 0) return 'Shooting today. The footage is handed to the editor tomorrow morning by itself — or press “Footage is in” once it is.'
+      return 'Shot. The footage is handed to the editor this morning by itself — press “Footage is in” if it is already.'
+    }
+    case 'footage_handed':
+      return `Footage should be in — the editor has been told. The work is on the Editor page${due ? `, due ${due}` : ''}.`
+  }
+}
+
+/* ── the handover, without a press ─────────────────────────────────────── */
+
+/**
+ * Go is the handover (11 Sep 2026): the cards are made and given to the
+ * editor the moment the shoot is confirmed, so the editor sees their work
+ * from the day the shoot is booked, marked "footage after the shoot".
+ * Handing over needs the three things the SOP names: the editor, the
+ * priorities and the deadline. Missing any, the cards are still made; only
+ * the empty fields wait.
+ */
+export function handoverReady(b: Pick<SopShoot, 'editor_id' | 'editor_priorities' | 'edit_deadline'>): boolean {
+  return !!b.editor_id && text(b.editor_priorities).length > 0 && text(b.edit_deadline).length > 0
+}
+
+/** The chip on an editor's card before the shoot: "Shoot on 21 Sept — footage after that". */
+export function footageAfterWords(b: Pick<SopShoot, 'shoot_date'>, today: string): string | null {
+  const days = daysUntilShoot(b, today)
+  if (days === null || days < 0) return null
+  const when = shortDay(b.shoot_date)
+  return days === 0 ? 'Shooting today — footage after that' : `Shoot on ${when} — footage after that`
+}
+
+/**
+ * The morning after the shoot: a confirmed shoot whose day has passed and
+ * whose footage nobody marked as in is handed over BY ITSELF, and the
+ * editor told once. A shoot with no editor named cannot be handed to
+ * anyone — its account manager is asked to name one instead, once.
+ */
+export function footageDueTargets<T extends SopShoot>(shoots: readonly T[], today: string): { hand: T[]; askEditor: T[] } {
+  const hand: T[] = []
+  const askEditor: T[] = []
+  for (const b of shoots) {
+    if (b.footage_due_nudged_at || b.footage_handed_at || b.status === 'wrapped') continue
+    if (!b.go_at && b.status !== 'locked' && b.status !== 'shot') continue
+    const days = daysUntilShoot(b, today)
+    if (days === null || days >= 0) continue
+    if (b.editor_id) hand.push(b)
+    else askEditor.push(b)
+  }
+  return { hand, askEditor }
+}
+
+/* ── the footage folder: where the footage lives ───────────────────────── */
+
+/**
+ * "How do they get the Dropbox link?" (the owner, 11 Sep 2026). Whoever has
+ * the footage pastes its folder on the shoot page. When the footage is
+ * handed over — by a press or by the morning sweep — every card from the
+ * shoot with no "Files to work from" folder yet gets it; a card somebody
+ * already pointed at a folder keeps theirs. Pure: which cards, from which
+ * link. Idempotent by construction.
+ */
+export function footageFolderFill(
+  b: Pick<SopShoot, 'id' | 'footage_url'>,
+  items: readonly { id: string; batch_id?: string | null; raw_assets_url?: string | null; work_kinds?: { slug?: string } | null }[],
+): { id: string; raw_assets_url: string }[] {
+  const url = text(b.footage_url)
+  if (!url) return []
+  return items
+    .filter(i => i.batch_id === b.id && i.work_kinds?.slug !== 'shoot_brief' && !text(i.raw_assets_url))
+    .map(i => ({ id: i.id, raw_assets_url: url }))
 }

@@ -822,10 +822,18 @@ export const shootBriefLate = inngest.createFunction(
     retries: 1,
   },
   async ({ step }) => withRequestCache(async () => {
-    return step.run('nudge', async () => {
+    const late = await step.run('nudge', async () => {
       const { runBriefLateNudge } = await import('../lib/shoot-sop-notify')
       return runBriefLateNudge()
     })
+    // THE MORNING AFTER A SHOOT the footage is handed to the editor by itself
+    // and they are told to start (11 Sep 2026) — the same function, one more
+    // step, so no re-sync is needed
+    const footage = await step.run('footage-due', async () => {
+      const { runFootageDueSweep } = await import('../lib/shoot-handover')
+      return runFootageDueSweep()
+    })
+    return { ...late, ...footage }
   })
 )
 

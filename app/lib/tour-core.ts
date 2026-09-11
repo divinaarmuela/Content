@@ -74,7 +74,7 @@ export const SCHEDULE_TOUR: Tour = {
     },
     {
       target: 'views',
-      title: 'Four ways to look at it',
+      title: 'Five ways to look at it',
       body: 'Week, Month, List, Preview and Stories show the same posts different ways, and drafts only appear in the List.',
     },
     {
@@ -148,14 +148,14 @@ export const POST_APPROVAL_TOUR: Tour = {
     {
       target: 'board-lanes',
       title: 'The columns',
-      body: 'Draft is being made, Internal check is with an account manager, Quality check is with the reviewer, With client is with them, Ready to post needs a time, Booked in means the channel has it, and Posted is live.',
+      body: 'Draft is being made, Internal check is with an account manager, Quality check is with the reviewer, With client is with them, Ready to post needs a time, Booked in means the channel has it, and Posted is live everywhere.',
     },
     {
       target: 'board-new-post',
       title: 'Starting a post',
       body: 'Upload the files here, then send them to your account manager to check.',
       bodyByRole: {
-        account_manager: 'Upload files here and send them for the quality check, or ask somebody to check them first. The quality reviewer sends them on to the client or the scheduler.',
+        account_manager: 'Upload files here and send them for the quality check, or ask somebody to check them first. The quality reviewer sends them on to the client, and if that reviewer is you, you send them on yourself.',
         super_admin: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them. Everybody else’s uploads pass the quality reviewer first.',
       },
     },
@@ -169,7 +169,7 @@ export const POST_APPROVAL_TOUR: Tour = {
       title: 'The button and the dots',
       body: 'Your one button does the next thing; the dots hold the rest.',
       bodyByRole: {
-        account_manager: 'Send it for quality check, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted. Only the quality reviewer passes it to the client.',
+        account_manager: 'Send it for quality check, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted. The quality reviewer passes it to the client, and if that is you, so do you.',
         super_admin: 'Pass it, ask for changes, hand it to a scheduler, or delete it, and nothing the channel already holds can be deleted. You can pass the quality check when the reviewer is away.',
       },
     },

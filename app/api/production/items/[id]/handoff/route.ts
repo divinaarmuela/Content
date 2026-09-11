@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { TeamUser } from '@/lib/db-types'
-import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
+import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyScheduleHandoff } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
@@ -11,7 +11,13 @@ import { announceItemChange } from '../../../../../lib/production-live'
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const user = await requireRole('account_manager')
+    // managers, super admins — and the general role, who may make and post
+    // a card and so may hand one on (the tutorial walk of 11 Sep 2026: the
+    // board offered "Hand to…" and this route answered 403)
+    const user = await requireRole('scheduler')
+    if (!['account_manager', 'super_admin', 'general'].includes(user.role)) {
+      throw new AuthzError('Handing a card on is for managers and general users', 403)
+    }
     const { id } = await params
     const item = await loadItemForUser(user, id)
     // approved OR already scheduled: re-handing a scheduled item to someone

@@ -3,20 +3,21 @@
  *
  * The owner, 9 Sep 2026: "if they are signed in for the first time create a
  * tutorial page for them to use … a proper tutorial which tells them what
- * they should do … they should know what they are looking at. That getting
- * started is not a good one." So this is not three links in a panel. It is
- * a walk through the job, one step at a time: each step first describes the
- * screen — what the columns are, what a card is, what the button reads —
- * and then says what to press and what happens next, in the words the
- * screen uses, with the real page one press away.
+ * they should do … they should know what they are looking at." And on 11
+ * Sep, after the playbook build: "revamp the tutorial pages — currently I
+ * know it's broken and not updated."
  *
- * Every label quoted here — "New post", "Send for approval", "Approved
- * media", "Upload", "Ready to post", "Post approval", "Schedule", "Shoot
- * brief boards", "Pick a client" — is the label the screen draws today
- * (Shell.tsx, board-core.ts, schedule-compose-core.ts,
- * schedule-upload-core.ts, useSchedulePosts). A step that tells somebody to
- * press a button that is not there is worse than no tutorial;
- * `tests/tutorial-core.test.ts` pins the ones that can be pinned.
+ * So this is a walk through the job as the app runs it TODAY, one step at a
+ * time: each step first describes the screen — the columns, what a card
+ * is, what the button reads — and then says what to press and what happens
+ * next, in the words the screen uses, with the real page one press away.
+ *
+ * The flow every tutorial follows is the Team's Playbook plus Abby's rule
+ * of 11 Sep 2026: AM / designer / editor → Joy (the quality check) →
+ * scheduler. Every label quoted here is the label the screen draws
+ * (Shell.tsx, board-core.ts, workflow-core.ts, shoot-sop-core.ts,
+ * schedule-compose-core.ts); `tests/tutorial-core.test.ts` pins the ones
+ * that can be pinned, so a rename fails a test rather than a first day.
  *
  * Pure: no I/O, no React. The page draws it; the getting-started API stores
  * "done" under the same per-role key the panels use, so a promotion earns
@@ -44,34 +45,62 @@ export type Tutorial = {
   job: string
   intro: string
   steps: TutorialStep[]
-  /** where "I'm ready" lands them */
+  /** where "I'm ready" lands them — their first page */
   home: string
   homeLabel: string
 }
 
 const SCHEDULE = '/dashboard/social/schedule'
+const POST_APPROVAL = '/dashboard/scheduler'
+const EDITOR_PAGE = '/dashboard/editor'
+const SHOOTS = '/dashboard/production'
+const POSTS = '/dashboard/social/activity'
+const NOTIFICATIONS = '/dashboard/notifications'
+
+/** The Post approval columns, as the board draws them — quoted in more than
+ *  one tutorial, so said once. */
+export const POST_APPROVAL_COLUMNS = 'Draft, Internal check, Quality check, With client, Ready to post, Booked in, Posted'
+/** The Editor columns. */
+export const EDITOR_COLUMNS = 'In progress, For review, Quality check, With client, For handoff, Done'
+/** The Shoots columns. */
+export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage handed over'
+
+const WHERE_ANSWERS_ARRIVE: TutorialStep = {
+  title: 'Where answers arrive',
+  see: [
+    'Notifications, in the sidebar: every approval, every "please change this", every @mention, newest first. Each one opens the card it is about.',
+    'Notes on a card: the conversation about that piece. Typing @ and a name asks that person; they are emailed and see "Waiting on you" until they answer.',
+    'Every email the app sends you has a link straight to the card.',
+  ],
+  actions: [
+    'Open Notifications once a day at least.',
+    'To ask a question, open the card and type @ and the name in the note box.',
+  ],
+  href: NOTIFICATIONS,
+  linkLabel: 'Open Notifications',
+}
 
 const SCHEDULER: Tutorial = {
-  job: 'Get the team’s approved work onto the client’s accounts, on time.',
-  intro: 'Two pages are yours: Post approval, which is your board, and Schedule, which is the posting calendar. Everything below happens on one of the two.',
-  home: SCHEDULE,
-  homeLabel: 'Open the Schedule page',
+  job: 'Get the team’s checked work onto the client’s accounts, on time.',
+  intro: 'Three pages are yours: Post approval, where the cards handed to you wait; Schedule, the posting calendar; and Posts, which says what went out. Everything below happens on one of the three.',
+  home: POST_APPROVAL,
+  homeLabel: 'Open Post approval',
   steps: [
     {
       title: 'Your board: Post approval',
       see: [
-        'Five columns, left to right: Draft, Internal check, With client, Ready to post, Posted. A card moves right as it gets checked.',
-        'Each card is ONE piece — a reel, a carousel, a graphic — for one client. It shows the client, what it is, who has it, and a link to the files.',
-        'Only Ready to post has been signed off. Everything left of it is still being made or checked by someone else.',
-        'A card with "Waiting on you" means somebody tagged you in its comments with a question.',
+        `Seven columns, left to right: ${POST_APPROVAL_COLUMNS}. A card moves right as it gets checked.`,
+        'Each card is ONE piece — a reel, a carousel, a graphic — for one client. It shows the client, what it is, who has it, the due date and "Sent to client" once the client has seen it.',
+        'You see the cards handed to you, plus anything you uploaded yourself. Ready to post is your queue: everything left of it is still being made or checked by someone else.',
+        'A green "Your turn" means a card was handed to you by name. A card in Ready to post with nobody named can be taken by any scheduler.',
       ],
       actions: [
         'Open Post approval in the sidebar.',
-        'Find the Ready to post column. Those are the pieces you can post.',
-        'Open one card and read it: the caption if there is one, the files, the due date, any comments.',
+        'Find the Ready to post column. Those are the pieces you can book.',
+        'Open one card and read it: the files, the caption if there is one, the due date, the notes, and who the account manager is.',
       ],
       result: 'You know what is ready to go out, and what is still with someone else.',
-      href: '/dashboard/scheduler',
+      href: POST_APPROVAL,
       linkLabel: 'Open Post approval',
     },
     {
@@ -79,8 +108,8 @@ const SCHEDULER: Tutorial = {
       see: [
         'A week of days across the top and hours down the side. Each tile on it is one planned post at one time.',
         '"Pick a client" at the top: the calendar is per client, and nothing on it means anything until one is chosen.',
-        'The rail on the side lists the client’s approved media — the pieces from Ready to post — waiting to be given a time.',
-        'Every time shown here is in the client’s time zone, not yours.',
+        'The rail on the left lists the client’s approved files — the pieces from Ready to post — waiting to be given a time. "Waiting for approval" at the bottom opens the List narrowed to posts a reviewer still has; "Drafts" is what you saved and left.',
+        'Every time shown here is in the client’s time zone, not yours. "Night hours" shows midnight to 5 am.',
       ],
       actions: [
         'Open Schedule in the sidebar.',
@@ -93,9 +122,9 @@ const SCHEDULER: Tutorial = {
     {
       title: '"New post" — where a post starts',
       see: [
-        'The New post window has three sources across the top: "Approved media" (pieces already signed off on the board), "Upload" (files from your own device), and "Google Drive".',
+        'The New post window has three sources across the top: "Approved media" (pieces already checked on the board), "Upload" (files from your own device), and "Google Drive" (a file from the client’s folder — a copy is taken, nothing in Drive is touched).',
         'Below them, the files you have picked, in the order they will show. Several files in one post is a carousel.',
-        'A line under the files says what will happen next — sent to a manager, or booked in — depending on who you are.',
+        'You can also open a folder in the rail, tick the files you want and press Post, or drag a folder onto a time on the calendar.',
       ],
       actions: [
         'Press New post.',
@@ -107,332 +136,386 @@ const SCHEDULER: Tutorial = {
       linkLabel: 'Open the Schedule page',
     },
     {
-      title: 'The post window: caption, channels, time',
+      title: 'The post window: channels, kind, cover, caption, time',
       see: [
-        'The media on the left; the caption box; a tab per channel so one network can have its own words or files.',
-        'The channels: every account connected for this client — Instagram, Facebook, TikTok, LinkedIn, YouTube and so on — with a tick box each.',
-        'The day and time picker, in the client’s time zone.',
-        'A line under the media that states each network’s limits — length, size, how many files — and says plainly if a file will not post there.',
-        'One button at the bottom. Its label tells you what it does: for you it reads Send for approval.',
+        'The channels first: every account connected for this client — Instagram, TikTok, Facebook, LinkedIn, YouTube and so on — with a tick box each.',
+        'The kind of post: leave it on Auto publish and each network decides, or choose Reel, Story, Carousel or Trial Reel. A Trial Reel is Instagram only and needs an account with 1,000 followers.',
+        'The cover: for a video, choose the frame people see before they press play, or upload a picture of your own.',
+        'The caption box, and "More options" with each network’s own settings — only the ones that network really has.',
+        'A line under the media says what each channel will do with your files, and says plainly if a file will not post there. Preview shows the post the way each network will.',
+        'The day and time picker, in the client’s time zone. If clean copies of a video are still being made, the clock starts at the earliest safe time.',
+        'One button at the bottom. Its label tells you what it does: for a piece checked on the board it reads Schedule, or Post now if the time is right now.',
       ],
       actions: [
-        'Write the caption.',
         'Tick the channels it goes to.',
+        'Write the caption.',
         'Set the day and time.',
         'Read the line under the media before you press anything — a refused file is said here, not after.',
+        'Press Schedule.',
       ],
+      result: 'It is booked in. On the board the card moves to Booked in.',
       href: SCHEDULE,
       linkLabel: 'Open the Schedule page',
     },
     {
-      title: 'Send it for approval',
+      title: 'Your own uploads go through the check like everything else',
       see: [
-        'You do not approve posts; an account manager or a super admin does. So your button reads Send for approval, and it asks you who.',
-        'After you press it the tile on the calendar says it is waiting, and on whom.',
-        'A manager’s answer comes back on the post — approved, or a note saying what to change.',
+        'You can upload something of your own on Post approval with New post, or in the post window from Upload.',
+        'You do not approve posts. A piece you uploaded goes to an account manager, then to the quality reviewer, and comes back to Ready to post once it has passed — so your button on it reads Send for approval, and it asks you who.',
+        'A manager’s answer comes back on the card — passed on, or a note saying what to change.',
       ],
       actions: [
         'Press Send for approval and pick the account manager.',
         'Wait for their email — you get one either way.',
-        'If they asked for changes, read the note on the post, change it, and press Send again.',
+        'If they asked for changes, read the note on the card, change it, and send it again.',
       ],
-      result: 'Once approved it is booked in at the time you chose. Nothing else to press.',
-      href: SCHEDULE,
-      linkLabel: 'Open the Schedule page',
-    },
-    {
-      title: 'Already approved on the board? Just schedule it',
-      see: [
-        'A piece that reached Ready to post has already been checked, so for it the button does not ask anyone: it reads Schedule, or Post now if the time is right now.',
-      ],
-      actions: [
-        'In New post choose "Approved media" and pick the piece.',
-        'Write the caption, tick the channels, set the time.',
-        'Press Schedule.',
-      ],
-      result: 'It is booked in. No one else has to press anything.',
-      href: SCHEDULE,
-      linkLabel: 'Open the Schedule page',
+      result: 'Once it has passed the quality check and the client, it is back in Ready to post for you to book.',
+      href: POST_APPROVAL,
+      linkLabel: 'Open Post approval',
     },
     {
       title: 'Booked in is not posted',
       see: [
-        'A booked tile has a time. A posted tile has gone live — the tile changes when it does, and says so if a network refused it.',
+        'Booked in means the channel has it and a time is set. Posted means every channel has it live — the card moves to Posted by itself when the channel says so.',
+        'On the Schedule page a booked tile has a time; a posted tile has gone live, and says so if a network refused it.',
         'The usual reasons for a refusal: a file the network would not take, or a channel whose connection has expired and needs reconnecting.',
-        'On your board the same piece shows the stage: "Booked in" when it has a time, "Posted" once it is live.',
+        'A booked post can still be moved by dragging it to another time on the calendar.',
       ],
       actions: [
         'After the time passes, check the tile.',
         'If it failed, read why on the tile, fix that, and schedule it again.',
-        'On the card, press "Booked in" when it has a time and "Posted" once it is live, so the board tells the truth.',
+        'If you posted a file yourself, outside the app, open the card and mark it "Posted by hand" with the link, so the card and the client know.',
       ],
-      href: '/dashboard/scheduler',
+      href: POST_APPROVAL,
       linkLabel: 'Open Post approval',
     },
     {
-      title: 'Where answers arrive',
+      title: 'Posts: what actually went out',
       see: [
-        'Notifications, in the sidebar: every approval, every "please change this", every @mention, newest first. Each one opens the card it is about.',
-        'Comments on a card: the conversation about that piece. Typing @ and a name asks that person, who is emailed and gets a "Waiting on you" card until they answer.',
+        'Three piles: Scheduled, Did not post, Posted. One row per post, with a line per channel saying what kind of post it was and what happened to it.',
+        'A refused channel shows the reason in plain words, with Send again. A booked post can be cancelled here while the channel still holds it.',
+        'The last 30 days per client along the top: posted, scheduled, did not post.',
       ],
       actions: [
-        'Open Notifications once a day at least.',
-        'To ask a question, open the card, go to Comments, type @ and the name.',
+        'Open Posts in the sidebar once a day.',
+        'On anything in Did not post, read the reason, fix it, press Send again.',
       ],
-      href: '/dashboard/notifications',
-      linkLabel: 'Open Notifications',
+      href: POSTS,
+      linkLabel: 'Open Posts',
     },
+    WHERE_ANSWERS_ARRIVE,
   ],
 }
 
 const EDITOR: Tutorial = {
   job: 'Make the pieces on your cards and hand each one on for checking.',
-  intro: 'Your board is the Editor page. Every card on it is one thing to make, and it moves left to right as it gets checked.',
-  home: '/dashboard/editor',
+  intro: 'Your board is the Editor page. Every card on it is one thing to make — for editors and designers alike — and it moves left to right as it gets checked. Shoots is where you read the plan for a filming day you are on.',
+  home: EDITOR_PAGE,
   homeLabel: 'Open my board',
   steps: [
     {
       title: 'Your board: Editor',
       see: [
-        'Columns left to right: Draft, Internal check, With client, then Ready to post and Posted folded away at the end.',
+        `Columns left to right: ${EDITOR_COLUMNS}. Done holds what is booked or posted, folded away.`,
         'Each card is ONE thing to make — one reel, one carousel, one graphic. Four reels is four cards.',
-        'You only see what is yours: cards assigned to you, cards you made, cards someone tagged you on, and the cards of a shoot you own.',
-        'A card says the client, what to make, the due date, who has it, and links to the shoot folder.',
+        'You only see what is yours: cards handed to you, cards you made, and cards someone tagged you on.',
+        'A card says the client, the account manager, what to make, which shoot it is from, the due date, and "Files to work from" when a manager attached footage or a folder.',
+        'A new card says "New — press Acknowledge". Pressing it tells the team you are on it, the same day it lands, as the playbook asks.',
       ],
       actions: [
         'Open Editor in the sidebar.',
-        'Open a card in Draft and read it top to bottom.',
+        'Open a card in In progress and read it top to bottom.',
+        'Press Acknowledge.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open my board',
     },
     {
-      title: 'The card: where the link goes',
+      title: 'The card: the final goes on it',
       see: [
-        'The top of the card says whose move it is and shows one blue button for it. Greyed out means something is missing, and the line under it says what.',
-        'The "work" section holds the link to the finished piece — the card carries a link, not the file.',
-        'Replacing the link makes a new version. The latest version is what gets checked.',
+        'Under "Files to work from" is what the manager gave you: footage, stills, or the Drive or Dropbox folder they live in. Open them from there.',
+        'Under "Versions" is where your finished piece goes. Three ways in: Upload (the export from your device), "Pick the final from Google Drive" (a copy is taken from the client’s folder — nothing in Drive is touched), or a pasted link.',
+        'Only pictures and videos are taken — finals in the platform’s spec, watched start to finish. Never raw footage.',
+        '"Source files (Dropbox)" is where the project files live, for whoever picks this up later.',
+        'Each upload is a new version. The latest version is what gets checked.',
       ],
       actions: [
         'Make the piece in your own tools.',
-        'Paste the Google Drive or Dropbox link on the card and save.',
+        'Upload the final, or pick it from Google Drive.',
+        'Paste the Dropbox link to the source files.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open my board',
     },
     {
-      title: 'Hand it on',
+      title: 'Hand it on, and flag a risk early',
       see: [
-        'The button reads "Ready for checking". Pressing it moves the card to Internal check, where an account manager looks at it.',
-        'A card that comes back sits in Draft again with the manager’s note on it, in their words.',
+        'The button reads "Ready for checking". Pressing it moves the card to For review, where the account manager looks at it. From there it goes to the quality reviewer, then to the client, then to the scheduler — you do not need to do anything for those.',
+        'A card that comes back sits in In progress again with the note on it, in the reviewer’s words.',
+        '"Flag a deadline risk" tells the account managers in one line that the date is at risk. The playbook asks for this the moment you see it, not on the due date.',
+        'A card with no file yet is refused with "Attach the work first" — upload the final, then press again.',
       ],
       actions: [
         'Press "Ready for checking".',
-        'Watch your email: you are told when it is approved, or when it comes back.',
-        'If it comes back, read the note, change the piece, replace the link, press "Ready for checking" again.',
+        'Watch your email: you are told when it moves on, or when it comes back.',
+        'If it comes back, read the note, change the piece, upload the new version, press "Ready for checking" again.',
+        'If a date is at risk, press "Flag a deadline risk" and say why in one line.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open my board',
     },
     {
-      title: 'Shoots and shoot plans',
+      title: 'Shoots: read the plan, then get the footage',
       see: [
-        'Shoots is where filming days live. One card is one shoot, in six columns from Draft to Footage handed over.',
-        'Open a shoot for its plan: the concept, shot list and references on the planning board — the one the client sees on their portal — plus who has read it and the go-ahead.',
-        'You see the shoots you are on and the plans you made or were given.',
+        `Shoots is where filming days live. One card is one shoot, in the playbook’s six stages: ${SHOOT_COLUMNS}.`,
+        'You see the shoots you are on as the editor or the crew. Open one for the plan: the objective, the shot list, the script, call time and location, and the editor priorities and deadline.',
+        'The plan is built on a Milanote-style canvas on the shoot page — shot list, references, mood board.',
+        'When the account manager shares the plan you are emailed. The shoot cannot be confirmed until everyone on it has pressed "I’ve read the plan".',
+        'After the shoot, when the footage is handed over, the cards for that shoot land on your Editor page — owned by you, with the deadline and the priorities from the plan — and you are emailed.',
       ],
       actions: [
-        'Open Shoots in the sidebar.',
-        'To plan a shoot yourself: press New shoot plan. Making the plan sets up the shoot too.',
+        'When the email arrives, open the shoot and read the plan.',
+        'Press "I’ve read the plan".',
+        'When "Footage is in" arrives, go to Editor and press Acknowledge on the new cards.',
       ],
-      href: '/dashboard/production',
+      href: SHOOTS,
       linkLabel: 'Open Shoots',
     },
-    {
-      title: 'Where answers arrive',
-      see: [
-        'Notifications: approvals, changes and @mentions, newest first, each opening its card.',
-        'Comments on a card: type @ and a name to ask someone; they are emailed and get a "Waiting on you" card until they answer.',
-      ],
-      actions: [
-        'Open Notifications in the sidebar.',
-        'Ask questions on the card, not in a separate chat — the answer stays with the work.',
-      ],
-      href: '/dashboard/notifications',
-      linkLabel: 'Open Notifications',
-    },
+    WHERE_ANSWERS_ARRIVE,
   ],
 }
 
 const GENERAL: Tutorial = {
-  job: 'Do the cards that are yours — and book your own in when they are ready.',
-  intro: 'You see the work assigned to you, the work you made, and the shoots you own. A card you own is yours to carry from Draft all the way to Posted.',
-  home: '/dashboard/production',
-  homeLabel: 'Open Shoots',
+  job: 'Make work for any client, get it checked, and book your own in when it has passed.',
+  intro: 'You see the making-and-posting run for every client: Shoots, Editor, Post approval, Schedule and Posts, plus the Clients pages. A card you own is yours to carry from In progress all the way to Booked in. You do not do the checking: that is the account manager, then the quality reviewer.',
+  home: EDITOR_PAGE,
+  homeLabel: 'Open the Editor page',
   steps: [
     {
-      title: 'Three pages, one piece of work',
+      title: 'Five pages, one piece of work',
       see: [
-        'Shoots: every filming day, from the first plan to the footage handed over.',
-        'Editor: everything being made — pieces and tasks — from In progress to Done.',
-        'Schedule: the posting calendar for one client at a time.',
-        'The same card can appear on more than one of them, wearing a different hat on each.',
+        `Shoots: every filming day, from the first plan to the footage handed over, in six stages: ${SHOOT_COLUMNS}.`,
+        `Editor: everything being made — pieces and tasks — in the columns ${EDITOR_COLUMNS}. Your own cards, plus anything you made.`,
+        `Post approval: the same cards as they get checked, in the columns ${POST_APPROVAL_COLUMNS}. Ready to post with nobody named is yours to take.`,
+        'Schedule: the posting calendar for one client at a time. Posts: what went out.',
+        'The same card can appear on more than one of them.',
       ],
       actions: [
-        'Open each of the three from the sidebar once, so you know the shape of them.',
+        'Open each of the five from the sidebar once, so you know the shape of them.',
       ],
-      href: '/dashboard/production',
+      href: SHOOTS,
       linkLabel: 'Open Shoots',
     },
     {
-      title: 'Make a card, or take one',
+      title: 'Make a card, or plan a shoot',
       see: [
-        'New card on the Editor page makes a task or a piece; New shoot plan on Shoots makes a shoot.',
-        'A card you make stays on your board even if you hand it to someone else.',
-        'A card with nobody on it says "Nobody yet".',
+        'New card on the Editor page makes a piece or a task: pick the client, name it, say what needs doing, choose which shoot and deliverable it is from, attach files to work from, set the due date.',
+        'New shoot plan on Shoots makes a shoot: pick the client, name it, say what it is for, set the shoot date. The nine parts of the plan are filled in on the plan page after that.',
+        'A card you make stays on your board even if you hand it to someone else. A card with nobody on it says "Nobody yet".',
       ],
       actions: [
-        'Press New card on the Editor page and choose what you are making.',
-        'Name it for what it is; paste the link when the work is ready.',
+        'Press New card on the Editor page and fill it in.',
+        'Or press New shoot plan on Shoots.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open the Editor page',
     },
     {
-      title: 'Add the link and hand it on',
+      title: 'Put the final on the card and hand it on',
       see: [
-        'The card carries a link to the finished piece, not the file. Replacing the link makes a new version.',
-        'The button reads "Ready for checking"; pressing it sends the card to an account manager’s Internal check column.',
+        'Under "Versions": Upload the final, "Pick the final from Google Drive", or paste a link. Pictures and videos only, in the platform’s spec.',
+        'The button reads "Ready for checking"; pressing it sends the card to the account manager’s Internal check. From there the quality reviewer passes it, then the client sees it.',
+        'A card with no file yet is refused with "Attach the work first".',
+        'Press Acknowledge on a card that was handed to you, and "Flag a deadline risk" if a date is at risk.',
       ],
       actions: [
-        'Paste the link on the card and save.',
-        'Press "Ready for checking". You are emailed when it is approved or comes back with changes.',
+        'Upload the final on the card.',
+        'Press "Ready for checking". You are emailed when it moves on or comes back with changes.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open the Editor board',
     },
     {
       title: 'Book your own piece in',
       see: [
-        'Once approved, your piece is in Ready to post and in the Schedule page’s "Approved media".',
-        'Because you own it, the button in the post window reads Schedule — it does not ask anyone. You are the one notified when it moves, not a scheduler.',
+        'Once it has passed the quality check and the client, your piece is in Ready to post and in the Schedule page’s "Approved media".',
+        'For a piece that has passed, the button in the post window reads Schedule — it does not ask anyone. For a file you upload straight into the post window it reads Send for approval, because that file has not been checked yet.',
+        'On the board the card moves to Booked in, and to Posted when every channel has it live.',
       ],
       actions: [
         'Open Schedule, pick the client, press New post, choose "Approved media" and pick the piece.',
-        'Write the caption, tick the channels, set the time, press Schedule.',
+        'Tick the channels, write the caption, set the time, press Schedule.',
       ],
-      result: 'It is booked in. The tile changes when it goes live.',
+      result: 'It is booked in. The tile changes when it goes live, and Posts says what happened on each channel.',
       href: SCHEDULE,
       linkLabel: 'Open the Schedule page',
     },
     {
-      title: 'Where answers arrive',
+      title: 'Shoots: the plan and the go-ahead',
       see: [
-        'Notifications: approvals, changes and @mentions, each opening its card.',
-        'Comments on a card: type @ and a name to ask someone a question.',
+        'Open a shoot for the nine-part checklist ("6 of 9 filled" says what is missing), who has read the plan, the seven-day clock and Go.',
+        'The plan must be shared with the team seven days before the shoot: "No brief, no shoot." A late plan turns red and Ops is told.',
+        'Everyone on the shoot presses "I’ve read the plan". Go is the one sign-off — it also books the date. After the day, "Footage handed over" puts the shoot’s cards on the editor’s page.',
+        'The account manager picks the editor and crew and gives the Go.',
       ],
       actions: [
-        'Open Notifications in the sidebar.',
+        'Fill the nine parts on the plan page, on the canvas and in the fields.',
+        'Press "I’ve read the plan" on any shoot you are on.',
       ],
-      href: '/dashboard/notifications',
-      linkLabel: 'Open Notifications',
+      href: SHOOTS,
+      linkLabel: 'Open Shoots',
     },
+    WHERE_ANSWERS_ARRIVE,
   ],
 }
 
 const MANAGER: Tutorial = {
-  job: 'Run your clients: plan the shoots, check the work, get it posted.',
-  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is three places: Shoots, the Post approval board, and Schedule.',
+  job: 'Run your clients: plan the shoots, check the work, get it to the client, get it posted.',
+  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is four places: Shoots, Editor, Post approval and the Overview. The flow is the playbook’s: you check, the quality reviewer passes, the client approves, the scheduler posts.',
   home: '/dashboard',
   homeLabel: 'Open the Overview',
   steps: [
     {
       title: 'The Overview and your clients',
       see: [
-        'The Overview: this month at a glance — what each client is owed under their agreement and what has gone out.',
-        'Clients: one page per client — who manages them, their connected channels, their portal link, and the switch "This client signs off every post".',
+        'The Overview: what is on you today. "Needs your decision" is split into waiting on you by name and "nobody asked yet"; "Quality check" is what the reviewer has; "With clients" is what the client has; "Shoot plans late" is any shoot under seven days out whose plan is not shared.',
+        'Under it, this month per client: posts per account, and produced, delivered, published against the contracted number.',
+        'Clients: one page per client — who manages them, "Who schedules for this client", their connected channels, their portal link, and the switch "This client signs off every post".',
       ],
       actions: [
-        'Open Clients and open one client’s page. Check the manager and the channels are right.',
+        'Open Clients and open one client’s page. Check the managers, the schedulers and the channels are right.',
       ],
       href: '/dashboard/clients',
       linkLabel: 'Open Clients',
     },
     {
-      title: 'Shoots: plan a shoot',
+      title: 'Shoots: plan a shoot the playbook’s way',
       see: [
-        'One card per shoot for your clients, in the playbook’s six columns: Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage handed over.',
-        'A shoot plan is the concept and shot list for one filming day, drawn on a planning board — the same board the client sees, open, on their portal once you share it.',
-        'Open a shoot for the nine-part checklist, who has read the plan, the plan’s own sign-off, and Go. By date shows the same shoots on a calendar.',
+        `One card per shoot for your clients, in six stages: ${SHOOT_COLUMNS}. By date shows the same shoots on a calendar.`,
+        'New shoot plan makes the shoot: client, title, what it is for, shoot date. Making the plan sets up the shoot; you never create the shoot separately.',
+        'On the shoot page: the nine-part checklist (objective, deliverables, shot list, script, date and call time and location, talent, props and wardrobe, client availability, editor priorities and deadline) with "6 of 9 filled" and what is missing; the Milanote-style canvas for the shot list, references and mood board; who is on the shoot; the plan’s own approval.',
+        '"Editor: who edits the footage after the shoot" and "Crew on the day". Everyone you add is emailed when you share the plan and must press "I’ve read the plan".',
+        'The seven-day rule: the plan must be shared with the team seven days before the day. A late plan turns red and Ops is nudged; Go is refused, and only a super admin can go anyway with a reason.',
+        'Go is the one sign-off: it needs the checklist complete, "Aligned with the strategist" and client availability ticked, and every acknowledgement in. It also books the date.',
+        'The day before, Ops presses "Reminder sent" and everyone gets call time and location. After the day, drag to "Footage handed over": the editor’s cards are made with the deadline and priorities from the plan, and they are emailed.',
       ],
       actions: [
-        'Press New shoot plan. Making the plan sets up the shoot; you never create the shoot separately.',
-        'Write the concept and shot list, then share the plan with the client.',
-        'Once they approve, open the plan and book the filming date.',
+        'Press New shoot plan.',
+        'Fill the nine parts. Send the plan for review, or share it with the client and log their answer.',
+        'Pick the editor and crew, then share the plan with the team — seven days out.',
+        'Tick aligned and confirmed, wait for "2 of 2 acknowledged", press "Confirm — it is go".',
+        'After the shoot, drag the card to Footage handed over.',
       ],
-      href: '/dashboard/production',
+      href: SHOOTS,
       linkLabel: 'Open Shoots',
     },
     {
-      title: 'The Editor board: your column is Internal check',
+      title: 'Editor: give out the work, watch it come back',
       see: [
-        'Five columns from Draft to Posted. Anything in Internal check is waiting on you.',
-        'A card with "Nobody yet" has no editor. Opening it lets you hand it to a named editor, who is emailed the job.',
-        'Once the client signs a piece off it moves to Ready to post and off this board for you.',
+        `The Editor board shows every card being made for your clients, in the columns ${EDITOR_COLUMNS}.`,
+        'New card makes a piece or a task for anyone: pick the client, name it, say what needs doing, which shoot and deliverable, attach "Files to work from" (footage, stills, or a Drive or Dropbox folder), set the due date and who. They are emailed.',
+        'A card with "Nobody yet" has no owner. "Hand to…" gives it to an editor, who is emailed the job.',
+        'An editor’s "Flag a deadline risk" reaches you as a red chip and an email.',
       ],
       actions: [
-        'Open Editor and go to Internal check.',
-        'Open the link, look at the piece, then send it to the client for their answer — or send it back with what needs changing, in your own words on the card.',
+        'Press New card, or open a shoot’s handed-over cards, and make sure each has an owner and a due date.',
       ],
-      href: '/dashboard/editor',
+      href: EDITOR_PAGE,
       linkLabel: 'Open the Editor board',
     },
     {
-      title: 'Schedule: post it — no one else’s approval needed',
+      title: 'Post approval: your column is Internal check',
       see: [
-        'The posting calendar for one client: a week across the top, hours down the side, a tile per planned post.',
-        'New post takes a piece from "Approved media", a file uploaded straight from your device, or Google Drive.',
-        'For you the button at the bottom reads Schedule, or Post now if the time is now. One press books it in; the app records you as the one who signed it off.',
-        'If the client’s page says they sign off every post, that sentence appears under the button as a reminder. It does not stop you.',
+        `Seven columns: ${POST_APPROVAL_COLUMNS}. Anything in Internal check is waiting on a manager.`,
+        '"Needs a check — nobody asked yet" means no manager was named; "Ask somebody to check it" names one, and then it reads "Your turn" for them alone.',
+        'Your check is the playbook’s: caption tone, message, CTA, cover, timing, platform fit. Then "Send for quality check" sends it to the quality reviewer. You cannot send it to the client yourself: only the reviewer, or a super admin standing in, passes it on.',
+        '"Ask for changes" sends it back to the editor with your note, in your words.',
+        'Once the reviewer passes it, the card goes With client and "Sent to client" is stamped — that is the playbook’s delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
+        'On the client’s yes the card goes to Ready to post and is handed to the client’s schedulers by itself. Some clients post their own content: their cards stop at Delivered.',
+        'Filter by Client and by People at the top to see who is doing what.',
       ],
       actions: [
-        'Open Schedule, pick the client, press New post, choose the media.',
-        'Write the caption, tick the channels, set the time, press Schedule.',
-        'To have the client see it first instead, choose Send for approval from the menu next to the button.',
+        'Open Post approval and go to Internal check.',
+        'Open the card, look at the files, then press "Send for quality check" — or "Ask for changes" with what needs changing.',
+        'When the client answers on the portal, nothing to press. If they told you by phone, press "Log the client’s approval".',
+      ],
+      href: POST_APPROVAL,
+      linkLabel: 'Open Post approval',
+    },
+    {
+      title: 'Schedule and Posts: post it, and see what went out',
+      see: [
+        'The Schedule page is the posting calendar for one client. You can book a checked piece yourself: for it the button reads Schedule, or Post now.',
+        'A file you upload straight into the post window has not been checked, so pressing Schedule sends it for quality check and says so in green. It is booked once the reviewer passes it.',
+        'Posts shows what went out and what did not, channel by channel, with the reason and Send again.',
+      ],
+      actions: [
+        'Open Schedule, pick the client, press New post, choose "Approved media", tick the channels, set the time, press Schedule.',
+        'Open Posts when a client asks "did it go out?".',
       ],
       href: SCHEDULE,
       linkLabel: 'Open the Schedule page',
     },
     {
-      title: 'Post approval: what a scheduler sends you',
-      see: [
-        'A scheduler cannot approve a post. Theirs arrive as "Send for approval" and wait for you, showing who sent it and when it is meant to go out.',
-      ],
-      actions: [
-        'Open Post approval.',
-        'Approve it — it is booked in at their time, nothing else to press — or send it back with a note.',
-      ],
-      href: '/dashboard/scheduler',
-      linkLabel: 'Open Post approval',
-    },
-    {
       title: 'The client’s portal',
       see: [
         'Each client has a share link on their page. It opens without an account.',
-        'On it: their shoot first, with the planning board open at full width; then the posts waiting on them; then the work in review.',
-        'Their answers and comments come back to you in Notifications and on the card.',
+        'On it: their shoot plan first; then the posts waiting on them ("Needs your review"); then the work being made and being checked, approved, and live with each channel’s line and the numbers.',
+        'The portal never names who on the team has a card, or the checking stages — only "Being made" and "Being checked".',
+        'Their answers and comments come back to you in Notifications and on the card. "Reply to the client" on a card lands on their portal.',
       ],
       actions: [
         'Open a client’s page, find the portal link, and look at it once as they will.',
       ],
-      href: '/dashboard/notifications',
-      linkLabel: 'Open Notifications',
+      href: '/dashboard/clients',
+      linkLabel: 'Open Clients',
     },
+    WHERE_ANSWERS_ARRIVE,
   ],
 }
 
-/** The tutorial for a role — none for a client (the portal is theirs). */
-export function tutorialFor(role: Role | null | undefined): Tutorial | null {
+/**
+ * The quality reviewer's own step — Joy's job, said once. A person of ANY
+ * team role can be flagged (`team_users.quality_reviewer`), so this is added
+ * to their base role's tutorial rather than being a tutorial of its own.
+ */
+export const QUALITY_REVIEWER_STEP: TutorialStep = {
+  title: 'You are the quality check',
+  see: [
+    'Abby’s rule: every graphic, story, reel and caption passes you before it is scheduled. The flow is account manager or designer or editor, then you, then the scheduler.',
+    'Every card waiting on you sits in the Quality check column on Post approval, for every client. The Overview’s "Quality check" tile counts them.',
+    'Your buttons there: "Passed — send to client" (or "Passed — approve without client" for a client who does not sign off), and "Ask for changes" with a note. Nobody else can pass a card out of Quality check except a super admin standing in for you.',
+    'On your pass the card is handed to the client’s schedulers by itself. You are emailed each time a card reaches Quality check.',
+    'At Internal check you see one button, "Send to client": your check is the quality check, so you never send work to yourself.',
+  ],
+  actions: [
+    'Open Post approval and go to the Quality check column, or press the Quality check tile on the Overview.',
+    'Open the card. Check spelling, dates, branding, image quality and platform specs — the playbook’s list.',
+    'Press "Passed — send to client", or "Ask for changes" and say what.',
+  ],
+  href: POST_APPROVAL,
+  linkLabel: 'Open Post approval',
+}
+
+export type TutorialOptions = {
+  /** `team_users.quality_reviewer`: Joy's flag, on any role */
+  qualityReviewer?: boolean | null
+}
+
+/** The tutorial for a role — none for a client (the portal is theirs). A
+ *  flagged quality reviewer gets their role's tutorial with the quality
+ *  step added before "Where answers arrive". */
+export function tutorialFor(role: Role | null | undefined, opts: TutorialOptions = {}): Tutorial | null {
+  const base = baseTutorialFor(role)
+  if (!base || opts.qualityReviewer !== true) return base
+  const last = base.steps[base.steps.length - 1]
+  const steps = last === WHERE_ANSWERS_ARRIVE
+    ? [...base.steps.slice(0, -1), QUALITY_REVIEWER_STEP, last]
+    : [...base.steps, QUALITY_REVIEWER_STEP]
+  return { ...base, steps }
+}
+
+function baseTutorialFor(role: Role | null | undefined): Tutorial | null {
   switch (role) {
     case 'scheduler': return SCHEDULER
     case 'editor': return EDITOR
@@ -448,12 +531,12 @@ export function tutorialFor(role: Role | null | undefined): Tutorial | null {
 export const tutorialKey = (role: Role) => `${role}:start`
 
 /**
- * The roles whose FIRST sign-in opens the tutorial by itself. The owner asked
- * for it for schedulers ("this is only for scheduler right"); every other
- * role's tutorial waits in the sidebar under How this works. Widening this
- * is adding a role to the list.
+ * The roles whose FIRST sign-in opens the tutorial by itself. Every team
+ * role (the owner, 11 Sep 2026: "when they are first signed in" — the
+ * scheduler was first, and on the day the whole team signs in the rest
+ * need it just as much). A client never sees the dashboard.
  */
-export const AUTO_OPEN_ROLES: readonly Role[] = ['scheduler']
+export const AUTO_OPEN_ROLES: readonly Role[] = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin']
 
 /**
  * Open the tutorial for this person on arrival? Only a role in

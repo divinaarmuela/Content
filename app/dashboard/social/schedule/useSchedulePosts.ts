@@ -24,6 +24,7 @@
  * pair the items API and the boards use. This file subscribes and assembles.
  */
 
+import { DELIVER_ONLY_REASON, deliverOnly } from '@/app/lib/deliver-only-core'
 import { useMemo } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
@@ -31,7 +32,7 @@ import type {
   SocialAccount, SocialPost, TeamUserClient, WorkflowActivity, WorkKind,
 } from '@/lib/db-types'
 import {
-  assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility,
+  assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility, type Eligibility,
   postTileFacts, type SocialPostStatus, type TileJob, type TileTone,
 } from '@/app/lib/social-schedule-core'
 import { safeZone } from '@/app/lib/timezone-core'
@@ -108,6 +109,9 @@ export type RailMedia = {
   used: boolean
   /** "2 of 4 posted" while a piece is part-way out (posted-slides-core) */
   posted: string | null
+  /** the Drive folder a scheduler was handed to post from (the card's link),
+   *  when the card carries one — the post window's Drive tab opens on it */
+  driveFolderUrl?: string | null
   /**
    * Every file this piece has EVER held, across every version.
    *
@@ -210,6 +214,7 @@ export function useSchedulePosts(
         batchComments: batchComments.rows,
         activity: activity.rows,
         workKinds: workKinds.rows,
+        clients: clients.rows,
       }),
     ).filter(i => i.client_id === clientId)
       // a shoot plan is a plan for a shoot, not something to post: it has no
@@ -320,7 +325,11 @@ export function useSchedulePosts(
     return scopedItems
       .map(item => {
         const itemVersions = versionsByItem.get(item.id) ?? []
-        const elig = postingEligibility(item, itemVersions, postWithoutApproval)
+        // DELIVER ONLY (11 Sep 2026): the client posts this themselves — it
+        // is delivered, never booked from here
+        const elig: Eligibility = deliverOnly(item as { deliver_only?: unknown }, client as { posts_own_content?: unknown } | null)
+          ? { ok: false, reason: DELIVER_ONLY_REASON }
+          : postingEligibility(item, itemVersions, postWithoutApproval)
         // A PIECE POSTED IN PARTS (9 Sep 2026): a file already in a post that
         // is booked or live, or marked posted by hand, is not offered again;
         // what is left is what the next post is made of
@@ -347,6 +356,8 @@ export function useSchedulePosts(
           // "used" now means nothing left to post — every file is in a post
           used: elig.ok && elig.slides.length > 0 && slides.length === 0,
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
+          driveFolderUrl: (item as { link_kind?: string | null }).link_kind === 'drive' && typeof (item as { link_url?: unknown }).link_url === 'string'
+            ? String((item as { link_url?: unknown }).link_url) : null,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),

@@ -40,17 +40,39 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
   const [schedulers, setSchedulers] = useState<Person[]>([])
   const [canSetSchedulers, setCanSetSchedulers] = useState(false)
   const [savingSchedulers, setSavingSchedulers] = useState(false)
+  /** DELIVER ONLY (the playbook, 11 Sep 2026): this client posts their own
+   *  content — we deliver the finals, nobody here schedules them */
+  const [postsOwn, setPostsOwn] = useState(false)
+  const [savingPostsOwn, setSavingPostsOwn] = useState(false)
   const [picked, setPicked] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const apply = (json: { managers?: Manager[]; eligible?: Eligible[]; can_manage?: boolean; default_schedulers?: Person[]; schedulers?: Person[]; can_set_schedulers?: boolean }) => {
+  const apply = (json: { managers?: Manager[]; eligible?: Eligible[]; can_manage?: boolean; default_schedulers?: Person[]; schedulers?: Person[]; can_set_schedulers?: boolean; posts_own_content?: boolean }) => {
     setManagers(json.managers ?? [])
+    if (json.posts_own_content !== undefined) setPostsOwn(json.posts_own_content)
     setEligible(json.eligible ?? [])
     if (json.can_manage !== undefined) setCanManage(json.can_manage)
     if (json.default_schedulers) setDefaultSchedulers(json.default_schedulers)
     if (json.schedulers) setSchedulers(json.schedulers)
     if (json.can_set_schedulers !== undefined) setCanSetSchedulers(json.can_set_schedulers)
+  }
+
+  const togglePostsOwn = async (on: boolean) => {
+    setSavingPostsOwn(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/managers`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts_own_content: on }),
+      })
+      if (!res.ok) throw new Error('Could not change that')
+      apply(await res.json())
+      toast.success(on ? 'Deliver only — this client posts their own content' : 'We post for this client')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change that')
+    } finally {
+      setSavingPostsOwn(false)
+    }
   }
 
   const toggleScheduler = async (id: string) => {
@@ -250,6 +272,24 @@ export default function ManagersCard({ clientId, intakeComplete = false, hideWhe
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── deliver only: the client posts their own content ── */}
+      {!hideWhenIdle && (
+        <div className="mt-5 border-t border-border pt-4">
+          <h3 className="text-body-15 font-semibold">Who posts this client’s content</h3>
+          <label className="mt-2 flex min-h-11 cursor-pointer items-start gap-3 text-body-15">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-foreground" checked={postsOwn}
+              disabled={!canSetSchedulers || savingPostsOwn}
+              onChange={e => void togglePostsOwn(e.target.checked)} />
+            <span className="flex flex-col">
+              <span>This client posts their own content</span>
+              <span className="text-secondary-13 text-muted-foreground">
+                We deliver the finals. Once they approve a piece it is theirs to download on the portal, and nobody here schedules it.
+              </span>
+            </span>
+          </label>
         </div>
       )}
     </div>

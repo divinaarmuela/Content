@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LINK_LABELS, linkKindOf, linkLabel, nextVersionAfterLink, versionWord,
+  LINK_LABELS, driveFolderIdFromUrl, linkKindOf, linkLabel, nextVersionAfterLink, versionWord,
 } from '../app/lib/card-link-core'
 
 describe('linkKindOf — a pasted link is a link', () => {
@@ -94,5 +94,17 @@ describe('nextVersionAfterLink', () => {
   it('the same link again changes nothing', () => {
     expect(nextVersionAfterLink({ link_url: U1, current_version_number: 2 }, U1))
       .toEqual({ version: 2, changed: false })
+  })
+})
+
+/* ── the folder a scheduler is handed (11 Sep 2026) ── */
+
+describe('driveFolderIdFromUrl', () => {
+  it('reads the id off a Drive folder link and nothing else', () => {
+    expect(driveFolderIdFromUrl('https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQr?usp=sharing')).toBe('1AbCdEfGhIjKlMnOpQr')
+    expect(driveFolderIdFromUrl('https://drive.google.com/drive/u/0/folders/1AbCdEfGhIjKlMnOpQr')).toBe('1AbCdEfGhIjKlMnOpQr')
+    expect(driveFolderIdFromUrl('https://www.dropbox.com/scl/fo/abc')).toBeNull()
+    expect(driveFolderIdFromUrl('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/view')).toBeNull()
+    expect(driveFolderIdFromUrl(null)).toBeNull()
   })
 })

@@ -1,3 +1,5 @@
+import { deliverOnlyFor, selfPostingClientIds } from './deliver-only'
+import { DELIVER_ONLY_REASON } from './deliver-only-core'
 import 'server-only'
 import { readPlatformResults } from './post-outcome-core'
 import { randomUUID } from 'node:crypto'
@@ -208,6 +210,9 @@ export async function mayPostStraightOut(user: TeamUser, item: ContentItem): Pro
 async function eligibleFor(
   user: TeamUser, item: ContentItem, versions: readonly AssetVersion[],
 ): Promise<Eligibility> {
+  // DELIVER ONLY (11 Sep 2026): the client posts it themselves — delivered,
+  // never booked here, whoever is asking
+  if (await deliverOnlyFor(item)) return { ok: false, reason: DELIVER_ONLY_REASON }
   return postingEligibility(item, versions, await mayPostStraightOut(user, item))
 }
 
@@ -2002,6 +2007,7 @@ async function scopeItemsFor(
     scopeContextOf({
       viewer: who as never,
       batches: batches as unknown as { id: string; client_id: string; owner_id?: string | null }[],
+      clients: [...await selfPostingClientIds()].map(id => ({ id, posts_own_content: true })),
       taggedItemIds: itemTags,
       taggedBatchIds: batchTags,
       createdItemIds: createdIds,

@@ -172,9 +172,11 @@ async function toldSince(since: string): Promise<{ recipient_email: string; subj
   return rows.map(r => ({ recipient_email: String(r.recipient_email ?? ''), subject: String(r.subject ?? ''), event_type: String(r.event_type ?? ''), status: String(r.status ?? '') }))
 }
 const settle = () => new Promise(r => setTimeout(r, 1200))
-/** the fan-out is fire-and-forget and the mailer is slow per recipient: ask every 300 ms until the rows are there, 45 s at most */
+/** the fan-out is fire-and-forget and the mailer is slow per recipient: ask every 300 ms until the rows are there, two minutes at most */
 async function toldUntil(since: string, done: (rows: Awaited<ReturnType<typeof toldSince>>) => boolean) {
-  const deadline = Date.now() + 45_000
+  // the mailer tries every .invalid address in turn and each one is refused
+  // slowly; five recipients ahead of the one asked about can take a minute
+  const deadline = Date.now() + 120_000
   let rows = await toldSince(since)
   while (!done(rows) && Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 300))
@@ -395,11 +397,17 @@ describe('the playbook, start to finish, live', () => {
     // go booked the shoot: the plan's line is a card now, owned by nobody yet
     const cards = await table<ContentItem>('content_items').list({ fresh: true, by: { batch_id: shootId } as never })
     for (const c of cards) created.items.add(c.id)
-    const photo = cards.find(c => /Launch photo set/.test(String(c.title)))
+    // ONE SHOOT, ONE CARD (the owner, 11 Sep 2026): the card carries the
+    // shoot's title and the deliverables as its brief
+    const photo = cards.find(c => /launch shoot/.test(String(c.title)))
     expect(photo, JSON.stringify(cards.map(c => c.title))).toBeTruthy()
     itemId = photo!.id
-    expect(photo!.owner_id).toBeNull()
-    await everyone('Step 3b — go: shoot confirmed and booked, the plan line is a card')
+    // GO IS THE HANDOVER (the rule of 11 Sep 2026, `shoot-handover`): the
+    // plan's cards are the named editor's from the moment the shoot is
+    // confirmed, so their Editor page shows the coming work; the footage
+    // step later fills what is still empty and tells them the footage is in
+    expect(photo!.owner_id).toBe(editor.id)
+    await everyone('Step 3b — go: shoot confirmed and booked, the plan line is a card, already the editor’s')
   })
 
   it('4. Ops sends the reminder; after the day, footage is handed over and the editor holds the card', async () => {

@@ -38,8 +38,12 @@ import type { RailMedia } from './useSchedulePosts'
  */
 export default function NewPostSources({
   clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable, allowUploads = true,
+  handedFolders = [],
   onPick, onApprove, onCreated, onOpenExisting, onClose,
 }: {
+  /** the cards this person was handed with a Drive folder to post from —
+   *  the Drive tab offers each folder beside the client's own */
+  handedFolders?: readonly { itemId: string; title: string }[]
   clientId: string | null
   media: RailMedia[]
   /** the time the click meant, carried through to the composer */
@@ -156,6 +160,8 @@ export default function NewPostSources({
 
   type DriveRow = { id: string; name: string; type: 'image' | 'video'; bytes: number | null }
   const [drive, setDrive] = useState<DriveRow[] | null>(null)
+  /** which folder the Drive tab reads: the client's own, or a handed card's */
+  const [folderFrom, setFolderFrom] = useState<string>('client')
   const [driveNote, setDriveNote] = useState<string | null>(null)
   const [bringing, setBringing] = useState<string | null>(null)
 
@@ -163,7 +169,10 @@ export default function NewPostSources({
     if (source !== 'drive' || drive !== null || !clientId) return
     let cancelled = false
     setLoadingDrive(true)
-    fetch(`/api/social/schedule/drive?clientId=${encodeURIComponent(clientId)}`)
+    const url = folderFrom === 'client'
+      ? `/api/social/schedule/drive?clientId=${encodeURIComponent(clientId)}`
+      : `/api/social/schedule/drive?itemId=${encodeURIComponent(folderFrom)}&from=link`
+    fetch(url)
       .then(r => r.json())
       .then(json => {
         if (cancelled) return
@@ -175,7 +184,7 @@ export default function NewPostSources({
       })
       .finally(() => { if (!cancelled) setLoadingDrive(false) })
     return () => { cancelled = true }
-  }, [source, drive, clientId])
+  }, [source, drive, clientId, folderFrom])
 
   const bringAcross = async (row: DriveRow) => {
     if (!clientId) return
@@ -365,6 +374,18 @@ export default function NewPostSources({
             </div>
           ) : source === 'drive' ? (
             <div className="flex flex-col gap-2">
+              {handedFolders.length > 0 && (
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Which folder">
+                  {[{ itemId: 'client', title: 'This client’s folder' }, ...handedFolders.map(f => ({ itemId: f.itemId, title: `Folder for ${f.title}` }))].map(f => (
+                    <button key={f.itemId} type="button" aria-pressed={folderFrom === f.itemId}
+                      onClick={() => { if (folderFrom !== f.itemId) { setFolderFrom(f.itemId); setDrive(null); setDriveNote(null) } }}
+                      className={cn('min-h-11 rounded-full border px-3 text-[13px] font-semibold',
+                        folderFrom === f.itemId ? 'border-foreground bg-foreground text-background' : 'border-border bg-paper hover:bg-muted')}>
+                      {f.title}
+                    </button>
+                  ))}
+                </div>
+              )}
               {driveNote && (
                 <p className="rounded-inner border border-border bg-paper px-3 py-2 text-[12px]">
                   {driveNote}

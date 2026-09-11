@@ -7,12 +7,14 @@ import { canOpenBatch } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
-import { ensurePlanCards } from '../../../../lib/plan-cards'
+import { ensureShootCard } from '../../../../lib/plan-cards'
+import { fillFootageFolder, handOverAtGo } from '../../../../lib/shoot-handover'
+import { linkKindOf } from '../../../../lib/card-link-core'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { acksOf, peopleOnShoot } from '../../../../lib/shoot-sop-core'
+import { acksOf, isOnShoot, peopleOnShoot } from '../../../../lib/shoot-sop-core'
 
 /** Load a brief the caller may touch, or answer with the right refusal. */
 async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
@@ -105,12 +107,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const user = await requireRole('editor')
+    const user = await requireRole('scheduler')
     const { id } = await params
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
     const batch = loaded.batch
     const body = await req.json()
+    // THE FOOTAGE FOLDER is the one field anyone on the shoot may set — the
+    // crew have the footage, whatever their role (11 Sep 2026). Everything
+    // else on a shoot is the team's (editor and up), as it always was.
+    const onlyFootage = body && typeof body === 'object' && Object.keys(body).length > 0 && Object.keys(body).every(k => k === 'footage_url')
+    if (!roleSatisfies(user.role, 'editor') && !(onlyFootage && isOnShoot(batch, user.id))) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    }
 
     // an AM changing a LOCKED date is its own audited act, with a reason
     if (body.action === 'change_date') {
@@ -173,6 +182,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ] as const) {
       if (field in body) patch[field] = String(body[field] ?? '').trim().slice(0, max) || null
     }
+    if ('footage_url' in body) {
+      const raw = String(body.footage_url ?? '').trim()
+      if (raw) {
+        const check = linkKindOf(raw)
+        if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 422 })
+        patch.footage_url = check.url
+      } else {
+        patch.footage_url = null
+      }
+    }
     if ('edit_deadline' in body) {
       const d = body.edit_deadline ? String(body.edit_deadline).slice(0, 10) : ''
       if (d && Number.isNaN(new Date(`${d}T00:00:00`).getTime())) {
@@ -182,7 +201,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     // ── the people on the shoot: the AM's call ──
     if ('editor_id' in body || 'crew_ids' in body) {
-      if (!roleSatisfies(user.role, 'account_manager')) {
+      // the AM's call — and a general user's, who may raise a shoot for any
+      // client and must be able to staff it (the walk of 11 Sep 2026)
+      if (!roleSatisfies(user.role, 'account_manager') && user.role !== 'general') {
         return NextResponse.json({ error: 'Only an account manager picks who is on the shoot' }, { status: 403 })
       }
       const team = await table<TeamUser>('team_users').list({ where: u => u.active_status === true && u.role !== 'client' })
@@ -255,12 +276,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await table('batches').update(id, { last_edited_by: user.id, last_edited_at: new Date().toISOString() })
     } catch { /* the edit itself already landed */ }
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status ?? 'brief', kind: 'updated' })
-    // a line added to the plan of a shoot that is already booked is work
-    // now, so it gets its card straight away — the same claim per line that
-    // booking used, so lines that already have one are left alone
+    // the plan of a shoot that is already booked is work now: a shoot with
+    // no card yet gets its one card straight away (the same claim booking
+    // used); a shoot that has one is left alone
     if ('planned_deliverables' in patch && data.status !== 'brief') {
       try {
-        await ensurePlanCards(user, data)
+        await ensureShootCard(user, data)
       } catch (e) {
         console.error('plan cards after edit:', e)
       }
@@ -269,6 +290,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // filed under the month it was raised in — put it right the moment the
     // date exists
     if ('shoot_date' in patch) onShootDateChanged(data)
+    // THE EDITOR NAMED AFTER GO gets the cards the moment they are named —
+    // the same handover go does, so nothing waits for a press
+    if ('editor_id' in patch && patch.editor_id && (data.go_at || data.status !== 'brief')) {
+      try { await handOverAtGo(user, data) } catch (e) { console.error('handover after naming the editor:', e) }
+    }
+    // a footage folder pasted AFTER the handover reaches the cards now
+    if ('footage_url' in patch && patch.footage_url && data.footage_handed_at) {
+      try { await fillFootageFolder(data) } catch (e) { console.error('footage folder after handover:', e) }
+    }
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

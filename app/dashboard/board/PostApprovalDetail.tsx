@@ -1,5 +1,6 @@
 'use client'
 
+import { deliverOnly } from '@/app/lib/deliver-only-core'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
@@ -12,7 +13,7 @@ import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
 import { HandToDialog } from './BoardDialogs'
 import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
-import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
+import { STATUS_LABELS, type ItemStatus, itemPath } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
@@ -135,6 +136,23 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
   const slides = useMemo(() => slidesOf(latest), [latest])
   const nameOf = (uid: string | null | undefined) => team.find(u => u.id === uid)?.name ?? null
+  const [savingDeliver, setSavingDeliver] = useState(false)
+  const setDeliverOnly = async (on: boolean) => {
+    if (!item) return
+    setSavingDeliver(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deliver_only: on }),
+      })
+      if (!res.ok) throw new Error('Could not change that')
+      toast.success(on ? 'Deliver only — the client will post this themselves' : 'We post this one')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change that')
+    } finally {
+      setSavingDeliver(false)
+    }
+  }
   const managerNames = clientLinks
     .map(l => team.find(u => u.id === l.team_user_id))
     .filter((u): u is TeamUser => !!u && u.role === 'account_manager' && u.active_status !== false)
@@ -410,6 +428,24 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               ? `Account manager: ${managerNames.join(', ')}`
               : 'No account manager on this client yet'}
           </p>
+          {/* DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
+              themselves — the card ends at their approval, no scheduler.
+              The client's own setting is the default; this is the card's word */}
+          {isManager && !adhoc && !frozenCard && (
+            <label className="mt-1.5 flex min-h-11 w-fit cursor-pointer items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-foreground"
+                checked={deliverOnly(item as { deliver_only?: unknown }, client as { posts_own_content?: unknown } | null)}
+                disabled={savingDeliver}
+                onChange={e => void setDeliverOnly(e.target.checked)}
+              />
+              <span>Deliver only — the client posts this themselves</span>
+              {(client as { posts_own_content?: unknown } | null)?.posts_own_content === true && (item as { deliver_only?: unknown }).deliver_only == null && (
+                <span className="text-muted-foreground">(the client's setting)</span>
+              )}
+            </label>
+          )}
           {!adhoc && (
             <div className="mt-1.5 flex flex-col gap-1 text-[13px]">
               {(item as { brief?: string | null }).brief && (
@@ -434,6 +470,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           {/* the manager sees what the client sees — the owner, 9 Sep 2026:
               "AM and super admin should see the client portal on the
               assigned task" (not the editor, not the scheduler) */}
+          {/* renames, due dates and the rest live on the full card page */}
+          {!adhoc && (
+            <a href={itemPath(item)}
+              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
+              Full card
+            </a>
+          )}
           {isManager && client?.share_token && (
             <a href={`/portal/${client.share_token}`} target="_blank" rel="noreferrer"
               className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">

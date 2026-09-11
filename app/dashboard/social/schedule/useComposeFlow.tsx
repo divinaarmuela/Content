@@ -278,7 +278,8 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
           role={role}
           postWithoutApproval={data.postWithoutApproval}
           clientSignsOff={data.clientSignsOff}
-          driveAvailable={driveAvailable}
+          driveAvailable={driveAvailable || data.media.some(m => m.driveFolderUrl)}
+          handedFolders={data.media.filter(m => m.driveFolderUrl).map(m => ({ itemId: m.itemId, title: m.title }))}
           // Schedule offers approved pieces only; Post approval's window uploads
           // the owner, 8 Sep 2026: "an AM or super admin can go directly to the
           // Schedule page to post there without approval — upload files and

@@ -1,16 +1,17 @@
 import type { Role } from './identity-core'
 
 /**
- * The three things a new hire needs on their first day, per role — and now
+ * The three things a new hire needs on their first day, per role — and
  * per PAGE, because the first day happens on four different screens.
  *
- * Until now the app explained itself nowhere: no tour, no first-run panel, no
- * `?`, no glossary. Every invented word had to be learned by asking a
- * colleague. This is the smallest honest fix — three steps, each a real link,
- * on the page the person is standing on.
+ * Rewritten 11 Sep 2026 to the pages as they run now (the playbook build:
+ * Shoots, the Editor and Post approval columns, the quality check, the
+ * Booked in column). Every sentence names a button or a column the screen
+ * draws today; `tests/getting-started-pages.test.ts` sweeps it for jargon
+ * and `tests/tutorial-core.test.ts` pins the labels.
  *
- * Pure data so the copy can be tested and swept for jargon. The panel that
- * renders it is app/dashboard/GettingStarted.tsx.
+ * Pure data so the copy can be tested. The panel that renders it is
+ * app/dashboard/GettingStarted.tsx.
  */
 
 export type GettingStartedStep = {
@@ -41,19 +42,19 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card assigned to you is on your board: Draft, Internal check and With client, with what is done folded into one narrow lane at the end. One card is one thing to make: it shows what needs doing and the link to the work.',
+      body: 'Every card handed to you is on your board: In progress, For review, Quality check, With client, For handoff, with what is booked or posted folded into Done. One card is one thing to make. Press Acknowledge on a new one so the team knows you are on it.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
-      title: 'Add the link, then hand it on',
-      body: 'Paste the Google Drive or Dropbox link on the card, then press "Ready for checking". An account manager checks it next.',
+      title: 'Put the final on the card, then hand it on',
+      body: 'Under Versions, upload the export or press "Pick the final from Google Drive", add the Dropbox link to the source files, then press "Ready for checking". The account manager checks it, then the quality reviewer.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
-      title: 'Watch for changes',
-      body: 'A card that comes back shows what to change, in the account manager’s words, right on the card.',
+      title: 'Watch for changes, and flag a risk early',
+      body: 'A card that comes back shows what to change, in the reviewer’s words, right on the card. If a date is at risk, press "Flag a deadline risk" the moment you see it.',
       href: '/dashboard/notifications',
       linkLabel: 'See what came back',
     },
@@ -64,22 +65,22 @@ const SCHEDULER: GettingStartedPanel = {
   heading: HEADING,
   steps: [
     {
-      title: 'See what is coming',
-      body: 'Every card for your clients is on the board: Ready to post and Posted have the room, and what is still being made is folded into "Coming up" on the left. Only Ready to post has been signed off — nothing else is yours to post yet.',
+      title: 'See what is ready',
+      body: 'Ready to post is your queue: cards handed to you, checked by the quality reviewer and approved by the client. Everything left of it is still with someone else. A green "Your turn" means it was handed to you by name.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },
     {
-      title: 'Take the link, post it, move the card',
-      body: 'Each card shows what needs doing and the link to the work. Post it on the Schedule page, then press "Booked in" on the card — and "Posted" once it is live.',
+      title: 'Book it on the Schedule page',
+      body: 'Pick the client, press New post, choose "Approved media", tick the channels, write the caption, set the time, press Schedule. The card moves to Booked in by itself.',
       href: '/dashboard/social/schedule',
       linkLabel: 'Open the Schedule page',
     },
     {
       title: 'Booked in is not posted',
-      body: 'Booked in means it has a time. Posted means it is actually live. The posting calendar shows both.',
-      href: '/dashboard/scheduler/calendar',
-      linkLabel: 'Open the posting calendar',
+      body: 'Booked in means the channel has it and a time is set. Posted means it is live on every channel. The Posts page says what happened on each one, and why if it did not go out.',
+      href: '/dashboard/social/activity',
+      linkLabel: 'Open Posts',
     },
   ],
 }
@@ -89,46 +90,46 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
   steps: [
     {
       title: 'Your clients',
-      body: 'Each client has a monthly agreement. The Overview table shows what is still owed this month.',
+      body: 'One page per client: who manages them, who schedules for them, their channels and their portal link. The Overview shows what is on you today and this month’s produced, delivered and published per client.',
       href: '/dashboard/clients',
       linkLabel: 'See my clients',
     },
     {
-      title: 'Check, then send on',
-      body: 'Cards in "Internal check" are waiting on you. Send them to the client, or send them back with what needs changing.',
-      href: '/dashboard/editor',
+      title: 'Check, then send for quality check',
+      body: 'Cards in Internal check on Post approval are waiting on a manager. Check caption, message, cover and timing, then press "Send for quality check" — or "Ask for changes". The quality reviewer sends it to the client.',
+      href: '/dashboard/scheduler',
       linkLabel: 'Review what is waiting',
     },
     {
       title: 'Plan the next shoot',
-      body: 'In Production, plan a shoot, write the shoot plan, share it with the client, then book the shoot.',
+      body: 'On Shoots, press New shoot plan, fill the nine parts, pick the editor and crew, share the plan seven days before the day, and press Go once everyone has read it.',
       href: '/dashboard/production',
-      linkLabel: 'Go to Production',
+      linkLabel: 'Open Shoots',
     },
   ],
 }
 
-/** The Editor board as a MANAGER sees it: their job here is the review column. */
+/** The Editor board as a MANAGER sees it: every card being made for their clients. */
 const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
-  heading: 'The Editor board, for reviewers',
+  heading: 'The Editor board, for managers',
   steps: [
     {
-      title: 'Your column is "Internal check"',
-      body: 'Anything there is waiting on you. Open the link, check the work, then send it to the client — or send it back with what needs changing, right on the card.',
+      title: 'Every card being made',
+      body: 'One card per piece, for your clients, in the editors’ own columns: In progress, For review, Quality check, With client, For handoff, Done. Filter by Client or People to see who is doing what.',
       href: '/dashboard/editor',
-      linkLabel: 'See what is waiting',
+      linkLabel: 'See the board',
     },
     {
       title: 'Nobody on it? Give it to someone',
-      body: 'A card with nobody on it says "Nobody yet". Open it to hand it to a named editor, who is emailed the job.',
+      body: 'A card with "Nobody yet" has no editor. Open it and press "Hand to…" to give it to a named editor, who is emailed the job. New card makes a fresh one, with "Files to work from" for them.',
       href: '/dashboard/editor',
       linkLabel: 'Find unassigned cards',
     },
     {
-      title: 'Signed off means "ready to post"',
-      body: 'Once the client has signed off, the card moves to Ready to post and off this board for you. The Scheduler page shows it from there until it is live.',
+      title: 'Your checking happens on Post approval',
+      body: 'When an editor presses "Ready for checking" the card lands in Internal check on Post approval. That is where you send it for quality check, or ask for changes.',
       href: '/dashboard/scheduler',
-      linkLabel: 'Open the Scheduler',
+      linkLabel: 'Open Post approval',
     },
   ],
 }
@@ -138,31 +139,32 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
   steps: [
     {
       title: 'Make a shoot plan',
-      body: 'Press New shoot plan. The plan is the concept and shot list for one filming day — making it sets up the shoot too. You never create the shoot separately.',
+      body: 'Press New shoot plan: the client, a title, what the shoot is for, the date. Making the plan sets up the shoot too. You never create the shoot separately.',
     },
     {
-      title: 'Fill it in, share it, get it signed off',
-      body: 'Open the shoot: fill the nine parts of the plan, pick the editor and crew, share it at least seven days before the day, then send it to the client. The card moves right as each step is done.',
+      title: 'Fill it in, share it seven days out',
+      body: 'Open the shoot: fill the nine parts of the plan, pick the editor and crew, then share it with the team at least seven days before the day. A late plan turns red and Ops is told. The card moves right as each step is done.',
     },
     {
       title: 'Go, shoot, hand over',
-      body: 'Once everyone has read the plan, press Go — that books the date. After the day, move the shoot to Footage handed over and the editor gets their cards.',
+      body: 'Once everyone has pressed "I’ve read the plan", press "Confirm — it is go" — that books the date. The day before, Reminder sent emails call time and location. After the day, move the shoot to Footage handed over and the editor gets their cards.',
     },
   ],
 }
 
-const PRODUCTION_FOR_EDITORS: GettingStartedPanel = {
+/** Shoots for the people on them — editors and crew — and for a general user. */
+const PRODUCTION_FOR_CREW: GettingStartedPanel = {
   heading: 'Shoots, in three steps',
   steps: [
     {
       title: 'A shoot is one card',
-      body: 'One filming day: the date, the location, the shot list and the plan. You see the shoots you are on.',
+      body: 'One filming day: the date, the location, the shot list and the plan, in six stages from Draft to Footage handed over. Open a shoot to read its plan on the canvas.',
       href: '/dashboard/production',
       linkLabel: 'See the shoots',
     },
     {
       title: 'Read the plan and say so',
-      body: 'Open the shoot and press "I\u2019ve read the plan". The shoot cannot go ahead until everyone on it has.',
+      body: 'Open the shoot and press "I’ve read the plan". The shoot cannot be confirmed until everyone on it has.',
       href: '/dashboard/production',
       linkLabel: 'See the shoots',
     },
@@ -180,21 +182,47 @@ const ITEM_PAGE: GettingStartedPanel = {
   steps: [
     {
       title: 'The top card says what to do now',
-      body: 'It names whose move it is and shows one blue button for it. If the button is greyed out, the line under it says what is missing.',
+      body: 'It names whose move it is and shows one button for it. If the button is greyed out, the line under it says what is missing.',
       href: '#next',
       linkLabel: 'Jump to it',
     },
     {
-      title: 'Add the link on the card',
-      body: 'Paste the Google Drive or Dropbox link where the work lives, then save. Replacing it makes a new version; the latest one is what gets checked.',
+      title: 'Put the final on the card',
+      body: 'Upload the export, pick it from Google Drive, or paste a link where the work lives. Each upload is a new version; the latest one is what gets checked.',
       href: '#work',
-      linkLabel: 'Jump to the link',
+      linkLabel: 'Jump to the files',
     },
     {
       title: 'Tag someone to ask a question',
-      body: 'In Comments, type @ and a name. They get an email and a "Waiting on you" card until they mark it done.',
+      body: 'In the notes, type @ and a name. They get an email and a "Waiting on you" line until they mark it done.',
       href: '#comments',
-      linkLabel: 'Jump to Comments',
+      linkLabel: 'Jump to the notes',
+    },
+  ],
+}
+
+/** The Post approval board for a GENERAL user: their own cards through
+ *  every stage, and the unclaimed queue. */
+const SCHEDULER_PAGE_FOR_GENERAL: GettingStartedPanel = {
+  heading: HEADING,
+  steps: [
+    {
+      title: 'Your cards, as they get checked',
+      body: 'Draft, Internal check, Quality check, With client, Ready to post, Booked in, Posted. Your own cards show through every stage; Ready to post with nobody named is yours to take.',
+      href: '/dashboard/scheduler',
+      linkLabel: 'See the board',
+    },
+    {
+      title: 'You make, others check',
+      body: 'Press "Ready for checking" on your card and the account manager checks it, then the quality reviewer, then the client. You are emailed at each step.',
+      href: '/dashboard/editor',
+      linkLabel: 'Open the Editor page',
+    },
+    {
+      title: 'Book your own piece in',
+      body: 'Once it has passed, book it on the Schedule page: New post, "Approved media", channels, caption, time, Schedule. The card moves to Booked in by itself.',
+      href: '/dashboard/social/schedule',
+      linkLabel: 'Open the Schedule page',
     },
   ],
 }
@@ -202,13 +230,14 @@ const ITEM_PAGE: GettingStartedPanel = {
 /**
  * Which panel a role sees on the Overview. Super admins get the account-
  * manager one — they do that job too, and inventing a fourth panel for one
- * person is copy that never gets maintained. Clients get nothing: this is
- * staff onboarding.
+ * person is copy that never gets maintained. A general user gets the Post
+ * approval one for their role. Clients get nothing: this is staff onboarding.
  */
 export function panelForRole(role: Role | null): GettingStartedPanel | null {
   switch (role) {
     case 'editor': return EDITOR
     case 'scheduler': return SCHEDULER
+    case 'general': return SCHEDULER_PAGE_FOR_GENERAL
     case 'account_manager':
     case 'super_admin': return ACCOUNT_MANAGER
     default: return null
@@ -222,9 +251,9 @@ export function panelForPage(page: GettingStartedPage, role: Role | null): Getti
   const manager = role === 'account_manager' || role === 'super_admin'
   switch (page) {
     case 'overview': return panelForRole(role)
-    case 'editor': return manager ? EDITOR_PAGE_FOR_MANAGERS : role === 'editor' ? EDITOR : null
-    case 'scheduler': return role === 'scheduler' || manager ? SCHEDULER : null
-    case 'production': return manager ? PRODUCTION_FOR_MANAGERS : PRODUCTION_FOR_EDITORS
+    case 'editor': return manager ? EDITOR_PAGE_FOR_MANAGERS : (role === 'editor' || role === 'general') ? EDITOR : null
+    case 'scheduler': return role === 'scheduler' ? SCHEDULER : role === 'general' ? SCHEDULER_PAGE_FOR_GENERAL : manager ? ACCOUNT_MANAGER : null
+    case 'production': return manager ? PRODUCTION_FOR_MANAGERS : PRODUCTION_FOR_CREW
     case 'item': return ITEM_PAGE
     default: return null
   }

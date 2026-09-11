@@ -1,3 +1,4 @@
+import { deliverOnly } from './deliver-only-core'
 import 'server-only'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -177,6 +178,9 @@ export type PortalCard = {
    *  did not go out, handed over as a draft, with the words already in the
    *  client's clock */
   channels: (PortalChannelLine & { words: string })[]
+  /** the client posts this themselves: once approved the finals are theirs
+   *  to download, and nobody here books a time (`deliver-only-core`) */
+  deliver_only: boolean
   /** the post's own page on the portal, once it has gone out — the numbers,
    *  the words and the people, in one place. Null on anything not posted. */
   post_id: string | null
@@ -674,7 +678,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     // the link the team pasted on the card (`link_url`, labelled by its
     // stored `link_kind`) wins; the item's old Drive mirror field and the
     // latest version's Drive link are fallbacks for cards made before it
-    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null; caption?: string | null; work_kinds?: { name?: string | null } | null }
+    const row = i as { link_url?: string | null; link_kind?: string | null; drive_url?: string | null; caption?: string | null; work_kinds?: { name?: string | null } | null; deliver_only?: unknown }
+    const selfPosts = deliverOnly({ status: p.status, deliver_only: row.deliver_only }, clientRow as { posts_own_content?: unknown })
     const pasted = facing ? row.link_url || null : null
     const url = facing ? (pasted || row.drive_url || p.drive_url || null) : null
     const kind = pasted ? row.link_kind ?? null : null
@@ -688,7 +693,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       caption: facing && typeof row.caption === 'string' && row.caption.trim() ? row.caption.trim() : null,
       column: portalColumnFor(p.status),
       tone: portalCardTone(p.status),
-      line: cardLine(p.status, { postedWhen, progress: p.progress_line }),
+      line: cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
+      deliver_only: selfPosts,
       link: linkFor(url, kind),
       pdf: false,
       preview_url: p.preview_url,
@@ -731,6 +737,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       column: standing.column,
       tone: standing.tone,
       line: standing.line,
+      deliver_only: false,
       link: null,
       pdf: shared,
       preview_url: null,

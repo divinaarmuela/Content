@@ -1,3 +1,5 @@
+import { deliverOnlyFor } from './deliver-only'
+import { DELIVERED_ACTION, DELIVERED_LINE, stageWordFor } from './deliver-only-core'
 import 'server-only'
 import { DbError, table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -329,6 +331,16 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
  * yourself tells nobody. The route calls this INSTEAD of
  * `notifyJobAssigned`, never as well, so a handover is one message.
  */
+/** "Post from this folder: <link>" — the Drive or Dropbox folder a card
+ *  carries, for the person handed it (the owner, 11 Sep 2026: "we might
+ *  assign the scheduler by giving them the drive link"). */
+function folderLine(item: { link_url?: string | null; link_kind?: string | null }): string {
+  const url = String(item.link_url ?? '').trim()
+  if (!url || !(item.link_kind === 'drive' || item.link_kind === 'dropbox')) return ''
+  const word = item.link_kind === 'drive' ? 'Google Drive' : 'Dropbox'
+  return `<p><strong>Post from this folder:</strong> <a href="${escapeHtml(url)}">${escapeHtml(word)} folder</a></p>`
+}
+
 export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: string | null) {
   if (!item.owner_id || item.owner_id === actor.id) return
   void (async () => {
@@ -356,6 +368,7 @@ export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: stri
           ? `<p><strong>What they want you to do:</strong></p>`
             + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(words)}</blockquote>`
           : '')
+        + folderLine(item as { link_url?: string | null; link_kind?: string | null })
         + (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : '')
         + `<p>It is on your board now — open it to see everything on the card.</p>`,
         OPEN_ITEM_CTA,
@@ -448,6 +461,7 @@ export async function notifyScheduleHandoff(
     bodyHtml: renderEmail(
       `${item.title} needs a posting date`,
       `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>` +
+      folderLine(item as { link_url?: string | null; link_kind?: string | null }) +
       `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext('approved_for_scheduling'))}</p>` +
       (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
       'Open the item',
@@ -789,7 +803,11 @@ export async function performTransition(
   // WHO SCHEDULES IT (Abby, 11 Sep 2026: "Joy will assign to either Cath &
   // Raven for scheduling"): a card leaving the quality check with nobody
   // named is handed to the client's default schedulers, in the same write.
-  const defaults = (from === 'quality_check' && to !== 'revision_required' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal)
+  // DELIVER ONLY (the playbook's clients who post their own, 11 Sep 2026):
+  // the card ends at the client's approval — no scheduler is handed it and
+  // nobody is told to book it
+  const selfPosts = !isBriefTask && !isInternal && await deliverOnlyFor(item)
+  const defaults = (from === 'quality_check' && to !== 'revision_required' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal && !selfPosts)
     ? await defaultSchedulersOf(item.client_id)
     : []
   let updated: ContentItemRow | null
@@ -799,6 +817,13 @@ export async function performTransition(
       ...asked,
       ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
       ...(defaults.length > 0 ? { scheduler_ids: defaults } : {}),
+      // PINNED AT APPROVAL: the client's "posts their own content" setting
+      // is read once, here, and written onto the card — so flipping the
+      // setting later never moves a card that was already approved between
+      // Ready to post and Delivered (the live walk of 11 Sep 2026)
+      ...(to === 'approved_for_scheduling' && !isBriefTask && !isInternal
+        && (before as { deliver_only?: unknown }).deliver_only == null
+        ? { deliver_only: selfPosts } : {}),
     })
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)
@@ -833,6 +858,14 @@ export async function performTransition(
   if (!system && standIns.length > 0) {
     void notifyStandInPass(actor, { ...item, status: to }, standIns, to)
       .catch(e => console.error('stand-in pass notification error:', e))
+  }
+  if (selfPosts && to === 'approved_for_scheduling') {
+    // the card's history says where it ended: delivered, the client's to post
+    await logActivity({
+      actor: system ? null : actor, clientId: item.client_id,
+      entityType: 'content_item', entityId: item.id,
+      action: DELIVERED_ACTION, detail: DELIVERED_LINE,
+    })
   }
   if (defaults.length > 0) {
     await logActivity({
@@ -907,6 +940,7 @@ export async function performTransition(
 
   // notifications — fire-and-forget; the outbox dedupe makes retries safe
   const skip = new Set(opts?.skipAudiences ?? [])
+  if (selfPosts) { skip.add('assigned_schedulers'); skip.add('schedulers') }
   const audiences = (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
@@ -971,7 +1005,8 @@ export async function performTransition(
           : transitionSubject({
               title: item.title,
               to,
-              stageLabel: stageLabel(to),
+              // a delivered card is never "now Ready to post" to anyone
+              stageLabel: stageWordFor(to, selfPosts, stageLabel(to)),
               recipientRole: (person as { role?: Role }).role ?? null,
               turns: isBriefTask ? BRIEF_STATUS_TURN : undefined,
             })

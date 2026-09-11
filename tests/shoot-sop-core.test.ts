@@ -4,8 +4,9 @@ import {
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageMove, withAck, withoutAck, type SopShoot,
   briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
+  STAGE_STRIP, footageAfterWords, footageDueTargets, footageFolderFill, handoverReady, nextStepWords,
 } from '../app/lib/shoot-sop-core'
-import { planCardId } from '../app/lib/deliverable-group-core'
+import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
 
 /* ── the Shoot Brief SOP (Team's Playbook §3), as the rules read it ────── */
 
@@ -189,15 +190,14 @@ describe('dragging a shoot to a column', () => {
 
 describe('the handover: Production → Editor', () => {
   const shot = complete({ shoot_date: '2026-09-10' })
-  it('a line with no card becomes the editor’s card, due on the deadline, briefed with the priorities', () => {
+  it('a shoot with no card yet gets ONE card, titled with the shoot, owned by the editor, briefed with the list and the priorities', () => {
     const plan = handoverPlan(shot, [])
     expect(plan.create.map(c => [c.title, c.owner_id, c.due_date, c.brief])).toEqual([
-      ['Hero reel', ED, '2026-09-25', 'Hero reel first, 60 s, upbeat'],
-      ['Photo set', ED, '2026-09-25', 'Hero reel first, 60 s, upbeat'],
+      ['Golf Day', ED, '2026-09-25', 'Coming out of this shoot:\n\u2022 Hero reel\n\u2022 Photo set\n\nPriorities: Hero reel first, 60 s, upbeat'],
     ])
-    expect(plan.create[0].id).toBe(planCardId('b-1', 'l1'))
+    expect(plan.create[0].id).toBe(shootCardId('b-1'))
     expect(plan.fill).toEqual([])
-    expect(plan.total).toBe(2)
+    expect(plan.total).toBe(1)
   })
   it('a card that exists keeps what it has — only empty fields are filled — and the plan card is never handed over', () => {
     const items = [
@@ -207,6 +207,7 @@ describe('the handover: Production → Editor', () => {
       { id: 'other-shoot', batch_id: 'b-2', owner_id: null, due_date: null, brief: null },
     ]
     const plan = handoverPlan(shot, items)
+    // an older shoot with one-per-line cards gets no new card — nothing doubled
     expect(plan.create).toEqual([])
     expect(plan.fill).toEqual([
       { id: planCardId('b-1', 'l1'), patch: { due_date: '2026-09-25', brief: 'Hero reel first, 60 s, upbeat' } },
@@ -218,7 +219,10 @@ describe('the handover: Production → Editor', () => {
   it('is idempotent: after the handover, the same input plans nothing', () => {
     const first = handoverPlan(shot, [])
     const after = first.create.map(c => ({ id: c.id, batch_id: 'b-1', owner_id: c.owner_id, due_date: c.due_date, brief: c.brief }))
-    expect(handoverPlan(shot, after)).toEqual({ create: [], fill: [], total: 2 })
+    expect(handoverPlan(shot, after)).toEqual({ create: [], fill: [], total: 1 })
+  })
+  it('a shoot with nothing listed makes no card yet', () => {
+    expect(handoverPlan(complete({ planned_deliverables: [] }), [])).toEqual({ create: [], fill: [], total: 0 })
   })
 })
 
@@ -317,5 +321,70 @@ describe('a plan shared late', () => {
     const fine = complete({ id: 'fine', brief_shared_at: '2026-09-12T09:00:00Z' })
     const closed = complete({ id: 'closed', brief_shared_at: '2026-09-17T09:00:00Z', status: 'wrapped' })
     expect(lateShareNudgeTargets([late, told, fine, closed]).map(b => b.id)).toEqual(['late'])
+  })
+})
+
+/* ── the flow, on the page: six stages and the one next move (11 Sep 2026) ── */
+
+describe('the strip and the next step', () => {
+  it('names the six stages in the SOP order, the last one short', () => {
+    expect(STAGE_STRIP.map(s => s.label)).toEqual(['Draft', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in'])
+  })
+  it('says what to do next, and who, at every stage', () => {
+    const half = complete({ objective: null, script: null })
+    expect(nextStepWords(half, TODAY)).toMatch(/^Next: fill in the plan — objective, script or talking points still to go/)
+    expect(nextStepWords(half, TODAY)).toMatch(/Refused until all nine parts are filled/)
+    expect(nextStepWords(complete(), TODAY)).toBe('Next: share the plan with the team. Everyone on it is emailed and asked to read it.')
+    const shared = complete({ brief_shared_at: '2026-09-11T00:00:00Z' })
+    expect(nextStepWords(shared, TODAY)).toMatch(/everyone on the shoot presses \u201cI\u2019ve read the plan\u201d — waiting on 2 of 2/)
+    const acked = complete({ ...shared, acknowledgements: [{ user_id: ED, at: 'x' }, { user_id: VG, at: 'x' }] })
+    expect(nextStepWords(acked, TODAY)).toMatch(/account manager ticks \u201cAligned with the strategist\u201d/)
+    const ready = complete({ ...acked, aligned_at: 'x', client_confirmed_at: 'x' })
+    expect(nextStepWords(ready, TODAY)).toMatch(/^Next: the account manager presses Go\. That books the shoot and puts the editor\u2019s card on the Editor page/)
+    const late = complete({ ...ready, brief_shared_at: '2026-09-18T00:00:00Z' })
+    expect(nextStepWords(late, TODAY)).toMatch(/shared 3 days before the shoot — the playbook needs 7/)
+    const go = complete({ ...ready, go_at: 'x' })
+    expect(nextStepWords(go, TODAY)).toMatch(/^Confirmed for 21 Sept\. The editor\u2019s card is on the Editor page, due 25 Sept\. Next: Ops presses Reminder sent/)
+    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), TODAY)).toMatch(/^Reminder sent\. Next: the shoot on 21 Sept/)
+    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-21')).toMatch(/^Shooting today\. The footage is handed to the editor tomorrow morning by itself/)
+    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-22')).toMatch(/^Shot\. The footage is handed to the editor this morning by itself/)
+    expect(nextStepWords(complete({ ...go, footage_handed_at: 'x' }), '2026-09-22')).toMatch(/^Footage should be in — the editor has been told/)
+  })
+  it('the handover is ready once the editor, the priorities and the deadline are named', () => {
+    expect(handoverReady(complete())).toBe(true)
+    expect(handoverReady(complete({ editor_id: null }))).toBe(false)
+    expect(handoverReady(complete({ edit_deadline: '' }))).toBe(false)
+    expect(footageAfterWords(complete(), TODAY)).toBe('Shoot on 21 Sept — footage after that')
+    expect(footageAfterWords(complete(), '2026-09-21')).toBe('Shooting today — footage after that')
+    expect(footageAfterWords(complete(), '2026-09-22')).toBeNull()
+  })
+  it('the morning after a shoot, a confirmed shoot with an editor is handed over by itself; one without is asked for one', () => {
+    const shot = complete({ go_at: 'x', brief_shared_at: 'x' })
+    expect(footageDueTargets([shot], '2026-09-22').hand.map(b => b.id)).toEqual(['b-1'])
+    // not before the day is gone, not twice, not once a person did it, not a closed shoot
+    expect(footageDueTargets([shot], '2026-09-21').hand).toEqual([])
+    expect(footageDueTargets([complete({ ...shot, footage_due_nudged_at: 'x' })], '2026-09-22').hand).toEqual([])
+    expect(footageDueTargets([complete({ ...shot, footage_handed_at: 'x' })], '2026-09-22').hand).toEqual([])
+    expect(footageDueTargets([complete({ ...shot, status: 'wrapped' })], '2026-09-22').hand).toEqual([])
+    // a plan never confirmed is not handed to anyone by itself
+    expect(footageDueTargets([complete()], '2026-09-22')).toEqual({ hand: [], askEditor: [] })
+    const noEditor = complete({ ...shot, editor_id: null })
+    expect(footageDueTargets([noEditor], '2026-09-22').askEditor.map(b => b.id)).toEqual(['b-1'])
+  })
+})
+
+/* ── the footage folder reaches the cards (11 Sep 2026) ── */
+
+describe('the footage folder', () => {
+  it('goes onto every card from the shoot that has no folder yet, never the plan, never over a chosen one', () => {
+    const b = complete({ footage_url: 'https://www.dropbox.com/scl/fo/golf' })
+    const items = [
+      { id: 'k1', batch_id: 'b-1', raw_assets_url: null },
+      { id: 'k2', batch_id: 'b-1', raw_assets_url: 'https://drive.google.com/mine' },
+      { id: 'plan', batch_id: 'b-1', raw_assets_url: null, work_kinds: { slug: 'shoot_brief' } },
+      { id: 'other', batch_id: 'b-2', raw_assets_url: null },
+    ]
+    expect(footageFolderFill(b, items)).toEqual([{ id: 'k1', raw_assets_url: 'https://www.dropbox.com/scl/fo/golf' }])
+    expect(footageFolderFill(complete(), items)).toEqual([])
   })
 })

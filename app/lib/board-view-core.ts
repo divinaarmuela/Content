@@ -13,14 +13,14 @@
  * only says how to word it and where to put it.
  */
 
+import { DELIVER_ONLY_REASON, deliverOnly } from './deliver-only-core'
 import { postedLine, readPostedSlides } from './posted-slides-core'
 import {
   actingRoles, availableTransitionsAs, presentTransitions, whoseTurn, STATUS_LABELS,
   type ActingViewer, type Hat, type ItemStatus,
 } from './workflow-core'
 import {
-  BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey,
-} from './board-core'
+  BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey, cardColumn } from './board-core'
 import { linkLabel, versionWord } from './card-link-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
@@ -37,8 +37,11 @@ export type BoardViewCard = {
   title: string
   status: ItemStatus
   client_id: string
-  clients?: { name: string } | null
+  clients?: { name: string; posts_own_content?: boolean | null } | null
   work_kinds?: { name: string; slug?: string; color?: string } | null
+  /** deliver only: the client posts this themselves (`deliver-only-core`);
+   *  null follows the client's own setting */
+  deliver_only?: boolean | null
   link_url?: string | null
   link_kind?: string | null
   /** what needs doing — the requirement, in the manager's words */
@@ -76,6 +79,8 @@ export type BoardViewCard = {
    *  has it — an editor is told which shoot's footage this is */
   batch_id?: string | null
   shoot_title?: string | null
+  /** the shoot's date, so an editor's card can say "footage after that" */
+  shoot_date?: string | null
   /** THE VIDEO EDITORS SOP: the holder acknowledges a card the day it lands,
    *  and flags a deadline risk the moment they see one. Read off the card's
    *  activity by the page (`card-flag-core.flagsOf`). */
@@ -117,6 +122,8 @@ export type CardLines = {
   posted: string | null
   /** "Sent to client 11 Sept" — the playbook's delivery date, once stamped */
   delivered: string | null
+  /** the client posts this themselves — the card ends at Delivered */
+  deliverOnly: boolean
   /** who is holding it: a name, "You", or "Nobody yet" */
   assignee: string
   assigneeId: string | null
@@ -173,6 +180,10 @@ export function cardLines(
     // playbook: "that's the moment our obligation is met"), so the card says
     // it in those words and keeps saying it through Ready to post and Posted
     delivered: card.delivered_at && shortDate(card.delivered_at) ? `Sent to client ${shortDate(card.delivered_at)}` : null,
+    // "Client posts it" is a word about what is still to come: a card the
+    // channel already holds or has posted was posted by US, whatever the
+    // client's setting says now (the live role-play of 11 Sep 2026)
+    deliverOnly: deliverOnly(card, card.clients) && !isOut(card.status),
     assignee,
     assigneeId: card.owner_id ?? null,
     due,
@@ -330,7 +341,10 @@ export function cardActions(
   // (no schedule row) or a lie (one of five files booked), and a whole-card
   // "Posted" contradicted the "2 of 5 posted" chip (the audit of 9 Sep 2026)
   const adhoc = (card as { adhoc_post?: unknown }).adhoc_post === true
-  const kept = adhoc ? all.filter(a => !(a.kind === 'transition' && (a.to === 'scheduled' || a.to === 'published'))) : all
+  // …and a deliver-only card is never booked in or posted from here: the
+  // client does that, and a file they say went live is logged by hand
+  const noBooking = adhoc || deliverOnly(card, card.clients)
+  const kept = noBooking ? all.filter(a => !(a.kind === 'transition' && (a.to === 'scheduled' || a.to === 'published'))) : all
   // with no filled button, the face shows the constructive answer, not the
   // destructive one: "Log the client's approval" before "Send back for
   // changes" (the audit of 10 Sep 2026)
@@ -386,6 +400,9 @@ export function dropAction(card: BoardViewCard, column: BoardColumnKey, viewer: 
   // to" was still offering the whole-card press (the audit of 10 Sep 2026)
   if ((card as { adhoc_post?: unknown }).adhoc_post === true && (d.to === 'scheduled' || d.to === 'published')) {
     return { ok: false, reason: ADHOC_MOVE_REASON }
+  }
+  if (deliverOnly(card, card.clients) && (d.to === 'scheduled' || d.to === 'published')) {
+    return { ok: false, reason: DELIVER_ONLY_REASON }
   }
   return { ok: true, action: actionFor(d.to, d.label, hats), column }
 }
@@ -460,6 +477,10 @@ export function recentlyPosted(
 export function pageCards<T extends BoardViewCard>(
   page: BoardPage, cards: readonly T[], viewer: BoardViewer, today?: string | null,
 ): T[] {
+  // A DELIVERED CARD IS NEVER A SCHEDULER'S (the playbook's deliver-only
+  // clients, 11 Sep 2026): the client posts it, so it is not on any page of
+  // theirs — handed to them or not
+  if (viewer.role === 'scheduler') cards = cards.filter(c => cardColumn(c) !== 'delivered')
   const mine = (c: T) => isAssignedTo(c, viewer.id)
   /**
    * Media uploaded straight onto the Schedule page to be posted is a POST,
@@ -492,7 +513,7 @@ export function pageCards<T extends BoardViewCard>(
     if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => mine(c) && fresh(c))
     // a manager on the Editor page sees the making, not the posting
     return cards.filter(c => fresh(c)
-      && (mine(c) || (columnOf(c.status) !== 'ready_to_post' && !isOut(c.status))))
+      && (mine(c) || (cardColumn(c) !== 'ready_to_post' && !isOut(c.status) && cardColumn(c) !== 'delivered')))
   }
   return cards.filter(fresh)
 }
@@ -509,6 +530,7 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
   ready_to_post: 'Nothing ready to post.',
   booked: 'Nothing booked in.',
   posted: 'Nothing posted yet.',
+  delivered: 'Nothing delivered for a client to post themselves.',
   done: 'Nothing done yet.',
   coming_up: 'Nothing coming up.',
 }
@@ -522,6 +544,7 @@ export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   ready_to_post: LANE_EMPTY.ready_to_post,
   booked: LANE_EMPTY.booked,
   posted: LANE_EMPTY.posted,
+  delivered: LANE_EMPTY.delivered,
 }
 
 /** The line under Posted: where the cards that left the board went. */
@@ -558,6 +581,7 @@ export const EDITOR_LANE_LABELS: Partial<Record<BoardColumnKey, string>> = {
   ready_to_post: 'For handoff',
   booked: 'Done',
   posted: 'Done',
+  delivered: 'Done',
 }
 
 /**
@@ -602,14 +626,14 @@ export function laneOf(page: BoardPage, column: BoardColumnKey): PageLaneKey {
 
 /** Group cards by lane, every lane present (empty arrays included), in
  *  board order. Input order within a lane is preserved. */
-export function groupByLane<T extends { status: ItemStatus }>(
+export function groupByLane<T extends { status: ItemStatus; deliver_only?: unknown; clients?: { posts_own_content?: unknown } | null }>(
   lanes: readonly PageLane[], cards: readonly T[],
 ): { lane: PageLane; cards: T[] }[] {
   const buckets = new Map<PageLaneKey, T[]>(lanes.map(l => [l.key, []]))
   const laneByColumn = new Map<BoardColumnKey, PageLaneKey>(
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
-    const key = laneByColumn.get(columnOf(card.status))
+    const key = laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))
@@ -634,7 +658,7 @@ export function dropOnLane(card: BoardViewCard, lane: PageLane, viewer: BoardVie
     if (d.ok) return { ok: true, action: d.action, column, lane: lane.key }
     if (reason === null) reason = d.reason
   }
-  if (lane.columns.includes(columnOf(card.status))) return { ok: false, reason: `Already in ${lane.label}` }
+  if (lane.columns.includes(cardColumn(card))) return { ok: false, reason: `Already in ${lane.label}` }
   return { ok: false, reason: reason ?? `Already in ${lane.label}` }
 }
 
@@ -753,7 +777,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   const ctx: ShowContext = {
     viewer, today, postingToday: input.postingToday, connectedClientIds: input.connectedClientIds,
   }
-  const inColumn = (key: BoardColumnKey) => count(cards, c => columnOf(c.status) === key)
+  const inColumn = (key: BoardColumnKey) => count(cards, c => cardColumn(c) === key)
 
   if (viewer.role === 'editor') {
     const mine = cards.filter(c => matchesShow(c, 'mine', ctx))
@@ -776,6 +800,31 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     ]
   }
 
+  // A GENERAL USER makes and posts; they are not the client's manager, so
+  // the manager's "Needs your decision" and "Quality check" tiles pointed
+  // them at buttons they do not have (the tutorial walk of 11 Sep 2026).
+  // Their tiles are their own cards, plus the queue any of them may post.
+  if (viewer.role === 'general') {
+    const mine = cards.filter(c => matchesShow(c, 'mine', ctx))
+    return [
+      {
+        key: 'assigned', title: 'Your cards', tone: 'green',
+        href: boardHref('editor'), actionLabel: 'Editor',
+        stats: [{ value: count(mine, c => !isOut(c.status)), label: 'to work on' }],
+      },
+      {
+        key: 'due', title: 'Due now', tone: 'amber',
+        href: boardHref('editor', { show: 'due' }), actionLabel: 'See them',
+        stats: [{ value: count(mine, c => matchesShow(c, 'due', ctx)), label: 'due today or overdue' }],
+      },
+      {
+        key: 'ready', title: 'Ready to post', tone: 'blue',
+        href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Post approval',
+        stats: [{ value: inColumn('ready_to_post'), label: 'approved, not yet booked' }],
+      },
+    ]
+  }
+
   if (viewer.role === 'scheduler') {
     return [
       {
@@ -784,7 +833,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
         // a post somebody was asked to book in is theirs to book in; with
         // nobody asked, the column is still the whole queue
         stats: [{
-          value: count(cards, c => columnOf(c.status) === 'ready_to_post' && waitingOnViewer(c, viewer.id)),
+          value: count(cards, c => cardColumn(c) === 'ready_to_post' && waitingOnViewer(c, viewer.id)),
           label: 'to book in',
         }],
       },
@@ -858,4 +907,14 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
 
   // account manager
   return [clients, decide, quality, withClients]
+}
+
+/**
+ * "Ready for checking" needs something to check. The server refuses the
+ * move on an empty card ("Attach the work first"); the button says so
+ * before the press instead of after (the tutorial walk of 11 Sep 2026).
+ */
+export const UPLOAD_FIRST = 'Upload the final first'
+export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url'>): boolean {
+  return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim()
 }

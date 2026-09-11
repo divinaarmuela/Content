@@ -30,7 +30,7 @@ import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
 import LocationSearch from './LocationSearch'
 import PlanReviewCard from './PlanReviewCard'
-import { BriefParts, GoPanel, TeamPanel, type CrewRow, type TeamRow } from './ShootSop'
+import { BriefParts, GoPanel, StageStrip, TeamPanel, type CrewRow, type TeamRow } from './ShootSop'
 import type { ShootStage, SopShoot } from '../../../../lib/shoot-sop-core'
 import {
   availableBatchTransitions, sanitiseCanvasCards,
@@ -39,7 +39,7 @@ import {
 import { SHOWN_SHOOT_LABEL, shownShootState } from '../../../../lib/shoot-lifecycle-core'
 import { createCoalescer } from '../../../../lib/coalesce-core'
 import { TYPE_LABELS, type ContentType } from '../../../../lib/agreement-core'
-import { newLineId, planCardId, planLines } from '../../../../lib/deliverable-group-core'
+import { newLineId, planLines, plannedCount, shootCardId } from '../../../../lib/deliverable-group-core'
 
 type Batch = {
   id: string; client_id: string; title: string; status: BatchStatus
@@ -148,7 +148,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const canvasRefs = useMemo(() => batch?.reference_media ?? [], [batch?.reference_media])
 
   const isManager = ['account_manager', 'super_admin'].includes(role)
-  const canEdit = ['editor', 'account_manager', 'super_admin'].includes(role)
+  // the same people the PATCH route lets in (editor and up — the general
+  // role included): a general user could create a shoot and then found
+  // every field on it disabled (the render audit of 11 Sep 2026)
+  const canEdit = ['editor', 'general', 'account_manager', 'super_admin'].includes(role)
 
   /**
    * Field-level save: send ONLY what changed.
@@ -436,7 +439,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           <p className="text-body-15 text-foreground">
             Nothing has been written up for this shoot yet. A shoot plan is what the
             client signs off before we film — writing one puts this shoot through
-            review and books the date.
+            review. Go, on the right, books the date.
           </p>
           <Button size="sm" className="ml-auto" disabled={busy !== null}
             onClick={async () => {
@@ -484,6 +487,11 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       {/* THE review lifecycle — the "what's the next move" card, moved here so
           the plan lives on ONE page: write it above, send it for review here,
           the client decides on their portal, then Book the shoot. */}
+      {/* the flow, on the page: six stages and the one next move */}
+      {today && (
+        <StageStrip batch={batch} today={today} role={role as never} itemCount={deliverableItems.length} />
+      )}
+
       {briefTask && (
         <PlanReviewCard
           briefItemId={briefTask.id}
@@ -627,19 +635,20 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
             </CardContent>
           </Card>
 
-          {/* Plan lines are the OLD way of listing a shoot's work; a new
-              shoot has none, and its work is added as ordinary cards pointed
-              at the shoot (New card → Which shoot?). The section only shows on
-              a shoot that still carries lines, so those keep their cards. */}
-          {planned.length > 0 && (
+          {/* WHAT IS COMING OUT — a plain list. ONE SHOOT, ONE CARD (the
+              owner, 11 Sep 2026): the list is what the editor's single card
+              says needs doing, and the count of finals expected is read off
+              it ("5 reels" is five). Always drawn for anyone who can edit:
+              the checklist's Deliverables row sends people here. */}
+          {(planned.length > 0 || canEdit) && (
           <Card>
             <CardContent className="flex flex-col gap-2 p-4">
               <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">What is coming out of this shoot</p>
-              {/* one plain line per thing; each becomes its own card when the
-                  shoot is booked. Old plans stored as "2 reels" read back as
-                  "Reel 1", "Reel 2" — the first edit saves them that way. */}
+              {planned.length === 0 && (
+                <p className="text-[13px] text-muted-foreground">Nothing listed yet. Add a line for each thing coming out of the shoot.</p>
+              )}
+              <p className="text-[13px] text-muted-foreground">List what is coming out: 5 reels, 1 long-form, 1 photo set. The editor gets one card for the whole shoot{plannedCount(batch.planned_deliverables) > 0 ? `, holding ${plannedCount(batch.planned_deliverables)} final${plannedCount(batch.planned_deliverables) === 1 ? '' : 's'}` : ''}.</p>
               {planned.map((line, i) => {
-                const card = itemById.get(planCardId(batch.id, line.id))
                 return (
                   <div key={line.id} className="flex items-center gap-1.5">
                     <span className="w-5 shrink-0 text-right font-mono text-[12px] text-muted-foreground">{i + 1}</span>
@@ -650,11 +659,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                         if (title && title !== line.title) void patch('planned_deliverables',
                           planned.map((x, j) => j === i ? { ...x, title } : x), true)
                       }} />
-                    {card && (
-                      <Link href={`/dashboard/production/${card.id}`} className="shrink-0 text-secondary-13 text-accent-blue-deep hover:underline">
-                        Open card
-                      </Link>
-                    )}
                     {canEdit && (
                       <button type="button" aria-label="Remove this line"
                         className="flex h-11 w-11 shrink-0 items-center justify-center"
@@ -677,11 +681,20 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
                   </Button>
                 </div>
               )}
-              <p className="text-[12px] text-muted-foreground">
-                {batch.status === 'brief'
-                  ? 'Each line becomes its own card on the board when the shoot is booked.'
-                  : 'Each line is its own card on the board. A line added now gets a card too.'}
-              </p>
+              {(() => {
+                const one = itemById.get(shootCardId(batch.id)) ?? deliverableItems[0]
+                return one ? (
+                  <Link href={`/dashboard/production/${one.id}`} className="w-fit text-secondary-13 font-semibold text-accent-blue-deep underline-offset-4 hover:underline">
+                    Open the editor’s card
+                  </Link>
+                ) : (
+                  <p className="text-[12px] text-muted-foreground">
+                    {batch.status === 'brief'
+                      ? 'The editor’s card is made when the shoot is booked or confirmed.'
+                      : 'The editor’s card is made as soon as something is listed here.'}
+                  </p>
+                )
+              })()}
             </CardContent>
           </Card>
           )}
@@ -691,7 +704,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Production</p>
               {batch.status === 'brief' ? (
                 <p className="text-body-15 text-muted-foreground">
-                  Book the shoot, and you can start creating items for it.
+                  Pressing Go books the shoot and makes the editor’s one card, briefed with “What is coming out of this shoot”.
                 </p>
               ) : (
                 <>

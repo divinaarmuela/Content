@@ -1,3 +1,4 @@
+import { selfPostingClientIds } from '@/app/lib/deliver-only'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -89,6 +90,7 @@ export async function GET(req: Request) {
       scopeContextOf({
         viewer,
         batches,
+        clients: [...await selfPostingClientIds()].map(id => ({ id, posts_own_content: true })),
         taggedItemIds: itemTags,
         taggedBatchIds: batchTags,
         createdItemIds: createdIds,
@@ -415,6 +417,8 @@ export async function POST(req: Request) {
         client_approval_required: typeof it.client_approval_required === 'boolean'
           ? it.client_approval_required
           : !isInternal,
+        // deliver only: the card's own word, or null to follow the client
+        deliver_only: typeof it.deliver_only === 'boolean' ? it.deliver_only : null,
         // both were Postgres column defaults; an item that reads back without
         // a status is on no board at all
         status: 'draft_uploaded',

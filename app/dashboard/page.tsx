@@ -364,7 +364,7 @@ function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
 
 /** The board at a glance — the same six columns, with the same words. */
 const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
-  draft: 'muted', internal_check: 'amber', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green',
+  draft: 'muted', internal_check: 'amber', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
 }
 
 /** Per-status counts folded into the five columns — `columnOf` is the one
@@ -856,7 +856,7 @@ export default function OverviewPage() {
               thing a manager should do first now says so, and says how many. */}
           {!loading && role !== 'editor' && role !== 'general' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
             <Button size="sm" className="min-h-11 w-fit" asChild>
-              <Link href="/dashboard/editor">
+              <Link href="/dashboard/scheduler?show=decide">
                 Check {data!.manager!.needs_review.length} card{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>

@@ -37,7 +37,7 @@ import {
 
 /** A board row: the item, its joins and the items API's three annotations. */
 export type LiveItem = ContentItem & {
-  clients: { name: string; timezone?: string | null } | null
+  clients: { name: string; timezone?: string | null; posts_own_content?: boolean | null } | null
   batches: { title: string; status?: string; planned_deliverables?: unknown[] } | null
   work_kinds: { name: string; slug: string; color: string; uses_media?: boolean } | null
   my_open_task?: boolean
@@ -206,6 +206,7 @@ export function useWorkRows(
       scopeContextOf({
         viewer,
         batches: t.batches.rows,
+        clients: t.clients.rows,
         taggedItemIds: tagAssignments.items,
         taggedBatchIds: tagAssignments.batches,
         activity: t.activity.rows,
@@ -221,7 +222,9 @@ export function useWorkRows(
       const credit = credits.get(r.id)
       const row: LiveItem = {
         ...(r as unknown as ContentItem),
-        clients: client ? { name: client.name, timezone: client.timezone ?? null } : null,
+        clients: client
+          ? { name: client.name, timezone: client.timezone ?? null, posts_own_content: (client as { posts_own_content?: boolean | null }).posts_own_content ?? null }
+          : null,
         batches: batch
           ? {
               title: batch.title,

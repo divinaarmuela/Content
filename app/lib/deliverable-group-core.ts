@@ -261,3 +261,89 @@ export function planCards(shoot: { id: string; client_id: string }, raw: unknown
     content_type: contentTypeFromTitle(line.title),
   }))
 }
+
+// ───────────────────────── one shoot, one card ─────────────────────────
+// The owner, 11 Sep 2026: "5 reels → 5 cards" is clutter, and asking the
+// account manager to choose "one line or five" is "too much too". So a
+// shoot makes ONE card for the editor: titled with the shoot, briefed with
+// the deliverables list and the editor priorities, holding every final as a
+// file. The plan's lines stay a plain list of what is coming out; the count
+// of finals expected is read off them ("5 reels" is five).
+
+/** The line id the shoot's own card is claimed under — one per shoot. */
+export const SHOOT_CARD_LINE = 'shoot-card'
+
+/** The fixed id of the shoot's one card, so a repeat (go twice, name the
+ *  editor twice, the morning sweep) can never make a second one. */
+export function shootCardId(batchId: string): string {
+  return planCardId(batchId, SHOOT_CARD_LINE)
+}
+
+/** How many finals one line promises: a leading number counts ("5 reels" is
+ *  five, "2 x carousel" is two), anything else is one ("Reel 1", "Photo set"). */
+export function lineQuantity(title: string): number {
+  const m = String(title ?? '').trim().match(/^(\d{1,3})\s*(?:x|×)?\s+\S/i)
+  const n = m ? Number(m[1]) : 1
+  return Number.isFinite(n) && n > 0 ? Math.min(n, PLAN_MAX_LINES) : 1
+}
+
+/** The finals the whole plan promises — the "of 6". Legacy {type, qty} rows
+ *  count their qty; a titled line its leading number. Empty plan, zero. */
+export function plannedCount(raw: unknown): number {
+  if (!Array.isArray(raw)) return 0
+  let n = 0
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const row = r as Record<string, unknown>
+    if (typeof row.title === 'string') { if (row.title.trim()) n += lineQuantity(row.title) }
+    else n += legacyQty(row)
+  }
+  return n
+}
+
+/** A line that moves is the editor's; stills and carousels the designer's.
+ *  Any moving line makes the whole card a video edit. */
+export function shootCardContentType(lines: readonly PlanLine[]): string {
+  const types = lines.map(l => contentTypeFromTitle(l.title))
+  if (types.some(t => t === 'reel' || t === 'video' || t === 'story')) return 'video'
+  if (types.some(t => t === 'carousel')) return 'carousel'
+  if (types.some(t => t === 'static')) return 'static'
+  return 'other'
+}
+
+/** What the card says needs doing: the list, then the priorities. */
+export function deliverablesBrief(lines: readonly PlanLine[], priorities?: string | null): string {
+  const list = lines.map(l => l.title.trim()).filter(Boolean)
+  const parts: string[] = []
+  if (list.length) parts.push(`Coming out of this shoot:\n${list.map(t => `\u2022 ${t}`).join('\n')}`)
+  const p = String(priorities ?? '').trim()
+  if (p) parts.push(`Priorities: ${p}`)
+  return parts.join('\n\n')
+}
+
+/** The one card a shoot makes, or null when the plan lists nothing yet. */
+export type ShootCard = PlanCard & { planned: number; lines: string[] }
+export function shootCard(
+  shoot: { id: string; client_id: string; title?: string | null },
+  raw: unknown,
+): ShootCard | null {
+  const lines = planLines(raw)
+  if (lines.length === 0) return null
+  return {
+    id: shootCardId(shoot.id),
+    line_id: SHOOT_CARD_LINE,
+    client_id: shoot.client_id,
+    batch_id: shoot.id,
+    title: String(shoot.title ?? '').trim() || lines[0].title,
+    content_type: shootCardContentType(lines),
+    planned: plannedCount(raw),
+    lines: lines.map(l => l.title),
+  }
+}
+
+/** "3 of 6 finals in" on the card face; null when nothing was planned. */
+export function finalsInWords(filesIn: number, planned: number): string | null {
+  if (!(planned > 0)) return null
+  const n = Math.max(0, Math.floor(filesIn))
+  return `${Math.min(n, planned)} of ${planned} final${planned === 1 ? '' : 's'} in`
+}

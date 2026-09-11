@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   plannedFormats, plannedTarget,
-  contentTypeFromTitle, isLegacyPlan, moveLine, planCardId, planCards, planLines, planSummary,
+  contentTypeFromTitle, deliverablesBrief, finalsInWords, isLegacyPlan, lineQuantity, moveLine, planCardId, planCards, planLines, plannedCount, planSummary, shootCard, shootCardId,
 } from '../app/lib/deliverable-group-core'
 
 // The quota card is gone: a card is one deliverable, and every piece is its
@@ -164,5 +164,48 @@ describe('contentTypeFromTitle — what the line says it is', () => {
     expect(contentTypeFromTitle('BTS clip')).toBe('video')
     expect(contentTypeFromTitle('Chef portrait')).toBe('static')
     expect(contentTypeFromTitle('Something else')).toBe('other')
+  })
+})
+
+/* ── one shoot, one card (the owner, 11 Sep 2026: five cards "is gonna be cluttered") ── */
+
+describe('shootCard — the one card a shoot makes', () => {
+  const shoot = { id: '4d2f1c1e-9b4a-4f8c-8a1e-2f3b4c5d6e7f', client_id: 'client-1', title: 'Spring launch' }
+  it('reads the finals a line promises: a leading number counts, anything else is one', () => {
+    expect(lineQuantity('5 reels')).toBe(5)
+    expect(lineQuantity('2 x carousel')).toBe(2)
+    expect(lineQuantity('Reel 1')).toBe(1)
+    expect(lineQuantity('Photo set')).toBe(1)
+    expect(lineQuantity('1 long-form')).toBe(1)
+    expect(lineQuantity('')).toBe(1)
+  })
+  it('sums the plan — titled lines and old {type, qty} rows alike; empty is zero', () => {
+    expect(plannedCount([{ id: 'a', title: '5 reels' }, { id: 'b', title: '1 long-form' }, { id: 'c', title: 'Photo set' }])).toBe(7)
+    expect(plannedCount([{ type: 'reel', qty: 2 }, { type: 'carousel', qty: 1 }])).toBe(3)
+    expect(plannedCount([])).toBe(0)
+    expect(plannedCount(null)).toBe(0)
+  })
+  it('is one card, titled with the shoot, with a fixed id, holding every line', () => {
+    const card = shootCard(shoot, [{ id: 'a', title: '5 reels' }, { id: 'b', title: 'Photo set' }])
+    expect(card).toMatchObject({ id: shootCardId(shoot.id), title: 'Spring launch', client_id: 'client-1', batch_id: shoot.id, planned: 6, lines: ['5 reels', 'Photo set'] })
+    expect(card!.content_type).toBe('video')
+    expect(shootCard(shoot, [{ id: 'a', title: 'Menu carousel' }])!.content_type).toBe('carousel')
+    expect(shootCard(shoot, [{ id: 'a', title: 'Chef portrait' }])!.content_type).toBe('static')
+    expect(shootCard(shoot, [])).toBeNull()
+    expect(shootCardId(shoot.id)).toBe(shootCardId(shoot.id))
+    expect(shootCardId('another')).not.toBe(shootCardId(shoot.id))
+    expect(shootCardId(shoot.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+  it('the brief is the list, then the priorities', () => {
+    expect(deliverablesBrief([{ id: 'a', title: '5 reels' }, { id: 'b', title: 'Photo set' }], 'Reel 1 first'))
+      .toBe('Coming out of this shoot:\n\u2022 5 reels\n\u2022 Photo set\n\nPriorities: Reel 1 first')
+    expect(deliverablesBrief([{ id: 'a', title: '5 reels' }], null)).toBe('Coming out of this shoot:\n\u2022 5 reels')
+    expect(deliverablesBrief([], '')).toBe('')
+  })
+  it('says how many finals are in against how many were planned', () => {
+    expect(finalsInWords(3, 6)).toBe('3 of 6 finals in')
+    expect(finalsInWords(9, 6)).toBe('6 of 6 finals in')
+    expect(finalsInWords(0, 1)).toBe('0 of 1 final in')
+    expect(finalsInWords(2, 0)).toBeNull()
   })
 })

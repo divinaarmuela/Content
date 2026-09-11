@@ -253,6 +253,8 @@ export interface Batch {
   month: number | null
   year: number | null
   owner_id: string | null
+  footage_due_nudged_at: string | null
+  footage_url: string | null
   objective: string | null
   script: string | null
   call_time: string | null
@@ -482,6 +484,7 @@ export interface Client {
   brand_profile_updated_at: string | null
   brand_profile_updated_by: string | null
   timezone: string | null
+  posts_own_content: boolean | null
   website: string | null
   source: string | null
   default_scheduler_ids: unknown | null
@@ -540,6 +543,7 @@ export interface ContentAsset {
 
 export interface ContentItem {
   group_id: string | null
+  deliver_only: boolean | null
   drive_folder_id: string | null
   drive_url: string | null
   delivered_at: string | null
@@ -1247,7 +1251,7 @@ export const TABLE_COLUMNS = {
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
   batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
   board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
   boards: ['id', 'client_id', 'parent_board_id', 'item_id', 'name', 'icon', 'colour', 'created_by', 'created_at', 'updated_at'],
@@ -1264,10 +1268,10 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
-  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'drive_folder_id', 'drive_url', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
@@ -1327,7 +1331,7 @@ export const NULLABLE_COLUMNS = {
   assistant_chats: [],
   assistant_prefs: [],
   batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['author_id', 'resolved_at'],
   board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],
   boards: ['parent_board_id', 'item_id', 'created_by'],
@@ -1344,10 +1348,10 @@ export const NULLABLE_COLUMNS = {
   client_contacts: [],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
-  content_items: ['group_id', 'drive_folder_id', 'drive_url', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'drive_folder_id', 'drive_url', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],

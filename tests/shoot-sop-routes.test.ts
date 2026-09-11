@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 import { roleSatisfies, type Role } from '../app/lib/identity-core'
-import { planCardId } from '../app/lib/deliverable-group-core'
+import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
 
 /**
  * THE SHOOT BRIEF SOP, END TO END THROUGH THE ROUTES.
@@ -56,6 +56,7 @@ const detail = await import('../app/api/production/batches/[id]/route')
 const stage = await import('../app/api/production/batches/[id]/stage/route')
 const ack = await import('../app/api/production/batches/[id]/acknowledge/route')
 const { runBriefLateNudge } = await import('../app/lib/shoot-sop-notify')
+const { runFootageDueSweep } = await import('../app/lib/shoot-handover')
 
 const dayShift = (n: number) => new Date(Date.now() + n * 86_400_000)
   .toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
@@ -176,10 +177,20 @@ describe('go', () => {
     const go = await move('confirmed')
     expect(go.status).toBe(200)
     expect(batch().go_by).toBe(AM)
-    // one press: the shoot is booked by go, its plan's lines are cards now
+    // one press: the shoot is booked by go, its plan's lines are cards now —
+    // AND THEY ARE THE EDITOR'S ALREADY (11 Sep 2026): owner, deadline and
+    // priorities from the plan, the editor told the footage follows the shoot
     expect(batch().status).toBe('locked')
     expect(batch().locked_by).toBe(AM)
-    expect(cards().map(c => c.title).sort()).toEqual(['Hero reel', 'Photo set'])
+    // ONE SHOOT, ONE CARD (11 Sep 2026): the shoot's card, briefed with the list
+    expect(cards().map(c => [c.title, c.owner_id, c.due_date, c.brief])).toEqual([
+      ['Golf Day', ED, dayShift(14), 'Coming out of this shoot:\n\u2022 Hero reel\n\u2022 Photo set\n\nPriorities: Hero reel first'],
+    ])
+    expect(go.body.handed).toEqual({ total: 1 })
+    const onIt = emails.filter(e => e.eventType === 'shoot_editor_on')
+    expect(onIt).toHaveLength(1)
+    expect(onIt[0].recipientEmail).toBe('sam@zz.invalid')
+    expect(String(onIt[0].subject)).toMatch(/You\u2019re on Golf Day — your card is ready, shoot on/)
     // the reminder follows — and it IS the reminder: call time and location
     // to everyone on the shoot, not a stamp
     emails.length = 0
@@ -190,10 +201,15 @@ describe('go', () => {
     expect(String(reminders[0].bodyHtml)).toMatch(/Call time:<\/strong> 7:30 am/)
     expect(String(reminders[0].bodyHtml)).toMatch(/Location:<\/strong> Royal Melbourne/)
   })
-  it('the ticks and the people are the AM’s to set', async () => {
+  it('the ticks are the AM’s to set; the people are the AM’s or a general user’s', async () => {
     as(ED, 'editor')
     expect((await edit({ aligned: true })).status).toBe(403)
     expect((await edit({ crew_ids: [OUT] })).status).toBe(403)
+    // a general user raises shoots for any client and must be able to staff them
+    as(VG, 'general')
+    expect((await edit({ aligned: true })).status).toBe(403)
+    expect((await edit({ crew_ids: [OUT] })).status).toBe(200)
+    expect((await edit({ editor_id: ED })).status).toBe(200)
     as(AM, 'account_manager')
     expect((await edit({ editor_id: VG })).body.error).toMatch(/one of the editors/)
     expect((await edit({ crew_ids: [VG, OUT, 'nobody'] })).status).toBe(200)
@@ -213,24 +229,24 @@ describe('the handover: Production → Editor', () => {
     as(VG, 'general', 'Vik Camera')
     const r = await move('footage_handed')
     expect(r.status).toBe(200)
-    expect(r.body.handed).toEqual({ total: 2 })
+    // ONE SHOOT, ONE CARD (11 Sep 2026): titled with the shoot, briefed with the list
+    expect(r.body.handed).toEqual({ total: 1 })
     const made = cards()
-    expect(made).toHaveLength(2)
-    expect(made.map(c => [c.title, c.owner_id, c.due_date, c.brief, c.status, c.batch_id]).sort()).toEqual([
-      ['Hero reel', ED, dayShift(14), 'Hero reel first', 'draft_uploaded', 'b-1'],
-      ['Photo set', ED, dayShift(14), 'Hero reel first', 'draft_uploaded', 'b-1'],
+    expect(made).toHaveLength(1)
+    expect(made.map(c => [c.title, c.owner_id, c.due_date, c.brief, c.status, c.batch_id])).toEqual([
+      ['Golf Day', ED, dayShift(14), 'Coming out of this shoot:\n\u2022 Hero reel\n\u2022 Photo set\n\nPriorities: Hero reel first', 'draft_uploaded', 'b-1'],
     ])
-    expect(made.map(c => c.id).sort()).toEqual([planCardId('b-1', 'l1'), planCardId('b-1', 'l2')].sort())
+    expect(made.map(c => c.id)).toEqual([shootCardId('b-1')])
     // the editor is told, once, with the count and the date
     const told = emails.filter(e => e.eventType === 'shoot_footage_in')
     expect(told).toHaveLength(1)
     expect(told[0].recipientEmail).toBe('sam@zz.invalid')
-    expect(String(told[0].subject)).toMatch(/Footage is in: Golf Day — 2 cards yours, due/)
+    expect(String(told[0].subject)).toMatch(/Footage is in: Golf Day — your card is ready, due/)
 
     // dragging again: already there, and nothing is made twice
     const again = await move('footage_handed')
     expect(again.status).toBe(422)
-    expect(cards()).toHaveLength(2)
+    expect(cards()).toHaveLength(1)
   })
   it('a card that already exists keeps its owner; only its empty fields are filled', async () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1) })
@@ -245,8 +261,9 @@ describe('the handover: Production → Editor', () => {
     expect(hero.owner_id).toBe(OUT)
     expect(hero.due_date).toBe(dayShift(14))
     expect(hero.brief).toBe('Hero reel first')
-    // one card made for the other line, so the editor holds one
-    expect(r.body.handed).toEqual({ total: 1 })
+    // a shoot that already has a card gets no second one; that card is somebody else's
+    expect(cards()).toHaveLength(1)
+    expect(r.body.handed).toEqual({ total: 0 })
   })
 })
 
@@ -315,5 +332,111 @@ describe('a plan shared late', () => {
     expect(batch().late_share_nudged_at).toBeTruthy()
     emails.length = 0
     expect(await runBriefLateNudge()).toEqual({ late: 0, told: 0 })
+  })
+})
+
+/* ── the handover needs no press (11 Sep 2026) ── */
+
+describe('the handover without a press', () => {
+  it('naming the editor after go hands them the cards at once, and tells them', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', editor_id: null })
+    const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
+    ;(t.content_items ??= {})[planCardId('b-1', 'l1')] = {
+      id: planCardId('b-1', 'l1'), client_id: 'c-1', batch_id: 'b-1', title: 'Hero reel', status: 'draft_uploaded',
+      owner_id: null, due_date: null, brief: null, created_at: 'x', updated_at: 'x',
+    }
+    expect((await edit({ editor_id: ED })).status).toBe(200)
+    // the card that exists is filled; no second card is made
+    expect(cards().map(c => [c.title, c.owner_id, c.due_date])).toEqual([
+      ['Hero reel', ED, dayShift(14)],
+    ])
+    const onIt = emails.filter(e => e.eventType === 'shoot_editor_on')
+    expect(onIt.map(e => e.recipientEmail)).toEqual(['sam@zz.invalid'])
+    // one key per shoot and editor, so the mailer can never tell them twice
+    expect(String(onIt[0].entityId)).toBe(`b-1#editor#${ED}`)
+    // naming the same editor again changes nothing
+    expect((await edit({ editor_id: ED })).status).toBe(200)
+    expect(cards()).toHaveLength(1)
+  })
+  it('the morning after the shoot, the footage is handed over by itself and the editor told to start', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1) })
+    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0 })
+    expect(batch().footage_handed_at).toBeTruthy()
+    expect(batch().footage_due_nudged_at).toBeTruthy()
+    expect(cards().map(c => [c.title, c.owner_id])).toEqual([['Golf Day', ED]])
+    const told = emails.filter(e => e.eventType === 'shoot_footage_in')
+    expect(told).toHaveLength(1)
+    expect(told[0].recipientEmail).toBe('sam@zz.invalid')
+    expect(String(told[0].subject)).toMatch(/^Footage should be in: Golf Day — start the edit, due /)
+    // once: a second morning does nothing
+    emails.length = 0
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0 })
+    expect(emails).toHaveLength(0)
+    // a person who already pressed "Footage is in" is left alone by the sweep
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_handed_at: 'x' })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0 })
+    // and on the day itself, nothing yet
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(0) })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0 })
+  })
+  it('a shoot shot with no editor named asks its account manager for one, once', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), editor_id: null })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 1 })
+    expect(emails.map(e => e.recipientEmail)).toEqual(['am@zz.invalid'])
+    expect(String(emails[0].subject)).toMatch(/^Name the editor: Golf Day was shot/)
+    expect(batch().footage_handed_at).toBeFalsy()
+    emails.length = 0
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0 })
+  })
+})
+
+/* ── where the footage lives (11 Sep 2026: "how do they get the dropbox link") ── */
+
+describe('the footage folder', () => {
+  const SC = 'b2b2b2b2-0000-4000-8000-000000000001'
+  const withCrewScheduler = (over: Record<string, unknown> = {}) => {
+    fake.restore(); fake = seed({ crew_ids: [VG, SC], ...over })
+    const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
+    t.team_users[SC] = { id: SC, name: 'Cath Crew', email: 'cath@zz.invalid', role: 'scheduler', active_status: true }
+  }
+  it('is checked as a link, and pasted by whoever has the footage — a crew member of any role, but only that field', async () => {
+    withCrewScheduler()
+    as(AM, 'account_manager')
+    expect((await edit({ footage_url: 'not a link' })).status).toBe(422)
+    expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })).status).toBe(200)
+    expect(batch().footage_url).toBe('https://www.dropbox.com/scl/fo/golf-day')
+    as(SC, 'scheduler', 'Cath Crew')
+    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc' })).status).toBe(200)
+    expect(batch().footage_url).toBe('https://drive.google.com/drive/folders/abc')
+    expect((await edit({ title: 'Nope' })).status).toBe(403)
+    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc', title: 'Nope' })).status).toBe(403)
+    as(OUT, 'editor')
+    expect((await edit({ footage_url: 'https://drive.google.com/x' })).status).toBe(403)
+  })
+  it('reaches every card as Files to work from when the footage is handed over, and the editor\u2019s email carries it', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
+    const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
+    ;(t.content_items ??= {})[planCardId('b-1', 'l1')] = {
+      id: planCardId('b-1', 'l1'), client_id: 'c-1', batch_id: 'b-1', title: 'Hero reel', status: 'draft_uploaded',
+      owner_id: ED, due_date: null, brief: null, raw_assets_url: 'https://drive.google.com/chosen', created_at: 'x', updated_at: 'x',
+    }
+    expect((await move('footage_handed')).status).toBe(200)
+    // the card somebody already pointed at a folder keeps it; no second card is made
+    const byTitle = Object.fromEntries(cards().map(c => [c.title, c.raw_assets_url]))
+    expect(byTitle).toEqual({ 'Hero reel': 'https://drive.google.com/chosen' })
+    const told = emails.filter(e => e.eventType === 'shoot_footage_in')
+    expect(String(told[0].bodyHtml)).toMatch(/Footage folder:<\/strong> <a href="https:\/\/www\.dropbox\.com\/scl\/fo\/golf-day"/)
+  })
+  it('the morning sweep fills it too, and a folder pasted after the handover reaches the cards then', async () => {
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
+    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0 })
+    expect(cards().every(c => c.raw_assets_url === 'https://www.dropbox.com/scl/fo/golf-day')).toBe(true)
+
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1) })
+    expect((await move('footage_handed')).status).toBe(200)
+    expect(cards().every(c => !c.raw_assets_url)).toBe(true)
+    as(VG, 'general')
+    expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/late' })).status).toBe(200)
+    expect(cards().every(c => c.raw_assets_url === 'https://www.dropbox.com/scl/fo/late')).toBe(true)
   })
 })

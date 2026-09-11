@@ -99,9 +99,12 @@ describe('Shoot page — a shoot with no plan lines', () => {
     'utf8',
   )
 
-  it('shows no plan section at all — no heading over an empty list', () => {
-    // the section is gated on having lines, and the old empty-state line is gone
-    expect(PAGE).toMatch(/\{planned\.length > 0 && \(\s*<Card>/)
-    expect(PAGE).not.toMatch(/Nothing listed yet/)
+  it('shows the plan section to anyone who can edit, lines or none — the checklist points at it', () => {
+    // the owner, 11 Sep 2026: "where in the shoot page?" — a new shoot had
+    // nowhere to type its deliverables. Drawn for editors of the plan, with
+    // an empty-state line and the one-card rule under it.
+    expect(PAGE).toMatch(/\{\(planned\.length > 0 \|\| canEdit\) && \(/)
+    expect(PAGE).toMatch(/Nothing listed yet\. Add a line for each thing coming out of the shoot/)
+    expect(PAGE).toMatch(/The editor gets one card for the whole shoot/)
   })
 })

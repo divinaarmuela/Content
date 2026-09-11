@@ -14,15 +14,15 @@ import type { Role } from '../app/lib/identity-core'
  * disagree with it, and that every surface reading them gets the same answer.
  */
 
-const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted']
+const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted', 'delivered']
 
-describe('the seven columns', () => {
-  it('are exactly seven, in board order, with plain labels and one-line meanings', () => {
+describe('the eight columns', () => {
+  it('are exactly eight, in board order, with plain labels and one-line meanings', () => {
     expect(BOARD_COLUMNS.map(c => c.key)).toEqual(KEYS)
     // "Booked in", never "Scheduled" — the owner's word for a post the
     // channel holds (11 Sep 2026: a booked post sat under Posted and read as live)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted',
+      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
     ])
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Scheduled')
     for (const c of BOARD_COLUMNS) {
@@ -64,13 +64,13 @@ describe('the seven columns', () => {
 })
 
 describe('columnsForRole — the same board, a different lens', () => {
-  it('an editor sees all seven — their work, end to end', () => {
+  it('an editor sees all eight — their work, end to end', () => {
     expect(columnsForRole('editor')).toEqual(KEYS)
   })
-  it('a scheduler sees all seven — what is coming, too', () => {
+  it('a scheduler sees all eight — what is coming, too', () => {
     expect(columnsForRole('scheduler')).toEqual(KEYS)
   })
-  it('account managers and super admins see all seven', () => {
+  it('account managers and super admins see all eight', () => {
     expect(columnsForRole('account_manager')).toEqual(KEYS)
     expect(columnsForRole('super_admin')).toEqual(KEYS)
   })

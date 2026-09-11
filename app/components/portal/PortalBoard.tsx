@@ -96,7 +96,10 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
   const canComment = card.actions.comment && !!card.comment_target
   /** every asset, at full size, each with its own comment — the one image,
    *  cropped, was "terrible with these assets" */
-  const assets = card.kind === 'work' && canComment ? card.slides : []
+  /** DELIVER ONLY (11 Sep 2026): the client posts this themselves, so once
+   *  it is approved the finals are shown at full size with a Download each */
+  const finals = card.kind === 'work' && card.deliver_only && card.column === 'approved'
+  const assets = card.kind === 'work' && (canComment || finals) ? card.slides : []
   /** which asset the comment box is about — null is the post as a whole */
   const [onSlide, setOnSlide] = useState<number | null>(null)
   const perSlide = commentsBySlide(comments)
@@ -340,7 +343,13 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                     <span className={cn('text-[12px] font-semibold uppercase tracking-[0.02em]', muted)}>
                       {s.type === 'video' ? 'Video' : 'Photo'} {i + 1} of {assets.length}
                     </span>
-                    {onSlide !== i && (
+                    {finals && (
+                      <a href={s.url} download={s.name} target="_blank" rel="noreferrer noopener"
+                        className="inline-flex min-h-11 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
+                        Download
+                      </a>
+                    )}
+                    {onSlide !== i && canComment && (
                       <button type="button" onClick={() => { setOnSlide(i); setDraft('') }}
                         className="inline-flex min-h-9 items-center gap-1 text-[13px] font-semibold underline-offset-4 hover:underline">
                         <MessageCircle className="h-3.5 w-3.5" /> {here.length === 0 ? 'Comment on this one' : 'Add a comment'}

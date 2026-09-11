@@ -71,13 +71,15 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, drafts = 0, onDrafts, loading, role, postWithoutApproval, onNew, onPick, onApprove, onRemove,
+  media, waiting, drafts = 0, onDrafts, onWaiting, loading, role, postWithoutApproval, onNew, onPick, onApprove, onRemove,
 }: {
   media: RailMedia[]
   waiting: number
   /** posts saved and left — never drawn on a grid; the List is where they are */
   drafts?: number
   onDrafts?: () => void
+  /** show the posts waiting for approval — the List, narrowed to them */
+  onWaiting?: () => void
   loading: boolean
   /** the viewer's role — an account manager or a super admin may sign a piece
    *  off without the client from here */
@@ -343,9 +345,22 @@ export default function MediaRail({
         onto a time.
       </p>
 
-      <div className="flex min-h-10 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
-        Waiting for approval · {waiting}
-      </div>
+      {/* a count you can press: it opens the List narrowed to the posts
+          waiting on a yes (the owner, 11 Sep 2026: "schedule post approval
+          card when clicked") */}
+      {onWaiting && waiting > 0 ? (
+        <button
+          type="button"
+          onClick={onWaiting}
+          className="flex min-h-11 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
+        >
+          Waiting for approval · {waiting}
+        </button>
+      ) : (
+        <div className="flex min-h-11 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
+          Waiting for approval · {waiting}
+        </div>
+      )}
       {drafts > 0 && (
         <button
           type="button"

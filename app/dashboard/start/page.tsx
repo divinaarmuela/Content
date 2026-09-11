@@ -27,8 +27,10 @@ const STEP_KEY = 'md-tutorial-step'
 
 export default function StartPage() {
   const router = useRouter()
-  const { role, loading } = useRole()
-  const tutorial = useMemo(() => tutorialFor(role), [role])
+  const { role, loading, me } = useRole()
+  // a flagged quality reviewer (Joy, on any role) gets the quality step too
+  const reviewer = me?.quality_reviewer === true
+  const tutorial = useMemo(() => tutorialFor(role, { qualityReviewer: reviewer }), [role, reviewer])
   const total = tutorial?.steps.length ?? 0
 
   const [step, setStep] = useState(0)
