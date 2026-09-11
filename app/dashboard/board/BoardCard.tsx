@@ -18,6 +18,7 @@ import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
 import { footageAfterWords } from '../../lib/shoot-sop-core'
+import { blockedChip, reviewWords } from '../../lib/editor-sop-core'
 
 /**
  * ONE CARD ON THE BOARD.
@@ -84,7 +85,7 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking, tour, onAcknowledge,
+  statsHref, booking, tour, onAcknowledge, page,
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
@@ -127,6 +128,9 @@ export function BoardCard({
    *  Video Editors SOP). Offered on a card that is theirs and not yet
    *  acknowledged; the page records it. */
   onAcknowledge?: (card: BoardViewCard) => void
+  /** the Editor page draws the SOP's face: no kind of work, "3 of 6 finals
+   *  in", who has it inside For Review, and a blocked line */
+  page?: 'production' | 'editor' | 'scheduler'
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   const risk = riskChip(card.risk ?? null)
@@ -142,7 +146,11 @@ export function BoardCard({
   const column = columnOf(card.status)
   // the column already names the stage; the chip earns its place only where
   // one column holds more than one stage
-  const showStage = statusesIn(column).length > 1
+  const editorFace = page === 'editor' && viewer.role !== 'account_manager' && viewer.role !== 'super_admin'
+  const showStage = !editorFace && statusesIn(column).length > 1
+  const review = editorFace ? reviewWords(card.status) : null
+  const blockedLine = editorFace ? blockedChip(card as never) : null
+  const finals = editorFace ? (card as { finals_in?: string | null }).finals_in ?? null : null
   const tone = cardTone({
     status: card.status,
     due: card.due_date,
@@ -165,8 +173,11 @@ export function BoardCard({
       tone={tone}
       people={people}
       chips={<>
-        {lines.kind && <Chip tone={kindTone(card.work_kinds?.color)}>{lines.kind}</Chip>}
+        {lines.kind && !editorFace && <Chip tone={kindTone(card.work_kinds?.color)}>{lines.kind}</Chip>}
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
+        {review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
+        {finals && <Chip tone="green">{finals}</Chip>}
+        {blockedLine && <Chip tone="red">{blockedLine}</Chip>}
         {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}

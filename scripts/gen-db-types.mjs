@@ -55,7 +55,7 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
     }
     tables.set(name, cols)
   }
-  for (const m of sql.matchAll(/alter table(?: if exists)?\s+(?:public\.)?([a-z_]+)\s+add column(?: if not exists)?\s+"?([a-z_]+)"?\s+([a-z_ \[\]]+(?:\([^)]*\))?)([^;]*);/gi)) {
+  for (const m of sql.matchAll(/alter table(?: if exists)?\s+(?:public\.)?([a-z_]+)\s+add column(?: if not exists)?\s+"?([a-z0-9_]+)"?\s+([a-z_ \[\]]+(?:\([^)]*\))?)([^;]*);/gi)) {
     const [, name, col, type, rest] = m
     const cols = tables.get(name) ?? new Map()
     cols.set(col, { type: tsType(type.trim()), nullable: !/not null/i.test(rest), json: isJson(type), jsonArray: isJson(type) && isJsonArrayDefault(type + rest) })

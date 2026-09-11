@@ -270,7 +270,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    expect(pageLanes('editor').map(l => l.key)).toEqual(['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'done'])
+    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'for_review', 'for_handoff', 'done'])
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
@@ -318,12 +318,13 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(keys).toContain('booked')
   })
 
-  it('the Editor page names the lanes the Video Editors SOP way, and folds Booked in and Posted into Done', () => {
-    // In Progress → For Review → For Handoff → Done (the Team's Playbook)
+  it('the Editor page is the Video Editors SOP\u2019s four: In Progress, For Review, For Handoff, Done', () => {
+    // the team's three checking stages are ONE lane to the editor (the
+    // owner, 11 Sep 2026: "do what's from that doc")
     const lanes = pageLanes('editor')
-    expect(lanes.map(l => l.label)).toEqual(['In progress', 'For review', 'Quality check', 'With client', 'For handoff', 'Done'])
-    expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, false, true])
-    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['internal_check'], ['quality_check'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
+    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'For Review', 'For Handoff', 'Done'])
+    expect(lanes.map(l => l.folded)).toEqual([false, false, false, true])
+    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['internal_check', 'quality_check', 'with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page
     expect(lanes.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
   })
@@ -333,8 +334,9 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(laneOf('production', 'booked')).toBe('booked')
     expect(laneOf('editor', 'posted')).toBe('done')
     expect(laneOf('editor', 'booked')).toBe('done')
-    expect(laneOf('editor', 'ready_to_post')).toBe('ready_to_post')
-    expect(laneOf('editor', 'draft')).toBe('draft')
+    expect(laneOf('editor', 'ready_to_post')).toBe('for_handoff')
+    expect(laneOf('editor', 'draft')).toBe('in_progress')
+    expect(laneOf('editor', 'quality_check')).toBe('for_review')
     expect(laneOf('scheduler', 'draft')).toBe('draft')
     expect(laneOf('scheduler', 'with_client')).toBe('with_client')
     expect(laneOf('scheduler', 'ready_to_post')).toBe('ready_to_post')
@@ -393,8 +395,8 @@ describe('the lanes each page arranges the eight columns into', () => {
     const lane = (page: BoardPage, key: string) => pageLanes(page).find(l => l.key === key)!
 
     it('a one-column lane is that column\'s drop', () => {
-      const d = dropOnLane(card(), lane('editor', 'internal_check'), editor)
-      expect(d).toEqual({ ok: true, lane: 'internal_check', column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
+      const d = dropOnLane(card(), lane('editor', 'for_review'), editor)
+      expect(d).toEqual({ ok: true, lane: 'for_review', column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
     })
 
     it('a drop lands on the stage the rules allow, whoever drops it', () => {
@@ -403,7 +405,7 @@ describe('the lanes each page arranges the eight columns into', () => {
       const d = dropOnLane(card({ status: 'approved_for_scheduling' }), lane('editor', 'done'), scheduler)
       expect(d).toEqual({ ok: true, lane: 'done', column: 'booked', action: { kind: 'transition', to: 'scheduled', label: BOOKED_LABEL } })
       const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
-      const free = dropOnLane(card({ status: 'quality_check', client_approval_required: false }), lane('editor', 'ready_to_post'), joy)
+      const free = dropOnLane(card({ status: 'quality_check', client_approval_required: false }), lane('editor', 'for_handoff'), joy)
       expect(free.ok && free.column).toBe('ready_to_post')
       expect(free.ok && free.action.to).toBe('approved_for_scheduling')
       const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'internal_check'), manager)
@@ -417,10 +419,10 @@ describe('the lanes each page arranges the eight columns into', () => {
       if (!d.ok) expect(d.reason).toMatch(/may not|Nothing moves/)
       // a card that needs the client says so — to the one hat that could pass it
       const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
-      const needs = dropOnLane(card({ status: 'quality_check' }), lane('editor', 'ready_to_post'), joy)
+      const needs = dropOnLane(card({ status: 'quality_check' }), lane('editor', 'for_handoff'), joy)
       expect(needs).toEqual({ ok: false, reason: NEEDS_CLIENT_REASON })
       // …and a manager is told it is not their move
-      const notMine = dropOnLane(card({ status: 'quality_check' }), lane('editor', 'ready_to_post'), manager)
+      const notMine = dropOnLane(card({ status: 'quality_check' }), lane('editor', 'for_handoff'), manager)
       expect(notMine.ok).toBe(false)
       if (!notMine.ok) expect(notMine.reason).toMatch(/may not/)
       // a card already in the lane, with nowhere else inside it, says so
@@ -429,7 +431,7 @@ describe('the lanes each page arranges the eight columns into', () => {
       expect(same).toEqual({ ok: false, reason: 'Already in Done' })
       expect(dropOnLane(card({ status: 'published' }), pageLanes('scheduler').find(l => l.key === 'posted')!, scheduler))
         .toEqual({ ok: false, reason: 'Already in Posted' })
-      expect(dropOnLane(card(), lane('editor', 'draft'), editor)).toEqual({ ok: false, reason: 'Already in In progress' })
+      expect(dropOnLane(card(), lane('editor', 'in_progress'), editor)).toEqual({ ok: false, reason: 'Already in In Progress' })
       expect(dropOnLane(card(), lane('production', 'draft'), editor)).toEqual({ ok: false, reason: 'Already in Draft' })
     })
 

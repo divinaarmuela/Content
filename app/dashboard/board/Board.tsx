@@ -315,6 +315,7 @@ export function Board({
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
                 booking={bookingByItem.get(c.id) ?? null}
                 onAcknowledge={onAcknowledge ? card => onAcknowledge(card as BoardCardRow) : undefined}
+                page={page}
               />
             )}
           </div>

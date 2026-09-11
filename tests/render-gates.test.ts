@@ -53,13 +53,12 @@ describe('the shoot page draws what its checklist points at', () => {
 describe('one drawer for every card', () => {
   it('Post approval and Editor open the same plain drawer, so a shoot card is not shown the old one', () => {
     expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple \/>/)
-    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple \/>/)
+    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor=\{!isManager\} \/>/)
   })
-  it('the plain drawer links to the full card page for renames and due dates', () => {
-    // through itemPath, so an uploaded post never gets a link to the old
-    // card page (tests/item-path-core pins that rule on the same file)
-    expect(src(DRAWER)).toMatch(/href=\{itemPath\(item\)\}/)
-    expect(src(DRAWER)).toMatch(/Full card/)
+  it('the plain drawer renames and sets the due date itself — no link out to the old card page', () => {
+    expect(src(DRAWER)).toMatch(/Rename or set due date/)
+    expect(src(DRAWER)).not.toMatch(/Full card/)
+    expect(src(DRAWER)).not.toMatch(/itemPath\(/)
   })
 })
 
@@ -67,5 +66,39 @@ describe('buttons the server would refuse are not drawn', () => {
   it('the board gives "Hand to…" only to people who may hand a card on', () => {
     const s = src(BOARD)
     expect(s).toMatch(/onHandTo=\{canEdit\(c\) && \(isManager \|\| viewer\.role === 'general'\) \? setHandToFor : undefined\}/)
+  })
+})
+
+describe('the editor\u2019s card draws every SOP section, empty or not', () => {
+  const EDITOR_DRAWER = 'app/dashboard/board/EditorCardDrawer.tsx'
+  const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
+  it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
+    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor=\{!isManager\} \/>/)
+    expect(src(CARD_SHEET)).toMatch(/editor && !adhoc\s*\? <EditorCardDrawer/)
+  })
+  it('the seven sections are not gated on having data', () => {
+    const s = src(EDITOR_DRAWER)
+    for (const id of ['ed-before', 'ed-from', 'ed-versions', 'ed-qc', 'ed-hand', 'ed-blocked', 'ed-history']) {
+      expect(s, id).toContain(`aria-labelledby="${id}"`)
+    }
+    // no section is wrapped in a length/data gate
+    expect(s).not.toMatch(/\{[a-zA-Z.]+\.length > 0 && \(\s*<section/)
+    // the empty states say what to do
+    expect(s).toMatch(/No final yet\. Export the finished cut/)
+    expect(s).toMatch(/Not given yet — edit from the Dropbox working folder/)
+    expect(s).toMatch(/Not blocked\./)
+    expect(s).toMatch(/Once the card is approved: the final in the Drive monthly folder/)
+    // "Before you start" says Not given rather than hiding a row
+    expect(s).toMatch(/row\.value \?\? NOT_GIVEN/)
+  })
+  it('the editor\u2019s card carries nothing the SOP does not give an editor', () => {
+    const s = src(EDITOR_DRAWER)
+    for (const words of ['Hand to', 'Kind of work', 'Deliver only', 'Client portal', 'Rename or set due date']) {
+      expect(s, words).not.toContain(words)
+    }
+  })
+  it('submit is behind the seven checks and a file', () => {
+    const s = src(EDITOR_DRAWER)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| slides\.length === 0\}/)
   })
 })

@@ -61,7 +61,7 @@ const NOTIFICATIONS = '/dashboard/notifications'
  *  one tutorial, so said once. */
 export const POST_APPROVAL_COLUMNS = 'Draft, Internal check, Quality check, With client, Ready to post, Booked in, Posted'
 /** The Editor columns. */
-export const EDITOR_COLUMNS = 'In progress, For review, Quality check, With client, For handoff, Done'
+export const EDITOR_COLUMNS = 'In Progress, For Review, For Handoff, Done'
 /** The Shoots columns. */
 export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage handed over'
 
@@ -216,15 +216,15 @@ const EDITOR: Tutorial = {
     {
       title: 'Your board: Editor',
       see: [
-        `Columns left to right: ${EDITOR_COLUMNS}. Done holds what is booked or posted, folded away.`,
-        'Each card is ONE thing to make — one reel, one carousel, one graphic. Four reels is four cards.',
+        `Four columns, the playbook’s own: ${EDITOR_COLUMNS}. For Review is the account manager, the quality reviewer and the client — the card says who has it. Done holds what is booked or posted, folded away.`,
+        'One card is one shoot’s work: the deliverables are listed on it and the card counts "3 of 6 finals in". A manager can also make a card by hand for a single job.',
         'You only see what is yours: cards handed to you, cards you made, and cards someone tagged you on.',
         'A card says the client, the account manager, what to make, which shoot it is from, the due date, and "Files to work from" when a manager attached footage or a folder.',
         'A new card says "New — press Acknowledge". Pressing it tells the team you are on it, the same day it lands, as the playbook asks.',
       ],
       actions: [
         'Open Editor in the sidebar.',
-        'Open a card in In progress and read it top to bottom.',
+        'Open a card in In Progress and read "Before you start" top to bottom: objective, deliverables, platform specs, deadline, shot list, notes, brand guidelines, previous edits.',
         'Press Acknowledge.',
       ],
       href: EDITOR_PAGE,
@@ -233,8 +233,8 @@ const EDITOR: Tutorial = {
     {
       title: 'The card: the final goes on it',
       see: [
-        'Under "Files to work from" is what the manager gave you: footage, stills, or the Drive or Dropbox folder they live in. Open them from there.',
-        'Under "Versions" is where your finished piece goes. Three ways in: Upload (the export from your device), "Pick the final from Google Drive" (a copy is taken from the client’s folder — nothing in Drive is touched), or a pasted link.',
+        'Under "Work from" is the footage folder and anything the manager attached: footage, stills, or the Drive or Dropbox folder they live in. Edit from the Dropbox working folder only.',
+        'Under "Your versions" is where your finished piece goes. Two ways in: "Upload the final" (the export from your device) or "Pick the final from Google Drive" (a copy is taken from the client’s folder — nothing in Drive is touched).',
         'Only pictures and videos are taken — finals in the platform’s spec, watched start to finish. Never raw footage.',
         '"Source files (Dropbox)" is where the project files live, for whoever picks this up later.',
         'Each upload is a new version. The latest version is what gets checked.',
@@ -248,18 +248,21 @@ const EDITOR: Tutorial = {
       linkLabel: 'Open my board',
     },
     {
-      title: 'Hand it on, and flag a risk early',
+      title: 'Quality check, submit, and never sit blocked',
       see: [
-        'The button reads "Ready for checking". Pressing it moves the card to For review, where the account manager looks at it. From there it goes to the quality reviewer, then to the client, then to the scheduler — you do not need to do anything for those.',
-        'A card that comes back sits in In progress again with the note on it, in the reviewer’s words.',
-        '"Flag a deadline risk" tells the account managers in one line that the date is at risk. The playbook asks for this the moment you see it, not on the due date.',
-        'A card with no file yet is refused with "Attach the work first" — upload the final, then press again.',
+        '"Quality check before submitting" is the playbook’s seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
+        'Submit moves the card to For Review, where the account manager looks at it. From there it goes to the quality reviewer, then to the client, then to the scheduler — the card says who has it; you do nothing for those.',
+        'A card that comes back sits in In Progress again with "What to change" on it, in the reviewer’s words.',
+        '"Something looks wrong — flag it" tells the account managers in one line, the moment you see it, not on the due date.',
+        '"Blocked?" is the 24-hour rule: pick what you need from the playbook’s list, say what is blocked, and the right person is told now. At 12 hours Ops is copied; at 24 hours leadership is told.',
+        'Once the card is approved, "Handover" has three ticks: the final in the Drive monthly folder, the source files handed off, the next owner tagged.',
       ],
       actions: [
-        'Press "Ready for checking".',
+        'Tick the seven checks, then press "Submit for review".',
         'Watch your email: you are told when it moves on, or when it comes back.',
-        'If it comes back, read the note, change the piece, upload the new version, press "Ready for checking" again.',
-        'If a date is at risk, press "Flag a deadline risk" and say why in one line.',
+        'If it comes back, read "What to change", upload the new version, tick the checks, submit again.',
+        'If a date is at risk or something looks wrong, flag it in one line.',
+        'If you are stuck, press "I’m blocked" — do not let it sit quietly.',
       ],
       href: EDITOR_PAGE,
       linkLabel: 'Open my board',

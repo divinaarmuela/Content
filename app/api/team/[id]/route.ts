@@ -41,6 +41,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // the playbook's two hats — flags on a person, never a role
       if (typeof body.quality_reviewer === 'boolean') patch.quality_reviewer = body.quality_reviewer
       if (typeof body.ops_contact === 'boolean') patch.ops_contact = body.ops_contact
+      // "Martin heads the Video Editing team": the editors' lead, a flag
+      if (typeof body.editors_lead === 'boolean') patch.editors_lead = body.editors_lead
       if ('name' in body) patch.name = String(body.name ?? '')
 
       const data = await table('team_users').update(id, patch)

@@ -136,7 +136,7 @@ describe('the words are the screen’s words', () => {
     expect(everyLine('account_manager')).toContain(SHOOT_COLUMNS)
     expect(everyLine('editor')).toContain(SHOOT_COLUMNS)
     // the Editor lanes, as the Editor page names them
-    const editorPage = read('app/lib/board-view-core.ts') + read('app/lib/board-core.ts')
+    const editorPage = read('app/lib/editor-sop-core.ts') + read('app/lib/board-view-core.ts') + read('app/lib/board-core.ts')
     for (const lane of EDITOR_COLUMNS.split(', ')) expect(editorPage, lane).toContain(`'${lane}'`)
   })
 

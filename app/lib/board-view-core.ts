@@ -15,6 +15,7 @@
 
 import { DELIVER_ONLY_REASON, deliverOnly } from './deliver-only-core'
 import { postedLine, readPostedSlides } from './posted-slides-core'
+import { EDITOR_LANES } from './editor-sop-core'
 import {
   actingRoles, availableTransitionsAs, presentTransitions, whoseTurn, STATUS_LABELS,
   type ActingViewer, type Hat, type ItemStatus,
@@ -519,7 +520,7 @@ export function pageCards<T extends BoardViewCard>(
 }
 
 /** A lane is one column, or several columns folded into one narrow strip. */
-export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up'
+export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' | 'for_review' | 'for_handoff'
 
 /** What is NOT in a lane, in the lane's own words. */
 export const LANE_EMPTY: Record<PageLaneKey, string> = {
@@ -533,6 +534,9 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
   delivered: 'Nothing delivered for a client to post themselves.',
   done: 'Nothing done yet.',
   coming_up: 'Nothing coming up.',
+  in_progress: 'Nothing to edit right now.',
+  for_review: 'Nothing out for review.',
+  for_handoff: 'Nothing approved yet.',
 }
 
 /** The five columns' own empty sentences — the Production list draws them too. */
@@ -574,11 +578,11 @@ const laneOfColumn = (key: BoardColumnKey): PageLane => ({
  * a manager looking at the same card sees it in the same place.
  */
 export const EDITOR_LANE_LABELS: Partial<Record<BoardColumnKey, string>> = {
-  draft: 'In progress',
-  internal_check: 'For review',
-  quality_check: 'Quality check',
-  with_client: 'With client',
-  ready_to_post: 'For handoff',
+  draft: 'In Progress',
+  internal_check: 'For Review',
+  quality_check: 'For Review',
+  with_client: 'For Review',
+  ready_to_post: 'For Handoff',
   booked: 'Done',
   posted: 'Done',
   delivered: 'Done',
@@ -610,13 +614,12 @@ export function pageLanes(page: BoardPage): PageLane[] {
   // which button each role gets, never which stages exist.
   const lanes = BOARD_COLUMNS.map(c => laneOfColumn(c.key))
   if (page !== 'editor') return lanes
-  // the editor's part is done once the card is handed on: Booked in and
-  // Posted fold into one narrow "Done" rail, not two working columns
-  const working = lanes.filter(l => !OUT_COLUMNS.includes(l.key as BoardColumnKey))
-  return [
-    ...working.map(l => ({ ...l, label: EDITOR_LANE_LABELS[l.key as BoardColumnKey] ?? l.label })),
-    { key: 'done', label: 'Done', columns: [...OUT_COLUMNS], folded: true, empty: LANE_EMPTY.done },
-  ]
+  // THE EDITOR'S FOUR (the Video Editors SOP §6, the owner 11 Sep 2026:
+  // "do what's from that doc"): In Progress → For Review → For Handoff →
+  // Done. The team's three checking stages are ONE lane to the editor —
+  // "For Review" — with a small chip saying who has it; the columns, the
+  // statuses and the moves underneath are the same as every other page.
+  return EDITOR_LANES.map(l => ({ key: l.key, label: l.label, columns: [...l.columns], folded: l.folded, empty: l.empty }))
 }
 
 /** The lane a column sits in on this page — how a `?column=` link lands. */

@@ -22,21 +22,24 @@ import {
 import { NewCardDialog } from '../board/BoardDialogs'
 import { toast } from 'sonner'
 import { flagsOf } from '../../lib/card-flag-core'
+import { EDITOR_LANE_WORDS } from '../../lib/editor-sop-core'
+import { finalsInWords, plannedCount } from '../../lib/deliverable-group-core'
+import { slidesOf } from '../../lib/version-files-core'
 
 /**
- * THE EDITOR PAGE: your cards, from draft to the client.
+ * THE EDITOR PAGE — the Video Editors SOP, and nothing else (the owner,
+ * 11 Sep 2026: "revamp the whole editing page … do what's from that doc").
  *
- * One board, holding only the cards assigned to the person looking. The
- * three stages they work — Draft, Internal check, With client — get full
- * lanes; everything past them (Ready to post, Posted) is folded into one
- * narrow "Done" lane, so they still see their work go out the door without
- * two columns sitting empty. A card is one deliverable: what needs doing
- * and one link. Hand it on for
- * checking from the card itself ("Ready for checking"). A card that came
- * back carries what to change, in the manager's words.
+ * Four columns, the SOP's own: In Progress · For Review · For Handoff ·
+ * Done. One card is one shoot's work (or one task a manager made). The face
+ * says the client, the shoot, the deadline, "3 of 6 finals in", whether it
+ * was acknowledged, and who has it inside For Review. Opening a card gives
+ * the SOP's order: Before you start, Work from, Your versions, Quality
+ * check and submit, Handover, Blocked, What happened (`EditorCardDrawer`).
  *
- * An account manager looking in sees every card still being made. The rows
- * are live; every move is the ordinary transition route.
+ * An editor sees only their own cards. An account manager or super admin
+ * looking in sees every card still being made and keeps the manager's
+ * drawer. The rows are live; every move is the ordinary transition route.
  */
 export default function EditorPage() {
   const { me, noAccount } = useRole()
@@ -69,6 +72,15 @@ export default function EditorPage() {
     // cards), whether the holder acknowledged it, and a standing risk
     const shootTitle = new Map(live.tables.batches.rows.map(b => [b.id, String(b.title ?? '')]))
     const shootDate = new Map(live.tables.batches.rows.map(b => [b.id, (b as { shoot_date?: string | null }).shoot_date ?? null]))
+    // "3 of 6 finals in": the latest version's files against what the shoot
+    // plan promised (deliverable-group-core), drawn on the face
+    const planned = new Map(live.tables.batches.rows.map(b => [b.id, plannedCount((b as { planned_deliverables?: unknown }).planned_deliverables)]))
+    const latestByItem = new Map<string, { n: number; files: number }>()
+    for (const v of live.tables.versions.rows) {
+      const n = Number(v.version_number ?? 0)
+      const cur = latestByItem.get(String(v.item_id))
+      if (!cur || n > cur.n) latestByItem.set(String(v.item_id), { n, files: slidesOf(v).length })
+    }
     const activityByItem = new Map<string, typeof live.tables.activity.rows>()
     for (const a of live.tables.activity.rows) {
       if (a.entity_type !== 'content_item') continue
@@ -81,6 +93,7 @@ export default function EditorPage() {
         ...c,
         shoot_title: c.batch_id ? (shootTitle.get(c.batch_id) ?? null) : null,
         shoot_date: c.batch_id ? (shootDate.get(c.batch_id) ?? null) : null,
+        finals_in: c.batch_id ? finalsInWords(latestByItem.get(c.id)?.files ?? 0, planned.get(c.batch_id) ?? 0) : null,
         acknowledged: flags.acknowledged,
         risk: flags.risk,
       }
@@ -131,8 +144,8 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? 'Everything still being made, In progress to With client, with what is done folded in at the end. Check the work, then send it on for the quality check or send it back.'
-          : 'Your cards, the playbook way: In progress, For review, Quality check, With client, For handoff and Done. Acknowledge a new card the day it lands, upload the final export, then press Ready for checking.'}
+          ? `Everything still being made, in the editors’ four columns: ${EDITOR_LANE_WORDS}. Check the work, then send it on for the quality check or send it back.`
+          : `Your cards, the playbook way: ${EDITOR_LANE_WORDS}. Acknowledge a new card the day it lands, confirm the brief, upload the final, tick the quality check, submit.`}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
@@ -171,7 +184,7 @@ export default function EditorPage() {
       )}
 
       {/* the card, beside the board — the board stays live behind it */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} simple />
+      <CardSheet id={sheet.cardId} onClose={sheet.close} simple editor={!isManager} />
 
       {viewer && (
         <NewCardDialog

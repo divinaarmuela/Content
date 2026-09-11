@@ -72,7 +72,7 @@ describe('the three boards host the sheet, and the address carries the card', ()
       expect(src).toContain("from '../board/CardSheet'")
       expect(src).toContain('useCardSheet()')
       expect(src).toMatch(/onOpen=\{c => sheet\.open\(c\.id\)\}/)
-      expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\}( simple)? \/>/)
+      expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\}( simple)?( editor=\{!isManager\})? \/>/)
     })
   }
 

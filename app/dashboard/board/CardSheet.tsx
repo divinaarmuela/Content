@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import CardDetail from '../production/[id]/CardDetail'
 import PostApprovalDetail from './PostApprovalDetail'
+import EditorCardDrawer from './EditorCardDrawer'
 import { useRow } from '@/lib/db-client'
 import type { ContentItem } from '@/lib/db-types'
 import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-sheet-core'
@@ -21,13 +22,16 @@ import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-she
  * swipe to the right: the panel follows the thumb and lets go past 80px.
  * The full page is one tap away for anyone who wants the room.
  */
-export function CardSheet({ id, onClose, simple = false }: {
+export function CardSheet({ id, onClose, simple = false, editor = false }: {
   /** the open card, or null for shut */
   id: string | null
   onClose: () => void
   /** the plain drawer — files, decision, what was said — for every card, not
    *  only an uploaded post (the Editor page, 9 Sep 2026) */
   simple?: boolean
+  /** the EDITOR'S card, in the Video Editors SOP's order (11 Sep 2026) —
+   *  what the person making the piece sees; managers keep the plain drawer */
+  editor?: boolean
 }) {
   // the swipe: where the touch began, how far it has come
   const start = useRef<{ x: number; y: number } | null>(null)
@@ -71,9 +75,11 @@ export function CardSheet({ id, onClose, simple = false }: {
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">Card</SheetTitle>
-        {id && !openedLoading && (adhoc || simple
-          ? <PostApprovalDetail key={id} id={id} onClose={onClose} />
-          : <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />)}
+        {id && !openedLoading && (editor && !adhoc
+          ? <EditorCardDrawer key={id} id={id} onClose={onClose} />
+          : adhoc || simple
+            ? <PostApprovalDetail key={id} id={id} onClose={onClose} />
+            : <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />)}
       </SheetContent>
     </Sheet>
   )

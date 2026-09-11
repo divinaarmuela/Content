@@ -13,7 +13,7 @@ import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
 import { HandToDialog } from './BoardDialogs'
 import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
-import { STATUS_LABELS, type ItemStatus, itemPath } from '../../lib/workflow-core'
+import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
@@ -151,6 +151,38 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       toast.error(e instanceof Error ? e.message : 'Could not change that')
     } finally {
       setSavingDeliver(false)
+    }
+  }
+  // RENAME AND DUE DATE, here in the drawer: the old link out to the
+  // card page was the one thing the drawer sent people elsewhere for
+  // (the owner, 11 Sep 2026: "what's full card")
+  const [editingHead, setEditingHead] = useState(false)
+  const [headTitle, setHeadTitle] = useState('')
+  const [headDue, setHeadDue] = useState('')
+  const [savingHead, setSavingHead] = useState(false)
+  const openHead = () => {
+    if (!item) return
+    setHeadTitle(String(item.title ?? ''))
+    setHeadDue(item.due_date ? String(item.due_date).slice(0, 10) : '')
+    setEditingHead(true)
+  }
+  const saveHead = async () => {
+    if (!item) return
+    const title = headTitle.trim()
+    if (!title) { toast.error('Give the card a title'); return }
+    setSavingHead(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, due_date: headDue || null }),
+      })
+      if (!res.ok) throw new Error('Could not save that')
+      toast.success('Saved')
+      setEditingHead(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save that')
+    } finally {
+      setSavingHead(false)
     }
   }
   const managerNames = clientLinks
@@ -423,6 +455,24 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             {client?.name ?? ''} · {adhoc ? 'Post' : (kind?.name ?? 'Work')}
           </p>
           <h2 className="text-section-title truncate">{item.title}</h2>
+          {editingHead && (
+            <div className="mt-2 flex flex-col gap-2 rounded-inner border border-border p-3">
+              <label className="flex flex-col gap-1 text-[12px] font-semibold" htmlFor="head-title">
+                Title
+                <input id="head-title" value={headTitle} onChange={e => setHeadTitle(e.target.value)}
+                  className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
+              </label>
+              <label className="flex flex-col gap-1 text-[12px] font-semibold" htmlFor="head-due">
+                Due <span className="font-normal text-muted-foreground">(optional)</span>
+                <input id="head-due" type="date" value={headDue} onChange={e => setHeadDue(e.target.value)}
+                  className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal" />
+              </label>
+              <div className="flex items-center gap-2">
+                <Button className={primary} disabled={savingHead} onClick={() => void saveHead()}>Save</Button>
+                <Button variant="ghost" className={secondary} disabled={savingHead} onClick={() => setEditingHead(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
           <p className="mt-1 text-[13px] text-muted-foreground">
             {managerNames.length > 0
               ? `Account manager: ${managerNames.join(', ')}`
@@ -471,11 +521,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               "AM and super admin should see the client portal on the
               assigned task" (not the editor, not the scheduler) */}
           {/* renames, due dates and the rest live on the full card page */}
-          {!adhoc && (
-            <a href={itemPath(item)}
+          {!adhoc && isManager && !editingHead && (
+            <button type="button" onClick={openHead}
               className="inline-flex min-h-11 items-center gap-1 rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-muted">
-              Full card
-            </a>
+              Rename or set due date
+            </button>
           )}
           {isManager && client?.share_token && (
             <a href={`/portal/${client.share_token}`} target="_blank" rel="noreferrer"

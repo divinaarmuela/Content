@@ -42,7 +42,7 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card handed to you is on your board: In progress, For review, Quality check, With client, For handoff, with what is booked or posted folded into Done. One card is one thing to make. Press Acknowledge on a new one so the team knows you are on it.',
+      body: 'Every card handed to you is on your board, in the playbook’s four columns: In Progress, For Review, For Handoff, Done. One card is one shoot’s work. Press Acknowledge on a new one so the team knows you are on it.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
@@ -115,7 +115,7 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
   steps: [
     {
       title: 'Every card being made',
-      body: 'One card per piece, for your clients, in the editors’ own columns: In progress, For review, Quality check, With client, For handoff, Done. Filter by Client or People to see who is doing what.',
+      body: 'One card per shoot’s work, for your clients, in the editors’ four columns: In Progress, For Review, For Handoff, Done. Filter by Client or People to see who is doing what.',
       href: '/dashboard/editor',
       linkLabel: 'See the board',
     },

@@ -837,9 +837,32 @@ export const shootBriefLate = inngest.createFunction(
   })
 )
 
+/**
+ * THE VIDEO EDITORS SOP'S CLOCKS (11 Sep 2026): the 24-hour blocker rule's
+ * two escalations — Ops copied at 12 hours, leadership told at 24 — and the
+ * morning-after nudge for a card nobody acknowledged. Hourly, each stamp
+ * claimed before its email goes, so nothing is sent twice. A NEW function:
+ * re-sync after deploy (CLAUDE.md trap 5b).
+ */
+export const editorSopNudges = inngest.createFunction(
+  {
+    id: 'editor-sop-nudges',
+    name: 'Editor SOP: blocker escalations and acknowledge nudges',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 5 * * * *' }],
+    retries: 1,
+  },
+  async ({ step }) => withRequestCache(async () => {
+    return step.run('nudge', async () => {
+      const { runEditorSopNudges } = await import('../lib/editor-sop-notify')
+      return runEditorSopNudges()
+    })
+  })
+)
+
 export const functions = [
   dueReminders,
   shootBriefLate,
+  editorSopNudges,
   accountHealthDaily,
   driveMirrorFile,
   scanInboxScheduled,
@@ -859,3 +882,4 @@ export const functions = [
   followersDaily,
   followersSnapshot,
 ]
+

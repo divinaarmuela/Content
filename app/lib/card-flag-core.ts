@@ -7,8 +7,9 @@
  * the board reads back ("Acknowledged", a red "Deadline at risk" chip).
  */
 import type { Role } from './identity-core'
+import { blockerNeed, qcComplete, type BlockerNeed } from './editor-sop-core'
 
-export const FLAG_KINDS = ['acknowledged', 'deadline_risk'] as const
+export const FLAG_KINDS = ['acknowledged', 'deadline_risk', 'qc_done', 'handover_drive', 'handover_source', 'blocked', 'unblocked'] as const
 export type FlagKind = (typeof FLAG_KINDS)[number]
 
 export const RISK_NOTE_MAX = 500
@@ -20,11 +21,11 @@ export function mayFlag(viewer: { id: string; role: Role }, ownerId: string | nu
 }
 
 export type FlagCheck =
-  | { ok: true; kind: FlagKind; note: string }
+  | { ok: true; kind: FlagKind; note: string; ticks: string[]; need: BlockerNeed | null }
   | { ok: false; reason: string; status: 400 | 403 }
 
 export function flagCheck(input: {
-  kind: unknown; note: unknown
+  kind: unknown; note: unknown; ticks?: unknown; need?: unknown
   viewer: { id: string; role: Role }; ownerId: string | null
 }): FlagCheck {
   const kind = String(input.kind ?? '')
@@ -34,7 +35,13 @@ export function flagCheck(input: {
   }
   const note = String(input.note ?? '').trim().slice(0, RISK_NOTE_MAX)
   if (kind === 'deadline_risk' && !note) return { ok: false, reason: 'Say in a line why the date is at risk', status: 400 }
-  return { ok: true, kind: kind as FlagKind, note }
+  const ticks = Array.isArray(input.ticks) ? input.ticks.map(String) : []
+  // §4: every check ticked, or it does not count
+  if (kind === 'qc_done' && !qcComplete(ticks)) return { ok: false, reason: 'Tick every check before you submit', status: 400 }
+  const need = kind === 'blocked' ? (blockerNeed(input.need)?.key ?? null) : null
+  if (kind === 'blocked' && !need) return { ok: false, reason: 'Pick what you need from the list', status: 400 }
+  if (kind === 'blocked' && !note) return { ok: false, reason: 'Say in a line what is blocked', status: 400 }
+  return { ok: true, kind: kind as FlagKind, note, ticks, need }
 }
 
 /** Read the flags back off a card's activity rows: has THIS person
