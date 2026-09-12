@@ -272,7 +272,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'for_handoff', 'done'])
+    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'with_client', 'for_handoff', 'done'])
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
@@ -320,13 +320,13 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(keys).toContain('booked')
   })
 
-  it('the Editor page is four lanes: In Progress, Quality check, For Handoff, Done', () => {
+  it('the Editor page is five lanes: In Progress, Quality check, With client, For Handoff, Done', () => {
     // Abby's rule (11 Sep 2026): the maker's submit goes to Joy; the
     // client's look sits inside the same lane with a chip saying who has it
     const lanes = pageLanes('editor')
-    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'For Handoff', 'Done'])
-    expect(lanes.map(l => l.folded)).toEqual([false, false, false, true])
-    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check', 'with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
+    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'With client', 'For Handoff', 'Done'])
+    expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, true])
+    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page
     expect(lanes.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
   })

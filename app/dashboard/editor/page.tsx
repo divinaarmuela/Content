@@ -146,7 +146,7 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? `Everything still being made, in the editors’ four columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
+          ? `Everything still being made, in the editors’ five columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
           : `Your cards, the playbook way: ${EDITOR_LANE_WORDS}. Acknowledge a new card the day it lands, confirm the brief, upload the final, tick the quality check, submit — it goes straight to the quality reviewer.`}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}

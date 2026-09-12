@@ -24,7 +24,7 @@ import type { BoardColumnKey } from './board-core'
 
 /* ── §6 the four stages ─────────────────────────────────────────────────── */
 
-export type EditorLaneKey = 'in_progress' | 'quality_check' | 'for_handoff' | 'done'
+export type EditorLaneKey = 'in_progress' | 'quality_check' | 'with_client' | 'for_handoff' | 'done'
 
 export const EDITOR_LANES: readonly {
   key: EditorLaneKey
@@ -36,10 +36,11 @@ export const EDITOR_LANES: readonly {
   empty: string
 }[] = [
   { key: 'in_progress', label: 'In Progress', columns: ['draft'], folded: false, empty: 'Nothing to edit right now.' },
-  // Abby's rule (11 Sep 2026): the maker's submit goes to Joy. The editor's
-  // second column is the quality check itself; the client's look sits inside
-  // it too, with the chip saying who has it
-  { key: 'quality_check', label: 'Quality check', columns: ['quality_check', 'with_client'], folded: false, empty: 'Nothing with the quality reviewer.' },
+  // Abby's rule (11 Sep 2026): the maker's submit goes to Joy. The client's
+  // look is its own column (the owner, 12 Sep 2026: "why does editing not
+  // have with client"), so the editor sees approve / changes requested there
+  { key: 'quality_check', label: 'Quality check', columns: ['quality_check'], folded: false, empty: 'Nothing with the quality reviewer.' },
+  { key: 'with_client', label: 'With client', columns: ['with_client'], folded: false, empty: 'Nothing with a client.' },
   { key: 'for_handoff', label: 'For Handoff', columns: ['ready_to_post'], folded: false, empty: 'Nothing approved yet.' },
   { key: 'done', label: 'Done', columns: ['booked', 'posted', 'delivered'], folded: true, empty: 'Nothing done yet.' },
 ]

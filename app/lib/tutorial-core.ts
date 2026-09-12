@@ -61,7 +61,7 @@ const NOTIFICATIONS = '/dashboard/notifications'
  *  one tutorial, so said once. */
 export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, With client, Ready to post, Booked in, Posted'
 /** The Editor columns. */
-export const EDITOR_COLUMNS = 'In Progress, Quality check, For Handoff, Done'
+export const EDITOR_COLUMNS = 'In Progress, Quality check, With client, For Handoff, Done'
 /** The Shoots columns. */
 export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage in'
 

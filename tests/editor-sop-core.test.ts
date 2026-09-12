@@ -11,9 +11,10 @@ import { BOARD_COLUMNS } from '../app/lib/board-core'
 
 describe('§6 the four stages', () => {
   it('is In Progress, For Review, For Handoff, Done — the SOP’s words, every column in exactly one', () => {
-    expect(EDITOR_LANE_WORDS).toBe('In Progress, Quality check, For Handoff, Done')
+    expect(EDITOR_LANE_WORDS).toBe('In Progress, Quality check, With client, For Handoff, Done')
     expect(EDITOR_LANES.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
-    expect(EDITOR_LANES.find(l => l.key === 'quality_check')!.columns).toEqual(['quality_check', 'with_client'])
+    expect(EDITOR_LANES.find(l => l.key === 'quality_check')!.columns).toEqual(['quality_check'])
+    expect(EDITOR_LANES.find(l => l.key === 'with_client')!.columns).toEqual(['with_client'])
     expect(EDITOR_LANES.find(l => l.key === 'done')!.folded).toBe(true)
   })
   it('inside For Review the editor is told who has it, in small words', () => {
