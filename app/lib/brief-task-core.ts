@@ -28,7 +28,7 @@ export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
   quality_check: 'Plan being checked',
   client_review: 'Plan with client',
   client_changes_requested: 'Client wants plan changes',
-  approved_for_scheduling: 'Plan approved — book the shoot',
+  approved_for_scheduling: 'Plan approved — press Go',
   scheduled: 'Shoot booked',
   published: 'Shoot booked',
 }
