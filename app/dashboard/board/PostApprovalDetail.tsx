@@ -449,7 +449,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   return (
     <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">
       {/* ── 1. what and where ── */}
-      <div className="flex items-start justify-between gap-3 border-b border-border px-5 pb-4 pt-5">
+      {/* the buttons sit UNDER the title, full width: beside it they squeezed
+          the title to "ZZ walk test ca…" (seen in the browser, 12 Sep 2026) */}
+      <div className="flex flex-col gap-3 border-b border-border px-5 pb-4 pt-5">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
             {client?.name ?? ''} · {adhoc ? 'Post' : (kind?.name ?? 'Work')}
@@ -516,7 +518,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {/* the manager sees what the client sees — the owner, 9 Sep 2026:
               "AM and super admin should see the client portal on the
               assigned task" (not the editor, not the scheduler) */}

@@ -53,7 +53,7 @@ describe('the shoot page draws what its checklist points at', () => {
 describe('one drawer for every card', () => {
   it('Post approval and Editor open the same plain drawer, so a shoot card is not shown the old one', () => {
     expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple \/>/)
-    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor=\{!isManager\} \/>/)
+    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
   })
   it('the plain drawer renames and sets the due date itself — no link out to the old card page', () => {
     expect(src(DRAWER)).toMatch(/Rename or set due date/)
@@ -73,7 +73,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   const EDITOR_DRAWER = 'app/dashboard/board/EditorCardDrawer.tsx'
   const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
   it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
-    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor=\{!isManager\} \/>/)
+    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
     expect(src(CARD_SHEET)).toMatch(/editor && !adhoc\s*\? <EditorCardDrawer/)
   })
   it('the seven sections are not gated on having data', () => {

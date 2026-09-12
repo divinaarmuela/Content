@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Compass, X } from 'lucide-react'
 import Tour, { useTourOnce } from '../social/schedule/Tour'
-import { POST_APPROVAL_TOUR } from '../../lib/tour-core'
+import { EDITOR_TOUR, POST_APPROVAL_TOUR } from '../../lib/tour-core'
 import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
 import {
   COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
@@ -217,7 +217,7 @@ export function Board({
    * walked past. An editor is not on the tour's list of roles and never
    * sees it.
    */
-  const tour = useTourOnce('post-approval', {
+  const tour = useTourOnce(page === 'editor' ? 'editor-board' : 'post-approval', {
     userId: viewer.id || null,
     role: viewer.role,
     ready: true,
@@ -399,7 +399,7 @@ export function Board({
       {/* the live listener drops the row once the server has removed it */}
       <DeleteDialog card={deleteFor} onClose={() => setDeleteFor(null)} />
 
-      {tour.open && <Tour tour={POST_APPROVAL_TOUR} role={viewer.role} onClose={tour.close} />}
+      {tour.open && <Tour tour={page === 'editor' ? EDITOR_TOUR : POST_APPROVAL_TOUR} role={viewer.role} onClose={tour.close} />}
     </div>
   )
 }

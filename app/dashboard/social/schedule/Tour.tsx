@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   firstStep, nextStep, shouldRunTour, stepBody, stepCount, stepNumber, tourKey,
-  type Tour as TourData, type TourId,
-} from '@/app/lib/tour-core'
+  type Tour as TourData, type TourId, tourRoles } from '@/app/lib/tour-core'
 import type { Role } from '@/app/lib/identity-core'
 
 /**
@@ -272,7 +271,7 @@ export function useTourOnce(
     if (!ready || !userId || open) return
     let seen = true
     try { seen = window.localStorage.getItem(tourKey(userId, tourId)) === '1' } catch { seen = true }
-    if (!shouldRunTour(role, seen)) return
+    if (!shouldRunTour(role, seen, tourRoles(tourId))) return
     // one beat, so the page has drawn the things being pointed at
     const t = window.setTimeout(() => setOpen(true), 450)
     return () => window.clearTimeout(t)

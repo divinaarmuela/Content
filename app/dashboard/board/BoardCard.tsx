@@ -147,7 +147,9 @@ export function BoardCard({
   const column = columnOf(card.status)
   // the column already names the stage; the chip earns its place only where
   // one column holds more than one stage
-  const editorFace = page === 'editor' && viewer.role !== 'account_manager' && viewer.role !== 'super_admin'
+  // the Editor page shows the editor's face to EVERYONE — a manager's tools
+  // live on Post approval (the owner, 12 Sep 2026: "too many options")
+  const editorFace = page === 'editor'
   const showStage = !editorFace && statusesIn(column).length > 1
   const review = editorFace ? reviewWords(card.status, (card as { reviewer_name?: string | null }).reviewer_name ?? null) : null
   // the maker's submit lives behind the seven-point quality check in the

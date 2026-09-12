@@ -186,7 +186,8 @@ export default function EditorPage() {
       )}
 
       {/* the card, beside the board — the board stays live behind it */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} simple editor={!isManager} />
+      {/* the editor's card for every role here; managers get their tools on Post approval */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} simple editor />
 
       {viewer && (
         <NewCardDialog

@@ -20,7 +20,7 @@ import type { Role } from './identity-core'
  * the part worth testing.
  */
 
-export type TourId = 'schedule' | 'post-window' | 'post-approval'
+export type TourId = 'schedule' | 'post-window' | 'post-approval' | 'editor-board'
 
 export type TourStep = {
   /** the value of the `data-tour` attribute on the element to point at */
@@ -194,10 +194,41 @@ export const POST_APPROVAL_TOUR: Tour = {
   ],
 }
 
+/** Tour 4: the Editor board — the editor's own page, the SOP's columns. Runs
+ *  for editors as well as the posting roles (the owner, 12 Sep 2026: the
+ *  Post approval tour was opening on the Editor page). */
+export const EDITOR_TOUR: Tour = {
+  id: 'editor-board',
+  name: 'The Editor board',
+  steps: [
+    {
+      target: 'board-lanes',
+      title: 'Your columns',
+      body: 'In Progress is yours to make. Quality check is with the reviewer, With client is with them, For Handoff is approved and with the scheduler, Done went out.',
+    },
+    {
+      target: 'board-card',
+      title: 'One card, one shoot’s work',
+      body: 'The card says which shoot it is from, the deadline, and how many finals are in. Press Acknowledge the day it lands.',
+    },
+    {
+      target: 'board-card-action',
+      title: 'The one button',
+      body: 'Upload the final, tick the quality check, then Ready for checking. It goes straight to the quality reviewer; if it comes back, the note says what to change.',
+    },
+  ],
+}
+
 export const TOURS: Record<TourId, Tour> = {
   schedule: SCHEDULE_TOUR,
   'post-window': POST_WINDOW_TOUR,
   'post-approval': POST_APPROVAL_TOUR,
+  'editor-board': EDITOR_TOUR,
+}
+
+/** Who a given tour runs for: the Editor board tour includes editors. */
+export function tourRoles(tourId: TourId): readonly Role[] {
+  return tourId === 'editor-board' ? ['editor', ...TOUR_ROLES] : TOUR_ROLES
 }
 
 /** The localStorage prefix. Exported so "Show me again" can clear every tour
@@ -223,9 +254,9 @@ export const TOUR_ROLES: readonly Role[] = ['scheduler', 'general', 'account_man
 /** Run the tour for a posting role that has not seen it. Unknown role (the
  *  answer has not arrived yet) means no: a tour that starts before the page
  *  has drawn points at nothing. */
-export function shouldRunTour(role: Role | null | undefined, seen: boolean): boolean {
+export function shouldRunTour(role: Role | null | undefined, seen: boolean, roles: readonly Role[] = TOUR_ROLES): boolean {
   if (seen || !role) return false
-  return (TOUR_ROLES as readonly string[]).includes(role)
+  return (roles as readonly string[]).includes(role)
 }
 
 /**
