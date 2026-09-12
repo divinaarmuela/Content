@@ -150,7 +150,7 @@ describe('briefSatisfiesSubmission', () => {
     expect(briefSatisfiesSubmission({}, { concept: 'Garden shoot, golden hour' }).ok).toBe(true)
     expect(briefSatisfiesSubmission({}, { shot_list: [{ id: 's1' }] }).ok).toBe(true)
     expect(briefSatisfiesSubmission({ brief_url: '  ' }, { concept: ' ', shot_list: [] }))
-      .toMatchObject({ ok: false, missing: expect.stringContaining('plan link') })
+      .toMatchObject({ ok: false, missing: expect.stringContaining('shot list') })
   })
 })
 

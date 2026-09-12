@@ -715,16 +715,18 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               <p className="font-mono text-[12px] uppercase tracking-widest text-muted-foreground">Client portal</p>
               {isManager ? (
                 <>
-                  <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
-                    <Switch
-                      checked={batch.shared_with_client ?? false}
-                      onCheckedChange={async v => {
-                        const ok = await patch('shared_with_client', v)
-                        if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
-                      }}
-                    />
-                    Visible on the client portal
-                    <span className="block text-[12px] text-muted-foreground">Turns on by itself when the plan is shared with the client. They can see the plan and comment on the canvas.</span>
+                  <label className="flex flex-col gap-1 text-secondary-13 text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <Switch
+                        checked={batch.shared_with_client ?? false}
+                        onCheckedChange={async v => {
+                          const ok = await patch('shared_with_client', v)
+                          if (ok) toast.success(v ? 'Shoot plan is now on the client portal' : 'Hidden from the client portal')
+                        }}
+                      />
+                      <span className="text-foreground">Visible on the client portal</span>
+                    </span>
+                    <span className="text-[12px] text-muted-foreground">Turns on by itself when the plan is shared with the client. They can see the plan and comment on the canvas.</span>
                   </label>
                 </>
               ) : (

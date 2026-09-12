@@ -147,7 +147,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
   )
   const blockedReason = (to: ItemStatus): string | null => {
     if (to === 'internal_review' && !briefHasContent) {
-      return 'Add a plan link, or write the concept or shot list above first.'
+      return 'Write the objective or the shot list above first.'
     }
     return null
   }

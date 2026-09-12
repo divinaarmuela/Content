@@ -162,7 +162,7 @@ export function ShootStageBoard({
           tone={late ? 'red' : TONE[stage]}
           people={people}
           chips={<>
-            {clock && <Chip tone={late ? 'red' : stage === 'shoot_day' ? 'amber' : 'muted'}>{clock}</Chip>}
+            {clock && <Chip tone={late ? 'red' : stage === 'shoot_day' ? 'amber' : 'muted'} className="h-auto whitespace-normal text-left">{clock}</Chip>}
             {(stage === 'drafting' || stage === 'shared') && (
               <Chip tone={list.complete ? 'green' : 'surface'}>{list.words}</Chip>
             )}

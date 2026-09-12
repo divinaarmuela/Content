@@ -214,7 +214,7 @@ export default function ProductionPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-[13px] text-muted-foreground">
-          One card per shoot <HelpHint term="shoot" />. Open it for the shoot plan <HelpHint term="shoot_plan" />, who has read it, and the go-ahead.
+          One card per shoot. Open a card for the plan, who has read it, and the go-ahead. <HelpHint term="shoot" /> <HelpHint term="shoot_plan" />
         </p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {/* By stage answers "where is each shoot against the playbook";
