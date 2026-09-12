@@ -27,7 +27,7 @@ import WaitingOnYou from './WaitingOnYou'
  *
  * Every content card for the clients the person holds, on the one board.
  * The two stages a scheduler works — Ready to post, Posted — get full
- * lanes; everything before them (Draft, Internal check, With client) is
+ * lanes; everything before them (Draft, Quality check, With client) is
  * folded into one narrow "Coming up" lane, so what is coming is visible
  * before it is ready without three columns sitting empty. Each card
  * carries the link to the work and what needs doing. Back here the card just

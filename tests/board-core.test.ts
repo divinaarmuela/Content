@@ -14,16 +14,17 @@ import type { Role } from '../app/lib/identity-core'
  * disagree with it, and that every surface reading them gets the same answer.
  */
 
-const KEYS: BoardColumnKey[] = ['draft', 'internal_check', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted', 'delivered']
+const KEYS: BoardColumnKey[] = ['draft', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted', 'delivered']
 
-describe('the eight columns', () => {
-  it('are exactly eight, in board order, with plain labels and one-line meanings', () => {
+describe('the seven columns', () => {
+  it('are exactly seven, in board order, with plain labels and one-line meanings — no Internal check (Abby\u2019s rule, 11 Sep 2026)', () => {
     expect(BOARD_COLUMNS.map(c => c.key)).toEqual(KEYS)
     // "Booked in", never "Scheduled" — the owner's word for a post the
     // channel holds (11 Sep 2026: a booked post sat under Posted and read as live)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Internal check', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
+      'Draft', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
     ])
+    expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Internal check')
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Scheduled')
     for (const c of BOARD_COLUMNS) {
       expect(c.meaning.length).toBeGreaterThan(10)
@@ -35,8 +36,9 @@ describe('the eight columns', () => {
   })
 
   it('hold the statuses the owner named', () => {
-    expect(statusesIn('draft')).toEqual(['draft_uploaded'])
-    expect(statusesIn('internal_check')).toEqual(['internal_review', 'revision_required', 'revision_complete'])
+    expect(statusesIn('draft')).toEqual(['draft_uploaded', 'revision_required', 'revision_complete'])
+    // legacy internal_review cards are drawn with the quality check
+    expect(statusesIn('quality_check')).toEqual(['quality_check', 'internal_review'])
     expect(statusesIn('with_client')).toEqual(['client_review', 'client_changes_requested'])
     expect(statusesIn('ready_to_post')).toEqual(['approved_for_scheduling'])
     expect(statusesIn('booked')).toEqual(['scheduled'])
@@ -64,13 +66,13 @@ describe('the eight columns', () => {
 })
 
 describe('columnsForRole — the same board, a different lens', () => {
-  it('an editor sees all eight — their work, end to end', () => {
+  it('an editor sees all seven — their work, end to end', () => {
     expect(columnsForRole('editor')).toEqual(KEYS)
   })
-  it('a scheduler sees all eight — what is coming, too', () => {
+  it('a scheduler sees all seven — what is coming, too', () => {
     expect(columnsForRole('scheduler')).toEqual(KEYS)
   })
-  it('account managers and super admins see all eight', () => {
+  it('account managers and super admins see all seven', () => {
     expect(columnsForRole('account_manager')).toEqual(KEYS)
     expect(columnsForRole('super_admin')).toEqual(KEYS)
   })
@@ -96,10 +98,10 @@ describe('groupByColumn', () => {
   it('puts every card in its column, keeps order, and lists empty columns', () => {
     const g = groupByColumn(cards)
     expect(g.map(x => x.column.key)).toEqual(KEYS)
-    expect(g[0].cards.map(c => c.id)).toEqual(['a', 'd'])
-    expect(g[1].cards.map(c => c.id)).toEqual(['c'])
+    expect(g[0].cards.map(c => c.id)).toEqual(['a', 'c', 'd'])
+    expect(g[1].cards).toEqual([])
     expect(g[2].cards).toEqual([])
-    expect(g[6].cards.map(c => c.id)).toEqual(['b'])
+    expect(g[5].cards.map(c => c.id)).toEqual(['b'])
   })
   it('limits itself to the columns it is given (the portal asks for one)', () => {
     const g = groupByColumn(cards, columnsForRole('client'))
@@ -114,9 +116,9 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
   const SC: Role[] = ['scheduler']
   const SA: Role[] = ['super_admin']
 
-  it('an editor hands a draft on for checking', () => {
-    expect(canMoveTo({ status: 'draft_uploaded' }, 'internal_check', ED))
-      .toEqual({ ok: true, to: 'internal_review', label: 'Submit for review' })
+  it('an editor hands a draft on for the quality check', () => {
+    expect(canMoveTo({ status: 'draft_uploaded' }, 'quality_check', ED))
+      .toEqual({ ok: true, to: 'quality_check', label: 'Ready for quality check' })
   })
 
   it('an editor cannot send work to the client', () => {
@@ -125,9 +127,12 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
     if (!d.ok) expect(d.reason).toBe('editor may not perform "Send to client"')
   })
 
-  it('a manager dropping on Quality check sends it to the quality reviewer, who sends it to the client', () => {
+  it('a manager dropping a legacy card on Quality check sends it to the quality reviewer, who sends it to the client', () => {
+    // internal_review sits IN the Quality check column now, so the drag is
+    // refused as "already there"; the button "Send to the quality reviewer"
+    // still moves the status on
     expect(canMoveTo({ status: 'internal_review' }, 'quality_check', AM))
-      .toEqual({ ok: true, to: 'quality_check', label: 'Send for quality check' })
+      .toEqual({ ok: false, reason: 'Already in Quality check' })
     expect(canMoveTo({ status: 'internal_review' }, 'with_client', AM).ok).toBe(false)
     expect(canMoveTo({ status: 'quality_check' }, 'with_client', ['quality_reviewer']))
       .toEqual({ ok: true, to: 'client_review', label: 'Passed — send to client' })
@@ -135,19 +140,18 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
   })
 
   it('a multi-status column is entered at the FIRST status the person may reach', () => {
-    // from With client (changes requested), the manager holds one edge into
-    // Internal check: revision_required. internal_review is skipped.
-    expect(canMoveTo({ status: 'client_changes_requested' }, 'internal_check', AM))
+    // from With client (changes requested), the manager holds one edge back
+    // into Draft: revision_required. draft_uploaded is skipped.
+    expect(canMoveTo({ status: 'client_changes_requested' }, 'draft', AM))
       .toEqual({ ok: true, to: 'revision_required', label: 'Send for revision' })
-    // from Draft an editor reaches internal_review, the first status
-    expect(canMoveTo({ status: 'draft_uploaded' }, 'internal_check', ED).ok).toBe(true)
+    // from Quality check the reviewer's "Ask for changes" lands in Draft too
+    expect(canMoveTo({ status: 'quality_check' }, 'draft', ['quality_reviewer']))
+      .toEqual({ ok: true, to: 'revision_required', label: 'Ask for changes' })
   })
 
-  it('an editor who finished revisions lands on "Revisions done"', () => {
-    // revision_required → revision_complete is within Internal check, so a
-    // drag cannot express it (same column) — that stays a button
-    const d = canMoveTo({ status: 'revision_required' }, 'internal_check', ED)
-    expect(d).toEqual({ ok: false, reason: 'Already in Internal check' })
+  it('an editor who finished revisions goes back to the quality check', () => {
+    expect(canMoveTo({ status: 'revision_required' }, 'quality_check', ED))
+      .toEqual({ ok: true, to: 'quality_check', label: 'Revisions done — ready for quality check' })
   })
 
   it('a scheduler books a ready card in, and cannot pull it back', () => {
@@ -160,8 +164,8 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
   })
 
   it('never offers the app\'s own automatic moves — not even to a super admin', () => {
-    // client_review → internal_review is `auto`
-    const d = canMoveTo({ status: 'client_review' }, 'internal_check', SA)
+    // client_review → quality_check is `auto`
+    const d = canMoveTo({ status: 'client_review' }, 'quality_check', SA)
     expect(d.ok).toBe(false)
     // approved_for_scheduling → client_review is `auto` too
     expect(canMoveTo({ status: 'approved_for_scheduling' }, 'with_client', SA).ok).toBe(false)
@@ -215,15 +219,15 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
     const me = { id: 'u1', role: 'editor' as const }
     const mine = { status: 'draft_uploaded' as const, owner_id: 'u1' }
     const theirs = { status: 'draft_uploaded' as const, owner_id: 'u2' }
-    expect(canMoveTo(mine, 'internal_check', actingRoles(me, mine)).ok).toBe(true)
-    expect(canMoveTo(theirs, 'internal_check', actingRoles(me, theirs)).ok).toBe(false)
+    expect(canMoveTo(mine, 'quality_check', actingRoles(me, mine)).ok).toBe(true)
+    expect(canMoveTo(theirs, 'quality_check', actingRoles(me, theirs)).ok).toBe(false)
   })
 
   it('reachableColumns lists where a drag may land', () => {
-    expect(reachableColumns({ status: 'internal_review' }, AM).map(r => r.column)).toEqual(['quality_check'])
-    // the reviewer may also send it back: Internal check is where "Ask for changes" lands
+    expect(reachableColumns({ status: 'internal_review' }, AM).map(r => r.column)).toEqual(['draft'])
+    // the reviewer may also send it back: Draft is where "Ask for changes" lands
     expect(reachableColumns({ status: 'quality_check' }, ['quality_reviewer']).map(r => r.column))
-      .toEqual(['internal_check', 'with_client', 'ready_to_post'])
+      .toEqual(['draft', 'with_client', 'ready_to_post'])
     expect(reachableColumns({ status: 'published' }, SA)).toEqual([])
   })
 })

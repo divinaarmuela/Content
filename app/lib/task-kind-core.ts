@@ -81,6 +81,11 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
   'revision_complete>client_review': { label: 'Looks good — send to client', roles: ['account_manager'] },
   'internal_review>quality_check': { blocked: true },
   'revision_complete>quality_check': { blocked: true },
+  'draft_uploaded>quality_check': { blocked: true },
+  'revision_required>quality_check': { blocked: true },
+  'client_review>quality_check': { blocked: true },
+  // revised: back to the manager, as before (the base edge is tasks-and-plans only now)
+  'revision_required>revision_complete': { label: 'Revisions done', roles: ['editor', 'account_manager'] },
   // the client's own yes, recorded — not the manager approving it themselves
   'client_review>approved_for_scheduling': { label: 'Client approved — mark done', roles: ['client', 'account_manager'] },
   // a task has nothing to schedule or publish — Done is the end, for everyone
@@ -99,7 +104,7 @@ export function checkTaskTransitionAs(
   const exists = TRANSITIONS[from]?.[to]
   if (!exists) return { ok: false, reason: `No transition from ${from} to ${to}` }
   const override = TASK_TRANSITION_OVERRIDES[`${from}>${to}`]
-  if (!override) return checkTransitionAs(roles, from, to, opts)
+  if (!override) return checkTransitionAs(roles, from, to, { ...opts, tasksAndPlans: true })
   if ('blocked' in override) {
     return { ok: false, reason: to === 'quality_check'
       ? 'A task has no quality check — the manager sends it on themselves'
@@ -116,7 +121,7 @@ export function checkTaskTransitionAs(
 export function availableTaskTransitionsAs(
   roles: readonly Hat[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
-  return offeredTransitionsFrom(from)
+  return offeredTransitionsFrom(from, { tasksAndPlans: true })
     .map(to => {
       const c = checkTaskTransitionAs(roles, from, to)
       return c.ok ? { to, label: c.rule.label } : null

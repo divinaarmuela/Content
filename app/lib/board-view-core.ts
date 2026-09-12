@@ -385,7 +385,7 @@ function needsClientFirst(card: BoardViewCard, to: ItemStatus): boolean {
  * walks both steps, so the board offers it as the one move it is.
  */
 function sendBackFromClient(card: BoardViewCard, column: BoardColumnKey, hats: readonly Hat[]): boolean {
-  return column === 'internal_check' && card.status === 'client_review' && isManagerHat(hats)
+  return column === 'draft' && card.status === 'client_review' && isManagerHat(hats)
 }
 
 export function dropAction(card: BoardViewCard, column: BoardColumnKey, viewer: BoardViewer): DropDecision {
@@ -520,12 +520,11 @@ export function pageCards<T extends BoardViewCard>(
 }
 
 /** A lane is one column, or several columns folded into one narrow strip. */
-export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' | 'for_review' | 'for_handoff'
+export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' | 'for_handoff'
 
 /** What is NOT in a lane, in the lane's own words. */
 export const LANE_EMPTY: Record<PageLaneKey, string> = {
   draft: 'Nothing being made.',
-  internal_check: 'Nothing waiting on a check.',
   quality_check: 'Nothing waiting on a quality check.',
   with_client: 'Nothing with a client.',
   ready_to_post: 'Nothing ready to post.',
@@ -535,14 +534,12 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
   done: 'Nothing done yet.',
   coming_up: 'Nothing coming up.',
   in_progress: 'Nothing to edit right now.',
-  for_review: 'Nothing out for review.',
   for_handoff: 'Nothing approved yet.',
 }
 
 /** The five columns' own empty sentences — the Production list draws them too. */
 export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   draft: LANE_EMPTY.draft,
-  internal_check: LANE_EMPTY.internal_check,
   quality_check: LANE_EMPTY.quality_check,
   with_client: LANE_EMPTY.with_client,
   ready_to_post: LANE_EMPTY.ready_to_post,
@@ -579,9 +576,8 @@ const laneOfColumn = (key: BoardColumnKey): PageLane => ({
  */
 export const EDITOR_LANE_LABELS: Partial<Record<BoardColumnKey, string>> = {
   draft: 'In Progress',
-  internal_check: 'For Review',
-  quality_check: 'For Review',
-  with_client: 'For Review',
+  quality_check: 'Quality check',
+  with_client: 'Quality check',
   ready_to_post: 'For Handoff',
   booked: 'Done',
   posted: 'Done',

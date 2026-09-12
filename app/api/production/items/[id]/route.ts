@@ -197,9 +197,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const handOver = body?.hand_over === true || typeof body?.hand_over === 'string'
     const handNote = typeof body?.hand_over === 'string' ? body.hand_over : ''
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
+    // WHERE THE REVIEWER SHOULD LOOK (Abby, 11 Sep 2026: "the task must have
+    // the link on the description eg. Canva link and page number"): an https
+    // link, and a free line such as "page 3" — both optional, both plain
+    if ('review_link' in patch) {
+      const raw = String(patch.review_link ?? '').trim()
+      if (raw && !/^https:\/\/\S+$/i.test(raw)) {
+        return NextResponse.json({ error: 'The review link must start with https://' }, { status: 400 })
+      }
+      patch.review_link = raw ? raw.slice(0, 2000) : null
+    }
+    if ('review_note' in patch) {
+      const raw = String(patch.review_note ?? '').trim()
+      patch.review_note = raw ? raw.slice(0, 200) : null
+    }
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
     // what this save ADDED, decided before the write: the upload queue sends
     // the whole array back every time it appends one file, so the payload is

@@ -22,7 +22,7 @@ import {
 import { NewCardDialog } from '../board/BoardDialogs'
 import { toast } from 'sonner'
 import { flagsOf } from '../../lib/card-flag-core'
-import { EDITOR_LANE_WORDS } from '../../lib/editor-sop-core'
+import { EDITOR_LANE_WORDS, reviewerNameOf } from '../../lib/editor-sop-core'
 import { finalsInWords, plannedCount } from '../../lib/deliverable-group-core'
 import { slidesOf } from '../../lib/version-files-core'
 
@@ -87,10 +87,12 @@ export default function EditorPage() {
       const key = String(a.entity_id ?? '')
       activityByItem.set(key, [...(activityByItem.get(key) ?? []), a])
     }
+    const reviewerName = reviewerNameOf(live.tables.team.rows as never)
     const rows = base.map(c => {
       const flags = flagsOf(activityByItem.get(c.id) ?? [], viewer.id)
       return {
         ...c,
+        reviewer_name: reviewerName,
         shoot_title: c.batch_id ? (shootTitle.get(c.batch_id) ?? null) : null,
         shoot_date: c.batch_id ? (shootDate.get(c.batch_id) ?? null) : null,
         finals_in: c.batch_id ? finalsInWords(latestByItem.get(c.id)?.files ?? 0, planned.get(c.batch_id) ?? 0) : null,
@@ -99,7 +101,7 @@ export default function EditorPage() {
       }
     })
     return pageCards('editor', rows, viewer, today)
-  }, [live.items, live.tables.batches.rows, live.tables.activity.rows, viewer, today])
+  }, [live.items, live.tables.batches.rows, live.tables.activity.rows, live.tables.versions.rows, live.tables.team.rows, viewer, today])
   /* ── who is doing what: the Client and People filters, for managers, super
         admins and the quality reviewer; an editor sees only their own cards
         and has nothing to narrow (the owner, 11 Sep 2026) ── */
@@ -144,8 +146,8 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? `Everything still being made, in the editors’ four columns: ${EDITOR_LANE_WORDS}. Check the work, then send it on for the quality check or send it back.`
-          : `Your cards, the playbook way: ${EDITOR_LANE_WORDS}. Acknowledge a new card the day it lands, confirm the brief, upload the final, tick the quality check, submit.`}
+          ? `Everything still being made, in the editors’ four columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
+          : `Your cards, the playbook way: ${EDITOR_LANE_WORDS}. Acknowledge a new card the day it lands, confirm the brief, upload the final, tick the quality check, submit — it goes straight to the quality reviewer.`}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">

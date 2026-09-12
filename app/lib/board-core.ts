@@ -24,7 +24,7 @@ import type { Role } from './identity-core'
 import type { Hat } from './workflow-core'
 import { isDelivered } from './deliver-only-core'
 
-export type BoardColumnKey = 'draft' | 'internal_check' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted' | 'delivered'
+export type BoardColumnKey = 'draft' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted' | 'delivered'
 
 export type BoardColumn = {
   key: BoardColumnKey
@@ -38,23 +38,23 @@ export type BoardColumn = {
 
 /** The board, left to right. */
 export const BOARD_COLUMNS: readonly BoardColumn[] = [
+  // ABBY'S RULE (11 Sep 2026): maker → Joy → scheduler. There is no
+  // "Internal check" column any more — the maker's submit lands on the
+  // quality reviewer. A card being made, or being changed after a send-back,
+  // is in Draft; a card the reviewer holds is in Quality check.
   {
     key: 'draft',
     label: 'Draft',
-    meaning: 'Being made. Nobody has checked it yet.',
-    statuses: ['draft_uploaded'],
-  },
-  {
-    key: 'internal_check',
-    label: 'Internal check',
-    meaning: 'An account manager is checking it, or changes are being made.',
-    statuses: ['internal_review', 'revision_required', 'revision_complete'],
+    meaning: 'Being made, or being changed after a send-back.',
+    statuses: ['draft_uploaded', 'revision_required', 'revision_complete'],
   },
   {
     key: 'quality_check',
     label: 'Quality check',
     meaning: 'The quality reviewer is checking it before it goes to the client or a scheduler.',
-    statuses: ['quality_check'],
+    // internal_review is LEGACY: a card that was at the old manager's check
+    // when that step went away is drawn here and moved on by the manager
+    statuses: ['quality_check', 'internal_review'],
   },
   {
     key: 'with_client',

@@ -10,6 +10,8 @@ import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/work
 import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
 import { previewVideos } from '../../../../../lib/stream'
 import { normaliseSlides, slidesSatisfyType } from '../../../../../lib/version-files-core'
+import { isInternalKind } from '../../../../../lib/task-kind-core'
+import { SHOOT_BRIEF_SLUG } from '../../../../../lib/brief-task-core'
 
 /** Append a new asset version (race-safe numbering). The editor HAT on this
  *  item — its owner, or anyone while it is unowned — plus managers. */
@@ -119,7 +121,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // The piece goes back to them, exactly as it does from the composer's
     // media picker, and they are emailed the same plain sentence.
     let status = item.status as string
-    const backTo = item.status === 'client_review' ? 'internal_review'
+    // content comes back to the quality reviewer (Abby's rule); a task or a
+    // shoot plan, which has no gate, comes back to the manager's check
+    const kindRow = item.work_kind_id ? await table<{ id: string; slug?: string | null; uses_media?: boolean | null }>('work_kinds').get(String(item.work_kind_id)).catch(() => null) : null
+    const noGate = kindRow?.slug === SHOOT_BRIEF_SLUG || isInternalKind(kindRow as never)
+    const backTo = item.status === 'client_review' ? (noGate ? 'internal_review' : 'quality_check')
       : item.status === 'approved_for_scheduling' ? 'client_review'
       : null
     if (backTo) {

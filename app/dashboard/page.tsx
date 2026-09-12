@@ -364,7 +364,7 @@ function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
 
 /** The board at a glance — the same six columns, with the same words. */
 const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
-  draft: 'muted', internal_check: 'amber', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
+  draft: 'muted', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
 }
 
 /** Per-status counts folded into the five columns — `columnOf` is the one

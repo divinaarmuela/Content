@@ -99,7 +99,34 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   })
   it('submit is behind the seven checks and a file', () => {
     const s = src(EDITOR_DRAWER)
-    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| slides\.length === 0\}/)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| slides\.length === 0 \|\| !reviewLinkOk\}/)
+    // the submit goes straight to the quality reviewer (Abby's rule), never to a manager's check
+    expect(s).toMatch(/\{ to: 'quality_check' \}/)
+    expect(s).not.toMatch(/to: 'internal_review'/)
+  })
+  it('after the seven ticks the card asks where the reviewer should look, and saves it with a PATCH', () => {
+    const s = src(EDITOR_DRAWER)
+    expect(s).toMatch(/\{qcComplete\(ticks\) && \(/)
+    expect(s).toMatch(/id="ed-review-link"/)
+    expect(s).toMatch(/id="ed-review-note"/)
+    expect(s).toMatch(/Where should the reviewer look\?/)
+    // the items route has no POST: the review fields go by PATCH (the live walk of 12 Sep 2026)
+    expect(s).toMatch(/review_note: reviewNote\.trim\(\) \|\| null \}, 'Saved where to look', 'Saving', 'PATCH'\)/)
+    // the reviewer sees it on the manager's card
+    expect(src(DRAWER)).toMatch(/Look here:/)
+    expect(src(DRAWER)).toMatch(/review_link/)
+  })
+  it('the card face for the maker opens the card ("Quality check, then submit"); the link controls are the manager’s', () => {
+    const s = src('app/dashboard/board/BoardCard.tsx')
+    expect(s).toMatch(/needsWorkFirst\(card\) \? UPLOAD_FIRST : 'Quality check, then submit'/)
+    expect(s).toMatch(/adhoc_post === true \|\| editorFace \? null : canEdit \?/)
+    expect(s).toMatch(/\{!settled && !adhocPost && !editorFace && \(/)
+    // a red "at risk" chip has no place on a Done card (the live walk of 12 Sep 2026)
+    expect(s).toMatch(/card\.status === 'scheduled' \|\| card\.status === 'published' \? null : riskChip/)
+  })
+  it('"Previous edits" opens the editor’s own page, and a second Acknowledge is a no-op', () => {
+    expect(src('app/lib/editor-sop-core.ts')).toMatch(/href: `\/dashboard\/editor\?client=/)
+    expect(src('app/api/production/items/[id]/flag/route.ts')).toMatch(/already: true/)
   })
 })
 
@@ -132,5 +159,39 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(s).toMatch(/\{!simple && groups\.length > 0 &&/)
     expect(s).toMatch(/\{isManager && !simple && \(/)
     expect(src(EDITOR)).toMatch(/<NewCardDialog[\s\S]*?simple\s*\/>/)
+  })
+})
+
+describe('the shoot plan, every button (the walk of 12 Sep 2026)', () => {
+  const REVIEW = 'app/dashboard/production/shoots/[id]/PlanReviewCard.tsx'
+  const NEW_PLAN = 'app/dashboard/production/NewItemDialog.tsx'
+  it('Go is the one sign-off: no second "Book the shoot" button or dialog on the shoot page', () => {
+    const s = src(SHOOT)
+    expect(s).not.toMatch(/Book this shoot\?|setLockOpen|lockOpen/)
+    expect(s).not.toMatch(/transitions\.find\(t => t\.to === 'locked'\)/)
+    // the plan's approval card points at Go, not at a Book button that is not there
+    expect(src(REVIEW)).not.toMatch(/Book button above/)
+    expect(src(REVIEW)).toMatch(/press Go, on the right/)
+  })
+  it('"Open the editor\u2019s card" opens it on Editor, never the old card page', () => {
+    expect(src(SHOOT)).toMatch(/dashboard\/editor\?card=\$\{one\.id\}/)
+    expect(src(SHOOT)).not.toMatch(/dashboard\/production\/\$\{one\.id\}/)
+  })
+  it('one shoot, one card — no "one line is one card" anywhere on the shoot page', () => {
+    expect(src(SOP)).not.toMatch(/One line is one card/)
+    expect(src(SOP)).toMatch(/The editor gets one card for the whole shoot/)
+    expect(src(SOP)).toMatch(/The editor’s card is on the Editor page already/)
+  })
+  it('the sixth stage is "Footage in" on the board, the strip and the tutorials', () => {
+    const core = src('app/lib/shoot-sop-core.ts')
+    expect(core).toMatch(/label: 'Footage in'/)
+    expect(core).not.toMatch(/label: 'Footage handed over'/)
+    expect(src('app/lib/tutorial-core.ts')).not.toMatch(/Footage handed over/)
+    expect(src('app/lib/getting-started-core.ts')).not.toMatch(/Footage handed over/)
+  })
+  it('New shoot plan\u2019s toast names Shoots, not a board that is gone', () => {
+    expect(src(NEW_PLAN)).not.toMatch(/Production board/)
+    expect(src(NEW_PLAN)).toMatch(/it is in Draft on Shoots/)
+    expect(src(NEW_PLAN)).not.toMatch(/dashboard\/production\/\$\{first\.id\}/)
   })
 })

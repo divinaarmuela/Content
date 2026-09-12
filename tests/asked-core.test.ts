@@ -270,8 +270,8 @@ afterEach(() => { fake?.restore(); fake = null })
 describe('asked, then answered — the round trip', () => {
   it('picking who to ask records them ON the card, not just in the email', async () => {
     fake = seed('draft_uploaded')
-    h.user = ED    // the editor submits, and picks who to ask
-    const r = await move('internal_review', [AM.id, AM2.id])
+    h.user = ED    // the editor submits — straight to the quality check — and picks who to ask
+    const r = await move('quality_check', [AM.id, AM2.id])
     await drain()
     expect(r.status).toBe(200)
     expect(item().asked_ids).toEqual([AM.id, AM2.id])
@@ -296,13 +296,13 @@ describe('asked, then answered — the round trip', () => {
   it('a card nobody was asked about behaves exactly as it did', async () => {
     fake = seed('draft_uploaded')
     h.user = ED
-    const r = await move('internal_review')
+    const r = await move('quality_check')
     await drain()
     expect(r.status).toBe(200)
-    expect(item().status).toBe('internal_review')
+    expect(item().status).toBe('quality_check')
     expect(item().asked_ids ?? null).toBeNull()
-    // the role rule is back in charge: both managers MAY take it, neither is named
-    expect(whoseTurn('internal_review', item() as never, AM)).toMatchObject({ mine: false, unassigned: true, may: true })
+    // the role rule is back in charge: any reviewer MAY take it, nobody is named
+    expect(whoseTurn('quality_check', item() as never, { ...AM, quality_reviewer: true } as never)).toMatchObject({ mine: false, unassigned: true, may: true })
     expect(whoseTurn('internal_review', item() as never, AM2)).toMatchObject({ mine: false, unassigned: true, may: true })
   })
 

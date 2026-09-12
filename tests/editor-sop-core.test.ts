@@ -11,9 +11,9 @@ import { BOARD_COLUMNS } from '../app/lib/board-core'
 
 describe('§6 the four stages', () => {
   it('is In Progress, For Review, For Handoff, Done — the SOP’s words, every column in exactly one', () => {
-    expect(EDITOR_LANE_WORDS).toBe('In Progress, For Review, For Handoff, Done')
+    expect(EDITOR_LANE_WORDS).toBe('In Progress, Quality check, For Handoff, Done')
     expect(EDITOR_LANES.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
-    expect(EDITOR_LANES.find(l => l.key === 'for_review')!.columns).toEqual(['internal_check', 'quality_check', 'with_client'])
+    expect(EDITOR_LANES.find(l => l.key === 'quality_check')!.columns).toEqual(['quality_check', 'with_client'])
     expect(EDITOR_LANES.find(l => l.key === 'done')!.folded).toBe(true)
   })
   it('inside For Review the editor is told who has it, in small words', () => {
@@ -31,7 +31,7 @@ describe('§2 before you start', () => {
     expect(rows.map(r => r.key)).toEqual(['objective', 'deliverables', 'specs', 'deadline', 'shot_list', 'script', 'notes', 'previous'])
     expect(rows.filter(r => r.key !== 'previous').every(r => r.value === null)).toBe(true)
     expect(NOT_GIVEN).toBe('Not given')
-    expect(rows.find(r => r.key === 'previous')!.href).toContain('/dashboard/scheduler?client=c1')
+    expect(rows.find(r => r.key === 'previous')!.href).toContain('/dashboard/editor?client=c1&column=posted')
   })
   it('reads the shoot plan, the card and the specs', () => {
     const rows = beforeYouStart({

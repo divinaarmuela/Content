@@ -23,7 +23,7 @@ import { flagsOf } from '../../lib/card-flag-core'
 import { plannedCount, finalsInWords } from '../../lib/deliverable-group-core'
 import {
   BLOCKER_LADDER, BLOCKER_NEEDS, EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
-  beforeYouStart, blockerWords, handoverState, qcComplete, qcDoneFor, reviewWords, showsHandover, workFrom,
+  beforeYouStart, blockerWords, handoverState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
 
@@ -85,10 +85,10 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const flags = useMemo(() => flagsOf(activity as never, me?.id ?? ''), [activity, me?.id])
   const ackRow = useMemo(() => activity.find(a => a.action === 'acknowledged' && a.actor_id === item?.owner_id) ?? null, [activity, item?.owner_id])
 
-  const post = async (path: string, body: Record<string, unknown>, said: string, what = said) => {
+  const post = async (path: string, body: Record<string, unknown>, said: string, what = said, method: 'POST' | 'PATCH' = 'POST') => {
     setWorking(what)
     try {
-      const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? json?.problems?.[0] ?? 'That did not work'))
       toast.success(said)
@@ -168,16 +168,25 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const [ticks, setTicks] = useState<string[]>([])
   const [riskOpen, setRiskOpen] = useState(false)
   const [riskNote, setRiskNote] = useState('')
-  const submitTo: 'internal_review' | 'revision_complete' | null =
-    item?.status === 'draft_uploaded' ? 'internal_review'
-    : item?.status === 'revision_required' ? 'revision_complete'
-    : null
+  /** WHERE JOY SHOULD LOOK (Abby, 11 Sep 2026: "the task must have the link
+   *  … Canva link and page number for her to go through") — optional when
+   *  the final is on the card itself */
+  const [reviewLink, setReviewLink] = useState(item?.review_link ?? '')
+  const [reviewNote, setReviewNote] = useState(item?.review_note ?? '')
+  useEffect(() => { setReviewLink(item?.review_link ?? ''); setReviewNote(item?.review_note ?? '') }, [item?.review_link, item?.review_note])
+  const reviewLinkOk = reviewLink.trim() === '' || /^https:\/\/\S+$/i.test(reviewLink.trim())
+  // ABBY'S RULE: the maker's submit goes straight to the quality reviewer
+  const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
   const submit = async () => {
-    if (!submitTo) return
+    if (!submitting) return
     if (slides.length === 0) { toast.error('Upload the final first'); return }
+    if (!reviewLinkOk) { toast.error('The review link must start with https://'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
-    const moved = await post(`/api/production/items/${id}/transition`, { to: submitTo }, submitTo === 'internal_review' ? 'Sent for review — the account manager has it' : 'Revisions done — sent back for review', 'Sending')
+    // the card's own fields take a PATCH (the items route has no POST)
+    const where = await post(`/api/production/items/${id}`, { review_link: reviewLink.trim() || null, review_note: reviewNote.trim() || null }, 'Saved where to look', 'Saving', 'PATCH')
+    if (where === null) return
+    const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
     if (moved) setTicks([])
   }
 
@@ -203,7 +212,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const holder = me?.id === item.owner_id
   const frozen = ['scheduled', 'published'].includes(status)
   const editing = holder && ['draft_uploaded', 'revision_required', 'revision_complete'].includes(status)
-  const review = reviewWords(status)
+  const review = reviewWords(status, reviewerNameOf(team as never))
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
   const specs = channelSpecs({ platforms, types: slides.some(s => s.type === 'video') || slides.length === 0 ? ['video'] : ['image'] })
     .map(s => ({ platform: s.label, lines: s.groups.flatMap(g => g.lines) }))
@@ -375,9 +384,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
       {/* ── 4. quality check, then submit (§4) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-qc">
         <p id="ed-qc" className={H2}>Quality check before submitting</p>
-        {submitTo && holder ? (
+        {submitting && holder ? (
           <>
-            <p className="text-[12px] text-muted-foreground">Never submit a cut you have not reviewed. Tick each one, then submit.</p>
+            <p className="text-[12px] text-muted-foreground">Never submit a cut you have not reviewed. Tick each one, then submit — it goes straight to the quality reviewer.</p>
             <ul className="flex flex-col gap-1">
               {QC_CHECKLIST.map(c => (
                 <li key={c.key}>
@@ -389,10 +398,18 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
                 </li>
               ))}
             </ul>
+            {qcComplete(ticks) && (
+              <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
+                <label htmlFor="ed-review-link" className="text-[13px] font-semibold">Where should the reviewer look? <span className="font-normal text-muted-foreground">(a Canva link and the page — optional when the final is uploaded here)</span></label>
+                <input id="ed-review-link" value={reviewLink} onChange={e => setReviewLink(e.target.value)} placeholder="https://www.canva.com/design/…" className={`${field} min-w-0`} />
+                <input id="ed-review-note" aria-label="Which page or frame" value={reviewNote} onChange={e => setReviewNote(e.target.value)} placeholder="page 3" className={`${field} min-w-0`} />
+                {!reviewLinkOk && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">The review link must start with https://</p>}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || slides.length === 0} onClick={() => void submit()}
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || slides.length === 0 || !reviewLinkOk} onClick={() => void submit()}
                 title={slides.length === 0 ? 'Upload the final first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
-                {submitTo === 'internal_review' ? 'Submit for review' : 'Revisions done — submit'}
+                {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
                 <Button variant="ghost" className={ghostBtn} disabled={busy} onClick={() => setRiskOpen(true)}>
@@ -404,7 +421,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">
-            {qcDone ? 'Quality check done on this version.' : submitTo ? 'The person holding this card does the quality check.' : 'Done for this stage — the check happens before each submit.'}
+            {qcDone ? 'Quality check done on this version.' : submitting ? 'The person holding this card does the quality check.' : 'Done for this stage — the check happens before each submit.'}
           </p>
         )}
         {riskOpen && (

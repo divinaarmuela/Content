@@ -66,9 +66,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       current = { ...current, ...moved, status: moved.status }
     }
 
-    if (columnOf(current.status) !== 'internal_check') {
-      // the drop a drag onto Internal check would make — same rules, same status
-      const decision = canMoveTo({ status: current.status }, 'internal_check', hats)
+    if (columnOf(current.status) !== 'draft') {
+      // the drop a drag back onto Draft would make — same rules, same status
+      // (Abby's rule, 11 Sep 2026: a card being changed is in Draft)
+      const decision = canMoveTo({ status: current.status }, 'draft', hats)
       if (!decision.ok) return NextResponse.json({ error: decision.reason }, { status: 403 })
       const moved = await performTransition(user, current, decision.to, {
         note,
@@ -78,9 +79,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       steps.push({ from: current.status, to: decision.to, label: decision.label })
       current = { ...current, ...moved, status: moved.status }
     } else if (current.status !== 'revision_required') {
-      // already in Internal check but not yet being revised (waiting for the
-      // manager's check, or revised and waiting again): "Ask for changes" is
-      // the edge, and the machine decides whether this person holds it
+      // already in Draft but not yet being revised (a legacy card revised and
+      // waiting on the old re-check): "Ask for changes" is the edge, and the
+      // machine decides whether this person holds it
       const moved = await performTransition(user, current, 'revision_required', {
         note, skipAudiences: ['owner_editor'],
       })

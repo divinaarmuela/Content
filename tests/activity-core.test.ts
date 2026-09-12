@@ -47,8 +47,8 @@ describe('describeActivity', () => {
   })
 
   it('falls back to the rule’s label when the row carries no detail', () => {
-    const r = row({ old_value: 'client_review', new_value: 'internal_review' })
-    expect(describeActivity(r, 'asset')).toBe("New version — back for the manager's check — Divina")
+    const r = row({ old_value: 'client_review', new_value: 'quality_check' })
+    expect(describeActivity(r, 'asset')).toBe('New version — back for the quality check — Divina')
   })
 
   it('leaves an ordinary move alone — its detail is only the button’s name', () => {

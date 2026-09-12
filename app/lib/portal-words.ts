@@ -86,12 +86,12 @@ export type LastStatusChange = {
 export function progressLine(
   status: string | null | undefined, lastChange: LastStatusChange,
 ): string | null {
-  if (status !== 'internal_review') return null
+  if (status !== 'internal_review' && status !== 'quality_check') return null
   // read from the item's own history rather than from a flag column: the move
   // is already recorded there, and a second source of truth for the same fact
   // is a second thing to get out of step
   if (String(lastChange?.old_value ?? '') !== 'client_review') return null
-  if (String(lastChange?.new_value ?? '') !== 'internal_review') return null
+  if (!['internal_review', 'quality_check'].includes(String(lastChange?.new_value ?? ''))) return null
   return UPDATING_AFTER_REVIEW_LINE
 }
 

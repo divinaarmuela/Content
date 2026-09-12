@@ -154,7 +154,7 @@ export function BriefParts({ batch, canEdit, itemCount, onPatch }: {
             {Array.isArray(batch.planned_deliverables) && batch.planned_deliverables.length > 0
               ? `${batch.planned_deliverables.length} line${batch.planned_deliverables.length === 1 ? '' : 's'} in “What is coming out of this shoot”`
               : itemCount > 0 ? `${itemCount} card${itemCount === 1 ? '' : 's'} pointed at this shoot`
-              : 'Add the outputs under “What is coming out of this shoot” — on the right, or below on a phone. One line is one card: “5 reels” is one card with five files.'}
+              : 'Add the outputs under “What is coming out of this shoot” — on the right, or below on a phone. The editor gets one card for the whole shoot.'}
           </p>
         ))}
         {row('shot_list', (
@@ -367,7 +367,7 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
         {names.shared_by && batch.brief_shared_at && <p className="text-[12px] text-muted-foreground">Shared by {names.shared_by}</p>}
         {names.go_by && batch.go_at && <p className="text-[12px] text-muted-foreground">Confirmed as go by {names.go_by}</p>}
         {wentLate && <Chip tone="amber" className="w-fit">{wentLate}</Chip>}
-        {names.handed_by && batch.footage_handed_at && <p className="text-[12px] text-muted-foreground">Footage handed over by {names.handed_by}</p>}
+        {names.handed_by && batch.footage_handed_at && <p className="text-[12px] text-muted-foreground">Footage marked in by {names.handed_by}</p>}
 
         {manager && stage !== 'footage_handed' && (
           <div className="flex flex-col gap-1.5">
@@ -443,7 +443,7 @@ export function GoPanel({ batch, role, viewerId, today, itemCount, busy, names, 
         {(stage === 'confirmed' || stage === 'reminder_sent' || stage === 'shoot_day') && (
           <p className="text-[13px] text-muted-foreground">
             {handoverReady(batch)
-              ? 'The editor’s cards are on the Editor page already; the footage follows the shoot. The morning after the shoot it is handed over by itself — press “Footage is in” only if it is in early.'
+              ? 'The editor’s card is on the Editor page already; the footage follows the shoot. The morning after the shoot it is handed over by itself — press “Footage is in” only if it is in early.'
               : 'Name the editor, the priorities and the deadline so the card can be theirs — the handover waits on those three.'}
           </p>
         )}

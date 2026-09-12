@@ -94,9 +94,9 @@ describe('the lines on a card', () => {
 })
 
 describe('the control on a card', () => {
-  it('an editor hands a draft on for checking, and that is the only button', () => {
+  it('an editor hands a draft on for the quality check, and that is the only button', () => {
     const { primary, more } = cardActions(card(), editor)
-    expect(primary).toEqual({ kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL })
+    expect(primary).toEqual({ kind: 'transition', to: 'quality_check', label: 'Ready for quality check' })
     expect(READY_FOR_CHECK_LABEL).toBe('Ready for checking')
     expect(more).toEqual([])
   })
@@ -107,9 +107,9 @@ describe('the control on a card', () => {
     expect(more).toEqual([])
   })
 
-  it('a manager checking a card sends it for quality check or sends it back with what to change', () => {
+  it('a manager on a legacy card sends it to the quality reviewer or sends it back with what to change', () => {
     const { primary, more } = cardActions(card({ status: 'internal_review' }), manager)
-    expect(primary).toEqual({ kind: 'transition', to: 'quality_check', label: 'Send for quality check' })
+    expect(primary).toEqual({ kind: 'transition', to: 'quality_check', label: 'Send to the quality reviewer' })
     expect(more).toContainEqual({ kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL })
     // the client is the quality reviewer's to send to, never the manager's
     expect(more.some(a => a.to === 'client_review')).toBe(false)
@@ -209,12 +209,12 @@ describe('the control on a card', () => {
 
 describe('dragging a card', () => {
   it('lands on the status a button would, worded as the action', () => {
-    const d = dropAction(card(), 'internal_check', editor)
-    expect(d).toEqual({ ok: true, column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
+    const d = dropAction(card(), 'quality_check', editor)
+    expect(d).toEqual({ ok: true, column: 'quality_check', action: { kind: 'transition', to: 'quality_check', label: 'Ready for quality check' } })
   })
 
-  it('a manager dropping a client card on Internal check is asked what to change', () => {
-    const d = dropAction(card({ status: 'client_review' }), 'internal_check', manager)
+  it('a manager dropping a client card back on Draft is asked what to change', () => {
+    const d = dropAction(card({ status: 'client_review' }), 'draft', manager)
     expect(d.ok && d.action.kind).toBe('send_back')
   })
 
@@ -234,10 +234,12 @@ describe('dragging a card', () => {
   })
 
   it('the keyboard gets the same targets as the mouse, in words', () => {
+    // a legacy card at the old manager's check sits IN Quality check: the one
+    // move a drag can express is back to Draft (send back for changes)
     const t = moveTargets(card({ status: 'internal_review' }), manager)
-    expect(t.map(x => x.column)).toEqual(['quality_check'])
-    expect(t[0].label).toBe('Move to Quality check — Send for quality check')
-    expect(moveTargets(card(), editor)[0].label).toBe('Move to Internal check — Ready for checking')
+    expect(t.map(x => x.column)).toEqual(['draft'])
+    expect(t[0].label).toBe('Move to Draft — Send back for changes')
+    expect(moveTargets(card(), editor)[0].label).toBe('Move to Quality check — Ready for quality check')
     // a card that needs the client has no way straight to Ready to post
     expect(t.some(x => x.column === 'ready_to_post')).toBe(false)
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
@@ -270,7 +272,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'for_review', 'for_handoff', 'done'])
+    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'for_handoff', 'done'])
   })
 
   it('a manager on the Editor page sees the making, not the posting', () => {
@@ -318,13 +320,13 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(keys).toContain('booked')
   })
 
-  it('the Editor page is the Video Editors SOP\u2019s four: In Progress, For Review, For Handoff, Done', () => {
-    // the team's three checking stages are ONE lane to the editor (the
-    // owner, 11 Sep 2026: "do what's from that doc")
+  it('the Editor page is four lanes: In Progress, Quality check, For Handoff, Done', () => {
+    // Abby's rule (11 Sep 2026): the maker's submit goes to Joy; the
+    // client's look sits inside the same lane with a chip saying who has it
     const lanes = pageLanes('editor')
-    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'For Review', 'For Handoff', 'Done'])
+    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'For Handoff', 'Done'])
     expect(lanes.map(l => l.folded)).toEqual([false, false, false, true])
-    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['internal_check', 'quality_check', 'with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
+    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check', 'with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page
     expect(lanes.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
   })
@@ -336,7 +338,7 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(laneOf('editor', 'booked')).toBe('done')
     expect(laneOf('editor', 'ready_to_post')).toBe('for_handoff')
     expect(laneOf('editor', 'draft')).toBe('in_progress')
-    expect(laneOf('editor', 'quality_check')).toBe('for_review')
+    expect(laneOf('editor', 'quality_check')).toBe('quality_check')
     expect(laneOf('scheduler', 'draft')).toBe('draft')
     expect(laneOf('scheduler', 'with_client')).toBe('with_client')
     expect(laneOf('scheduler', 'ready_to_post')).toBe('ready_to_post')
@@ -394,9 +396,9 @@ describe('the lanes each page arranges the eight columns into', () => {
   describe('dropping on a lane', () => {
     const lane = (page: BoardPage, key: string) => pageLanes(page).find(l => l.key === key)!
 
-    it('a one-column lane is that column\'s drop', () => {
-      const d = dropOnLane(card(), lane('editor', 'for_review'), editor)
-      expect(d).toEqual({ ok: true, lane: 'for_review', column: 'internal_check', action: { kind: 'transition', to: 'internal_review', label: READY_FOR_CHECK_LABEL } })
+    it('the editor\'s Quality check lane is entered at the quality check', () => {
+      const d = dropOnLane(card(), lane('editor', 'quality_check'), editor)
+      expect(d).toEqual({ ok: true, lane: 'quality_check', column: 'quality_check', action: { kind: 'transition', to: 'quality_check', label: 'Ready for quality check' } })
     })
 
     it('a drop lands on the stage the rules allow, whoever drops it', () => {
@@ -408,8 +410,8 @@ describe('the lanes each page arranges the eight columns into', () => {
       const free = dropOnLane(card({ status: 'quality_check', client_approval_required: false }), lane('editor', 'for_handoff'), joy)
       expect(free.ok && free.column).toBe('ready_to_post')
       expect(free.ok && free.action.to).toBe('approved_for_scheduling')
-      const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'internal_check'), manager)
-      expect(back.ok && back.column).toBe('internal_check')
+      const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'draft'), manager)
+      expect(back.ok && back.column).toBe('draft')
     })
 
     it('a lane with no way in refuses in plain words', () => {
@@ -495,7 +497,7 @@ describe('Posted keeps the last two weeks', () => {
     const kept = pageCards('production', rows, manager, TODAY)
     const keptColumns = new Set(kept.map(c => columnOf(c.status)))
     // Booked in is never cut: a card the channel still holds is coming, not old
-    expect([...keptColumns].sort()).toEqual((['booked', 'draft', 'internal_check', 'quality_check', 'ready_to_post', 'with_client'] as BoardColumnKey[]).sort())
+    expect([...keptColumns].sort()).toEqual((['booked', 'draft', 'quality_check', 'ready_to_post', 'with_client'] as BoardColumnKey[]).sort())
   })
 })
 
@@ -706,7 +708,7 @@ describe('the card menu on a settled card', () => {
   const src = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
   it('hides Hand to and Change the kind of work once a card is booked or posted', () => {
     expect(src).toContain("const settled = card.status === 'scheduled' || card.status === 'published'")
-    expect(src).toContain('{!settled && !adhocPost && (')
+    expect(src).toContain('{!settled && !adhocPost && !editorFace && (')
     expect(src).toContain('{onHandTo && !settled && (')
   })
 })

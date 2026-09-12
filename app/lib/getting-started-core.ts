@@ -42,7 +42,7 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card handed to you is on your board, in the playbook’s four columns: In Progress, For Review, For Handoff, Done. One card is one shoot’s work. Press Acknowledge on a new one so the team knows you are on it.',
+      body: 'Every card handed to you is on your board, in four columns: In Progress, Quality check, For Handoff, Done. One card is one shoot’s work. Press Acknowledge on a new one so the team knows you are on it.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
@@ -95,8 +95,8 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
       linkLabel: 'See my clients',
     },
     {
-      title: 'Check, then send for quality check',
-      body: 'Cards in Internal check on Post approval are waiting on a manager. Check caption, message, cover and timing, then press "Send for quality check" — or "Ask for changes". The quality reviewer sends it to the client.',
+      title: 'The quality check is the gate',
+      body: 'A submitted card lands in Quality check on Post approval, with the reviewer. You are copied when one of your clients’ cards gets there; press "Ask for changes" if something is wrong. The quality reviewer sends it to the client.',
       href: '/dashboard/scheduler',
       linkLabel: 'Review what is waiting',
     },
@@ -115,7 +115,7 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
   steps: [
     {
       title: 'Every card being made',
-      body: 'One card per shoot’s work, for your clients, in the editors’ four columns: In Progress, For Review, For Handoff, Done. Filter by Client or People to see who is doing what.',
+      body: 'One card per shoot’s work, for your clients, in the editors’ four columns: In Progress, Quality check, For Handoff, Done. Filter by Client or People to see who is doing what.',
       href: '/dashboard/editor',
       linkLabel: 'See the board',
     },
@@ -126,8 +126,8 @@ const EDITOR_PAGE_FOR_MANAGERS: GettingStartedPanel = {
       linkLabel: 'Find unassigned cards',
     },
     {
-      title: 'Your checking happens on Post approval',
-      body: 'When an editor presses "Ready for checking" the card lands in Internal check on Post approval. That is where you send it for quality check, or ask for changes.',
+      title: 'Cards go straight to the quality reviewer',
+      body: 'When a maker presses "Ready for quality check" the card lands in Quality check on Post approval, with the reviewer. You are copied; ask for changes there if something is wrong.',
       href: '/dashboard/scheduler',
       linkLabel: 'Open Post approval',
     },
@@ -147,7 +147,7 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
     },
     {
       title: 'Go, shoot, hand over',
-      body: 'Once everyone has pressed "I’ve read the plan", press "Confirm — it is go" — that books the date. The day before, Reminder sent emails call time and location. After the day, move the shoot to Footage handed over and the editor gets their cards.',
+      body: 'Once everyone has pressed "I’ve read the plan", press "Confirm — it is go" — that books the date and puts the editor’s card on the Editor page. The day before, Reminder sent emails call time and location. The morning after the shoot it moves to Footage in by itself.',
     },
   ],
 }
@@ -158,7 +158,7 @@ const PRODUCTION_FOR_CREW: GettingStartedPanel = {
   steps: [
     {
       title: 'A shoot is one card',
-      body: 'One filming day: the date, the location, the shot list and the plan, in six stages from Draft to Footage handed over. Open a shoot to read its plan on the canvas.',
+      body: 'One filming day: the date, the location, the shot list and the plan, in six stages from Draft to Footage in. Open a shoot to read its plan on the canvas.',
       href: '/dashboard/production',
       linkLabel: 'See the shoots',
     },
@@ -208,7 +208,7 @@ const SCHEDULER_PAGE_FOR_GENERAL: GettingStartedPanel = {
   steps: [
     {
       title: 'Your cards, as they get checked',
-      body: 'Draft, Internal check, Quality check, With client, Ready to post, Booked in, Posted. Your own cards show through every stage; Ready to post with nobody named is yours to take.',
+      body: 'Draft, Quality check, With client, Ready to post, Booked in, Posted. Your own cards show through every stage; Ready to post with nobody named is yours to take.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },

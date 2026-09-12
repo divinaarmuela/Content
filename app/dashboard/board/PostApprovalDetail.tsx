@@ -774,6 +774,17 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       {/* ── 5. what was said ── */}
       <div className="flex flex-col gap-3 px-5 py-4">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What was said</p>
+        {/* WHERE TO LOOK (Abby, 11 Sep 2026): the maker's Canva link and page,
+            for the reviewer — drawn whenever the maker gave one */}
+        {((item as { review_link?: string | null }).review_link || (item as { review_note?: string | null }).review_note) && (
+          <p className="rounded-inner bg-tint-blue p-3 text-[13px]">
+            <span className="font-semibold">Look here: </span>
+            {(item as { review_link?: string | null }).review_link
+              ? <a href={String((item as { review_link?: string | null }).review_link)} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">{String((item as { review_link?: string | null }).review_link)}<span className="sr-only">, opens in a new tab</span></a>
+              : null}
+            {(item as { review_note?: string | null }).review_note ? ` · ${String((item as { review_note?: string | null }).review_note)}` : ''}
+          </p>
+        )}
         {changeAbout && changeAbout.index === null && (
           <p className="rounded-inner bg-tint-red p-3 text-[13px]"><span className="font-semibold">Change asked for: </span>{changeAbout.rest}</p>
         )}

@@ -44,6 +44,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: check.status })
 
     const now = new Date().toISOString()
+    // "I am on it" is said once: a second press changes nothing and logs
+    // nothing, so the history never reads "Acknowledged" twice
+    if (check.kind === 'acknowledged') {
+      const before = await table<{ id: string; action: string; actor_id?: string | null; entity_id?: string | null }>('workflow_activity')
+        .list({ where: a => String(a.entity_id ?? '') === id && a.action === 'acknowledged' && a.actor_id === user.id, limit: 1 })
+      if (before.length > 0) return NextResponse.json({ ok: true, kind: 'acknowledged', already: true, told: [] })
+    }
     let detail: string | null = check.note || null
     if (check.kind === 'qc_done') {
       detail = qcDetail(check.ticks)

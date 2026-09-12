@@ -232,15 +232,13 @@ async function makeCard(key: string, title: string, extra: Record<string, unknow
   return row.id
 }
 
-/** editor uploads → Ready for checking → AM sends for quality check → Joy passes → client approves */
+/** editor uploads → Ready for quality check (straight to Joy, Abby's rule) → Joy passes → client approves */
 async function throughTheGate(id: string, slide: (typeof SLIDES)[number]) {
   as(editor)
   const v = await json(await addVersion(new Request('https://x.test/versions', { method: 'POST', body: JSON.stringify({ files: [slide], notes: 'Final export' }) }), params(id)))
   expect(v.status, JSON.stringify(v.body)).toBe(201)
   for (const ver of await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: id } as never })) created.versions.add(ver.id)
-  expect((await performTransition(editor, (await itemRow(id)) as never, 'internal_review')).status).toBe('internal_review')
-  as(am)
-  expect((await performTransition(am, (await itemRow(id)) as never, 'quality_check')).status).toBe('quality_check')
+  expect((await performTransition(editor, (await itemRow(id)) as never, 'quality_check')).status).toBe('quality_check')
   as(joy)
   expect((await performTransition(joy, (await itemRow(id)) as never, 'client_review', { note: 'Passed' })).status).toBe('client_review')
   const r = await json(await portalAct(new Request('https://x.test/portal/act', {
@@ -386,8 +384,8 @@ describe('A. the scheduler swaps a booked post for another approved asset', () =
     postIds.C = String(r.body.post?.id ?? ''); if (postIds.C) { created.posts.add(postIds.C); created.locks.add(`social_post__${cards.C}`); created.locks.add(`publish__${cards.C}`) }
     for (const v of await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: cards.C } as never })) created.versions.add(v.id)
     const c = await itemRow(cards.C)
-    expect(c.status).toBe('internal_review')
-    say(`   Scheduler uploaded a fresh file C and pressed Post → "${r.body.message ?? 'sent for approval'}" · card C in Internal check`)
+    expect(c.status).toBe('quality_check')
+    say(`   Scheduler uploaded a fresh file C and pressed Post → "${r.body.message ?? 'sent for approval'}" · card C in Quality check`)
     // booking it is refused until somebody says yes
     await expect(schedulePost(scheduler, postIds.C)).rejects.toThrow(/approval/i)
     await expect(sendForApproval(scheduler, postIds.C, { mode: 'direct' })).rejects.toThrow()

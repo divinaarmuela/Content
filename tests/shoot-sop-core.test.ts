@@ -54,9 +54,9 @@ describe('the nine things a brief must contain', () => {
 describe('the six columns, read off the stamps and the calendar', () => {
   it('has the SOP timeline in order', () => {
     expect(SHOOT_STAGES.map(s => s.label)).toEqual([
-      'Draft', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage handed over',
+      'Draft', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in',
     ])
-    expect(STAGE_LABEL.footage_handed).toBe('Footage handed over')
+    expect(STAGE_LABEL.footage_handed).toBe('Footage in')
   })
   it('walks forward one stamp at a time', () => {
     const b = complete()

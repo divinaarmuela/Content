@@ -133,7 +133,8 @@ export function BoardCard({
   page?: 'production' | 'editor' | 'scheduler'
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
-  const risk = riskChip(card.risk ?? null)
+  // a risk flagged while the card was being made is over once it is booked or posted
+  const risk = card.status === 'scheduled' || card.status === 'published' ? null : riskChip(card.risk ?? null)
   const askAck = !!onAcknowledge && card.owner_id === viewer.id && card.acknowledged === false
     && columnOf(card.status) === 'draft'
   const [briefOpen, setBriefOpen] = useState(false)
@@ -148,7 +149,11 @@ export function BoardCard({
   // one column holds more than one stage
   const editorFace = page === 'editor' && viewer.role !== 'account_manager' && viewer.role !== 'super_admin'
   const showStage = !editorFace && statusesIn(column).length > 1
-  const review = editorFace ? reviewWords(card.status) : null
+  const review = editorFace ? reviewWords(card.status, (card as { reviewer_name?: string | null }).reviewer_name ?? null) : null
+  // the maker's submit lives behind the seven-point quality check in the
+  // open card (the Video Editors SOP §4); the face opens the card rather
+  // than skipping the checks
+  const faceOpensCard = editorFace && primary?.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review' || primary.to === 'revision_complete')
   const blockedLine = editorFace ? blockedChip(card as never) : null
   const finals = editorFace ? (card as { finals_in?: string | null }).finals_in ?? null : null
   const tone = cardTone({
@@ -238,13 +243,13 @@ export function BoardCard({
             {lines.link.label} <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
             <span className="sr-only">opens in a new tab</span>
           </a>
-        ) : (card as { adhoc_post?: unknown }).adhoc_post === true ? null : canEdit ? (
+        ) : (card as { adhoc_post?: unknown }).adhoc_post === true || editorFace ? null : canEdit ? (
           <Button variant="outline" disabled={busy}
             onClick={e => { e.preventDefault(); onLink(card) }}
             className="h-11 rounded-full border-dashed border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
             Add link
           </Button>
-        ) : (
+        ) : editorFace ? null : (
           <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-border px-3.5 text-[13px] font-semibold text-muted-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:text-cream/70">
             No link yet
           </span>
@@ -265,10 +270,17 @@ export function BoardCard({
             Acknowledge
           </Button>
         )}
-        {primary && (() => {
+        {primary && faceOpensCard && (
+          <Button disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
+            onClick={e => { e.preventDefault(); onOpen(card) }}
+            className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
+            {needsWorkFirst(card) ? UPLOAD_FIRST : 'Quality check, then submit'}
+          </Button>
+        )}
+        {primary && !faceOpensCard && (() => {
           // an empty card cannot go for checking: say "Upload the final
           // first" on the button rather than a refusal after the press
-          const blocked = primary.kind === 'transition' && primary.to === 'internal_review' && needsWorkFirst(card)
+          const blocked = primary.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review') && needsWorkFirst(card)
           return (
             <Button disabled={busy || blocked} data-tour={tour ? 'board-card-action' : undefined}
               title={blocked ? UPLOAD_FIRST : undefined}
@@ -322,7 +334,10 @@ export function BoardCard({
                   {/* the link is where a shoot's work lives (a Drive or
                       Dropbox folder); an uploaded post carries its files,
                       so it has nothing to link (the owner, 11 Sep 2026) */}
-                  {!adhocPost && (
+                  {/* the scheduler's folder and the kind of work are the
+                      manager's; an editor's face carries neither (the Video
+                      Editors SOP gives an editor no such thing) */}
+                  {!adhocPost && !editorFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
                       {lines.link ? 'Change the Drive folder' : 'Drive folder to post from'}
                     </DropdownMenuItem>
@@ -331,7 +346,7 @@ export function BoardCard({
                       no kind left to change; an uploaded post's kind is "Post"
                       (the owner, 10 Sep 2026: "why is Hand to shown on a
                       posted card") */}
-                  {!settled && !adhocPost && (
+                  {!settled && !adhocPost && !editorFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
                       Change the kind of work
                     </DropdownMenuItem>

@@ -100,7 +100,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   /** the line being typed under the plan, saved on Enter or Add */
   const [newLine, setNewLine] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [lockOpen, setLockOpen] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
   const [dateDraft, setDateDraft] = useState({ shoot_date: '', reason: '' })
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -166,10 +165,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
    * screen ever said why.
    */
   const pending = useRef(0)
-  // the freshest batch, readable from inside an async click handler — the
-  // `batch` a closure captured is the one from the render it was created in
-  const batchRef = useRef<Batch | null>(null)
-  useEffect(() => { batchRef.current = batch }, [batch])
   const patch = async (field: string, value: unknown, quiet = false) => {
     pending.current += 1
     setSaveState('saving')
@@ -309,10 +304,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? `${label} failed`)
-      setLockOpen(false)
-      toast.success(to === 'locked'
-        ? `Shoot booked for ${longDate(json.shoot_date)}. You can create its items now.`
-        : `${label} — done`)
+      toast.success(`${label} — done`)
       void load()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : `${label} failed`)
@@ -337,9 +329,10 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
   const shots = batch.shot_list ?? []
   const captured = shots.filter(s => s.done).length
   const transitions = availableBatchTransitions(role as never, batch.status)
-  // ONE primary action: Book the shoot. "Shot" is derived from the calendar
-  // (shownShootState) — no button; closing and undoing live in the ⋯ menu.
-  const primary = transitions.find(t => t.to === 'locked')
+  // GO IS THE ONE SIGN-OFF (the owner, 11 Sep 2026): pressing "Confirm — it is
+  // go" on the right books the shoot too, so there is no second "Book the
+  // shoot" button here. "Shot" is derived from the calendar (shownShootState);
+  // closing a shoot and undoing a booking live in the ⋯ menu.
   const quiet = transitions.filter(t => t.to !== 'locked' && t.to !== 'shot')
   const state = shownShootState(batch)
   const stateStyle = { planning: 'brief', booked: 'locked', shot: 'shot', closed: 'wrapped' } as const
@@ -382,13 +375,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         <Badge variant="outline" className={`font-normal ${BATCH_STATUS_STYLE[stateStyle[state]]}`}>
           {SHOWN_SHOOT_LABEL[state]}
         </Badge>
-        {primary && (
-          <Button size="sm" disabled={busy !== null}
-            onClick={() => setLockOpen(true)}
-            title={!batch.shoot_date ? 'Set a shoot date first' : undefined}>
-            <Lock className="h-3.5 w-3.5" /> {primary.label}
-          </Button>
-        )}
         {/* the exceptions — closing early, undoing a booking, reopening — live
             in a quiet ⋯ menu so the page carries one obvious action */}
         {isManager && quiet.length > 0 && (
@@ -438,8 +424,8 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
         <div className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-blue/25 bg-tint-blue px-4 py-3">
           <p className="text-body-15 text-foreground">
             Nothing has been written up for this shoot yet. A shoot plan is what the
-            client signs off before we film — writing one puts this shoot through
-            review. Go, on the right, books the date.
+            client signs off before we film. Write it here, share it with the team,
+            and press Go on the right — that books the date.
           </p>
           <Button size="sm" className="ml-auto" disabled={busy !== null}
             onClick={async () => {
@@ -674,7 +660,7 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
               {(() => {
                 const one = itemById.get(shootCardId(batch.id)) ?? deliverableItems[0]
                 return one ? (
-                  <Link href={`/dashboard/production/${one.id}`} className="w-fit text-secondary-13 font-semibold text-accent-blue-deep underline-offset-4 hover:underline">
+                  <Link href={`/dashboard/editor?card=${one.id}`} className="w-fit text-secondary-13 font-semibold text-accent-blue-deep underline-offset-4 hover:underline">
                     Open the editor’s card
                   </Link>
                 ) : (
@@ -819,51 +805,6 @@ export default function ShootBriefPage({ params }: { params: Promise<{ id: strin
           />
         </BriefBoardComments>
       </div>
-
-      {/* ── the booking ceremony ── */}
-      <AlertDialog open={lockOpen} onOpenChange={o => busy === null && setLockOpen(o)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Book this shoot?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="flex flex-col gap-3">
-                <span className="text-3xl font-semibold tracking-tight text-foreground">
-                  {longDate(batch.shoot_date) ?? 'No date set'}
-                </span>
-                <span>{batch.clients?.name}{batch.location ? ` · ${batch.location}` : ''}</span>
-                <span>
-                  Booking commits the team to this date and opens the shoot up for
-                  items. Changing a booked date needs an account manager.
-                </span>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
-            {/* never disabled by data that might still be in flight: while a
-                field save is in the air the button WAITS for it and then goes,
-                so a click always ends in a lock or a message */}
-            <AlertDialogAction disabled={busy !== null}
-              onClick={async e => {
-                e.preventDefault()
-                if (pending.current > 0) {
-                  setBusy('locked')
-                  // let the blur-save that is in the air land first
-                  for (let i = 0; i < 40 && pending.current > 0; i++) await new Promise(r => setTimeout(r, 50))
-                  setBusy(null)
-                }
-                const dated = batchRef.current?.shoot_date ?? batch.shoot_date
-                if (!dated) {
-                  toast.error('Set the shoot date first — it is the field above this button.')
-                  return
-                }
-                void transition('locked', 'Book the shoot')
-              }}>
-              {busy === 'locked' ? 'Booking…' : 'Book the shoot'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* ── AM changes a booked date, with a reason ── */}
       <AlertDialog open={dateOpen} onOpenChange={o => busy === null && setDateOpen(o)}>

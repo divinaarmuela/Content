@@ -163,13 +163,22 @@ describe('three roles, one post, live', () => {
     postId = String(r.body.post?.id ?? ''); if (postId) { created.posts.add(postId); created.locks.add(`social_post__${itemId}`); created.locks.add(`publish__${itemId}`) }
     for (const v of await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })) created.versions.add(v.id)
     const item = await itemRow()
-    expect(item.status).toBe('internal_review')
+    // Abby's rule (11 Sep 2026): the upload lands at the quality check, with the named manager asked
+    expect(item.status).toBe('quality_check')
     expect(item.owner_id).toBe(scheduler.id)
     expect((item as { asked_ids?: string[] }).asked_ids).toEqual([am.id])
     expect((item as { adhoc_post?: boolean }).adhoc_post).toBe(true)
-    console.log(`[1] card ${itemId} in Internal check, asked ${am.email}`)
+    console.log(`[1] card ${itemId} in Quality check, asked ${am.email}`)
 
-    const told = await toldAbout()
+    // on the new road the reviewers are told first (real super admins stand in
+    // when nobody is flagged, each refused slowly by the kill switch), then Ops,
+    // then the named manager — so wait for the manager's row rather than read once
+    const deadline = Date.now() + 120_000
+    let told = await toldAbout()
+    while (!told.some(t => t.recipient_email === am.email) && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 300))
+      told = await toldAbout()
+    }
     expect(told.length).toBeGreaterThan(0)
     expect(told.every(t => t.recipient_email.endsWith('.invalid'))).toBe(true)
     expect(told.some(t => t.recipient_email === am.email)).toBe(true)
@@ -193,8 +202,9 @@ describe('three roles, one post, live', () => {
     const amActs = cardActions(card, { id: am.id, role: 'account_manager' } as never)
     console.log('[2] AM actions:', JSON.stringify([amActs.primary, ...amActs.more]))
     console.log('[2] scheduler actions:', JSON.stringify((() => { const a = cardActions(card, { id: scheduler.id, role: 'scheduler' } as never); return [a.primary, ...a.more] })()))
-    // the gate (11 Sep 2026): the AM's button sends it for quality check, never approves
-    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'quality_check')).toBe(true)
+    // the gate (11 Sep 2026): at Quality check the AM may only send it back, never approve or pass
+    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'send_back')).toBe(true)
+    expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'quality_check')).toBe(false)
     expect([amActs.primary, ...amActs.more].some(a => a?.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(false)
     const schActs = cardActions(card, { id: scheduler.id, role: 'scheduler' } as never)
     expect([schActs.primary, ...schActs.more].some(a => a?.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(false)
@@ -204,9 +214,9 @@ describe('three roles, one post, live', () => {
   it('2b. the AM sends it to the client; the client comments on one photo from the portal; only the AM reads it', async () => {
     as(am)
     const before = (await toldAbout()).length
-    // the AM sends it for quality check; the super admin, standing in for the
-    // quality reviewer, sends it to the client (Abby's rule, 11 Sep 2026)
-    expect((await performTransition(am, (await itemRow()) as never, 'quality_check', { note: 'Have a look' })).status).toBe('quality_check')
+    // the card is already at the quality check; the super admin, standing in
+    // for the quality reviewer, sends it to the client (Abby's rule, 11 Sep 2026)
+    expect((await itemRow()).status).toBe('quality_check')
     const sent = await performTransition(SUPER, (await itemRow()) as never, 'client_review', { note: 'Have a look' })
     expect(sent.status).toBe('client_review')
     await new Promise(r => setTimeout(r, 1000))
@@ -245,8 +255,14 @@ describe('three roles, one post, live', () => {
     const handed = await json(await handoff(new Request('https://x.test/handoff', { method: 'POST', body: JSON.stringify({ scheduler_ids: [scheduler.id], note: 'Yours to post' }) }), params(itemId)))
     expect(handed.status, JSON.stringify(handed.body)).toBe(200)
     expect((await itemRow()).scheduler_ids).toEqual([scheduler.id])
-    await new Promise(r => setTimeout(r, 1000))
-    const told = (await toldAbout()).slice(before)
+    // the fan-out is fire-and-forget and the mailer is slow per refused
+    // address: wait for the scheduler's row rather than read once
+    const deadline = Date.now() + 120_000
+    let told = (await toldAbout()).slice(before)
+    while (!told.some(t => t.recipient_email === scheduler.email) && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 300))
+      told = (await toldAbout()).slice(before)
+    }
     expect(told.every(t => t.recipient_email.endsWith('.invalid'))).toBe(true)
     expect(told.some(t => t.recipient_email === scheduler.email)).toBe(true)
     console.log(`[3] approved and handed; told: ${told.map(t => `${t.recipient_email} "${t.subject}" ${t.entity_id}`).join(', ')}`)

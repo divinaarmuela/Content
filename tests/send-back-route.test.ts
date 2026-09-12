@@ -105,7 +105,7 @@ describe('POST /api/production/items/[id]/send-back', () => {
     await drain()
     expect(r.status).toBe(200)
     expect(r.json).toMatchObject({
-      ok: true, status: 'revision_required', column: 'internal_check',
+      ok: true, status: 'revision_required', column: 'draft',
       steps: [
         { from: 'client_review', to: 'client_changes_requested' },
         { from: 'client_changes_requested', to: 'revision_required', label: 'Send for revision' },
@@ -195,7 +195,7 @@ describe('POST /api/production/items/[id]/send-back', () => {
     fake = seed('approved_for_scheduling')
     const r = await post('Changed my mind')
     expect(r.status).toBe(403)
-    expect(r.json.error).toBe('Nothing moves from Ready to post to Internal check')
+    expect(r.json.error).toBe('Nothing moves from Ready to post to Draft')
     expect(item().status).toBe('approved_for_scheduling')
   })
 

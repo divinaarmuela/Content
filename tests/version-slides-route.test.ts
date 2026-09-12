@@ -141,7 +141,7 @@ describe('POST /api/production/items/:id/versions — slides', () => {
 })
 
 describe('POST /api/production/items/:id/versions — saving one while the client is looking', () => {
-  it('sends the piece back for the manager’s check', async () => {
+  it('sends the piece back for the quality check', async () => {
     item.status = 'client_review'
     const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
     expect(status).toBe(201)
@@ -149,14 +149,14 @@ describe('POST /api/production/items/:id/versions — saving one while the clien
     // upload must never be lost to a status change that failed
     expect(addVersion).toHaveBeenCalledTimes(1)
     expect(performTransition).toHaveBeenCalledTimes(1)
-    expect(performTransition.mock.calls[0][2]).toBe('internal_review')
+    expect(performTransition.mock.calls[0][2]).toBe('quality_check')
     // `{ auto: true }` is not decoration: without it the move is refused —
     // this edge is the app's own and nobody may press it — and the route
     // swallows that refusal and still returns 201, so the piece would stay in
     // front of the client showing a version nobody checked
     expect(performTransition.mock.calls[0][3]).toEqual({ auto: true })
     // the live hint carries where the item actually IS now, not where it was
-    expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'internal_review' })
+    expect(announceItemChange.mock.calls[0][0]).toMatchObject({ status: 'quality_check' })
   })
 
   it('sends a piece the client ALREADY APPROVED back to them', async () => {

@@ -193,11 +193,11 @@ export default function NewShootPlanDialog({
       const first = rows[0]
       const href = first?.batch_id
         ? `/dashboard/production/shoots/${first.batch_id}`
-        : first?.id ? `/dashboard/production/${first.id}` : '/dashboard/production'
+        : '/dashboard/production'
       if (failed.length > 0) {
         toast.error('The shoot plan could not be saved. Try again.', { duration: 12_000 })
       } else {
-        toastOpen('Shoot plan created — it is on the Production board', href, router.push)
+        toastOpen('Shoot plan created — it is in Draft on Shoots', href, router.push)
       }
       onOpenChange(false)
       setDraft({ ...BLANK })

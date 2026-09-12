@@ -97,6 +97,9 @@ export const BRIEF_TRANSITION_OVERRIDES: Record<string, Override> = {
   // the content quality reviewer — the gate is not on a plan's road
   'internal_review>quality_check': { blocked: true },
   'revision_complete>quality_check': { blocked: true },
+  'draft_uploaded>quality_check': { blocked: true },
+  'revision_required>quality_check': { blocked: true },
+  'client_review>quality_check': { blocked: true },
   // booking = the date is locked on the shoot; an AM makes the call
   'approved_for_scheduling>scheduled': { label: 'Book the shoot', roles: ['account_manager'], requires: 'batch_locked' },
   // a brief never "publishes" — booked is its end state, for everyone
@@ -116,7 +119,7 @@ export function checkBriefTaskTransitionAs(
   const exists = TRANSITIONS[from]?.[to]
   if (!exists) return { ok: false, reason: `No transition from ${from} to ${to}` }
   const override = BRIEF_TRANSITION_OVERRIDES[`${from}>${to}`]
-  if (!override) return checkTransitionAs(roles, from, to, opts)
+  if (!override) return checkTransitionAs(roles, from, to, { ...opts, tasksAndPlans: true })
   if ('blocked' in override) {
     return { ok: false, reason: to === 'quality_check'
       ? 'A shoot plan has no quality check — the account manager shares it with the client'
@@ -145,7 +148,7 @@ export function checkBriefTaskTransition(role: Role, from: ItemStatus, to: ItemS
 export function availableBriefTaskTransitionsAs(
   roles: readonly Hat[], from: ItemStatus,
 ): { to: ItemStatus; label: string }[] {
-  return offeredTransitionsFrom(from)
+  return offeredTransitionsFrom(from, { tasksAndPlans: true })
     .map(to => {
       const c = checkBriefTaskTransitionAs(roles, from, to)
       return c.ok ? { to, label: c.rule.label } : null

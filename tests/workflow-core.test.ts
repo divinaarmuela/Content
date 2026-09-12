@@ -34,16 +34,31 @@ describe('funnel shape', () => {
     for (const s of ITEM_STATUSES) expect(CLIENT_LABELS[s]).toBeTruthy()
   })
   it('internal churn reads as one calm client state', () => {
-    for (const s of ['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete'] as ItemStatus[]) {
+    for (const s of ['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check'] as ItemStatus[]) {
       expect(CLIENT_LABELS[s]).toBe('In production')
     }
   })
 })
 
 describe('checkTransition — role gates', () => {
-  it('editor submits draft for internal review; scheduler cannot', () => {
-    expect(checkTransition('editor', 'draft_uploaded', 'internal_review').ok).toBe(true)
-    expect(checkTransition('scheduler', 'draft_uploaded', 'internal_review').ok).toBe(false)
+  it('the maker submits a draft straight to the quality check — Abby\u2019s rule, no manager in front (11 Sep 2026)', () => {
+    for (const r of ['editor', 'account_manager'] as Role[]) {
+      expect(checkTransition(r, 'draft_uploaded', 'quality_check').ok, r).toBe(true)
+    }
+    // rights follow assignment (the live walk of 12 Sep 2026): a scheduler or a
+    // general user submits THEIR OWN card through the editor hat ownership
+    // grants — never somebody else's from the base role
+    for (const r of ['scheduler', 'general', 'client'] as Role[]) {
+      expect(checkTransition(r, 'draft_uploaded', 'quality_check').ok, r).toBe(false)
+      expect(checkTransition(r, 'revision_required', 'quality_check').ok, r).toBe(false)
+    }
+    expect(checkTransitionAs(actingRoles({ id: 'u1', role: 'scheduler' }, { owner_id: 'u1' }), 'draft_uploaded', 'quality_check').ok).toBe(true)
+    expect(checkTransitionAs(actingRoles({ id: 'u1', role: 'general' }, { owner_id: 'u1' }), 'revision_required', 'quality_check').ok).toBe(true)
+    expect(checkTransitionAs(actingRoles({ id: 'u2', role: 'scheduler' }, { owner_id: 'u1' }), 'draft_uploaded', 'quality_check').ok).toBe(false)
+    // the old manager's-check road is for tasks and shoot plans only
+    expect(checkTransition('editor', 'draft_uploaded', 'internal_review').ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'draft_uploaded', 'internal_review', { tasksAndPlans: true }).ok).toBe(true)
+    expect(TRANSITIONS.draft_uploaded?.internal_review?.tasksOnly).toBe(true)
   })
   it('the AM sends to the quality check; only the quality reviewer sends to the client; an editor neither', () => {
     // the Team's Playbook (11 Sep 2026): AM / designer / editor → Joy → scheduler
@@ -76,11 +91,10 @@ describe('checkTransition — role gates', () => {
     expect(checkTransition('client', 'client_review', 'client_changes_requested').ok).toBe(true)
     expect(checkTransition('client', 'internal_review', 'client_review').ok).toBe(false)
   })
-  it('scheduler gating: cannot touch anything before approved_for_scheduling', () => {
+  it('scheduler gating: the base role cannot touch anything before approved_for_scheduling (their own upload goes through the editor hat)', () => {
     for (const from of ITEM_STATUSES.filter(s => !SCHEDULER_STATUSES.includes(s))) {
       for (const to of ITEM_STATUSES) {
-        const res = checkTransition('scheduler', from, to)
-        expect(res.ok).toBe(false)
+        expect(checkTransition('scheduler', from, to).ok, `${from}→${to}`).toBe(false)
       }
     }
   })
@@ -95,10 +109,10 @@ describe('checkTransition — role gates', () => {
 })
 
 describe('availableTransitions', () => {
-  it('editor sees only the submit action from draft', () => {
+  it('editor sees only the submit action from draft — to the quality check', () => {
     const av = availableTransitions('editor', 'draft_uploaded')
     expect(av).toHaveLength(1)
-    expect(av[0].to).toBe('internal_review')
+    expect(av[0].to).toBe('quality_check')
     expect(av[0].requires).toBe('reviewable_asset')
   })
   it('AM sees two choices from internal_review: the gate, or changes', () => {
@@ -256,13 +270,13 @@ describe('checkTransitionAs — the assignment decides, not the title', () => {
 
   it('an account manager who owns the item may do the editor move on it', () => {
     const roles = hats('account_manager', { owner_id: ME })
-    expect(checkTransitionAs(roles, 'revision_required', 'revision_complete').ok).toBe(true)
+    expect(checkTransitionAs(roles, 'revision_required', 'quality_check').ok).toBe(true)
   })
 
   it("an editor cannot submit another person's draft, but may submit an unowned one", () => {
     expect(hats('editor', { owner_id: THEM })).toEqual([])
-    expect(checkTransitionAs(hats('editor', { owner_id: THEM }), 'draft_uploaded', 'internal_review').ok).toBe(false)
-    expect(checkTransitionAs(hats('editor', { owner_id: null }), 'draft_uploaded', 'internal_review').ok).toBe(true)
+    expect(checkTransitionAs(hats('editor', { owner_id: THEM }), 'draft_uploaded', 'quality_check').ok).toBe(false)
+    expect(checkTransitionAs(hats('editor', { owner_id: null }), 'draft_uploaded', 'quality_check').ok).toBe(true)
   })
 
   it('an editor handed the scheduling schedules and publishes it', () => {
@@ -285,9 +299,9 @@ describe('checkTransitionAs — the assignment decides, not the title', () => {
   })
 
   it('no hats at all can do nothing, and says so', () => {
-    const r = checkTransitionAs([], 'draft_uploaded', 'internal_review')
+    const r = checkTransitionAs([], 'draft_uploaded', 'quality_check')
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.reason).toBe('nobody may not perform "Submit for review"')
+    if (!r.ok) expect(r.reason).toBe('nobody may not perform "Ready for quality check"')
     for (const from of ITEM_STATUSES) {
       for (const to of ITEM_STATUSES) expect(checkTransitionAs([], from, to).ok).toBe(false)
     }
@@ -300,10 +314,11 @@ describe('checkTransitionAs — the assignment decides, not the title', () => {
         // …except an `auto` edge, which is the APP's move and not an
         // override anyone holds — a super admin is still a person pressing
         // something. It passes only when the caller says it IS the app.
+        // …and a tasks-and-plans edge, which content never takes
         expect(checkTransitionAs(['super_admin'], from, to).ok)
-          .toBe(Boolean(rule) && !rule?.auto)
+          .toBe(Boolean(rule) && !rule?.auto && !rule?.tasksOnly)
         expect(checkTransitionAs(['super_admin'], from, to, { auto: true }).ok)
-          .toBe(Boolean(rule))
+          .toBe(Boolean(rule) && !rule?.tasksOnly)
       }
     }
   })
@@ -384,17 +399,17 @@ describe('presentTransitions — one obvious button, or none', () => {
     expect(presentTransitions(roles, 'approved_for_scheduling', outs, ctx).primary).toBeNull()
   })
 
-  it('an account manager holding their own item in revisions gets one button', () => {
+  it('an account manager holding their own item in revisions gets one button — back to the quality check', () => {
     const p = present('account_manager', { owner_id: ME }, 'revision_required')
-    expect(p.primary).toEqual({ to: 'revision_complete', label: 'Revisions done', requires: 'reviewable_asset' })
+    expect(p.primary).toEqual({ to: 'quality_check', label: 'Revisions done — ready for quality check', requires: 'reviewable_asset' })
     expect(p.secondary).toEqual([])
   })
 
-  it('the reject button has ONE name, even on your own item', () => {
+  it('the reject button has ONE name, even on your own item (a legacy card at the old re-check)', () => {
     // it used to become "Send back to myself" for the owner, which read as a
     // note to self rather than the request-for-changes it is
     const p = present('account_manager', { owner_id: ME }, 'revision_complete')
-    expect(p.primary?.label).toBe('Looks good — send for quality check')
+    expect(p.primary?.label).toBe('Ready for quality check')
     expect(p.secondary.map(s => s.label)).toEqual(['Ask for more changes'])
   })
 
@@ -423,7 +438,7 @@ describe('presentTransitions — one obvious button, or none', () => {
     const p = present('account_manager', { owner_id: THEM }, 'draft_uploaded')
     expect(STATUS_TURN.draft_uploaded).toBe('editor')
     expect(p.primary).toBeNull()
-    expect(p.secondary.map(t => t.to)).toEqual(['internal_review'])
+    expect(p.secondary.map(t => t.to)).toEqual(['quality_check'])
   })
 
   it('every primary is the state’s point, not merely a legal move', () => {
@@ -433,35 +448,37 @@ describe('presentTransitions — one obvious button, or none', () => {
 })
 
 describe('a new version while the piece is with the client', () => {
-  const EDGE = "New version — back for the manager's check"
+  const EDGE = 'New version — back for the quality check'
 
-  it('the piece can come back off the client’s desk, and only from there', () => {
+  it('the piece can come back off the client’s desk — to the quality reviewer — and only from there', () => {
     // `{ auto: true }` throughout: this is the app's own move, and nothing
     // may reach it by pressing something
     const auto = { auto: true }
-    expect(checkTransitionAs(['editor'], 'client_review', 'internal_review', auto).ok).toBe(true)
-    expect(checkTransitionAs(['account_manager'], 'client_review', 'internal_review', auto).ok).toBe(true)
-    expect(TRANSITIONS.client_review?.internal_review?.label).toBe(EDGE)
+    expect(checkTransitionAs(['editor'], 'client_review', 'quality_check', auto).ok).toBe(true)
+    expect(checkTransitionAs(['account_manager'], 'client_review', 'quality_check', auto).ok).toBe(true)
+    expect(TRANSITIONS.client_review?.quality_check?.label).toBe(EDGE)
+    // the manager's-check pull-back is for tasks and shoot plans only
+    expect(checkTransitionAs(['editor'], 'client_review', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'client_review', 'internal_review', { ...auto, tasksAndPlans: true }).ok).toBe(true)
     // …and not at all without that claim
-    expect(checkTransition('editor', 'client_review', 'internal_review').ok).toBe(false)
+    expect(checkTransition('editor', 'client_review', 'quality_check').ok).toBe(false)
     // nowhere else: a piece the client has already sent back for changes is
     // EXPECTING a new version, and must not be dragged sideways
-    expect(checkTransitionAs(['editor'], 'client_changes_requested', 'internal_review', auto).ok).toBe(false)
-    expect(checkTransitionAs(['editor'], 'revision_required', 'internal_review', auto).ok).toBe(false)
-    expect(checkTransitionAs(['editor'], 'approved_for_scheduling', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'client_changes_requested', 'quality_check', auto).ok).toBe(false)
+    expect(checkTransitionAs(['editor'], 'approved_for_scheduling', 'quality_check', auto).ok).toBe(false)
   })
 
   it('the client cannot perform it, and neither can a scheduler', () => {
     const auto = { auto: true }
-    expect(checkTransitionAs(['client'], 'client_review', 'internal_review', auto).ok).toBe(false)
-    expect(checkTransitionAs(['scheduler'], 'client_review', 'internal_review', auto).ok).toBe(false)
+    expect(checkTransitionAs(['client'], 'client_review', 'quality_check', auto).ok).toBe(false)
+    expect(checkTransitionAs(['scheduler'], 'client_review', 'quality_check', auto).ok).toBe(false)
   })
 
   it('it is never a button — not on any surface, not for anyone', () => {
     const roles: Role[] = ['scheduler', 'editor', 'account_manager', 'super_admin', 'client']
     for (const role of roles) {
       expect(availableTransitions(role, 'client_review').map(t => t.to))
-        .not.toContain('internal_review')
+        .not.toContain('quality_check')
       expect(availableBriefTaskTransitionsAs([role], 'client_review').map(t => t.to))
         .not.toContain('internal_review')
     }
@@ -470,10 +487,17 @@ describe('a new version while the piece is with the client', () => {
       .toEqual(["Log the client's approval", "Log the client's changes"])
   })
 
-  it('the manager hears about it; the client is never told', () => {
-    const audiences = TRANSITION_NOTIFICATIONS['client_review>internal_review']
-    expect(audiences).toEqual(['account_managers'])
+  it('the reviewer and the manager hear about it; the client is never told', () => {
+    const audiences = TRANSITION_NOTIFICATIONS['client_review>quality_check']
+    expect(audiences).toEqual(['quality_reviewers', 'account_managers'])
     expect(audiences).not.toContain('client_users')
+  })
+
+  it('a submit tells the reviewers, the Ops contact and the client\u2019s managers (Abby: "cc me")', () => {
+    for (const edge of ['draft_uploaded>quality_check', 'revision_required>quality_check'] as const) {
+      expect(TRANSITION_NOTIFICATIONS[edge]).toEqual(['quality_reviewers', 'ops_contact', 'account_managers'])
+    }
+    expect(TRANSITION_NOTIFICATIONS['draft_uploaded>internal_review']).toBeUndefined()
   })
 
   it('at that moment the client is urged to do nothing, and offered nothing', () => {

@@ -55,20 +55,34 @@ type TransitionRule = {
    * knows about, so `availableTransitions*` filter it out everywhere.
    */
   auto?: true
+  /**
+   * An edge that exists for internal tasks and shoot plans ONLY. Those two
+   * kinds keep the account manager's check (they have no quality gate) and
+   * their override tables grant the roles; for content the edge is refused
+   * outright, so the maker's one road is Abby's: maker → Joy → scheduler.
+   */
+  tasksOnly?: true
 }
 
 /** The funnel. Key: from-status → to-status → rule. Anything absent is illegal. */
 export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, TransitionRule>>>> = {
+  // ABBY'S RULE, AS WRITTEN (11 Sep 2026): maker → Joy → scheduler. The
+  // maker's submit goes STRAIGHT to the quality reviewer; there is no
+  // account manager's check in front of her. Anyone who makes a card may
+  // submit it: an editor or designer, an account manager, a general user, a
+  // scheduler who uploaded a post.
   draft_uploaded: {
-    internal_review: { roles: ['editor', 'account_manager'], requires: 'reviewable_asset', label: 'Submit for review' },
+    quality_check: { roles: ['editor', 'account_manager'], requires: 'reviewable_asset', label: 'Ready for quality check' },
+    // tasks and shoot plans: the manager's check is still their road
+    internal_review: { roles: ['editor', 'account_manager'], requires: 'reviewable_asset', label: 'Submit for review', tasksOnly: true },
   },
+  // LEGACY: cards that were already at the manager's check when the step
+  // went away still render (in the Quality check column) and still move on
   internal_review: {
     // one name for one action, on all three overlays: the button that sends
     // work back for changes is "Ask for changes", never the assignee's name
     revision_required: { roles: ['account_manager'], label: 'Ask for changes' },
-    // the account manager's check done, the piece goes to the quality
-    // reviewer — never straight to the client or a scheduler
-    quality_check: { roles: ['account_manager'], label: 'Send for quality check' },
+    quality_check: { roles: ['account_manager'], label: 'Send to the quality reviewer' },
     // …unless the person checking IS the quality reviewer, whose check is
     // the quality check: the two edges below stay for that one hat (and for
     // shoot plans and internal tasks, which wear their own words on them and
@@ -77,10 +91,15 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Approve without client' },
   },
   revision_required: {
-    revision_complete: { roles: ['editor'], requires: 'reviewable_asset', label: 'Revisions done' },
+    // revisions done: back to the quality reviewer, by the same people who
+    // may submit in the first place
+    quality_check: { roles: ['editor', 'account_manager'], requires: 'reviewable_asset', label: 'Revisions done — ready for quality check' },
+    // tasks and shoot plans: revised, back to the manager
+    revision_complete: { roles: ['editor'], requires: 'reviewable_asset', label: 'Revisions done', tasksOnly: true },
   },
+  // LEGACY: a revised card waiting on the old manager's re-check
   revision_complete: {
-    quality_check: { roles: ['account_manager'], label: 'Looks good — send for quality check' },
+    quality_check: { roles: ['editor', 'account_manager'], label: 'Ready for quality check' },
     revision_required: { roles: ['account_manager'], label: 'Ask for more changes' },
     client_review: { roles: ['quality_reviewer'], label: 'Looks good — send to client' },
     approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Approve without client' },
@@ -105,10 +124,17 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     // uploaded to — and an account manager saving a fix does the same.
     // client_changes_requested is deliberately NOT given the same edge: a new
     // version there is exactly what the client asked for.
+    quality_check: {
+      roles: ['editor', 'account_manager'],
+      label: 'New version — back for the quality check',
+      auto: true,
+    },
+    // tasks and shoot plans: the same pull-back, to the manager's check
     internal_review: {
       roles: ['editor', 'account_manager'],
       label: "New version — back for the manager's check",
       auto: true,
+      tasksOnly: true,
     },
     client_changes_requested: {
       roles: ['client', 'account_manager'], label: 'Ask for changes',
@@ -288,12 +314,19 @@ export function checkTransitionAs(
      *  transition API by anyone whose hat matched, on items (an internal
      *  task, a shoot brief) whose vocabulary has no words for it. */
     auto?: boolean
+    /** the caller is a task's or a shoot plan's own rule table, which may
+     *  take the `tasksOnly` edges */
+    tasksAndPlans?: boolean
   },
 ): TransitionCheck {
   const rule = TRANSITIONS[from]?.[to]
   if (!rule) return { ok: false, reason: `No transition from ${from} to ${to}` }
   if (rule.auto && !opts?.auto) {
     return { ok: false, reason: `"${rule.label}" is something the app does, not something to press` }
+  }
+  // content never takes the tasks-and-plans road (Abby's rule, 11 Sep 2026)
+  if (rule.tasksOnly && !opts?.tasksAndPlans) {
+    return { ok: false, reason: `"${rule.label}" is a move for tasks and shoot plans — content goes to the quality check` }
   }
   if (roles.includes('super_admin')) return { ok: true, rule }
   if (!rule.roles.some(r => roles.includes(r))) {
@@ -329,6 +362,8 @@ export function availableTransitionsAs(
     // an `auto` edge is the app's move, not an offer — never a button, not
     // even for a super admin
     .filter(([, rule]) => !rule.auto)
+    // a tasks-and-plans edge is never offered on content; their own tables offer it
+    .filter(([, rule]) => !rule.tasksOnly)
     .filter(([, rule]) => roles.includes('super_admin') || rule.roles.some(r => roles.includes(r)))
     .map(([to, rule]) => ({ to, label: labelFor(rule, roles), requires: rule.requires }))
 }
@@ -336,10 +371,10 @@ export function availableTransitionsAs(
 /** The to-statuses a surface may OFFER from here: every edge except the app's
  *  own automatic ones. The task and brief vocabularies walk the funnel
  *  themselves, and must not offer what the asset funnel does not. */
-export function offeredTransitionsFrom(from: ItemStatus): ItemStatus[] {
+export function offeredTransitionsFrom(from: ItemStatus, opts?: { tasksAndPlans?: boolean }): ItemStatus[] {
   const outs = TRANSITIONS[from] ?? {}
   return (Object.entries(outs) as [ItemStatus, TransitionRule][])
-    .filter(([, rule]) => !rule.auto)
+    .filter(([, rule]) => !rule.auto && (opts?.tasksAndPlans || !rule.tasksOnly))
     .map(([to]) => to)
 }
 
@@ -354,9 +389,9 @@ export function availableTransitions(role: Role, from: ItemStatus): { to: ItemSt
 
 /** The one move that IS the point at each stage — everything else is a detour. */
 export const PRIMARY_ACTION: Partial<Record<ItemStatus, ItemStatus>> = {
-  draft_uploaded: 'internal_review',
+  draft_uploaded: 'quality_check',
   internal_review: 'quality_check',
-  revision_required: 'revision_complete',
+  revision_required: 'quality_check',
   revision_complete: 'quality_check',
   quality_check: 'client_review',
   client_review: 'approved_for_scheduling',
@@ -399,7 +434,9 @@ export function presentTransitions(
   // stands in for her): at the manager's stages "Send for quality check"
   // beside "Send to client" was two buttons for one decision (the live walk
   // of 11 Sep 2026), so the gate's own edge is not offered to them
-  const isGate = roles.includes(QUALITY_HAT) || roles.includes('super_admin')
+  // …but only where a straight-to-client edge also exists (the legacy
+  // manager's stages); from Draft the maker's one button is the gate itself
+  const isGate = (roles.includes(QUALITY_HAT) || roles.includes('super_admin')) && transitions.some(t => t.to === 'client_review')
   const visible = transitions
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
     .filter(t => !(isGate && t.to === 'quality_check'))
@@ -520,20 +557,25 @@ export function clientArrivalLine(from: ItemStatus): string {
 /** `creator` is whoever raised the card (`assigned_by`). They hear about
  *  anything the CLIENT does to it, because they are the person who will be
  *  asked about it — owner's rule, 6 Sep 2026. */
-export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator' | 'quality_reviewers'
+export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator' | 'quality_reviewers' | 'ops_contact'
 export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatus}`, Audience[]>> = {
   // 'owner_editor' is the item's OWNER whatever their role (anyone can carry a
   // task) — every move an item makes reaches the person assigned to it, and
   // never anyone merely of the same role. The actor is always skipped, so an
   // owner acting on their own item is not self-notified.
-  'draft_uploaded>internal_review': ['account_managers'],
+  // INTO THE QUALITY CHECK (Abby, 11 Sep 2026: "assign to her for approval,
+  // and cc me"): the reviewers, the Ops contact, and the client's account
+  // managers — each person once, whichever audiences name them
+  'draft_uploaded>quality_check': ['quality_reviewers', 'ops_contact', 'account_managers'],
+  'revision_required>quality_check': ['quality_reviewers', 'ops_contact', 'account_managers'],
   'internal_review>revision_required': ['owner_editor'],
-  'revision_required>revision_complete': ['account_managers'],
   'revision_complete>revision_required': ['owner_editor'],
-  // into the quality check: the reviewers hear, and so does the person who
-  // made it — the card left their desk
-  'internal_review>quality_check': ['quality_reviewers', 'owner_editor'],
-  'revision_complete>quality_check': ['quality_reviewers', 'owner_editor'],
+  'internal_review>quality_check': ['quality_reviewers', 'ops_contact', 'account_managers', 'owner_editor'],
+  'revision_complete>quality_check': ['quality_reviewers', 'ops_contact', 'account_managers'],
+  // a new cut pulled the piece back off the client's desk: the reviewer has
+  // to look again, and the client must not be told the thing they were
+  // reviewing was taken away and re-made
+  'client_review>quality_check': ['quality_reviewers', 'account_managers'],
   // out of it: the same three every route to the client tells, plus the
   // schedulers it was handed to, who now know it is coming
   // NOT the schedulers: a card with the client is one they cannot open yet
@@ -550,7 +592,6 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   // know there is something to check, and the CLIENT must not be told that the
   // thing they were reviewing has been taken away and re-made. They see it in
   // the portal as "In production", which is all it is.
-  'client_review>internal_review': ['account_managers'],
   // media the client has never seen landed on a piece they had already
   // approved, so the piece went back to them. Silence here was the whole
   // failure mode: the scheduler saw one sentence in the composer, nobody else

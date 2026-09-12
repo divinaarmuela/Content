@@ -24,7 +24,7 @@ import type { BoardColumnKey } from './board-core'
 
 /* ── §6 the four stages ─────────────────────────────────────────────────── */
 
-export type EditorLaneKey = 'in_progress' | 'for_review' | 'for_handoff' | 'done'
+export type EditorLaneKey = 'in_progress' | 'quality_check' | 'for_handoff' | 'done'
 
 export const EDITOR_LANES: readonly {
   key: EditorLaneKey
@@ -36,22 +36,33 @@ export const EDITOR_LANES: readonly {
   empty: string
 }[] = [
   { key: 'in_progress', label: 'In Progress', columns: ['draft'], folded: false, empty: 'Nothing to edit right now.' },
-  { key: 'for_review', label: 'For Review', columns: ['internal_check', 'quality_check', 'with_client'], folded: false, empty: 'Nothing out for review.' },
+  // Abby's rule (11 Sep 2026): the maker's submit goes to Joy. The editor's
+  // second column is the quality check itself; the client's look sits inside
+  // it too, with the chip saying who has it
+  { key: 'quality_check', label: 'Quality check', columns: ['quality_check', 'with_client'], folded: false, empty: 'Nothing with the quality reviewer.' },
   { key: 'for_handoff', label: 'For Handoff', columns: ['ready_to_post'], folded: false, empty: 'Nothing approved yet.' },
   { key: 'done', label: 'Done', columns: ['booked', 'posted', 'delivered'], folded: true, empty: 'Nothing done yet.' },
 ]
 
 export const EDITOR_LANE_WORDS = EDITOR_LANES.map(l => l.label).join(', ')
 
-/** Inside For Review the editor is told who has it, in small words. */
-export function reviewWords(status: ItemStatus | string): string | null {
+/** Inside Quality check the editor is told who has it, in small words —
+ *  the reviewer's first name when somebody wears the flag ("With Joy"). */
+export function reviewWords(status: ItemStatus | string, reviewerName?: string | null): string | null {
+  const first = String(reviewerName ?? '').trim().split(/\s+/)[0]
   switch (status) {
     case 'internal_review': return 'With the account manager'
-    case 'quality_check': return 'With the quality reviewer'
+    case 'quality_check': return first ? `With ${first}` : 'With the quality reviewer'
     case 'client_review': return 'With the client'
     case 'client_changes_requested': return 'The client asked for changes'
     default: return null
   }
+}
+
+/** The first flagged reviewer's name, for the chip — null when nobody wears it. */
+export function reviewerNameOf(team: readonly { name?: string | null; email?: string | null; quality_reviewer?: boolean | null; active_status?: boolean | null }[]): string | null {
+  const joy = team.find(u => u.quality_reviewer === true && u.active_status !== false)
+  return joy ? (String(joy.name ?? '').trim() || String(joy.email ?? '').trim() || null) : null
 }
 
 /* ── §2 before you start ────────────────────────────────────────────────── */
@@ -127,7 +138,7 @@ export function beforeYouStart(s: BriefSources): BriefRow[] {
     { key: 'shot_list', label: 'Shot list', value: shotListWords(shoot?.shot_list) },
     { key: 'script', label: 'Script or talking points', value: clean(shoot?.script) },
     { key: 'notes', label: 'Strategist notes', value: notes.length ? notes.join('\n') : null },
-    { key: 'previous', label: 'Previous edits', value: 'What went out for this client', href: `/dashboard/scheduler?client=${encodeURIComponent(s.card.client_id)}&column=posted` },
+    { key: 'previous', label: 'Previous edits', value: 'What went out for this client', href: `/dashboard/editor?client=${encodeURIComponent(s.card.client_id)}&column=posted` },
   ]
 }
 

@@ -1427,7 +1427,7 @@ export function composerWait(input: {
   /** this client signs every post off — a note to the manager, not a gate on them (the owner, 9 Sep 2026) */
   clientSignsOff?: boolean
 }): ComposerWait | null {
-  if (input.itemStatus !== 'internal_review') return null
+  if (input.itemStatus !== 'internal_review' && input.itemStatus !== 'quality_check') return null
   if (input.mayApprove) return null
   const elig = postingEligibility({ status: input.itemStatus }, [], false)
   if (elig.ok) return null

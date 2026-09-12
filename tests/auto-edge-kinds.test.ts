@@ -102,9 +102,11 @@ const move = (id: string, to: string, opts?: Record<string, unknown>) =>
   performTransition(OWNER as never, rowOf(id) as never, to as never, opts as never)
 
 describe('the app’s own move works for every kind of item', () => {
-  it('pulls a piece of CONTENT back off the client’s desk', async () => {
-    await move(ASSET, 'internal_review', { auto: true })
-    expect(rowOf(ASSET).status).toBe('internal_review')
+  it('pulls a piece of CONTENT back off the client’s desk — to the quality reviewer', async () => {
+    // the manager's-check road is for tasks and shoot plans only
+    await expect(move(ASSET, 'internal_review', { auto: true })).rejects.toThrow(/tasks and shoot plans/)
+    await move(ASSET, 'quality_check', { auto: true })
+    expect(rowOf(ASSET).status).toBe('quality_check')
   })
 
   it('pulls an INTERNAL TASK back — the case that silently stopped working', async () => {
@@ -125,6 +127,7 @@ describe('the app’s own move works for every kind of item', () => {
 
 describe('…and none of them is something a person can press', () => {
   it('refuses the edge on every kind when the app does not claim the move', async () => {
+    await expect(move(ASSET, 'quality_check')).rejects.toThrow(/something the app does/)
     for (const id of [ASSET, TASK, BRIEF]) {
       await expect(move(id, 'internal_review')).rejects.toThrow(/something the app does/)
       expect(rowOf(id).status).toBe('client_review')

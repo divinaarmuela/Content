@@ -223,16 +223,15 @@ export const SHOOT_STAGES: readonly { key: ShootStage; label: string; meaning: s
   { key: 'confirmed', label: 'Confirmed', meaning: 'The account manager signed it off as go: plan complete, strategist aligned, client and location confirmed, everyone acknowledged.', empty: 'Nothing confirmed yet.' },
   { key: 'reminder_sent', label: 'Reminder sent', meaning: 'Ops sent the day-before reminder: call time, location, everyone knows their role.', empty: 'No reminders out.' },
   { key: 'shoot_day', label: 'Shoot day', meaning: 'Filming, to the plan. The calendar puts a shoot here on the day.', empty: 'No shoot today.' },
-  { key: 'footage_handed', label: 'Footage handed over', meaning: 'The footage is with the editor, with priorities and a deadline, and the work is on the Editor page.', empty: 'Nothing handed over yet.' },
+  { key: 'footage_handed', label: 'Footage in', meaning: 'The footage is with the editor, with priorities and a deadline, and the work is on the Editor page.', empty: 'No footage in yet.' },
 ]
 
 export const STAGE_LABEL: Record<ShootStage, string> = Object.fromEntries(SHOOT_STAGES.map(s => [s.key, s.label])) as Record<ShootStage, string>
 
-/** The same six stages as a strip across the shoot page — the column word,
- *  with the last one short enough to sit in a row. */
-export const STAGE_STRIP: readonly { key: ShootStage; label: string }[] = SHOOT_STAGES.map(s => ({
-  key: s.key, label: s.key === 'footage_handed' ? 'Footage in' : s.label,
-}))
+/** The same six stages as a strip across the shoot page — the column words,
+ *  the owner's six: Draft · Shared with team · Confirmed · Reminder sent ·
+ *  Shoot day · Footage in. */
+export const STAGE_STRIP: readonly { key: ShootStage; label: string }[] = SHOOT_STAGES.map(s => ({ key: s.key, label: s.label }))
 
 const STAGE_ORDER: ShootStage[] = SHOOT_STAGES.map(s => s.key)
 export const stageIndex = (s: ShootStage) => STAGE_ORDER.indexOf(s)

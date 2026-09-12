@@ -148,7 +148,8 @@ describe('the words are the screen’s words', () => {
       expect(actions, r).not.toContain('Hand to')
       expect(actions, r).not.toMatch(/press "?Approve/i)
     }
-    expect(tutorialFor('account_manager')!.steps.flatMap(s => s.actions).join('\n')).toContain('Send for quality check')
+    // Abby's rule: the maker's submit goes straight to the reviewer — no manager presses "Send for quality check"
+    expect(tutorialFor('account_manager')!.steps.flatMap(s => s.actions).join('\n')).toContain('Ask for changes')
   })
 
   it('names no page or button that is gone', () => {

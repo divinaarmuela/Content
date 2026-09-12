@@ -10,7 +10,7 @@ import { writeFileSync } from 'node:fs'
  *   editor/crew   press "I've read the plan"
  *   Ops           sends the reminder; after the day, hands the footage over
  *   editor        acknowledges the card, uploads the final, flags a risk,
- *                 presses Ready for checking
+ *                 presses Ready for quality check — straight to Joy (Abby's rule)
  *   AM            cannot send it to the client (the gate); sends it to Joy
  *   Joy           asks for changes once, then passes it; the card is handed
  *                 to the client's default scheduler and they are told
@@ -452,7 +452,7 @@ describe('the playbook, start to finish, live', () => {
     await everyone('Step 4c — footage handed over: the editor holds the card')
   })
 
-  it('5. the editor acknowledges, uploads the final, flags a risk, presses Ready for checking', async () => {
+  it('5. the editor acknowledges, uploads the final, flags a risk, presses Ready for quality check — straight to Joy', async () => {
     const rows = await ourRows()
     expect(seenBy(editor, rows)).toEqual([itemId])
     expect(seenBy(OTHER, rows)).toEqual([])
@@ -473,22 +473,30 @@ describe('the playbook, start to finish, live', () => {
     const v = await json(await addVersion(new Request('https://x.test/versions', { method: 'POST', body: JSON.stringify({ files: [SLIDES[0]], dropbox_url: 'https://www.dropbox.com/s/zztest-source', notes: 'Final export' }) }), params(itemId)))
     expect(v.status, JSON.stringify(v.body)).toBe(201)
     for (const ver of await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })) created.versions.add(ver.id)
-    const checked = await performTransition(editor, (await itemRow()) as never, 'internal_review')
-    expect(checked.status).toBe('internal_review')
-    await everyone('Step 5 — editor acknowledged, uploaded the final, flagged a risk, pressed Ready for checking')
+    // ABBY'S RULE, AS WRITTEN: maker → Joy → scheduler. The old manager's
+    // check is not on the road any more — the edge is refused for content
+    await expect(performTransition(editor, (await itemRow()) as never, 'internal_review')).rejects.toThrow(/tasks and shoot plans/)
+    const sinceSubmit = new Date().toISOString()
+    const checked = await performTransition(editor, (await itemRow()) as never, 'quality_check')
+    expect(checked.status).toBe('quality_check')
+    // the reviewers, the Ops contact and the client's managers are told — each once
+    const toldSubmit = await toldUntil(sinceSubmit, t => t.some(x => x.recipient_email === joy.email) && t.some(x => x.recipient_email === am.email))
+    noLeak(toldSubmit)
+    expect(toldSubmit.filter(t => t.recipient_email === joy.email)).toHaveLength(1)
+    expect(toldSubmit.filter(t => t.recipient_email === am.email)).toHaveLength(1)
+    say(`   told on submit: ${toldSubmit.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    await everyone('Step 5 — editor acknowledged, uploaded the final, flagged a risk, pressed Ready for quality check')
   })
 
-  it('6. the AM cannot send it to the client; sends it for quality check; the scheduler still sees nothing', async () => {
+  it('6. the AM cannot send it to the client and cannot pass the gate; the card is with Joy; the scheduler still sees nothing', async () => {
     as(am)
     await expect(performTransition(am, (await itemRow()) as never, 'client_review')).rejects.toThrow()
     say('   AM tries Send to client → refused (the gate)')
-    const since = new Date().toISOString()
-    const gated = await performTransition(am, (await itemRow()) as never, 'quality_check', { note: 'Caption and cover are right' })
-    expect(gated.status).toBe('quality_check')
-    const told = await toldUntil(since, t => t.some(x => x.recipient_email === joy.email))
-    noLeak(told)
-    expect(told.some(t => t.recipient_email === joy.email)).toBe(true)
-    say(`   told: ${told.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    expect((await itemRow()).status).toBe('quality_check')
+    // the AM's only move at the gate is to ask for changes
+    const amActs = cardActions((await itemRow()) as never, viewerOf(am))
+    expect([amActs.primary, ...amActs.more].filter(Boolean).map(a => a!.to)).toEqual(['revision_required'])
+    say('   AM on the card at Quality check: buttons Send back for changes only')
     const rows = await ourRows()
     expect(seenBy(scheduler, rows)).toEqual([])
     expect(seenBy(editor, rows)).toEqual([itemId])
@@ -507,9 +515,8 @@ describe('the playbook, start to finish, live', () => {
     const v2 = await json(await addVersion(new Request('https://x.test/versions', { method: 'POST', body: JSON.stringify({ files: [SLIDES[1]], notes: 'Tighter crop' }) }), params(itemId)))
     expect(v2.status, JSON.stringify(v2.body)).toBe(201)
     for (const ver of await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })) created.versions.add(ver.id)
-    expect((await performTransition(editor, (await itemRow()) as never, 'revision_complete')).status).toBe('revision_complete')
-    as(am)
-    expect((await performTransition(am, (await itemRow()) as never, 'quality_check')).status).toBe('quality_check')
+    // revisions done: straight back to Joy, no manager's re-check
+    expect((await performTransition(editor, (await itemRow()) as never, 'quality_check')).status).toBe('quality_check')
     await everyone('Step 7b — revisions done, back with Joy')
 
     as(joy)

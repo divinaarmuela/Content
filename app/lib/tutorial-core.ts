@@ -59,11 +59,11 @@ const NOTIFICATIONS = '/dashboard/notifications'
 
 /** The Post approval columns, as the board draws them — quoted in more than
  *  one tutorial, so said once. */
-export const POST_APPROVAL_COLUMNS = 'Draft, Internal check, Quality check, With client, Ready to post, Booked in, Posted'
+export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, With client, Ready to post, Booked in, Posted'
 /** The Editor columns. */
-export const EDITOR_COLUMNS = 'In Progress, For Review, For Handoff, Done'
+export const EDITOR_COLUMNS = 'In Progress, Quality check, For Handoff, Done'
 /** The Shoots columns. */
-export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage handed over'
+export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage in'
 
 const WHERE_ANSWERS_ARRIVE: TutorialStep = {
   title: 'Where answers arrive',
@@ -216,7 +216,7 @@ const EDITOR: Tutorial = {
     {
       title: 'Your board: Editor',
       see: [
-        `Four columns, the playbook’s own: ${EDITOR_COLUMNS}. For Review is the account manager, the quality reviewer and the client — the card says who has it. Done holds what is booked or posted, folded away.`,
+        `Four columns: ${EDITOR_COLUMNS}. Quality check is the reviewer, then the client — the card says who has it. Done holds what is booked or posted, folded away.`,
         'One card is one shoot’s work: the deliverables are listed on it and the card counts "3 of 6 finals in". A manager can also make a card by hand for a single job.',
         'You only see what is yours: cards handed to you, cards you made, and cards someone tagged you on.',
         'A card says the client, the account manager, what to make, which shoot it is from, the due date, and "Files to work from" when a manager attached footage or a folder.',
@@ -251,14 +251,15 @@ const EDITOR: Tutorial = {
       title: 'Quality check, submit, and never sit blocked',
       see: [
         '"Quality check before submitting" is the playbook’s seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
-        'Submit moves the card to For Review, where the account manager looks at it. From there it goes to the quality reviewer, then to the client, then to the scheduler — the card says who has it; you do nothing for those.',
+        'Submit moves the card straight to Quality check, where the quality reviewer looks at it — Abby’s rule: maker, then the reviewer, then the scheduler. From there it goes to the client, then to the scheduler — the card says who has it; you do nothing for those.',
+        'After the seven ticks the card asks where the reviewer should look: a Canva link and the page, optional when the final is uploaded here.',
         'A card that comes back sits in In Progress again with "What to change" on it, in the reviewer’s words.',
         '"Something looks wrong — flag it" tells the account managers in one line, the moment you see it, not on the due date.',
         '"Blocked?" is the 24-hour rule: pick what you need from the playbook’s list, say what is blocked, and the right person is told now. At 12 hours Ops is copied; at 24 hours leadership is told.',
         'Once the card is approved, "Handover" has three ticks: the final in the Drive monthly folder, the source files handed off, the next owner tagged.',
       ],
       actions: [
-        'Tick the seven checks, then press "Submit for review".',
+        'Tick the seven checks, say where the reviewer should look if the final is not on the card, then press "Submit for quality check".',
         'Watch your email: you are told when it moves on, or when it comes back.',
         'If it comes back, read "What to change", upload the new version, tick the checks, submit again.',
         'If a date is at risk or something looks wrong, flag it in one line.',
@@ -327,7 +328,7 @@ const GENERAL: Tutorial = {
       title: 'Put the final on the card and hand it on',
       see: [
         'Under "Versions": Upload the final, "Pick the final from Google Drive", or paste a link. Pictures and videos only, in the platform’s spec.',
-        'The button reads "Ready for checking"; pressing it sends the card to the account manager’s Internal check. From there the quality reviewer passes it, then the client sees it.',
+        'The button reads "Ready for quality check"; pressing it sends the card straight to the quality reviewer. They pass it, then the client sees it.',
         'A card with no file yet is refused with "Attach the work first".',
         'Press Acknowledge on a card that was handed to you, and "Flag a deadline risk" if a date is at risk.',
       ],
@@ -358,7 +359,7 @@ const GENERAL: Tutorial = {
       see: [
         'Open a shoot for the nine-part checklist ("6 of 9 filled" says what is missing), who has read the plan, the seven-day clock and Go.',
         'The plan must be shared with the team seven days before the shoot: "No brief, no shoot." A late plan turns red and Ops is told.',
-        'Everyone on the shoot presses "I’ve read the plan". Go is the one sign-off — it also books the date. After the day, "Footage handed over" puts the shoot’s cards on the editor’s page.',
+        'Everyone on the shoot presses "I’ve read the plan". Go is the one sign-off — it books the date and puts the editor’s card on the Editor page. The morning after the shoot, the shoot moves to Footage in by itself and the editor is told.',
         'The account manager picks the editor and crew and gives the Go.',
       ],
       actions: [
@@ -400,14 +401,14 @@ const MANAGER: Tutorial = {
         '"Editor: who edits the footage after the shoot" and "Crew on the day". Everyone you add is emailed when you share the plan and must press "I’ve read the plan".',
         'The seven-day rule: the plan must be shared with the team seven days before the day. A late plan turns red and Ops is nudged; Go is refused, and only a super admin can go anyway with a reason.',
         'Go is the one sign-off: it needs the checklist complete, "Aligned with the strategist" and client availability ticked, and every acknowledgement in. It also books the date.',
-        'The day before, Ops presses "Reminder sent" and everyone gets call time and location. After the day, drag to "Footage handed over": the editor’s cards are made with the deadline and priorities from the plan, and they are emailed.',
+        'The day before, Ops presses "Reminder sent" and everyone gets call time and location. The morning after the shoot it moves to Footage in by itself and the editor is emailed; paste the footage folder on the shoot page so it reaches their card.',
       ],
       actions: [
         'Press New shoot plan.',
         'Fill the nine parts. Send the plan for review, or share it with the client and log their answer.',
         'Pick the editor and crew, then share the plan with the team — seven days out.',
         'Tick aligned and confirmed, wait for "2 of 2 acknowledged", press "Confirm — it is go".',
-        'After the shoot, drag the card to Footage handed over.',
+        'After the shoot, nothing to press: the morning after, it moves to Footage in by itself.',
       ],
       href: SHOOTS,
       linkLabel: 'Open Shoots',
@@ -427,19 +428,18 @@ const MANAGER: Tutorial = {
       linkLabel: 'Open the Editor board',
     },
     {
-      title: 'Post approval: your column is Internal check',
+      title: 'Post approval: the quality check is the gate',
       see: [
-        `Seven columns: ${POST_APPROVAL_COLUMNS}. Anything in Internal check is waiting on a manager.`,
-        '"Needs a check — nobody asked yet" means no manager was named; "Ask somebody to check it" names one, and then it reads "Your turn" for them alone.',
-        'Your check is the playbook’s: caption tone, message, CTA, cover, timing, platform fit. Then "Send for quality check" sends it to the quality reviewer. You cannot send it to the client yourself: only the reviewer, or a super admin standing in, passes it on.',
-        '"Ask for changes" sends it back to the editor with your note, in your words.',
+        `Six columns: ${POST_APPROVAL_COLUMNS}. A submitted card lands in Quality check, with the reviewer — Abby’s rule: maker, then the reviewer, then the scheduler.`,
+        'You are told when a card reaches Quality check for your clients. Look at it there; "Ask for changes" sends it back to the maker with your note, in your words. You cannot send it to the client yourself: only the reviewer, or a super admin standing in, passes it on.',
+        'The card says where the reviewer should look when the maker gave a Canva link and page.',
         'Once the reviewer passes it, the card goes With client and "Sent to client" is stamped — that is the playbook’s delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
         'On the client’s yes the card goes to Ready to post and is handed to the client’s schedulers by itself. Some clients post their own content: their cards stop at Delivered.',
         'Filter by Client and by People at the top to see who is doing what.',
       ],
       actions: [
-        'Open Post approval and go to Internal check.',
-        'Open the card, look at the files, then press "Send for quality check" — or "Ask for changes" with what needs changing.',
+        'Open Post approval and go to Quality check.',
+        'Open the card and look at the files. If something is wrong, press "Ask for changes" with what needs changing; otherwise the reviewer passes it.',
         'When the client answers on the portal, nothing to press. If they told you by phone, press "Log the client’s approval".',
       ],
       href: POST_APPROVAL,
@@ -489,7 +489,7 @@ export const QUALITY_REVIEWER_STEP: TutorialStep = {
     'Every card waiting on you sits in the Quality check column on Post approval, for every client. The Overview’s "Quality check" tile counts them.',
     'Your buttons there: "Passed — send to client" (or "Passed — approve without client" for a client who does not sign off), and "Ask for changes" with a note. Nobody else can pass a card out of Quality check except a super admin standing in for you.',
     'On your pass the card is handed to the client’s schedulers by itself. You are emailed each time a card reaches Quality check.',
-    'At Internal check you see one button, "Send to client": your check is the quality check, so you never send work to yourself.',
+    'Every submit comes straight to you — there is no manager’s check in front of yours. The Ops contact and the client’s account managers are copied when a card reaches you.',
   ],
   actions: [
     'Open Post approval and go to the Quality check column, or press the Quality check tile on the Overview.',

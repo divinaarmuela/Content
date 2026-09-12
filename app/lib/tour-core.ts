@@ -148,15 +148,15 @@ export const POST_APPROVAL_TOUR: Tour = {
     {
       target: 'board-lanes',
       title: 'The columns',
-      body: 'Draft is being made, Internal check is with an account manager, Quality check is with the reviewer, With client is with them, Ready to post needs a time, Booked in means the channel has it, and Posted is live everywhere.',
+      body: 'Draft is being made or changed, Quality check is with the reviewer, With client is with them, Ready to post needs a time, Booked in means the channel has it, and Posted is live everywhere.',
     },
     {
       target: 'board-new-post',
       title: 'Starting a post',
-      body: 'Upload the files here, then send them to your account manager to check.',
+      body: 'Upload the files here, then send them for the quality check.',
       bodyByRole: {
-        account_manager: 'Upload files here and send them for the quality check, or ask somebody to check them first. The quality reviewer sends them on to the client, and if that reviewer is you, you send them on yourself.',
-        super_admin: 'Upload files here and approve them yourself, send them to the client, or ask somebody to check them. Everybody else’s uploads pass the quality reviewer first.',
+        account_manager: 'Upload files here and send them for the quality check. The quality reviewer sends them on to the client, and if that reviewer is you, you send them on yourself.',
+        super_admin: 'Upload files here and approve them yourself, send them to the client, or send them for the quality check. Everybody else’s uploads pass the quality reviewer first.',
       },
     },
     {

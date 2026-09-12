@@ -172,6 +172,11 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'super_admin' && u.active_status })
     }
+    case 'ops_contact': {
+      // Abby ("cc me"): whoever wears the Ops contact flag on the Team page
+      return table<TeamUserRow>('team_users')
+        .list({ where: u => (u as { ops_contact?: unknown }).ops_contact === true && u.active_status && u.role !== 'client' })
+    }
     case 'creator': {
       // whoever raised the card. They are the person the client's answer is
       // really for, and they are not always its owner or its manager.
@@ -402,10 +407,17 @@ export function notifyBatchTransition(
     const when = batch.shoot_date
       ? new Date(batch.shoot_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'long', day: 'numeric', month: 'long' })
       : null
+    // ONE EMAIL PER PERSON: the shoot's owner is usually also one of the
+    // client's managers, and the two audiences each named them — the live
+    // walk of 12 Sep 2026 saw "Shoot booked" land twice in the same inbox.
+    const people = new Map<string, { id: string; email: string }>()
     for (const audience of audiences) {
-      const people = await resolveAudience(audience, stub)
-      for (const person of people) {
-        if (person.id === actor.id) continue
+      for (const person of await resolveAudience(audience, stub)) {
+        if (person.id !== actor.id && !people.has(person.id)) people.set(person.id, person)
+      }
+    }
+    {
+      for (const person of people.values()) {
         await notify({
           actorName: actor.name,
           actorEmail: actor.email,
@@ -735,7 +747,7 @@ export async function performTransition(
   // cut the manager just rejected sends it round the loop unchanged; the
   // audit trail already knows when changes were asked for, so compare against
   // it. An item with no such record predates the trail — let it through.
-  if (!system && !isBriefTask && from === 'revision_required' && to === 'revision_complete') {
+  if (!system && !isBriefTask && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would
     // block the move forever with a message about a version nobody asked for
@@ -946,6 +958,10 @@ export async function performTransition(
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   const schedulerIds = [...(opts?.schedulerIds ?? []).filter(x => typeof x === 'string'), ...defaults].slice(0, 20)
   void (async () => {
+    // one email per person per move, whichever audiences name them (the
+    // reviewer who is also the client's manager, the Ops contact who is a
+    // super admin)
+    const toldAlready = new Set<string>()
     for (const audience of audiences) {
       let people = await resolveAudience(audience, item)
       if (audience === 'account_managers' && reviewerIds.length > 0) {
@@ -994,6 +1010,8 @@ export async function performTransition(
       }
       for (const person of people) {
         if (actorId && person.id === actorId) continue // don't notify yourself
+        if (toldAlready.has(person.id)) continue
+        toldAlready.add(person.id)
         const label = audience === 'client_users' ? CLIENT_LABELS[to] : check.rule.label
         // The subject used to be the BUTTON THE SENDER PRESSED: "Ask for
         // changes: Winter Reel 3" lands in the editor's inbox reading as an

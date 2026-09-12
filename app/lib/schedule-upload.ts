@@ -311,43 +311,33 @@ export async function createPostFromFiles(
     .map(x => String(x ?? '')).filter(Boolean).slice(0, 20)
   const note = String(input.note ?? '').trim().slice(0, 2000) || undefined
   const decision = input.decision ?? (straightOut ? 'approve' : null)
+  /**
+   * THE QUALITY CHECK (Abby, 11 Sep 2026, as written): maker → Joy →
+   * scheduler. An upload that is submitted goes STRAIGHT to the quality
+   * reviewer — there is no manager's check in front of her. A manager who
+   * IS a quality reviewer (or a super admin) holds the edges straight
+   * through and answers it themselves below.
+   */
+  const throughGate = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, current)
+  const passesQuality = throughGate.includes('quality_reviewer') || throughGate.includes('super_admin')
   if (decision) {
     try {
-      current = await performTransition(user, item as never, 'internal_review', {
+      current = await performTransition(user, item as never, 'quality_check', {
         note: decision === 'ask' ? note : UPLOAD_ADHOC_REASON,
-        // 'ask': the "ready for review" note goes to the people named, not to
-        // every manager of the client
+        // 'ask': the note goes to the people named as well as the reviewers
         reviewerIds: decision === 'ask' ? reviewerIds : undefined,
-        // the manager is about to answer it themselves in the next line
-        skipAudiences: decision === 'ask' ? undefined : ['account_managers'],
+        // a reviewer answering it themselves in the next line does not need
+        // the managers told twice
+        skipAudiences: decision === 'ask' || !passesQuality ? undefined : ['account_managers'],
       }) as unknown as ContentItem
     } catch (e) {
       // the media is saved either way; a piece that stayed at draft is a piece
       // somebody can still submit by hand, and losing the upload would not be
       // recoverable
-      console.error('upload post — could not submit the new piece for review:', e)
+      console.error('upload post — could not submit the new piece for the quality check:', e)
     }
   }
-  /**
-   * THE QUALITY CHECK (Abby, 11 Sep 2026): a manager's upload goes to the
-   * quality reviewer before the client or a scheduler, exactly like a card
-   * on the board. A manager who IS a quality reviewer (or a super admin)
-   * holds the edge straight through, and their upload is checked by the
-   * person who would have checked it anyway.
-   */
-  const throughGate = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, current)
-  const passesQuality = throughGate.includes('quality_reviewer') || throughGate.includes('super_admin')
-  if ((decision === 'client' || decision === 'approve') && !passesQuality && String(current.status) === 'internal_review') {
-    try {
-      current = await performTransition(user, current as never, 'quality_check', {
-        note: note ?? UPLOAD_ADHOC_REASON,
-        skipAudiences: ['owner_editor'],
-      }) as unknown as ContentItem
-    } catch (e) {
-      console.error('upload post — could not send the new piece for quality check:', e)
-    }
-  }
-  if (decision === 'client' && String(current.status) === 'internal_review') {
+  if (decision === 'client' && passesQuality && String(current.status) === 'quality_check') {
     try {
       current = await performTransition(user, current as never, 'client_review', { note }) as unknown as ContentItem
     } catch (e) {
@@ -364,7 +354,7 @@ export async function createPostFromFiles(
    * piece waits at `internal_review` for the manager's check, which is what it
    * did before this change too.
    */
-  if (decision === 'approve' && String(current.status) === 'internal_review') {
+  if (decision === 'approve' && passesQuality && String(current.status) === 'quality_check') {
     try {
       current = await performTransition(user, current as never, 'approved_for_scheduling', {
         note: note ?? UPLOAD_ADHOC_REASON,

@@ -212,7 +212,9 @@ const SUPER: TeamUser = {
 /** internal check → quality check (the AM) → approved (the reviewer): the
  *  two presses the gate made of the AM's old one (11 Sep 2026) */
 async function gatePass(id: string) {
-  await performTransition(am, await fresh(id), 'quality_check')
+  // Abby's rule (11 Sep 2026): the maker's submit already landed the card at
+  // the quality check; the super admin, standing in for Joy, passes it
+  if ((await fresh(id)).status !== 'quality_check') await performTransition(am, await fresh(id), 'quality_check')
   return performTransition(SUPER, await fresh(id), 'approved_for_scheduling')
 }
 
@@ -220,7 +222,7 @@ describe('rights follow assignment, not job title', () => {
   it('the account manager who OWNS the edit may mark revisions done; a scheduler may not', async () => {
     const id = await makeItem({ owner_id: am.id })
     await addVersion(am, id, v(1))
-    expect((await performTransition(am, await fresh(id), 'internal_review')).status).toBe('internal_review')
+    expect((await performTransition(am, await fresh(id), 'quality_check')).status).toBe('quality_check')
     expect((await performTransition(am, await fresh(id), 'revision_required')).status).toBe('revision_required')
 
     // the revision really happened — a new version lands after the request
@@ -228,26 +230,27 @@ describe('rights follow assignment, not job title', () => {
     expect((await addVersion(am, id, v(2))).version_number).toBe(2)
 
     // the same edge, from the seat of someone this item was never handed to
-    await expect(performTransition(scheduler, await fresh(id), 'revision_complete')).rejects.toThrow()
+    await expect(performTransition(scheduler, await fresh(id), 'quality_check')).rejects.toThrow()
 
-    // …and from the owner's seat, wearing the editor hat their OWNERSHIP grants
-    expect((await performTransition(am, await fresh(id), 'revision_complete')).status).toBe('revision_complete')
+    // …and from the owner's seat, wearing the editor hat their OWNERSHIP grants:
+    // revisions done goes straight back to the quality check (Abby's rule)
+    expect((await performTransition(am, await fresh(id), 'quality_check')).status).toBe('quality_check')
   })
 
   it('"revisions done" without a new version is refused — the evidence rule', async () => {
     const id = await makeItem({ owner_id: am.id })
     await addVersion(am, id, v(1))
-    await performTransition(am, await fresh(id), 'internal_review')
+    await performTransition(am, await fresh(id), 'quality_check')
     await performTransition(am, await fresh(id), 'revision_required')
     // no v2 this time: nothing changed since the changes were asked for
-    await expect(performTransition(am, await fresh(id), 'revision_complete'))
+    await expect(performTransition(am, await fresh(id), 'quality_check'))
       .rejects.toThrow(/new version/i)
   })
 
   it('an EDITOR handed the scheduling schedules and publishes it; the unhanded scheduler cannot', async () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     expect((await gatePass(id)).status)
       .toBe('approved_for_scheduling')
 
@@ -270,7 +273,7 @@ describe('rights follow assignment, not job title', () => {
   it('the schedule ENTRY itself follows the hat: the handed editor writes it, the unhanded scheduler cannot', async () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [editor.id] })
 
@@ -299,7 +302,7 @@ describe('rights follow assignment, not job title', () => {
   it('with nobody handed the scheduling, the scheduler picks it up and posts it', async () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [] })
     await upsertSchedule({
@@ -622,7 +625,7 @@ describe('a scheduler handed an item off the client team', () => {
   it('opens it and books a slot for it', async () => {
     const id = await makeItem({ owner_id: editor.id })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
@@ -794,7 +797,7 @@ describe('final-post approval: the caption gets its own yes before anything queu
   it('scheduler sends → queue refused → AM approves → queue opens', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E final caption — exactly as it will post' })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
     await upsertScheduleEntry(scheduler, await fresh(id), {
@@ -837,7 +840,7 @@ describe('final-post approval: the caption gets its own yes before anything queu
   it('request changes sends it back with the note; a fresh send re-opens the loop', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption, first attempt' })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 
@@ -866,7 +869,7 @@ describe('final-post approval: the caption gets its own yes before anything queu
   it('client_too routes it to the portal pile; approval empties it', async () => {
     const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption for the client' })
     await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'internal_review')
+    await performTransition(editor, await fresh(id), 'quality_check')
     await gatePass(id)
     await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
 

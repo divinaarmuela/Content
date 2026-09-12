@@ -160,7 +160,7 @@ export default function PlanReviewCard({ briefItemId, planHasContent, onChanged 
       case 'revision_complete': return 'Marked as revised — back with the reviewer'
       case 'client_review': return `Shared with ${client} — it is on their portal now`
       case 'client_changes_requested': return "The client's changes are logged"
-      case 'approved_for_scheduling': return 'Plan approved — now book the shoot with the Book button above'
+      case 'approved_for_scheduling': return 'Plan approved — now share it with the team and press Go, on the right'
       default: return label
     }
   }

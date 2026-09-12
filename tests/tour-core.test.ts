@@ -31,7 +31,7 @@ describe('the tours themselves', () => {
 
   it('names the five columns and says what each one means', () => {
     const columns = POST_APPROVAL_TOUR.steps.find(s => s.target === 'board-lanes')!.body
-    for (const label of ['Draft', 'Internal check', 'With client', 'Ready to post', 'Posted']) {
+    for (const label of ['Draft', 'Quality check', 'With client', 'Ready to post', 'Posted']) {
       expect(columns, label).toContain(label)
     }
   })

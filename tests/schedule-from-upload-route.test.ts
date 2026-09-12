@@ -194,9 +194,9 @@ describe('an account manager posts a file with no piece behind it', () => {
     expect(made.body.needs_approval).toBe(true)
     expect(items()[0].status).toBe('quality_check')
     expect(made.body.message).toContain('quality check')
-    // it went the ordinary way: internal check, then the gate, in this person's name
+    // it went the ordinary way: straight to the gate, in this person's name (Abby's rule)
     const trail = (fake.rows('workflow_activity') as any[]).map(a => `${a.action}:${a.new_value ?? ''}`)
-    expect(trail).toContain('status_change:internal_review')
+    expect(trail).not.toContain('status_change:internal_review')
     expect(trail).toContain('status_change:quality_check')
     expect(trail.some(t => t.includes('approved_for_scheduling'))).toBe(false)
   })
@@ -411,11 +411,11 @@ describe('the files are checked before anything is written', () => {
 /* ── the Post approval page's one window (8 Sep 2026): the upload decides ── */
 
 describe('an upload that carries its decision', () => {
-  it('a scheduler asks a named manager: Internal check, and only they are asked', async () => {
+  it('a scheduler asks a named manager: the card goes to the quality check, and they are named on it', async () => {
     as(SCHEDULER)
     const made = await upload({ decision: 'ask', reviewer_ids: [AM.id], note: 'Two options, pick one' })
     expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('internal_review')
+    expect(items()[0].status).toBe('quality_check')
     expect(items()[0].asked_ids).toEqual([AM.id])
     expect(made.body.message).toContain('Sent for approval')
   })

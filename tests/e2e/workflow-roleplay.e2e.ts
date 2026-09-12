@@ -108,7 +108,7 @@ describe('the funnel, role by role', () => {
   })
 
   it('editor: cannot submit for review without a version (evidence rule)', async () => {
-    await expect(performTransition(editor, await freshItem(), 'internal_review'))
+    await expect(performTransition(editor, await freshItem(), 'quality_check'))
       .rejects.toThrow(/Add a version/)
   })
 
@@ -119,8 +119,9 @@ describe('the funnel, role by role', () => {
       notes: 'First cut',
     })
     expect(v.version_number).toBe(1)
-    const updated = await performTransition(editor, await freshItem(), 'internal_review')
-    expect(updated.status).toBe('internal_review')
+    // Abby's rule (11 Sep 2026): straight to the quality check, no manager's check in front
+    const updated = await performTransition(editor, await freshItem(), 'quality_check')
+    expect(updated.status).toBe('quality_check')
   })
 
   it('scheduler: cannot even see the item pre-approval', async () => {
@@ -141,13 +142,12 @@ describe('the funnel, role by role', () => {
       notes: 'Tightened the hook per AM note',
     })
     expect(v2.version_number).toBe(2)
-    expect((await performTransition(editor, await freshItem(), 'revision_complete')).status).toBe('revision_complete')
+    expect((await performTransition(editor, await freshItem(), 'quality_check')).status).toBe('quality_check')
   })
 
-  it('AM: sends it for quality check; the quality reviewer sends it to the client portal', async () => {
+  it('the quality reviewer sends it to the client portal; the AM cannot', async () => {
     // the gate (Abby's rule, 11 Sep 2026): an AM cannot send to the client themselves
     await expect(performTransition(am, await freshItem(), 'client_review')).rejects.toThrow()
-    expect((await performTransition(am, await freshItem(), 'quality_check')).status).toBe('quality_check')
     expect((await performTransition(SUPER, await freshItem(), 'client_review')).status).toBe('client_review')
   })
 
@@ -182,8 +182,7 @@ describe('the funnel, role by role', () => {
       dropbox_url: 'https://www.dropbox.com/s/test-master-v3',
       file_url: 'https://example.com/preview-v3.mp4',
     })
-    expect((await performTransition(editor, await freshItem(), 'revision_complete')).status).toBe('revision_complete')
-    expect((await performTransition(am, await freshItem(), 'quality_check')).status).toBe('quality_check')
+    expect((await performTransition(editor, await freshItem(), 'quality_check')).status).toBe('quality_check')
     expect((await performTransition(SUPER, await freshItem(), 'client_review')).status).toBe('client_review')
   })
 
