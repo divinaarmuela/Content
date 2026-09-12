@@ -375,6 +375,10 @@ export async function POST(req: Request) {
             title: String(it.title).slice(0, 120),
             shoot_date: it.due_date ?? null,
             planned_deliverables: sanitisePlannedDeliverables(it.planned_deliverables),
+            // "What this shoot is for" on the popup IS the plan's Objective
+            // row — the checklist ticks it from here (seen in the browser,
+            // 12 Sep 2026: the row read "Not given" after the popup)
+            objective: it.brief ? String(it.brief).slice(0, 2000) : null,
             owner_id: it.owner_id ?? user.id,
             // Postgres defaulted the status; a shoot without one matches no
             // gate in batch-brief-core
