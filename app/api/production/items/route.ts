@@ -282,12 +282,18 @@ export async function POST(req: Request) {
       // research / strategy / copy: nothing to shoot, nothing to post — the
       // shoot gate is about assets and does not apply
       const isInternal = kindSlug !== 'shoot_brief' && kindRow?.uses_media === false
+      // AN EDITOR MAKES THEIR OWN CARD, FOR ANY CLIENT (the owner, 13 Sep
+      // 2026: "make sure editor also can create their own card, like create
+      // and pick clients"): the card is theirs, so the scoped list is not
+      // the gate — what they may see of that client is still scoped as ever
+      const ownCard = user.role === 'editor' && (!it.owner_id || it.owner_id === user.id)
       if (
         clientIds !== null && !clientIds.includes(it.client_id)
         // a TASK is internal work, not client-confidential — any team member
         // may raise one for any client (the owner's rule). Shoots, plans and
         // assets keep the scoped list: they carry unreleased material.
         && !taskExemptFromClientScope(kindRow)
+        && !ownCard
       ) {
         // off the client team, but holding a job on the shoot (the brief handed
         // to a manager) — the shoot opens for them, so its items may be made

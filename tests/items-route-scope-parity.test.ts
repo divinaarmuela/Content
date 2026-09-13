@@ -39,7 +39,7 @@ vi.mock('../app/lib/production-live', () => ({
 }))
 vi.mock('../app/lib/gdrive-hooks', () => ({ onItemsCreated: vi.fn(), onBatchCreated: vi.fn() }))
 
-const { GET } = await import('../app/api/production/items/route')
+const { GET, POST } = await import('../app/api/production/items/route')
 
 const WORK_KINDS = [
   { id: 'wk-brief', slug: 'shoot_brief', name: 'Shoot plan', uses_media: true, active: true, sort_order: 0 },
@@ -150,5 +150,19 @@ describe('items GET scoping is visibleItems, for every role', () => {
     expect(byBatch.map(r => r.id).sort()).toEqual(['i3', 'i4'])
     const byClient = await (await GET(new Request('https://x.test/api/production/items?client_id=c3'))).json() as { id: string }[]
     expect(byClient.map(r => r.id)).toEqual(['i5'])
+  })
+})
+
+describe('an editor makes their own card, for any client (13 Sep 2026)', () => {
+  const post = (body: unknown) => POST(new Request('https://x.test/api/production/items', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }))
+  it('their own card on a client off their roster is made; a card for somebody else there is refused', async () => {
+    current = VIEWERS.editor
+    // the editor is linked to c1 only (ASSIGNMENTS); c2 is not theirs
+    const own = await post({ items: [{ client_id: 'c2', title: 'My cut', work_kind_id: 'wk-edit', owner_id: 'u-ed', content_type: 'other' }], adhoc_reason: 'Made on the board' })
+    expect(own.status, await own.text()).toBe(201)
+    const other = await post({ items: [{ client_id: 'c2', title: 'For Sam', work_kind_id: 'wk-edit', owner_id: 'u-am', content_type: 'other' }], adhoc_reason: 'Made on the board' })
+    expect(other.status).toBe(403)
   })
 })
