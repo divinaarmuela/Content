@@ -40,7 +40,7 @@ export default function NewPostButton() {
   const [open, setOpen] = useState(false)
   // ONE BUTTON (the owner, 13 Sep 2026: "just one button that makes sense").
   // For an account manager or a super admin it opens the card popup — files,
-  // what needs doing, Hand to a scheduler, the Drive folder to post from —
+  // what needs doing, who posts it, the Drive folder to post from —
   // for everyone else the upload-and-send flow.
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
   const viewer = useMemo<BoardViewer | null>(
@@ -72,6 +72,7 @@ export default function NewPostButton() {
           team={team}
           viewer={{ ...viewer, name: me?.name }}
           simple
+          forPosting
         />
       ) : open ? (
         <SendForApprovalDialog onClose={() => setOpen(false)} />

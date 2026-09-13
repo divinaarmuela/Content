@@ -531,8 +531,12 @@ export type PersonChoice = { id: string; name: string; email: string }
  * A new card: one deliverable, one client, one link. Kind is free text.
  * Managers can hand it to somebody; everyone else makes it their own.
  */
-export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false }: {
+export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false, forPosting = false }: {
   open: boolean
+  /** Post approval's New post for a manager (13 Sep 2026): no shoot
+   *  question, "Hand to" instead of "Who", and the folder becomes the card's
+   *  link so the scheduler sees "Folder to work from" */
+  forPosting?: boolean
   /** the Editor page's popup: no "Kind of work" to pick — a card for an
    *  editor is a video edit, or graphics when the files are stills (the
    *  owner, 11 Sep 2026: "Kind of work, what's this") */
@@ -640,9 +644,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       if (!res.ok) throw new Error(await readError(res, 'Could not make the card'))
       const made = await res.json() as { id?: string }[] | { id?: string }
       const id = Array.isArray(made) ? made[0]?.id : made.id
-      if (id && link.trim()) {
+      // the card's link: the pasted link, or — for a post handed to a
+      // scheduler — the folder, so the Schedule page shows "Folder to work from"
+      const cardLink = link.trim() || (forPosting ? folder.trim() : '')
+      if (id && cardLink) {
         const put = await fetch(`/api/production/items/${id}/link`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: link.trim() }),
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: cardLink }),
         })
         if (!put.ok) toast.error('The card is made, but the link did not save — add it from the card')
       }
@@ -660,8 +667,10 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     <Dialog open={open} onOpenChange={o => { if (!busy) onOpenChange(o) }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New card</DialogTitle>
-          <DialogDescription>One card for one client. Say what needs doing and attach the files to work from.</DialogDescription>
+          <DialogTitle>{forPosting ? 'New post' : 'New card'}</DialogTitle>
+          <DialogDescription>{forPosting
+            ? 'One post for one client. Say what needs doing, attach the files or the folder, and hand it to whoever posts it.'
+            : 'One card for one client. Say what needs doing and attach the files to work from.'}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -692,7 +701,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               <KindInput id="new-kind" value={kind} onChange={setKind} kinds={kinds} />
             </div>
           )}
-          {(shoots.length > 0 || simple) && (
+          {(shoots.length > 0 || simple) && !forPosting && (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="new-shoot">Which shoot is this from?</Label>
@@ -774,7 +783,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
             )}
             {isManager && team.length > 0 && (
               <div className="flex flex-col gap-2">
-                <Label>Who</Label>
+                <Label>{forPosting ? 'Hand to' : 'Who'}</Label>
                 <Select value={owner} onValueChange={v => v && setOwner(v)}>
                   <SelectTrigger className={field}><SelectValue placeholder="Pick a person" /></SelectTrigger>
                   <SelectContent>
