@@ -123,10 +123,10 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // no section is wrapped in a length/data gate
     expect(s).not.toMatch(/\{[a-zA-Z.]+\.length > 0 && \(\s*<section/)
     // the empty states say what to do
-    expect(s).toMatch(/No final yet\. Export the finished cut/)
-    expect(s).toMatch(/Not given yet — edit from the Dropbox working folder/)
+    expect(s).toMatch(/No final yet\. Add the finished cut here/)
+    expect(s).toMatch(/Not given yet — ask Production\./)
     expect(s).toMatch(/Not blocked\./)
-    expect(s).toMatch(/Once the card is approved: the final in the Drive monthly folder/)
+    expect(s).toMatch(/Shown once the card is approved\./)
     // "Before you start" says Not given rather than hiding a row
     expect(s).toMatch(/row\.value \?\? NOT_GIVEN/)
   })
@@ -148,7 +148,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(s).toMatch(/\{qcComplete\(ticks\) && \(/)
     expect(s).toMatch(/id="ed-review-link"/)
     expect(s).toMatch(/id="ed-review-note"/)
-    expect(s).toMatch(/Where should the reviewer look\?/)
+    expect(s).toMatch(/Review link/)
     // the items route has no POST: the review fields go by PATCH (the live walk of 12 Sep 2026)
     expect(s).toMatch(/review_note: reviewNote\.trim\(\) \|\| null \}, 'Saved where to look', 'Saving', 'PATCH'\)/)
     // the reviewer sees it on the manager's card

@@ -18,7 +18,7 @@ import { writeFileSync } from 'node:fs'
  *             its refusal · Source files link, checked · flag a deadline risk
  *             (managers told) · I'm blocked (need → SOP people, named person
  *             told, "Waiting on … from … since …") · Unblocked · the seven
- *             checks gate submit · Where should the reviewer look (https only)
+ *             checks gate submit · Review link (https only)
  *             · Submit for quality check — STRAIGHT TO JOY (Abby's rule), the
  *             manager's check refused for content
  *   Joy       is told once, as are Ops and the client's managers · asks for

@@ -250,7 +250,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           <p className="mt-2 text-[13px] text-muted-foreground">
             {ackRow
               ? `Acknowledged ${formatInZone(String(ackRow.created_at), zone, 'short') ?? ''}`
-              : item.owner_id ? 'Not acknowledged yet — the playbook asks for the same day it lands.' : 'Nobody holds this card yet.'}
+              : item.owner_id ? 'Not acknowledged yet.' : 'Nobody holds this card yet.'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {!ackRow && holder && (
@@ -280,7 +280,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
       {/* ── 1. before you start (§2) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-before">
         <p id="ed-before" className={H2}>Before you start</p>
-        <p className="text-[12px] text-muted-foreground">Confirm the brief. If it does not say what the video is meant to achieve, ask before cutting — do not guess.</p>
         <dl className="flex flex-col gap-2">
           {brief.map(row => (
             <div key={row.key} className="flex flex-col gap-0.5">
@@ -307,14 +306,14 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           <span className="font-semibold">Footage folder: </span>
           {from.footage
             ? <a href={from.footage} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">Open the Dropbox or Drive folder <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
-            : <span className="text-muted-foreground">Not given yet — edit from the Dropbox working folder; ask Production where it is.</span>}
+            : <span className="text-muted-foreground">Not given yet — ask Production.</span>}
         </p>
         <FilesToWorkFrom item={item as never} isManager={false} frozen={frozen} />
         <p className="text-[13px]">
           <span className="font-semibold">Finals go to: </span>
           {from.finalsFolder
-            ? <a href={from.finalsFolder} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">the client’s Google Drive folder, in this month’s Scheduled folder <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
-            : <span className="text-muted-foreground">the client’s Google Drive monthly folder (no folder is linked here yet).</span>}
+            ? <a href={from.finalsFolder} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">this month’s Scheduled folder in Drive <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
+            : <span className="text-muted-foreground">this month’s Drive folder (not linked yet).</span>}
         </p>
       </section>
 
@@ -325,7 +324,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
         {slides.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground">No final yet. Export the finished cut in the platform’s spec, watch it start to finish, then add it here. Pictures and videos only — never raw footage.</p>
+          <p className="text-[13px] text-muted-foreground">No final yet. Add the finished cut here (pictures and videos only, no raw footage).</p>
         ) : (
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {slides.map((s, i) => (
@@ -380,7 +379,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           </div>
         )}
         <div className="flex flex-col gap-2">
-          <label htmlFor="ed-source" className="text-[13px] font-semibold">Source files (Dropbox)<span className="ml-1 font-normal text-muted-foreground">— where the project and raw files were handed over</span></label>
+          <label htmlFor="ed-source" className="text-[13px] font-semibold">Source files (Dropbox)</label>
           {holder && !frozen ? (
             <div className="flex flex-wrap items-center gap-2">
               <input id="ed-source" value={source} onChange={e => setSource(e.target.value)} placeholder="https://www.dropbox.com/…" className={`${field} min-w-0 flex-1`} />
@@ -400,7 +399,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
         <p id="ed-qc" className={H2}>Quality check before submitting</p>
         {submitting && holder ? (
           <>
-            <p className="text-[12px] text-muted-foreground">Never submit a cut you have not reviewed. Tick each one, then submit — it goes straight to the quality reviewer.</p>
+            <p className="text-[12px] text-muted-foreground">Tick each one, then submit.</p>
             <ul className="flex flex-col gap-1">
               {QC_CHECKLIST.map(c => (
                 <li key={c.key}>
@@ -414,7 +413,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             </ul>
             {qcComplete(ticks) && (
               <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-                <label htmlFor="ed-review-link" className="text-[13px] font-semibold">Where should the reviewer look? <span className="font-normal text-muted-foreground">(a Canva link and the page — optional when the final is uploaded here)</span></label>
+                <label htmlFor="ed-review-link" className="text-[13px] font-semibold">Review link <span className="font-normal text-muted-foreground">(Canva link and page, optional)</span></label>
                 <input id="ed-review-link" value={reviewLink} onChange={e => setReviewLink(e.target.value)} placeholder="https://www.canva.com/design/…" className={`${field} min-w-0`} />
                 <input id="ed-review-note" aria-label="Which page or frame" value={reviewNote} onChange={e => setReviewNote(e.target.value)} placeholder="page 3" className={`${field} min-w-0`} />
                 {!reviewLinkOk && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">The review link must start with https://</p>}
@@ -435,12 +434,12 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">
-            {qcDone ? 'Quality check done on this version.' : submitting ? 'The person holding this card does the quality check.' : 'Done for this stage — the check happens before each submit.'}
+            {qcDone ? 'Quality check done on this version.' : submitting ? 'The person holding this card does the quality check.' : 'Done for this stage.'}
           </p>
         )}
         {riskOpen && (
           <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-            <label htmlFor="ed-risk" className="text-[13px] font-semibold">What looks wrong, or why the date is at risk? One line — the account managers are told.</label>
+            <label htmlFor="ed-risk" className="text-[13px] font-semibold">What looks wrong? One line.</label>
             <textarea id="ed-risk" rows={2} autoFocus value={riskNote} onChange={e => setRiskNote(e.target.value)} className={`${field} resize-none p-2.5`} />
             <div className="flex items-center gap-2">
               <Button className={primaryBtn} disabled={busy || !riskNote.trim()} onClick={async () => { const ok = await flag({ kind: 'deadline_risk', note: riskNote }, 'Flagged — the account managers have been told'); if (ok) { setRiskOpen(false); setRiskNote('') } }}>Flag it</Button>
@@ -477,7 +476,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             ))}
           </ul>
         ) : (
-          <p className="text-[13px] text-muted-foreground">Once the card is approved: the final in the Drive monthly folder, the source files handed off, and the next owner tagged.</p>
+          <p className="text-[13px] text-muted-foreground">Shown once the card is approved.</p>
         )}
       </section>
 
@@ -504,7 +503,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               <option value="">Pick one</option>
               {BLOCKER_NEEDS.map(n => <option key={n.key} value={n.key}>{n.label} — go to {n.who.toLowerCase()}</option>)}
             </select>
-            <label htmlFor="ed-from" className="text-[13px] font-semibold">Who are you asking? <span className="font-normal text-muted-foreground">(optional — the right people are told either way)</span></label>
+            <label htmlFor="ed-from" className="text-[13px] font-semibold">Who are you asking? <span className="font-normal text-muted-foreground">(optional)</span></label>
             <select id="ed-from" value={fromId} onChange={e => setFromId(e.target.value)} className={`${field} h-11`}>
               <option value="">Whoever the playbook names</option>
               {team.filter(u => u.active_status !== false && u.role !== 'client' && u.id !== me?.id).map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
