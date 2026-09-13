@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Shoots page, every route</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ink:#161412; --paper:#FBFAF6; --muted:#6B665E; --line:#DDD8CE;
+    --red:#C62828; --tint-green:#D6F5E1; --tint-amber:#FFF0C7; --tint-blue:#DCE6FF; --tint-red:#FBE3E1;
+  }
+  @page{ size:A4; margin:16mm 14mm 18mm 14mm; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink)}
+  body{font-family:"Instrument Sans",system-ui,Arial,sans-serif;font-size:10.5pt;line-height:1.45}
+  h1,h2,h3{font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;text-wrap:balance;margin:0}
+  h1{font-size:30pt;font-weight:700;line-height:1.05;letter-spacing:-.01em}
+  h2{font-size:17pt;font-weight:700;margin:18pt 0 6pt;padding-top:8pt;border-top:2px solid var(--ink);break-after:avoid}
+  h3{font-size:12pt;font-weight:700;margin:12pt 0 4pt;break-after:avoid}
+  p{margin:0 0 6pt}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:8pt;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .lede{font-size:12pt;max-width:62ch;margin:8pt 0 0}
+  .meta{display:flex;gap:18pt;margin-top:10pt;color:var(--muted);font-size:9pt}
+  .strip{display:flex;gap:4pt;margin:10pt 0 4pt;font-family:"JetBrains Mono",monospace;font-size:8pt}
+  .strip span{flex:1;border:1px solid var(--line);padding:5pt 6pt;text-align:center;background:#fff;border-radius:3pt}
+  .strip span.auto{background:var(--tint-blue)}
+  .legend{font-size:8.5pt;color:var(--muted);margin-bottom:8pt}
+  table{width:100%;border-collapse:collapse;margin:4pt 0 10pt;font-size:9.5pt;break-inside:auto}
+  th{font-family:"JetBrains Mono",monospace;font-size:7.5pt;letter-spacing:.1em;text-transform:uppercase;text-align:left;color:var(--muted);padding:4pt 6pt;border-bottom:1.5px solid var(--ink)}
+  td{vertical-align:top;padding:6pt 6pt;border-bottom:1px solid var(--line)}
+  tr{break-inside:avoid}
+  td.k{font-weight:600;width:24%}
+  .route{border:1px solid var(--line);border-radius:6pt;padding:10pt 12pt;margin:8pt 0;background:#fff;break-inside:avoid}
+  .route h3{margin-top:0}
+  .route .q{font-style:italic;color:var(--muted);margin-bottom:6pt}
+  ol,ul{margin:0 0 6pt 16pt;padding:0}
+  li{margin:0 0 3pt}
+  .mail{background:var(--tint-blue);border-radius:3pt;padding:1pt 4pt;font-size:9pt;white-space:nowrap}
+  .stop{background:var(--tint-red);border-radius:3pt;padding:1pt 4pt;font-size:9pt}
+  .ok{background:var(--tint-green);border-radius:3pt;padding:1pt 4pt;font-size:9pt}
+  .note{background:var(--tint-amber);border-left:3px solid #E0A400;padding:6pt 8pt;margin:6pt 0;font-size:9.5pt}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10pt}
+  .pb{break-before:page}
+  .foot{margin-top:14pt;color:var(--muted);font-size:8.5pt;border-top:1px solid var(--line);padding-top:6pt}
+</style>
+</head>
+<body>
+
+<p class="eyebrow">MD Media · Agency OS · team guide</p>
+<h1>The Shoots page, every route</h1>
+<p class="lede">One card is one shoot. The card moves along six columns, and this guide is every way it can move, what you press, what has to be true first, and who is told. Written from the app as it runs on 13 September 2026.</p>
+<div class="meta"><span>For: account managers, general users, super admins</span><span>Editors and schedulers never open this page</span></div>
+
+<div class="strip">
+  <span>Draft</span><span>Shared with team</span><span>Confirmed</span><span>Reminder sent</span><span class="auto">Shoot day</span><span class="auto">Footage in</span>
+</div>
+<p class="legend">Blue columns are the calendar's: the app moves a shoot there by itself. White columns move when a person presses the next-step button on the shoot page, or drags the card.</p>
+
+<h2>Who can do what</h2>
+<table>
+<tr><th>Person</th><th>Sees</th><th>Can do</th></tr>
+<tr><td class="k">Account manager on the client</td><td>Every shoot for their clients</td><td>Everything: plan, share, Go, reminder, Footage is in, client share, move back, delete</td></tr>
+<tr><td class="k">Whoever created the shoot</td><td>Their own shoot</td><td>Everything on that shoot, including sending the plan to the client</td></tr>
+<tr><td class="k">Super admin</td><td>Every shoot</td><td>Everything, plus "Go anyway" with a reason when the plan was shared late</td></tr>
+<tr><td class="k">General user</td><td>Shoots they created or are on</td><td>Same as the creator</td></tr>
+<tr><td class="k">Editor</td><td>Not this page. Their card on the Editor page carries the plan</td><td>Press "I've read the plan" on their card</td></tr>
+<tr><td class="k">Videographer, presenter, crew</td><td>Not this page. An email with an acknowledge link</td><td>Press the link to say they have read the plan</td></tr>
+<tr><td class="k">Scheduler</td><td>Nothing here</td><td>Nothing here</td></tr>
+<tr><td class="k">Client</td><td>Their portal: the plan card and the board, once shared</td><td>Approve, request changes, comment on a board card</td></tr>
+</table>
+
+<h2>The normal road, step by step</h2>
+
+<div class="route">
+<h3>1 · Draft: write the plan</h3>
+<p>Press <b>New shoot plan</b>, name it, pick the client and the date. The plan has nine parts: objective, deliverables, shot list, script or talking points, date with call time and location, talent, props and wardrobe, client availability, editor priorities and deadline. The card shows "3 of 9 filled" until all nine are in.</p>
+<p><b>Who is on this shoot</b>: add the editor and the crew here. Nobody is emailed yet. Paste the <b>footage folder</b> link (Dropbox or Drive) whenever you have it.</p>
+<p>The plan is due <b>7 days before the shoot</b>. Under 7 days and still in Draft, the card turns red with "Plan is late" and lists what is missing. Once, the account managers on the client and the Ops contact get <span class="mail">⚠️ Plan is late</span>.</p>
+</div>
+
+<div class="route">
+<h3>2 · Share the plan with the team</h3>
+<p>Press <b>Share the plan with the team</b>. Needs the nine parts filled. What happens:</p>
+<ul>
+<li>The shoot's <b>one editor card</b> is created on the Editor page, in In Progress, in the editor's name if one is named. It carries the whole plan.</li>
+<li>The editor gets <span class="mail">Read the plan</span> with a link to that card, where they press "I've read the plan".</li>
+<li>Everyone else on the shoot gets <span class="mail">Read the plan</span> with an acknowledge link. One press marks them as read.</li>
+<li>The card reads "read 1 of 3" until everyone has.</li>
+</ul>
+<p>If the share lands under 7 days before the shoot, the managers and Ops get <span class="mail">⚠️ Plan shared late</span> and Go will need a super admin.</p>
+</div>
+
+<div class="route">
+<h3>3 · Confirmed: Go books the shoot</h3>
+<p>Press <b>Confirm — it is go</b>. Refused, with the reason under the button, until all of these are true:</p>
+<ul>
+<li>the nine parts are filled;</li>
+<li>"Aligned with the strategist or creative director" is ticked;</li>
+<li>"Client availability and location confirmed" is ticked;</li>
+<li>everyone on the shoot has acknowledged the plan;</li>
+<li>the plan was shared 7 or more days before the shoot, or a super admin presses <b>Go anyway</b> with a reason (the managers and Ops are emailed the reason).</li>
+</ul>
+<p>Go books the shoot and stamps who pressed it and when. The editor gets <span class="mail">You're on [shoot] — your card is ready, shoot on [date]</span>. The card on the Editor page now reads "Shoot on [date], footage after that".</p>
+</div>
+
+<div class="route">
+<h3>4 · Reminder sent</h3>
+<p>Press <b>Reminder sent to everyone</b>. Everyone on the shoot, plus the creator, gets <span class="mail">Shoot reminder: [shoot] — [date]</span>. Only allowed after Go.</p>
+</div>
+
+<div class="route">
+<h3>5 · Shoot day (the calendar's column)</h3>
+<p>On the shoot date the card moves here by itself. Nobody can drag a card in or out of this column. To move it, change the shoot date.</p>
+</div>
+
+<div class="route">
+<h3>6 · Footage in: the handover to the editor</h3>
+<p>Two ways, and they never both happen:</p>
+<ol>
+<li><b>You press "Footage is in"</b> on the shoot page, the day of the shoot or after. Refused until: the shoot date has passed, an editor is named, priorities and deadline are written, and the footage folder link is pasted. The editor gets <span class="mail">Footage is in: [shoot] — your card is ready, due [deadline]</span> with the folder link and the priorities. The folder appears on their card under "Work from".</li>
+<li><b>You do nothing.</b> The morning after the shoot the app hands it over by itself. The editor gets <span class="mail">Footage should be in: [shoot] — start the edit</span>. If no folder link was pasted, the email tells them to ask you, and pasting it later still reaches their card.</li>
+</ol>
+<p>From here the work is on the Editor page and the shoot card sits in Footage in. It stays there. There is no "close" button; the shoot is done when its edits are done.</p>
+</div>
+
+<h2 class="pb">Routes off the normal road</h2>
+
+<div class="route">
+<h3>The shoot happened and you have not decided who edits it</h3>
+<p class="q">"Let's say we have a shoot but I am not sure yet who is editing, but the shoot is finished. What happens?"</p>
+<ol>
+<li>The card sits in <b>Shoot day</b>. "Footage is in" is greyed: <span class="stop">Name the editor on the shoot first — the footage is handed to them</span>.</li>
+<li>The morning after the shoot, the app cannot hand over to nobody. Instead, once, it emails the account managers and super admins on the client: <span class="mail">Name the editor: [shoot] was shot and nobody has the footage</span>, with a link to the shoot.</li>
+<li>Nothing else moves. No editor card is made in anyone's name. If the plan was shared, the shoot's card already exists on the Editor page with no owner. Any editor can open it, but it is nobody's.</li>
+<li>When you decide, open the shoot, pick the editor under <b>Who is on this shoot</b>. The moment you save:
+  <ul>
+  <li>the card becomes theirs, with the due date and priorities from the plan;</li>
+  <li>they get <span class="mail">You're on [shoot] — your card is ready</span>.</li>
+  </ul></li>
+<li>Then press <b>Footage is in</b> (paste the folder link first). They get <span class="mail">Footage is in</span> and start. The automatic morning-after handover does not run a second time for this shoot, so this press is yours to make.</li>
+</ol>
+<p class="note">If the shoot was never shared with the team (still Draft when it was shot), the same applies, and there is no editor card until you either share the plan or name an editor.</p>
+</div>
+
+<div class="route">
+<h3>The editor is named, but priorities or the deadline are missing</h3>
+<p>The button "Footage is in" refuses: <span class="stop">Write the editor priorities and the deadline first</span>. The morning-after handover still runs, because an editor is named: the card goes to them without a due date, and the "Footage should be in" email has no due date. Add the deadline on the shoot afterwards and it fills the card's empty due date.</p>
+</div>
+
+<div class="route">
+<h3>You name the editor after Go, or swap editors</h3>
+<p>Naming an editor on a shared or confirmed shoot hands them the card at once and emails <span class="mail">You're on [shoot]</span>. Swapping editors: the card keeps whoever already holds it. The handover only ever fills an <b>empty</b> owner, so reassign the card on the Editor page with "Hand to" if the wrong person has it.</p>
+</div>
+
+<div class="route">
+<h3>The shoot was already filmed and never planned here</h3>
+<p>Do not make a plan. On the Editor page, press <b>New card</b> and type the shoot's name. That makes a footage-only shoot: already shot, no plan, landing straight in <b>Footage in</b> with "No plan — footage only". It never needs a share, Go or a reminder.</p>
+</div>
+
+<div class="route">
+<h3>Not everyone has acknowledged the plan</h3>
+<p>Go is refused: <span class="stop">2 of 3 on the shoot have not acknowledged the plan</span>. The crew's email has the acknowledge link; the editor presses "I've read the plan" on their card. The card shows "read 1 of 3". If someone left, remove them from "Who is on this shoot" and the count drops.</p>
+</div>
+
+<div class="route">
+<h3>The plan is late, but the shoot must go ahead</h3>
+<p>Under 7 days and shared late, Go is refused for an account manager. A super admin sees <b>Go anyway (super admin)</b> and a box "Why is it going ahead late?". The reason is required, is stamped on the shoot ("Went ahead late — [reason]"), and the managers and Ops are emailed <span class="mail">Went ahead late: [shoot]</span>.</p>
+</div>
+
+<div class="route">
+<h3>The client needs to see and approve the plan</h3>
+<p>Press <b>Share the plan with the client</b> (needs the nine parts). It turns the portal switch on, stamps "With the client since [date]" and emails the client <span class="mail">Your shoot plan: [shoot] — [date]</span>. The line under it then reads <b>Waiting on the client</b> until they press Approve or Request changes on their portal. Their answer, with any note, appears on the shoot page and in What happened. Sharing again clears their answer and waits on them again.</p>
+<p><b>Copy portal link</b> copies the client's portal. <b>Copy board link</b> copies a page with only the planning board, turns both portal switches on, and lets the client comment on any board card. Their comments land on the same card on your shoot page and email the account manager.</p>
+<p class="note">The "Visible on the client portal" switch only shows or hides the shoot. It does not send anything and does not stamp a share.</p>
+</div>
+
+<div class="route">
+<h3>Moving a shoot backwards</h3>
+<p>Drag the card back, or press <b>Move…</b>. Allowed for the people who can manage the shoot. Every stamp past the column you drop it in is cleared: back to Shared clears Go and the reminder; back to Draft clears the share too. Two refusals: nothing moves out of Shoot day ("change the shoot date to move it"), and nothing moves into Shoot day by hand.</p>
+</div>
+
+<div class="route">
+<h3>The shoot date changes</h3>
+<p>Change it on the plan. The Shoot day and Footage in columns follow the calendar. Reminders and the morning-after handover use the new date. A confirmed shoot's date is a commitment: the app asks "Why is the date moving?" and logs the reason.</p>
+</div>
+
+<div class="route">
+<h3>Deleting a shoot</h3>
+<p><b>Delete</b> on the shoot page. The shoot is removed and the deletion logged under your name. Its cards on the Editor and Post approval boards are <b>not</b> deleted: they lose their "From the shoot" line and stay where they are.</p>
+</div>
+
+<h2>Every email the Shoots page sends</h2>
+<table>
+<tr><th>When</th><th>To</th><th>Subject</th></tr>
+<tr><td>Plan still Draft under 7 days out (once)</td><td>AMs on the client, Ops contact</td><td>⚠️ Plan is late: [shoot]</td></tr>
+<tr><td>Share the plan with the team</td><td>Editor (card link), crew (acknowledge link)</td><td>Read the plan: [shoot]</td></tr>
+<tr><td>Shared under 7 days out (once)</td><td>AMs, Ops contact</td><td>⚠️ Plan shared late: [shoot]</td></tr>
+<tr><td>Go</td><td>Editor</td><td>You're on [shoot] — your card is ready, shoot on [date]</td></tr>
+<tr><td>Go anyway with a reason</td><td>AMs on the client, Ops contact</td><td>Went ahead late: [shoot]</td></tr>
+<tr><td>Reminder sent</td><td>Everyone on the shoot, the creator</td><td>Shoot reminder: [shoot] — [date]</td></tr>
+<tr><td>Footage is in (pressed)</td><td>Editor</td><td>Footage is in: [shoot] — your card is ready, due [date]</td></tr>
+<tr><td>Morning after, editor named</td><td>Editor</td><td>Footage should be in: [shoot] — start the edit</td></tr>
+<tr><td>Morning after, no editor</td><td>AMs and super admins on the client</td><td>Name the editor: [shoot] was shot and nobody has the footage</td></tr>
+<tr><td>Editor named after share or Go</td><td>Editor</td><td>You're on [shoot]</td></tr>
+<tr><td>Share the plan with the client</td><td>Client contact</td><td>Your shoot plan: [shoot] — [date]</td></tr>
+<tr><td>Client approves or asks for changes</td><td>AMs on the client, Ops contact, the creator</td><td>[Client] approved / asked for changes: [shoot]</td></tr>
+</table>
+<p class="legend">Every email is sent once per event. Pressing a button twice never emails twice.</p>
+
+<h2>Quick answers</h2>
+<table>
+<tr><td class="k">The card is red</td><td>The plan is late: under 7 days to the shoot and still Draft. Fill what it lists and share.</td></tr>
+<tr><td class="k">Go is greyed</td><td>Read the line under it. It names the one thing missing.</td></tr>
+<tr><td class="k">Footage is in is greyed</td><td>Same: date not passed, no editor, no priorities or deadline, or no folder link.</td></tr>
+<tr><td class="k">"Waiting on the client"</td><td>The client has not answered on the portal. Only they can change it.</td></tr>
+<tr><td class="k">A stage is ticked but never happened</td><td>It is not: since 13 September the strip ticks only stages with a stamp. A plan the calendar carried to Shoot day shows Draft ticked and the rest plain.</td></tr>
+<tr><td class="k">The editor says they got no email</td><td>Check they are named under "Who is on this shoot" and active on the Team page. Emails go to named people only.</td></tr>
+<tr><td class="k">I want the shoot off the board</td><td>Delete it. Its cards stay.</td></tr>
+</table>
+
+<p class="foot">MD Media Agency OS · docs/SHOOTS_PAGE_ROUTES · generated from the code on 13 Sep 2026. Where the app changes, this page is regenerated with it.</p>
+</body>
+</html>
