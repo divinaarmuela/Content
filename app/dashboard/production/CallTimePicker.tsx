@@ -23,9 +23,10 @@ export default function CallTimePicker({ value, onSave, disabled }: {
     const base: CallTimeParts = parts ?? { hour: 7, minute: 30, period: 'am' }
     onSave(formatCallTime({ ...base, ...next }))
   }
-  const trigger = 'h-11 w-full min-w-0 text-[15px] font-normal'
+  // tight: the chevron must never sit on the number (the owner, 13 Sep 2026)
+  const trigger = 'h-11 w-full min-w-0 gap-1 px-2.5 text-[15px] font-normal [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0'
   return (
-    <div className="grid grid-cols-[1fr_1fr_1fr] gap-1" role="group" aria-label="Call time">
+    <div className="grid grid-cols-[minmax(64px,1fr)_minmax(72px,1fr)_minmax(72px,1fr)] gap-1.5" role="group" aria-label="Call time">
       <Select value={parts ? String(parts.hour) : ''} onValueChange={v => v && pick({ hour: Number(v) })} disabled={disabled}>
         <SelectTrigger className={trigger} aria-label="Hour"><SelectValue placeholder="7" /></SelectTrigger>
         <SelectContent>{HOURS.map(h => <SelectItem key={h} value={String(h)}>{h}</SelectItem>)}</SelectContent>
