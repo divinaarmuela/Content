@@ -37,9 +37,17 @@ export async function GET(req: Request) {
       statusLabel: shootStatusLabel(batch.status as string),
       shootDate: batch.shoot_date ?? null,
       location: batch.location ?? null,
-      concept: batch.concept ?? null,
+      // never the team's notes on the client's copy
+      concept: null,
       deliverables: sanitisePlannedDeliverables(batch.planned_deliverables),
       shotList: sanitiseShotList(batch.shot_list),
+      callTime: batch.call_time ?? null,
+      objective: batch.objective ?? null,
+      script: batch.script ?? null,
+      talent: batch.talent ?? null,
+      propsWardrobe: batch.props_wardrobe ?? null,
+      clientAvailability: batch.client_availability ?? null,
+      audience: 'client',
     })
     const slug = String(batch.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'shoot'
     return new NextResponse(new Uint8Array(pdf), {

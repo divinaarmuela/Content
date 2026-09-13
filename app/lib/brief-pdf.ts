@@ -3,8 +3,9 @@ import PDFDocument from 'pdfkit'
 import type { PlannedDeliverable, ShotRow } from './batch-brief-core'
 
 /**
- * The shoot plan as a PDF — the brief as a hand-out: client, date, location,
- * concept, deliverables, and the shot list with capture ticks. Same visual
+ * The shoot plan as a PDF — the brief as a hand-out: the nine parts of the
+ * plan in the shoot page's order, the shot list with capture ticks, and for
+ * the team's copy the editor's brief, the crew and the notes. Same visual
  * system as the leads report (pdfkit, built-in Helvetica, serverless-safe).
  */
 
@@ -21,9 +22,51 @@ export type BriefPdfData = {
   statusLabel: string
   shootDate: string | null
   location: string | null
+  /** "Notes for the team" on the shoot page — team only, never the client's copy */
   concept: string | null
   deliverables: PlannedDeliverable[]
   shotList: ShotRow[]
+  /** the rest of the nine-part plan (13 Sep 2026: "what fields do I need to
+   *  enter in order to fill it up?" — the PDF printed five of them) */
+  callTime?: string | null
+  objective?: string | null
+  script?: string | null
+  talent?: string | null
+  propsWardrobe?: string | null
+  clientAvailability?: string | null
+  editorPriorities?: string | null
+  editDeadline?: string | null
+  /** names: the editor and the crew */
+  editorName?: string | null
+  crewNames?: string[]
+  /** who this copy is for. The client's copy drops the editor's priorities
+   *  and deadline, the team notes and the crew list. Default: team. */
+  audience?: 'team' | 'client'
+}
+
+/** The plan's sections in the order the shoot page shows them, already
+ *  filtered for the audience. Pure, so a test can read what will print. */
+export function briefPdfSections(d: BriefPdfData): { title: string; text: string }[] {
+  const client = d.audience === 'client'
+  const t = (v: string | null | undefined) => String(v ?? '').trim()
+  const out: { title: string; text: string }[] = []
+  const push = (title: string, text: string) => { if (text) out.push({ title, text }) }
+  push('OBJECTIVE', t(d.objective))
+  push('SCRIPT OR TALKING POINTS', t(d.script))
+  push('TALENT OR PRESENTER', t(d.talent))
+  push('PROPS, WARDROBE AND SETUP', t(d.propsWardrobe))
+  push('CLIENT AVAILABILITY', t(d.clientAvailability))
+  if (!client) {
+    const deadline = t(d.editDeadline)
+    const pri = t(d.editorPriorities)
+    const who = t(d.editorName)
+    const lines = [who ? `Editor: ${who}` : '', deadline ? `Deadline: ${deadline}` : '', pri].filter(Boolean)
+    push('EDITOR PRIORITIES AND DEADLINE', lines.join('\n'))
+    const crew = (d.crewNames ?? []).map(t).filter(Boolean)
+    push('WHO IS ON THIS SHOOT', crew.join('\n'))
+    push('NOTES FOR THE TEAM', t(d.concept))
+  }
+  return out
 }
 
 export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
@@ -65,6 +108,7 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       : 'To be confirmed'
     const facts: [string, string][] = [
       ['SHOOT DATE', dateLabel],
+      ['CALL TIME', String(data.callTime ?? '').trim() || 'To be confirmed'],
       ['LOCATION', data.location || 'To be confirmed'],
     ]
     const factW = contentW / facts.length
@@ -84,13 +128,15 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
       doc.y += 16
     }
 
-    // ─── Concept ───
-    if (data.concept?.trim()) {
-      section('CONCEPT & NOTES')
+    const prose = (title: string, text: string) => {
+      section(title)
       doc.fillColor(INK).font('Helvetica').fontSize(10)
-        .text(data.concept.trim(), PAGE.margin, doc.y, { width: contentW, lineGap: 3 })
+        .text(text, PAGE.margin, doc.y, { width: contentW, lineGap: 3 })
       doc.y += 18
     }
+    const sections = briefPdfSections(data)
+    const objective = sections.find(x => x.title === 'OBJECTIVE')
+    if (objective) prose(objective.title, objective.text)
 
     // ─── What is being made — one line, one thing ───
     if (data.deliverables.length > 0) {
@@ -125,7 +171,11 @@ export function renderBriefPdf(data: BriefPdfData): Promise<Buffer> {
           )
         doc.y = Math.max(doc.y, y + 14)
       }
+      doc.y += 12
     }
+
+    // ─── The rest of the plan, in the page's order ───
+    for (const x of sections) if (x.title !== 'OBJECTIVE') prose(x.title, x.text)
 
     // ─── Footer on every page ───
     const range = doc.bufferedPageRange()
