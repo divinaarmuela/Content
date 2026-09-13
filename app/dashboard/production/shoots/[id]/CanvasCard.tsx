@@ -6,7 +6,7 @@ import {
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
@@ -64,6 +64,11 @@ export const NOTE_COLORS: Record<string, string> = {
  *  column is as tall as its content and the clipping never bites. */
 const boxStyle = (card: Card): React.CSSProperties => ({ width: card.w, ...(card.h ? { height: card.h } : {}) })
 const BOX = 'flex flex-col overflow-hidden'
+/** where the words sit (13 Sep 2026) — the class per alignment, and the
+ *  flex-row equivalent for a to-do's checkbox rows */
+const ALIGN_CLASS: Record<string, string> = { left: 'text-left', center: 'text-center', right: 'text-right' }
+const ALIGN_ROW: Record<string, string> = { left: 'justify-start', center: 'justify-center', right: 'justify-end' }
+const ALIGN_SELF: Record<string, string> = { left: 'self-start', center: 'self-center', right: 'self-end' }
 
 /* ────────────────────────── platform marks ────────────────────────── */
 
@@ -443,10 +448,11 @@ function CanvasCardInner({
     const palette = NOTE_COLORS[card.color ?? 'paper'] ?? NOTE_COLORS.paper
     const ink = TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? (card.color === 'ink' ? 'text-background' : 'text-foreground')
     const px = NOTE_FONT_PX[textSizeOf(card)]
+    const align = textAlignOf(card)
     return (
       <div className={`w-full rounded-inner border p-3 shadow-sm ${palette} ${BOX}`} style={boxStyle(card)}>
         <div className="mb-1.5 flex shrink-0 items-baseline justify-between gap-2">
-          <span className={`min-w-0 truncate font-semibold ${ink}`} style={{ fontSize: px }}>{card.name || 'To-do'}</span>
+          <span className={`min-w-0 flex-1 truncate font-semibold ${ALIGN_CLASS[align]} ${ink}`} style={{ fontSize: px }}>{card.name || 'To-do'}</span>
           {items.length > 0 && (
             <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">{done}/{items.length}</span>
           )}
@@ -456,14 +462,14 @@ function CanvasCardInner({
             <span className="text-[12px] text-muted-foreground">Nothing to do yet.</span>
           )}
           {items.map(t => (
-            <label key={t.id} className="group/row flex items-start gap-1.5"
+            <label key={t.id} className={`group/row flex items-start gap-1.5 ${ALIGN_ROW[align]}`}
               onPointerDown={e => e.stopPropagation()}>
               <input type="checkbox" checked={t.done} disabled={!onUpdate}
                 className="mt-[3px] h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
                 onChange={e => onUpdate?.({ ...card, items: items.map(x => x.id === t.id ? { ...x, done: e.target.checked } : x) })} />
               {onUpdate ? (
                 <input key={`${t.id}:${t.text}`} defaultValue={t.text} style={{ fontSize: px }}
-                  className={`min-w-0 flex-1 bg-transparent outline-none ${t.done ? 'text-muted-foreground line-through' : ink}`}
+                  className={`min-w-0 flex-1 bg-transparent outline-none ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
                   onBlur={e => {
                     const v = e.target.value.trim()
                     if (v === t.text) return
@@ -480,7 +486,7 @@ function CanvasCardInner({
         </div>
         {onUpdate && items.length < 30 && (
           <button type="button"
-            className="mt-1.5 shrink-0 self-start text-[12px] text-muted-foreground hover:text-foreground"
+            className={`mt-1.5 shrink-0 ${ALIGN_SELF[align]} text-[12px] text-muted-foreground hover:text-foreground`}
             onPointerDown={e => e.stopPropagation()}
             onClick={e => {
               e.stopPropagation()
@@ -500,8 +506,9 @@ function CanvasCardInner({
           autoFocus
           defaultValue={card.text ?? ''}
           placeholder="SECTION TITLE"
-          style={{ fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
-          className="w-56 bg-transparent font-mono uppercase tracking-widest text-muted-foreground outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
+          // the box the words are typed into is the box they will sit in
+          style={{ fontSize: LABEL_FONT_PX[textSizeOf(card)], width: card.w }}
+          className={`bg-transparent font-mono uppercase tracking-widest text-muted-foreground outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground ${ALIGN_CLASS[textAlignOf(card)]}`}
           onBlur={e => onCommitText(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() }
@@ -510,13 +517,15 @@ function CanvasCardInner({
         />
       )
     }
-    // a heading wraps at its own width but never inside a word: the
-    // narrowest it goes is its widest word, so no two words ever land on
-    // top of each other
+    // a heading is drawn AT ITS STORED WIDTH (13 Sep 2026: "something is
+    // wrong with the label being laggy" — it used to be capped at its words'
+    // width by an inline maxWidth, so a drag on the handle wrote a width the
+    // cap swallowed until the drag ended). It wraps inside that width but
+    // never inside a word: the resize floor is its widest word.
     return (
       <span
-        className={`block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest ${TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? 'text-muted-foreground'}`}
-        style={{ maxWidth: Math.max(card.w, 120), minWidth: 'min-content', fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
+        className={`block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest ${ALIGN_CLASS[textAlignOf(card)]} ${TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? 'text-muted-foreground'}`}
+        style={{ width: card.w, fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
       >
         {card.text || (onUpdate ? 'Double-click to name this section' : '')}
       </span>
@@ -540,7 +549,7 @@ function CanvasCardInner({
             defaultValue={card.text ?? ''}
             rows={Math.max(3, (card.text ?? '').split('\n').length)}
             style={{ fontSize: noteFont, lineHeight: noteLine }}
-            className={`min-h-0 w-full flex-1 resize-none bg-transparent outline-none placeholder:text-muted-foreground ${inkText}`}
+            className={`min-h-0 w-full flex-1 resize-none bg-transparent outline-none placeholder:text-muted-foreground ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
@@ -551,7 +560,7 @@ function CanvasCardInner({
         ) : (
           // the words wrap and, in a box shorter than they are, scroll —
           // they never draw past the card's border
-          <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${inkText}`}>
+          <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}>
             {card.text || <span className="text-muted-foreground">Write it down…</span>}
           </p>
         )}

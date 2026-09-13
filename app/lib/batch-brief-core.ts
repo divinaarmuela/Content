@@ -206,6 +206,15 @@ export function textColorOf(card: { text_color?: string | null } | null | undefi
   return (CANVAS_TEXT_COLORS as readonly string[]).includes(String(v)) ? (v as CanvasTextColor) : null
 }
 
+/** WHERE THE WORDS SIT in a note, a heading or a to-do (the owner, 13 Sep
+ *  2026: "allow alignment, either left, middle or right"). Absent = left. */
+export const CANVAS_TEXT_ALIGNS = ['left', 'center', 'right'] as const
+export type CanvasTextAlign = (typeof CANVAS_TEXT_ALIGNS)[number]
+export function textAlignOf(card: { align?: string | null } | null | undefined): CanvasTextAlign {
+  const v = card?.align
+  return (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(v)) ? (v as CanvasTextAlign) : 'left'
+}
+
 export const CANVAS_TEXT_SIZES = ['sm', 'md', 'lg', 'xl'] as const
 export type CanvasTextSize = (typeof CANVAS_TEXT_SIZES)[number]
 export const TEXT_SIZE_LABEL: Record<CanvasTextSize, string> = { sm: 'Small', md: 'Normal', lg: 'Large', xl: 'Heading' }
@@ -247,6 +256,8 @@ export type CanvasCard = {
   size?: CanvasTextSize
   /** note / heading — the words' own colour; absent = the box decides */
   text_color?: CanvasTextColor
+  /** note / heading / to-do — left, centre or right; absent = left */
+  align?: CanvasTextAlign
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
@@ -531,6 +542,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         : {}),
       ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
         ? { text_color: String(r.text_color) as CanvasTextColor }
+        : {}),
+      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(r.align ?? ''))
+        ? { align: String(r.align) as CanvasTextAlign }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),

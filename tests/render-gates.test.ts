@@ -313,3 +313,16 @@ describe('Post approval is assets only (13 Sep 2026: "what is this video edit ta
     expect(src('app/lib/act-as-core.ts')).toMatch(/personLabel\(nameOf\(actor\)\)/)
   })
 })
+
+describe('a heading is drawn at its stored width (13 Sep 2026)', () => {
+  it('has no maxWidth cap, so a drag on the handle shows up as it happens', () => {
+    const src = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect(src).not.toMatch(/maxWidth: Math\.max\(card\.w/)
+    expect(src).not.toMatch(/minWidth: 'min-content'/)
+    expect(src).toMatch(/style=\{\{ width: card\.w, fontSize: LABEL_FONT_PX\[textSizeOf\(card\)\] \}\}/)
+    // and the three alignments are on the toolbar for a note, heading or to-do
+    const canvas = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(canvas).toMatch(/aria-label="Align"/)
+    expect(canvas).toMatch(/CANVAS_TEXT_ALIGNS\.map/)
+  })
+})

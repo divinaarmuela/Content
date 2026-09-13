@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableBatchTransitions, batchSatisfiesLock, canCreateItemsUnder,
-  checkBatchTransition, isInProduction, shootDeletion, textColorOf,
+  checkBatchTransition, isInProduction, shootDeletion, textColorOf, textAlignOf,
 } from '../app/lib/batch-brief-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -552,5 +552,25 @@ describe('text colour on a note or a heading (13 Sep 2026)', () => {
     expect(cards.find(c => c.id === 'b')).not.toHaveProperty('text_color')
     expect(textColorOf({ text_color: 'blue' })).toBe('blue')
     expect(textColorOf({})).toBeNull()
+  })
+})
+
+describe('where the words sit: left, middle or right (13 Sep 2026)', () => {
+  it('keeps a known alignment on a note, heading or to-do, drops it elsewhere, and reads absent as left', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'n', kind: 'note', x: 0, y: 0, align: 'center' },
+      { id: 'h', kind: 'label', x: 0, y: 0, text: 'A', align: 'right' },
+      { id: 't', kind: 'todo', x: 0, y: 0, items: [], align: 'right' },
+      { id: 'i', kind: 'image', x: 0, y: 0, url: 'https://x/y.png', align: 'right' },
+      { id: 'b', kind: 'note', x: 0, y: 0, align: 'justify' },
+    ])
+    expect(cards.find(c => c.id === 'n')?.align).toBe('center')
+    expect(cards.find(c => c.id === 'h')?.align).toBe('right')
+    expect(cards.find(c => c.id === 't')?.align).toBe('right')
+    expect(cards.find(c => c.id === 'i')).not.toHaveProperty('align')
+    expect(cards.find(c => c.id === 'b')).not.toHaveProperty('align')
+    expect(textAlignOf({ align: 'right' })).toBe('right')
+    expect(textAlignOf({})).toBe('left')
   })
 })

@@ -10,7 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
+  AlignCenter, AlignLeft, AlignRight, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
@@ -19,7 +19,7 @@ import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
-  type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf } from '../../../../lib/batch-brief-core'
+  type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -1052,6 +1052,24 @@ export default function BriefCanvas({
               ))}
             </div>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            {/* where the words sit — left, middle, right (13 Sep 2026) */}
+            <div role="group" aria-label="Align" className="flex items-center gap-0.5">
+              {CANVAS_TEXT_ALIGNS.map(al => {
+                const Icon = al === 'left' ? AlignLeft : al === 'center' ? AlignCenter : AlignRight
+                const on = textAlignOf(card) === al
+                return (
+                  <button key={al} type="button" aria-label={`Align ${al === 'center' ? 'middle' : al}`} title={`Align ${al === 'center' ? 'middle' : al}`}
+                    aria-pressed={on}
+                    onClick={() => { if (on) return; const next = { ...card, align: al === 'left' ? undefined : al }; upsertLocal(next); persist([next]) }}
+                    className={`flex h-7 w-7 items-center justify-center rounded-md [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
+                      on ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+                    }`}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </button>
+                )
+              })}
+            </div>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             {card.kind !== 'todo' && (
               <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
                 <Pencil className="h-3.5 w-3.5" /> Edit text
@@ -1395,8 +1413,6 @@ export default function BriefCanvas({
                       // comment bubble in its top-right corner (the owner, 13 Sep
                       // 2026: "it's overlapping that thing") — its handles sit on
                       // the bottom edge instead
-                      // the right handle follows the DRAWN edge (a heading is as
-                      // wide as its words, not its stored width)
                       style={{ ...(mode === 'w' ? { left: -22 } : { right: -22 }), ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}) }}
                       onPointerDown={e => startResize(e, card, mode)}
                       onPointerMove={e => moveResize(e, card)}
