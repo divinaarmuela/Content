@@ -7,6 +7,7 @@ import {
   ackNudgeDue, assignedAtOf, blockerNeed, blockerNudgeDue, type BlockerNeed,
 } from './editor-sop-core'
 import { dayKeyInZone } from './timezone-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * THE VIDEO EDITORS SOP, THE PARTS THAT SEND EMAIL — §6 and §7.
@@ -19,7 +20,6 @@ import { dayKeyInZone } from './timezone-core'
  * shouting into an empty room.
  */
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 type Person = { id: string; email: string; name: string }
 type TeamRow = TeamUser & { editors_lead?: boolean | null; ops_contact?: boolean | null }

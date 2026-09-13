@@ -59,6 +59,7 @@ const shareClient = await import('../app/api/production/batches/[id]/share-clien
 const portalAct = await import('../app/api/portal/act/route')
 const stage = await import('../app/api/production/batches/[id]/stage/route')
 const ack = await import('../app/api/production/batches/[id]/acknowledge/route')
+const shareAgain = await import('../app/api/production/batches/[id]/share-again/route')
 const { runBriefLateNudge } = await import('../app/lib/shoot-sop-notify')
 const { runFootageDueSweep } = await import('../app/lib/shoot-handover')
 
@@ -129,8 +130,10 @@ describe('sharing the brief', () => {
     const toEditor = emails.find(e => e.recipientEmail === 'sam@zz.invalid')!
     const toCrew = emails.find(e => e.recipientEmail === 'vik@zz.invalid')!
     expect(String(toEditor.bodyHtml)).toMatch(/Objective<\/td><td[^>]*>Spring membership drive/)
-    expect(String(toEditor.bodyHtml)).toMatch(/\/dashboard\/editor\?card=/)
-    expect(String(toEditor.bodyHtml)).not.toMatch(/\/dashboard\/production\/shoots\//)
+    // the editor's link is the PLAN PAGE too (14 Sep 2026): "I've read the
+    // plan" and "Open your card" are both on it, so a missing card never 404s
+    expect(String(toEditor.bodyHtml)).toMatch(/\/dashboard\/production\/shoots\/b-1/)
+    expect(String(toEditor.bodyHtml)).toMatch(/app\.mdmmarketing\.com\.au/)
     // the crew's link opens the PLAN PAGE, read-only for them, with "I've
     // read the plan" on it (13 Sep 2026) — not a bare button in the email
     expect(String(toCrew.bodyHtml)).toMatch(/\/dashboard\/production\/shoots\/b-1/)
@@ -600,5 +603,26 @@ describe('the "Visible on the client portal" switch', () => {
     expect(batch().client_shared_by ?? null).toBeNull()
     expect((await edit({ shared_with_client: false })).status).toBe(200)
     expect(batch().shared_with_client).toBe(false)
+  })
+})
+
+describe('send the plan again (14 Sep 2026)', () => {
+  it('after a share, a manager sends the plan again to whoever has not read it — never to those who have', async () => {
+    fake.restore(); fake = seed({ brief_shared_at: '2026-09-13T00:00:00Z', brief_shared_by: AM, status: 'brief' })
+    // the videographer has read it; the editor has not
+    as(VG, 'general', 'Vik Camera')
+    await acknowledge()
+    emails.length = 0
+    as(AM, 'account_manager')
+    const res = await shareAgain.POST(new Request('https://x.test/again', { method: 'POST' }), P('b-1'))
+    expect(res.status).toBe(200)
+    const to = emails.map(e => String(e.recipientEmail)).sort()
+    expect(to).not.toContain('vik@zz.invalid')
+    expect(emails.every(e => /Read the plan/.test(String(e.subject)))).toBe(true)
+    expect(emails.length).toBeGreaterThan(0)
+    // an editor may not press it
+    as(ED, 'editor', 'Sam Editor')
+    const no = await shareAgain.POST(new Request('https://x.test/again', { method: 'POST' }), P('b-1'))
+    expect(no.status).toBe(403)
   })
 })

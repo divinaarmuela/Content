@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, HardDriveDownload, Upload, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Upload, X } from 'lucide-react'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import type { Role } from '../../lib/identity-core'
@@ -49,7 +49,6 @@ import { columnOf } from '../../lib/board-core'
  * give an editor is here: handing on, the kind of work, the client's own
  * settings and links are the manager's.
  */
-type DriveRow = { id: string; name: string; type: 'image' | 'video'; bytes: number | null }
 
 /** the only folder URL form Drive publishes (gdrive-core.folderUrl, kept out
  *  of the browser bundle) */
@@ -177,27 +176,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   }
   const removeFile = (i: number) => void writeVersion(slides.filter((_, j) => j !== i), 'File removed — saved as a new version')
 
-  const [driveOpen, setDriveOpen] = useState(false)
-  const [drive, setDrive] = useState<DriveRow[] | null>(null)
-  const [driveNote, setDriveNote] = useState<string | null>(null)
-  useEffect(() => {
-    if (!driveOpen || drive !== null) return
-    let cancelled = false
-    fetch(`/api/social/schedule/drive?itemId=${encodeURIComponent(id)}`)
-      .then(r => r.json())
-      .then(json => {
-        if (cancelled) return
-        if (json?.error) { setDriveNote(String(json.error)); setDrive([]) }
-        else { setDrive((json?.files ?? []) as DriveRow[]); setDriveNote(null) }
-      })
-      .catch(() => { if (!cancelled) { setDriveNote('Google Drive did not answer. Try again in a moment.'); setDrive([]) } })
-    return () => { cancelled = true }
-  }, [driveOpen, drive, id])
-  const bringAcross = async (row: DriveRow) => {
-    const json = await post('/api/social/schedule/drive', { item_id: id, file_ids: [row.id] }, 'Copied in from Drive', 'Copying from Drive')
-    const files = (json?.files ?? []) as Slide[]
-    if (files.length > 0) { await writeVersion([...slides, ...files], `Added ${files.length} from Drive — saved as a new version`); setDriveOpen(false) }
-  }
+  // NO DRIVE PICKER (the owner, 14 Sep 2026: "they have to upload their own
+  // Drive from review, not pick from the existing Drive"): the editor hands
+  // in a file, or their own Dropbox / Drive link — the Source files box below
 
   /* ── source files ── */
   const [source, setSource] = useState(item?.link_url ?? '')
@@ -226,21 +207,13 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   /** WHERE JOY SHOULD LOOK (Abby, 11 Sep 2026: "the task must have the link
    *  … Canva link and page number for her to go through") — optional when
    *  the final is on the card itself */
-  const [reviewLink, setReviewLink] = useState(item?.review_link ?? '')
-  const [reviewNote, setReviewNote] = useState(item?.review_note ?? '')
-  useEffect(() => { setReviewLink(item?.review_link ?? ''); setReviewNote(item?.review_note ?? '') }, [item?.review_link, item?.review_note])
-  const reviewLinkOk = reviewLink.trim() === '' || /^https:\/\/\S+$/i.test(reviewLink.trim())
   // ABBY'S RULE: the maker's submit goes straight to the quality reviewer
   const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
   const submit = async () => {
     if (!submitting) return
-    if (slides.length === 0) { toast.error('Upload the final first'); return }
-    if (!reviewLinkOk) { toast.error('The review link must start with https://'); return }
+    if (slides.length === 0 && !item?.link_url) { toast.error('Add your Drive or Dropbox link, or upload the files, first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
-    // the card's own fields take a PATCH (the items route has no POST)
-    const where = await post(`/api/production/items/${id}`, { review_link: reviewLink.trim() || null, review_note: reviewNote.trim() || null }, 'Saved where to look', 'Saving', 'PATCH')
-    if (where === null) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
     if (moved) setTicks([])
   }
@@ -390,14 +363,34 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
       </section>
 
       {/* ── 3. your versions (§1, finals only) ── */}
+      {/* ── 3. YOUR FINISHED EDIT (the owner, 14 Sep 2026: "make it simple —
+          upload a Drive link or files, and comments, that's it for the
+          editor"): one box for the Drive or Dropbox link, or the files ── */}
       <section className="flex flex-col gap-3 border-b border-border px-5 py-4" aria-labelledby="ed-versions">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p id="ed-versions" className={H2}>Your versions{latest ? ` · version ${latest.version_number}` : ''}</p>
+        <div className="flex items-center justify-between">
+          <p id="ed-versions" className={H2}>Your finished edit</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
-        {slides.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground">No final yet. Add the finished cut here (pictures and videos only, no raw footage).</p>
-        ) : (
+        {holder && !frozen ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <input id="ed-source" value={source} onChange={e => setSource(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" aria-label="Drive or Dropbox link to the finished edit" className={`${field} min-w-0 flex-1`} />
+            <Button variant="outline" className={outlineBtn} disabled={busy || (source.trim() !== '' && !sourceCheck.ok) || source.trim() === (item.link_url ?? '')} onClick={() => void saveSource()}>Save</Button>
+            <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => fileInput.current?.click()}>
+              <Upload className="h-4 w-4" aria-hidden /> Or upload files
+            </Button>
+            <input ref={fileInput} type="file" multiple accept="image/*,video/*" className="hidden"
+              onChange={e => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void onFiles(f) }} />
+          </div>
+        ) : item.link_url ? (
+          <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[14px] underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
+        ) : slides.length === 0 ? (
+          <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : 'Nothing handed in yet.'}</p>
+        ) : null}
+        {holder && !frozen && item.link_url && (
+          <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
+        )}
+        {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
+        {slides.length > 0 && (
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {slides.map((s, i) => (
               <li key={`${s.url}-${i}`} className="relative">
@@ -412,58 +405,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             ))}
           </ul>
         )}
-        {editing && !frozen ? (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => fileInput.current?.click()}>
-              <Upload className="h-4 w-4" aria-hidden /> Upload the final
-            </Button>
-            <input ref={fileInput} type="file" multiple accept="image/*,video/*" className="hidden"
-              onChange={e => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void onFiles(f) }} />
-            <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(o => !o)}>
-              <HardDriveDownload className="h-4 w-4" aria-hidden /> Pick the final from Google Drive
-            </Button>
-          </div>
-        ) : (
-          <p className="text-[12px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : holder ? 'Out for review — a new version can go on once it comes back.' : 'Only the person holding this card adds files.'}</p>
-        )}
-        {driveOpen && (
-          <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[13px] font-semibold">The client’s Drive folder</p>
-              <Button variant="ghost" className={ghostBtn} onClick={() => setDriveOpen(false)}>Close</Button>
-            </div>
-            <p className="text-[12px] text-muted-foreground">A copy is brought in as a new version. Nothing in Drive is moved or changed.</p>
-            {driveNote && <p role="alert" className="text-[13px] font-medium text-accent-red-deep">{driveNote}</p>}
-            {drive === null ? (
-              <p role="status" className="py-4 text-center text-[13px] text-muted-foreground">Looking in Drive…</p>
-            ) : drive.length === 0 && !driveNote ? (
-              <p className="py-4 text-center text-[13px] text-muted-foreground">No pictures or videos in this client’s Drive folder.</p>
-            ) : (
-              <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-                {drive.map(row => (
-                  <li key={row.id} className="flex items-center justify-between gap-2 rounded-inner px-2 py-1 hover:bg-muted">
-                    <span className="min-w-0 truncate text-[13px]">{row.name}<span className="ml-1 text-muted-foreground">· {row.type}</span></span>
-                    <Button variant="outline" className="h-11 shrink-0 rounded-full px-3 text-[13px] font-semibold" disabled={busy} onClick={() => void bringAcross(row)}>Use this</Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <label htmlFor="ed-source" className="text-[13px] font-semibold">Source files (Dropbox)</label>
-          {holder && !frozen ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <input id="ed-source" value={source} onChange={e => setSource(e.target.value)} placeholder="https://www.dropbox.com/…" className={`${field} min-w-0 flex-1`} />
-              <Button variant="outline" className={outlineBtn} disabled={busy || (source.trim() !== '' && !sourceCheck.ok) || source.trim() === (item.link_url ?? '')} onClick={() => void saveSource()}>Save</Button>
-            </div>
-          ) : item.link_url ? (
-            <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[14px] underline underline-offset-4">Open the source files<span className="sr-only">, opens in a new tab</span></a>
-          ) : (
-            <p className="text-[13px] text-muted-foreground">Not handed over yet.</p>
-          )}
-          {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
-        </div>
       </section>
 
       {/* ── 4. quality check, then submit (§4) ── */}
@@ -484,17 +425,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
                 </li>
               ))}
             </ul>
-            {qcComplete(ticks) && (
-              <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-                <label htmlFor="ed-review-link" className="text-[13px] font-semibold">Review link <span className="font-normal text-muted-foreground">(Canva link and page, optional)</span></label>
-                <input id="ed-review-link" value={reviewLink} onChange={e => setReviewLink(e.target.value)} placeholder="https://www.canva.com/design/…" className={`${field} min-w-0`} />
-                <input id="ed-review-note" aria-label="Which page or frame" value={reviewNote} onChange={e => setReviewNote(e.target.value)} placeholder="page 3" className={`${field} min-w-0`} />
-                {!reviewLinkOk && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">The review link must start with https://</p>}
-              </div>
-            )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || slides.length === 0 || !reviewLinkOk} onClick={() => void submit()}
-                title={slides.length === 0 ? 'Upload the final first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || (slides.length === 0 && !item.link_url)} onClick={() => void submit()}
+                title={slides.length === 0 && !item.link_url ? 'Add your Drive or Dropbox link, or upload the files, first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (

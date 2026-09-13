@@ -2,6 +2,7 @@ import 'server-only'
 import { DbError, table } from '@/lib/db'
 import type { Client, TeamUser } from '@/lib/db-types'
 import { notify, renderEmail } from './mailer'
+import { DASHBOARD_URL } from './app-url'
 import {
   emailDomain, isBusinessDomain, slugify, type IngestLead,
 } from './lead-enrichment-core'
@@ -101,7 +102,7 @@ export async function autoIngestLead(lead: IngestLead): Promise<'created' | 'ski
           `New prospect: ${name}`,
           `<p>A lead from <strong>${lead.fname} ${lead.lname}</strong> was verified as a company (<a href="${website}">${domain}</a>) and added to Clients as a prospect.</p>`,
           'Open clients',
-          `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/dashboard/clients`
+          `${DASHBOARD_URL}/dashboard/clients`
         ),
       })
     }

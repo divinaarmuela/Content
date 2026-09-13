@@ -11,8 +11,8 @@ import {
   notifyTagged, resolveTags, settleTagNotifications, taggableTeam,
 } from '../../../../../lib/comment-tags'
 import { cardPathForRole, noteAudience, noteSubject } from '../../../../../lib/card-comment-core'
+import { DASHBOARD_URL } from '../../../../../lib/app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /** Add a comment. Visibility is derived from the author's role, never
  *  client-chosen: clients always write client-visible comments; editors always

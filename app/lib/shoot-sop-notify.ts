@@ -5,9 +5,10 @@ import type { TeamUser } from './authz'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import {
   LATE_WORDS, acksOf, daysUntilShoot, lateNudgeTargets, peopleOnShoot, type HandoverPlan, lateShareNudgeTargets, shareLeadDays,
-  planAsText, type ClientDecision,
+  planAsText, type ClientDecision, hasAcknowledged,
 } from './shoot-sop-core'
 import { shootCardId } from './deliverable-group-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * WHO IS TOLD WHAT, ALONG THE SHOOT BRIEF SOP — the server half.
@@ -28,7 +29,6 @@ import { shootCardId } from './deliverable-group-core'
  * in the email as text.
  */
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 type Person = { id: string; email: string; name: string; role: string }
 
@@ -101,22 +101,30 @@ export async function notifyShootOwner(actor: TeamUser, batch: Batch): Promise<b
  * it. The editor's button is on their card; a crew member's is the link in
  * this email. The plan itself is in the email.
  */
-export async function notifyBriefShared(actor: TeamUser, batch: Batch): Promise<number> {
+export async function notifyBriefShared(actor: TeamUser, batch: Batch, opts?: { again?: string }): Promise<number> {
   const people = await activePeople(peopleOnShoot(batch))
   const when = longDate(batch.shoot_date)
   let sent = 0
   for (const p of people) {
-    if (p.id === actor.id) continue
+    // SENT AGAIN (the owner, 14 Sep 2026: "make sure I can click send to them
+    // again if I change people on the shoot"): the people added since, and
+    // anyone who has not read it — never somebody who already has
+    if (opts?.again && hasAcknowledged(batch as never, p.id)) continue
+    // the person who pressed Share is on the shoot too (the owner, 14 Sep
+    // 2026: "super admins, AMs, editors might need to be on set") — they get
+    // the same email and acknowledge the same way; nobody is skipped
     const isEditor = p.id === batch.editor_id
     // THE CREW SEE THE PLAN ON THE PAGE (the owner, 13 Sep 2026: "the person
     // on shoot day shouldn't just have a button in the email — they have to
     // see it in the page"): the link opens the shoot page, read-only for
     // them, with "I've read the plan" on it. The editor's link is their card.
-    const link = isEditor ? editorCardUrl(batch.id) : `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`
+    // the editor too: the plan page has "I've read the plan" AND "Open your
+    // card", so a card that is not there yet can never send them to a 404
+    const link = `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`
     const r = await notify({
       actorName: actor.name, actorEmail: actor.email,
       eventType: 'shoot_brief_shared', entityType: 'batch',
-      entityId: `${batch.id}#shared#${batch.brief_shared_at ?? ''}`,
+      entityId: `${batch.id}#shared#${opts?.again ?? batch.brief_shared_at ?? ''}`,
       recipientId: p.id, recipientEmail: p.email,
       subject: `Read the plan: ${batch.title}`,
       bodyHtml: renderEmail(
@@ -127,7 +135,7 @@ export async function notifyBriefShared(actor: TeamUser, batch: Batch): Promise<
         (isEditor
           ? '<p>Read it, then press <strong>I’ve read the plan</strong> on your card. The shoot is not confirmed until everyone on it has.</p>'
           : '<p>Open the plan, read it, then press <strong>I’ve read the plan</strong> on the page. The shoot is not confirmed until everyone on it has.</p>'),
-        isEditor ? 'Open your card' : 'Open the plan',
+        'Open the plan',
         link,
       ),
     })

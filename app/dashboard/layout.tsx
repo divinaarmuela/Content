@@ -140,6 +140,11 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
       '/dashboard/boards': '/dashboard/production',
     }
     if (ORPHANS[path]) return ORPHANS[path]
+    // A SHOOT'S PLAN PAGE IS EVERY TEAM ROLE'S TO OPEN (the owner, 14 Sep
+    // 2026: the crew's "Read the plan" link hit "not part of your access"):
+    // the crew, the editor and the quality checker read the plan there, and
+    // the SERVER decides who may — a null section skips the shell's gate
+    if (/^\/dashboard\/production\/shoots\/[^/]+$/.test(path)) return null
     // a board inside a board answers to Production too
     if (path.startsWith('/dashboard/boards/')) return '/dashboard/production'
     // The social children resolve to THEMSELVES: `canSeePage` falls back to

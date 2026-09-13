@@ -7,8 +7,8 @@ import type {
 import { notify, renderEmail } from './mailer'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { itemStatusLabel } from './brief-task-core'
+import { DASHBOARD_URL } from './app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 type DueItem = {
   id: string

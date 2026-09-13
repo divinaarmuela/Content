@@ -5,8 +5,8 @@ import type { Client, SocialAccount, TeamUserClient } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { healthVerdict, readStoredHealth, reconnectSubject, type ProviderHealth, type StoredHealth } from './account-health-core'
+import { DASHBOARD_URL } from './app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 /** the agency's own inbox — always told when an account drops (the owner,
  *  9 Sep 2026: "notification is sent to scheduler, AM and tech@") */
 export const TECH_EMAIL = 'tech@mdmmarketing.com.au'

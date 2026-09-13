@@ -9,6 +9,7 @@ import { announceBatchChange, announceItemChange } from './production-live'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { footageDueTargets, footageFolderFill, footageReceiptTargets, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
 import { shootCardId } from './deliverable-group-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * PRODUCTION → EDITOR, WITHOUT A PRESS.
@@ -27,7 +28,6 @@ import { shootCardId } from './deliverable-group-core'
  * keeps their choice.
  */
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 const shootUrl = (id: string) => `${DASHBOARD_URL}/dashboard/production/shoots/${id}`
 /** the editor never opens the shoot page: their link is their card */
 const cardUrl = (batchId: string) => `${DASHBOARD_URL}/dashboard/editor?card=${shootCardId(batchId)}`

@@ -549,13 +549,19 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
 
 /* ── who is on the shoot ───────────────────────────────────────────────── */
 
-export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
+export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack, viewerId, onAck, onResend }: {
   batch: ShootSopBatch
   crew: CrewRow[]
   team: TeamRow[]
   busy: boolean
   onPatch: (field: string, value: unknown) => Promise<boolean>
   onUnack: (userId: string) => Promise<void>
+  /** the viewer, so their own row carries "I've read the plan" (14 Sep 2026:
+   *  a super admin or AM on set acknowledges here, like everyone else) */
+  viewerId?: string
+  onAck?: () => Promise<void>
+  /** "Send the plan again" to whoever has not read it (14 Sep 2026) */
+  onResend?: () => Promise<void>
 }) {
   const ack = ackState(batch)
   // the editor picker: editors first, then the managers who also cut
@@ -604,7 +610,13 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
                 {c.name}{c.id === batch.editor_id && <span className="text-muted-foreground"> · editor</span>}
                 <span className="sr-only">{c.acknowledged_at ? ', has read the plan' : ', has not read the plan yet'}</span>
               </span>
-              <span className="text-[12px] text-muted-foreground">{c.acknowledged_at ? `read it ${stampWords(c.acknowledged_at) ?? ''}` : 'not yet'}</span>
+              {!c.acknowledged_at && c.id === viewerId && onAck ? (
+                <Button className="h-9 rounded-full px-3 text-[13px] font-semibold" disabled={busy} onClick={() => void onAck()}>
+                  I’ve read the plan
+                </Button>
+              ) : (
+                <span className="text-[12px] text-muted-foreground">{c.acknowledged_at ? `read it ${stampWords(c.acknowledged_at) ?? ''}` : 'not yet'}</span>
+              )}
               {c.acknowledged_at && (
                 <button type="button" onClick={() => void onUnack(c.id)} disabled={busy}
                   className="min-h-11 rounded-full px-2 text-[12px] font-semibold text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue">
@@ -646,6 +658,11 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
               Add
             </Button>
           </div>
+        )}
+        {batch.brief_shared_at && onResend && crew.some(c => !c.acknowledged_at) && (
+          <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy} onClick={() => void onResend()}>
+            Send the plan again to whoever has not read it
+          </Button>
         )}
         <p className="text-[12px] text-muted-foreground">Each person here is emailed the plan when it is shared. The editor presses “I’ve read the plan” on their card; the crew press the link in their email. The shoot is not confirmed until everyone has.</p>
       </CardContent>

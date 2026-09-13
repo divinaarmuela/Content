@@ -66,7 +66,9 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     expect(sop).toMatch(/dashboard\/editor\?card=\$\{one\.id\}/)
     expect(sop).toMatch(/Open on Editor/)
     expect(sop).toMatch(/The editor presses “I’ve read the plan” on their card; the crew press the link in their email/)
-    expect(sop).not.toMatch(/onAck|I’ve read the plan<\/Button>/)
+    // …and the viewer's OWN row carries "I've read the plan" when they are on the
+    // shoot — a super admin or AM on set acknowledges here (14 Sep 2026)
+    expect(sop).toMatch(/c\.id === viewerId && onAck/)
   })
   it('the header says who created the shoot and when', () => {
     expect(page).toMatch(/createdWords\(batch, nameOf\)/)
@@ -133,7 +135,9 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // no section is wrapped in a length/data gate
     expect(s).not.toMatch(/\{[a-zA-Z.]+\.length > 0 && \(\s*<section/)
     // the empty states say what to do
-    expect(s).toMatch(/No final yet\. Add the finished cut here/)
+    // "Your finished edit": a Drive/Dropbox link or files, nothing else (14 Sep 2026)
+    expect(s).toMatch(/Your finished edit/)
+    expect(s).toMatch(/Nothing handed in yet\./)
     expect(s).toMatch(/Not given yet — ask Production\./)
     // Handover and Blocked? are the two that DO step aside when they have
     // nothing to say (the owner, 13 Sep 2026: "your UI has so many texts in
@@ -153,22 +157,15 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   })
   it('submit is behind the seven checks and a file', () => {
     const s = src(EDITOR_DRAWER)
-    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| slides\.length === 0 \|\| !reviewLinkOk\}/)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| \(slides\.length === 0 && !item\.link_url\)\}/)
     // the submit goes straight to the quality reviewer (Abby's rule), never to a manager's check
     expect(s).toMatch(/\{ to: 'quality_check' \}/)
     expect(s).not.toMatch(/to: 'internal_review'/)
   })
-  it('after the seven ticks the card asks where the reviewer should look, and saves it with a PATCH', () => {
+  it('the editor’s card is a link or files, the checks and a submit — no review link, no Drive picker (14 Sep 2026)', () => {
     const s = src(EDITOR_DRAWER)
-    expect(s).toMatch(/\{qcComplete\(ticks\) && \(/)
-    expect(s).toMatch(/id="ed-review-link"/)
-    expect(s).toMatch(/id="ed-review-note"/)
-    expect(s).toMatch(/Review link/)
-    // the items route has no POST: the review fields go by PATCH (the live walk of 12 Sep 2026)
-    expect(s).toMatch(/review_note: reviewNote\.trim\(\) \|\| null \}, 'Saved where to look', 'Saving', 'PATCH'\)/)
-    // the reviewer sees it on the manager's card
-    expect(src(DRAWER)).toMatch(/Look here:/)
-    expect(src(DRAWER)).toMatch(/review_link/)
+    expect(s).not.toMatch(/Review link|ed-review-link|Pick the final from Google Drive|Source files \(Dropbox\)/)
+    expect(s).toMatch(/Or upload files/)
   })
   it('the card face for the maker opens the card ("Quality check, then submit"); the link controls are the manager’s', () => {
     const s = src('app/dashboard/board/BoardCard.tsx')
@@ -379,5 +376,12 @@ describe('the read-only plan page carries the quality checker’s two answers (1
     expect(ro).toContain('Send back with a note')
     expect(ro).toMatch(/data-plan-review/)
     expect(src(SHOOT)).toMatch(/canReview=\{viewerIsReviewer && !!batch\.review_asked_at && !batch\.plan_reviewed_at\}/)
+  })
+})
+
+describe('a shoot’s plan page is not behind the shell’s section gate (14 Sep 2026)', () => {
+  it('the shell resolves the plan page to no section, so the server decides who reads it', () => {
+    const shell = src('app/dashboard/layout.tsx')
+    expect(shell).toContain('shoots\\/[^/]+$/.test(path)) return null')
   })
 })

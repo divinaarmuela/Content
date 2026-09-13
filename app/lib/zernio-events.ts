@@ -8,6 +8,7 @@ import type {
 import { notify } from './mailer'
 import { NETWORK_LABEL } from './publish-core'
 import type { ZernioAction } from './zernio-webhook-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * What each Zernio webhook event actually DOES to this database.
@@ -459,7 +460,7 @@ export async function accountManagersFor(providerAccountId: string | null): Prom
 /* ── an account stopped working ─────────────────────────────────────────── */
 
 /** Where somebody goes to fix it. Same base every other notification uses. */
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+const APP_URL = DASHBOARD_URL
 
 /**
  * A CHANNEL WENT DEAD AND SOMEBODY HAS TO BE TOLD.

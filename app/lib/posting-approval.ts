@@ -14,12 +14,12 @@ import { notify, renderEmail, escapeHtml } from './mailer'
 import { formatWithZone, safeZone, zoneAbbrev, zoneLabel } from './timezone-core'
 import { platformLabel } from './posting-card-core'
 import { NOBODY_ASKED } from './asked-core'
+import { DASHBOARD_URL } from './app-url'
 import {
   maySendPostApproval, mayApprovePost, nextApprovalState, parseApprovalState,
   type ApprovalAction, type PostingApprovalState,
 } from './posting-approval-core'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * Final-post approval, server side — the one place the state is written.

@@ -3,6 +3,7 @@ import { table } from '@/lib/db'
 import type { Client, TeamUser } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { isPlatform, type Platform } from './publish-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * Minting the link a client follows to connect one of their own accounts.
@@ -72,7 +73,7 @@ export async function connectLinkFor(
   // scheduler cannot even see the Social channels page, so for them the
   // old return was a refusal after a success. Redirecting to
   // /dashboard/clients/[id] lands on a 404 — no such route exists.
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const base = DASHBOARD_URL
   const authUrl = await publisher.connectUrl({
     platform: platform as Platform,
     profileId,

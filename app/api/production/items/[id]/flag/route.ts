@@ -11,8 +11,8 @@ import { itemPath } from '../../../../../lib/workflow-core'
 import { flagCheck } from '../../../../../lib/card-flag-core'
 import { qcDetail, blockerNeed } from '../../../../../lib/editor-sop-core'
 import { notifyBlocked } from '../../../../../lib/editor-sop-notify'
+import { DASHBOARD_URL } from '../../../../../lib/app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * WHAT AN EDITOR SAYS ABOUT THEIR CARD (the Video Editors SOP, 11 Sep 2026):

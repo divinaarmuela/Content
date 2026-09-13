@@ -246,6 +246,36 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
       setBusy(null)
     }
   }
+  /** "Send the plan again" to whoever has not read it (14 Sep 2026) */
+  const resendPlan = async () => {
+    setBusy('resend')
+    try {
+      const res = await fetch(`/api/production/batches/${id}/share-again`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not send')
+      toast.success(json.told > 0 ? `Sent again to ${json.told} ${json.told === 1 ? 'person' : 'people'}` : 'Everyone on the shoot has already read it')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send')
+    } finally {
+      setBusy(null)
+    }
+  }
+  /** the viewer's own "I've read the plan" — a manager on set (14 Sep 2026) */
+  const acknowledgeMe = async () => {
+    setBusy('ack')
+    try {
+      const res = await fetch(`/api/production/batches/${id}/acknowledge`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not save')
+      toast.success('Thanks — the team can see you have read the plan')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setBusy(null)
+    }
+  }
   const unacknowledge = async (userId: string) => {
     setBusy('unack')
     try {
@@ -401,7 +431,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
               planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview}
               portalToken={portalToken} />
           )}
-          <PeoplePanel batch={batch} crew={crew} team={team} busy={busy !== null} onPatch={patchThenLoad} onUnack={unacknowledge} />
+          <PeoplePanel batch={batch} crew={crew} team={team} busy={busy !== null} onPatch={patchThenLoad} onUnack={unacknowledge}
+            viewerId={viewerId} onAck={acknowledgeMe} onResend={resendPlan} />
           <EditorCardPanel batch={batch} items={items} editorName={nameOf(batch.editor_id)} />
           <BriefComments batchId={batch.id} cards={canvasCards} />
         </div>

@@ -11,8 +11,8 @@ import { canReadClientComments } from '../../../../../lib/comment-access-core'
 import { actingRoles, STATUS_LABELS, type ItemStatus } from '../../../../../lib/workflow-core'
 import { canMoveTo, columnOf } from '../../../../../lib/board-core'
 import { NOBODY_ASKED } from '../../../../../lib/asked-core'
+import { DASHBOARD_URL } from '../../../../../lib/app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * SEND BACK FOR CHANGES — the manager's words go to the person who must act.

@@ -13,8 +13,8 @@ import { actOnPostingApproval } from '../../../lib/posting-approval'
 import { AuthzError, requireRole, type TeamUser } from '../../../lib/authz'
 import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-core'
 import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
+import { DASHBOARD_URL } from '../../../lib/app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * Client actions from the share-link portal: approve, request changes,

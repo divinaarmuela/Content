@@ -6,8 +6,8 @@ import { canConfirmFootage } from '../../../../../lib/shoot-sop-core'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { escapeHtml, notify, renderEmail } from '../../../../../lib/mailer'
+import { DASHBOARD_URL } from '../../../../../lib/app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * "GOT THE FOOTAGE" (the owner, 14 Sep 2026: "how do we know if he has

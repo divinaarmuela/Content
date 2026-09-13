@@ -84,9 +84,14 @@ export default function PlanReadOnly({ batch, cards, references, crew, viewerId,
             )}
           </div>
         ) : isEditor ? (
-          <Button asChild className="h-11 rounded-full px-5 text-[14px] font-semibold">
-            <Link href={`/dashboard/editor?card=${shootCardId(batch.id)}`}>Open your card</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {me?.acknowledged_at
+              ? <span className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-green/20 px-4 text-[14px] font-semibold"><Check className="h-4 w-4" aria-hidden /> You have read the plan</span>
+              : <Button className="h-11 rounded-full px-5 text-[14px] font-semibold" disabled={busy} onClick={() => void ack()}>I’ve read the plan</Button>}
+            <Button asChild variant="outline" className="h-11 rounded-full px-5 text-[14px] font-semibold">
+              <Link href={`/dashboard/editor?card=${shootCardId(batch.id)}`}>Open your card</Link>
+            </Button>
+          </div>
         ) : me?.acknowledged_at ? (
           <span className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-green/20 px-4 text-[14px] font-semibold"><Check className="h-4 w-4" aria-hidden /> You have read the plan</span>
         ) : me ? (

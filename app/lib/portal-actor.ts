@@ -4,8 +4,8 @@ import { attachOne } from '@/lib/db-join'
 import type { TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import type { TeamUser } from './authz'
+import { DASHBOARD_URL } from './app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /** The client's standing portal identity: one hidden team_users row per
  *  client (role client, inactive so no notification audience ever emails

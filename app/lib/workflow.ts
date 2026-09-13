@@ -46,6 +46,7 @@ import { mirrorLatestVersionSoon } from './gdrive-mirror'
 import { STAND_IN_MARK } from './card-history-core'
 import { type RawAsset as WorkFile, rawAssetKind } from './raw-assets-core'
 import type { Slide } from './version-files-core'
+import { DASHBOARD_URL } from './app-url'
 
 export type ContentItem = {
   id: string
@@ -70,7 +71,6 @@ export type ContentItem = {
   scheduler_ids?: string[] | null
 }
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * The audit trail's one writer.

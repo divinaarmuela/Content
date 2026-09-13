@@ -4,10 +4,10 @@ import { attachOne } from '@/lib/db-join'
 import type { TeamUserClient } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml } from './mailer'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 import type { TeamUser } from './authz'
 import { formatInZone, safeZone } from './timezone-core'
 import { itemPath } from './workflow-core'
+import { DASHBOARD_URL } from './app-url'
 
 /**
  * "IF SOMETHING IS SCHEDULED, NOTIFY THE AM" (the owner, 9 Sep 2026).

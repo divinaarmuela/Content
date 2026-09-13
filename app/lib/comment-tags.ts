@@ -6,8 +6,8 @@ import { notify, renderEmail, escapeHtml } from './mailer'
 import { OPEN_ITEM_CTA } from './email-voice-core'
 import { resolveTags, type Mentionable } from './mention-core'
 import { cardPathForRole } from './card-comment-core'
+import { DASHBOARD_URL } from './app-url'
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
 /**
  * Tagging somebody in a comment — the server half.
