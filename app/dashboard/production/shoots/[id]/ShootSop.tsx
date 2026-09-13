@@ -337,7 +337,10 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const meaning = SHOOT_STAGES.find(s => s.key === stage)?.meaning
   // ONE next button: the stage's own move
   const next: { to: ShootStage; label: string } | null =
-    stage === 'drafting' ? { to: 'shared', label: 'Share the plan with the team' }
+    // a gated plan's one action while drafting is the review row (Ask for a
+    // review); Share appears once the quality checker passed it
+    stage === 'drafting' && gate && !planReviewPassed(batch) ? null
+    : stage === 'drafting' || (stage === 'quality_review' && planReviewPassed(batch)) ? { to: 'shared', label: 'Share the plan with the team' }
     : stage === 'shared' ? { to: 'confirmed', label: askOverride ? 'Go anyway (super admin)' : 'Confirm — it is go' }
     : stage === 'confirmed' ? { to: 'reminder_sent', label: 'Reminder sent to everyone' }
     : stage === 'reminder_sent' || stage === 'shoot_day' ? { to: 'footage_handed', label: 'Footage is in' }

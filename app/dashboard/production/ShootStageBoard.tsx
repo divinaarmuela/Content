@@ -112,7 +112,8 @@ export function ShootStageBoard({
   const manages = role === 'super_admin' || role === 'general' || role === 'account_manager'
   const open = (s: StageShoot) => {
     if (justDragged.current) return
-    if (manages || s.owner_id === viewerId || s.created_by === viewerId) router.push(`/dashboard/production/shoots/${s.id}`)
+    // the quality checker reviews on the shoot page too (13 Sep 2026)
+    if (manages || role === 'quality_checker' || s.owner_id === viewerId || s.created_by === viewerId) router.push(`/dashboard/production/shoots/${s.id}`)
     else router.push(`/dashboard/editor?card=${shootCardId(s.id)}`)
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  REVIEW_OUT_WORDS, NOT_GATED_WORDS, inQualityReview, isAskedToReview,
+  REVIEW_OUT_WORDS, NOT_GATED_WORDS, PLAN_REVIEW_WORDS, inQualityReview, isAskedToReview,
   BRIEF_ITEMS, LATE_WORDS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, canSeeShoot,
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageHappened, stageMove, withAck, withoutAck, type SopShoot,
@@ -460,7 +460,14 @@ describe('the Quality review column', () => {
     expect(shootStage(complete(), TODAY, gated)).toBe('drafting')
     expect(shootStage(asked(), TODAY, gated)).toBe('quality_review')
     expect(shootStage(asked({ brief_shared_at: 'x' }), TODAY, gated)).toBe('quality_review')
-    expect(shootStage(asked({ plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, gated)).toBe('drafting')
+    // passed but not yet shared: it STAYS in the column, marked Passed (13 Sep 2026)
+    expect(shootStage(asked({ plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, gated)).toBe('quality_review')
+    expect(nextStepWords(asked({ plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, { planReview: { required: true } } as never)).toMatch(/^Passed by the quality checker\. Next: share the plan/)
+    // SHARE NEEDS THE PASS on a gated plan (13 Sep 2026): refused before, allowed after; an ungated plan shares freely
+    expect(stageMove(complete(), 'shared', { role: 'account_manager', today: TODAY, planReview: { required: true } } as never, now, AM)).toMatchObject({ ok: false, reason: PLAN_REVIEW_WORDS })
+    expect(stageMove(complete(), 'shared', { role: 'account_manager', today: TODAY, planReview: { required: false } } as never, now, AM)).toMatchObject({ ok: true })
+    // …and the account manager shares it from there, no reviewer needed
+    expect(stageMove(asked({ plan_reviewed_at: '2026-09-11T00:00:00Z' }), 'shared', { role: 'account_manager', today: TODAY, planReview: { required: true } } as never, now, AM)).toMatchObject({ ok: true })
     expect(shootStage(asked({ brief_shared_at: 'x', plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, gated)).toBe('shared')
     expect(shootStage(asked({ review_asked_at: null, review_asked_to: null }), TODAY, gated)).toBe('drafting')
     expect(inQualityReview(asked())).toBe(true)

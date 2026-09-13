@@ -299,8 +299,13 @@ export function shootStage(b: SopShoot, today: string, opts?: StageOpts): ShootS
 export type StageOpts = { planReview?: boolean }
 
 /** Asked and not passed: the shoot is with the quality checker. */
-export function inQualityReview(b: Pick<SopShoot, 'review_asked_at' | 'plan_reviewed_at' | 'go_at'>): boolean {
-  return !!b.review_asked_at && !b.plan_reviewed_at && !b.go_at
+export function inQualityReview(b: Pick<SopShoot, 'review_asked_at' | 'plan_reviewed_at' | 'go_at' | 'brief_shared_at'>): boolean {
+  if (!b.review_asked_at || b.go_at) return false
+  // PASSED BUT NOT YET SHARED stays in the column, marked Passed, until the
+  // account manager shares it (the owner, 13 Sep 2026: "after passing
+  // quality review why does it end up back in Draft?") — a shoot never
+  // moves backwards on a pass
+  return !b.plan_reviewed_at || !b.brief_shared_at
 }
 
 /** Was this person asked to quality review this plan? (Not "on the shoot":
@@ -514,7 +519,7 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
   const reviewer = input.reviewer === true || input.role === 'quality_checker' || input.role === 'super_admin'
   // OUT of Quality review is the quality checker's: passing it, or sending
   // it back. A drag out by anyone else is refused, in so many words.
-  if (from === 'quality_review') {
+  if (from === 'quality_review' && !b.plan_reviewed_at) {
     if (!reviewer) return { ok: false, reason: REVIEW_OUT_WORDS }
     if (to === 'drafting' || to === 'shared') {
       if (to === 'shared' && !b.brief_shared_at) return { ok: false, reason: 'Share the plan with the team first' }
@@ -558,6 +563,10 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
 
   switch (to) {
     case 'shared': {
+      // A GATED PLAN IS SHARED ONLY ONCE THE QUALITY CHECKER PASSED IT (the
+      // owner, 13 Sep 2026: "share plan with team only available once the
+      // quality checker has passed it — make sure it's that way")
+      if (gated && !planReviewPassed(b)) return { ok: false, reason: PLAN_REVIEW_WORDS }
       const list = briefChecklist(b, input.checklist)
       if (!list.complete) return { ok: false, reason: `Not yet — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in.` }
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
@@ -913,6 +922,7 @@ export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): 
   const due = shortDay(b.edit_deadline)
   switch (stage) {
     case 'quality_review':
+      if (planReviewPassed(b)) return 'Passed by the quality checker. Next: share the plan with the team.'
       return 'With the quality checker. Next: they press Pass the plan on the shoot page, or send it back with a note.'
     case 'drafting': {
       const list = briefChecklist(b, input)
