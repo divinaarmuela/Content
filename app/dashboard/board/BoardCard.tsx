@@ -3,7 +3,7 @@
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
+import { ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -202,6 +202,10 @@ export function BoardCard({
         {lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
         {lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
+        {/* somebody wrote to you on this card and it is not done (13 Sep 2026) */}
+        {(card as { my_open_task?: boolean }).my_open_task === true && (
+          <Chip tone="amber" className="gap-1"><MessageCircle className="h-3.5 w-3.5" aria-hidden /> New for you</Chip>
+        )}
       </>}
       note={<>
         {card.shoot_title && (

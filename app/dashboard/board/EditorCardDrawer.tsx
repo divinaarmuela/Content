@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, HardDriveDownload, Upload, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, HardDriveDownload, MessageCircle, Upload, X } from 'lucide-react'
+import { visibleComments } from '../../lib/comment-access-core'
+import type { Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Batch, Client, ContentItem, TeamUser, WorkflowActivity } from '@/lib/db-types'
+import type { AssetVersion, Batch, Client, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
@@ -67,6 +69,47 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const byEntity = useMemo(() => ({ entity_id: id }), [id])
   const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
   const { rows: team } = useTable<TeamUser>('team_users')
+  // the card's comments, and who runs the client — the one box below writes
+  // to the account manager (the owner, 13 Sep 2026: "currently there is no
+  // same tab chat for editor")
+  const { rows: comments } = useTable<ItemComment>('item_comments', { by: byItem })
+  const byClient = useMemo(() => ({ client_id: item?.client_id ?? '' }), [item?.client_id])
+  const { rows: clientLinks } = useTable<TeamUserClient>('team_user_clients', { by: byClient })
+  const managers = useMemo(() => {
+    const ids = new Set(clientLinks.map(l => l.team_user_id))
+    return team.filter(u => ids.has(u.id) && u.role === 'account_manager' && u.active_status !== false)
+  }, [clientLinks, team])
+  const thread = useMemo(() => {
+    if (!me) return [] as ItemComment[]
+    return visibleComments(me.role as Role, me.id, comments.map(c => ({
+      ...c, visibility: String(c.visibility ?? 'internal'), assigned_to: c.assigned_to ?? null, parent_id: c.parent_id ?? null,
+    })) as unknown as (ItemComment & { visibility: string; assigned_to: string | null; parent_id: string | null })[])
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  }, [comments, me])
+  const [note, setNote] = useState('')
+  const [sendingNote, setSendingNote] = useState(false)
+  const sendNote = async () => {
+    const text = note.trim()
+    if (!text || !item) return
+    setSendingNote(true)
+    try {
+      // tagged to the first account manager; the rest are named in the text
+      // so the same tag rule reaches them
+      const [first, ...rest] = managers
+      const mentions = rest.map(m => `@${m.name || m.email}`).join(' ')
+      const res = await fetch(`/api/production/items/${item.id}/comments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: mentions ? `${text} ${mentions}` : text, ...(first ? { assigned_to: first.id } : {}) }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not send')
+      setNote('')
+      toast.success(managers.length > 0 ? `Sent — ${managers.map(m => m.name || m.email).join(', ')} will be told` : 'Sent to the team')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send')
+    } finally {
+      setSendingNote(false)
+    }
+  }
   const { row: shoot } = useRow<Batch>('batches', item?.batch_id ?? null)
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   const zone = client?.timezone || DEFAULT_TZ
@@ -519,7 +562,31 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
         )}
       </section>
 
-      {/* ── 7. what happened ── */}
+      {/* ── 7. comments: the same thread the account manager reads ── */}
+      <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-comments">
+        <p id="ed-comments" className={H2}>Comments</p>
+        {thread.length === 0 && <p className="text-[13px] text-muted-foreground">Nothing yet. Write to the account manager below.</p>}
+        {thread.map(c => (
+          <div key={c.id} className="rounded-inner bg-foreground/[0.04] p-3 text-[13px]">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
+              <span className="font-semibold text-foreground">{c.author_id === me?.id ? 'You' : (nameOf(c.author_id) ?? 'Someone')}</span>
+              <span>{formatInZone(String(c.created_at), zone, 'short') ?? ''}</span>
+            </p>
+            <p className="mt-1 whitespace-pre-wrap">{String(c.body ?? '')}</p>
+          </div>
+        ))}
+        <div className="flex items-end gap-2">
+          <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
+            aria-label="Write to the account manager"
+            placeholder={managers.length > 0 ? `Write to ${managers.map(m => m.name || m.email).join(', ')}…` : 'Write to the account manager…'}
+            className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
+          <Button className="h-11 rounded-full px-4 text-[14px] font-semibold" disabled={sendingNote || !note.trim()} onClick={() => void sendNote()}>
+            <MessageCircle className="h-4 w-4" aria-hidden /> Send
+          </Button>
+        </div>
+      </section>
+
+      {/* ── 8. what happened ── */}
       <section className="flex flex-col gap-2 px-5 py-4" aria-labelledby="ed-history">
         <p id="ed-history" className={H2}>What happened</p>
         {history.length === 0 ? (

@@ -5,6 +5,7 @@ import type { TeamUser } from './authz'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { OPEN_ITEM_CTA } from './email-voice-core'
 import { resolveTags, type Mentionable } from './mention-core'
+import { cardPathForRole } from './card-comment-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -26,13 +27,13 @@ const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
  * them was a dead row.
  */
 
-export type Taggable = Mentionable & { email: string }
+export type Taggable = Mentionable & { email: string; role?: string }
 
 /** Active, non-client team members — the people "@Name" can reach. */
 export async function taggableTeam(): Promise<Taggable[]> {
   const rows = await table<TeamUserRow>('team_users')
     .list({ where: u => u.role !== 'client' && u.active_status })
-  return rows.map(u => ({ id: String(u.id), name: String(u.name ?? u.email ?? ''), email: String(u.email ?? '') }))
+  return rows.map(u => ({ id: String(u.id), name: String(u.name ?? u.email ?? ''), email: String(u.email ?? ''), role: String(u.role ?? '') }))
 }
 
 /** The pure rule lives in mention-core; re-exported so the routes import
@@ -49,11 +50,13 @@ export async function notifyTagged(input: {
   commentId: string
 }): Promise<void> {
   const { actor, tagged, text, target, commentId } = input
-  const href = target.kind === 'item'
-    ? `${DASHBOARD_URL}/dashboard/production/${target.id}`
-    : `${DASHBOARD_URL}/dashboard/production/shoots/${target.id}`
   const who = actor.name || actor.email
   for (const t of tagged) {
+    // a card opens on the board this person has (13 Sep 2026) — the old
+    // link was the retired full-card page
+    const href = target.kind === 'item'
+      ? `${DASHBOARD_URL}${cardPathForRole(t.role, target.id)}`
+      : `${DASHBOARD_URL}/dashboard/production/shoots/${target.id}`
     await notify({
       actorName: actor.name,
       actorEmail: actor.email,

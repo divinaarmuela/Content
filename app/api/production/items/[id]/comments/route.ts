@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { itemPath } from '../../../../../lib/workflow-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
@@ -8,10 +7,10 @@ import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { announceItemChange } from '../../../../../lib/production-live'
-import { OPEN_ITEM_CTA } from '../../../../../lib/email-voice-core'
 import {
   notifyTagged, resolveTags, settleTagNotifications, taggableTeam,
 } from '../../../../../lib/comment-tags'
+import { cardPathForRole, noteAudience, noteSubject } from '../../../../../lib/card-comment-core'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -115,8 +114,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             `<p>The client wrote:</p>` +
             `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
             `<p><strong>What happens next:</strong> read it and, if changes are needed, tag the editor in a comment on the item — nobody else has been told yet.</p>`,
-            OPEN_ITEM_CTA,
-            `${DASHBOARD_URL}${itemPath(item)}`
+            'Open the card',
+            `${DASHBOARD_URL}${cardPathForRole(r.role, id)}`
           ),
         })
       }
@@ -150,14 +149,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .map(r => r.team_users as unknown as { id: string; role: string; active_status: boolean } | null)
         .filter((u): u is { id: string; role: string; active_status: boolean } => !!u && u.active_status && u.role === 'account_manager')
         .map(u => u.id)
-      const holders = [...new Set([
-        ...(item.owner_id ? [String(item.owner_id)] : []),
-        ...(Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : []),
-        ...managerIds,
-      ])].filter(uid => uid && uid !== user.id && !tagged.some(t => t.id === uid))
+      // …and the super admin who created the card (13 Sep 2026: "the AM gets
+      // the notification and editor/scheduler gets notification")
+      const creatorId = (item as { created_by?: string | null }).created_by ?? null
+      const creator = creatorId ? await table<TeamUser>('team_users').get(creatorId) : null
+      const holders = noteAudience({
+        authorId: user.id,
+        ownerId: item.owner_id ? String(item.owner_id) : null,
+        schedulerIds: Array.isArray(item.scheduler_ids) ? (item.scheduler_ids as unknown[]).map(String) : [],
+        managerIds,
+        creatorId,
+        creatorIsSuperAdmin: creator?.role === 'super_admin',
+        taggedIds: tagged.map(t => t.id),
+      })
       if (holders.length > 0) {
         const people = await table<TeamUser>('team_users')
           .list({ where: u => holders.includes(u.id) && u.active_status === true && u.role !== 'client' })
+        const who = user.name || user.email
         for (const p of people) {
           await notify({
             actorName: user.name, actorEmail: user.email, actorClerkId: user.clerk_user_id,
@@ -165,13 +173,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             entityType: 'content_item',
             entityId: `${id}#${comment.id}#holder`,
             recipientId: p.id, recipientEmail: p.email,
-            subject: `${user.name || user.email} left a note on ${item.title}`,
+            subject: noteSubject(who, String(item.title ?? 'a card'), text),
             bodyHtml: renderEmail(
               `A note on ${item.title}`,
-              `<p>${escapeHtml(user.name || user.email)} wrote on <strong>${escapeHtml(String(item.title ?? ''))}</strong>:</p>` +
-              `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>`,
-              OPEN_ITEM_CTA,
-              `${DASHBOARD_URL}${itemPath(item)}`,
+              `<p>${escapeHtml(who)} wrote on <strong>${escapeHtml(String(item.title ?? ''))}</strong>:</p>` +
+              `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
+              '<p>Open the card and write back under Comments.</p>',
+              'Open the card',
+              // the board this person has, with the card open — never the
+              // retired full-card page
+              `${DASHBOARD_URL}${cardPathForRole(p.role, id)}`,
             ),
           })
         }
