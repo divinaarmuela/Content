@@ -1,3 +1,4 @@
+import { isQualityReviewer } from './identity-core'
 /**
  * WHO IS DOING WHAT — the Client and People filters on the three boards.
  *
@@ -46,7 +47,7 @@ export type ClientRow = { id: string; name: string; count: number }
 /** Who may narrow a board to a person: the people whose job is to see
  *  everyone's work — managers, super admins and the quality reviewer. */
 export function mayFilterPeople(viewer: { role: string; quality_reviewer?: boolean | null }): boolean {
-  return viewer.role === 'super_admin' || viewer.role === 'account_manager' || viewer.quality_reviewer === true
+  return viewer.role === 'super_admin' || viewer.role === 'account_manager' || isQualityReviewer(viewer)
 }
 
 function ids(v: unknown): string[] {

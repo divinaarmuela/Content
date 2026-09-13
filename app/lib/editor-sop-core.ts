@@ -19,6 +19,7 @@
  *                                with Ops copied, flag leadership at 24 h
  */
 
+import { isQualityReviewer } from './identity-core'
 import type { ItemStatus } from './workflow-core'
 import type { BoardColumnKey } from './board-core'
 
@@ -61,8 +62,8 @@ export function reviewWords(status: ItemStatus | string, reviewerName?: string |
 }
 
 /** The first flagged reviewer's name, for the chip — null when nobody wears it. */
-export function reviewerNameOf(team: readonly { name?: string | null; email?: string | null; quality_reviewer?: boolean | null; active_status?: boolean | null }[]): string | null {
-  const joy = team.find(u => u.quality_reviewer === true && u.active_status !== false)
+export function reviewerNameOf(team: readonly { name?: string | null; email?: string | null; role?: string | null; quality_reviewer?: boolean | null; active_status?: boolean | null }[]): string | null {
+  const joy = team.find(u => isQualityReviewer(u) && u.active_status !== false)
   return joy ? (String(joy.name ?? '').trim() || String(joy.email ?? '').trim() || null) : null
 }
 

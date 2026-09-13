@@ -1,6 +1,7 @@
 import { deliverOnlyFor } from './deliver-only'
 import { DELIVERED_ACTION, DELIVERED_LINE, stageWordFor } from './deliver-only-core'
 import 'server-only'
+import { isQualityReviewer } from './identity-core'
 import { DbError, table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
@@ -167,7 +168,7 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       // everyone flagged as a quality reviewer (Joy); with nobody flagged the
       // super admins hear, because they stand in for her
       const flagged = await table<TeamUserRow>('team_users')
-        .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client' })
+        .list({ where: u => isQualityReviewer(u as { role?: string; quality_reviewer?: boolean }) && u.active_status && u.role !== 'client' })
       if (flagged.length > 0) return flagged
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'super_admin' && u.active_status })
@@ -224,7 +225,7 @@ export function sanitiseRawAssets(raw: unknown): { url: string; name: string }[]
 /** Everyone flagged as a quality reviewer, active, on the team. */
 async function flaggedReviewers(): Promise<{ id: string; email: string; name: string }[]> {
   const rows = await table<TeamUserRow>('team_users')
-    .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client' })
+    .list({ where: u => isQualityReviewer(u as { role?: string; quality_reviewer?: boolean }) && u.active_status && u.role !== 'client' })
     .catch(() => [] as TeamUserRow[])
   return rows.map(u => ({ id: u.id, email: u.email, name: u.name || u.email }))
 }

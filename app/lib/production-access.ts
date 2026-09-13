@@ -1,4 +1,5 @@
 import 'server-only'
+import { isQualityReviewer } from './identity-core'
 import { table } from '@/lib/db'
 import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
@@ -173,7 +174,7 @@ export async function assignedItemsFilter(
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
     // the quality reviewer's desk
-    || (user.quality_reviewer === true && item.status === 'quality_check')
+    || (isQualityReviewer(user) && item.status === 'quality_check')
 }
 
 /** The item ids assignment opens, for the surfaces that filter in memory
@@ -236,7 +237,9 @@ export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
   // an editor or scheduler sees only the shoots they are NAMED on (held via
   // heldBatchIds), never a client's whole list (the owner, 12 Sep 2026:
   // "shouldn't it be the ones they've tagged")
-  if (user.role === 'editor' || user.role === 'scheduler') return []
+  // …and a quality checker: the gate opens every card in it for them
+  // whoever's client it is; shoots only where they are named
+  if (user.role === 'editor' || user.role === 'scheduler' || user.role === 'quality_checker') return []
   const rows = await table<TeamUserClient>('team_user_clients')
     .list({ by: { team_user_id: user.id } })
   return rows.map(r => r.client_id)
@@ -270,7 +273,7 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
 
   // the quality reviewer's desk: a card in the gate opens for them whoever's
   // client it is (the Team's Playbook, 11 Sep 2026)
-  if (user.quality_reviewer === true && item.status === 'quality_check') {
+  if (isQualityReviewer(user) && item.status === 'quality_check') {
     return item as ContentItem & Record<string, unknown> & {
       status: ItemStatus
       scheduler_ids?: string[] | null

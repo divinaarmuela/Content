@@ -125,6 +125,12 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === 'editor') {
     return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
   }
+  if (role === 'quality_checker') {
+    // the owner, 13 Sep 2026: "quality check is a role" — the Quality check
+    // column on Post approval is their desk; the Editor page shows the
+    // cards as the editor sees them
+    return [...PERSONAL_PAGES, '/dashboard/scheduler', '/dashboard/editor'].includes(href)
+  }
   if (role === 'scheduler') {
     // all three: the Scheduler board is their own five columns ("where is
     // my page, the columns one"), Schedule is where they upload and send,

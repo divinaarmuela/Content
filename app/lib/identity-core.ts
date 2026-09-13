@@ -13,8 +13,26 @@
  * `requireRole('scheduler')` admit it and `requireRole('account_manager')`
  * does not.
  */
-export const TEAM_ROLES = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin'] as const
-export type Role = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'client'
+export const TEAM_ROLES = ['scheduler', 'editor', 'quality_checker', 'general', 'account_manager', 'super_admin'] as const
+export type Role = 'super_admin' | 'account_manager' | 'general' | 'quality_checker' | 'editor' | 'scheduler' | 'client'
+
+/**
+ * THE QUALITY CHECKER IS A ROLE (the owner, 13 Sep 2026: "quality check is a
+ * role"). Joy's job title, in the role list, with its own pages. It sits
+ * above editor (it may do everything an editor may, and open the editor's
+ * face of a card) and below general and account manager (no client share,
+ * no handover to the scheduler, no team management, no publishing).
+ *
+ * The older way — the `quality_reviewer` FLAG on any role, for an account
+ * manager who also reviews — keeps working. `isQualityReviewer` is the ONE
+ * question every gate asks; nothing reads the flag or the role on its own.
+ */
+export function isQualityReviewer(
+  u: { role?: string | null; quality_reviewer?: boolean | null } | null | undefined,
+): boolean {
+  if (!u) return false
+  return u.role === 'quality_checker' || u.quality_reviewer === true
+}
 
 /**
  * The one spelling of each role a person reads on screen.
@@ -28,6 +46,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   super_admin: 'Super admin',
   account_manager: 'Account manager',
   general: 'General',
+  quality_checker: 'Quality checker',
   editor: 'Editor or designer',
   scheduler: 'Scheduler',
   client: 'Client',

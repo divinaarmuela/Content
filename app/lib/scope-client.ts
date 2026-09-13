@@ -20,6 +20,7 @@
  * components.
  */
 
+import { isQualityReviewer } from './identity-core'
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
 import { isOnShoot } from './shoot-sop-core'
 import { askedIdsOf } from './asked-core'
@@ -210,8 +211,8 @@ export function batchClientIdsOf(
   if (viewer.role === 'super_admin') return null
   if (viewer.role === 'general') return null
   if (viewer.role === 'client') return viewer.client_id ? [viewer.client_id] : []
-  // editors and schedulers: only the shoots they are named on (heldBatchIdsOf)
-  if (viewer.role === 'editor' || viewer.role === 'scheduler') return []
+  // editors, schedulers and quality checkers: only the shoots they are named on (heldBatchIdsOf)
+  if (viewer.role === 'editor' || viewer.role === 'scheduler' || viewer.role === 'quality_checker') return []
   return assignments.filter(a => a.team_user_id === viewer.id).map(a => a.client_id)
 }
 
@@ -290,7 +291,7 @@ export function visibleItems<T extends ScopeItem>(
   // THE QUALITY REVIEWER'S DESK (the Team's Playbook, 11 Sep 2026): every
   // card waiting in the gate is theirs to check, whoever's client it is and
   // whatever their own role says — the hat is worn on every item
-  const inGate = (r: ScopeItem) => viewer.quality_reviewer === true && r.status === 'quality_check'
+  const inGate = (r: ScopeItem) => isQualityReviewer(viewer) && r.status === 'quality_check'
   const scoped = items.filter(r => {
     if (inGate(r)) return true
     if (clientIds !== null) {
@@ -418,7 +419,7 @@ export function itemIsVisible(
 ): boolean {
   if (!item) return false
   // the quality reviewer opens anything in the gate
-  if (viewer.quality_reviewer === true && item.status === 'quality_check') return true
+  if (isQualityReviewer(viewer) && item.status === 'quality_check') return true
   if (viewer.role === 'scheduler') {
     if (!(SCHEDULER_STATUSES as readonly string[]).includes(item.status)
       && item.owner_id !== viewer.id) return false

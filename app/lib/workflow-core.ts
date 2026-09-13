@@ -4,6 +4,7 @@
  * client-visible label translation. The server engine (workflow.ts) executes
  * these rules; nothing else in the codebase decides what moves where.
  */
+import { isQualityReviewer } from './identity-core'
 import { roleSatisfies, type Role } from './identity-core'
 // who was actually ASKED for the next thing on this card, when anybody was.
 // asked-core imports nothing from here, so there is no cycle.
@@ -284,9 +285,10 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
 
   const roles: Hat[] = []
   if (viewer.role === 'account_manager') roles.push('account_manager')
-  // the quality hat is a flag on the person, worn on every item: checking is
-  // the job, the way reviewing is an account manager's
-  if (viewer.quality_reviewer === true) roles.push(QUALITY_HAT)
+  // the quality hat is worn on every item — the Quality checker role, or the
+  // flag on another role: checking is the job, the way reviewing is an
+  // account manager's
+  if (isQualityReviewer(viewer)) roles.push(QUALITY_HAT)
 
   const owner = item.owner_id
   // the open pool for an unowned item is editors and AMs; a scheduler picking

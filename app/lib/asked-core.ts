@@ -67,6 +67,7 @@ export const ASKED_VERB: Record<Role | 'quality_reviewer', string> = {
   super_admin: 'to check',
   account_manager: 'to check',
   general: 'to make and post',
+  quality_checker: 'to quality check',
   editor: 'to make',
   scheduler: 'to post',
   client: 'to look at',

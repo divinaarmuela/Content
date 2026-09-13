@@ -1,3 +1,4 @@
+import { isQualityReviewer } from '../../../lib/identity-core'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { TeamUser } from '@/lib/db-types'
@@ -30,7 +31,7 @@ export async function GET() {
       // can set one — so the extra read is theirs alone.
       const reviewerSet = me.role === 'super_admin'
         ? (await table<TeamUser>('team_users')
-          .list({ where: u => (u as { quality_reviewer?: unknown }).quality_reviewer === true && u.active_status && u.role !== 'client', limit: 1 })
+          .list({ where: u => isQualityReviewer(u as { role?: string; quality_reviewer?: boolean }) && u.active_status && u.role !== 'client', limit: 1 })
           .catch(() => [] as TeamUser[])).length > 0
         : undefined
 
@@ -40,7 +41,9 @@ export async function GET() {
         name: me.name,
         role: me.role,
         // the two playbook hats: passes the quality check; the ops contact
-        quality_reviewer: data?.quality_reviewer === true,
+        // the Quality checker ROLE or the flag on another role — one answer
+        // for every page (the owner, 13 Sep 2026: "quality check is a role")
+        quality_reviewer: isQualityReviewer({ role: me.role, quality_reviewer: data?.quality_reviewer === true }),
         ops_contact: data?.ops_contact === true,
         ...(reviewerSet === undefined ? {} : { quality_reviewer_set: reviewerSet }),
         employment_type: me.employment_type,

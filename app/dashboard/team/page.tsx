@@ -61,6 +61,7 @@ const ROLE_STYLE: Record<string, string> = {
   account_manager: 'bg-tint-green text-foreground border-accent-green/30',
   general:         'bg-tint-blue text-foreground border-accent-blue/25',
   editor:          'bg-foreground/[0.06] text-muted-foreground border-border',
+  quality_checker: 'bg-tint-green text-foreground border-accent-green/30',
   scheduler:       'bg-tint-amber text-foreground border-accent-amber/35',
   client:          'bg-foreground/[0.04] text-muted-foreground border-border',
 }
@@ -464,6 +465,7 @@ export default function TeamPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="account_manager">Account manager</SelectItem>
+                  <SelectItem value="quality_checker">Quality checker — passes work out of the quality check</SelectItem>
                   <SelectItem value="editor">Editor or designer</SelectItem>
                   <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
@@ -558,6 +560,7 @@ export default function TeamPage() {
                 <SelectContent>
                   <SelectItem value="super_admin">Super admin</SelectItem>
                   <SelectItem value="account_manager">Account manager</SelectItem>
+                  <SelectItem value="quality_checker">Quality checker — passes work out of the quality check</SelectItem>
                   <SelectItem value="editor">Editor or designer</SelectItem>
                   <SelectItem value="general">General — makes, sends for approval, books in</SelectItem>
                   <SelectItem value="scheduler">Scheduler</SelectItem>
@@ -637,7 +640,7 @@ export default function TeamPage() {
                 </div>
               </div>
             )}
-            {(editDraft.role === 'account_manager' || editDraft.role === 'editor') && clients.length > 0 && (
+            {(editDraft.role === 'account_manager' || editDraft.role === 'editor' || editDraft.role === 'quality_checker') && clients.length > 0 && (
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label>Assigned clients</Label>
                 <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-inner border border-border p-2">

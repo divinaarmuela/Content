@@ -404,7 +404,7 @@ export function bookingPatch(b: Pick<SopShoot, 'status' | 'shoot_date'>, now: st
 
 /* ── moving between columns ────────────────────────────────────────────── */
 
-export type MoveRole = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'client'
+export type MoveRole = 'super_admin' | 'account_manager' | 'general' | 'quality_checker' | 'editor' | 'scheduler' | 'client'
 
 /* ── whose page this is ────────────────────────────────────────────────── */
 

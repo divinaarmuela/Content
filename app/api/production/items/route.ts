@@ -1,3 +1,4 @@
+import { isQualityReviewer } from '../../../lib/identity-core'
 import { selfPostingClientIds } from '@/app/lib/deliver-only'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
       id: user.id,
       role: user.role,
       client_id: (user as { client_id?: string | null }).client_id ?? null,
-      quality_reviewer: user.quality_reviewer === true,
+      quality_reviewer: isQualityReviewer(user),
     }
     // the same tables the boards subscribe to (see useLiveWork.ts), read once
     // inside this request's cache

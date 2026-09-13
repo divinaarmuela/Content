@@ -500,6 +500,16 @@ export const QUALITY_REVIEWER_STEP: TutorialStep = {
   linkLabel: 'Open Post approval',
 }
 
+/** The Quality checker's own tutorial (the role, 13 Sep 2026): the step
+ *  that used to ride on another role's tutorial, then where answers arrive. */
+export const QUALITY_CHECKER: Tutorial = {
+  job: 'Check every piece before it reaches the client or the scheduler.',
+  intro: 'Your desk is the Quality check column on Post approval, for every client. The Editor page shows you the cards as the editors see them.',
+  steps: [QUALITY_REVIEWER_STEP, WHERE_ANSWERS_ARRIVE],
+  home: POST_APPROVAL,
+  homeLabel: 'Open Post approval',
+}
+
 export type TutorialOptions = {
   /** `team_users.quality_reviewer`: Joy's flag, on any role */
   qualityReviewer?: boolean | null
@@ -521,6 +531,7 @@ export function tutorialFor(role: Role | null | undefined, opts: TutorialOptions
 function baseTutorialFor(role: Role | null | undefined): Tutorial | null {
   switch (role) {
     case 'scheduler': return SCHEDULER
+    case 'quality_checker': return QUALITY_CHECKER
     case 'editor': return EDITOR
     case 'general': return GENERAL
     case 'account_manager':
@@ -539,7 +550,7 @@ export const tutorialKey = (role: Role) => `${role}:start`
  * scheduler was first, and on the day the whole team signs in the rest
  * need it just as much). A client never sees the dashboard.
  */
-export const AUTO_OPEN_ROLES: readonly Role[] = ['scheduler', 'editor', 'general', 'account_manager', 'super_admin']
+export const AUTO_OPEN_ROLES: readonly Role[] = ['scheduler', 'editor', 'quality_checker', 'general', 'account_manager', 'super_admin']
 
 /**
  * Open the tutorial for this person on arrival? Only a role in
