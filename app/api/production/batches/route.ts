@@ -8,7 +8,6 @@ import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
 import { onBatchCreated } from '../../../lib/gdrive-hooks'
 import { notifyShootOwner } from '../../../lib/shoot-sop-notify'
-import { footageOnlyPatch } from '../../../lib/shoot-sop-core'
 
 const melbourneToday = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 import {
@@ -81,9 +80,10 @@ export async function POST(req: Request) {
     }
     if (month !== null && (!Number.isInteger(month) || month < 1 || month > 12)) month = null
     if (year !== null && (!Number.isInteger(year) || year < 2024 || year > 2100)) year = null
-    // A SHOOT THAT WAS NEVER PLANNED HERE (13 Sep 2026): typed by name on the
-    // Editor page's New card — made already shot, footage in, no plan
-    const footageOnly = body.footage_only === true
+    // A CARD NEVER MAKES A SHOOT (the owner, 13 Sep 2026: "it shouldn't do
+    // that, at all"): a shoot is only made from New shoot plan. The old
+    // `footage_only` flag is ignored — no request can file a shoot as
+    // already shot with no plan.
     // "Account manager for this shoot": any active team member bar a client
     let ownerId: string = user.id
     if (body.owner_id) {
@@ -114,7 +114,6 @@ export async function POST(req: Request) {
         // Postgres defaulted the status; a shoot that reads back without one
         // is a plan no gate in batch-brief-core recognises
         status: 'brief',
-        ...(footageOnly ? footageOnlyPatch(new Date().toISOString(), user.id, shootDate ?? melbourneToday()) : {}),
       }) as unknown as Batch
     await logActivity({
       actor: user, clientId: data.client_id,
@@ -123,7 +122,7 @@ export async function POST(req: Request) {
     })
     announceBatchChange({ batch_id: data.id, client_id: data.client_id, status: data.status ?? 'brief', kind: 'created' })
     // the account manager named by somebody else is told the shoot is theirs
-    if (ownerId !== user.id && !footageOnly) {
+    if (ownerId !== user.id) {
       await notifyShootOwner(user, data).catch(e => console.error('shoot owner notify:', e))
     }
     // the shoot's folder tree, in the background: never awaited, never able to

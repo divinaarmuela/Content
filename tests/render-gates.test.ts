@@ -75,12 +75,12 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     expect(board).not.toMatch(/BRIEF_KIND_LABELS|planTone/)
     expect(board).toMatch(/dashboard\/editor\?card=\$\{shootCardId\(s\.id\)\}/)
   })
-  it('the Editor page’s New card lets a manager type a shoot that was never planned here', () => {
+  it('a card NEVER makes a shoot (the owner, 13 Sep 2026: it should not do that, at all)', () => {
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
-    expect(dialogs).toMatch(/Another shoot — type its name/)
-    expect(dialogs).toMatch(/footage_only: true/)
+    expect(dialogs).not.toMatch(/type its name|footage_only|\/api\/production\/batches'/)
     expect(dialogs).toMatch(/\{\(shoots\.length > 0 \|\| simple\) && !forPosting && \(/)
-    expect(src('app/dashboard/production/ShootStageBoard.tsx')).toMatch(/FOOTAGE_ONLY_WORDS/)
+    // and the server takes no such flag either
+    expect(src('app/api/production/batches/route.ts')).not.toMatch(/footageOnlyPatch|body\.footage_only/)
   })
   it('New shoot plan makes the shoot itself — no plan document', () => {
     const dialog = src('app/dashboard/production/NewItemDialog.tsx')

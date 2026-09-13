@@ -563,11 +563,6 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  deliverable on that shoot the card answers for, when the shoot has them */
   const [shootId, setShootId] = useState('')
   const [groupId, setGroupId] = useState('')
-  /** A SHOOT THAT WAS NEVER PLANNED HERE (the owner, 13 Sep 2026: "simply
-   *  type the shoot name there"): typing a name makes a footage-only shoot
-   *  — already shot, no plan — and the card belongs to it */
-  const [newShoot, setNewShoot] = useState('')
-  const [newShootDate, setNewShootDate] = useState('')
   /** FILES TO WORK FROM (the owner, 11 Sep 2026: "she will show the files
    *  there"): a manager hands the editor the footage, stills or references
    *  with the card, and/or the folder they live in */
@@ -585,15 +580,14 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     if (!open) return
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
-    setShootId(''); setGroupId(''); setWorkFiles([]); setFolder(''); setNewShoot(''); setNewShootDate('')
+    setShootId(''); setGroupId(''); setWorkFiles([]); setFolder('')
   }, [open, defaultClientId, clients, viewer.id])
-  useEffect(() => { setShootId(''); setGroupId(''); setNewShoot(''); setNewShootDate('') }, [clientId])
+  useEffect(() => { setShootId(''); setGroupId('') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])
 
   const linkCheck = linkKindOf(link)
   const folderCheck = linkKindOf(folder)
-  const typingShoot = shootId === 'new'
-  const canSave = !!clientId && !!title.trim() && (simple || !!normaliseKindName(kind)) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok) && (!typingShoot || !!newShoot.trim())
+  const canSave = !!clientId && !!title.trim() && (simple || !!normaliseKindName(kind)) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
 
   const save = async () => {
     if (!canSave) return
@@ -609,18 +603,11 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       const rawAssets = workFiles.length > 0
         ? (await uploadFiles(workFiles, { purpose: 'social' }).done).map(({ file, url }) => ({ url, name: file.name }))
         : []
-      // a shoot typed by name: made first, footage in and no plan, so the
-      // card has a shoot to belong to
-      let batchId = typingShoot ? '' : shootId
-      if (typingShoot) {
-        const made = await fetch('/api/production/batches', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ client_id: clientId, title: newShoot.trim(), footage_only: true, ...(newShootDate ? { shoot_date: newShootDate } : {}) }),
-        })
-        const shoot = await made.json().catch(() => ({}))
-        if (!made.ok) throw new Error(shoot?.error ?? 'Could not make the shoot')
-        batchId = String(shoot.id)
-      }
+      // A CARD NEVER MAKES A SHOOT (the owner, 13 Sep 2026: "why does just
+      // an editing card end up creating a card on the Shoots page? It
+      // shouldn't do that, at all"): a card is from one of the client's
+      // planned shoots, or from no shoot
+      const batchId = shootId
       const res = await fetch('/api/production/items', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -710,18 +697,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   <SelectContent>
                     <SelectItem value="none">Not from a shoot</SelectItem>
                     {shoots.map(b => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
-                    {simple && <SelectItem value="new">Another shoot — type its name</SelectItem>}
                   </SelectContent>
                 </Select>
-                {typingShoot && (
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="new-shoot-name">The shoot’s name</Label>
-                    <Input id="new-shoot-name" value={newShoot} onChange={e => setNewShoot(e.target.value)} placeholder="e.g. Clinic open day" className={field} />
-                    <Label htmlFor="new-shoot-date">Shot on</Label>
-                    <Input id="new-shoot-date" type="date" value={newShootDate} onChange={e => setNewShootDate(e.target.value)} className={`${field} font-mono`} />
-                    <p className="text-[12px] text-muted-foreground">Today if left blank. The shoot is filed as footage in, with no plan — it was never planned here.</p>
-                  </div>
-                )}
               </div>
               {!simple && groups.length > 0 && (
                 <div className="flex flex-col gap-2">
