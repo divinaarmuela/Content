@@ -185,7 +185,10 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(s).toMatch(/data-plan-review/)
     expect(s).toContain('Pass the plan')
     expect(s).toContain('Send back with a note')
-    expect(s).toMatch(/REVIEW_DEFAULT_QUALITY : REVIEW_DEFAULT_MANAGERS/)
+    // no review row at all on a plan that does not need the gate (a super
+    // admin's own plan): the picker and the button sit inside `gate &&`
+    expect(s).toMatch(/\{gate && onAskReview && !planReviewPassed\(batch\) && \(/)
+    expect(s).not.toContain('REVIEW_DEFAULT_MANAGERS')
     expect(s).toMatch(/planReview: input\.planReview|planReview \}/)
     const board = src('app/dashboard/production/ShootStageBoard.tsx')
     expect(board).toMatch(/planReviewChip\(s, planReviewRequired\(/)

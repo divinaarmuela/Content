@@ -67,6 +67,15 @@ describe('who the gate applies to', () => {
     // an old shoot with nobody on record is not held up
     expect(planReviewRequired({ created_by: null, owner_id: null }, {})).toBe(false)
     expect(planReviewRequired(b, {})).toBe(false)
+    // "September 18th is created by an admin and didn't assign anyone" — no gate, no review row
+    expect(planReviewRequired({ created_by: 'abby', owner_id: null }, { createdByRole: 'super_admin', ownerRole: null })).toBe(false)
+    // "plans created by a super admin but assigned to an AM must have the
+    // review process": the gate applies if EITHER the creator or the owner
+    // is an account manager or a general user
+    expect(planReviewRequired({ created_by: 'abby', owner_id: 'karly' }, { createdByRole: 'super_admin', ownerRole: 'account_manager' })).toBe(true)
+    expect(planReviewRequired({ created_by: 'karly', owner_id: null }, { createdByRole: 'account_manager', ownerRole: null })).toBe(true)
+    expect(planReviewRequired({ created_by: 'karly', owner_id: 'abby' }, { createdByRole: 'account_manager', ownerRole: 'super_admin' })).toBe(true)
+    expect(planReviewRequired({ created_by: 'raina', owner_id: 'raina' }, { createdByRole: 'general', ownerRole: 'general' })).toBe(true)
   })
   it('the reviewers default to the active quality checkers, role or flag', () => {
     expect(qualityCheckersOf(people)).toEqual(['joy', 'karly'])
@@ -88,6 +97,9 @@ describe('Go waits on the pass', () => {
   it('refuses with one sentence until passed, and not at all when the gate does not apply', () => {
     expect(goReady(plan, { itemCount: 1, planReview: { required: true } }).reasons).toEqual([PLAN_REVIEW_WORDS])
     expect(goReady(plan, { itemCount: 1, planReview: { required: false } }).ok).toBe(true)
+    // a super admin's own plan is never asked for the pass, asked or not
+    const adminPlan = { ...plan, ...reviewAskPatch('t', 'abby', ['joy']) } as SopShoot
+    expect(goReady(adminPlan, { itemCount: 1, planReview: { required: false } }).reasons).toEqual([])
     expect(goReady(plan, { itemCount: 1 }).ok).toBe(true)
     const passed = { ...plan, ...planReviewPatch('2026-09-13T06:00:00Z', 'joy', true) } as SopShoot
     expect(goReady(passed, { itemCount: 1, planReview: { required: true } }).ok).toBe(true)

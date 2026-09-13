@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  REVIEW_DEFAULT_MANAGERS, REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
+  REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
@@ -419,13 +419,15 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
                 )}
               </div>
             )}
-            {onAskReview && !(gate && planReviewPassed(batch)) && (
+            {/* ONLY A PLAN THAT NEEDS THE GATE shows the review at all (the
+                owner, 13 Sep 2026: "September 18th is created by an admin and
+                didn't assign anyone — why does it show sending for review") */}
+            {gate && onAskReview && !planReviewPassed(batch) && (
               <div className="flex flex-col gap-1.5 pl-8">
-                {!gate && reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
                 <div className="flex flex-wrap items-center gap-2">
                   <select value={reviewer} onChange={e => setReviewer(e.target.value)} aria-label="Who should review the plan"
                     className="h-11 min-w-0 rounded-inner border border-border bg-surface px-2 text-[13px]">
-                    <option value="">{gate ? REVIEW_DEFAULT_QUALITY : REVIEW_DEFAULT_MANAGERS}</option>
+                    <option value="">{REVIEW_DEFAULT_QUALITY}</option>
                     {(team ?? []).filter(t => t.id !== viewerId && t.role !== 'client').map(t => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
