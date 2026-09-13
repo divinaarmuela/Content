@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
   REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
@@ -559,7 +560,10 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
   onUnack: (userId: string) => Promise<void>
 }) {
   const ack = ackState(batch)
-  const editors = team.filter(t => t.role === 'editor')
+  // the editor picker: editors first, then the managers who also cut
+  // (the owner, 13 Sep 2026: "can an account manager / super admin get the
+  // editing feature?" — yes), each under their own header
+  const editorGroups = groupPeople(team.filter(t => ['editor', 'account_manager', 'super_admin'].includes(t.role)), 'editor')
   const crewIds = Array.isArray(batch.crew_ids) ? batch.crew_ids.map(String) : []
   const addable = team.filter(t => !crewIds.includes(t.id) && t.id !== batch.editor_id)
   const [adding, setAdding] = useState('')
@@ -581,7 +585,12 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
             <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Editor"><SelectValue placeholder="Pick the editor" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not picked yet</SelectItem>
-              {editors.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              {editorGroups.map(g => (
+                <SelectGroup key={g.role}>
+                  <SelectLabel>{g.label}</SelectLabel>
+                  {g.people.map(e => <SelectItem key={e.id} value={e.id}>{personWords(e)}</SelectItem>)}
+                </SelectGroup>
+              ))}
             </SelectContent>
           </Select>
         </label>
@@ -625,7 +634,12 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
               <Select value={adding} onValueChange={v => setAdding(v ?? '')}>
                 <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Crew on the day"><SelectValue placeholder="Pick a person" /></SelectTrigger>
                 <SelectContent>
-                  {addable.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  {groupPeople(addable, 'general').map(g => (
+                    <SelectGroup key={g.role}>
+                      <SelectLabel>{g.label}</SelectLabel>
+                      {g.people.map(t => <SelectItem key={t.id} value={t.id}>{personWords(t)}</SelectItem>)}
+                    </SelectGroup>
+                  ))}
                 </SelectContent>
               </Select>
             </label>
