@@ -32,7 +32,7 @@ const shootUrl = (id: string) => `${DASHBOARD_URL}/dashboard/production/shoots/$
 /** the editor never opens the shoot page: their link is their card */
 const cardUrl = (batchId: string) => `${DASHBOARD_URL}/dashboard/editor?card=${shootCardId(batchId)}`
 
-const melbourneToday = (): string =>
+export const melbourneToday = (): string =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 
 function longDate(iso: string | null | undefined): string | null {
@@ -182,15 +182,75 @@ export async function notifyFootageIn(actor: Actor, batch: Batch, plan: Pick<Han
   return r === 'sent'
 }
 
-/** The AM is asked, once, to name an editor for a shoot that was shot with none. */
-async function notifyNameTheEditor(batch: Batch): Promise<number> {
+/** the shoot's account managers and super admins, plus its owner */
+async function managersOf(batch: Batch): Promise<TeamUserRow[]> {
   const ids = new Set<string>()
   if (batch.owner_id) ids.add(batch.owner_id)
   const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: batch.client_id } })
   for (const l of links) ids.add(l.team_user_id)
-  const people = await table<TeamUserRow>('team_users').list({
+  return table<TeamUserRow>('team_users').list({
     where: u => u.active_status === true && ids.has(u.id) && ['account_manager', 'super_admin'].includes(u.role),
   })
+}
+
+/**
+ * THE FOLDER LINK IS ASKED FOR, once (the owner, 13 Sep 2026): the shoot
+ * happened, the editor is named, and nobody has pasted where the footage
+ * is. The crew on the day and the account managers are told; the editor is
+ * told the moment the link goes in.
+ */
+async function notifyPasteTheFolder(batch: Batch): Promise<number> {
+  const crewIds = Array.isArray(batch.crew_ids) ? (batch.crew_ids as unknown[]).map(String) : []
+  const crew = crewIds.length
+    ? await table<TeamUserRow>('team_users').list({ where: u => u.active_status === true && crewIds.includes(u.id) })
+    : []
+  const people = new Map<string, TeamUserRow>()
+  for (const p of [...crew, ...(await managersOf(batch))]) people.set(p.id, p)
+  let sent = 0
+  for (const p of people.values()) {
+    const r = await notify({
+      eventType: 'shoot_footage_in', entityType: 'batch',
+      entityId: `${batch.id}#no-folder`,
+      recipientId: p.id, recipientEmail: p.email,
+      subject: `Where is the footage? ${batch.title} — paste the folder link`,
+      bodyHtml: renderEmail(
+        `${escapeHtml(batch.title)} — the footage folder link is not in`,
+        `<p>The shoot was ${longDate(batch.shoot_date) ?? 'yesterday'} and nobody has pasted where the footage is, so the editor cannot start.</p>` +
+        '<p>Open the shoot and paste the Dropbox or Drive folder link under “Footage folder”. The editor is told the moment it is in.</p>',
+        'Open the shoot', shootUrl(batch.id),
+      ),
+    })
+    if (r === 'sent') sent++
+  }
+  return sent
+}
+
+/**
+ * A FOLDER LINK PASTED AFTER THE SHOOT IS THE HANDOVER (13 Sep 2026): the
+ * same stamp, cards, folder fill and email “Footage is in” gives — claimed,
+ * so a press and a paste can never both tell the editor.
+ */
+export async function handOverFootageNow(actor: Actor, batch: Batch): Promise<boolean> {
+  const now = new Date().toISOString()
+  const stamped = await table<Batch>('batches').claim(batch.id, cur =>
+    cur && !cur.footage_handed_at ? { ...cur, footage_handed_at: now, footage_handed_by: actor.id || null } : null)
+  if (!stamped.claimed) return false
+  const updated = stamped.row
+  await logActivity({
+    actor: actor.id ? (actor as TeamUser) : null, clientId: updated.client_id,
+    entityType: 'batch', entityId: updated.id,
+    action: 'sop_stage', oldValue: 'shoot_day', newValue: 'footage_handed', detail: 'Footage folder link pasted — handed to the editor',
+  })
+  const plan = await handOverCards(actor, updated, 'footage from')
+  await fillFootageFolder(updated).catch(e => console.error('footage folder fill:', e))
+  await notifyFootageIn(actor, updated, plan, false).catch(e => console.error('footage notify:', e))
+  announceBatchChange({ batch_id: updated.id, client_id: updated.client_id, status: updated.status ?? 'brief', kind: 'updated' })
+  return true
+}
+
+/** The AM is asked, once, to name an editor for a shoot that was shot with none. */
+async function notifyNameTheEditor(batch: Batch): Promise<number> {
+  const people = await managersOf(batch)
   let sent = 0
   for (const p of people) {
     const r = await notify({
@@ -215,15 +275,16 @@ async function notifyNameTheEditor(batch: Batch): Promise<number> {
  * claimed first, so two runs cannot hand over or tell twice; a shoot that a
  * person already handed over (footage_handed_at) is skipped by the rule.
  */
-export async function runFootageDueSweep(): Promise<{ handed: number; askedForEditor: number }> {
+export async function runFootageDueSweep(): Promise<{ handed: number; askedForEditor: number; askedForFolder: number }> {
   const today = melbourneToday()
   const candidates = await table<Batch>('batches').list({
     where: r => !!r.shoot_date && !r.footage_handed_at && !r.footage_due_nudged_at && r.status !== 'wrapped',
     limit: 500,
   })
-  const { hand, askEditor } = footageDueTargets(candidates, today)
+  const { hand, askEditor, askFolder } = footageDueTargets(candidates, today)
   let handed = 0
   let askedForEditor = 0
+  let askedForFolder = 0
   const now = new Date().toISOString()
   for (const b of hand) {
     const stamped = await table<Batch>('batches').claim(b.id, cur =>
@@ -249,7 +310,13 @@ export async function runFootageDueSweep(): Promise<{ handed: number; askedForEd
     if (!stamped.claimed) continue
     askedForEditor += await notifyNameTheEditor(stamped.row)
   }
-  return { handed, askedForEditor }
+  for (const b of askFolder) {
+    const stamped = await table<Batch>('batches').claim(b.id, cur =>
+      cur && !cur.footage_due_nudged_at ? { ...cur, footage_due_nudged_at: now } : null)
+    if (!stamped.claimed) continue
+    askedForFolder += await notifyPasteTheFolder(stamped.row)
+  }
+  return { handed, askedForEditor, askedForFolder }
 }
 
 /** the cards are the editor's from go — used by the go path and by naming the editor later */

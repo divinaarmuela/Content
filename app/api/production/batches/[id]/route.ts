@@ -11,13 +11,13 @@ import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
 import { ensureShootCard } from '../../../../lib/plan-cards'
-import { fillFootageFolder, handOverAtGo } from '../../../../lib/shoot-handover'
+import { fillFootageFolder, handOverAtGo, handOverFootageNow, melbourneToday } from '../../../../lib/shoot-handover'
 import { linkKindOf } from '../../../../lib/card-link-core'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { NOT_YOUR_PAGE, acksOf, canManageShoot, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
 
 /**
  * Load a shoot the caller may WORK — the shoot page and every button on it
@@ -286,6 +286,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // a footage folder pasted AFTER the handover reaches the cards now
     if ('footage_url' in patch && patch.footage_url && data.footage_handed_at) {
       try { await fillFootageFolder(data) } catch (e) { console.error('footage folder after handover:', e) }
+    }
+    // …and one pasted once the shoot has happened IS the handover (13 Sep
+    // 2026): the editor is told, nobody has to press anything
+    if ('footage_url' in patch && patch.footage_url && footageReadyToHand(data, melbourneToday())) {
+      try { await handOverFootageNow(user, data) } catch (e) { console.error('handover on footage link:', e) }
     }
     return NextResponse.json(data)
   } catch (e) {

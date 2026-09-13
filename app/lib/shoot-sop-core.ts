@@ -935,6 +935,11 @@ export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): 
       return `Reminder sent. Next: the shoot${when ? ` on ${when}` : ''}. Nothing to press until then.`
     case 'shoot_day': {
       const days = daysUntilShoot(b, today)
+      if (!text(b.footage_url)) {
+        return days === 0
+          ? 'Shooting today. Paste the footage folder link below once the footage is up — the editor is told the moment it is in.'
+          : 'Shot, and the footage folder link is not in yet. Paste it below — the editor is told the moment it is in.'
+      }
       if (days === 0) return 'Shooting today. The footage is handed to the editor tomorrow morning by itself — or press “Footage is in” once it is.'
       return 'Shot. The footage is handed to the editor this morning by itself — press “Footage is in” if it is already.'
     }
@@ -972,18 +977,34 @@ export function footageAfterWords(b: Pick<SopShoot, 'shoot_date'>, today: string
  * editor told once. A shoot with no editor named cannot be handed to
  * anyone — its account manager is asked to name one instead, once.
  */
-export function footageDueTargets<T extends SopShoot>(shoots: readonly T[], today: string): { hand: T[]; askEditor: T[] } {
+export function footageDueTargets<T extends SopShoot>(shoots: readonly T[], today: string): { hand: T[]; askEditor: T[]; askFolder: T[] } {
   const hand: T[] = []
   const askEditor: T[] = []
+  const askFolder: T[] = []
   for (const b of shoots) {
     if (b.footage_due_nudged_at || b.footage_handed_at || b.status === 'wrapped') continue
     if (!b.go_at && b.status !== 'locked' && b.status !== 'shot') continue
     const days = daysUntilShoot(b, today)
     if (days === null || days >= 0) continue
-    if (b.editor_id) hand.push(b)
-    else askEditor.push(b)
+    if (!b.editor_id) askEditor.push(b)
+    // THE LINK FIRST (the owner, 13 Sep 2026: "if shoot day is done but the
+    // footage is not yet submitted, the person handling it would know they
+    // need to put the link there"): nothing is handed to the editor without
+    // the folder — the crew and the account managers are asked for it
+    else if (!text(b.footage_url)) askFolder.push(b)
+    else hand.push(b)
   }
-  return { hand, askEditor }
+  return { hand, askEditor, askFolder }
+}
+
+/** A folder link pasted once the shoot has happened IS the handover: the
+ *  editor is named, the day is here or gone, nobody handed it yet. */
+export function footageReadyToHand(b: SopShoot, today: string): boolean {
+  if (b.footage_handed_at || b.status === 'wrapped') return false
+  if (!b.go_at && b.status !== 'locked' && b.status !== 'shot') return false
+  if (!b.editor_id || !text(b.footage_url)) return false
+  const days = daysUntilShoot(b, today)
+  return days !== null && days <= 0
 }
 
 /* ── a shoot that was never planned here: footage only ─────────────────── */

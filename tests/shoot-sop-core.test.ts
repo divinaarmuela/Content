@@ -5,7 +5,7 @@ import {
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageHappened, stageMove, withAck, withoutAck, type SopShoot,
   briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
-  STAGE_STRIP, footageAfterWords, footageDueTargets, footageFolderFill, handoverReady, nextStepWords,
+  STAGE_STRIP, footageAfterWords, footageDueTargets, footageFolderFill, footageReadyToHand, handoverReady, nextStepWords,
 } from '../app/lib/shoot-sop-core'
 import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
 
@@ -364,8 +364,12 @@ describe('the strip and the next step', () => {
     const go = complete({ ...ready, go_at: 'x' })
     expect(nextStepWords(go, TODAY)).toMatch(/^Confirmed for 21 Sept\. The editor\u2019s card is on the Editor page, due 25 Sept\. Next: Ops presses Reminder sent/)
     expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), TODAY)).toMatch(/^Reminder sent\. Next: the shoot on 21 Sept/)
-    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-21')).toMatch(/^Shooting today\. The footage is handed to the editor tomorrow morning by itself/)
-    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-22')).toMatch(/^Shot\. The footage is handed to the editor this morning by itself/)
+    // without the folder link the words ask for it (13 Sep 2026)
+    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-21')).toMatch(/^Shooting today\. Paste the footage folder link below/)
+    expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), '2026-09-22')).toMatch(/^Shot, and the footage folder link is not in yet\. Paste it below/)
+    const linked = { ...go, reminder_sent_at: 'x', footage_url: 'https://www.dropbox.com/scl/fo/golf' }
+    expect(nextStepWords(complete(linked), '2026-09-21')).toMatch(/^Shooting today\. The footage is handed to the editor tomorrow morning by itself/)
+    expect(nextStepWords(complete(linked), '2026-09-22')).toMatch(/^Shot\. The footage is handed to the editor this morning by itself/)
     expect(nextStepWords(complete({ ...go, footage_handed_at: 'x' }), '2026-09-22')).toMatch(/^Footage should be in — the editor has been told/)
   })
   it('the handover is ready once the editor, the priorities and the deadline are named', () => {
@@ -376,18 +380,33 @@ describe('the strip and the next step', () => {
     expect(footageAfterWords(complete(), '2026-09-21')).toBe('Shooting today — footage after that')
     expect(footageAfterWords(complete(), '2026-09-22')).toBeNull()
   })
-  it('the morning after a shoot, a confirmed shoot with an editor is handed over by itself; one without is asked for one', () => {
-    const shot = complete({ go_at: 'x', brief_shared_at: 'x' })
+  it('the morning after a shoot, a confirmed shoot with an editor AND a folder link is handed over by itself; one without is asked', () => {
+    const shot = complete({ go_at: 'x', brief_shared_at: 'x', footage_url: 'https://www.dropbox.com/scl/fo/golf' })
     expect(footageDueTargets([shot], '2026-09-22').hand.map(b => b.id)).toEqual(['b-1'])
+    // no link, no handover: the crew and the AMs are asked for it (13 Sep 2026)
+    const noLink = complete({ ...shot, footage_url: null })
+    expect(footageDueTargets([noLink], '2026-09-22').askFolder.map(b => b.id)).toEqual(['b-1'])
+    expect(footageDueTargets([noLink], '2026-09-22').hand).toEqual([])
     // not before the day is gone, not twice, not once a person did it, not a closed shoot
     expect(footageDueTargets([shot], '2026-09-21').hand).toEqual([])
     expect(footageDueTargets([complete({ ...shot, footage_due_nudged_at: 'x' })], '2026-09-22').hand).toEqual([])
     expect(footageDueTargets([complete({ ...shot, footage_handed_at: 'x' })], '2026-09-22').hand).toEqual([])
     expect(footageDueTargets([complete({ ...shot, status: 'wrapped' })], '2026-09-22').hand).toEqual([])
     // a plan never confirmed is not handed to anyone by itself
-    expect(footageDueTargets([complete()], '2026-09-22')).toEqual({ hand: [], askEditor: [] })
+    expect(footageDueTargets([complete()], '2026-09-22')).toEqual({ hand: [], askEditor: [], askFolder: [] })
     const noEditor = complete({ ...shot, editor_id: null })
     expect(footageDueTargets([noEditor], '2026-09-22').askEditor.map(b => b.id)).toEqual(['b-1'])
+  })
+
+  it('a folder link pasted once the shoot has happened is the handover (13 Sep 2026)', () => {
+    const shot = complete({ go_at: 'x', brief_shared_at: 'x', footage_url: 'https://www.dropbox.com/scl/fo/golf' })
+    expect(footageReadyToHand(shot, '2026-09-21')).toBe(true)   // shoot day
+    expect(footageReadyToHand(shot, '2026-09-22')).toBe(true)   // after
+    expect(footageReadyToHand(shot, '2026-09-20')).toBe(false)  // not before the day
+    expect(footageReadyToHand(complete({ ...shot, footage_url: null }), '2026-09-22')).toBe(false)
+    expect(footageReadyToHand(complete({ ...shot, editor_id: null }), '2026-09-22')).toBe(false)
+    expect(footageReadyToHand(complete({ ...shot, footage_handed_at: 'x' }), '2026-09-22')).toBe(false)
+    expect(footageReadyToHand(complete({ footage_url: 'https://www.dropbox.com/scl/fo/golf' }), '2026-09-22')).toBe(false) // never confirmed
   })
 })
 
