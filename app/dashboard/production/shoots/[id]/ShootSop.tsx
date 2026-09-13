@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, shootStage, stageIndex, stageMove,
+  clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
@@ -73,7 +73,9 @@ export function StageStrip({ batch, today, role, itemCount }: {
     <div className="flex flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3">
       <ol className="flex flex-wrap items-center gap-x-1 gap-y-1.5" aria-label="Where this shoot is">
         {STAGE_STRIP.map((s, i) => {
-          const done = i < at
+          const past = i < at
+          const done = past && stageHappened(batch, s.key, today)
+          const skipped = past && !done
           const now = i === at
           return (
             <li key={s.key} className="flex items-center gap-1">
@@ -86,7 +88,7 @@ export function StageStrip({ batch, today, role, itemCount }: {
               >
                 {done && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />}
                 {s.label}
-                <span className="sr-only">{now ? ' — now' : done ? ' — done' : ' — to come'}</span>
+                <span className="sr-only">{now ? ' — now' : done ? ' — done' : skipped ? ' — skipped' : ' — to come'}</span>
               </span>
               {i < STAGE_STRIP.length - 1 && <span aria-hidden className="text-muted-foreground">›</span>}
             </li>
@@ -374,11 +376,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {footageOnly && (
           <p className="text-[13px] text-muted-foreground">This shoot was typed in from the Editor page — it was never planned here, so there is nothing to confirm. Its cards are on the Editor page.</p>
         )}
-        {(stage === 'confirmed' || stage === 'reminder_sent' || stage === 'shoot_day') && (
+        {(stage === 'confirmed' || stage === 'reminder_sent' || stage === 'shoot_day') && handoverReady(batch) && (
           <p className="text-[13px] text-muted-foreground">
-            {handoverReady(batch)
-              ? 'The editor’s card is on the Editor page already; the footage follows the shoot. The morning after the shoot it is handed over by itself — press “Footage is in” only if it is in early.'
-              : 'Name the editor, the priorities and the deadline so the card can be theirs — the handover waits on those three.'}
+            The morning after the shoot the footage is handed over by itself — press “Footage is in” only if it is in early.
           </p>
         )}
 

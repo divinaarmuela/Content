@@ -275,6 +275,23 @@ export function shootStage(b: SopShoot, today: string): ShootStage {
   return 'drafting'
 }
 
+/**
+ * Did this stage actually happen, or did the calendar carry the shoot past
+ * it? A shoot that was never shared still lands on Shoot day when the date
+ * comes — the strip must not tick "Shared with team" for it (the owner saw
+ * exactly that on 13 Sep 2026: four ticks on a plan nobody shared).
+ */
+export function stageHappened(b: SopShoot, key: ShootStage, today: string): boolean {
+  switch (key) {
+    case 'drafting': return true
+    case 'shared': return !!b.brief_shared_at || b.status === 'locked' || b.status === 'shot'
+    case 'confirmed': return !!b.go_at
+    case 'reminder_sent': return !!b.reminder_sent_at
+    case 'shoot_day': { const d = daysUntilShoot(b, today); return d !== null && d <= 0 }
+    case 'footage_handed': return !!b.footage_handed_at || b.status === 'wrapped'
+  }
+}
+
 /** Late: still Drafting with less than 7 days to the shoot (or the day gone). */
 export function briefIsLate(b: SopShoot, today: string): boolean {
   if (shootStage(b, today) !== 'drafting') return false

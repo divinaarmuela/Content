@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BRIEF_ITEMS, LATE_WORDS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, canSeeShoot,
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
-  stageMove, withAck, withoutAck, type SopShoot,
+  stageHappened, stageMove, withAck, withoutAck, type SopShoot,
   briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
   STAGE_STRIP, footageAfterWords, footageDueTargets, footageFolderFill, handoverReady, nextStepWords,
 } from '../app/lib/shoot-sop-core'
@@ -403,5 +403,19 @@ describe('the footage folder', () => {
     ]
     expect(footageFolderFill(b, items)).toEqual([{ id: 'k1', raw_assets_url: 'https://www.dropbox.com/scl/fo/golf' }])
     expect(footageFolderFill(complete(), items)).toEqual([])
+  })
+})
+
+describe('the strip ticks only what happened', () => {
+  it('a shoot the calendar carried to Shoot day without a share has no ticks for the stages it skipped (13 Sep 2026)', () => {
+    const b = complete({ shoot_date: '2026-09-08' })
+    expect(stageHappened(b, 'drafting', TODAY)).toBe(true)
+    expect(stageHappened(b, 'shared', TODAY)).toBe(false)
+    expect(stageHappened(b, 'confirmed', TODAY)).toBe(false)
+    expect(stageHappened(b, 'reminder_sent', TODAY)).toBe(false)
+    expect(stageHappened(b, 'shoot_day', TODAY)).toBe(true)
+    expect(stageHappened(b, 'footage_handed', TODAY)).toBe(false)
+    const full = complete({ shoot_date: '2026-09-08', brief_shared_at: 'x', go_at: 'x', reminder_sent_at: 'x', footage_handed_at: 'x' })
+    expect((['shared', 'confirmed', 'reminder_sent', 'footage_handed'] as const).every(k => stageHappened(full, k, TODAY))).toBe(true)
   })
 })
