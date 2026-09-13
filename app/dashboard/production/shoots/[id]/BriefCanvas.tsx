@@ -10,15 +10,16 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  ChevronRight, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
+  ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
 import {
-  CANVAS_NOTE_COLORS, cardTakesHeight, mockupPlatformFor, resizeCard, seedCardsFromReferences,
-  type CanvasCard, type ReferenceMedia,
+  CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
+  seedCardsFromReferences, stepTextSize, textSizeOf,
+  type CanvasCard, type CanvasTextSize, type ReferenceMedia,
 } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
@@ -31,6 +32,11 @@ const mint = () => Math.random().toString(36).slice(2, 10)
 const clampScale = (s: number) => Math.min(2, Math.max(0.25, s))
 /** cards settle onto an 8px grid on drop, so layouts line up without effort */
 const snap = (n: number) => Math.round(n / 8) * 8
+/** what a card is called on its toolbar — a post and a link are different
+ *  things, and the word is the first thing on the bar */
+const KIND_WORD: Record<CanvasCard['kind'], string> = {
+  note: 'Note', label: 'Heading', image: 'Image', link: 'Link', mockup: 'Post', todo: 'To-do', board: 'Board', arrow: 'Arrow',
+}
 
 /** the "add a post" menu, grouped the way people think — by platform */
 const MOCKUP_MENU: { group: string; items: { pf: NonNullable<CanvasCard['platform']>; label: string; w: number }[] }[] = [
@@ -134,7 +140,12 @@ export default function BriefCanvas({
 
   const readOnly = !canEdit
   const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
-  const viewOnly = readOnly || coarse
+  // THE ONLY VIEW-ONLY RULE IS THE PORTAL'S. A touch-first device used to be
+  // read-only too (`|| coarse`), which is why Divina, on an iPad, "can't
+  // control the width of the notes … can't change colours" (13 Sep 2026):
+  // the handles and the toolbar were never drawn for her. Pointer events
+  // work on touch; `coarse` now only sizes the viewport.
+  const viewOnly = readOnly
 
   const paint = useCallback(() => {
     const { x, y, s } = camRef.current
@@ -327,14 +338,21 @@ export default function BriefCanvas({
   const resizeState = useRef<{
     id: string; startX: number; startY: number; ow: number; oh: number; hadH: boolean
     live: number; liveH: number | undefined
-    el: HTMLElement | null; raf: number
+    /** which handle: the right edge, the left edge (which also moves the
+     *  card, as in Figma), or the bottom-right corner (both axes) */
+    mode: 'e' | 'w' | 'se'
+    /** the card's x/y at pointerdown, and where a left-edge drag has moved it */
+    ox: number; oy: number; liveX: number
+    el: HTMLElement | null; wrap: HTMLElement | null; raf: number
   } | null>(null)
   /** write the live size to the card's box — one place, so paint, re-render
    *  and abort all agree on what "the size" is */
-  const paintResize = (el: HTMLElement | null, w: number, h: number | undefined) => {
-    if (!el) return
-    el.style.width = `${w}px`
-    el.style.height = h === undefined ? '' : `${h}px`
+  const paintResize = (el: HTMLElement | null, w: number, h: number | undefined, wrap?: HTMLElement | null, x?: number, y?: number) => {
+    if (el) {
+      el.style.width = `${w}px`
+      el.style.height = h === undefined ? '' : `${h}px`
+    }
+    if (wrap && x !== undefined && y !== undefined) wrap.style.transform = `translate(${x}px, ${y}px)`
   }
   /* ── Milanote-style line drag: pull from a card's dot onto another card ── */
   const lineDrag = useRef<{ from: string } | null>(null)
@@ -408,7 +426,7 @@ export default function BriefCanvas({
     d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
     d.el.style.zIndex = '9999'
     const r = resizeState.current
-    if (r?.el) paintResize(r.el, r.live, r.liveH)
+    if (r?.el) paintResize(r.el, r.live, r.liveH, r.wrap, r.liveX, r.oy)
   })
 
   const onCardPointerMove = (e: React.PointerEvent, card: CanvasCard) => {
@@ -443,7 +461,7 @@ export default function BriefCanvas({
     if (r) {
       resizeState.current = null
       if (r.raf) cancelAnimationFrame(r.raf)
-      paintResize(r.el, r.ow, r.hadH ? r.oh : undefined)
+      paintResize(r.el, r.ow, r.hadH ? r.oh : undefined, r.wrap, r.ox, r.oy)
     }
     if (d || r) { interactingRef.current = false; forceRender(n => n + 1) }
   }, [])
@@ -479,6 +497,92 @@ export default function BriefCanvas({
     }
     upsertLocal(next)
     persist([next])
+  }
+
+  /* ── resizing: the same three handlers behind every handle ── */
+  const startResize = (e: React.PointerEvent, card: CanvasCard, mode: 'e' | 'w' | 'se') => {
+    e.stopPropagation()
+    e.preventDefault()
+    interactingRef.current = true
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    // the size lives on the card's own box (the positioned wrapper is
+    // zero-width), so grab it once to write to
+    const wrap = e.currentTarget.parentElement as HTMLElement | null
+    const box = (wrap?.firstElementChild ?? null) as HTMLElement | null
+    const oh = card.h ?? box?.offsetHeight ?? 0
+    resizeState.current = {
+      id: card.id, startX: e.clientX, startY: e.clientY,
+      ow: card.w, oh, hadH: card.h !== undefined,
+      live: card.w, liveH: card.h, mode, ox: card.x, oy: card.y, liveX: card.x,
+      el: box, wrap, raf: 0,
+    }
+  }
+  const moveResize = (e: React.PointerEvent, card: CanvasCard) => {
+    const r = resizeState.current
+    if (!r || r.id !== card.id) return
+    const s = camRef.current.s
+    const rawDx = (e.clientX - r.startX) / s
+    // a left-edge pull grows the card leftwards: width up, x down
+    const dx = r.mode === 'w' ? -rawDx : rawDx
+    const dy = r.mode === 'se' ? (e.clientY - r.startY) / s : 0
+    // never narrower than the card's widest word, at its text size
+    const words = card.kind === 'todo' ? card.name : card.text
+    const next = resizeCard(card.kind, { w: r.ow, h: r.oh }, dx, dy, e.shiftKey && r.mode === 'se', words, textSizeOf(card))
+    // a sideways-only pull on a content-tall card keeps it content-tall:
+    // the height is only claimed once it moves
+    const h = r.mode === 'se' && cardTakesHeight(card.kind) && (r.hadH || Math.abs(dy) >= 3 || e.shiftKey)
+      ? next.h : r.hadH ? r.oh : undefined
+    const x = r.mode === 'w' ? r.ox + (r.ow - next.w) : r.ox
+    if (next.w === r.live && h === r.liveH && x === r.liveX) return
+    r.live = next.w
+    r.liveH = h
+    r.liveX = x
+    // size straight to the DOM, one write per frame: routing it through
+    // React re-rendered every card on the board on every pixel
+    if (!r.raf) {
+      r.raf = requestAnimationFrame(() => {
+        const cur = resizeState.current
+        if (!cur) return
+        cur.raf = 0
+        paintResize(cur.el, cur.live, cur.liveH, cur.wrap, cur.liveX, cur.oy)
+      })
+    }
+  }
+  const endResize = (card: CanvasCard) => {
+    const r = resizeState.current
+    if (!r || r.id !== card.id) return
+    if (r.raf) cancelAnimationFrame(r.raf)
+    resizeState.current = null
+    interactingRef.current = false
+    paintResize(r.el, r.live, r.liveH, r.wrap, r.liveX, r.oy)
+    if (r.live !== r.ow || r.liveH !== card.h || r.liveX !== r.ox) {
+      const { h: _drop, ...rest } = card
+      void _drop
+      const next: CanvasCard = { ...rest, w: r.live, x: r.liveX, ...(r.liveH !== undefined ? { h: r.liveH } : {}) }
+      upsertLocal(next); persist([next])
+    }
+  }
+
+  /** A copy beside the original (Ctrl+D, or the toolbar). Boards and
+   *  arrows are not copied: a board is its contents, an arrow its ends. */
+  const duplicateCard = (card: CanvasCard) => {
+    if (card.kind === 'arrow' || card.kind === 'board') return
+    const copy: CanvasCard = { ...card, id: mint(), x: card.x + 24, y: card.y + 24, z: Math.max(0, ...cards.map(c => c.z)) + 1 }
+    upsertLocal(copy); persist([copy]); setSelected(copy.id)
+  }
+  /** Bigger or smaller words on a note or a heading. The card grows to fit
+   *  its widest word at the new size rather than cutting it. */
+  const setTextSize = (card: CanvasCard, size: CanvasTextSize) => {
+    if (size === textSizeOf(card)) return
+    const w = Math.max(card.w, minCardWidth(card.kind, card.text, size))
+    const next: CanvasCard = { ...card, size, w }
+    upsertLocal(next); persist([next])
+  }
+  /** Into the words — the toolbar's way, for a finger that cannot double-click. */
+  const editCard = (card: CanvasCard) => {
+    if (card.kind !== 'note' && card.kind !== 'label' && card.kind !== 'mockup') return
+    interactingRef.current = true
+    setEditing(card.id)
   }
 
   /* ── creation ── */
@@ -543,15 +647,46 @@ export default function BriefCanvas({
    * can (a Reel link is a Reel frame, a Short a Short); a link no frame
    * fits becomes a plain link card instead, and says so.
    */
-  const addMockupFromLink = (url: string) => {
+  /**
+   * ONE WAY IN FOR A LINK (the owner, 13 Sep 2026: "there are two ways i can
+   * put a link for post and just a link make sure its integrated nicely").
+   * Every pasted URL comes through here: a post's link (Instagram, TikTok,
+   * YouTube, LinkedIn, Facebook, Pinterest — `mockupPlatformFor`, the one
+   * detector) becomes a post mock-up wearing the real post; anything else
+   * is a link card. `expectPost` is the Post menu's paste box, which says so
+   * when the link was not a post; the Add link box says nothing, because a
+   * link card is exactly what was asked for.
+   */
+  const addFromLink = (url: string, expectPost = false) => {
     const platform = mockupPlatformFor(url)
     if (!platform) {
       addCard({ kind: 'link', url })
-      toast('No post frame fits that link, so it went on as a link card')
+      if (expectPost) toast('That link is not a post, so it went on as a link card')
       return
     }
     const w = MOCKUP_MENU.flatMap(g => g.items).find(i => i.pf === platform)?.w ?? 280
     addCard({ kind: 'mockup', platform, w, link_url: url })
+  }
+  /** A link card that is a post, shown as a post instead — the same card,
+   *  the same id, so its arrows and comments stay. */
+  const showLinkAsPost = (card: CanvasCard) => {
+    if (card.kind !== 'link' || !card.url) return
+    const platform = mockupPlatformFor(card.url)
+    if (!platform) return
+    const w = MOCKUP_MENU.flatMap(g => g.items).find(i => i.pf === platform)?.w ?? 280
+    const { url, thumb, title, provider, media, canonical, embeddable, author, video, caption: _cap, ...rest } = card
+    void _cap
+    const preview = {
+      ...(thumb ? { thumb } : {}), ...(title ? { title } : {}), ...(provider ? { provider } : {}),
+      ...(media ? { media } : {}), ...(canonical ? { canonical } : {}), ...(embeddable === false ? { embeddable } : {}),
+      ...(author ? { author } : {}), ...(video ? { video } : {}),
+    }
+    const next: CanvasCard = {
+      ...rest, kind: 'mockup', platform, w, link_url: url,
+      ...(Object.keys(preview).length ? { preview } : {}),
+      ...(title ? { text: title.slice(0, 500) } : {}),
+    }
+    upsertLocal(next); persist([next])
   }
 
   /** Paste a post's link onto a mock-up that already exists. */
@@ -792,6 +927,10 @@ export default function BriefCanvas({
         e.preventDefault(); undo(); return
       }
       const card = cards.find(c => c.id === selected)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        if (card) { e.preventDefault(); duplicateCard(card) }
+        return
+      }
       if (e.key.toLowerCase() === 'n') { addCard({ kind: 'note', text: '', color: 'yellow' }); return }
       if (e.key.toLowerCase() === 'f') { setFullscreen(v => !v); return }
       if (e.key === '1') { fitToCards(); return }
@@ -803,7 +942,8 @@ export default function BriefCanvas({
         if (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup') setEditing(card.id)
         return
       }
-      const step = e.shiftKey ? 1 : 10
+      // as in Figma: an arrow key is a pixel, Shift makes it ten
+      const step = e.shiftKey ? 10 : 1
       const move: Record<string, [number, number]> = {
         ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0],
       }
@@ -823,6 +963,123 @@ export default function BriefCanvas({
 
   const selectedCard = cards.find(c => c.id === selected) ?? null
   const ordered = useMemo(() => [...visible].sort((a, b) => a.z - b.z), [visible])
+
+  /* ── the card's own tools, by kind ──
+   * Words first (what this card IS — so a post and a link are never
+   * confused), then what changes its look (colour, text size), then what
+   * changes its words, then copy / connect / delete. 44px targets on touch
+   * come from the Button base; the swatches carry their own. */
+  const tb = 'h-8 gap-1.5 px-2 text-secondary-13'
+  const cardToolbar = (card: CanvasCard) => {
+    const size = textSizeOf(card)
+    const hasText = card.kind === 'note' || card.kind === 'label'
+    return (
+      <>
+        <span className="px-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{KIND_WORD[card.kind]}</span>
+        {card.kind === 'note' && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <div role="group" aria-label="Colour" className="flex items-center gap-1">
+              {CANVAS_NOTE_COLORS.map(c => (
+                <button key={c} type="button" aria-label={`Colour ${c}`} title={c[0].toUpperCase() + c.slice(1)}
+                  aria-pressed={(card.color ?? 'paper') === c}
+                  onClick={() => { const next = { ...card, color: c }; upsertLocal(next); persist([next]) }}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${NOTE_COLORS[c].split(' ').slice(0, 1).join(' ')} ${
+                    (card.color ?? 'paper') === c ? 'border-accent-blue ring-2 ring-accent-blue/30' : 'border-border'
+                  }`} />
+              ))}
+            </div>
+          </>
+        )}
+        {hasText && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <div role="group" aria-label="Text size" className="flex items-center">
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 font-semibold" aria-label="Smaller text" title="Smaller text"
+                disabled={size === 'sm'} onClick={() => setTextSize(card, stepTextSize(size, -1))}>A−</Button>
+              <span className="min-w-[4.5rem] text-center text-secondary-13" aria-live="polite">{TEXT_SIZE_LABEL[size]}</span>
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 font-semibold" aria-label="Bigger text" title="Bigger text"
+                disabled={size === 'xl'} onClick={() => setTextSize(card, stepTextSize(size, 1))}>A+</Button>
+            </div>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit text
+            </Button>
+          </>
+        )}
+        {card.kind === 'mockup' && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant="ghost" className={tb}
+              onClick={() => { mockupTargetRef.current = card.id; fileRef.current?.click() }}>
+              <ImagePlus className="h-3.5 w-3.5" />
+              {card.platform === 'ig_carousel'
+                ? (card.url ? 'Add slides' : 'Add images')
+                : (card.url ? 'Swap image' : 'Add image')}
+            </Button>
+            {/* the real post, in this frame: paste its link */}
+            <input
+              key={card.id}
+              defaultValue={card.link_url ?? ''}
+              placeholder="Paste the post's link…"
+              aria-label="Paste a post link into this mock-up"
+              className="h-8 w-44 rounded-inner border border-border bg-surface px-2 font-mono text-[12px] outline-none placeholder:text-muted-foreground focus:border-accent-blue/50 [@media(pointer:coarse)]:h-11"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const v = (e.target as HTMLInputElement).value.trim()
+                  if (v.startsWith('https://')) { attachLinkToMockup(card, v); (e.target as HTMLInputElement).blur() }
+                  else toast.error('Links must start with https://')
+                }
+                if (e.key === 'Escape') (e.target as HTMLInputElement).blur()
+              }}
+            />
+            <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
+              <Pencil className="h-3.5 w-3.5" /> Caption
+            </Button>
+          </>
+        )}
+        {card.kind === 'board' && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant="ghost" className={tb} onClick={() => openBoard(card.id)}>
+              <FolderOpen className="h-3.5 w-3.5" /> Open
+            </Button>
+            <Button size="sm" variant="ghost" className={tb} onClick={() => setBoardDialog({ card })}>
+              <Pencil className="h-3.5 w-3.5" /> Rename
+            </Button>
+          </>
+        )}
+        {card.kind === 'link' && card.url && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant="ghost" className={tb} asChild>
+              <a href={card.url} target="_blank" rel="noreferrer noopener">
+                <ExternalLink className="h-3.5 w-3.5" /> Open
+              </a>
+            </Button>
+            {/* a link that is a post can wear a post's frame instead */}
+            {mockupPlatformFor(card.url) && (
+              <Button size="sm" variant="ghost" className={tb} onClick={() => showLinkAsPost(card)}>
+                <Smartphone className="h-3.5 w-3.5" /> Show as a post
+              </Button>
+            )}
+          </>
+        )}
+        <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+        {card.kind !== 'board' && (
+          <Button size="sm" variant="ghost" className={tb} onClick={() => duplicateCard(card)} title="Duplicate (Ctrl+D)">
+            <Copy className="h-3.5 w-3.5" /> Duplicate
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" className={tb} onClick={() => { setConnectFrom(card.id); setSelected(null) }}>
+          <MoveUpRight className="h-3.5 w-3.5" /> Arrow
+        </Button>
+        <Button size="sm" variant="ghost" className={`${tb} text-accent-red hover:text-accent-red`} onClick={() => removeCard(card)} aria-label="Delete" title="Delete">
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </>
+    )
+  }
 
   /** "Shoot brief / Concepts / Day two" — every step a 44px button back up. */
   const crumbs = board !== null && (
@@ -965,7 +1222,7 @@ export default function BriefCanvas({
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
                 selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
-              style={{ transform: `translate(${card.x}px, ${card.y}px)` }}
+              style={{ transform: `translate(${card.x}px, ${card.y}px)`, ...(selected === card.id ? { zIndex: 5000 } : {}) }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
               onPointerMove={e => onCardPointerMove(e, card)}
               onPointerUp={e => onCardPointerUp(e, card)}
@@ -1011,7 +1268,8 @@ export default function BriefCanvas({
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div
-                  className="absolute -right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-accent-blue/25 bg-surface shadow"
+                  className="absolute -bottom-2 h-3.5 w-3.5 -translate-x-1/2 cursor-crosshair rounded-full border-2 border-accent-blue/25 bg-surface shadow"
+                  style={{ left: card.w / 2 }}
                   title="Drag onto another card to connect"
                   onPointerDown={e => {
                     e.stopPropagation()
@@ -1043,80 +1301,62 @@ export default function BriefCanvas({
                   }}
                 />
               )}
-              {selected === card.id && !viewOnly && !editing && card.kind !== 'label' && card.kind !== 'arrow' && (
-                // the corner handle: a small dot to look at, a 44px square to
-                // grab. It resizes both ways (Shift keeps a picture's shape)
-                // and stops the pointer here, so it never starts a card move
-                // or a canvas pan. The dot sits just OUTSIDE the corner, so
-                // it is never drawn over the card's own words
-                <div
-                  role="presentation"
-                  aria-label="Resize"
-                  title={cardTakesHeight(card.kind) ? 'Drag to resize · hold Shift to keep the shape' : 'Drag to resize'}
-                  className={`absolute -bottom-[30px] -right-[30px] flex h-11 w-11 touch-none items-center justify-center ${
-                    cardTakesHeight(card.kind) ? 'cursor-nwse-resize' : 'cursor-ew-resize'
-                  }`}
-                  onPointerDown={e => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    interactingRef.current = true
-                    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                    // the size lives on the card's own box (the positioned
-                    // wrapper is zero-width), so grab it once to write to
-                    const box = (e.currentTarget.parentElement?.firstElementChild ?? null) as HTMLElement | null
-                    const oh = card.h ?? box?.offsetHeight ?? 0
-                    resizeState.current = {
-                      id: card.id, startX: e.clientX, startY: e.clientY,
-                      ow: card.w, oh, hadH: card.h !== undefined,
-                      live: card.w, liveH: card.h, el: box, raf: 0,
-                    }
-                  }}
-                  onPointerMove={e => {
-                    const r = resizeState.current
-                    if (!r || r.id !== card.id) return
-                    const s = camRef.current.s
-                    const dx = (e.clientX - r.startX) / s
-                    const dy = (e.clientY - r.startY) / s
-                    // never narrower than the card's widest word
-                    const words = card.kind === 'todo' ? card.name : card.text
-                    const next = resizeCard(card.kind, { w: r.ow, h: r.oh }, dx, dy, e.shiftKey, words)
-                    // a sideways-only pull on a content-tall card keeps it
-                    // content-tall: the height is only claimed once it moves
-                    const h = cardTakesHeight(card.kind) && (r.hadH || Math.abs(dy) >= 3 || e.shiftKey)
-                      ? next.h : undefined
-                    if (next.w === r.live && h === r.liveH) return
-                    r.live = next.w
-                    r.liveH = h
-                    // size straight to the DOM, one write per frame: routing
-                    // it through React re-rendered every card on the board on
-                    // every pixel, which is what made it crawl
-                    if (!r.raf) {
-                      r.raf = requestAnimationFrame(() => {
-                        const cur = resizeState.current
-                        if (!cur) return
-                        cur.raf = 0
-                        paintResize(cur.el, cur.live, cur.liveH)
-                      })
-                    }
-                  }}
-                  onPointerUp={() => {
-                    const r = resizeState.current
-                    if (!r || r.id !== card.id) return
-                    if (r.raf) cancelAnimationFrame(r.raf)
-                    resizeState.current = null
-                    interactingRef.current = false
-                    paintResize(r.el, r.live, r.liveH)
-                    if (r.live !== r.ow || r.liveH !== card.h) {
-                      const { h: _drop, ...rest } = card
-                      void _drop
-                      const next: CanvasCard = { ...rest, w: r.live, ...(r.liveH !== undefined ? { h: r.liveH } : {}) }
-                      upsertLocal(next); persist([next])
-                    }
-                  }}
-                >
-                  <span aria-hidden className="block h-3.5 w-3.5 rounded-full border-2 border-white bg-accent-blue shadow dark:border-background" />
-                </div>
+              {/* RESIZE HANDLES (13 Sep 2026): the left and right edges make a
+                  card wider or narrower (the left one moves it too, as in
+                  Figma); the bottom-right corner does both axes on the kinds
+                  that own a height (Shift keeps a picture's shape). A small
+                  square to look at, a 44px square to grab — drawn on touch
+                  devices too. Each stops the pointer here, so it never starts
+                  a card move or a canvas pan. */}
+              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
+                <>
+                  {(['w', 'e'] as const).map(mode => (
+                    <div key={mode} role="presentation" aria-label={mode === 'w' ? 'Resize from the left' : 'Resize from the right'}
+                      title="Drag to change the width"
+                      data-resize={mode}
+                      className="absolute top-1/2 flex h-11 w-11 -translate-y-1/2 touch-none cursor-ew-resize items-center justify-center"
+                      style={{ left: mode === 'w' ? -22 : card.w - 22 }}
+                      onPointerDown={e => startResize(e, card, mode)}
+                      onPointerMove={e => moveResize(e, card)}
+                      onPointerUp={() => endResize(card)}>
+                      <span aria-hidden className="block h-2.5 w-2.5 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
+                    </div>
+                  ))}
+                  {cardTakesHeight(card.kind) && (
+                    <div role="presentation" aria-label="Resize"
+                      title="Drag to resize · hold Shift to keep the shape"
+                      data-resize="se"
+                      className="absolute -bottom-[22px] flex h-11 w-11 touch-none cursor-nwse-resize items-center justify-center"
+                      style={{ left: card.w - 22 }}
+                      onPointerDown={e => startResize(e, card, 'se')}
+                      onPointerMove={e => moveResize(e, card)}
+                      onPointerUp={() => endResize(card)}>
+                      <span aria-hidden className="block h-2.5 w-2.5 rounded-[2px] border-[1.5px] border-white bg-accent-blue shadow dark:border-background" />
+                    </div>
+                  )}
+                </>
               )}
+              {/* THE CARD'S TOOLBAR, just above it — following it as the
+                  board pans, held at screen size as the board zooms. It
+                  drops below the card when the card is at the top edge. */}
+              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (() => {
+                const s = camRef.current.s
+                const nearTop = camRef.current.y + card.y * s < 72
+                return (
+                  <div data-card-toolbar role="toolbar" aria-label={`${KIND_WORD[card.kind]} tools`}
+                    className="absolute flex w-max max-w-[92vw] flex-wrap items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur"
+                    style={{
+                      left: card.w / 2,
+                      ...(nearTop ? { top: 'calc(100% + 12px)' } : { bottom: 'calc(100% + 12px)' }),
+                      transform: `translateX(-50%) scale(${1 / s})`,
+                      transformOrigin: nearTop ? 'top center' : 'bottom center',
+                    }}
+                    onPointerDown={e => e.stopPropagation()}
+                    onDoubleClick={e => e.stopPropagation()}>
+                    {cardToolbar(card)}
+                  </div>
+                )
+              })()}
             </div>
           ))}
         </div>
@@ -1146,11 +1386,6 @@ export default function BriefCanvas({
               : 'Now click the card it points to — Esc cancels'}
           </div>
         )}
-        {coarse && (
-          <span className="absolute right-3 top-2 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
-            View only on mobile
-          </span>
-        )}
 
         {/* toolbar */}
         {!viewOnly && (
@@ -1165,7 +1400,7 @@ export default function BriefCanvas({
             </Button>
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => { setLinkPrompt(true); setTimeout(() => linkInputRef.current?.focus(), 50) }}>
-              <Link2 className="h-3.5 w-3.5" /> Link
+              <Link2 className="h-3.5 w-3.5" /> Add link
             </Button>
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'label', text: '' })}>
@@ -1220,7 +1455,7 @@ export default function BriefCanvas({
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     const v = (e.target as HTMLInputElement).value.trim()
-                    if (v.startsWith('https://')) { addMockupFromLink(v); setMockupMenu(false) }
+                    if (v.startsWith('https://')) { addFromLink(v, true); setMockupMenu(false) }
                     else toast.error('Links must start with https://')
                   }
                   if (e.key === 'Escape') setMockupMenu(false)
@@ -1231,12 +1466,13 @@ export default function BriefCanvas({
         )}
         {linkPrompt && (
           <div className="absolute left-3 top-14 flex items-center gap-1.5 rounded-inner border border-border bg-surface p-2 shadow-md">
-            <input ref={linkInputRef} placeholder="https://…"
-              className="w-64 bg-transparent font-mono text-secondary-13 outline-none placeholder:text-muted-foreground"
+            <input ref={linkInputRef} placeholder="https://… (a post's link becomes a post)"
+              aria-label="Paste a link"
+              className="w-72 bg-transparent font-mono text-secondary-13 outline-none placeholder:text-muted-foreground"
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   const v = (e.target as HTMLInputElement).value.trim()
-                  if (v.startsWith('https://')) { addCard({ kind: 'link', url: v }); setLinkPrompt(false) }
+                  if (v.startsWith('https://')) { addFromLink(v); setLinkPrompt(false) }
                   else toast.error('Links must start with https://')
                 }
                 if (e.key === 'Escape') setLinkPrompt(false)
@@ -1245,74 +1481,13 @@ export default function BriefCanvas({
           </div>
         )}
 
-        {/* selected-card mini toolbar */}
-        {selectedCard && !viewOnly && !editing && (
+        {/* an arrow has no box to hang a toolbar on: its one tool sits here */}
+        {selectedCard && !viewOnly && !editing && selectedCard.kind === 'arrow' && (
           <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur">
-            {selectedCard.kind === 'note' && (
-              <>
-                {CANVAS_NOTE_COLORS.map(c => (
-                  <button key={c} type="button" aria-label={`Colour ${c}`}
-                    onClick={() => { const next = { ...selectedCard, color: c }; upsertLocal(next); persist([next]) }}
-                    className={`h-5 w-5 rounded-full border ${NOTE_COLORS[c].split(' ').slice(0, 1).join(' ')} ${selectedCard.color === c ? 'ring-2 ring-accent-blue/25' : 'border-border'}`} />
-                ))}
-                <span className="mx-1 h-4 w-px bg-foreground/[0.08]" />
-              </>
-            )}
-            {selectedCard.kind === 'mockup' && (
-              <>
-                <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
-                  onClick={() => { mockupTargetRef.current = selectedCard.id; fileRef.current?.click() }}>
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  {selectedCard.platform === 'ig_carousel'
-                    ? (selectedCard.url ? 'Add slides' : 'Add images')
-                    : (selectedCard.url ? 'Swap image' : 'Add image')}
-                </Button>
-                {/* the real post, in this frame: paste its link */}
-                <input
-                  key={selectedCard.id}
-                  defaultValue={selectedCard.link_url ?? ''}
-                  placeholder="Paste a link…"
-                  aria-label="Paste a post link into this mock-up"
-                  className="h-7 w-44 rounded-inner border border-border bg-surface px-2 font-mono text-[12px] outline-none placeholder:text-muted-foreground focus:border-accent-blue/50"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      const v = (e.target as HTMLInputElement).value.trim()
-                      if (v.startsWith('https://')) { attachLinkToMockup(selectedCard, v); (e.target as HTMLInputElement).blur() }
-                      else toast.error('Links must start with https://')
-                    }
-                    if (e.key === 'Escape') (e.target as HTMLInputElement).blur()
-                  }}
-                />
-              </>
-            )}
-            {selectedCard.kind === 'board' && (
-              <>
-                <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
-                  onClick={() => openBoard(selectedCard.id)}>
-                  <FolderOpen className="h-3.5 w-3.5" /> Open
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
-                  onClick={() => setBoardDialog({ card: selectedCard })}>
-                  <Pencil className="h-3.5 w-3.5" /> Rename
-                </Button>
-              </>
-            )}
-            {selectedCard.kind !== 'arrow' && (
-              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
-                onClick={() => { setConnectFrom(selectedCard.id); setSelected(null) }}>
-                <MoveUpRight className="h-3.5 w-3.5" /> Arrow
-              </Button>
-            )}
-            {selectedCard.kind === 'link' && selectedCard.url && (
-              <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13" asChild>
-                <a href={selectedCard.url} target="_blank" rel="noreferrer noopener">
-                  <ExternalLink className="h-3.5 w-3.5" /> Open
-                </a>
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-accent-red hover:text-accent-red"
+            <span className="px-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Arrow</span>
+            <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 text-accent-red hover:text-accent-red"
               onClick={() => removeCard(selectedCard)}>
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
           </div>
         )}

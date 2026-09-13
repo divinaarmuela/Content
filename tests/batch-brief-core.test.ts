@@ -498,3 +498,30 @@ describe('captions, posts in mock-ups, and the widest word', () => {
     expect(resizeCard('note', { w: 400, h: 200 }, 0, 0, false, 'x'.repeat(5000)).w).toBeLessThanOrEqual(CANVAS_SIZE_LIMITS.note.maxW)
   })
 })
+
+describe('text size on a note or a heading (13 Sep 2026)', () => {
+  it('keeps the four sizes, drops anything else, and never puts one on another kind', async () => {
+    const { sanitiseCanvasCards, textSizeOf, stepTextSize, NOTE_FONT_PX, LABEL_FONT_PX } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'n1', kind: 'note', x: 0, y: 0, text: 'a', size: 'xl' },
+      { id: 'n2', kind: 'note', x: 0, y: 0, text: 'b', size: 'huge' },
+      { id: 'n3', kind: 'note', x: 0, y: 0, text: 'c' },
+      { id: 'l1', kind: 'label', x: 0, y: 0, text: 'd', size: 'sm' },
+      { id: 'i1', kind: 'image', x: 0, y: 0, url: 'https://cdn.co/a.jpg', size: 'lg' },
+    ])
+    expect(cards.map(c => c.size ?? null)).toEqual(['xl', null, null, 'sm', null])
+    // absent is Normal, which is exactly the size every older board renders at
+    expect(textSizeOf(cards[2])).toBe('md')
+    expect(NOTE_FONT_PX.md).toBe(13)
+    expect(LABEL_FONT_PX.md).toBe(15)
+    expect(stepTextSize('md', 1)).toBe('lg')
+    expect(stepTextSize('xl', 1)).toBe('xl')
+    expect(stepTextSize('sm', -1)).toBe('sm')
+  })
+  it('a bigger word needs a wider card: the floor grows with the size', async () => {
+    const { minCardWidth, resizeCard } = await import('../app/lib/batch-brief-core')
+    expect(minCardWidth('note', 'Extraordinarily', 'xl')).toBeGreaterThan(minCardWidth('note', 'Extraordinarily', 'md'))
+    expect(resizeCard('note', { w: 400, h: 100 }, -300, 0, false, 'Extraordinarily', 'xl').w)
+      .toBe(minCardWidth('note', 'Extraordinarily', 'xl'))
+  })
+})

@@ -6,7 +6,7 @@ import {
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
-import type { CanvasCard as Card } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
@@ -470,7 +470,8 @@ function CanvasCardInner({
           autoFocus
           defaultValue={card.text ?? ''}
           placeholder="SECTION TITLE"
-          className="w-56 bg-transparent font-mono text-body-15 uppercase tracking-widest text-muted-foreground outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
+          style={{ fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
+          className="w-56 bg-transparent font-mono uppercase tracking-widest text-muted-foreground outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
           onBlur={e => onCommitText(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() }
@@ -484,8 +485,8 @@ function CanvasCardInner({
     // top of each other
     return (
       <span
-        className="block select-none whitespace-normal break-normal font-mono text-body-15 uppercase leading-snug tracking-widest text-muted-foreground"
-        style={{ maxWidth: Math.max(card.w, 120), minWidth: 'min-content' }}
+        className="block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest text-muted-foreground"
+        style={{ maxWidth: Math.max(card.w, 120), minWidth: 'min-content', fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
       >
         {card.text || (onUpdate ? 'Double-click to name this section' : '')}
       </span>
@@ -496,6 +497,11 @@ function CanvasCardInner({
     const palette = NOTE_COLORS[card.color ?? 'paper'] ?? NOTE_COLORS.paper
     // 'ink' is dark in both themes — its text must not follow the theme
     const inkText = card.color === 'ink' ? 'text-background' : 'text-foreground'
+    // the words' size: md is the 13px every older note was drawn at; the
+    // bigger two sit tighter, as headings do
+    const noteSize = textSizeOf(card)
+    const noteFont = NOTE_FONT_PX[noteSize]
+    const noteLine = noteSize === 'lg' || noteSize === 'xl' ? 1.3 : 1.625
     return (
       <div className={`rounded-inner border p-3 shadow-sm ${palette} ${BOX}`} style={boxStyle(card)}>
         {editing ? (
@@ -503,7 +509,8 @@ function CanvasCardInner({
             autoFocus
             defaultValue={card.text ?? ''}
             rows={Math.max(3, (card.text ?? '').split('\n').length)}
-            className={`min-h-0 w-full flex-1 resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground ${inkText}`}
+            style={{ fontSize: noteFont, lineHeight: noteLine }}
+            className={`min-h-0 w-full flex-1 resize-none bg-transparent outline-none placeholder:text-muted-foreground ${inkText}`}
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
@@ -514,7 +521,7 @@ function CanvasCardInner({
         ) : (
           // the words wrap and, in a box shorter than they are, scroll —
           // they never draw past the card's border
-          <p data-scroll className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed ${inkText}`}>
+          <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${inkText}`}>
             {card.text || <span className="text-muted-foreground">Write it down…</span>}
           </p>
         )}

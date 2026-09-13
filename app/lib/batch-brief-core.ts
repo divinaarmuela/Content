@@ -191,6 +191,26 @@ export const MOCKUP_PLATFORMS = [
 export const CANVAS_NOTE_COLORS = [
   'paper', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'ink',
 ] as const
+/** Text size on a note or a heading. Absent = 'md', which is exactly the
+ *  size every board drawn before this field existed renders at, so old
+ *  boards look the same. (Divina, 13 Sep 2026: "I can't change … text
+ *  width and size".) */
+export const CANVAS_TEXT_SIZES = ['sm', 'md', 'lg', 'xl'] as const
+export type CanvasTextSize = (typeof CANVAS_TEXT_SIZES)[number]
+export const TEXT_SIZE_LABEL: Record<CanvasTextSize, string> = { sm: 'Small', md: 'Normal', lg: 'Large', xl: 'Heading' }
+/** a note's words, in px — md is today's 13px */
+export const NOTE_FONT_PX: Record<CanvasTextSize, number> = { sm: 12, md: 13, lg: 17, xl: 22 }
+/** a section heading's words, in px — md is today's 15px */
+export const LABEL_FONT_PX: Record<CanvasTextSize, number> = { sm: 12, md: 15, lg: 19, xl: 24 }
+export function textSizeOf(card: { size?: string | null } | null | undefined): CanvasTextSize {
+  const v = card?.size
+  return (CANVAS_TEXT_SIZES as readonly string[]).includes(String(v)) ? (v as CanvasTextSize) : 'md'
+}
+/** the next size up or down, stopping at the ends */
+export function stepTextSize(size: CanvasTextSize, dir: 1 | -1): CanvasTextSize {
+  const i = CANVAS_TEXT_SIZES.indexOf(size)
+  return CANVAS_TEXT_SIZES[Math.min(CANVAS_TEXT_SIZES.length - 1, Math.max(0, i + dir))]
+}
 const CANVAS_BOUND = 20_000
 /** across the WHOLE tree — a shoot with a few boards inside boards is still
  *  one array, so the cap is the shoot's, not one board's */
@@ -212,6 +232,8 @@ export type CanvasCard = {
   url?: string
   name?: string
   color?: (typeof CANVAS_NOTE_COLORS)[number]
+  /** note / label — how big the words are; absent = 'md' (today's size) */
+  size?: CanvasTextSize
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
@@ -323,11 +345,12 @@ export function mockupPlatformFor(url: string): NonNullable<CanvasCard['platform
  * from character counts (no canvas on the server), erring wide, so a
  * heading never breaks mid-word and a note never shows half a word.
  */
-export function longestWordWidth(kind: CanvasCard['kind'], text: string | undefined): number {
+export function longestWordWidth(kind: CanvasCard['kind'], text: string | undefined, size: CanvasTextSize = 'md'): number {
   if (!text) return 0
   // px per character, erring wide: a heading is mono, upper-case, widely
-  // tracked; a note is 13px proportional text
-  const perChar = kind === 'label' ? 11.5 : 8
+  // tracked; a note is 13px proportional text — both scaled by the text size
+  const scale = kind === 'label' ? LABEL_FONT_PX[size] / LABEL_FONT_PX.md : NOTE_FONT_PX[size] / NOTE_FONT_PX.md
+  const perChar = (kind === 'label' ? 11.5 : 8) * scale
   const pad = kind === 'label' ? 0 : 26
   let longest = 0
   for (const word of text.split(/\s+/)) longest = Math.max(longest, word.length)
@@ -336,8 +359,8 @@ export function longestWordWidth(kind: CanvasCard['kind'], text: string | undefi
 
 /** The floor for a card's width: its kind's minimum, or its widest word if
  *  that is wider. */
-export function minCardWidth(kind: CanvasCard['kind'], text?: string): number {
-  return Math.max(CANVAS_SIZE_LIMITS[kind].minW, Math.round(longestWordWidth(kind, text)))
+export function minCardWidth(kind: CanvasCard['kind'], text?: string, size: CanvasTextSize = 'md'): number {
+  return Math.max(CANVAS_SIZE_LIMITS[kind].minW, Math.round(longestWordWidth(kind, text, size)))
 }
 
 /* ── card sizes: what the corner handle may do to each kind ── */
@@ -389,9 +412,11 @@ export function resizeCard(
   lockAspect = false,
   /** the card's words: the width never goes under its widest one */
   text?: string,
+  /** the words' size — a heading-sized word is wider */
+  size: CanvasTextSize = 'md',
 ): { w: number; h?: number } {
   const lim = CANVAS_SIZE_LIMITS[kind]
-  const minW = Math.min(minCardWidth(kind, text), lim.maxW)
+  const minW = Math.min(minCardWidth(kind, text, size), lim.maxW)
   if (lim.minH === null) return { w: clamp(Math.round(start.w + dx) || 240, minW, lim.maxW) }
   if (lockAspect && start.w > 0 && start.h > 0) {
     const ratio = start.h / start.w
@@ -485,6 +510,11 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         : {}),
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
+        : {}),
+      // text size on the two kinds that carry words of their own; anything
+      // else, or an unknown value, is simply 'md' by absence
+      ...((kind === 'note' || kind === 'label') && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
+        ? { size: String(r.size) as CanvasTextSize }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),

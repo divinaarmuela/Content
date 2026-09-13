@@ -225,3 +225,35 @@ describe('the shoot plan, every button (the walk of 12 Sep 2026)', () => {
     expect(src(NEW_PLAN)).not.toMatch(/dashboard\/production\/\$\{first\.id\}/)
   })
 })
+
+describe('the shoot canvas is editable on a touch device (13 Sep 2026)', () => {
+  const canvas = src('app/dashboard/production/shoots/[id]/BriefCanvas.tsx')
+  it('the only view-only rule is the portal’s — a coarse pointer no longer hides the tools', () => {
+    // Divina, on an iPad: "I can't control the width of the notes … can't
+    // change colours and text width and size"
+    expect(canvas).toMatch(/const viewOnly = readOnly$/m)
+    expect(canvas).not.toMatch(/readOnly \|\| coarse/)
+    expect(canvas).not.toContain('View only on mobile')
+  })
+  it('draws edge and corner handles and a toolbar above the selected card, with 44px grab areas', () => {
+    expect(canvas).toMatch(/data-resize=\{mode\}/)
+    expect(canvas).toMatch(/data-resize="se"/)
+    expect(canvas).toMatch(/data-card-toolbar role="toolbar"/)
+    expect(canvas).toMatch(/h-11 w-11 -translate-y-1\/2 touch-none cursor-ew-resize/)
+  })
+  it('a note’s toolbar carries every colour, the text size and Edit text; every card can be duplicated', () => {
+    expect(canvas).toMatch(/aria-label=\{`Colour \$\{c\}`\}/)
+    expect(canvas).toMatch(/aria-label="Text size"/)
+    expect(canvas).toContain('Edit text')
+    expect(canvas).toContain('Duplicate')
+    expect(canvas).toMatch(/e\.key\.toLowerCase\(\) === 'd'/)
+  })
+  it('one way in for a link: a post’s link becomes a post, anything else a link card', () => {
+    expect(canvas).toMatch(/const addFromLink = \(url: string, expectPost = false\)/)
+    expect(canvas).toMatch(/addFromLink\(v\); setLinkPrompt\(false\)/)
+    expect(canvas).toMatch(/addFromLink\(v, true\); setMockupMenu\(false\)/)
+    expect(canvas).not.toMatch(/addCard\(\{ kind: 'link', url: v \}\)/)
+    expect(canvas).toContain('Show as a post')
+    expect(canvas).toContain("mockup: 'Post'")
+  })
+})

@@ -105,7 +105,12 @@ describe('the portal page is read-only, by construction', () => {
     // (Rename / delete), the new-board dialog and the delete guard are all
     // rendered only when the viewer may edit
     expect(canvas).toMatch(/\{!viewOnly && \(\s*<div[^]*?<BoardIcon[^]*?Board\s*<\/Button>/)
-    expect(canvas).toMatch(/\{selectedCard && !viewOnly && !editing && \(/)
+    // the card's own toolbar and its resize handles hang on the edit gate too
+    expect(canvas).toMatch(/\{selectedCard && !viewOnly && !editing && selectedCard\.kind === 'arrow' && \(/)
+    expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\(\) => \{/)
+    expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\s*<>\s*\{\(\['w', 'e'\] as const\)/)
+    // and the gate is the portal's, never the device's
+    expect(canvas).toMatch(/const viewOnly = readOnly$/m)
     expect(canvas).toMatch(/<NewBoardDialog[^]*?open=\{!viewOnly && boardDialog !== null\}/)
     expect(canvas).toMatch(/<AlertDialog open=\{!viewOnly && confirmDelete !== null\}/)
     // a tile still opens for a viewer — looking inside is not editing
