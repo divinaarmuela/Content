@@ -1076,6 +1076,29 @@ export default function BriefCanvas({
             </Button>
           </>
         )}
+        {card.kind === 'todo' && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            {/* the list's own name — a to-do had no toolbar of its own (the
+                owner, 13 Sep 2026: "todo doesn't have the toolbar") */}
+            <input
+              key={card.id}
+              defaultValue={card.name ?? ''}
+              placeholder="Name this list…"
+              aria-label="Name of the to-do list"
+              className="h-8 w-40 rounded-inner border border-border bg-surface px-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-accent-blue/50 [@media(pointer:coarse)]:h-11"
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
+              }}
+              onBlur={e => {
+                const name = e.target.value.trim().slice(0, 80)
+                if (name === (card.name ?? '')) return
+                const next = { ...card, name }
+                upsertLocal(next); persist([next])
+              }}
+            />
+          </>
+        )}
         {card.kind === 'board' && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />

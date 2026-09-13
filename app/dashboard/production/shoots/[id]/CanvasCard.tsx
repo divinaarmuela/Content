@@ -302,9 +302,12 @@ function CanvasCardInner({
   React.useEffect(() => {
     const v = videoRef.current
     if (!v || playing) return
-    v.muted = !soundOn
+    // when the post's sound is its own file (Instagram), the clip stays
+    // muted and the <audio> carries the sound — both audible a fraction
+    // apart was the echo (the owner, 13 Sep 2026)
+    v.muted = ig.audio ? true : !soundOn
     if (soundOn) v.play().catch(() => { /* still muted, still moving */ })
-  }, [soundOn, playing])
+  }, [soundOn, playing, ig.audio])
   React.useEffect(() => {
     const f = iframeRef.current
     const player = framePlayerOf(f?.getAttribute('src'))
@@ -326,7 +329,9 @@ function CanvasCardInner({
     const v = videoRef.current
     const a = audioRef.current
     if (v && !playing) {
-      v.muted = !on
+      // the clip is only unmuted when it IS the sound; with a separate
+      // sound file it stays silent (no echo)
+      v.muted = a ? true : !on
       if (on) v.play().catch(() => { v.muted = true; onSound?.(false) })
     }
     // the sound file, started in the same click for the same reason
