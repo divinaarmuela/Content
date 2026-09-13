@@ -597,9 +597,15 @@ export function PortalPanel({ batch, portalToken, onPatch }: {
             <Button variant="outline" className={outlineBtn}
               onClick={() => {
                 const link = `${window.location.origin}/portal/${portalToken}/board/${batch.id}`
-                const turnOn = batch.shared_with_client ? Promise.resolve(true) : onPatch('shared_with_client', true)
+                // the shoot must be on the portal AND its board switched on
+                // (an older page could turn the board off on its own), or
+                // the client opens "Nothing on the board yet"
+                const boardOff = (batch as { share_board?: boolean | null }).share_board === false
+                const wasOn = !!batch.shared_with_client && !boardOff
+                const turnOn = (batch.shared_with_client ? Promise.resolve(true) : onPatch('shared_with_client', true))
+                  .then(ok => ok && boardOff ? onPatch('share_board', true) : ok)
                 void turnOn.then(ok => ok ? navigator.clipboard.writeText(link) : Promise.reject(new Error('not shared')))
-                  .then(() => setCopied(batch.shared_with_client ? 'Board link copied' : 'Board link copied — the shoot is now visible on the client portal'))
+                  .then(() => setCopied(wasOn ? 'Board link copied' : 'Board link copied — the board is now visible on the client portal'))
                   .catch(() => setCopied('Could not copy the board link'))
               }}>
               <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link

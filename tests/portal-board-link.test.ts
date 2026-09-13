@@ -44,5 +44,7 @@ describe('Copy board link on the shoot page', () => {
   })
   it('turns the portal switch on before copying, so the link works for the client', () => {
     expect(s).toMatch(/batch\.shared_with_client \? Promise\.resolve\(true\) : onPatch\('shared_with_client', true\)/)
+    // and the board's own switch, which an older page could have turned off
+    expect(s).toMatch(/boardOff \? onPatch\('share_board', true\)/)
   })
 })
