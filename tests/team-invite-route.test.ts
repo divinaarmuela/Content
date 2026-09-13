@@ -90,7 +90,7 @@ describe('POST /api/team — an address that is already on the team', () => {
     expect(createInvitation).toHaveBeenCalledTimes(1)
     expect(createInvitation.mock.calls[0][0]).toMatchObject({
       emailAddress: 'dana@example.invalid', notify: true,
-      redirectUrl: expect.stringMatching(/\/sign-up$/),
+      redirectUrl: 'https://app.mdmmarketing.com.au/dashboard',
     })
     expect(fake!.rows('team_invites')).toHaveLength(1)
   })
@@ -148,7 +148,7 @@ describe('POST /api/team — an address that is already on the team', () => {
     expect(notify).toHaveBeenCalledTimes(1)
     const sent = notify.mock.calls[0][0] as { recipientEmail: string; bodyHtml: string }
     expect(sent.recipientEmail).toBe('dana@example.invalid')
-    expect(sent.bodyHtml).toMatch(/\/sign-in$/)
+    expect(sent.bodyHtml).toMatch(/https:\/\/app\.mdmmarketing\.com\.au\/dashboard$/)
     // and the person is still exactly who they were
     expect(users()[0]).toMatchObject({ name: 'Dana Reyes', role: 'super_admin' })
   })

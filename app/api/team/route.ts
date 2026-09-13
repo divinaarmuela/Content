@@ -8,7 +8,9 @@ import { onTeamChanged } from '../../lib/gdrive-members'
 import { takeClaimLock, releaseClaimLock, pendingInviteLockKey } from '../../lib/claim-lock'
 import { escapeHtml, notify, renderEmail } from '../../lib/mailer'
 
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mdmmarketing.com.au').replace(/\/$/, '')
+/** THE LINK IN EVERY TEAM EMAIL, spelled out (the owner, 13 Sep 2026:
+ *  "don't use the env url — just hardcode the dashboard link") */
+const DASHBOARD_LINK = 'https://app.mdmmarketing.com.au/dashboard'
 
 /** Somebody who already has a login is sent the sign-in link by the app —
  *  Clerk refuses to invite an existing account. Keyed per send, so pressing
@@ -23,7 +25,7 @@ async function sendSignInAgain(inviter: { id: string; name?: string | null; emai
     bodyHtml: renderEmail(
       'You are on the MD Media dashboard',
       `<p>${escapeHtml(inviter.name ?? inviter.email)} added you as <strong>${escapeHtml(role.replace('_', ' '))}</strong>. Sign in with this email address — your login is already there.</p>`,
-      'Sign in', `${APP_URL}/sign-in`,
+      'Sign in', DASHBOARD_LINK,
     ),
   }).catch(e => console.error('sign-in-again email:', e instanceof Error ? e.message : e))
 }
@@ -253,9 +255,8 @@ export async function POST(req: Request) {
           publicMetadata: { role },
           notify: true,
           // THE LINK IN THE EMAIL (13 Sep 2026: "fix the link in the email,
-          // currently it's the wrong link"): the app's own sign-up page, which
-          // reads Clerk's invitation ticket — not Clerk's default landing
-          redirectUrl: `${APP_URL}/sign-up`,
+          // currently it's the wrong link… just hardcode the dashboard link")
+          redirectUrl: DASHBOARD_LINK,
         })
         await invitesTable.update(invite.id, { clerk_invitation_id: clerkInvite.id })
       } catch (e) {
