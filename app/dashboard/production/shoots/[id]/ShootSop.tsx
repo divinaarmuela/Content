@@ -590,6 +590,21 @@ export function PortalPanel({ batch, portalToken, onPatch }: {
               <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
             </Button>
           )}
+          {/* JUST THE BOARD (13 Sep 2026): the canvas on its own page, same
+              token, the client's comments land on this shoot. Copying turns
+              the portal switch on, or the link would be a 404 for them. */}
+          {portalToken && (
+            <Button variant="outline" className={outlineBtn}
+              onClick={() => {
+                const link = `${window.location.origin}/portal/${portalToken}/board/${batch.id}`
+                const turnOn = batch.shared_with_client ? Promise.resolve(true) : onPatch('shared_with_client', true)
+                void turnOn.then(ok => ok ? navigator.clipboard.writeText(link) : Promise.reject(new Error('not shared')))
+                  .then(() => setCopied(batch.shared_with_client ? 'Board link copied' : 'Board link copied — the shoot is now visible on the client portal'))
+                  .catch(() => setCopied('Could not copy the board link'))
+              }}>
+              <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link
+            </Button>
+          )}
         </div>
         {copied && <p className="text-[12px] text-muted-foreground" role="status">{copied}</p>}
       </CardContent>
