@@ -61,13 +61,11 @@ export function visibleComments<T extends VisibilityComment>(
   if (role === 'client') return comments.filter(c => c.visibility === 'client')
   if (FULL_ACCESS.includes(role)) return comments
 
-  // a thread belongs to the viewer once any comment in it names them: the
-  // root they were tagged in, or a root they wrote themselves
-  const mine = (c: VisibilityComment) => c.author_id === viewerId || c.assigned_to === viewerId
-  const ownedThreads = new Set<string>()
-  for (const c of comments) {
-    if (mine(c)) ownedThreads.add(c.parent_id ?? c.id)
-  }
-  return comments.filter(c =>
-    c.visibility === 'internal' && (mine(c) || ownedThreads.has(c.parent_id ?? c.id)))
+  // THE TEAM'S THREAD IS THE TEAM'S (the owner, 14 Sep 2026: "I'm the AM,
+  // I typed hi Akmal, the editor got the notification but did not see the
+  // comment"). Whoever can open the card reads every team note on it — the
+  // card itself is what access is checked on. Only the client's own
+  // comments stay with the managers.
+  void viewerId
+  return comments.filter(c => c.visibility === 'internal')
 }

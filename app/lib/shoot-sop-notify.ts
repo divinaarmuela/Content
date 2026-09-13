@@ -181,8 +181,6 @@ export async function notifyShootReminder(actor: TeamUser, batch: Batch): Promis
   let sent = 0
   for (const p of people) {
     if (p.id === actor.id) continue
-    const isEditor = p.id === batch.editor_id
-    const manages = p.id === batch.owner_id
     const r = await notify({
       actorName: actor.name, actorEmail: actor.email,
       eventType: 'shoot_reminder', entityType: 'batch',
@@ -195,10 +193,10 @@ export async function notifyShootReminder(actor: TeamUser, batch: Batch): Promis
         `<strong>Location:</strong> ${escapeHtml(batch.location ?? 'see the plan')}</p>` +
         (batch.talent ? `<p><strong>On camera:</strong> ${escapeHtml(batch.talent)}</p>` : '') +
         (batch.props_wardrobe ? `<p><strong>Props and wardrobe:</strong> ${escapeHtml(batch.props_wardrobe)}</p>` : '') +
-        '<p>Everyone knows their role; the plan is the plan — no improvising on set.</p>' +
         planHtml(batch),
-        manages ? 'Open the shoot plan' : isEditor ? 'Open your card' : undefined,
-        manages ? shootUrl(batch.id) : isEditor ? editorCardUrl(batch.id) : undefined,
+        // everyone on the shoot opens the plan page (14 Sep 2026)
+        'Open the plan',
+        shootUrl(batch.id),
       ),
     })
     if (r === 'sent') sent++

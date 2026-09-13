@@ -26,35 +26,12 @@ describe('visibleComments', () => {
     expect(visibleComments('super_admin', 'sa-1', rows)).toHaveLength(3)
   })
 
-  it('an editor sees a comment tagged to them', () => {
-    const rows = [c('1', AM, { assigned_to: EDITOR }), c('2', AM)]
-    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1'])
-  })
-
-  it('an editor never sees manager-to-manager chat', () => {
-    // the classic leak: the AM who assigned the job muses to another manager
-    const rows = [c('1', AM), c('2', AM2), c('3', AM, { assigned_to: EDITOR })]
-    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['3'])
-  })
-
-  it('keeps the whole conversation once the viewer is in it', () => {
-    const rows = [
-      c('1', AM, { assigned_to: EDITOR }),   // tagged in
-      c('2', EDITOR, { parent_id: '1' }),    // their reply
-      c('3', AM, { parent_id: '1' }),        // manager's untagged reply — still theirs to read
-      c('4', AM2),                           // unrelated thread
-    ]
-    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1', '2', '3'])
-  })
-
-  it('a reply the viewer wrote pulls in the rest of that thread', () => {
-    const rows = [
-      c('1', AM),                             // root they were never tagged in…
-      c('2', SCHEDULER, { parent_id: '1' }),  // …but answered
-      c('3', AM, { parent_id: '1' }),
-      c('4', AM2),
-    ]
-    expect(visibleComments('scheduler', SCHEDULER, rows).map(r => r.id)).toEqual(['1', '2', '3'])
+  it('an editor and a scheduler read EVERY team note on a card they can open (the owner, 14 Sep 2026)', () => {
+    // "I'm the AM, I typed hi Akmal — the editor got the notification but did
+    // not see the comment": a team note tags nobody, and it is still theirs
+    const rows = [c('1', AM), c('2', AM2), c('3', AM, { assigned_to: EDITOR }), c('4', EDITOR, { parent_id: '3' })]
+    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1', '2', '3', '4'])
+    expect(visibleComments('scheduler', SCHEDULER, rows).map(r => r.id)).toEqual(['1', '2', '3', '4'])
   })
 
   it('client rows never reach an editor or scheduler, even tagged', () => {
@@ -63,9 +40,9 @@ describe('visibleComments', () => {
     expect(visibleComments('scheduler', SCHEDULER, rows)).toEqual([])
   })
 
-  it('an untouched thread stays invisible to both working roles', () => {
-    const rows = [c('1', AM), c('2', AM2, { parent_id: '1' })]
-    expect(visibleComments('editor', EDITOR, rows)).toEqual([])
-    expect(visibleComments('scheduler', SCHEDULER, rows)).toEqual([])
+  it('only the client’s own rows are kept from the working roles', () => {
+    const rows = [c('1', AM), c('2', AM2, { parent_id: '1' }), c('3', AM, { visibility: 'client' })]
+    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1', '2'])
+    expect(visibleComments('scheduler', SCHEDULER, rows).map(r => r.id)).toEqual(['1', '2'])
   })
 })
