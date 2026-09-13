@@ -458,7 +458,7 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack }: {
           {ack.total > 0 && <Chip tone={ack.complete ? 'green' : 'amber'} className="ml-auto"><span role="status">{ack.words}</span></Chip>}
         </div>
         <p className="text-[13px] text-muted-foreground">
-          Account manager: <span className="text-foreground">{crew.find(c => c.id === batch.owner_id)?.name ?? team.find(t => t.id === batch.owner_id)?.name ?? 'the team'}</span>
+          Assigned to: <span className="text-foreground">{crew.find(c => c.id === batch.owner_id)?.name ?? team.find(t => t.id === batch.owner_id)?.name ?? 'nobody yet'}</span>
         </p>
 
         <label className="flex flex-col gap-1 text-[12px] font-semibold">

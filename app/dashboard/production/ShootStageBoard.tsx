@@ -119,7 +119,11 @@ export function ShootStageBoard({
     const moves = SHOOT_STAGES.filter(st => st.key !== stage && allowed(s, st.key))
     // who made it, and how many have read it — on every card (13 Sep 2026)
     const creator = names.get(s.created_by ?? s.owner_id ?? '') ?? 'the team'
-    const who = `Created by ${creator}${ack.total > 0 ? ` · read ${ack.done} of ${ack.total}` : ''}`
+    // the person who plans it, when that is somebody other than the creator
+    // (the owner, 13 Sep 2026: "when we created the shoot plan and assigned,
+    // why is there no info on the card — like saying assigned to")
+    const planner = s.owner_id && s.owner_id !== s.created_by ? names.get(s.owner_id) : undefined
+    const who = `Created by ${creator}${planner ? ` · assigned to ${planner}` : ''}${ack.total > 0 ? ` · read ${ack.done} of ${ack.total}` : ''}`
     const note = stage === 'drafting' && !list.complete
       ? `Still to fill in: ${list.missing.map(m => m.label.toLowerCase()).join(', ')}`
       : stage === 'shared' && !ack.complete && ack.total > 0
