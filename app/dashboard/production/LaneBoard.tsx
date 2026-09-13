@@ -109,13 +109,14 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     // every lane is the same width — a fixed narrow one beside stretching
     // neighbours read as a squashed sliver. A folded lane is quieter (muted
     // header, compact cards); it is not smaller.
+    // ROOM FOR THE CARDS (the owner, 13 Sep 2026: "everything looks cramped
+    // on the laptop version"). Seven 200px lanes squashed every card; a lane
+    // is now at least 248px and the board scrolls sideways when it must —
+    // a readable card beats a whole board of unreadable ones.
     return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
         muted={lane.folded}
-        // 200, not 240: five lanes and their gaps have to fit a LAPTOP once
-        // the sidebar is taken out (~1,100px of board on a 1280 screen), or
-        // the fifth column is cut off and nobody scrolls sideways to find it
-        className="min-w-[200px]">
+        className="min-w-[248px] max-w-[360px] flex-1">
         {stack(lane)}
       </UiLane>
     )
