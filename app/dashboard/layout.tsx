@@ -98,6 +98,11 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   useEffect(() => {
     if (!role || role === 'client' || !path || path.startsWith('/dashboard/start')) return
+    // A LINK TO A CARD IS NEVER HIJACKED (the owner, 13 Sep 2026: the editor
+    // "received the email and when he opened it the page is taking them to
+    // the How it works page"). Somebody who arrived with ?card= came to do
+    // one thing; the tutorial waits for a plain visit.
+    try { if (new URLSearchParams(window.location.search).has('card')) return } catch { /* no window */ }
     let live = true
     try {
       if (sessionStorage.getItem('md-tutorial-offered') === '1') return

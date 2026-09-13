@@ -168,13 +168,14 @@ describe('acknowledging', () => {
     const r = await acknowledge()
     expect(r.status).toBe(403)
   })
-  it('the editor on the shoot is sent to their Editor page; the manager opens it with who has read it, and every name', async () => {
+  it('the editor on the shoot reads the plan here (read-only); a stranger is refused; the manager opens it with who has read it, and every name', async () => {
     as(VG, 'general', 'Vik Camera')
     await acknowledge()
     as(ED, 'editor', 'Sam Editor')
     const r = await open()
-    expect(r.status).toBe(403)
-    expect(r.body.redirect).toBe('/dashboard/editor')
+    // THE PLAN PAGE FOR THE PEOPLE ON THE SHOOT (13 Sep 2026): read, never work
+    expect(r.status).toBe(200)
+    expect(r.body.read_only).toBe(true)
     as(OUT, 'editor', 'Kit Outsider')
     expect((await open()).status).toBe(403)
     expect((await open()).body.redirect).toBeUndefined()

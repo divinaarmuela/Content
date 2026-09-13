@@ -25,7 +25,7 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
   const page = src(SHOOT)
   const sop = src(SOP)
   it('draws the SOP’s sections and nothing else', () => {
-    for (const heading of ['The shoot plan', 'Notes for the team', 'Plan canvas', 'Where it is', 'Who is on this shoot', 'The editor’s card', 'Client portal', 'What happened']) {
+    for (const heading of ['The shoot plan', 'Notes for the team', 'Plan canvas', 'Where it is', 'Who is on this shoot', 'The editor’s card', 'What happened']) {
       expect(page + sop).toContain(heading)
     }
     // the plan-document approval is gone from the page: no review card, no
@@ -50,7 +50,13 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
   it('Where it is: one next button with its reason, the two ticks with who ticked them, the client share, the footage folder, and every stamp with who and when', () => {
     expect(sop).toMatch(/const next: \{ to: ShootStage; label: string \} \| null =/)
     expect(sop).toMatch(/\{!check\.ok && <p className="text-\[12px\] text-muted-foreground" role="status">\{check\.reason\}<\/p>\}/)
-    expect(sop).toMatch(/Share the plan with the client/)
+    // THE CLIENT IN ONE PLACE (13 Sep 2026): one button puts the plan on the
+    // portal; the links and "take it off" appear there once it is on; no
+    // second Client portal card, no switch
+    expect(sop).toMatch(/Put the plan on the client portal/)
+    expect(sop).toMatch(/Take it off the portal/)
+    expect(sop).not.toMatch(/Share the plan with the client|Visible on the client portal|<Switch/)
+    expect(page).not.toMatch(/<PortalPanel/)
     expect(sop).toMatch(/stampLines\(batch, nameOf, \{ planReview: gate \}\)/)
     expect(sop).toMatch(/nameOf\(batch\.aligned_by\)/)
     expect(sop).toMatch(/Footage folder/)
@@ -349,5 +355,15 @@ describe('the home page loader covers the hero from the first paint (13 Sep 2026
     expect(fill).toBeGreaterThan(0)
     expect(hand).toBeGreaterThan(fill)
     expect(hand - fill).toBeLessThan(200)
+  })
+})
+
+describe('a link to a card is never hijacked by the tutorial (13 Sep 2026)', () => {
+  it('the dashboard layout skips the first-run tutorial when the URL carries ?card=', () => {
+    const s = src('app/dashboard/layout.tsx')
+    const gate = s.indexOf("new URLSearchParams(window.location.search).has('card')")
+    const offer = s.indexOf("router.replace('/dashboard/start')")
+    expect(gate).toBeGreaterThan(0)
+    expect(gate).toBeLessThan(offer)
   })
 })

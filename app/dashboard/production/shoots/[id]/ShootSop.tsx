@@ -7,14 +7,13 @@ import { Button } from '@/components/ui/button'
 import CallTimePicker from '../../CallTimePicker'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
-  BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
+  BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
   REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
@@ -296,8 +295,10 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
 /* ── where it is, and the one next move ────────────────────────────────── */
 
-export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview }: {
+export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview, portalToken = null }: {
   batch: ShootSopBatch
+  /** the client's portal token — the links to copy once the plan is on it */
+  portalToken?: string | null
   role: MoveRole
   viewerId: string
   today: string
@@ -333,8 +334,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview, reviewer: viewerIsReviewer === true }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
   const [folder, setFolder] = useState(batch.footage_url ?? '')
-  const folderShown = stage !== 'drafting'
-  const meaning = SHOOT_STAGES.find(s => s.key === stage)?.meaning
+  // the footage folder box appears from the day before the shoot — before
+  // that it is one more thing to read (the owner, 13 Sep 2026: "so many texts")
+  const folderShown = stageIndex(stage) >= stageIndex('reminder_sent')
   // ONE next button: the stage's own move
   const next: { to: ShootStage; label: string } | null =
     // a gated plan's one action while drafting is the review row (Ask for a
@@ -363,7 +365,6 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {clock && (
           <p className={`text-[15px] font-semibold ${late ? 'text-accent-red-deep' : ''}`} role={late ? 'alert' : undefined}>{clock}</p>
         )}
-        {meaning && <p className="text-[13px] text-muted-foreground">{meaning}</p>}
         {overrideWords(batch) && <Chip tone="amber" className="w-fit">{overrideWords(batch)}</Chip>}
         {footageOnly && <Chip tone="surface" className="w-fit">{FOOTAGE_ONLY_WORDS}</Chip>}
 
@@ -501,22 +502,14 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
           </p>
         )}
 
-        {/* the client: optional, from Draft on, once the nine parts are in */}
+        {/* THE CLIENT, IN ONE PLACE (the owner, 13 Sep 2026: "share button to
+            client should be named differently, and there's another Client
+            portal card at the bottom — confusing"). Not on the portal: one
+            button puts it there. On the portal: the links to send and the
+            way to take it off. No email is ever sent to a client. */}
         {batch.status !== 'wrapped' && !footageOnly && (
-          <div className="flex flex-col gap-1 border-t border-border pt-3">
-            {clientLine && <p className="text-[14px] font-semibold" role="status">{clientLine}</p>}
-            {/* no email to the client, ever (the owner, 13 Sep 2026): the
-                button puts the plan on the portal and stamps the share; the
-                team sends the link themselves */}
-            <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy || !shareReady.ok}
-              onClick={() => void onShareClient()}>
-              {batch.client_shared_at ? 'Share the plan with the client again' : 'Share the plan with the client'}
-            </Button>
-            <p className="text-[12px] text-muted-foreground">
-              {!shareReady.ok ? shareReady.reason
-                : 'Puts the plan on their portal and stamps who shared it. No email is sent — copy the portal or board link and send it yourself. They approve there, or ask for changes, and the answer shows here.'}
-            </p>
-          </div>
+          <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
+            onShareClient={onShareClient} onPatch={onPatch} />
         )}
 
         {folderShown && (
@@ -688,66 +681,79 @@ export function EditorCardPanel({ batch, items, editorName }: {
   )
 }
 
-/* ── the client portal ─────────────────────────────────────────────────── */
+/* ── the client, in one place ──────────────────────────────────────────── */
 
-export function PortalPanel({ batch, portalToken, onPatch }: {
+export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, onShareClient, onPatch }: {
   batch: ShootSopBatch
   portalToken: string | null
+  busy: boolean
+  shareReady: { ok: boolean; reason?: string }
+  clientLine: string | null
+  onShareClient: () => Promise<void>
   onPatch: (field: string, value: unknown) => Promise<boolean>
 }) {
   const [copied, setCopied] = useState<string | null>(null)
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4">
-        <p className={H}>Client portal</p>
-        <label className="flex flex-col gap-1 text-[13px] text-muted-foreground">
-          <span className="flex min-h-11 items-center gap-2">
-            <Switch checked={batch.shared_with_client ?? false} aria-label="Visible on the client portal"
-              onCheckedChange={v => void onPatch('shared_with_client', v)} />
-            <span className="text-foreground">Visible on the client portal</span>
-          </span>
-          <span className="text-[12px]">Turns on by itself when you press “Share the plan with the client”. Off hides the plan from them.</span>
-        </label>
+  const onPortal = !!batch.shared_with_client
+  const pdf = (
+    <Button variant="outline" className={outlineBtn} asChild>
+      <a href={`/api/production/batches/${batch.id}/pdf`} download>
+        <FileDown className="h-4 w-4" aria-hidden /> Download the plan PDF
+      </a>
+    </Button>
+  )
+  if (!onPortal) {
+    return (
+      <div className="flex flex-col gap-2 border-t border-border pt-3">
+        <p className="text-[12px] font-semibold">The client</p>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className={outlineBtn} asChild>
-            <a href={`/api/production/batches/${batch.id}/pdf`} download>
-              <FileDown className="h-4 w-4" aria-hidden /> Download the plan PDF
-            </a>
+          <Button variant="outline" className={outlineBtn} disabled={busy || !shareReady.ok} onClick={() => void onShareClient()}>
+            Put the plan on the client portal
           </Button>
-          {portalToken && (
-            <Button variant="outline" className={outlineBtn}
-              onClick={() => {
-                void navigator.clipboard.writeText(`${window.location.origin}/portal/${portalToken}`)
-                  .then(() => setCopied('Client portal link copied'))
-                  .catch(() => setCopied('Could not copy — copy it from the Clients page'))
-              }}>
-              <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
-            </Button>
-          )}
-          {/* JUST THE BOARD (13 Sep 2026): the canvas on its own page, same
-              token, the client's comments land on this shoot. Copying turns
-              the portal switch on, or the link would be a 404 for them. */}
-          {portalToken && (
-            <Button variant="outline" className={outlineBtn}
-              onClick={() => {
-                const link = `${window.location.origin}/portal/${portalToken}/board/${batch.id}`
-                // the shoot must be on the portal AND its board switched on
-                // (an older page could turn the board off on its own), or
-                // the client opens "Nothing on the board yet"
-                const boardOff = (batch as { share_board?: boolean | null }).share_board === false
-                const wasOn = !!batch.shared_with_client && !boardOff
-                const turnOn = (batch.shared_with_client ? Promise.resolve(true) : onPatch('shared_with_client', true))
-                  .then(ok => ok && boardOff ? onPatch('share_board', true) : ok)
-                void turnOn.then(ok => ok ? navigator.clipboard.writeText(link) : Promise.reject(new Error('not shared')))
-                  .then(() => setCopied(wasOn ? 'Board link copied' : 'Board link copied — the board is now visible on the client portal'))
-                  .catch(() => setCopied('Could not copy the board link'))
-              }}>
-              <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link
-            </Button>
-          )}
+          {pdf}
         </div>
-        {copied && <p className="text-[12px] text-muted-foreground" role="status">{copied}</p>}
-      </CardContent>
-    </Card>
+        <p className="text-[12px] text-muted-foreground">
+          {!shareReady.ok ? shareReady.reason : 'No email is sent — you copy the link and send it yourself once it is on.'}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3" data-client-on-portal>
+      <p className="text-[14px] font-semibold" role="status">{clientLine ?? 'On the client portal'}</p>
+      <div className="flex flex-wrap gap-2">
+        {portalToken && (
+          <Button variant="outline" className={outlineBtn}
+            onClick={() => {
+              void navigator.clipboard.writeText(`${window.location.origin}/portal/${portalToken}`)
+                .then(() => setCopied('Portal link copied — send it to the client'))
+                .catch(() => setCopied('Could not copy — copy it from the Clients page'))
+            }}>
+            <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
+          </Button>
+        )}
+        {/* JUST THE BOARD (13 Sep 2026): the canvas on its own page, same
+            token, the client's comments land on this shoot. The board is
+            switched on if an older page turned it off. */}
+        {portalToken && (
+          <Button variant="outline" className={outlineBtn}
+            onClick={() => {
+              const link = `${window.location.origin}/portal/${portalToken}/board/${batch.id}`
+              const boardOff = (batch as { share_board?: boolean | null }).share_board === false
+              const turnOn = boardOff ? onPatch('share_board', true) : Promise.resolve(true)
+              void turnOn.then(ok => ok ? navigator.clipboard.writeText(link) : Promise.reject(new Error('not shared')))
+                .then(() => setCopied('Board link copied — send it to the client'))
+                .catch(() => setCopied('Could not copy the board link'))
+            }}>
+            <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link
+          </Button>
+        )}
+        {pdf}
+      </div>
+      <p className="text-[12px] text-muted-foreground">
+        {copied ?? 'They approve on their portal or ask for changes, and the answer shows here. No email is sent.'}
+        {' '}
+        <button type="button" className="underline underline-offset-4" disabled={busy} onClick={() => void onPatch('shared_with_client', false)}>Take it off the portal</button>
+      </p>
+    </div>
   )
 }

@@ -35,13 +35,16 @@ async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: stri
   // person is the quality checker and he couldn't go to review the shoot
   // page"): the review buttons live on this page, so a reviewer opens it —
   // to read, and to pass or send back; every other button is still refused
-  const reviewer = isQualityReviewer(user) && mode === 'read'
-  if (!canManageShoot(me, batch) && !reviewer) {
-    // somebody on the shoot is sent to their card; a stranger is simply refused
-    const onIt = (await canOpenBatch(user, batch)) || peopleOnShoot(batch).includes(user.id)
+  const manages = canManageShoot(me, batch)
+  // …and so does EVERYONE ON THE SHOOT (13 Sep 2026: "whoever receives the
+  // brief has a dedicated page to see the plan"): the crew and the editor
+  // read the plan here, on a page that writes nothing
+  const onIt = !manages && ((await canOpenBatch(user, batch)) || peopleOnShoot(batch).includes(user.id))
+  const reader = mode === 'read' && (isQualityReviewer(user) || onIt)
+  if (!manages && !reader) {
     return { response: NextResponse.json(onIt ? NOT_YOUR_PAGE : { error: 'You are not on this client or this shoot' }, { status: 403 }) }
   }
-  return { batch }
+  return { batch, readOnly: !manages }
 }
 
 /** One shoot, with its cards and its people — the shoot page's data. */
@@ -84,11 +87,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const names: Record<string, string | null> = {}
     for (const col of ['created_by', 'owner_id', 'brief_shared_by', 'aligned_by', 'client_confirmed_by', 'client_shared_by', 'go_by', 'reminder_sent_by', 'footage_handed_by', 'editor_id', 'last_edited_by', 'go_override_by'] as const) {
       names[col] = nameOf(b[col])
+      // …and by their id, which is how the page looks a stamp's person up —
+      // keyed by column alone, every stamp read "by the team" (13 Sep 2026)
+      if (b[col]) names[String(b[col])] = nameOf(b[col])
     }
     for (const uid of peopleOnShoot(b)) names[uid] = nameOf(uid)
 
     return NextResponse.json({
       batch: b,
+      // the page draws the plan read-only for somebody who may not work it
+      read_only: loaded.readOnly === true,
       portal_token: clientRow?.share_token ?? null,
       client_email: clientRow?.email ?? null,
       items,

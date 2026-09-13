@@ -43,8 +43,11 @@ describe('Copy board link on the shoot page', () => {
     expect(s).toMatch(/\/portal\/\$\{portalToken\}\/board\/\$\{batch\.id\}/)
     expect(s).toContain('Copy board link')
   })
-  it('turns the portal switch on before copying, so the link works for the client', () => {
-    expect(s).toMatch(/batch\.shared_with_client \? Promise\.resolve\(true\) : onPatch\('shared_with_client', true\)/)
+  it('is drawn only once the plan is on the portal, and turns the board on before copying', () => {
+    // the links live in the on-portal state of the one client block (13 Sep
+    // 2026) — so the plan is already on the portal when the button exists
+    expect(s).toMatch(/const onPortal = !!batch\.shared_with_client/)
+    expect(s).toMatch(/data-client-on-portal/)
     // and the board's own switch, which an older page could have turned off
     expect(s).toMatch(/boardOff \? onPatch\('share_board', true\)/)
   })

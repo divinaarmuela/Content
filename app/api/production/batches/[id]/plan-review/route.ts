@@ -50,19 +50,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // who is told: whoever asked, and the plan's owner and creator
     const toIds = [...new Set([batch.review_asked_by, batch.owner_id, batch.created_by].filter((x): x is string => !!x))]
-    let commentId: string | null = null
-    if (!pass) {
-      try {
-        const row = await table('batch_comments').insert({
-          batch_id: id, author_id: user.id, body: `Plan sent back: ${note}`,
-          assigned_to: batch.review_asked_by ?? batch.owner_id ?? batch.created_by ?? null,
-          resolved: false, card_id: null,
-        })
-        commentId = String((row as { id?: string }).id ?? '') || null
-      } catch (e) {
-        console.error('plan review comment:', e)
-      }
-    }
+    // THE NOTE IS THE TEAM'S, NOT THE CLIENT'S (the owner, 13 Sep 2026: "why is
+    // the quality review comment down here?"): it used to be written into
+    // the shoot's comments, which the client reads on their portal. It lives
+    // in "Where it is" (plan_sent_back_note), the history line and the email.
+    const commentId: string | null = null
     const told = await notifyPlanReviewed(user, done.row, pass, note || null, toIds).catch(e => { console.error('plan review notify:', e); return 0 })
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: batch.status ?? 'brief', kind: 'updated' })
     // the people rows are read only to name the stand-in in the answer

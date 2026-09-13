@@ -15,10 +15,11 @@ import {
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
+import PlanReadOnly from './PlanReadOnly'
 import BriefBoardComments from './BriefBoardComments'
 import BriefComments from './BriefComments'
 import {
-  EditorCardPanel, PeoplePanel, PlanParts, PortalPanel, StageStrip, WherePanel,
+  EditorCardPanel, PeoplePanel, PlanParts, StageStrip, WherePanel,
   type CrewRow, type ShootSopBatch, type TeamRow,
 } from './ShootSop'
 import { STAGE_LABEL, createdWords, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
@@ -61,6 +62,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [lastEdited, setLastEdited] = useState<{ name: string | null; at: string | null }>({ name: null, at: null })
   const [role, setRole] = useState<string>('')
+  /** the crew, the editor, the quality checker: the plan, nothing to press */
+  const [readOnly, setReadOnly] = useState(false)
   const [viewerId, setViewerId] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [dateOpen, setDateOpen] = useState(false)
@@ -97,6 +100,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
     setItems(json.items ?? [])
     setLastEdited({ name: json.last_edited_by_name ?? null, at: json.last_edited_at ?? null })
     setRole(json.viewer_role ?? '')
+    setReadOnly(json.read_only === true)
     setViewerId(String(json.viewer_id ?? ''))
     setPortalToken(json.portal_token ?? null)
     setClientEmail(json.client_email ?? null)
@@ -268,6 +272,14 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
 
   const deliverableItems = items.filter(i => i.work_kinds?.slug !== 'shoot_brief')
   const nameOf = (uid: string | null | undefined) => (uid ? names[uid] ?? null : null)
+  if (readOnly) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Link href="/dashboard/production" className="inline-flex min-h-11 items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" aria-hidden /> Shoots</Link>
+        <PlanReadOnly batch={batch} cards={canvasCards} references={canvasRefs} crew={crew} viewerId={viewerId} onAcknowledged={() => void load()} />
+      </div>
+    )
+  }
   const booked = batch.status !== 'brief'
   const stage = today ? shootStage(batch, today) : null
 
@@ -385,11 +397,11 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
             <WherePanel batch={batch} role={role as never} viewerId={viewerId} today={today}
               itemCount={deliverableItems.length} busy={busy !== null} nameOf={nameOf} clientEmail={clientEmail}
               onPatch={patchThenLoad} onMove={moveStage} onShareClient={shareWithClient} onAskReview={askReview} team={team}
-              planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview} />
+              planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview}
+              portalToken={portalToken} />
           )}
           <PeoplePanel batch={batch} crew={crew} team={team} busy={busy !== null} onPatch={patchThenLoad} onUnack={unacknowledge} />
           <EditorCardPanel batch={batch} items={items} editorName={nameOf(batch.editor_id)} />
-          <PortalPanel batch={batch} portalToken={portalToken} onPatch={patchThenLoad} />
           <BriefComments batchId={batch.id} cards={canvasCards} />
         </div>
       </div>

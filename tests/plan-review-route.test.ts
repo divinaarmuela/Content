@@ -156,6 +156,22 @@ describe('passing and sending back', () => {
     expect(edit.status).toBe(403)
     expect(batch().objective).not.toBe('Joy wrote this')
   })
+  it('the editor and the crew on the shoot can OPEN the plan to read it — read-only, no edits (13 Sep 2026)', async () => {
+    fake.restore(); fake = seed({ editor_id: 'u-ed', crew_ids: ['u-vik'] }, [joy,
+      { id: 'u-ed', name: 'Eden', email: 'ed@zz.invalid', role: 'editor', active_status: true } as unknown as Row,
+      { id: 'u-vik', name: 'Vik', email: 'vik@zz.invalid', role: 'scheduler', active_status: true } as unknown as Row])
+    as('u-ed', 'editor', 'Eden')
+    const r = await open()
+    expect(r.status).toBe(200)
+    expect(r.body.read_only).toBe(true)
+    as('u-vik', 'scheduler', 'Vik')
+    expect((await open()).body.read_only).toBe(true)
+    const edit = await json(detail.PATCH(new Request('https://x.test/b', { method: 'PATCH', body: JSON.stringify({ objective: 'Vik wrote this' }) }), P('b-1')))
+    expect(edit.status).toBe(403)
+    // the manager's answer says the page is theirs to work
+    as(AM, 'account_manager', 'Karly')
+    expect((await open()).body.read_only).toBe(false)
+  })
   it('an account manager may not pass a plan', async () => {
     expect((await answer({ pass: true })).status).toBe(403)
     expect(batch().plan_reviewed_at ?? null).toBeNull()
@@ -190,10 +206,11 @@ describe('passing and sending back', () => {
     const r = await answer({ pass: false, note: 'The objective names no pillar' })
     expect(r.status).toBe(200)
     expect(batch().plan_reviewed_at ?? null).toBeNull()
-    const c = fake.rows('batch_comments') as any[]
-    expect(c).toHaveLength(1)
-    expect(c[0].body).toBe('Plan sent back: The objective names no pillar')
-    expect(c[0].assigned_to).toBe(AM)
+    // the note is NOT a shoot comment — those are read by the client on
+    // their portal (13 Sep 2026); it is on the shoot itself, for the panel
+    expect(fake.rows('batch_comments')).toHaveLength(0)
+    expect(batch().plan_sent_back_note).toBe('The objective names no pillar')
+    expect(batch().plan_sent_back_by).toBe(JOY)
     expect(String(emails[0].subject)).toBe('Plan sent back: Golf Day')
     expect(String(emails[0].bodyHtml)).toContain('The objective names no pillar')
     as(AM, 'account_manager', 'Karly')
