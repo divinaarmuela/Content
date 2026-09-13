@@ -179,6 +179,12 @@ describe('leftovers the SOP never asked for are gone', () => {
   it('New shoot plan asks only what the SOP asks: no priority, no existing-shoot picker, no outside link', () => {
     expect(src(NEW_PLAN)).not.toMatch(/<Label>Priority<\/Label>|A new shoot<\/SelectItem>|Outside plan link|milanote\.com/)
     expect(src(NEW_PLAN)).toMatch(/Account manager for this shoot/)
+    // the client is TYPED, not dropped down; the AM picker's closed face is
+    // the name only, so nothing pushes the window wide (13 Sep 2026)
+    expect(src(NEW_PLAN)).toMatch(/<ClientTypeahead/)
+    expect(src(NEW_PLAN)).not.toMatch(/placeholder="Choose client"/)
+    expect(src(NEW_PLAN)).toMatch(/\[&>\*\]:min-w-0/)
+    expect(src('app/dashboard/production/ClientTypeahead.tsx')).toMatch(/role="combobox"/)
   })
   it('the quality review gate on a plan: the row, the reviewer’s two answers, the board chip (13 Sep 2026)', () => {
     const s = src(SOP)

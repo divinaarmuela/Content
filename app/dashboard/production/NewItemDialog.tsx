@@ -1,6 +1,7 @@
 'use client'
 
 import BrandCard from './BrandCard'
+import ClientTypeahead from './ClientTypeahead'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -193,18 +194,19 @@ export default function NewShootPlanDialog({
             Then: {STAGE_STRIP.map(s => s.label).join(' › ')}
           </p>
         </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* every cell min-w-0: a long name in a picker must never push the
+            window wider (the owner, 13 Sep 2026: "the picker is going far right") */}
+        <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
           <div className="grid gap-1.5">
-            <Label>Client *</Label>
-            <Select value={draft.client_id} onValueChange={v => v && setDraft(d => ({ ...d, client_id: v, batch_id: '' }))}>
-              <SelectTrigger><SelectValue placeholder="Choose client" /></SelectTrigger>
-              <SelectContent>
-                {(allClients.length > 0 ? allClients : clients).map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[12px] text-muted-foreground">Any client, not only the ones you run.</p>
+            <Label htmlFor="plan-client">Client *</Label>
+            {/* type the name, pick from what matches (13 Sep 2026) */}
+            <ClientTypeahead
+              id="plan-client"
+              clients={(allClients.length > 0 ? allClients : clients).map(c => ({ id: c.id, name: c.name }))}
+              value={draft.client_id}
+              onChange={v => setDraft(d => ({ ...d, client_id: v, batch_id: '' }))}
+            />
+            <p className="text-[12px] text-muted-foreground">Type a few letters. Any client, not only the ones you run.</p>
           </div>
           {/* the brand, the moment a client is picked (9 Sep 2026) */}
           {/* who runs this account, and how to reach the client — the owner,
@@ -254,8 +256,17 @@ export default function NewShootPlanDialog({
             <div className="grid gap-1.5">
               <Label>Account manager for this shoot</Label>
               <Select value={draft.owner_id || 'none'} onValueChange={v => setDraft(d => ({ ...d, owner_id: v === 'none' ? '' : v ?? '' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
+                {/* the closed picker shows the NAME only; the email and the
+                    clients they handle are on the open list, where there is
+                    room (13 Sep 2026: "the picker is going far right") */}
+                <SelectTrigger className="min-w-0">
+                  <SelectValue>
+                    <span className="block truncate">
+                      {draft.owner_id ? (team.find(m => m.id === draft.owner_id)?.name || team.find(m => m.id === draft.owner_id)?.email || 'Picked') : 'Nobody yet — assign one later'}
+                    </span>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="max-w-[min(92vw,520px)]">
                   <SelectItem value="none">Nobody yet — assign one later</SelectItem>
                   {(() => {
                     const suggested = team.filter(m => m.role === 'account_manager' || m.role === 'super_admin')
@@ -266,10 +277,16 @@ export default function NewShootPlanDialog({
                     // that they handle so I know who to assign it to")
                     const handles = new Map<string, string[]>()
                     for (const c of allClients) for (const m of c.managers ?? []) handles.set(m.id, [...(handles.get(m.id) ?? []), c.name])
-                    const words = (m: { id: string; name: string; email: string }) => {
+                    const words = (m: { id: string; name: string; email: string }, role?: string) => {
                       const who = m.name || m.email
                       const clients = handles.get(m.id) ?? []
-                      return `${who}${m.name && m.email ? ` · ${m.email}` : ''}${clients.length ? ` · ${clients.join(', ')}` : ''}`
+                      const under = [m.name && m.email ? m.email : '', clients.length ? `handles ${clients.join(', ')}` : '', role ?? ''].filter(Boolean).join(' · ')
+                      return (
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{who}</span>
+                          {under && <span className="truncate text-[12px] text-muted-foreground">{under}</span>}
+                        </span>
+                      )
                     }
                     return (
                       <>
@@ -277,13 +294,13 @@ export default function NewShootPlanDialog({
                           <SelectGroup>
                             <SelectLabel>Usually plans shoots</SelectLabel>
                             {suggested.map(m => (
-                              <SelectItem key={m.id} value={m.id}>{words(m)}</SelectItem>
+                              <SelectItem key={m.id} value={m.id} textValue={m.name || m.email}>{words(m)}</SelectItem>
                             ))}
                           </SelectGroup>
                         )}
                         {rest.map(m => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {words(m)} · {ROLE_WORD[m.role] ?? m.role}
+                          <SelectItem key={m.id} value={m.id} textValue={m.name || m.email}>
+                            {words(m, ROLE_WORD[m.role] ?? m.role)}
                           </SelectItem>
                         ))}
                       </>
