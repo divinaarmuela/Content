@@ -204,7 +204,11 @@ export type NotifyInput = {
  * out to clients … when we are in this process".
  */
 export function clientNotificationsPaused(): boolean {
-  return process.env.PAUSE_CLIENT_NOTIFICATIONS === '1'
+  // THE CLIENT IS NEVER EMAILED (the owner, 13 Sep 2026: "never send any
+  // email to the client"). The portal is how they see things; the team
+  // sends them the link themselves. This is the rule, not a pause — the
+  // env switch stays only so a test can prove the gate reads it.
+  return true || process.env.PAUSE_CLIENT_NOTIFICATIONS === '1'
 }
 
 export type NotifyResult = 'sent' | 'duplicate' | 'failed' | 'muted'

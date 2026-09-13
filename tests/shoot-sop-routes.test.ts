@@ -511,7 +511,7 @@ describe('sharing the plan with the client', () => {
     const t = fake.tree().mdm!.tables! as Record<string, Record<string, Record<string, unknown>>>
     t.clients['c-1'] = { ...t.clients['c-1'], email: 'client@zz.invalid', share_token: '11111111-2222-4333-8444-555555555555' }
   }
-  it('needs the nine parts, then puts the plan on the portal, emails the client, and stamps who and when', async () => {
+  it('needs the nine parts, then puts the plan on the portal and stamps who and when — the client is never emailed', async () => {
     withClientEmail({ talent: null })
     const no = await share()
     expect(no.status).toBe(422)
@@ -520,15 +520,13 @@ describe('sharing the plan with the client', () => {
     emails.length = 0
     const yes = await share()
     expect(yes.status).toBe(200)
-    expect(yes.body.emailed).toBe(true)
+    // NEVER AN EMAIL TO THE CLIENT (the owner, 13 Sep 2026): the share puts
+    // the plan on the portal and stamps it; the team sends the link themselves
+    expect(yes.body.emailed).toBe(false)
     expect(batch().shared_with_client).toBe(true)
     expect(batch().client_shared_by).toBe(AM)
     expect(batch().client_shared_at).toBeTruthy()
-    const toClient = emails.find(e => e.recipientEmail === 'client@zz.invalid')!
-    expect(toClient.toClient).toBe(true)
-    expect(String(toClient.subject)).toMatch(/^Your shoot plan: Golf Day/)
-    expect(String(toClient.bodyHtml)).toMatch(/\/portal\/11111111-2222-4333-8444-555555555555/)
-    expect(String(toClient.bodyHtml)).toMatch(/Shot list<\/td>/)
+    expect(emails.find(e => e.recipientEmail === 'client@zz.invalid')).toBeUndefined()
     // an editor cannot send the plan to the client
     as(ED, 'editor')
     expect((await share()).status).toBe(403)

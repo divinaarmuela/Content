@@ -5,7 +5,6 @@ import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { shootManager } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
-import { notifyPlanSharedWithClient } from '../../../../../lib/shoot-sop-notify'
 import { NOT_YOUR_PAGE, canManageShoot, clientSharePatch, clientShareReady } from '../../../../../lib/shoot-sop-core'
 
 /**
@@ -37,9 +36,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!done.claimed) return NextResponse.json({ error: 'Could not save — try again' }, { status: 409 })
     await logActivity({
       actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
-      action: 'sop_client_shared', detail: client.email ? `emailed ${client.email}` : 'the client has no email on file',
+      action: 'sop_client_shared', detail: 'on the client portal — no email is sent to a client',
     })
-    const emailed = await notifyPlanSharedWithClient(user, done.row, client).catch(e => { console.error('client share notify:', e); return false })
+    // the client is never emailed (the owner, 13 Sep 2026: "never send any
+    // email to the client"); the mailer refuses client mail too. The team
+    // copies the portal or board link and sends it themselves.
+    const emailed = false
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: batch.status ?? 'brief', kind: 'updated' })
     return NextResponse.json({ ...done.row, emailed, client_email: client.email ?? null })
   } catch (e) {

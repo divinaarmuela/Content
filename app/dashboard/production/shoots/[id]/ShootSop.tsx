@@ -386,14 +386,16 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {batch.status !== 'wrapped' && !footageOnly && (
           <div className="flex flex-col gap-1 border-t border-border pt-3">
             {clientLine && <p className="text-[14px] font-semibold" role="status">{clientLine}</p>}
-            <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy || !shareReady.ok || !clientEmail}
+            {/* no email to the client, ever (the owner, 13 Sep 2026): the
+                button puts the plan on the portal and stamps the share; the
+                team sends the link themselves */}
+            <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy || !shareReady.ok}
               onClick={() => void onShareClient()}>
               {batch.client_shared_at ? 'Share the plan with the client again' : 'Share the plan with the client'}
             </Button>
             <p className="text-[12px] text-muted-foreground">
               {!shareReady.ok ? shareReady.reason
-                : !clientEmail ? 'The client has no email on the Clients page — add one and the plan can be sent.'
-                : 'Puts the plan on their portal and emails them. They approve it there, or ask for changes, and the answer shows here.'}
+                : 'Puts the plan on their portal and stamps who shared it. No email is sent — copy the portal or board link and send it yourself. They approve there, or ask for changes, and the answer shows here.'}
             </p>
           </div>
         )}
