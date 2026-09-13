@@ -196,6 +196,16 @@ export const CANVAS_NOTE_COLORS = [
  *  size every board drawn before this field existed renders at, so old
  *  boards look the same. (Divina, 13 Sep 2026: "I can't change … text
  *  width and size".) */
+/** TEXT COLOUR on a note or a heading (the owner, 13 Sep 2026: "the text
+ *  color changing, where is that option — the option you gave is for the
+ *  box"). Absent = the box decides (dark on a light box, light on ink). */
+export const CANVAS_TEXT_COLORS = ['ink', 'grey', 'red', 'amber', 'green', 'blue', 'white'] as const
+export type CanvasTextColor = (typeof CANVAS_TEXT_COLORS)[number]
+export function textColorOf(card: { text_color?: string | null } | null | undefined): CanvasTextColor | null {
+  const v = card?.text_color
+  return (CANVAS_TEXT_COLORS as readonly string[]).includes(String(v)) ? (v as CanvasTextColor) : null
+}
+
 export const CANVAS_TEXT_SIZES = ['sm', 'md', 'lg', 'xl'] as const
 export type CanvasTextSize = (typeof CANVAS_TEXT_SIZES)[number]
 export const TEXT_SIZE_LABEL: Record<CanvasTextSize, string> = { sm: 'Small', md: 'Normal', lg: 'Large', xl: 'Heading' }
@@ -235,6 +245,8 @@ export type CanvasCard = {
   color?: (typeof CANVAS_NOTE_COLORS)[number]
   /** note / label — how big the words are; absent = 'md' (today's size) */
   size?: CanvasTextSize
+  /** note / heading — the words' own colour; absent = the box decides */
+  text_color?: CanvasTextColor
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
@@ -516,6 +528,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       // else, or an unknown value, is simply 'md' by absence
       ...((kind === 'note' || kind === 'label') && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
         ? { size: String(r.size) as CanvasTextSize }
+        : {}),
+      ...((kind === 'note' || kind === 'label') && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
+        ? { text_color: String(r.text_color) as CanvasTextColor }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),

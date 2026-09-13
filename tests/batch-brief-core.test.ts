@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableBatchTransitions, batchSatisfiesLock, canCreateItemsUnder,
-  checkBatchTransition, isInProduction, shootDeletion,
+  checkBatchTransition, isInProduction, shootDeletion, textColorOf,
 } from '../app/lib/batch-brief-core'
 import type { Role } from '../app/lib/identity-core'
 
@@ -534,5 +534,23 @@ describe('text size on a note or a heading (13 Sep 2026)', () => {
     expect(minCardWidth('note', 'Extraordinarily', 'xl')).toBeGreaterThan(minCardWidth('note', 'Extraordinarily', 'md'))
     expect(resizeCard('note', { w: 400, h: 100 }, -300, 0, false, 'Extraordinarily', 'xl').w)
       .toBe(minCardWidth('note', 'Extraordinarily', 'xl'))
+  })
+})
+
+describe('text colour on a note or a heading (13 Sep 2026)', () => {
+  it('keeps a known colour on a note or heading, drops it elsewhere and drops an unknown one', async () => {
+    const { sanitiseCanvasCards } = await import('../app/lib/batch-brief-core')
+    const cards = sanitiseCanvasCards([
+      { id: 'n', kind: 'note', x: 0, y: 0, text_color: 'red' },
+      { id: 'h', kind: 'label', x: 0, y: 0, text: 'A', text_color: 'white' },
+      { id: 'i', kind: 'image', x: 0, y: 0, url: 'https://x/y.png', text_color: 'red' },
+      { id: 'b', kind: 'note', x: 0, y: 0, text_color: 'neon' },
+    ])
+    expect(cards.find(c => c.id === 'n')?.text_color).toBe('red')
+    expect(cards.find(c => c.id === 'h')?.text_color).toBe('white')
+    expect(cards.find(c => c.id === 'i')).not.toHaveProperty('text_color')
+    expect(cards.find(c => c.id === 'b')).not.toHaveProperty('text_color')
+    expect(textColorOf({ text_color: 'blue' })).toBe('blue')
+    expect(textColorOf({})).toBeNull()
   })
 })

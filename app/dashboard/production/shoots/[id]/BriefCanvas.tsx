@@ -15,12 +15,11 @@ import {
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
-import { CanvasCardView, NOTE_COLORS } from './CanvasCard'
+import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
-  type CanvasCard, type CanvasTextSize, type ReferenceMedia,
-} from '../../../../lib/batch-brief-core'
+  type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -441,6 +440,11 @@ export default function BriefCanvas({
       // bump to front visually — committing z through React here would
       // re-render every card at the exact moment the drag begins
       if (d.el) { d.el.style.willChange = 'transform'; d.el.style.zIndex = '9999' }
+      // the toolbar is heavy (swatches, blur) and rides on the card: it hides
+      // for the drag and is back on the drop (the owner, 13 Sep 2026: "the
+      // label bar is laggy when I drag it")
+      const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
+      if (bar) bar.style.display = 'none'
     }
     const s = camRef.current.s
     d.nx = d.ox + dx / s
@@ -456,6 +460,8 @@ export default function BriefCanvas({
       dragState.current = null
       if (d.raf) cancelAnimationFrame(d.raf)
       if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = `translate(${d.ox}px, ${d.oy}px)` }
+      const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
+      if (bar) bar.style.display = ''
     }
     const r = resizeState.current
     if (r) {
@@ -486,6 +492,8 @@ export default function BriefCanvas({
     dragState.current = null
     if (d.raf) cancelAnimationFrame(d.raf)
     if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = '' }
+    const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
+    if (bar) bar.style.display = ''
     interactingRef.current = false
     if (!d.moved) { setSelected(card.id); return }
     const s = camRef.current.s
@@ -1017,6 +1025,21 @@ export default function BriefCanvas({
                 disabled={size === 'xl'} onClick={() => setTextSize(card, stepTextSize(size, 1))}>A+</Button>
             </div>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            {/* the words' own colour — separate from the box (13 Sep 2026) */}
+            <div role="group" aria-label="Text colour" className="flex items-center gap-1">
+              <span className="px-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Text</span>
+              {CANVAS_TEXT_COLORS.map(c => (
+                <button key={c} type="button" aria-label={`Text colour ${c}`} title={`Text ${c}`}
+                  aria-pressed={textColorOf(card) === c}
+                  onClick={() => { const next = { ...card, text_color: textColorOf(card) === c ? undefined : c }; upsertLocal(next); persist([next]) }}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
+                    textColorOf(card) === c ? 'border-accent-blue ring-2 ring-accent-blue/30' : 'border-border'
+                  }`}>
+                  <span aria-hidden className={`h-3.5 w-3.5 rounded-full border border-border ${TEXT_COLOR_SWATCH[c]}`} />
+                </button>
+              ))}
+            </div>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
               <Pencil className="h-3.5 w-3.5" /> Edit text
             </Button>
@@ -1359,7 +1382,7 @@ export default function BriefCanvas({
                 const nearTop = camRef.current.y + card.y * s < 72
                 return (
                   <div data-card-toolbar role="toolbar" aria-label={`${KIND_WORD[card.kind]} tools`}
-                    className="absolute flex w-max max-w-[92vw] flex-wrap items-center gap-1 rounded-inner border border-border bg-surface/95 p-1 shadow-md backdrop-blur"
+                    className="absolute flex w-max max-w-[92vw] flex-wrap items-center gap-1 rounded-inner border border-border bg-surface p-1 shadow-md"
                     style={{
                       left: card.w / 2,
                       ...(nearTop ? { top: 'calc(100% + 12px)' } : { bottom: 'calc(100% + 12px)' }),

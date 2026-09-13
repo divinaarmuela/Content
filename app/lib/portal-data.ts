@@ -518,7 +518,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       shoot_date: b.shoot_date ?? null,
       location: b.location ?? null,
       // an unshared booked shoot shows the fact, never the working detail
-      concept: shared ? b.concept ?? null : null,
+      concept: null, // "Notes for the team" never reach the client (13 Sep 2026)
       board_name: shared ? b.board_name ?? null : null,
       planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
       shot_list: shared ? sanitiseShotList(b.shot_list) : [],
@@ -770,7 +770,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
         date_label: dateLabel,
         location: b.location ?? null,
         // an unshared booked shoot shows the fact, never the working detail
-        concept: shared ? b.concept ?? null : null,
+        concept: null, // "Notes for the team" never reach the client (13 Sep 2026)
         planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
         shot_list: shared ? sanitiseShotList(b.shot_list) : [],
       scripts: shared ? sanitiseScripts(b.scripts) : [],

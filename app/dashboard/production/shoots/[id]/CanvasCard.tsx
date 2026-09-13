@@ -6,7 +6,7 @@ import {
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
@@ -20,6 +20,27 @@ import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
+/** the words' own colour, when picked; '' = the box decides */
+export const TEXT_COLOR_CLASS: Record<string, string> = {
+  ink: 'text-foreground',
+  grey: 'text-muted-foreground',
+  red: 'text-accent-red-deep',
+  amber: 'text-accent-amber',
+  green: 'text-accent-green',
+  blue: 'text-accent-blue',
+  white: 'text-white',
+}
+/** the swatch for each text colour on the toolbar */
+export const TEXT_COLOR_SWATCH: Record<string, string> = {
+  ink: 'bg-foreground',
+  grey: 'bg-muted-foreground',
+  red: 'bg-accent-red-deep',
+  amber: 'bg-accent-amber',
+  green: 'bg-accent-green',
+  blue: 'bg-accent-blue',
+  white: 'bg-white',
+}
+
 export const NOTE_COLORS: Record<string, string> = {
   paper: 'bg-surface border-border',
   yellow: 'bg-tint-amber border-accent-amber/35',
@@ -485,7 +506,7 @@ function CanvasCardInner({
     // top of each other
     return (
       <span
-        className="block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest text-muted-foreground"
+        className={`block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest ${TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? 'text-muted-foreground'}`}
         style={{ maxWidth: Math.max(card.w, 120), minWidth: 'min-content', fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
       >
         {card.text || (onUpdate ? 'Double-click to name this section' : '')}
@@ -496,7 +517,7 @@ function CanvasCardInner({
   if (card.kind === 'note') {
     const palette = NOTE_COLORS[card.color ?? 'paper'] ?? NOTE_COLORS.paper
     // 'ink' is dark in both themes — its text must not follow the theme
-    const inkText = card.color === 'ink' ? 'text-background' : 'text-foreground'
+    const inkText = TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? (card.color === 'ink' ? 'text-background' : 'text-foreground')
     // the words' size: md is the 13px every older note was drawn at; the
     // bigger two sit tighter, as headings do
     const noteSize = textSizeOf(card)
