@@ -56,8 +56,12 @@ export default async function PortalBoardPage({ params, searchParams }: {
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
           <div className="mx-auto flex min-h-14 w-full max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 pr-14 sm:px-10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/MDLogo-trim.png" alt="MD Media" className="h-3.5 w-auto" />
+            {/* the logo is white and never inverted: it sits on the same dark
+                pill the portal uses, readable in both themes (13 Sep 2026) */}
+            <span className="flex shrink-0 items-center rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 px-2 py-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/MDLogo-trim.png" alt="MD Media" className="h-2.5 w-auto" />
+            </span>
             <span aria-hidden className="text-muted-foreground">·</span>
             <p className="text-[14px] font-semibold">{portal.client.name}</p>
             <p className="text-[14px] text-muted-foreground">{data.shoot.board_name || data.shoot.title}</p>

@@ -1280,6 +1280,7 @@ export default function BriefCanvas({
               key={card.id}
               data-card
               data-cid={card.id}
+              data-kind={card.kind}
               tabIndex={0}
               aria-label={card.kind === 'board' ? `Board: ${card.name ?? 'Board'}` : `${card.kind}${card.text ? `: ${card.text.slice(0, 40)}` : ''}`}
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
@@ -1382,7 +1383,9 @@ export default function BriefCanvas({
                       // comment bubble in its top-right corner (the owner, 13 Sep
                       // 2026: "it's overlapping that thing") — its handles sit on
                       // the bottom edge instead
-                      style={{ left: mode === 'w' ? -22 : card.w - 22, ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}) }}
+                      // the right handle follows the DRAWN edge (a heading is as
+                      // wide as its words, not its stored width)
+                      style={{ ...(mode === 'w' ? { left: -22 } : { right: -22 }), ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}) }}
                       onPointerDown={e => startResize(e, card, mode)}
                       onPointerMove={e => moveResize(e, card)}
                       onPointerUp={() => endResize(card)}>
