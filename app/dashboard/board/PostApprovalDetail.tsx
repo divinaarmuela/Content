@@ -30,7 +30,6 @@ import { usePlayable } from '../social/usePlayable'
 import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
-import EditorCardTools from './EditorCardTools'
 import FilesToWorkFrom from './FilesToWorkFrom'
 
 /**
@@ -385,7 +384,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
    *  card offers no action, so the row is drawn on this rather than on
    *  `isManager`: a manager opening a posted card used to get an empty
    *  bordered band where the buttons would have been. */
-  const mayHandOn = isManager && item?.status !== 'scheduled' && item?.status !== 'published'
+  // "Hand to…" is the handover to the scheduler: it exists once the piece is
+  // Ready to post (the handoff route takes nothing earlier), and reads
+  // "With X · change" once booked in
+  const mayHandOn = isManager && (item?.status === 'approved_for_scheduling' || item?.status === 'scheduled')
   const markPosted = async () => {
     if (!item || handOn === null) return
     const s = slides[handOn]
@@ -492,7 +494,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 disabled={savingDeliver}
                 onChange={e => void setDeliverOnly(e.target.checked)}
               />
-              <span>Deliver only — the client posts this themselves</span>
+              <span>The client posts this themselves</span>
               {(client as { posts_own_content?: unknown } | null)?.posts_own_content === true && (item as { deliver_only?: unknown }).deliver_only == null && (
                 <span className="text-muted-foreground">(the client's setting)</span>
               )}
@@ -719,18 +721,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           onChange={e => { void onAddPicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
       </div>
 
-      {/* ── the editor's own tools: which shoot, acknowledge, a deadline at
-          risk, a file from Google Drive, the source files (11 Sep 2026) ── */}
-      {!adhoc && viewer && (
-        <EditorCardTools
-          item={item as unknown as { id: string; client_id: string; owner_id: string | null; batch_id: string | null; group_id?: string | null; link_url?: string | null; status: string }}
-          viewer={viewer}
-          activity={activity}
-          frozen={frozenCard}
-          working={working !== null}
-          onFilesFromDrive={files => void writeVersion([...slides, ...files], `Added ${files.length} from Drive`)}
-        />
-      )}
+      {/* the editor's own tools (which shoot, acknowledge, a deadline at risk,
+          a final from Drive, the source files) live on the editor's card on
+          the Editor page — the owner, 13 Sep 2026, on this face: "so
+          confusing". A manager does none of those here. */}
 
       {/* ── the brand: colours, fonts, voice, logo files — for the editor and
           the scheduler as much as the manager (the owner, 9 Sep 2026: "make
