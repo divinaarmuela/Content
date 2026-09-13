@@ -237,6 +237,17 @@ export default function MediaRail({
                             ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
                             : m.reason}
                         </span>
+                        {/* THE FOLDER THE SCHEDULER WAS HANDED (the owner, 13 Sep
+                            2026): "in their UI on schedule or overview it will be
+                            folder to work from" — they download from it and make
+                            their own post */}
+                        {m.driveFolderUrl && (
+                          <a href={m.driveFolderUrl} target="_blank" rel="noreferrer noopener"
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex min-h-11 items-center gap-1 truncate text-[12px] font-semibold underline underline-offset-4">
+                            Folder to work from<span className="sr-only">, opens in a new tab</span>
+                          </a>
+                        )}
                       </span>
                     </button>
                     <button

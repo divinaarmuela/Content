@@ -259,17 +259,29 @@ function ItemRows({ items, empty, todayKey }: {
         const tone = toneOf(i, todayKey)
         const due = todayKey && i.due_date && i.due_date <= todayKey
           && !['published', 'scheduled'].includes(i.status)
+        // the folder a scheduler was handed (the owner, 13 Sep 2026: "in their
+        // UI on schedule or overview it will be folder to work from")
+        const folder = (i as { link_kind?: string | null; link_url?: string | null })
+        const folderUrl = (folder.link_kind === 'drive' || folder.link_kind === 'dropbox') && folder.link_url ? folder.link_url : null
         return (
-          <WorkRow key={i.id}
-            href={`/dashboard/production/${i.id}`}
-            tone={tone}
-            title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
-            /* the status is the detail line; the chip only ever adds a SECOND
-               fact — printing "Being changed" twice on one row said nothing
-               twice */
-            detail={statusLabel(i)}
-            chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : undefined}
-          />
+          <div key={i.id} className="flex flex-col gap-1">
+            <WorkRow
+              href={`/dashboard/production/${i.id}`}
+              tone={tone}
+              title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
+              /* the status is the detail line; the chip only ever adds a SECOND
+                 fact — printing "Being changed" twice on one row said nothing
+                 twice */
+              detail={statusLabel(i)}
+              chip={due ? (i.due_date === todayKey ? 'Due today' : 'Overdue') : undefined}
+            />
+            {folderUrl && (
+              <a href={folderUrl} target="_blank" rel="noreferrer noopener"
+                className="inline-flex min-h-11 w-fit items-center gap-1 px-3 text-[13px] font-semibold underline underline-offset-4">
+                Folder to work from<span className="sr-only">, opens in a new tab</span>
+              </a>
+            )}
+          </div>
         )
       })}
     </div>
