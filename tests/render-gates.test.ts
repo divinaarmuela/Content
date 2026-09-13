@@ -125,8 +125,13 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // the empty states say what to do
     expect(s).toMatch(/No final yet\. Add the finished cut here/)
     expect(s).toMatch(/Not given yet — ask Production\./)
-    expect(s).toMatch(/Not blocked\./)
-    expect(s).toMatch(/Shown once the card is approved\./)
+    // Handover and Blocked? are the two that DO step aside when they have
+    // nothing to say (the owner, 13 Sep 2026: "your UI has so many texts in
+    // the card") — no "Not blocked." / "Shown once approved." filler
+    expect(s).not.toMatch(/Not blocked\./)
+    expect(s).not.toMatch(/Shown once the card is approved\./)
+    expect(s).toMatch(/\{showsHandover\(status\) && \(/)
+    expect(s).toMatch(/\{\(blocked \|\| \(holder && !frozen\)\) && \(/)
     // "Before you start" says Not given rather than hiding a row
     expect(s).toMatch(/row\.value \?\? NOT_GIVEN/)
   })

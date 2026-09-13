@@ -19,6 +19,7 @@ import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
+import CardSaid from './CardSaid'
 import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
 import { fileBooking, outcomeWords, type OutcomeJob } from '../../lib/post-outcome-core'
 import {
@@ -770,68 +771,34 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         )}
       </div>
 
-      {/* ── 5. what was said ── */}
-      <div className="flex flex-col gap-3 px-5 py-4">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What was said</p>
-        {/* WHERE TO LOOK (Abby, 11 Sep 2026): the maker's Canva link and page,
-            for the reviewer — drawn whenever the maker gave one */}
-        {((item as { review_link?: string | null }).review_link || (item as { review_note?: string | null }).review_note) && (
-          <p className="rounded-inner bg-tint-blue p-3 text-[13px]">
-            <span className="font-semibold">Look here: </span>
-            {(item as { review_link?: string | null }).review_link
-              ? <a href={String((item as { review_link?: string | null }).review_link)} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">{String((item as { review_link?: string | null }).review_link)}<span className="sr-only">, opens in a new tab</span></a>
-              : null}
-            {(item as { review_note?: string | null }).review_note ? ` · ${String((item as { review_note?: string | null }).review_note)}` : ''}
-          </p>
-        )}
-        {changeAbout && changeAbout.index === null && (
-          <p className="rounded-inner bg-tint-red p-3 text-[13px]"><span className="font-semibold">Change asked for: </span>{changeAbout.rest}</p>
-        )}
-        {!readsClient && (
-          <p className="text-[12px] text-muted-foreground">The client’s own comments are read by the account manager; what they asked for is in the change note.</p>
-        )}
-        {said.length === 0 && !changeNote && (
-          <p className="text-[13px] text-muted-foreground">Nothing yet.</p>
-        )}
-        {said.map(c => {
-          const { label, rest } = splitSlideTag(String(c.body ?? ''))
-          return (
-            <div key={c.id} className="rounded-inner bg-foreground/[0.04] p-3 text-[13px]">
-              <p className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
-                <span className="font-semibold text-foreground">{nameOf(c.author_id) ?? 'Someone'}</span>
-                <span>{new Date(String(c.created_at)).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
-                {label && <span className="italic">on {label.toLowerCase()}</span>}
-                {(c as { visibility?: string }).visibility === 'client' && <Chip tone="blue" className="px-2 py-0.5">Client sees this</Chip>}
-                {roleOf(c.author_id) === 'client' && <Chip tone="amber" className="px-2 py-0.5">Client</Chip>}
-              </p>
-              <p className="mt-1 whitespace-pre-wrap">{rest}</p>
-            </div>
-          )
-        })}
-        {isManager && (
-          <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1 w-fit text-[13px] font-semibold">
-            <button type="button" aria-pressed={!toClient} onClick={() => setToClient(false)}
-              className={cn('inline-flex min-h-11 items-center rounded-full px-3', !toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Note for the team</button>
-            <button type="button" aria-pressed={toClient} onClick={() => setToClient(true)}
-              className={cn('inline-flex min-h-11 items-center rounded-full px-3', toClient ? 'bg-foreground text-background' : 'text-muted-foreground')}>Reply to {client?.name ?? 'the client'}</button>
-          </div>
-        )}
-        {replyOn !== null && slides[replyOn] && (
-          <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            About {slides[replyOn].type === 'video' ? 'video' : 'photo'} {replyOn + 1} of {slides.length}
-            <button type="button" onClick={() => setReplyOn(null)} className="-my-2 inline-flex min-h-11 items-center underline underline-offset-4">the whole post instead</button>
-          </p>
-        )}
-        <div className="flex items-end gap-2">
-          <textarea ref={noteBox} rows={2} value={draft} onChange={e => setDraft(e.target.value)}
-            aria-label={isManager && toClient ? `A reply to ${client?.name ?? 'the client'}` : 'A note for the team'}
-            placeholder={isManager && toClient ? `They see this on their portal — no email is sent` : 'A note for the team — @name to tag someone'}
-            className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
-          <Button className="h-11 w-11 rounded-full p-0" disabled={sending || !draft.trim()} onClick={() => void sendNote()} aria-label="Add note">
-            <MessageCircle className="h-4 w-4" aria-hidden />
-          </Button>
-        </div>
-      </div>
+      {/* ── 5. what was said — the same section the Editor drawer draws ── */}
+      <CardSaid
+        rows={said as never}
+        nameOf={nameOf} roleOf={roleOf} meId={me?.id}
+        when={iso => new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+        isManager={isManager} clientName={client?.name} readsClient={readsClient}
+        draft={draft} setDraft={setDraft} sending={sending} onSend={() => void sendNote()}
+        toClient={toClient} setToClient={setToClient}
+        noteBox={noteBox}
+        replyLabel={replyOn !== null && slides[replyOn] ? `About ${slides[replyOn].type === 'video' ? 'video' : 'photo'} ${replyOn + 1} of ${slides.length}` : null}
+        onClearReply={() => setReplyOn(null)}
+        extras={<>
+          {/* WHERE TO LOOK (Abby, 11 Sep 2026): the maker's Canva link and page,
+              for the reviewer — drawn whenever the maker gave one */}
+          {((item as { review_link?: string | null }).review_link || (item as { review_note?: string | null }).review_note) && (
+            <p className="rounded-inner bg-tint-blue p-3 text-[13px]">
+              <span className="font-semibold">Look here: </span>
+              {(item as { review_link?: string | null }).review_link
+                ? <a href={String((item as { review_link?: string | null }).review_link)} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">{String((item as { review_link?: string | null }).review_link)}<span className="sr-only">, opens in a new tab</span></a>
+                : null}
+              {(item as { review_note?: string | null }).review_note ? ` · ${String((item as { review_note?: string | null }).review_note)}` : ''}
+            </p>
+          )}
+          {changeAbout && changeAbout.index === null && (
+            <p className="rounded-inner bg-tint-red p-3 text-[13px]"><span className="font-semibold">Change asked for: </span>{changeAbout.rest}</p>
+          )}
+        </>}
+      />
 
       {isManager && status !== 'scheduled' && status !== 'published' && (
         <div className={cn('mt-auto flex items-center justify-end gap-2 border-t border-border px-5 py-4')}>

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, HardDriveDownload, MessageCircle, Upload, X } from 'lucide-react'
-import { visibleComments } from '../../lib/comment-access-core'
+import { AlertTriangle, Check, ExternalLink, HardDriveDownload, Upload, X } from 'lucide-react'
+import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
+import CardSaid from './CardSaid'
 import type { Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
@@ -88,6 +89,8 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   }, [comments, me])
   const [note, setNote] = useState('')
   const [sendingNote, setSendingNote] = useState(false)
+  const [toClient, setToClient] = useState(false)
+  const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
   const sendNote = async () => {
     const text = note.trim()
     if (!text || !item) return
@@ -95,15 +98,25 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
     try {
       // tagged to the first account manager; the rest are named in the text
       // so the same tag rule reaches them
-      const [first, ...rest] = managers
+      // a manager writes a note for the team, or a reply the client sees;
+      // the maker's note is tagged to the first account manager and names
+      // the rest (the owner, 13 Sep 2026: "I'm the account manager, why am
+      // I seeing write to me")
+      const [first, ...rest] = isManager ? [] : managers
       const mentions = rest.map(m => `@${m.name || m.email}`).join(' ')
       const res = await fetch(`/api/production/items/${item.id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: mentions ? `${text} ${mentions}` : text, ...(first ? { assigned_to: first.id } : {}) }),
+        body: JSON.stringify({
+          body: mentions ? `${text} ${mentions}` : text,
+          visibility: isManager && toClient ? 'client' : 'internal',
+          ...(first ? { assigned_to: first.id } : {}),
+        }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not send')
       setNote('')
-      toast.success(managers.length > 0 ? `Sent — ${managers.map(m => m.name || m.email).join(', ')} will be told` : 'Sent to the team')
+      toast.success(isManager
+        ? (toClient ? `Replied — ${client?.name ?? 'the client'} sees it on their portal` : 'Note added')
+        : managers.length > 0 ? `Sent — ${managers.map(m => m.name || m.email).join(', ')} will be told` : 'Sent to the team')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not send')
     } finally {
@@ -499,10 +512,12 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
         )}
       </section>
 
-      {/* ── 5. handover (§5) ── */}
+      {/* ── 5. handover (§5) — drawn only once there is one (the owner, 13
+          Sep 2026: "your UI has so many texts in the card") ── */}
+      {showsHandover(status) && (
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-hand">
         <p id="ed-hand" className={H2}>Handover</p>
-        {showsHandover(status) ? (
+        {(
           <ul className="flex flex-col gap-1">
             {handover.map(h => (
               <li key={h.key} className="flex min-h-11 items-center gap-3 text-[14px]">
@@ -519,15 +534,14 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-[13px] text-muted-foreground">Shown once the card is approved.</p>
         )}
       </section>
+      )}
 
-      {/* ── 6. blocked (§7) ── */}
+      {/* ── 6. blocked (§7) — only the holder's button, or the block itself ── */}
+      {(blocked || (holder && !frozen)) && (
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-blocked">
         <p id="ed-blocked" className={H2}>Blocked?</p>
-        <p className="text-[12px] text-muted-foreground">Nothing stays blocked for more than 24 hours. Ever.</p>
         {blocked ? (
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-[14px]">{blocked}</p>
@@ -536,7 +550,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
         ) : !blockOpen ? (
           holder && !frozen
             ? <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy} onClick={() => setBlockOpen(true)}>I’m blocked</Button>
-            : <p className="text-[13px] text-muted-foreground">Not blocked.</p>
+            : null
         ) : (
           <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
             <ol className="list-decimal pl-5 text-[12px] text-muted-foreground">
@@ -561,29 +575,19 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           </div>
         )}
       </section>
+      )}
 
-      {/* ── 7. comments: the same thread the account manager reads ── */}
-      <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-comments">
-        <p id="ed-comments" className={H2}>Comments</p>
-        {thread.length === 0 && <p className="text-[13px] text-muted-foreground">Nothing yet. Write to the account manager below.</p>}
-        {thread.map(c => (
-          <div key={c.id} className="rounded-inner bg-foreground/[0.04] p-3 text-[13px]">
-            <p className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
-              <span className="font-semibold text-foreground">{c.author_id === me?.id ? 'You' : (nameOf(c.author_id) ?? 'Someone')}</span>
-              <span>{formatInZone(String(c.created_at), zone, 'short') ?? ''}</span>
-            </p>
-            <p className="mt-1 whitespace-pre-wrap">{String(c.body ?? '')}</p>
-          </div>
-        ))}
-        <div className="flex items-end gap-2">
-          <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
-            aria-label="Write to the account manager"
-            placeholder={managers.length > 0 ? `Write to ${managers.map(m => m.name || m.email).join(', ')}…` : 'Write to the account manager…'}
-            className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
-          <Button className="h-11 rounded-full px-4 text-[14px] font-semibold" disabled={sendingNote || !note.trim()} onClick={() => void sendNote()}>
-            <MessageCircle className="h-4 w-4" aria-hidden /> Send
-          </Button>
-        </div>
+      {/* ── 7. what was said — the same section the Post approval drawer draws ── */}
+      <section className="border-b border-border" aria-label="What was said">
+        <CardSaid
+          rows={thread as never}
+          nameOf={nameOf} roleOf={uid => team.find(u => u.id === uid)?.role ?? null} meId={me?.id}
+          when={iso => formatInZone(iso, zone, 'short') ?? ''}
+          isManager={isManager} clientName={client?.name} readsClient={canReadClientComments(me?.role ?? null)}
+          draft={note} setDraft={setNote} sending={sendingNote} onSend={() => void sendNote()}
+          toClient={toClient} setToClient={setToClient}
+          placeholder={managers.length > 0 ? `Write to ${managers.map(m => m.name || m.email).join(', ')}…` : 'Write to the account manager…'}
+        />
       </section>
 
       {/* ── 8. what happened ── */}

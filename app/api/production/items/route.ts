@@ -430,6 +430,10 @@ export async function POST(req: Request) {
           : !isInternal,
         // deliver only: the card's own word, or null to follow the client
         deliver_only: typeof it.deliver_only === 'boolean' ? it.deliver_only : null,
+        // A POSTING JOB, not an edit (the owner, 13 Sep 2026: a New post card
+        // "ends up creating a card in the editor's quality check"): flagged
+        // like an uploaded post, so it lives on the Post approval board only
+        ...(it.adhoc_post === true ? { adhoc_post: true } : {}),
         // both were Postgres column defaults; an item that reads back without
         // a status is on no board at all
         status: 'draft_uploaded',

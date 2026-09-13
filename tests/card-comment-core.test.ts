@@ -66,7 +66,11 @@ describe('the subject says who wrote what', () => {
 describe('the editor drawer and the board card carry the thread (source pins)', () => {
   it('the editor drawer has a Comments section that writes to the account manager', () => {
     const src = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(src).toMatch(/aria-labelledby="ed-comments"/)
+    // ONE comments section, drawn by the same component on both drawers (the
+    // owner, 13 Sep 2026: "make them the same UI")
+    expect(src).toMatch(/<CardSaid/)
+    expect(readFileSync('app/dashboard/board/PostApprovalDetail.tsx', 'utf8')).toMatch(/<CardSaid/)
+    expect(readFileSync('app/dashboard/board/CardSaid.tsx', 'utf8')).toMatch(/What was said/)
     expect(src).toMatch(/visibleComments\(/)
     expect(src).toMatch(/\/api\/production\/items\/\$\{item\.id\}\/comments/)
     expect(src).toMatch(/assigned_to: first\.id/)

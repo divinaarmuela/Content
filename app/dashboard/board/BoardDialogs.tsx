@@ -622,6 +622,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           ...(rawAssets.length > 0 ? { raw_assets: rawAssets } : {}),
           ...(folder.trim() ? { raw_assets_url: folder.trim() } : {}),
           ...(deliverOnlyCard ? { deliver_only: true } : {}),
+          // a New post is a posting job: Post approval board only, never the Editor page
+          ...(forPosting ? { adhoc_post: true } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
           // link is where the work is from
