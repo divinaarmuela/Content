@@ -65,3 +65,13 @@ describe('the three pages hand the board their page, and the board makes the lan
     expect(compact).not.toMatch(/cardActions|DropdownMenu|onAction/)
   })
 })
+
+describe('the lanes show a scrollbar (13 Sep 2026)', () => {
+  it('the lane scroller is marked, and the stylesheet draws a bar for it despite hiding every other one', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    expect(readFileSync('app/dashboard/production/LaneBoard.tsx', 'utf8')).toMatch(/className="w-full overflow-x-auto" data-lane-scroll/)
+    const css = readFileSync('app/globals.css', 'utf8')
+    expect(css).toMatch(/\.dbx \[data-lane-scroll\]::-webkit-scrollbar \{ display: block; height: 10px; \}/)
+    expect(css).toMatch(/\.dbx \[data-lane-scroll\] \{ scrollbar-width: thin/)
+  })
+})

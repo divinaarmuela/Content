@@ -160,7 +160,11 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
   }
 
   return (
-    <div className="w-full overflow-x-auto">
+    // data-lane-scroll: the one place the dashboard SHOWS a scrollbar. The
+    // site hides every scrollbar (globals.css), so on a laptop the lanes past
+    // the edge gave no sign they were there (the owner, 13 Sep 2026: "need a
+    // bottom scrollbar to indicate they can scroll left to right")
+    <div className="w-full overflow-x-auto" data-lane-scroll>
       <div className="flex gap-3.5 pb-3">
         {lanes.map((l, i) => column(l, i))}
       </div>

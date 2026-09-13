@@ -287,6 +287,15 @@ html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
+/* THE ONE VISIBLE SCROLLBAR: a board's lanes on a narrow screen. Without it
+   a laptop shows five lanes and no hint that two more sit past the edge
+   (the owner, 13 Sep 2026). Always drawn, thin, in the dashboard's ink. */
+.dbx [data-lane-scroll] { scrollbar-width: thin; scrollbar-color: hsl(var(--foreground) / 0.35) hsl(var(--foreground) / 0.08); -ms-overflow-style: auto; padding-bottom: 4px; }
+.dbx [data-lane-scroll]::-webkit-scrollbar { display: block; height: 10px; }
+.dbx [data-lane-scroll]::-webkit-scrollbar-track { background: hsl(var(--foreground) / 0.08); border-radius: 999px; }
+.dbx [data-lane-scroll]::-webkit-scrollbar-thumb { background: hsl(var(--foreground) / 0.35); border-radius: 999px; }
+.dbx [data-lane-scroll]::-webkit-scrollbar-thumb:hover { background: hsl(var(--foreground) / 0.55); }
+
 body {
   font-family: var(--sans);
   font-weight: 400;

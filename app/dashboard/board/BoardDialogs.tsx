@@ -656,7 +656,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         <DialogHeader>
           <DialogTitle>{forPosting ? 'New post' : 'New card'}</DialogTitle>
           <DialogDescription>{forPosting
-            ? 'One post for one client. Say what needs doing, attach the files or the folder, and hand it to whoever posts it.'
+            ? 'Say what needs doing, attach the files or the folder, and hand it to whoever posts it.'
             : 'One card for one client. Say what needs doing and attach the files to work from.'}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">

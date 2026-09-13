@@ -332,3 +332,17 @@ describe('a heading is drawn at its stored width (13 Sep 2026)', () => {
     expect(canvas).toMatch(/CANVAS_TEXT_ALIGNS\.map/)
   })
 })
+
+describe('the home page loader covers the hero from the first paint (13 Sep 2026)', () => {
+  it('the cover box is CSS black in the server HTML, and steps aside only once the canvas is painted', () => {
+    const loader = src('app/components/lama/LamaLoader.tsx')
+    expect(loader).toMatch(/useState\(true\)/)
+    expect(loader).toMatch(/\$\{solid \? 'bg-black' : ''\}/)
+    // the hand-over happens right after the canvas is filled black
+    const fill = loader.indexOf('coverCtx.fillRect(0, 0, cover.width, cover.height)')
+    const hand = loader.indexOf('setSolid(false)')
+    expect(fill).toBeGreaterThan(0)
+    expect(hand).toBeGreaterThan(fill)
+    expect(hand - fill).toBeLessThan(200)
+  })
+})

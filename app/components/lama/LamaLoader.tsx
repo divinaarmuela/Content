@@ -11,6 +11,13 @@ const CELL = 16
 export default function LamaLoader() {
   const [pct, setPct] = useState(0)
   const [gone, setGone] = useState(false)
+  // THE COVER IS THERE FROM THE FIRST PAINT (the owner, 13 Sep 2026: "it
+  // showed a glimpse of the hero text before the loading starts"). The
+  // canvas is only painted black once JavaScript runs, and the server's
+  // HTML draws the hero visible until then — so the cover starts as plain
+  // CSS black on the box itself, and hands over to the canvas (already
+  // painted black) before the dissolve needs to clear cells.
+  const [solid, setSolid] = useState(true)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -24,6 +31,8 @@ export default function LamaLoader() {
       coverCtx.fillStyle = '#000'
       coverCtx.fillRect(0, 0, cover.width, cover.height)
     }
+    // the canvas is black now, so the CSS cover can step aside for the dissolve
+    setSolid(false)
     const start = performance.now()
     // The counter is an easing curve, not real progress — nothing is waiting on
     // it. It was 1500 + 700, so every visit paid 2.2s during which the page is
@@ -88,7 +97,7 @@ export default function LamaLoader() {
 
   if (gone) return null
   return (
-    <div aria-hidden="true" className="fixed inset-0 z-[200] pointer-events-none">
+    <div aria-hidden="true" className={`fixed inset-0 z-[200] pointer-events-none ${solid ? 'bg-black' : ''}`}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
       {pct < 100 && (
         <span className="absolute bottom-8 left-6 sm:left-10 font-lamam text-sm text-cream tracking-widest">{pct}%</span>

@@ -719,14 +719,21 @@ export async function performTransition(
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
     } else if (typeof (item as { link_url?: string | null }).link_url === 'string'
-        && (item as { link_url?: string | null }).link_url) {
-      // A CARD WITH A LINK IS EVIDENCE ENOUGH.
+        && (item as { link_url?: string | null }).link_url
+        && (item as { link_url?: string | null }).link_url !== ((item as { raw_assets_url?: string | null }).raw_assets_url ?? null)) {
+      // A CARD WITH A LINK IS EVIDENCE ENOUGH — when the link is the WORK.
       //
       // Since the board reset a card is one deliverable with one pasted link —
       // Google Drive or Dropbox — instead of nested versions carrying slides.
       // The old check only ever looked at `asset_versions`, so a link-only card
       // was refused at "Submit for review" with a message telling the person to
       // add the link they had already added.
+      //
+      // BUT the folder to work FROM is not the finished piece (the owner, 13
+      // Sep 2026: an AM makes the card with a Drive folder for the scheduler,
+      // who "uploads the files and chooses which one to schedule"). A card
+      // whose only link is that folder has nothing for the quality checker
+      // yet, so it falls through to the version check below.
     } else {
       const latest = (await table<AssetVersion>('asset_versions')
         .list({ by: { item_id: item.id }, orderBy: [['version_number', 'desc']], limit: 1 }))[0] ?? null
@@ -737,7 +744,14 @@ export async function performTransition(
           throw new AuthzError('Attach the work first — upload a file or add a link, then submit', 400)
         }
       } else {
-        if (!latest) throw new AuthzError('Add a version with links before submitting', 400)
+        if (!latest) {
+          throw new AuthzError(
+            (item as { raw_assets_url?: string | null }).raw_assets_url
+              ? 'Upload the finished files first — the folder is what you work from, not the piece to check'
+              : 'Add a version with links before submitting',
+            400,
+          )
+        }
         const valid = versionSatisfiesSubmission(latest)
         if (!valid.ok) throw new AuthzError(`Missing: ${valid.missing.join(' and ')}`, 400)
       }
