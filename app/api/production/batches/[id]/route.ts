@@ -26,12 +26,17 @@ import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoo
  * is refused with where to go instead (the owner, 12 Sep 2026: "editors
  * shouldn't be seeing that page on the dashboard").
  */
-async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
+async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: string, mode: 'work' | 'read' = 'work') {
   const found = await table<Batch>('batches').get(id)
   if (!found) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
   const batch = (await attachOne([found], 'client_id', 'clients', ['name']))[0]
   const me = await shootManager(user)
-  if (!canManageShoot(me, batch)) {
+  // THE QUALITY CHECKER READS THE PLAN HERE (the owner, 13 Sep 2026: "this
+  // person is the quality checker and he couldn't go to review the shoot
+  // page"): the review buttons live on this page, so a reviewer opens it —
+  // to read, and to pass or send back; every other button is still refused
+  const reviewer = isQualityReviewer(user) && mode === 'read'
+  if (!canManageShoot(me, batch) && !reviewer) {
     // somebody on the shoot is sent to their card; a stranger is simply refused
     const onIt = (await canOpenBatch(user, batch)) || peopleOnShoot(batch).includes(user.id)
     return { response: NextResponse.json(onIt ? NOT_YOUR_PAGE : { error: 'You are not on this client or this shoot' }, { status: 403 }) }
@@ -45,7 +50,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const user = await requireRole('scheduler')
     const { id } = await params
-    const loaded = await loadBatch(user, id)
+    const loaded = await loadBatch(user, id, 'read')
     if ('response' in loaded) return loaded.response
     const b = loaded.batch
 

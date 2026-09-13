@@ -145,6 +145,17 @@ describe('asking', () => {
 })
 
 describe('passing and sending back', () => {
+  it('the quality checker can OPEN the shoot page to review it, and still cannot edit the plan (13 Sep 2026)', async () => {
+    fake.restore(); fake = seed({}, [joy])
+    as(JOY, 'quality_checker', 'Joy')
+    const r = await open()
+    expect(r.status).toBe(200)
+    expect(Object.keys(r.body)).toContain('plan_review_required')
+    // reading is not working: the plan's fields are still the manager's
+    const edit = await json(detail.PATCH(new Request('https://x.test/b', { method: 'PATCH', body: JSON.stringify({ objective: 'Joy wrote this' }) }), P('b-1')))
+    expect(edit.status).toBe(403)
+    expect(batch().objective).not.toBe('Joy wrote this')
+  })
   it('an account manager may not pass a plan', async () => {
     expect((await answer({ pass: true })).status).toBe(403)
     expect(batch().plan_reviewed_at ?? null).toBeNull()
