@@ -7,7 +7,6 @@ import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import PortalLive from '../../../../components/portal/PortalLive'
 import ShootBoard from '../../../../components/portal/ShootBoard'
-import CommentThread from '../../../../components/portal/CommentThread'
 
 export const metadata: Metadata = {
   title: 'Your board — MD Media',
@@ -19,9 +18,10 @@ export const dynamic = 'force-dynamic'
  * JUST THE BOARD (the owner, 13 Sep 2026: "we already have this feature but
  * this is just the board"). The shoot's planning canvas on its own page,
  * under the MD Media header, and nothing else from the plan: no fields, no
- * approve buttons, no PDF. The client comments on any card, or under the
- * board, exactly as on the full portal page — the same comment rows, so the
- * team reads them on the shoot page and the account manager is emailed.
+ * approve buttons, no PDF, no general comment box: the client comments ON A
+ * CARD (the owner, 13 Sep 2026: "each card we add we can place comments"),
+ * the same comment rows as the portal, so the team reads them on the same
+ * card on the shoot page and the account manager is emailed.
  *
  * Same token as the client portal, so the "Copy board link" button on the
  * shoot page needs no new secret; an unshared shoot is not found here, as
@@ -82,9 +82,6 @@ export default async function PortalBoardPage({ params, searchParams }: {
             </p>
           )}
 
-          <div className="max-w-3xl">
-            <CommentThread token={token} kind="shoot" id={data.shoot.id} comments={data.comments} />
-          </div>
         </main>
         <Toaster position="top-center" />
       </div>

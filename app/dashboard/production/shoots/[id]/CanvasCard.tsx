@@ -487,7 +487,7 @@ function CanvasCardInner({
         className="block select-none whitespace-normal break-normal font-mono text-body-15 uppercase leading-snug tracking-widest text-muted-foreground"
         style={{ maxWidth: Math.max(card.w, 120), minWidth: 'min-content' }}
       >
-        {card.text || 'Double-click to name this section'}
+        {card.text || (onUpdate ? 'Double-click to name this section' : '')}
       </span>
     )
   }
@@ -809,7 +809,8 @@ function CanvasCardInner({
           ) : (
             <p className="break-words">
               <span className="font-semibold text-foreground">{handle}</span>{' '}
-              <span className="opacity-50">Double-click to write a caption…</span>
+              {/* a viewer (the client on the portal) cannot double-click anything */}
+              {onUpdate && <span className="opacity-50">Double-click to write a caption…</span>}
             </p>
           )}
         </div>

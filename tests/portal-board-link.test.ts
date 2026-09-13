@@ -18,7 +18,8 @@ describe('the board-only portal page', () => {
   it('is the same loader and the same comments as the portal shoot page — the team reads them on the shoot page', () => {
     expect(s).toMatch(/getPortalShootDetail\(raw, id\)/)
     expect(s).toMatch(/<ShootBoard[\s\S]*surface=\{\{ token \}\}/)
-    expect(s).toMatch(/<CommentThread token=\{token\} kind="shoot" id=\{data\.shoot\.id\}/)
+    // comments are ON A CARD (the board's bubbles), never a general box
+    expect(s).not.toContain('CommentThread')
     expect(s).toMatch(/notFound\(\)/)
   })
   it('draws the board and the MD Media header, and nothing else from the plan', () => {
@@ -46,5 +47,13 @@ describe('Copy board link on the shoot page', () => {
     expect(s).toMatch(/batch\.shared_with_client \? Promise\.resolve\(true\) : onPatch\('shared_with_client', true\)/)
     // and the board's own switch, which an older page could have turned off
     expect(s).toMatch(/boardOff \? onPatch\('share_board', true\)/)
+  })
+})
+
+describe('a viewer’s canvas carries no editing hints', () => {
+  it('the “Double-click…” hints are drawn only when the card can be updated (the client saw one on 13 Sep 2026)', () => {
+    const s = src('app/dashboard/production/shoots/[id]/CanvasCard.tsx')
+    expect(s).toMatch(/\{onUpdate && <span className="opacity-50">Double-click to write a caption…<\/span>\}/)
+    expect(s).toMatch(/onUpdate \? 'Double-click to name this section' : ''/)
   })
 })
