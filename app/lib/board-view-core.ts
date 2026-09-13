@@ -883,6 +883,10 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     stats: [{ value: input.clientCount ?? 0, label: 'you look after' }],
   }
 
+  // THE QUALITY CHECKER (13 Sep 2026): one tile — what waits on their
+  // check. Deciding, clients and leads are not theirs.
+  if (viewer.role === 'quality_checker') return [quality]
+
   if (viewer.role === 'super_admin') {
     const tiles: OverviewTile[] = [
       {

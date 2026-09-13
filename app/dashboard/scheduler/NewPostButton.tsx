@@ -33,6 +33,7 @@ import { useWorkRows } from '../useLiveWork'
 import { useTeamMembers } from '../production/workHooks'
 import type { BoardViewer } from '../../lib/board-view-core'
 import { NewCardDialog } from '../board/BoardDialogs'
+import { mayCreatePost } from '../../lib/overview-links-core'
 import SendForApprovalDialog from './SendForApprovalDialog'
 
 export default function NewPostButton() {
@@ -49,8 +50,11 @@ export default function NewPostButton() {
   const team = useTeamMembers(isManager)
 
   // the role is still arriving: render nothing rather than a button that may
-  // be about to disappear
-  if (roleLoading || !can('scheduler')) return null
+  // be about to disappear. And ONLY the roles who raise posts: a quality
+  // checker satisfies `can('scheduler')` on the ladder, but does not make
+  // posts (the owner, 13 Sep 2026: "doesn't make sense quality review can
+  // create a post")
+  if (roleLoading || !can('scheduler') || !mayCreatePost(me?.role)) return null
 
   return (
     <>

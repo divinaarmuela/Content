@@ -35,6 +35,9 @@ import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
 import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from '../lib/board-view-core'
+import {
+  CALENDAR_PAGE, EDITOR_BOARD, POST_APPROVAL_BOARD, SHOOTS_PAGE, actionFor, cardHref, chipCount, linkAllowed, overviewChips, shootHref,
+} from '../lib/overview-links-core'
 import { briefIsLate, type SopShoot } from '../lib/shoot-sop-core'
 import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
@@ -238,10 +241,12 @@ function toneOf(i: ItemLite, todayKey: string | null): RowTone {
 }
 
 /** The rows for a list of items, with the list's own loading and empty words. */
-function ItemRows({ items, empty, todayKey }: {
+function ItemRows({ items, empty, todayKey, role }: {
   items: ItemLite[] | undefined
   empty: string
   todayKey: string | null
+  /** whose Overview this is — the card opens on a board THIS role has */
+  role: Role | null | undefined
 }) {
   if (items === undefined) {
     return (
@@ -266,7 +271,7 @@ function ItemRows({ items, empty, todayKey }: {
         return (
           <div key={i.id} className="flex flex-col gap-1">
             <WorkRow
-              href={`/dashboard/production/${i.id}`}
+              href={cardHref(role, i)}
               tone={tone}
               title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
               /* the status is the detail line; the chip only ever adds a SECOND
@@ -379,33 +384,26 @@ const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
   draft: 'muted', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
 }
 
-/** Per-status counts folded into the five columns — `columnOf` is the one
- *  place a status is told which column it sits in, so the Overview can never
- *  disagree with the board about where a card is. */
-function columnCounts(pipeline: Record<string, number> | undefined): Record<BoardColumnKey, number> {
-  const out = Object.fromEntries(BOARD_COLUMNS.map(c => [c.key, 0])) as Record<BoardColumnKey, number>
-  for (const [status, n] of Object.entries(pipeline ?? {})) {
-    const key = columnOf(status as ItemStatus) as BoardColumnKey | undefined
-    if (key) out[key] += n
-  }
-  return out
-}
-
-function Pipeline({ pipeline, page }: { pipeline: Record<string, number> | undefined; page: 'production' | 'editor' }) {
-  const counts = columnCounts(pipeline)
+/** "Where everything is right now" — the ROLE's own columns, each chip a way
+ *  into that column of a board the role has (the owner, 13 Sep 2026: "this
+ *  needs fixing for every role, the button pages are wrong"). */
+function Pipeline({ pipeline, role, plansInReview }: {
+  pipeline: Record<string, number> | undefined
+  role: Role | null | undefined
+  plansInReview: number
+}) {
+  const chips = overviewChips(role)
   return (
     <TintCard tone="paper" title="Where everything is right now">
       <div className="flex flex-wrap gap-2">
-        {/* every count is a way in: the chip states the fact, the link around
-            it opens that column of the board */}
-        {BOARD_COLUMNS.map(c => (
-          <Link key={c.key} href={boardHref(page, { column: c.key })} title={c.meaning}
-            className="rounded-full underline-offset-4 hover:underline">
-            <Chip tone={COLUMN_TONE[c.key]}>
-              {c.label} · <span className="tabular-nums">{counts[c.key]}</span>
-            </Chip>
-          </Link>
-        ))}
+        {chips.map(c => {
+          const n = chipCount(c, pipeline, plansInReview)
+          const tone = COLUMN_TONE[c.columns[0] ?? 'draft'] ?? 'surface'
+          const chip = <Chip tone={tone}>{c.label} · <span className="tabular-nums">{n}</span></Chip>
+          return linkAllowed(role, c.href)
+            ? <Link key={c.key} href={c.href} className="rounded-full underline-offset-4 hover:underline">{chip}</Link>
+            : <span key={c.key}>{chip}</span>
+        })}
       </div>
     </TintCard>
   )
@@ -650,6 +648,18 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewer, isManager, live.loading, live.tables.assignments.rows, live.tables.clients.rows,
     live.tables.activity.rows, postCards, commitmentRows, todayKey])
+  /** a plan asked for review and not yet passed — the quality checker's queue */
+  const planInReview = (b: { review_asked_at?: string | null; plan_reviewed_at?: string | null }) =>
+    !!b.review_asked_at && !(b.plan_reviewed_at && String(b.plan_reviewed_at) >= String(b.review_asked_at))
+  const plansToReview = useMemo(
+    () => (live.batches as unknown as { id: string; title: string; clients?: { name: string } | null; review_asked_at?: string | null; plan_reviewed_at?: string | null }[])
+      .filter(planInReview).slice(0, 8),
+    [live.batches])
+  const plansInReview = plansToReview.length
+  /** cards at Quality check, for the quality checker's own list */
+  const qualityQueue = useMemo(
+    () => (postCards as unknown as ItemLite[]).filter(c => c.status === 'quality_check').slice(0, 8),
+    [postCards])
   const postPipeline = useMemo(() => {
     const out: Record<string, number> = {}
     for (const c of postCards) out[String(c.status)] = (out[String(c.status)] ?? 0) + 1
@@ -756,7 +766,7 @@ export default function OverviewPage() {
         title: `Post goes live · ${clientNameOf.get(it.client_id)?.name ?? 'a client'}`,
         detail: [it.title, platformName(e.platform)].filter(Boolean).join(' · '),
         tone: 'blue',
-        href: `/dashboard/production/${it.id}`,
+        href: cardHref(role as Role | null, it),
       })
     }
     for (const i of live.items) {
@@ -769,13 +779,13 @@ export default function OverviewPage() {
         title: `${review ? 'Client review' : 'Due today'} · ${i.clients?.name ?? 'a client'}`,
         detail: i.title,
         tone: review ? 'green' : 'amber',
-        href: `/dashboard/production/${i.id}`,
+        href: cardHref(role as Role | null, i),
       })
     }
     return rows
       .sort((a, b) => a.at.localeCompare(b.at))
       .map(r => ({ time: r.time, title: r.title, detail: r.detail, tone: r.tone, href: r.href }))
-  }, [live.batches, live.items, entryRows, clientNameOf, todayKey, zone])
+  }, [live.batches, live.items, entryRows, clientNameOf, todayKey, zone, role])
 
   /* ── the heading ── */
 
@@ -868,13 +878,13 @@ export default function OverviewPage() {
               <div className="flex flex-col gap-2">
                 {data.waiting_on_you.items.map(i => (
                   <WorkRow key={i.id} tone="amber"
-                    href={`/dashboard/production/${i.id}#comments`}
+                    href={cardHref(role as Role | null, i)}
                     title={i.clients?.name ? `${i.clients.name} · ${i.title}` : i.title}
                     detail={statusLabel(i)} chip="Answer this" />
                 ))}
                 {data.waiting_on_you.shoots.map(s => (
                   <WorkRow key={s.id} tone="amber"
-                    href={`/dashboard/production/shoots/${s.id}#comments`}
+                    href={shootHref(s.id)}
                     title={s.clients?.name ? `${s.clients.name} · ${s.title}` : s.title}
                     detail={s.line ?? 'Shoot'} chip={s.line ? 'Open the plan' : 'Answer this'} />
                 ))}
@@ -884,7 +894,7 @@ export default function OverviewPage() {
 
           {/* Seven identical grey ghost links and no cue which to press. The one
               thing a manager should do first now says so, and says how many. */}
-          {!loading && role !== 'editor' && role !== 'general' && (data?.manager?.needs_review?.length ?? 0) > 0 && (
+          {!loading && isManager && (data?.manager?.needs_review?.length ?? 0) > 0 && (
             <Button size="sm" className="min-h-11 w-fit" asChild>
               <Link href="/dashboard/scheduler?show=decide">
                 Check {data!.manager!.needs_review.length} card{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
@@ -896,18 +906,18 @@ export default function OverviewPage() {
           {/* ---- the lists, per role ---- */}
           {!loading && (role === 'editor' || role === 'general') && data?.editor && (
             <>
-              <Section title="Assigned to you" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
-                <ItemRows items={data.editor.needs_action} todayKey={todayKey}
+              <Section title="Assigned to you" action={actionFor(role as Role | null, 'Open the board', EDITOR_BOARD)}>
+                <ItemRows items={data.editor.needs_action} todayKey={todayKey} role={role as Role | null}
                   empty="Nothing waiting on you — everything is being checked." />
               </Section>
-              <Section title="Due soon" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
-                <ItemRows items={data.editor.due_soon} todayKey={todayKey}
+              <Section title="Due soon" action={actionFor(role as Role | null, 'Open the board', EDITOR_BOARD)}>
+                <ItemRows items={data.editor.due_soon} todayKey={todayKey} role={role as Role | null}
                   empty="Nothing due in the next 7 days." />
               </Section>
               {/* the open pool: work nobody holds, one click from being yours */}
               {data.editor.unassigned && (
-                <Section title="Nobody has taken these yet" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
-                  <ItemRows items={data.editor.unassigned} todayKey={todayKey}
+                <Section title="Nobody has taken these yet" action={actionFor(role as Role | null, 'Open the board', EDITOR_BOARD)}>
+                  <ItemRows items={data.editor.unassigned} todayKey={todayKey} role={role as Role | null}
                     empty="Nothing is going spare." />
                 </Section>
               )}
@@ -916,11 +926,11 @@ export default function OverviewPage() {
 
           {role === 'scheduler' && data?.scheduler && (
             <>
-              <Section title="Ready to post" action={{ label: 'Open the board', href: boardHref('scheduler', { column: 'ready_to_post' }) }}>
-                <ItemRows items={data.scheduler.queue} todayKey={todayKey}
+              <Section title="Ready to post" action={actionFor(role as Role | null, 'Open the board', boardHref('scheduler', { column: 'ready_to_post' }))}>
+                <ItemRows items={data.scheduler.queue} todayKey={todayKey} role={role as Role | null}
                   empty="Nothing waiting — a card lands here the moment it is signed off." />
               </Section>
-              <Section title="Going out next" action={{ label: 'Calendar', href: '/dashboard/scheduler/calendar' }}>
+              <Section title="Going out next" action={actionFor(role as Role | null, 'Calendar', CALENDAR_PAGE)}>
                 {data.scheduler.upcoming.length === 0 ? (
                   <p className="rounded-inner border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
                     Nothing scheduled for the next 7 days.
@@ -937,7 +947,7 @@ export default function OverviewPage() {
                       const mine = viewerHint(e.scheduled_at, tz, viewerTz)
                       return (
                         <WorkRow key={e.id} tone="blue"
-                          href={`/dashboard/production/${e.item_id}`}
+                          href={cardHref(role as Role | null, { id: e.item_id, status: (e.content_items as { status?: string } | null)?.status ?? 'scheduled' })}
                           title={e.content_items?.clients?.name
                             ? `${e.content_items.clients.name} · ${e.content_items?.title ?? '—'}`
                             : (e.content_items?.title ?? '—')}
@@ -951,17 +961,44 @@ export default function OverviewPage() {
             </>
           )}
 
-          {data?.manager && (
+          {/* THE QUALITY CHECKER'S DESK (13 Sep 2026): what waits on them —
+              cards at Quality check, and plans asked of them — nothing
+              about deciding, booking or leads */}
+          {!loading && role === 'quality_checker' && (
+            <>
+              <Section title="Waiting on your quality check" action={actionFor(role as Role | null, 'Open the board', `${POST_APPROVAL_BOARD}?column=quality_check`)}>
+                <ItemRows items={qualityQueue} todayKey={todayKey} role={role as Role | null}
+                  empty="Nothing waiting on a quality check." />
+              </Section>
+              <Section title="Plans to review" action={actionFor(role as Role | null, 'Open the shoots', SHOOTS_PAGE)}>
+                {plansToReview.length === 0 ? (
+                  <p className="rounded-inner border border-dashed border-border px-4 py-6 text-center text-[13px] text-muted-foreground">
+                    No plan is waiting on you.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {plansToReview.map(b => (
+                      <WorkRow key={b.id} tone="amber" href={shootHref(b.id)}
+                        title={b.clients?.name ? `${b.clients.name} · ${b.title}` : b.title}
+                        detail="Review the plan — pass it, or send it back with a note" chip="Open the plan" />
+                    ))}
+                  </div>
+                )}
+              </Section>
+            </>
+          )}
+
+          {data?.manager && isManager && (
             <>
               {(data.manager.my_tasks?.length ?? 0) > 0 && (
-                <Section title="Assigned to you" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
-                  <ItemRows items={data.manager.my_tasks} todayKey={todayKey} empty="" />
+                <Section title="Assigned to you" action={actionFor(role as Role | null, 'Open the board', EDITOR_BOARD)}>
+                  <ItemRows items={data.manager.my_tasks} todayKey={todayKey} role={role as Role | null} empty="" />
                 </Section>
               )}
               {/* the three stages whose turn is a MANAGER's — the same
                   population the stat above it counts */}
-              <Section title="Waiting on your sign-off" action={{ label: 'Open the board', href: '/dashboard/editor' }}>
-                <ItemRows items={data.manager.needs_review} todayKey={todayKey}
+              <Section title="Waiting on your sign-off" action={actionFor(role as Role | null, 'Open the board', EDITOR_BOARD)}>
+                <ItemRows items={data.manager.needs_review} todayKey={todayKey} role={role as Role | null}
                   empty="Nothing is waiting on you right now." />
               </Section>
             </>
@@ -1000,9 +1037,9 @@ export default function OverviewPage() {
           strip used to read the API's pipeline (every item, shoot plans
           included) while "The agency at a glance" left shoot plans out, so
           one card said "0 draft" and the other "Draft · 4" (9 Sep 2026). */}
-      {!loading && (role === 'editor' || role === 'general' || data?.manager) && <Pipeline pipeline={postPipeline} page={role === 'editor' || role === 'general' ? 'editor' : 'production'} />}
+      {!loading && role && <Pipeline pipeline={postPipeline} role={role as Role} plansInReview={plansInReview} />}
 
-      {data?.manager && (
+      {data?.manager && isManager && (
         <>
           {/* the ledger first, then what each account actually posted */}
           <PostsThisMonth rows={accountPosts} />

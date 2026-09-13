@@ -327,8 +327,14 @@ describe('the overview sends people to the right page', () => {
     // again; Production is reached from the sidebar, and item deep links
     // (/dashboard/production/<id>) are the detail page, not a board
     expect(overview).not.toMatch(/['"`]\/dashboard\/production['"`]/)
-    expect(overview).toContain('/dashboard/editor')
-    expect(overview).toContain('/dashboard/scheduler')
+    // since 13 Sep 2026 the boards' paths are named once, in
+    // overview-links-core, and every Overview link goes through it
+    expect(overview).toMatch(/from '\.\.\/lib\/overview-links-core'/)
+    const links = readFileSync(join(APP, 'lib', 'overview-links-core.ts'), 'utf8')
+    expect(links).toContain("EDITOR_BOARD = '/dashboard/editor'")
+    expect(links).toContain("POST_APPROVAL_BOARD = '/dashboard/scheduler'")
+    // and no card is ever sent to the retired full-card page
+    expect(overview).not.toMatch(/\/dashboard\/production\/\$\{/)
   })
 
   it('Production is still reachable — from the sidebar, as the shoots page', () => {
