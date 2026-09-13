@@ -67,7 +67,10 @@ export default function NewPostButton() {
         <NewCardDialog
           open={open}
           onOpenChange={setOpen}
-          clients={live.clients.map(c => ({ id: c.id, name: c.name }))}
+          // every active client, not only the ones this person already has
+          // cards for (the owner, 13 Sep 2026: "when an editor creates a new
+          // card I can't see all clients — only one option")
+          clients={live.tables.clients.rows.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => ({ id: c.id, name: c.name }))}
           kinds={live.tables.workKinds.rows}
           team={team}
           viewer={{ ...viewer, name: me?.name }}
