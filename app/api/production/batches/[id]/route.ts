@@ -213,10 +213,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
     if ('shared_with_client' in body) {
-      // the switch turns the portal off; turning it ON is "Share the plan
-      // with the client", which emails them (the share-client route)
+      // the switch only shows or hides the shoot on the portal. It never
+      // stamps "shared with the client": that is the share-client route,
+      // which emails them. The owner, 13 Sep 2026: "i accidentally toggled
+      // and updated the status with the client since" — a stamp nobody
+      // sent, on a real client's shoot.
       patch.shared_with_client = body.shared_with_client === true
-      if (body.shared_with_client === true && !batch.client_shared_at) { patch.client_shared_at = now; patch.client_shared_by = user.id }
     }
     if ('share_board' in body) patch.share_board = body.share_board === true
     if ('board_name' in body) patch.board_name = String(body.board_name ?? '').trim().slice(0, 80) || null

@@ -562,3 +562,19 @@ describe('sharing the plan with the client', () => {
     expect((await answer({ token: '11111111-2222-4333-8444-555555555555', shoot_id: 'b-1', action: 'approve' })).status).toBe(401)
   })
 })
+
+/* ── the portal switch is a switch, not a share (13 Sep 2026) ── */
+
+describe('the "Visible on the client portal" switch', () => {
+  it('shows or hides the shoot and never stamps "shared with the client" — that is the share button, which emails them', async () => {
+    fake.restore(); fake = seed({ shared_with_client: false })
+    expect((await edit({ shared_with_client: true })).status).toBe(200)
+    expect(batch().shared_with_client).toBe(true)
+    // the owner toggled a real client's shoot by accident and it read
+    // "With the client since …" — a share nobody sent
+    expect(batch().client_shared_at ?? null).toBeNull()
+    expect(batch().client_shared_by ?? null).toBeNull()
+    expect((await edit({ shared_with_client: false })).status).toBe(200)
+    expect(batch().shared_with_client).toBe(false)
+  })
+})
