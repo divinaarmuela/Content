@@ -85,11 +85,13 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking, tour, onAcknowledge, page,
+  statsHref, booking, tour, onAcknowledge, page, managers = [],
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
   names: Map<string, string>
+  /** the client's account managers — named on the editor's and scheduler's cards */
+  managers?: readonly string[]
   today: string
   /** something is being saved on this card — the buttons wait */
   busy?: boolean
@@ -194,6 +196,11 @@ export function BoardCard({
       note={<>
         {card.shoot_title && (
           <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">From the shoot: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{card.shoot_title}</span>{card.shoot_date && footageAfterWords({ shoot_date: card.shoot_date }, today) ? ` · ${footageAfterWords({ shoot_date: card.shoot_date }, today)}` : ''}</span>
+        )}
+        {/* who to ask (the owner, 13 Sep 2026: "make sure on each task card
+            of editor and scheduler that the AM name is there") */}
+        {(page === 'editor' || page === 'scheduler') && (
+          <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">Account manager: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{managers.length > 0 ? managers.join(', ') : 'none on this client yet'}</span></span>
         )}
         {askAck && (
           <span className="mb-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">New — press Acknowledge so the team knows you are on it.</span>

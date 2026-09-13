@@ -79,7 +79,7 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
     expect(dialogs).toMatch(/Another shoot — type its name/)
     expect(dialogs).toMatch(/footage_only: true/)
-    expect(dialogs).toMatch(/\{\(shoots\.length > 0 \|\| simple\) && \(/)
+    expect(dialogs).toMatch(/\{\(shoots\.length > 0 \|\| simple\) && !forPosting && \(/)
     expect(src('app/dashboard/production/ShootStageBoard.tsx')).toMatch(/FOOTAGE_ONLY_WORDS/)
   })
   it('New shoot plan makes the shoot itself — no plan document', () => {

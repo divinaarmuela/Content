@@ -63,6 +63,17 @@ export default function EditorPage() {
   const names = useMemo(
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
     [live.tables.team.rows])
+  /** the account managers on each client, for the card face */
+  const managersOf = useMemo(() => {
+    const byClient = new Map<string, string[]>()
+    const role = new Map(live.tables.team.rows.map(u => [u.id, u.role]))
+    for (const a of live.tables.assignments.rows) {
+      if (role.get(a.team_user_id) !== 'account_manager') continue
+      const name = names.get(a.team_user_id)
+      if (name) byClient.set(a.client_id, [...(byClient.get(a.client_id) ?? []), name])
+    }
+    return (clientId: string) => byClient.get(clientId) ?? []
+  }, [live.tables.assignments.rows, live.tables.team.rows, names])
 
   const allCards = useMemo(() => {
     if (!viewer) return [] as BoardCardRow[]
@@ -170,6 +181,7 @@ export default function EditorPage() {
           viewer={viewer}
           page="editor"
           names={names}
+          managersOf={managersOf}
           kinds={live.tables.workKinds.rows}
           today={today}
           onOpen={c => sheet.open(c.id)}

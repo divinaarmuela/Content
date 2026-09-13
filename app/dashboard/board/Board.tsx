@@ -87,7 +87,7 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 }
 
 export function Board({
-  cards, viewer, page, names, kinds, today, onOpen, initialColumn, show, onClearShow,
+  cards, viewer, page, names, managersOf, kinds, today, onOpen, initialColumn, show, onClearShow,
   postingToday, connectedClientIds, ariaLabel, onAcknowledge, filters, filterNote, laneEmpty,
 }: {
   cards: BoardCardRow[]
@@ -105,6 +105,9 @@ export function Board({
   /** which page this is — it decides the lanes (`pageLanes`) */
   page: BoardPage
   names: Map<string, string>
+  /** the account managers on a client, by client id — drawn on every card
+   *  of the Editor and Scheduler pages (the owner, 13 Sep 2026) */
+  managersOf?: (clientId: string) => string[]
   kinds: readonly KindRow[]
   today: string
   /** a press on a card — the page opens it beside the board (`CardSheet`) */
@@ -291,6 +294,7 @@ export function Board({
                 card={c}
                 viewer={viewer}
                 names={names}
+                managers={managersOf?.(c.client_id) ?? []}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}
