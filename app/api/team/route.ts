@@ -6,6 +6,27 @@ import type { TeamUser, TeamInvite, TeamUserClient } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError, type Role } from '../../lib/authz'
 import { onTeamChanged } from '../../lib/gdrive-members'
 import { takeClaimLock, releaseClaimLock, pendingInviteLockKey } from '../../lib/claim-lock'
+import { escapeHtml, notify, renderEmail } from '../../lib/mailer'
+
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mdmmarketing.com.au').replace(/\/$/, '')
+
+/** Somebody who already has a login is sent the sign-in link by the app —
+ *  Clerk refuses to invite an existing account. Keyed per send, so pressing
+ *  Invite again sends again, on purpose. */
+async function sendSignInAgain(inviter: { id: string; name?: string | null; email: string }, person: TeamUser, role: string): Promise<void> {
+  await notify({
+    actorName: inviter.name ?? inviter.email, actorEmail: inviter.email,
+    eventType: 'team_invite_again', entityType: 'team_user',
+    entityId: `${person.id}#${new Date().toISOString()}`,
+    recipientId: person.id, recipientEmail: person.email,
+    subject: 'Your MD Media dashboard sign-in',
+    bodyHtml: renderEmail(
+      'You are on the MD Media dashboard',
+      `<p>${escapeHtml(inviter.name ?? inviter.email)} added you as <strong>${escapeHtml(role.replace('_', ' '))}</strong>. Sign in with this email address — your login is already there.</p>`,
+      'Sign in', `${APP_URL}/sign-in`,
+    ),
+  }).catch(e => console.error('sign-in-again email:', e instanceof Error ? e.message : e))
+}
 
 const INVITABLE_ROLES: Role[] = ['super_admin', 'account_manager', 'general', 'quality_checker', 'editor', 'scheduler', 'client']
 
@@ -93,15 +114,15 @@ export async function POST(req: Request) {
       const existingUser = (await users.list({
         where: r => (r.email ?? '').toLowerCase() === email, limit: 1,
       }))[0] ?? null
-      if (existingUser) {
-        return NextResponse.json(
-          {
-            error: existingUser.clerk_user_id
-              ? 'This email already has an account'
-              : 'This person is already on the team, waiting for their first sign-in',
-          },
-          { status: 409 },
-        )
+      // RE-INVITE BY DEFAULT (the owner, 13 Sep 2026: "even if they have been
+      // invited before or have signed in, allow them to receive it again").
+      // Somebody with a login already: Clerk will not "invite" an existing
+      // account, so the app sends them the sign-in link itself. Somebody on
+      // the team who never signed in: a fresh invitation replaces the old.
+      if (existingUser?.clerk_user_id) {
+        await sendSignInAgain(inviter, existingUser, role)
+        onTeamChanged('invite (existing account)')
+        return NextResponse.json({ ...existingUser, already_has_account: true, resent: true }, { status: 201 })
       }
 
       // One pending invite per email — Postgres held that as a partial unique
@@ -119,7 +140,16 @@ export async function POST(req: Request) {
         limit: 1,
       }))[0]
       if (pending) {
-        return NextResponse.json({ error: 'A pending invite already exists for this email' }, { status: 409 })
+        // a fresh invitation replaces the old one: revoke it at Clerk (best
+        // effort), close the row, free the address
+        try {
+          const clerk = await clerkClient()
+          if (pending.clerk_invitation_id) await clerk.invitations.revokeInvitation(pending.clerk_invitation_id)
+        } catch (e) {
+          console.error('revoke old invitation:', e instanceof Error ? e.message : e)
+        }
+        await invitesTable.update(pending.id, { status: 'revoked' })
+        await releaseClaimLock(pendingInviteLockKey(email), pending.id).catch(() => {})
       }
 
       const inviteId = crypto.randomUUID()
@@ -164,7 +194,9 @@ export async function POST(req: Request) {
       // would quietly demote or rename a colleague. `team_users.email` is a
       // unique key, so a second insert loses — which is the answer we want.
       try {
-        await table('team_users').insert({
+        // a person already on the team (never signed in) keeps their row as
+        // it is — an invite must never rename or demote a colleague
+        if (!existingUser) await table('team_users').insert({
           email,
           name: String(body.name ?? '').trim() || email,
           role,
@@ -207,6 +239,8 @@ export async function POST(req: Request) {
           await invitesTable.update(invite.id, { status: 'accepted' })
           // no longer pending, so the address is free to be invited again
           await releaseClaimLock(lockKey, inviteId).catch(() => {})
+          // …and they are still TOLD (13 Sep 2026): the sign-in link, from us
+          if (linked[0]) await sendSignInAgain(inviter, linked[0], role)
           onTeamChanged('invite (existing account)')
           return NextResponse.json(
             { ...invite, status: 'accepted', already_has_account: true },
@@ -218,6 +252,10 @@ export async function POST(req: Request) {
           emailAddress: email,
           publicMetadata: { role },
           notify: true,
+          // THE LINK IN THE EMAIL (13 Sep 2026: "fix the link in the email,
+          // currently it's the wrong link"): the app's own sign-up page, which
+          // reads Clerk's invitation ticket — not Clerk's default landing
+          redirectUrl: `${APP_URL}/sign-up`,
         })
         await invitesTable.update(invite.id, { clerk_invitation_id: clerkInvite.id })
       } catch (e) {

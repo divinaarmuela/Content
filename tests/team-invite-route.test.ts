@@ -13,13 +13,20 @@ import type { Row } from '@/lib/db-types'
  * this proves the route still LOSES that race rather than winning it.
  */
 
-const createInvitation = vi.fn(async () => ({ id: 'clerk-inv-1' }))
+const createInvitation = vi.fn(async (_args?: unknown) => ({ id: 'clerk-inv-1' }))
+const revokeInvitation = vi.fn(async (_id?: string) => ({}))
 const getUserList = vi.fn(async () => ({ data: [] as { id: string }[] }))
 vi.mock('@clerk/nextjs/server', () => ({
   clerkClient: async () => ({
     users: { getUserList },
-    invitations: { createInvitation },
+    invitations: { createInvitation, revokeInvitation },
   }),
+}))
+const notify = vi.fn(async (_args?: unknown) => ({}))
+vi.mock('../app/lib/mailer', () => ({
+  notify,
+  renderEmail: (h: string, b: string, cta?: string, url?: string) => `${h}|${b}|${cta ?? ''}|${url ?? ''}`,
+  escapeHtml: (s: string) => s,
 }))
 
 class AuthzError extends Error { constructor(m: string, public status: number) { super(m) } }
@@ -49,7 +56,9 @@ const users = () => fake!.rows('team_users') as unknown as Record<string, unknow
 beforeEach(() => {
   fake = null
   createInvitation.mockClear()
+  revokeInvitation.mockClear()
   getUserList.mockClear()
+  notify.mockClear()
   seed = { team_users: [], team_invites: [], team_user_clients: [] }
 })
 afterEach(() => { fake?.restore(); fake = null })
@@ -61,24 +70,29 @@ describe('POST /api/team — an address that is already on the team', () => {
     timezone: 'Australia/Melbourne', active_status: true, clerk_user_id: null,
   }
 
-  it('refuses, and does not overwrite the member it found', async () => {
+  it('invites them AGAIN (13 Sep 2026), and does not overwrite the member it found', async () => {
     seed.team_users = [{ ...MEMBER }] as unknown as Row[]
     start()
 
-    const { status, json } = await post({
+    const { status } = await post({
       email: 'Dana@example.invalid', role: 'editor', name: 'Someone Else',
       employment_type: 'contractor', timezone: 'Asia/Manila',
     })
 
-    expect(status).toBe(409)
-    expect(json.error).toBe('This person is already on the team, waiting for their first sign-in')
+    expect(status).toBe(201)
     // the row is exactly as it was: an invite must never demote a colleague
     expect(users()).toHaveLength(1)
     expect(users()[0]).toMatchObject({
       name: 'Dana Reyes', role: 'super_admin',
       employment_type: 'employee', timezone: 'Australia/Melbourne',
     })
-    expect(createInvitation).not.toHaveBeenCalled()
+    // a fresh invitation email went out, pointing at the app's own sign-up
+    expect(createInvitation).toHaveBeenCalledTimes(1)
+    expect(createInvitation.mock.calls[0][0]).toMatchObject({
+      emailAddress: 'dana@example.invalid', notify: true,
+      redirectUrl: expect.stringMatching(/\/sign-up$/),
+    })
+    expect(fake!.rows('team_invites')).toHaveLength(1)
   })
 
   it('loses the race when the member appears after the check, and changes nothing', async () => {
@@ -109,6 +123,7 @@ describe('POST /api/team — an address that is already on the team', () => {
 
     expect(status).toBe(409)
     expect(json.error).toBe('This person is already on the team, waiting for their first sign-in')
+    // (the one refusal left: the race itself, where the write loses)
     // one row, still theirs — an invite that wrote over it would have made
     // Dana a contractor in Manila
     expect(users()).toHaveLength(1)
@@ -121,23 +136,35 @@ describe('POST /api/team — an address that is already on the team', () => {
     expect(createInvitation).not.toHaveBeenCalled()
   })
 
-  it('says so differently when they already have a login', async () => {
+  it('somebody with a login already is sent the sign-in link by the app itself', async () => {
     seed.team_users = [{ ...MEMBER, clerk_user_id: 'user_abc' }] as unknown as Row[]
     start()
     const { status, json } = await post({ email: 'dana@example.invalid', role: 'editor' })
-    expect(status).toBe(409)
-    expect(json.error).toBe('This email already has an account')
+    expect(status).toBe(201)
+    expect(json).toMatchObject({ already_has_account: true, resent: true })
+    // Clerk will not invite an existing account, so no invitation…
+    expect(createInvitation).not.toHaveBeenCalled()
+    // …the app mails the sign-in link instead
+    expect(notify).toHaveBeenCalledTimes(1)
+    const sent = notify.mock.calls[0][0] as { recipientEmail: string; bodyHtml: string }
+    expect(sent.recipientEmail).toBe('dana@example.invalid')
+    expect(sent.bodyHtml).toMatch(/\/sign-in$/)
+    // and the person is still exactly who they were
+    expect(users()[0]).toMatchObject({ name: 'Dana Reyes', role: 'super_admin' })
   })
 
-  it('refuses a second pending invite for the same address', async () => {
+  it('a second invite for a pending address replaces the first', async () => {
     seed.team_invites = [{
-      id: 'inv-1', email: 'dana@example.invalid', role: 'editor', status: 'pending',
+      id: 'inv-1', email: 'dana@example.invalid', role: 'editor', status: 'pending', clerk_invitation_id: 'clerk-old',
     }] as unknown as Row[]
     start()
-    const { status, json } = await post({ email: 'dana@example.invalid', role: 'editor' })
-    expect(status).toBe(409)
-    expect(json.error).toBe('A pending invite already exists for this email')
-    expect(fake!.rows('team_invites')).toHaveLength(1)
+    const { status } = await post({ email: 'dana@example.invalid', role: 'editor' })
+    expect(status).toBe(201)
+    expect(revokeInvitation).toHaveBeenCalledWith('clerk-old')
+    const invites = fake!.rows('team_invites') as unknown as { id: string; status: string }[]
+    expect(invites.find(i => i.id === 'inv-1')?.status).toBe('revoked')
+    expect(invites.filter(i => i.status === 'pending')).toHaveLength(1)
+    expect(createInvitation).toHaveBeenCalledTimes(1)
   })
 
   it('two admins inviting the same person at once send ONE invite', async () => {
