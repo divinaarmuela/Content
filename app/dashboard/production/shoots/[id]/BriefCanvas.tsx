@@ -1414,7 +1414,10 @@ export default function BriefCanvas({
                 const nearTop = camRef.current.y + card.y * s < 72
                 return (
                   <div data-card-toolbar role="toolbar" aria-label={`${KIND_WORD[card.kind]} tools`}
-                    className="absolute flex w-max max-w-[92vw] flex-wrap items-center gap-1 rounded-inner border border-border bg-surface p-1 shadow-md"
+                    // two short rows at most: one line of seventeen swatches ran
+                    // 1290px wide, off the canvas and across the cards above
+                    // (the owner, 13 Sep 2026: "the toolbar is getting overlapped")
+                    className="absolute flex w-max max-w-[min(92vw,680px)] flex-wrap items-center justify-center gap-1 rounded-inner border border-border bg-surface p-1 shadow-md"
                     style={{
                       left: card.w / 2,
                       ...(nearTop ? { top: 'calc(100% + 12px)' } : { bottom: 'calc(100% + 12px)' }),
