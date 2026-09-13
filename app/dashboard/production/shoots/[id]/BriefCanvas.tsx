@@ -1429,7 +1429,10 @@ export default function BriefCanvas({
               onClick={() => setConnectFrom(v => (v === null ? '' : null))}>
               <MoveUpRight className="h-3.5 w-3.5" /> Arrow
             </Button>
-            <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
+            {/* open: the dark pill must carry LIGHT words — `text-secondary-13`
+                sets a dark colour and hid "Post" (the owner, 13 Sep 2026) */}
+            <Button size="sm" variant={mockupMenu ? 'default' : 'ghost'}
+              className={mockupMenu ? 'h-7 gap-1.5 px-2 text-[13px] font-medium text-background' : 'h-7 gap-1.5 px-2 text-secondary-13'}
               onClick={() => setMockupMenu(v => !v)}>
               <Smartphone className="h-3.5 w-3.5" /> Post
             </Button>
