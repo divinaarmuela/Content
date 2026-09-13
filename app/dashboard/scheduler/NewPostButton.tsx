@@ -25,15 +25,28 @@
  * to say no is not a button.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRole } from '../useRole'
+import { useWorkRows } from '../useLiveWork'
+import { useTeamMembers } from '../production/workHooks'
+import type { BoardViewer } from '../../lib/board-view-core'
+import { NewCardDialog } from '../board/BoardDialogs'
 import SendForApprovalDialog from './SendForApprovalDialog'
 
 export default function NewPostButton() {
-  const { can, loading: roleLoading } = useRole()
+  const { me, can, loading: roleLoading } = useRole()
   const [open, setOpen] = useState(false)
+  // ONE BUTTON (the owner, 13 Sep 2026: "just one button that makes sense").
+  // For an account manager or a super admin it opens the card popup — files,
+  // what needs doing, Hand to a scheduler, the Drive folder to post from —
+  // for everyone else the upload-and-send flow.
+  const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
+  const viewer = useMemo<BoardViewer | null>(
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
+  const live = useWorkRows(isManager ? viewer : null, { schedulerPostFilter: false })
+  const team = useTeamMembers(isManager)
 
   // the role is still arriving: render nothing rather than a button that may
   // be about to disappear
@@ -50,7 +63,19 @@ export default function NewPostButton() {
 
       {/* mounted only while it is open — the listeners behind it belong to a
           post being written, not to a board being looked at */}
-      {open && <SendForApprovalDialog onClose={() => setOpen(false)} />}
+      {open && isManager && viewer ? (
+        <NewCardDialog
+          open={open}
+          onOpenChange={setOpen}
+          clients={live.clients.map(c => ({ id: c.id, name: c.name }))}
+          kinds={live.tables.workKinds.rows}
+          team={team}
+          viewer={{ ...viewer, name: me?.name }}
+          simple
+        />
+      ) : open ? (
+        <SendForApprovalDialog onClose={() => setOpen(false)} />
+      ) : null}
     </>
   )
 }
