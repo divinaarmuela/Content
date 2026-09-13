@@ -340,7 +340,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
         {lastEdited.name && lastEdited.at && <span className="text-[13px]">· Last edited by {lastEdited.name}, {stampWords(lastEdited.at)}</span>}
       </p>
 
-      {today && <StageStrip batch={batch} today={today} role={role as never} itemCount={deliverableItems.length} />}
+      {today && <StageStrip batch={batch} today={today} role={role as never} itemCount={deliverableItems.length} planReviewRequired={planReviewRequired} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── the plan ── */}

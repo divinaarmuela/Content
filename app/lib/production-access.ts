@@ -4,7 +4,7 @@ import { table } from '@/lib/db'
 import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
-import { canManageShoot, isOnShoot, type SopManager } from './shoot-sop-core'
+import { canManageShoot, isOnShoot, type SopManager, isAskedToReview } from './shoot-sop-core'
 
 /**
  * Every id the access helpers build a query around passes through here.
@@ -32,13 +32,15 @@ export function assertUuid(id: string): string {
  */
 export async function canOpenBatch(
   user: TeamUser,
-  batch: { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown },
+  batch: { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown; review_asked_to?: unknown },
 ): Promise<boolean> {
   const ids = await batchClientIds(user)
   if (ids === null || ids.includes(batch.client_id) || batch.owner_id === user.id) return true
   if (user.role === 'client') return false
   // on the shoot — its editor or its crew (the Shoot Brief SOP, 11 Sep 2026)
   if (isOnShoot(batch, user.id)) return true
+  // the quality checker opens the plans asked of them (13 Sep 2026)
+  if (isAskedToReview(batch, user.id)) return true
   const me = assertUuid(user.id)
   const held = await table<ContentItem>('content_items').list({
     by: { batch_id: batch.id },
@@ -104,7 +106,7 @@ export async function heldBatchIds(user: TeamUser): Promise<string[]> {
     table<Batch>('batches').list({ by: { owner_id: user.id }, limit: 500 }),
     taggedBatchIds(user),
     // the shoots this person is ON — their editor, or on their crew
-    table<Batch>('batches').list({ where: r => isOnShoot(r, me), limit: 500 }),
+    table<Batch>('batches').list({ where: r => isOnShoot(r, me) || isAskedToReview(r, me), limit: 500 }),
   ])
   return [...new Set([
     ...viaItems.map(r => r.batch_id as string),

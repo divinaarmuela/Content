@@ -108,7 +108,9 @@ describe('Go waits on the pass', () => {
     expect(planReviewPatch('t', 'joy', true)).toEqual({ plan_reviewed_at: 't', plan_reviewed_by: 'joy' })
     expect(planReviewPatch('t', 'joy', false)).toEqual({ plan_reviewed_at: null, plan_reviewed_by: null })
     expect(planReviewPassed(plan)).toBe(false)
-    expect(planReviewChip(plan, true)).toEqual({ tone: 'amber', text: 'Needs quality review' })
+    // no chip before anyone asks (13 Sep 2026: "Needs quality review … is wrong")
+    expect(planReviewChip(plan, true)).toBeNull()
+    expect(planReviewChip({ ...plan, review_asked_at: '2026-09-13T05:00:00Z' } as SopShoot, true)).toEqual({ tone: 'amber', text: 'Waiting on the quality checker' })
     expect(planReviewChip(plan, false)).toBeNull()
     const passed = { ...plan, plan_reviewed_at: '2026-09-13T06:00:00Z', plan_reviewed_by: 'joy' } as SopShoot
     expect(planReviewChip(passed, true)).toEqual({ tone: 'green', text: 'Passed quality review' })

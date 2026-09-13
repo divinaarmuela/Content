@@ -22,7 +22,7 @@
 
 import { isQualityReviewer } from './identity-core'
 import { SCHEDULER_STATUSES, schedulerIdsOf, type ItemStatus } from './workflow-core'
-import { isOnShoot } from './shoot-sop-core'
+import { isOnShoot, isAskedToReview } from './shoot-sop-core'
 import { askedIdsOf } from './asked-core'
 import { deliverOnly } from './deliver-only-core'
 import type { ScopeViewer } from './production-access-core'
@@ -45,7 +45,7 @@ export type ScopeItem = {
 }
 
 export type ScopeAssignment = { team_user_id: string; client_id: string }
-export type ScopeBatch = { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown }
+export type ScopeBatch = { id: string; client_id: string; owner_id?: string | null; editor_id?: string | null; crew_ids?: unknown; review_asked_to?: unknown }
 
 /**
  * The extra context assignment needs and a plain item array cannot carry:
@@ -233,7 +233,7 @@ export function heldBatchIdsOf(
     }
   }
   // owned outright, or ON it — its editor or its crew (the Shoot Brief SOP)
-  for (const b of batches) if (b.owner_id === viewer.id || isOnShoot(b, viewer.id)) held.add(b.id)
+  for (const b of batches) if (b.owner_id === viewer.id || isOnShoot(b, viewer.id) || isAskedToReview(b, viewer.id)) held.add(b.id)
   for (const id of taggedBatchIds) if (id) held.add(id)
   return held
 }

@@ -53,7 +53,7 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty,
+  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty, reviewer = false,
 }: {
   shoots: StageShoot[]
   /** an empty column's sentence while the page is narrowed to a client or a
@@ -69,6 +69,8 @@ export function ShootStageBoard({
   today: string
   onMove: (shoot: StageShoot, to: ShootStage) => Promise<void>
   busyId: string | null
+  /** the viewer wears the quality reviewer hat — may take a plan out of Quality review */
+  reviewer?: boolean
 }) {
   const router = useRouter()
   const [dragging, setDragging] = useState<StageShoot | null>(null)
@@ -77,22 +79,26 @@ export function ShootStageBoard({
   const justDragged = useRef(false)
 
   const checklist = (s: StageShoot) => ({ itemCount: itemCounts.get(s.id) ?? 0 })
+  // the quality gate on each plan, from the creator's and owner's roles
+  const gated = (s: StageShoot) => planReviewRequired(s, { createdByRole: roles?.get(s.created_by ?? '') ?? null, ownerRole: roles?.get(s.owner_id ?? '') ?? null })
+  const stageOf = (s: StageShoot) => shootStage(s, today, { planReview: gated(s) })
   const allowed = (s: StageShoot, to: ShootStage) =>
-    stageMove(s, to, { role, today, checklist: checklist(s) }, 'now', viewerId).ok
+    stageMove(s, to, { role, today, checklist: checklist(s), planReview: { required: gated(s) }, reviewer }, 'now', viewerId).ok
 
   const grouped = useMemo(() => {
     const by = new Map<ShootStage, StageShoot[]>(SHOOT_STAGES.map(st => [st.key, []]))
-    for (const s of shoots) by.get(shootStage(s, today))!.push(s)
+    for (const s of shoots) by.get(stageOf(s))!.push(s)
     // nearest shoot first inside a column
     for (const list of by.values()) list.sort((a, b) => String(a.shoot_date ?? '9').localeCompare(String(b.shoot_date ?? '9')))
     return by
-  }, [shoots, today])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shoots, today, roles])
 
   const reachable = useMemo(() => {
     if (!dragging) return new Set<ShootStage>()
     return new Set(SHOOT_STAGES.map(st => st.key).filter(k => allowed(dragging, k)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragging, role, today, itemCounts])
+  }, [dragging, role, today, itemCounts, roles, reviewer])
 
   const drop = (to: ShootStage) => {
     const s = dragging
@@ -111,7 +117,7 @@ export function ShootStageBoard({
   }
 
   const card = (s: StageShoot) => {
-    const stage = shootStage(s, today)
+    const stage = stageOf(s)
     const late = briefIsLate(s, today)
     const list = briefChecklist(s, checklist(s))
     const ack = ackState(s)
@@ -175,7 +181,7 @@ export function ShootStageBoard({
             {(() => {
               // the quality review gate (13 Sep 2026): a plan written or held
               // by anyone but a super admin
-              const chip = planReviewChip(s, planReviewRequired(s, { createdByRole: roles?.get(s.created_by ?? '') ?? null, ownerRole: roles?.get(s.owner_id ?? '') ?? null }))
+              const chip = planReviewChip(s, gated(s))
               return chip ? <Chip tone={chip.tone} className="h-auto whitespace-normal text-left">{chip.text}</Chip> : null
             })()}
           </>}

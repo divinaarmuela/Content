@@ -191,7 +191,12 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(s).not.toContain('REVIEW_DEFAULT_MANAGERS')
     expect(s).toMatch(/planReview: input\.planReview|planReview \}/)
     const board = src('app/dashboard/production/ShootStageBoard.tsx')
-    expect(board).toMatch(/planReviewChip\(s, planReviewRequired\(/)
+    const core = src('app/lib/shoot-sop-core.ts')
+    expect(board).toMatch(/planReviewChip\(s, gated\(s\)\)/)
+    // the column: the board groups by the gated stage, the lane has its empty line
+    expect(board).toMatch(/shootStage\(s, today, \{ planReview: gated\(s\) \}\)/)
+    expect(core).toContain("label: 'Quality review'")
+    expect(core).toContain("empty: 'Nothing waiting on the quality checker.'")
   })
   it('the shoot page has no link to the old Drive folder or the old card page, and no "Create items"', () => {
     expect(src(SHOOT) + src(SOP)).not.toMatch(/Open Drive folder|Create items|new_for_shoot|dashboard\/production\/\$\{it\.id\}/)

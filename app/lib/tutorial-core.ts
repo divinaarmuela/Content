@@ -63,7 +63,7 @@ export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, With client, Ready t
 /** The Editor columns. */
 export const EDITOR_COLUMNS = 'In Progress, Quality check, With client, For Handoff, Done'
 /** The Shoots columns. */
-export const SHOOT_COLUMNS = 'Draft, Shared with team, Confirmed, Reminder sent, Shoot day, Footage in'
+export const SHOOT_COLUMNS = 'Draft, Quality review, Shared with team, Confirmed, Reminder sent, Shoot day, Footage in'
 
 const WHERE_ANSWERS_ARRIVE: TutorialStep = {
   title: 'Where answers arrive',
@@ -271,7 +271,7 @@ const EDITOR: Tutorial = {
     {
       title: 'Shoots: read the plan, then get the footage',
       see: [
-        `Shoots is where filming days live. One card is one shoot, in six stages: ${SHOOT_COLUMNS}.`,
+        `Shoots is where filming days live. One card is one shoot, in seven stages: ${SHOOT_COLUMNS}.`,
         'You see the shoots you are on as the editor or the crew. The plan — the objective, the shot list, the script, call time and location, the editor priorities and deadline — is on your card under "Before you start" and in the email.',
         'The shoot page itself is the account manager’s; you never need it.',
         'When the account manager shares the plan you are emailed. The shoot cannot be confirmed until everyone on it has pressed "I’ve read the plan" — on your card, or the link in the email.',
@@ -298,7 +298,7 @@ const GENERAL: Tutorial = {
     {
       title: 'Five pages, one piece of work',
       see: [
-        `Shoots: every filming day, from the first plan to the footage handed over, in six stages: ${SHOOT_COLUMNS}.`,
+        `Shoots: every filming day, from the first plan to the footage handed over, in seven stages: ${SHOOT_COLUMNS}.`,
         `Editor: everything being made — pieces and tasks — in the columns ${EDITOR_COLUMNS}. Your own cards, plus anything you made.`,
         `Post approval: the same cards as they get checked, in the columns ${POST_APPROVAL_COLUMNS}. Ready to post with nobody named is yours to take.`,
         'Schedule: the posting calendar for one client at a time. Posts: what went out.',
@@ -395,7 +395,7 @@ const MANAGER: Tutorial = {
     {
       title: 'Shoots: plan a shoot',
       see: [
-        `One card per shoot for your clients, in six stages: ${SHOOT_COLUMNS}. By date shows the same shoots on a calendar.`,
+        `One card per shoot for your clients, in seven stages: ${SHOOT_COLUMNS}. By date shows the same shoots on a calendar.`,
         'New shoot plan makes the shoot: client, title, what it is for, shoot date. Making the plan sets up the shoot; you never create the shoot separately.',
         'On the shoot page: the nine-part plan (objective, deliverables, shot list, script, date and call time and location, talent, props and wardrobe, client availability, editor priorities and deadline) with "6 of 9 filled" and what is missing; the Milanote-style canvas for references and the mood board; who is on the shoot; where it is, with who did what and when.',
         '"Editor: who edits the footage after the shoot" and "Crew on the day". Everyone you add is emailed when you share the plan and must press "I’ve read the plan".',

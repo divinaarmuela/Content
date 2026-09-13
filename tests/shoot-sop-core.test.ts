@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  REVIEW_OUT_WORDS, NOT_GATED_WORDS, inQualityReview, isAskedToReview,
   BRIEF_ITEMS, LATE_WORDS, SHOOT_STAGES, STAGE_LABEL, ackState, briefChecklist, briefIsLate, canSeeShoot,
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageHappened, stageMove, withAck, withoutAck, type SopShoot,
@@ -54,7 +55,7 @@ describe('the nine things a brief must contain', () => {
 describe('the six columns, read off the stamps and the calendar', () => {
   it('has the SOP timeline in order', () => {
     expect(SHOOT_STAGES.map(s => s.label)).toEqual([
-      'Draft', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in',
+      'Draft', 'Quality review', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in',
     ])
     expect(STAGE_LABEL.footage_handed).toBe('Footage in')
   })
@@ -344,8 +345,8 @@ describe('a plan shared late', () => {
 /* ── the flow, on the page: six stages and the one next move (11 Sep 2026) ── */
 
 describe('the strip and the next step', () => {
-  it('names the six stages in the SOP order, the last one short', () => {
-    expect(STAGE_STRIP.map(s => s.label)).toEqual(['Draft', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in'])
+  it('names the seven stages in the SOP order, the last one short', () => {
+    expect(STAGE_STRIP.map(s => s.label)).toEqual(['Draft', 'Quality review', 'Shared with team', 'Confirmed', 'Reminder sent', 'Shoot day', 'Footage in'])
   })
   it('says what to do next, and who, at every stage', () => {
     const half = complete({ objective: null, script: null })
@@ -427,5 +428,59 @@ describe('the script part and the script blocks (13 Sep 2026)', () => {
     const hooked = complete({ script: null, scripts: [{ hook: 'Once in a while…' }] })
     expect(briefChecklist(hooked).missing.map(m => m.key)).not.toContain('script')
     expect(briefItemSource(hooked, 'script')).toBe('field')
+  })
+})
+
+/* ── the Quality review column (13 Sep 2026) ────────────────────────────── */
+
+describe('the Quality review column', () => {
+  const now = '2026-09-11T02:00:00Z'
+  const gated = { planReview: true }
+  const asked = (over: Partial<SopShoot> = {}) => complete({ review_asked_at: '2026-09-10T00:00:00Z', review_asked_by: AM, review_asked_to: ['joy'], ...over })
+  it('a gated plan sits there once asked and until passed; sent back (the ask cleared) puts it back where it was', () => {
+    expect(shootStage(complete(), TODAY, gated)).toBe('drafting')
+    expect(shootStage(asked(), TODAY, gated)).toBe('quality_review')
+    expect(shootStage(asked({ brief_shared_at: 'x' }), TODAY, gated)).toBe('quality_review')
+    expect(shootStage(asked({ plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, gated)).toBe('drafting')
+    expect(shootStage(asked({ brief_shared_at: 'x', plan_reviewed_at: '2026-09-11T00:00:00Z' }), TODAY, gated)).toBe('shared')
+    expect(shootStage(asked({ review_asked_at: null, review_asked_to: null }), TODAY, gated)).toBe('drafting')
+    expect(inQualityReview(asked())).toBe(true)
+    expect(inQualityReview(asked({ go_at: 'x' }))).toBe(false)
+  })
+  it('a plan the gate does not apply to, and a caller that does not know the gate, never see the column', () => {
+    expect(shootStage(asked(), TODAY)).toBe('drafting')
+    expect(shootStage(asked(), TODAY, { planReview: false })).toBe('drafting')
+    expect(stageHappened(asked({ plan_reviewed_at: 'x' }), 'quality_review', TODAY)).toBe(true)
+    expect(stageHappened(asked(), 'quality_review', TODAY)).toBe(false)
+  })
+  it('into the column is the ask, by a manager, on a gated plan not yet passed', () => {
+    const inp = { role: 'account_manager' as const, today: TODAY, planReview: { required: true } }
+    expect(stageMove(complete(), 'quality_review', inp, now, AM)).toMatchObject({ ok: true, askReview: true })
+    expect(stageMove(complete(), 'quality_review', { ...inp, planReview: { required: false } }, now, AM)).toMatchObject({ ok: false, reason: NOT_GATED_WORDS })
+    expect(stageMove(complete({ plan_reviewed_at: 'x' }), 'quality_review', inp, now, AM)).toMatchObject({ ok: false, reason: /already passed/ })
+    expect(stageMove(complete({ go_at: 'x', brief_shared_at: 'x' }), 'quality_review', inp, now, AM)).toMatchObject({ ok: false, reason: /before the shoot is confirmed/ })
+  })
+  it('out of the column is the quality checker’s — an account manager is refused in so many words', () => {
+    const inp = { role: 'account_manager' as const, today: TODAY, planReview: { required: true } }
+    expect(stageMove(asked(), 'drafting', inp, now, AM)).toMatchObject({ ok: false, reason: REVIEW_OUT_WORDS })
+    expect(stageMove(asked({ brief_shared_at: 'x' }), 'shared', inp, now, AM)).toMatchObject({ ok: false, reason: REVIEW_OUT_WORDS })
+    const joy = { role: 'quality_checker' as const, today: TODAY, planReview: { required: true } }
+    expect(stageMove(asked(), 'drafting', joy, now, 'joy')).toMatchObject({ ok: true, patch: { review_asked_at: null, review_asked_to: null } })
+    expect(stageMove(asked({ brief_shared_at: 'x' }), 'shared', joy, now, 'joy')).toMatchObject({ ok: true, patch: { review_asked_at: null } })
+    expect(stageMove(asked(), 'shared', joy, now, 'joy')).toMatchObject({ ok: false, reason: 'Share the plan with the team first' })
+    // an AM wearing the reviewer hat may too
+    expect(stageMove(asked(), 'drafting', { ...inp, reviewer: true }, now, AM)).toMatchObject({ ok: true })
+    // Go from the column still waits on the pass
+    expect(stageMove(asked({ brief_shared_at: 'x' }), 'confirmed', inp, now, AM)).toMatchObject({ ok: false })
+  })
+  it('the quality checker sees the plans asked of them, and nothing else', () => {
+    const b = asked()
+    expect(isAskedToReview(b, 'joy')).toBe(true)
+    expect(canSeeShoot({ id: 'joy', role: 'quality_checker' }, b, [])).toBe(true)
+    expect(canSeeShoot({ id: 'other', role: 'quality_checker' }, b, [])).toBe(false)
+    expect(canSeeShoot({ id: 'joy', role: 'quality_checker' }, complete(), [])).toBe(false)
+  })
+  it('the next step says who is waited on', () => {
+    expect(nextStepWords(asked(), TODAY, { planReview: { required: true } })).toMatch(/^With the quality checker/)
   })
 })

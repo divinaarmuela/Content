@@ -64,19 +64,24 @@ const outlineBtn = 'h-11 rounded-full px-4 text-[14px] font-semibold'
 
 /* ── the flow, on the page ─────────────────────────────────────────────── */
 
-export function StageStrip({ batch, today, role, itemCount }: {
+export function StageStrip({ batch, today, role, itemCount, planReviewRequired = false }: {
   batch: SopShoot
   today: string
   role: MoveRole
   itemCount: number
+  /** the quality gate applies — the strip shows the Quality review step */
+  planReviewRequired?: boolean
 }) {
-  const stage = shootStage(batch, today)
-  const at = stageIndex(stage)
-  const line = nextStepWords(batch, today, { itemCount, role })
+  const planReview = { required: planReviewRequired }
+  const stage = shootStage(batch, today, { planReview: planReviewRequired })
+  // a plan the gate does not apply to never has the Quality review step
+  const strip = planReviewRequired ? STAGE_STRIP : STAGE_STRIP.filter(s => s.key !== 'quality_review')
+  const at = strip.findIndex(s => s.key === stage)
+  const line = nextStepWords(batch, today, { itemCount, role, planReview })
   return (
     <div className="flex flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3">
       <ol className="flex flex-wrap items-center gap-x-1 gap-y-1.5" aria-label="Where this shoot is">
-        {STAGE_STRIP.map((s, i) => {
+        {strip.map((s, i) => {
           const past = i < at
           const done = past && stageHappened(batch, s.key, today)
           const skipped = past && !done
@@ -94,7 +99,7 @@ export function StageStrip({ batch, today, role, itemCount }: {
                 {s.label}
                 <span className="sr-only">{now ? ' — now' : done ? ' — done' : skipped ? ' — skipped' : ' — to come'}</span>
               </span>
-              {i < STAGE_STRIP.length - 1 && <span aria-hidden className="text-muted-foreground">›</span>}
+              {i < strip.length - 1 && <span aria-hidden className="text-muted-foreground">›</span>}
             </li>
           )
         })}
@@ -323,18 +328,18 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   viewerIsReviewer?: boolean
   onPlanReview?: (pass: boolean, note?: string) => Promise<void>
 }) {
-  const stage = shootStage(batch, today)
+  const gate = planReviewRequired === true
+  const stage = shootStage(batch, today, { planReview: gate })
   const [reviewer, setReviewer] = useState('')
   const [sendBack, setSendBack] = useState(false)
   const [sendBackNote, setSendBackNote] = useState('')
-  const gate = planReviewRequired === true
   const reviewLine = reviewWords(batch, nameOf, { planReview: gate })
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
   const [reason, setReason] = useState('')
   const planReview = { required: gate }
   const go = goReady(batch, { itemCount, role, overrideReason: reason, planReview })
-  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview }, 'now', viewerId)
+  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview, reviewer: viewerIsReviewer === true }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
   const [folder, setFolder] = useState(batch.footage_url ?? '')
   const folderShown = stage !== 'drafting'

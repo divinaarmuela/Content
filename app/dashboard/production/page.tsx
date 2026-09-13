@@ -265,6 +265,7 @@ export default function ProductionPage() {
           roles={teamRoles}
           role={viewer.role}
           viewerId={viewer.id}
+          reviewer={viewer.quality_reviewer}
           today={today}
           onMove={moveShoot}
           busyId={stageBusy}

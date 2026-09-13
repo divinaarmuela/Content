@@ -11,8 +11,10 @@ import { notifyBatchTransition } from '../../../../../lib/workflow'
 import { notifyBriefShared, notifyGoOverride, notifyShootReminder } from '../../../../../lib/shoot-sop-notify'
 import { fillFootageFolder, handOverAtGo, handOverCards, notifyFootageIn } from '../../../../../lib/shoot-handover'
 import {
-  NOT_YOUR_PAGE, SHOOT_STAGES, canManageShoot, planReviewRequired, shootStage, stageMove, type ShootStage,
+  NOT_YOUR_PAGE, NO_QUALITY_CHECKER, SHOOT_STAGES, canManageShoot, planReviewRequired, reviewAskPatch, reviewersFor, shootStage, stageMove, type ShootStage,
 } from '../../../../../lib/shoot-sop-core'
+import { notifyPlanReviewAsked } from '../../../../../lib/shoot-sop-notify'
+import { isQualityReviewer } from '../../../../../lib/identity-core'
 
 const melbourneToday = (): string =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
@@ -60,18 +62,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // checker passed a plan written or held by anyone but a super admin
     const roleOf = async (uid: string | null | undefined) => uid ? (await table<TeamUserRow>('team_users').get(uid))?.role ?? null : null
     const planReview = { required: planReviewRequired(batch, { createdByRole: await roleOf(batch.created_by), ownerRole: await roleOf(batch.owner_id) }) }
-    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds, planReview }, now, user.id)
+    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds, planReview, reviewer: isQualityReviewer(user) }, now, user.id)
     // NO BRIEF, NO SHOOT: a plan shared late is refused; the sentence says a
     // super admin can go ahead with a reason, and this is the request that
     // was missing one — a 400, not a rule they can never satisfy
     if (!move.ok) return NextResponse.json({ error: move.reason, needsOverride: move.needsOverride === true }, { status: move.needsOverride ? 400 : 422 })
 
-    const from = shootStage(batch, today)
+    // INTO QUALITY REVIEW is "Ask for a review" (13 Sep 2026): the quality
+    // checkers are asked and emailed, the ask is stamped — the same as the
+    // button on the shoot page
+    if (move.askReview) {
+      const people = await table<TeamUserRow>('team_users').list()
+      const reviewers = reviewersFor(user.id, null, people, { quality: true })
+      if (reviewers.length === 0) return NextResponse.json({ error: NO_QUALITY_CHECKER }, { status: 422 })
+      const asked = await batches.claim(id, cur => (cur && !cur.plan_reviewed_at ? { ...cur, ...(reviewAskPatch(now, user.id, reviewers) as Partial<Batch>) } : null))
+      if (!asked.claimed) return NextResponse.json({ error: 'Someone else moved this shoot — refresh and try again' }, { status: 409 })
+      await logActivity({ actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id, action: 'sop_review_asked', detail: `asked ${reviewers.length} to quality review the plan` })
+      await notifyPlanReviewAsked(user, asked.row, reviewers, { quality: true }).catch(e => console.error('review notify:', e))
+      announceBatchChange({ batch_id: id, client_id: batch.client_id, status: batch.status ?? 'brief', kind: 'updated' })
+      return NextResponse.json({ ...asked.row, stage: 'quality_review', asked: reviewers })
+    }
+
+    const from = shootStage(batch, today, { planReview: planReview.required })
     const moved = await batches.claim(id, cur => {
       if (!cur) return null
       // the mover saw the shoot in `from`; a shoot that has moved since is
       // somebody else's move, and this one stands down
-      if (shootStage(cur, today) !== from) return null
+      if (shootStage(cur, today, { planReview: planReview.required }) !== from) return null
       return { ...cur, ...(move.patch as Partial<Batch>) }
     })
     if (!moved.claimed) {

@@ -244,10 +244,13 @@ export function daysUntilShoot(b: Pick<SopShoot, 'shoot_date'>, today: string): 
 
 /* ── the six columns ───────────────────────────────────────────────────── */
 
-export type ShootStage = 'drafting' | 'shared' | 'confirmed' | 'reminder_sent' | 'shoot_day' | 'footage_handed'
+export type ShootStage = 'drafting' | 'quality_review' | 'shared' | 'confirmed' | 'reminder_sent' | 'shoot_day' | 'footage_handed'
 
 export const SHOOT_STAGES: readonly { key: ShootStage; label: string; meaning: string; empty: string }[] = [
   { key: 'drafting', label: 'Draft', meaning: 'The account manager is writing the plan. It leaves here once all nine parts are filled in.', empty: 'Nothing being written.' },
+  // THE QUALITY REVIEW COLUMN (the owner, 13 Sep 2026: "add a new column so
+  // when we set it for quality review then it goes there, like other pages")
+  { key: 'quality_review', label: 'Quality review', meaning: 'The plan is with the quality checker. It leaves here when they pass it, or send it back with a note.', empty: 'Nothing waiting on the quality checker.' },
   { key: 'shared', label: 'Shared with team', meaning: 'The plan is out, 7 days before the shoot. Everyone on it reads and acknowledges it.', empty: 'No brief out with the team.' },
   { key: 'confirmed', label: 'Confirmed', meaning: 'The account manager signed it off as go: plan complete, strategist aligned, client and location confirmed, everyone acknowledged.', empty: 'Nothing confirmed yet.' },
   { key: 'reminder_sent', label: 'Reminder sent', meaning: 'Ops sent the day-before reminder: call time, location, everyone knows their role.', empty: 'No reminders out.' },
@@ -257,9 +260,10 @@ export const SHOOT_STAGES: readonly { key: ShootStage; label: string; meaning: s
 
 export const STAGE_LABEL: Record<ShootStage, string> = Object.fromEntries(SHOOT_STAGES.map(s => [s.key, s.label])) as Record<ShootStage, string>
 
-/** The same six stages as a strip across the shoot page — the column words,
- *  the owner's six: Draft · Shared with team · Confirmed · Reminder sent ·
- *  Shoot day · Footage in. */
+/** The same stages as a strip across the shoot page — the column words:
+ *  Draft · Quality review · Shared with team · Confirmed · Reminder sent ·
+ *  Shoot day · Footage in. Quality review is drawn only on a plan the gate
+ *  applies to (the page filters it). */
 export const STAGE_STRIP: readonly { key: ShootStage; label: string }[] = SHOOT_STAGES.map(s => ({ key: s.key, label: s.label }))
 
 const STAGE_ORDER: ShootStage[] = SHOOT_STAGES.map(s => s.key)
@@ -273,15 +277,37 @@ export const stageIndex = (s: ShootStage) => STAGE_ORDER.indexOf(s)
  * Shoot day whatever was or was not stamped, until the footage is handed
  * over; a closed shoot is past everything.
  */
-export function shootStage(b: SopShoot, today: string): ShootStage {
+export function shootStage(b: SopShoot, today: string, opts?: StageOpts): ShootStage {
   if (b.footage_handed_at || b.status === 'wrapped') return 'footage_handed'
   const days = daysUntilShoot(b, today)
   if (days !== null && days <= 0) return 'shoot_day'
   if (b.reminder_sent_at) return 'reminder_sent'
   if (b.go_at) return 'confirmed'
+  // THE ONE RULE for the Quality review column: the gate applies, a review
+  // was asked, and the quality checker has not passed it. Sent back clears
+  // the ask, so the shoot falls back to where it was. Callers that do not
+  // know the gate (the sweeps, the late rule) never see this column.
+  if (opts?.planReview && inQualityReview(b)) return 'quality_review'
   if (b.brief_shared_at || b.status === 'locked' || b.status === 'shot') return 'shared'
   return 'drafting'
 }
+
+/** Which caller knows the gate — see `planReviewRequired`. */
+export type StageOpts = { planReview?: boolean }
+
+/** Asked and not passed: the shoot is with the quality checker. */
+export function inQualityReview(b: Pick<SopShoot, 'review_asked_at' | 'plan_reviewed_at' | 'go_at'>): boolean {
+  return !!b.review_asked_at && !b.plan_reviewed_at && !b.go_at
+}
+
+/** Was this person asked to quality review this plan? (Not "on the shoot":
+ *  a reviewer reads the plan; they are never asked to acknowledge it.) */
+export function isAskedToReview(b: Pick<SopShoot, 'review_asked_to'>, userId: string): boolean {
+  return Array.isArray(b.review_asked_to) && b.review_asked_to.map(String).includes(userId)
+}
+
+export const REVIEW_OUT_WORDS = 'Only the quality checker passes a plan — use Pass the plan on the shoot page'
+export const NOT_GATED_WORDS = 'This plan does not need a quality review'
 
 /**
  * Did this stage actually happen, or did the calendar carry the shoot past
@@ -292,6 +318,7 @@ export function shootStage(b: SopShoot, today: string): ShootStage {
 export function stageHappened(b: SopShoot, key: ShootStage, today: string): boolean {
   switch (key) {
     case 'drafting': return true
+    case 'quality_review': return !!b.plan_reviewed_at
     case 'shared': return !!b.brief_shared_at || b.status === 'locked' || b.status === 'shot'
     case 'confirmed': return !!b.go_at
     case 'reminder_sent': return !!b.reminder_sent_at
@@ -463,10 +490,12 @@ export type MoveInput = {
   overrideReason?: string | null
   /** the mover's clients, when known — see `SopManager` */
   clientIds?: readonly string[]
+  /** the mover is a quality checker (role or hat) — may take a plan out of Quality review */
+  reviewer?: boolean
 }
 
 export type MoveResult =
-  | { ok: true; patch: Record<string, unknown>; label: string }
+  | { ok: true; patch: Record<string, unknown>; label: string; askReview?: true }
   | { ok: false; reason: string; needsOverride?: boolean }
 
 /**
@@ -475,12 +504,41 @@ export type MoveResult =
  * checks the shoot is still where it was.
  */
 export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: string, actorId: string): MoveResult {
-  const from = shootStage(b, input.today)
+  const gated = input.planReview?.required === true
+  const from = shootStage(b, input.today, { planReview: gated })
   if (from === to) return { ok: false, reason: `Already in ${STAGE_LABEL[to]}` }
   if (b.status === 'wrapped') return { ok: false, reason: 'This shoot is closed' }
+  const reviewer = input.reviewer === true || input.role === 'quality_checker' || input.role === 'super_admin'
+  // OUT of Quality review is the quality checker's: passing it, or sending
+  // it back. A drag out by anyone else is refused, in so many words.
+  if (from === 'quality_review') {
+    if (!reviewer) return { ok: false, reason: REVIEW_OUT_WORDS }
+    if (to === 'drafting' || to === 'shared') {
+      if (to === 'shared' && !b.brief_shared_at) return { ok: false, reason: 'Share the plan with the team first' }
+      return {
+        ok: true,
+        patch: {
+          review_asked_at: null, review_asked_by: null, review_asked_to: null,
+          ...(to === 'drafting' ? { brief_shared_at: null, brief_shared_by: null } : {}),
+        },
+        label: 'Taken out of quality review — back with the writer',
+      }
+    }
+    // onward from here (Go and beyond) is the ordinary road, and Go asks
+    // for the pass itself
+  }
   // the shoot page is the manager's: the AM on the client, the creator, a
   // super admin, a general user — nobody else moves a shoot
   if (!canManageShoot({ id: actorId, role: input.role, clientIds: input.clientIds }, b)) return { ok: false, reason: NOT_YOURS }
+
+  // INTO Quality review = "Ask for a review": the route asks the quality
+  // checkers and stamps the ask; nothing to write here
+  if (to === 'quality_review') {
+    if (!gated) return { ok: false, reason: NOT_GATED_WORDS }
+    if (b.plan_reviewed_at) return { ok: false, reason: 'The quality checker has already passed this plan' }
+    if (from !== 'drafting' && from !== 'shared') return { ok: false, reason: 'A review is asked before the shoot is confirmed' }
+    return { ok: true, patch: {}, label: 'Asked for a quality review', askReview: true }
+  }
 
   const forward = stageIndex(to) > stageIndex(from)
   if (!forward) {
@@ -502,7 +560,7 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
     }
     case 'confirmed': {
-      if (from === 'drafting') return { ok: false, reason: 'Share the plan with the team first' }
+      if (from === 'drafting' || (from === 'quality_review' && !b.brief_shared_at)) return { ok: false, reason: 'Share the plan with the team first' }
       const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason, planReview: input.planReview })
       if (!go.ok) return { ok: false, reason: go.reasons[0], needsOverride: go.needsOverride }
       const overrode = sharedLate(b) && input.role === 'super_admin' && text(input.overrideReason).length > 0
@@ -666,6 +724,8 @@ export function canSeeShoot(
   // a client's team sees only the shoots they are named on (the owner, 12
   // Sep 2026: "shouldn't it be the ones they've tagged")
   if (viewer.role === 'account_manager' && clientIdsOfViewer.includes(b.client_id)) return true
+  // the quality checker sees the plans asked of them (13 Sep 2026)
+  if (viewer.role === 'quality_checker' && isAskedToReview(b, viewer.id)) return true
   return isOnShoot(b, viewer.id)
 }
 
@@ -845,10 +905,12 @@ export function planAsText(b: SopShoot): { label: string; value: string }[] {
  * `goReady` keep, so it never promises a button the route would refuse.
  */
 export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): string {
-  const stage = shootStage(b, today)
+  const stage = shootStage(b, today, { planReview: input.planReview?.required })
   const when = shortDay(b.shoot_date)
   const due = shortDay(b.edit_deadline)
   switch (stage) {
+    case 'quality_review':
+      return 'With the quality checker. Next: they press Pass the plan on the shoot page, or send it back with a note.'
     case 'drafting': {
       const list = briefChecklist(b, input)
       if (!list.complete) {
@@ -1070,12 +1132,16 @@ export function planReviewPatch(now: string, actorId: string, pass: boolean): Re
     : { plan_reviewed_at: null, plan_reviewed_by: null }
 }
 
-/** The chip on the Shoots board card, when the gate applies. */
-export function planReviewChip(b: Pick<SopShoot, 'plan_reviewed_at' | 'go_at'>, required: boolean): { tone: 'green' | 'amber'; text: string } | null {
+/** The chip on the Shoots board card, when the gate applies. Nothing until
+ *  somebody asks (the owner, 13 Sep 2026: "Needs quality review is
+ *  indicating the user that it now needs quality review, so it's wrong");
+ *  the column and Go's reason say what is required when the time comes. */
+export function planReviewChip(b: Pick<SopShoot, 'plan_reviewed_at' | 'go_at' | 'review_asked_at'>, required: boolean): { tone: 'green' | 'amber'; text: string } | null {
   if (!required) return null
   if (planReviewPassed(b)) return { tone: 'green', text: 'Passed quality review' }
   if (b.go_at) return null
-  return { tone: 'amber', text: 'Needs quality review' }
+  if (b.review_asked_at) return { tone: 'amber', text: 'Waiting on the quality checker' }
+  return null
 }
 
 /** Where the review is, in one line — null until asked. With the quality
