@@ -105,14 +105,15 @@ export default function NewShootPlanDialog({
   // scoped list is the fallback when the registry call fails — a picker with
   // the roster in it beats a picker with nothing in it. Fetched once, on
   // first open.
-  const [allClients, setAllClients] = useState<(ClientRow & { status?: string })[]>([])
+  type PickedClient = ClientRow & { status?: string; email?: string | null; managers?: { id: string; name: string; email: string }[] }
+  const [allClients, setAllClients] = useState<PickedClient[]>([])
   const allClientsFetchedRef = useRef(false)
   useEffect(() => {
     if (!open || allClientsFetchedRef.current) return
     allClientsFetchedRef.current = true
     fetch('/api/website/clients')
       .then(r => (r.ok ? r.json() : []))
-      .then((rows: (ClientRow & { status?: string })[]) => setAllClients(
+      .then((rows: PickedClient[]) => setAllClients(
         (Array.isArray(rows) ? rows : []).filter(c => (c.status ?? 'active') === 'active'),
       ))
       .catch(() => setAllClients([]))
@@ -206,6 +207,24 @@ export default function NewShootPlanDialog({
             <p className="text-[12px] text-muted-foreground">Any client, not only the ones you run.</p>
           </div>
           {/* the brand, the moment a client is picked (9 Sep 2026) */}
+          {/* who runs this account, and how to reach the client — the owner,
+              13 Sep 2026: "a nice touch, the AM for this account and the email" */}
+          {draft.client_id && (() => {
+            const picked = allClients.find(c => c.id === draft.client_id)
+            if (!picked) return null
+            const ams = (picked.managers ?? []).filter(m => m.name || m.email)
+            return (
+              <p className="text-[13px] text-muted-foreground sm:col-span-2" data-tour="client-account">
+                <span className="font-semibold text-foreground">Account manager: </span>
+                {ams.length > 0
+                  ? ams.map((m, i) => <span key={m.id}>{i > 0 ? ', ' : ''}{m.name || m.email}{m.email && m.name ? ` (${m.email})` : ''}</span>)
+                  : 'nobody on the Team page yet'}
+                <span aria-hidden> · </span>
+                <span className="font-semibold text-foreground">Client email: </span>
+                {picked.email ? picked.email : 'none on the Clients page'}
+              </p>
+            )
+          })()}
           {draft.client_id && <div className="sm:col-span-2"><BrandCard clientId={draft.client_id} /></div>}
           <div className="grid gap-1.5 sm:col-span-2">
             <Label>Title *</Label>
