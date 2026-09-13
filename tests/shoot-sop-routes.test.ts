@@ -74,6 +74,9 @@ const brief = (over: Record<string, unknown> = {}) => ({
   client_availability: 'GM 8–10', editor_priorities: 'Hero reel first', edit_deadline: dayShift(14),
   editor_id: ED, crew_ids: [VG], acknowledgements: [], canvas_cards: [], reference_media: [],
   created_at: '2026-09-01T00:00:00.000Z',
+  // the quality review gate (13 Sep 2026) is its own test file; here the
+  // plan is already passed so the older rules are judged on their own
+  plan_reviewed_at: '2026-09-01T01:00:00.000Z', plan_reviewed_by: OPS,
   ...over,
 })
 

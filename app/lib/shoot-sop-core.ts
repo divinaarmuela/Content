@@ -47,6 +47,7 @@ export type SopShoot = {
   brief_shared_at?: string | null
   aligned_at?: string | null
   review_asked_at?: string | null
+  plan_reviewed_at?: string | null
   /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
   scripts?: unknown
   review_asked_to?: unknown
@@ -76,6 +77,7 @@ export type SopShoot = {
   brief_shared_by?: string | null
   aligned_by?: string | null
   review_asked_by?: string | null
+  plan_reviewed_by?: string | null
   client_confirmed_by?: string | null
   go_by?: string | null
   reminder_sent_by?: string | null
@@ -368,6 +370,10 @@ export type GoCheck = {
 export type GoInput = ChecklistInput & {
   /** who is pressing — a super admin may override the 7-day rule */
   role?: MoveRole
+  /** does this plan need the quality checker's pass before Go — see
+   *  `planReviewRequired`; the route and the page work it out from the
+   *  creator's and the owner's roles */
+  planReview?: { required: boolean }
   /** the super admin's one line on why it goes ahead late */
   overrideReason?: string | null
 }
@@ -381,6 +387,7 @@ export function goReady(b: SopShoot, input: GoInput = {}): GoCheck {
   if (!list.complete) reasons.push(`The plan is not complete — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in`)
   if (!b.aligned_at) reasons.push('Tick “Aligned with the strategist” once the direction is agreed')
   if (!b.client_confirmed_at) reasons.push('Tick “Client availability and location confirmed”')
+  if (input.planReview?.required && !planReviewPassed(b)) reasons.push(PLAN_REVIEW_WORDS)
   const ack = ackState(b)
   if (ack.total === 0) reasons.push('Add the people on this shoot — nobody has been asked to read the plan')
   else if (!ack.complete) reasons.push(`${ack.missing.length} of ${ack.total} on the shoot have not acknowledged the plan`)
@@ -449,6 +456,8 @@ export function canManageShoot(who: SopManager, b: Pick<SopShoot, 'client_id' | 
 export type MoveInput = {
   role: MoveRole
   today: string
+  /** the quality review gate, worked out by the caller — see `goReady` */
+  planReview?: { required: boolean }
   checklist?: ChecklistInput
   /** a super admin's reason for going ahead with a plan shared late */
   overrideReason?: string | null
@@ -494,7 +503,7 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
     }
     case 'confirmed': {
       if (from === 'drafting') return { ok: false, reason: 'Share the plan with the team first' }
-      const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason })
+      const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason, planReview: input.planReview })
       if (!go.ok) return { ok: false, reason: go.reasons[0], needsOverride: go.needsOverride }
       const overrode = sharedLate(b) && input.role === 'super_admin' && text(input.overrideReason).length > 0
       return {
@@ -747,7 +756,7 @@ export type StampLine = { key: string; text: string; done: boolean }
  * line per step, with the person and the time; a step not taken yet says
  * so. The same lines feed "Where it is" and the board card.
  */
-export function stampLines(b: SopShoot, nameOf: NameOf): StampLine[] {
+export function stampLines(b: SopShoot, nameOf: NameOf, opts?: { planReview?: boolean }): StampLine[] {
   const lines: StampLine[] = []
   lines.push({ key: 'created', text: createdWords(b, nameOf), done: true })
   lines.push(b.brief_shared_at
@@ -767,6 +776,13 @@ export function stampLines(b: SopShoot, nameOf: NameOf): StampLine[] {
   if (b.review_asked_at) {
     const to = (Array.isArray(b.review_asked_to) ? b.review_asked_to : []).map(id => by(nameOf, String(id)))
     lines.push({ key: 'review', text: `Review asked from ${to.length > 0 ? to.join(', ') : 'the team'} by ${by(nameOf, b.review_asked_by)}${withWhen(b.review_asked_at)}`, done: !!b.aligned_at && String(b.aligned_at) >= String(b.review_asked_at) })
+  }
+  if (opts?.planReview) {
+    lines.push(planReviewPassed(b)
+      ? { key: 'plan_review', text: `Passed quality review by ${by(nameOf, b.plan_reviewed_by)}${withWhen(b.plan_reviewed_at)}`, done: true }
+      : b.review_asked_at
+        ? { key: 'plan_review', text: `Waiting on the quality checker since ${stampWords(b.review_asked_at) ?? 'the ask'}`, done: false }
+        : { key: 'plan_review', text: 'Quality review — not asked yet', done: false })
   }
   lines.push(b.aligned_at
     ? { key: 'aligned', text: `Aligned with the strategist — ticked by ${by(nameOf, b.aligned_by)}${withWhen(b.aligned_at)}`, done: true }
@@ -991,23 +1007,87 @@ export function formatCallTime(p: CallTimeParts): string {
 export function reviewersFor(
   askerId: string,
   picked: readonly string[] | null | undefined,
-  managers: readonly { id: string; role: string; active_status?: boolean | null }[],
+  managers: readonly { id: string; role: string; active_status?: boolean | null; quality_reviewer?: boolean | null }[],
+  /** the quality review gate applies: the default is every active quality
+   *  checker (the role or the flag), not the account managers */
+  opts?: { quality?: boolean },
 ): string[] {
   const chosen = (picked ?? []).map(String).filter(Boolean)
   const ids = chosen.length > 0
     ? chosen
-    : managers.filter(m => m.active_status !== false && (m.role === 'account_manager' || m.role === 'super_admin')).map(m => m.id)
+    : opts?.quality
+      ? qualityCheckersOf(managers)
+      : managers.filter(m => m.active_status !== false && (m.role === 'account_manager' || m.role === 'super_admin')).map(m => m.id)
   return [...new Set(ids)].filter(id => id !== askerId)
 }
+
+/** Every active quality checker — the role, or the flag on another role. */
+export function qualityCheckersOf(
+  people: readonly { id: string; role: string; active_status?: boolean | null; quality_reviewer?: boolean | null }[],
+): string[] {
+  return people.filter(p => p.active_status !== false && (p.role === 'quality_checker' || p.quality_reviewer === true)).map(p => p.id)
+}
+
+/** What the picker's default option says. */
+export const REVIEW_DEFAULT_MANAGERS = 'The account managers on this client'
+export const REVIEW_DEFAULT_QUALITY = 'The quality checker'
+export const NO_QUALITY_CHECKER = 'No quality checker on the Team page yet — set one, or pick a person'
 
 /** The stamps "Ask for a review" writes. */
 export function reviewAskPatch(now: string, actorId: string, to: readonly string[]): Record<string, unknown> {
   return { review_asked_at: now, review_asked_by: actorId, review_asked_to: [...to] }
 }
 
-/** Where the review is, in one line — null until asked. Ticking "Aligned
- *  with the strategist" is the sign-off. */
-export function reviewWords(b: SopShoot, nameOf: NameOf): string | null {
+/* ── THE QUALITY REVIEW GATE ON A PLAN (13 Sep 2026) ──────────────────────
+ * "for shoot briefs that has been created and assigned to AM or AM that
+ * created it, must go through quality review too … not for super admins".
+ * A plan written or held by anyone but a super admin is passed by a quality
+ * checker before Go. Editing the plan after it was passed does NOT clear
+ * the pass — the owner can ask for stricter later. */
+
+export type PlanReviewRoles = { createdByRole?: string | null; ownerRole?: string | null }
+
+/** Does the gate apply? Not when everyone who wrote or holds the plan is a
+ *  super admin. A role the caller does not know counts as a super admin's
+ *  (an old shoot with no creator on record is not held up). */
+export function planReviewRequired(b: Pick<SopShoot, 'created_by' | 'owner_id'>, roles: PlanReviewRoles): boolean {
+  const present: string[] = []
+  if (b.created_by && roles.createdByRole) present.push(roles.createdByRole)
+  if (b.owner_id && roles.ownerRole) present.push(roles.ownerRole)
+  return present.some(r => r !== 'super_admin')
+}
+
+export const PLAN_REVIEW_WORDS = 'The quality checker has not passed the plan yet — ask for a review'
+
+export function planReviewPassed(b: Pick<SopShoot, 'plan_reviewed_at'>): boolean {
+  return !!b.plan_reviewed_at
+}
+
+/** The stamps "Pass the plan" writes — or clears, when it is taken back. */
+export function planReviewPatch(now: string, actorId: string, pass: boolean): Record<string, unknown> {
+  return pass
+    ? { plan_reviewed_at: now, plan_reviewed_by: actorId }
+    : { plan_reviewed_at: null, plan_reviewed_by: null }
+}
+
+/** The chip on the Shoots board card, when the gate applies. */
+export function planReviewChip(b: Pick<SopShoot, 'plan_reviewed_at' | 'go_at'>, required: boolean): { tone: 'green' | 'amber'; text: string } | null {
+  if (!required) return null
+  if (planReviewPassed(b)) return { tone: 'green', text: 'Passed quality review' }
+  if (b.go_at) return null
+  return { tone: 'amber', text: 'Needs quality review' }
+}
+
+/** Where the review is, in one line — null until asked. With the quality
+ *  gate, "Pass the plan" is the sign-off; without it, the "Aligned with the
+ *  strategist" tick is. */
+export function reviewWords(b: SopShoot, nameOf: NameOf, opts?: { planReview?: boolean }): string | null {
+  if (opts?.planReview) {
+    if (planReviewPassed(b)) return `Passed quality review by ${nameOf(b.plan_reviewed_by) ?? 'the team'}${withWhen(b.plan_reviewed_at)}`
+    if (!b.review_asked_at) return null
+    const to = (Array.isArray(b.review_asked_to) ? b.review_asked_to : []).map(id => nameOf(String(id)) ?? 'the quality checker')
+    return `Waiting on ${to.length > 0 ? to.join(', ') : 'the quality checker'} since ${stampWords(b.review_asked_at) ?? 'the ask'} — asked by ${nameOf(b.review_asked_by) ?? 'the team'}`
+  }
   if (!b.review_asked_at) return null
   const to = (Array.isArray(b.review_asked_to) ? b.review_asked_to : []).map(id => nameOf(String(id)) ?? 'the team')
   const who = to.length > 0 ? to.join(', ') : 'the team'

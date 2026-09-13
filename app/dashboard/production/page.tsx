@@ -108,6 +108,9 @@ export default function ProductionPage() {
   const teamNames = useMemo(
     () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
     [live.tables.team.rows])
+  const teamRoles = useMemo(
+    () => new Map(live.tables.team.rows.map(u => [u.id, String(u.role ?? '')])),
+    [live.tables.team.rows])
 
   /* ── who is doing what: the Client and People filters. Everyone here may
         pick a client (the page always could); narrowing to a person is for
@@ -259,6 +262,7 @@ export default function ProductionPage() {
           shoots={visibleShoots}
           itemCounts={itemCountByShoot}
           names={teamNames}
+          roles={teamRoles}
           role={viewer.role}
           viewerId={viewer.id}
           today={today}

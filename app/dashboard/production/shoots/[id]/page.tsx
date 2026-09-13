@@ -72,6 +72,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   const [crew, setCrew] = useState<CrewRow[]>([])
   const [team, setTeam] = useState<TeamRow[]>([])
   const [names, setNames] = useState<Record<string, string | null>>({})
+  const [planReviewRequired, setPlanReviewRequired] = useState(false)
+  const [viewerIsReviewer, setViewerIsReviewer] = useState(false)
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })) }, [])
 
@@ -102,6 +104,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
     setCrew(Array.isArray(json.crew) ? json.crew : [])
     setTeam(Array.isArray(json.team) ? json.team : [])
     setNames(json.names && typeof json.names === 'object' ? json.names : {})
+    setPlanReviewRequired(json.plan_review_required === true)
+    setViewerIsReviewer(json.viewer_is_reviewer === true)
   }, [id, router])
   useEffect(() => { void load() }, [load])
   useProductionLive(useCallback(() => { void load() }, [load]))
@@ -248,6 +252,22 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
       setBusy(null)
     }
   }
+  const planReview = async (pass: boolean, note?: string) => {
+    setBusy('plan-review')
+    try {
+      const res = await fetch(`/api/production/batches/${id}/plan-review`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pass, note: note ?? '' }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not save')
+      toast.success(pass ? 'Plan passed — the team has been told' : 'Sent back — the team has been told')
+      void load()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setBusy(null)
+    }
+  }
   const unacknowledge = async (userId: string) => {
     setBusy('unack')
     try {
@@ -390,7 +410,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
           {today && (
             <WherePanel batch={batch} role={role as never} viewerId={viewerId} today={today}
               itemCount={deliverableItems.length} busy={busy !== null} nameOf={nameOf} clientEmail={clientEmail}
-              onPatch={patchThenLoad} onMove={moveStage} onShareClient={shareWithClient} onAskReview={askReview} team={team} />
+              onPatch={patchThenLoad} onMove={moveStage} onShareClient={shareWithClient} onAskReview={askReview} team={team}
+              planReviewRequired={planReviewRequired} viewerIsReviewer={viewerIsReviewer} onPlanReview={planReview} />
           )}
           <PeoplePanel batch={batch} crew={crew} team={team} busy={busy !== null} onPatch={patchThenLoad} onUnack={unacknowledge} />
           <EditorCardPanel batch={batch} items={items} editorName={nameOf(batch.editor_id)} />

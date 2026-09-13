@@ -8,7 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  FOOTAGE_ONLY_WORDS, SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clientPlanWords, clockWords, isFootageOnly, overrideWords, shootStage, stageMove,
+  FOOTAGE_ONLY_WORDS, SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clientPlanWords, clockWords, isFootageOnly, overrideWords, planReviewChip, planReviewRequired, shootStage, stageMove,
   type MoveRole, type ShootStage, type SopShoot,
 } from '../../lib/shoot-sop-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
@@ -53,7 +53,7 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, names, role, viewerId, today, onMove, busyId, laneEmpty,
+  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty,
 }: {
   shoots: StageShoot[]
   /** an empty column's sentence while the page is narrowed to a client or a
@@ -62,6 +62,8 @@ export function ShootStageBoard({
   /** cards already pointed at each shoot — a deliverable is a line OR a card */
   itemCounts: Map<string, number>
   names: Map<string, string>
+  /** id → role, for the quality review gate on each plan */
+  roles?: Map<string, string>
   role: MoveRole
   viewerId: string
   today: string
@@ -170,6 +172,12 @@ export function ShootStageBoard({
             {s.shoot_date && <Chip><CalendarDays className="h-3.5 w-3.5" aria-hidden />{whenShort(s.shoot_date)}</Chip>}
             {overrideWords(s) && <Chip tone="amber">{overrideWords(s)}</Chip>}
             {clientPlanWords(s) && <Chip tone={s.client_decision === 'approved' ? 'green' : s.client_decision === 'changes' ? 'amber' : 'blue'} className="h-auto whitespace-normal text-left">{clientPlanWords(s)}</Chip>}
+            {(() => {
+              // the quality review gate (13 Sep 2026): a plan written or held
+              // by anyone but a super admin
+              const chip = planReviewChip(s, planReviewRequired(s, { createdByRole: roles?.get(s.created_by ?? '') ?? null, ownerRole: roles?.get(s.owner_id ?? '') ?? null }))
+              return chip ? <Chip tone={chip.tone} className="h-auto whitespace-normal text-left">{chip.text}</Chip> : null
+            })()}
           </>}
           note={<>{who}{note ? <><br />{note}</> : null}</>}
           actions={moves.length > 0 ? (

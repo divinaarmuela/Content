@@ -67,7 +67,7 @@ type UpcomingEntry = {
 /** items and shoots with an unresolved comment tagged to the viewer */
 type WaitingOnYou = {
   items: ItemLite[]
-  shoots: { id: string; title: string; clients: { name: string } | null }[]
+  shoots: { id: string; title: string; clients: { name: string } | null; line?: string }[]
 }
 type Overview = {
   waiting_on_you?: WaitingOnYou
@@ -497,6 +497,22 @@ export default function OverviewPage() {
         client_id: b.client_id,
         clients: clientsById.get(b.client_id) ? { name: clientsById.get(b.client_id)!.name } : null,
       }))
+    // PLANS WAITING ON THE QUALITY CHECKER (13 Sep 2026): asked of this
+    // viewer and not passed yet — one row each, on their Overview
+    const shootsToReview = live.tables.batches.rows
+      .filter(b => {
+        const r = b as unknown as { review_asked_to?: unknown; plan_reviewed_at?: string | null; go_at?: string | null }
+        const to = Array.isArray(r.review_asked_to) ? r.review_asked_to.map(String) : []
+        return to.includes(me.id) && !r.plan_reviewed_at && !r.go_at && !live.tagged.batches.includes(b.id)
+      })
+      .map(b => ({
+        id: b.id,
+        title: b.title,
+        client_id: b.client_id,
+        clients: clientsById.get(b.client_id) ? { name: clientsById.get(b.client_id)!.name } : null,
+        line: 'Review the plan',
+      }))
+    taggedShoots.push(...shootsToReview)
     // how many clients this person runs — null means every one of them
     const scopedClients = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
     const clientCount = scopedClients === null
@@ -846,7 +862,7 @@ export default function OverviewPage() {
                   <WorkRow key={s.id} tone="amber"
                     href={`/dashboard/production/shoots/${s.id}#comments`}
                     title={s.clients?.name ? `${s.clients.name} · ${s.title}` : s.title}
-                    detail="Shoot" chip="Answer this" />
+                    detail={s.line ?? 'Shoot'} chip={s.line ? 'Open the plan' : 'Answer this'} />
                 ))}
               </div>
             </Section>

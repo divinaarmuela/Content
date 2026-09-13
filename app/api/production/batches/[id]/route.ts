@@ -1,5 +1,6 @@
 import { sanitiseScripts } from '../../../../lib/script-core'
 import { NextResponse } from 'next/server'
+import { isQualityReviewer } from '../../../../lib/identity-core'
 import { SHOOT_BRIEF_SLUG } from '../../../../lib/brief-task-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -16,7 +17,7 @@ import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { NOT_YOUR_PAGE, acksOf, canManageShoot, peopleOnShoot } from '../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, acksOf, canManageShoot, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
 
 /**
  * Load a shoot the caller may WORK — the shoot page and every button on it
@@ -91,6 +92,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       proposal: proposal ?? null,
       viewer_role: user.role,
       viewer_id: user.id,
+      // the quality review gate on THIS plan, and whether the viewer answers it
+      plan_review_required: planReviewRequired(b, { createdByRole: personById.get(b.created_by ?? '')?.role ?? null, ownerRole: personById.get(b.owner_id ?? '')?.role ?? null }),
+      viewer_is_reviewer: isQualityReviewer(user) || user.role === 'super_admin',
       crew,
       team,
       names,

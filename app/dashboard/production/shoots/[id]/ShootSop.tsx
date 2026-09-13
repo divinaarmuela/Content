@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
+  REVIEW_DEFAULT_MANAGERS, REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
@@ -300,7 +300,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, onScript
 
 /* ── where it is, and the one next move ────────────────────────────────── */
 
-export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team }: {
+export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team, planReviewRequired, viewerIsReviewer, onPlanReview }: {
   batch: ShootSopBatch
   role: MoveRole
   viewerId: string
@@ -316,16 +316,26 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   /** "Ask for a review": the ids to ask, or [] for the account managers on the client */
   onAskReview?: (to: string[]) => Promise<void>
   team?: readonly { id: string; name: string; role: string }[]
+  /** THE QUALITY GATE (13 Sep 2026): this plan needs the quality checker's
+   *  pass before Go — worked out by the route from who wrote and holds it */
+  planReviewRequired?: boolean
+  /** the viewer answers the gate: a quality checker, or a super admin */
+  viewerIsReviewer?: boolean
+  onPlanReview?: (pass: boolean, note?: string) => Promise<void>
 }) {
   const stage = shootStage(batch, today)
   const [reviewer, setReviewer] = useState('')
-  const reviewLine = reviewWords(batch, nameOf)
+  const [sendBack, setSendBack] = useState(false)
+  const [sendBackNote, setSendBackNote] = useState('')
+  const gate = planReviewRequired === true
+  const reviewLine = reviewWords(batch, nameOf, { planReview: gate })
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
   const [reason, setReason] = useState('')
-  const go = goReady(batch, { itemCount, role, overrideReason: reason })
-  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason }, 'now', viewerId)
-  const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount }).needsOverride
+  const planReview = { required: gate }
+  const go = goReady(batch, { itemCount, role, overrideReason: reason, planReview })
+  const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview }, 'now', viewerId)
+  const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
   const [folder, setFolder] = useState(batch.footage_url ?? '')
   const folderShown = stage !== 'drafting'
   const meaning = SHOOT_STAGES.find(s => s.key === stage)?.meaning
@@ -339,7 +349,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const check = next ? can(next.to) : null
   const shareReady = clientShareReady(batch, { itemCount })
   const clientLine = clientPlanWords(batch)
-  const lines = stampLines(batch, nameOf)
+  const lines = stampLines(batch, nameOf, { planReview: gate })
   // a shoot typed by name on the Editor page: already shot, no plan — no
   // ticks, no Go, no share; the footage folder and the log still apply
   const footageOnly = isFootageOnly(batch)
@@ -367,14 +377,55 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             </label>
             {/* ASK FOR A REVIEW (13 Sep 2026): whoever wrote the plan asks
                 the account managers, or one person, to look at it; the
-                tick above is their sign-off */}
-            {onAskReview && (
+                tick above is their sign-off. THE QUALITY GATE: a plan written
+                or held by anyone but a super admin goes to the quality
+                checker, who passes it or sends it back — Go waits on that. */}
+            {gate && (
+              <div className="flex flex-col gap-1.5" data-plan-review>
+                <p className="flex min-h-11 items-center gap-3 text-[14px]">
+                  <span aria-hidden className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${planReviewPassed(batch) ? 'border-accent-green bg-accent-green text-ink' : 'border-border'}`}>{planReviewPassed(batch) ? '✓' : ''}</span>
+                  <span>Quality review{planReviewPassed(batch) && <span className="text-[12px] text-muted-foreground"> · passed by {nameOf(batch.plan_reviewed_by) ?? 'the team'}, {stampWords(batch.plan_reviewed_at)}</span>}</span>
+                </p>
+                {!planReviewPassed(batch) && !viewerIsReviewer && (
+                  <p className="pl-8 text-[12px] text-muted-foreground" role="status">{reviewLine ?? 'Not asked yet — the quality checker passes the plan before Go.'}</p>
+                )}
+                {viewerIsReviewer && onPlanReview && !planReviewPassed(batch) && (
+                  <div className="flex flex-col gap-2 pl-8">
+                    {reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button className={primaryBtn} disabled={busy} onClick={() => void onPlanReview(true)}>Pass the plan</Button>
+                      {!sendBack && (
+                        <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setSendBack(true)}>Send back with a note</Button>
+                      )}
+                    </div>
+                    {sendBack && (
+                      <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
+                        <label htmlFor="plan-send-back" className="text-[13px] font-semibold">What should change? One line.</label>
+                        <Input id="plan-send-back" value={sendBackNote} onChange={e => setSendBackNote(e.target.value)} maxLength={2000}
+                          placeholder="The objective does not say which pillar this serves" className="h-11 text-[15px] font-normal" />
+                        <div className="flex items-center gap-2">
+                          <Button className={primaryBtn} disabled={busy || !sendBackNote.trim()}
+                            onClick={async () => { await onPlanReview(false, sendBackNote.trim()); setSendBack(false); setSendBackNote('') }}>Send back</Button>
+                          <Button variant="ghost" className={outlineBtn} onClick={() => { setSendBack(false); setSendBackNote('') }}>Cancel</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {viewerIsReviewer && onPlanReview && planReviewPassed(batch) && role === 'super_admin' && (
+                  <div className="pl-8">
+                    <Button variant="ghost" className={outlineBtn} disabled={busy} onClick={() => void onPlanReview(false, 'Pass taken back')}>Take the pass back</Button>
+                  </div>
+                )}
+              </div>
+            )}
+            {onAskReview && !(gate && planReviewPassed(batch)) && (
               <div className="flex flex-col gap-1.5 pl-8">
-                {reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
+                {!gate && reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
                 <div className="flex flex-wrap items-center gap-2">
                   <select value={reviewer} onChange={e => setReviewer(e.target.value)} aria-label="Who should review the plan"
                     className="h-11 min-w-0 rounded-inner border border-border bg-surface px-2 text-[13px]">
-                    <option value="">The account managers on this client</option>
+                    <option value="">{gate ? REVIEW_DEFAULT_QUALITY : REVIEW_DEFAULT_MANAGERS}</option>
                     {(team ?? []).filter(t => t.id !== viewerId && t.role !== 'client').map(t => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}

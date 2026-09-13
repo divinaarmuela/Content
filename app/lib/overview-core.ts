@@ -33,6 +33,8 @@ export type OverviewItem = {
 
 export type OverviewShoot = {
   id: string; title: string; client_id: string; clients: { name: string } | null
+  /** what the row says under the title; "Shoot" when absent */
+  line?: string
 }
 
 export type OverviewEntry = {

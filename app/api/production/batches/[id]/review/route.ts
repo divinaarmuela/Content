@@ -6,7 +6,7 @@ import { shootManager } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { notifyPlanReviewAsked } from '../../../../../lib/shoot-sop-notify'
-import { NOT_YOUR_PAGE, canManageShoot, reviewAskPatch, reviewersFor } from '../../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, NO_QUALITY_CHECKER, canManageShoot, planReviewRequired, reviewAskPatch, reviewersFor } from '../../../../../lib/shoot-sop-core'
 
 /**
  * "ASK FOR A REVIEW" (the owner, 13 Sep 2026: "general user sometimes needs
@@ -30,10 +30,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const picked = Array.isArray(body.to) ? body.to.map(String) : null
     const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: batch.client_id } })
     const linked = new Set(links.map(l => l.team_user_id))
-    const managers = await table<TeamUserRow>('team_users').list({ where: u => linked.has(u.id) })
-    const to = reviewersFor(user.id, picked, managers)
+    const people = await table<TeamUserRow>('team_users').list()
+    // THE QUALITY GATE (13 Sep 2026): a plan written or held by anyone but a
+    // super admin is reviewed by the quality checker, not the managers
+    const roleOf = (uid: string | null | undefined) => people.find(u => u.id === uid)?.role ?? null
+    const quality = planReviewRequired(batch, { createdByRole: roleOf(batch.created_by), ownerRole: roleOf(batch.owner_id) })
+    const pool = quality ? people : people.filter(u => linked.has(u.id))
+    const to = reviewersFor(user.id, picked, pool, { quality })
     if (to.length === 0) {
-      return NextResponse.json({ error: 'Nobody to ask — pick a reviewer, or put an account manager on this client on the Team page' }, { status: 422 })
+      return NextResponse.json({ error: quality ? NO_QUALITY_CHECKER : 'Nobody to ask — pick a reviewer, or put an account manager on this client on the Team page' }, { status: 422 })
     }
 
     const now = new Date().toISOString()
@@ -41,9 +46,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!done.claimed) return NextResponse.json({ error: 'Could not save — try again' }, { status: 409 })
     await logActivity({
       actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
-      action: 'sop_review_asked', detail: `asked ${to.length} to review the plan`,
+      action: 'sop_review_asked', detail: quality ? `asked ${to.length} to quality review the plan` : `asked ${to.length} to review the plan`,
     })
-    const told = await notifyPlanReviewAsked(user, done.row, to).catch(e => { console.error('review notify:', e); return 0 })
+    const told = await notifyPlanReviewAsked(user, done.row, to, { quality }).catch(e => { console.error('review notify:', e); return 0 })
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: batch.status ?? 'brief', kind: 'updated' })
     return NextResponse.json({ ...done.row, asked: to, told })
   } catch (e) {

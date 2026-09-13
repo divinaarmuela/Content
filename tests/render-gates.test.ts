@@ -51,7 +51,7 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     expect(sop).toMatch(/const next: \{ to: ShootStage; label: string \} \| null =/)
     expect(sop).toMatch(/\{!check\.ok && <p className="text-\[12px\] text-muted-foreground" role="status">\{check\.reason\}<\/p>\}/)
     expect(sop).toMatch(/Share the plan with the client/)
-    expect(sop).toMatch(/stampLines\(batch, nameOf\)/)
+    expect(sop).toMatch(/stampLines\(batch, nameOf, \{ planReview: gate \}\)/)
     expect(sop).toMatch(/nameOf\(batch\.aligned_by\)/)
     expect(sop).toMatch(/Footage folder/)
     expect(sop).not.toMatch(/mayPasteFolder/)
@@ -179,6 +179,16 @@ describe('leftovers the SOP never asked for are gone', () => {
   it('New shoot plan asks only what the SOP asks: no priority, no existing-shoot picker, no outside link', () => {
     expect(src(NEW_PLAN)).not.toMatch(/<Label>Priority<\/Label>|A new shoot<\/SelectItem>|Outside plan link|milanote\.com/)
     expect(src(NEW_PLAN)).toMatch(/Account manager for this shoot/)
+  })
+  it('the quality review gate on a plan: the row, the reviewer’s two answers, the board chip (13 Sep 2026)', () => {
+    const s = src(SOP)
+    expect(s).toMatch(/data-plan-review/)
+    expect(s).toContain('Pass the plan')
+    expect(s).toContain('Send back with a note')
+    expect(s).toMatch(/REVIEW_DEFAULT_QUALITY : REVIEW_DEFAULT_MANAGERS/)
+    expect(s).toMatch(/planReview: input\.planReview|planReview \}/)
+    const board = src('app/dashboard/production/ShootStageBoard.tsx')
+    expect(board).toMatch(/planReviewChip\(s, planReviewRequired\(/)
   })
   it('the shoot page has no link to the old Drive folder or the old card page, and no "Create items"', () => {
     expect(src(SHOOT) + src(SOP)).not.toMatch(/Open Drive folder|Create items|new_for_shoot|dashboard\/production\/\$\{it\.id\}/)

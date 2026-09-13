@@ -360,7 +360,11 @@ export function ackSummary(batch: Batch, names: Map<string, string>): string {
  *  "Aligned with the strategist" tick is the sign-off; a comment on the
  *  shoot page is how they send it back. Keyed per ask, so asking again
  *  emails again on purpose. */
-export async function notifyPlanReviewAsked(actor: TeamUser, batch: Batch, reviewerIds: readonly string[]): Promise<number> {
+export async function notifyPlanReviewAsked(
+  actor: TeamUser, batch: Batch, reviewerIds: readonly string[],
+  /** the quality gate: the reviewer PASSES the plan on the shoot page */
+  opts: { quality?: boolean } = {},
+): Promise<number> {
   const people = await activePeople(reviewerIds)
   const when = longDate(batch.shoot_date)
   let sent = 0
@@ -371,12 +375,45 @@ export async function notifyPlanReviewAsked(actor: TeamUser, batch: Batch, revie
       eventType: 'shoot_review_asked', entityType: 'batch',
       entityId: `${batch.id}#review#${batch.review_asked_at ?? ''}#${p.id}`,
       recipientId: p.id, recipientEmail: p.email,
-      subject: `Review the plan: ${batch.title}`,
+      subject: opts.quality ? `Quality review the plan: ${batch.title}` : `Review the plan: ${batch.title}`,
       bodyHtml: renderEmail(
-        `${escapeHtml(actor.name || actor.email)} is asking you to review a plan`,
+        opts.quality
+          ? `${escapeHtml(actor.name || actor.email)} is asking you to quality review a plan`
+          : `${escapeHtml(actor.name || actor.email)} is asking you to review a plan`,
         `<p>The shoot plan for <strong>${escapeHtml(batch.title)}</strong>${when ? `, shooting ${when},` : ''} is ready for your eyes.</p>` +
         planHtml(batch) +
-        '<p>Open the shoot. If the direction is right, tick <strong>Aligned with the strategist or creative director</strong> — that is the sign-off. If not, say what to change in the comments and tag the person who wrote it.</p>',
+        (opts.quality
+          ? '<p>Open the shoot. If the plan is right, press <strong>Pass the plan</strong> — the shoot cannot be confirmed as go until you have. If not, press <strong>Send back with a note</strong> and say what to change.</p>'
+          : '<p>Open the shoot. If the direction is right, tick <strong>Aligned with the strategist or creative director</strong> — that is the sign-off. If not, say what to change in the comments and tag the person who wrote it.</p>'),
+        'Open the shoot plan', shootUrl(batch.id),
+      ),
+    })
+    if (r === 'sent') sent++
+  }
+  return sent
+}
+
+/** The quality checker's answer on a plan: passed, or sent back with a
+ *  note — told to whoever asked and to the plan's owner and creator. */
+export async function notifyPlanReviewed(
+  actor: TeamUser, batch: Batch, pass: boolean, note: string | null, toIds: readonly string[],
+): Promise<number> {
+  const people = await activePeople(toIds)
+  let sent = 0
+  for (const p of people) {
+    if (p.id === actor.id) continue
+    const r = await notify({
+      actorName: actor.name, actorEmail: actor.email,
+      eventType: pass ? 'shoot_plan_passed' : 'shoot_plan_sent_back', entityType: 'batch',
+      entityId: `${batch.id}#plan-review#${batch.plan_reviewed_at ?? ''}#${pass ? 'pass' : 'back'}#${p.id}`,
+      recipientId: p.id, recipientEmail: p.email,
+      subject: pass ? `Plan passed quality review: ${batch.title}` : `Plan sent back: ${batch.title}`,
+      bodyHtml: renderEmail(
+        pass ? `${escapeHtml(actor.name || actor.email)} passed the plan` : `${escapeHtml(actor.name || actor.email)} sent the plan back`,
+        (pass
+          ? `<p><strong>${escapeHtml(batch.title)}</strong> passed the quality review. Once the ticks and the acknowledgements are in, it can be confirmed as go.</p>`
+          : `<p><strong>${escapeHtml(batch.title)}</strong> was sent back.</p>` + (note ? `<p><strong>What to change:</strong> ${escapeHtml(note)}</p>` : '') +
+            '<p>Change the plan, then ask for a review again.</p>'),
         'Open the shoot plan', shootUrl(batch.id),
       ),
     })

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Batch, ContentItem } from '@/lib/db-types'
+import type { Batch, ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { shootManager } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
@@ -11,7 +11,7 @@ import { notifyBatchTransition } from '../../../../../lib/workflow'
 import { notifyBriefShared, notifyGoOverride, notifyShootReminder } from '../../../../../lib/shoot-sop-notify'
 import { fillFootageFolder, handOverAtGo, handOverCards, notifyFootageIn } from '../../../../../lib/shoot-handover'
 import {
-  NOT_YOUR_PAGE, SHOOT_STAGES, canManageShoot, shootStage, stageMove, type ShootStage,
+  NOT_YOUR_PAGE, SHOOT_STAGES, canManageShoot, planReviewRequired, shootStage, stageMove, type ShootStage,
 } from '../../../../../lib/shoot-sop-core'
 
 const melbourneToday = (): string =>
@@ -56,7 +56,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const now = new Date().toISOString()
     const itemCount = await table<ContentItem>('content_items').count({ by: { batch_id: id } })
     const overrideReason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : null
-    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds }, now, user.id)
+    // THE QUALITY GATE (13 Sep 2026): Go is refused until the quality
+    // checker passed a plan written or held by anyone but a super admin
+    const roleOf = async (uid: string | null | undefined) => uid ? (await table<TeamUserRow>('team_users').get(uid))?.role ?? null : null
+    const planReview = { required: planReviewRequired(batch, { createdByRole: await roleOf(batch.created_by), ownerRole: await roleOf(batch.owner_id) }) }
+    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds, planReview }, now, user.id)
     // NO BRIEF, NO SHOOT: a plan shared late is refused; the sentence says a
     // super admin can go ahead with a reason, and this is the request that
     // was missing one — a 400, not a rule they can never satisfy

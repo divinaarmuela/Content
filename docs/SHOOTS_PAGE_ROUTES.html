@@ -61,7 +61,8 @@
 <tr><th>Person</th><th>Sees</th><th>Can do</th></tr>
 <tr><td class="k">Account manager on the client</td><td>Every shoot for their clients</td><td>Everything: plan, share, Go, reminder, Footage is in, client share, move back, delete</td></tr>
 <tr><td class="k">Whoever created the shoot</td><td>Their own shoot</td><td>Everything on that shoot, including sending the plan to the client</td></tr>
-<tr><td class="k">Super admin</td><td>Every shoot</td><td>Everything, plus "Go anyway" with a reason when the plan was shared late</td></tr>
+<tr><td class="k">Super admin</td><td>Every shoot</td><td>Everything, plus "Go anyway" with a reason when the plan was shared late. Their own plans skip the quality review; they may pass another's plan in the checker's place</td></tr>
+<tr><td class="k">Quality checker (Joy)</td><td>Every plan asked of them, on their Overview</td><td>Pass the plan, or send it back with a note</td></tr>
 <tr><td class="k">General user</td><td>Shoots they created or are on</td><td>Same as the creator</td></tr>
 <tr><td class="k">Editor</td><td>Not this page. Their card on the Editor page carries the plan</td><td>Press "I've read the plan" on their card</td></tr>
 <tr><td class="k">Videographer, presenter, crew</td><td>Not this page. An email with an acknowledge link</td><td>Press the link to say they have read the plan</td></tr>
@@ -91,12 +92,25 @@
 </div>
 
 <div class="route">
+<h3>2b · Quality review of the plan</h3>
+<p>Every plan written or assigned to an account manager or a general user is passed by the quality checker before it can be confirmed. A plan a super admin wrote and holds skips this step.</p>
+<ol>
+<li>Under "Aligned with the strategist" press <b>Ask for a review</b>. The default is the quality checker; you can pick one person instead.</li>
+<li>They get <span class="mail">Quality review the plan: [shoot]</span> with the whole plan, and the shoot appears under "Waiting on you" on their Overview.</li>
+<li>On the shoot page they press <b>Pass the plan</b>, or <b>Send back with a note</b>. A send-back clears any earlier pass, writes the note as a shoot comment tagged to whoever asked, and emails them <span class="mail">Plan sent back: [shoot]</span>. A pass emails <span class="mail">Plan passed quality review: [shoot]</span>.</li>
+<li>Until it is passed, Go is grey: <span class="stop">The quality checker has not passed the plan yet — ask for a review</span>. The board card reads "Needs quality review", then "Passed quality review".</li>
+</ol>
+<p class="note">A super admin can press Pass the plan on anyone's plan. It is logged "in the reviewer's place", the same words as a content check passed for Joy. Editing the plan after it was passed does not undo the pass.</p>
+</div>
+
+<div class="route">
 <h3>3 · Confirmed: Go books the shoot</h3>
 <p>Press <b>Confirm — it is go</b>. Refused, with the reason under the button, until all of these are true:</p>
 <ul>
 <li>the nine parts are filled;</li>
 <li>"Aligned with the strategist or creative director" is ticked;</li>
 <li>"Client availability and location confirmed" is ticked;</li>
+<li>the quality checker has passed the plan, unless a super admin wrote and holds it;</li>
 <li>everyone on the shoot has acknowledged the plan;</li>
 <li>the plan was shared 7 or more days before the shoot, or a super admin presses <b>Go anyway</b> with a reason (the managers and Ops are emailed the reason).</li>
 </ul>
@@ -195,6 +209,9 @@
 <tr><td>Plan still Draft under 7 days out (once)</td><td>AMs on the client, Ops contact</td><td>⚠️ Plan is late: [shoot]</td></tr>
 <tr><td>Share the plan with the team</td><td>Editor (card link), crew (acknowledge link)</td><td>Read the plan: [shoot]</td></tr>
 <tr><td>Shared under 7 days out (once)</td><td>AMs, Ops contact</td><td>⚠️ Plan shared late: [shoot]</td></tr>
+<tr><td>Ask for a review</td><td>The quality checker (or the person picked)</td><td>Quality review the plan: [shoot]</td></tr>
+<tr><td>Plan passed</td><td>Whoever asked, the plan's owner and creator</td><td>Plan passed quality review: [shoot]</td></tr>
+<tr><td>Plan sent back with a note</td><td>Whoever asked, the plan's owner and creator</td><td>Plan sent back: [shoot]</td></tr>
 <tr><td>Go</td><td>Editor</td><td>You're on [shoot] — your card is ready, shoot on [date]</td></tr>
 <tr><td>Go anyway with a reason</td><td>AMs on the client, Ops contact</td><td>Went ahead late: [shoot]</td></tr>
 <tr><td>Reminder sent</td><td>Everyone on the shoot, the creator</td><td>Shoot reminder: [shoot] — [date]</td></tr>
@@ -210,7 +227,7 @@
 <h2>Quick answers</h2>
 <table>
 <tr><td class="k">The card is red</td><td>The plan is late: under 7 days to the shoot and still Draft. Fill what it lists and share.</td></tr>
-<tr><td class="k">Go is greyed</td><td>Read the line under it. It names the one thing missing.</td></tr>
+<tr><td class="k">Go is greyed</td><td>Read the line under it. It names the one thing missing. "The quality checker has not passed the plan yet" means press Ask for a review and wait for Joy.</td></tr>
 <tr><td class="k">Footage is in is greyed</td><td>Same: date not passed, no editor, no priorities or deadline, or no folder link.</td></tr>
 <tr><td class="k">"Waiting on the client"</td><td>The client has not answered on the portal. Only they can change it.</td></tr>
 <tr><td class="k">A stage is ticked but never happened</td><td>It is not: since 13 September the strip ticks only stages with a stamp. A plan the calendar carried to Shoot day shows Draft ticked and the rest plain.</td></tr>
