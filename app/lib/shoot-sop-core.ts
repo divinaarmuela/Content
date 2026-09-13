@@ -489,7 +489,7 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
   switch (to) {
     case 'shared': {
       const list = briefChecklist(b, input.checklist)
-      if (!list.complete) return { ok: false, reason: `Not yet — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in. Nothing moves forward on half-information.` }
+      if (!list.complete) return { ok: false, reason: `Not yet — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in.` }
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
     }
     case 'confirmed': {
@@ -689,7 +689,7 @@ export type ClientDecision = 'approved' | 'changes'
 export function clientShareReady(b: SopShoot, input: ChecklistInput = {}): { ok: true } | { ok: false; reason: string } {
   if (b.status === 'wrapped') return { ok: false, reason: 'This shoot is closed' }
   const list = briefChecklist(b, input)
-  if (!list.complete) return { ok: false, reason: `Fill in the plan first — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to go` }
+  if (!list.complete) return { ok: false, reason: 'Fill in the plan first.' }
   return { ok: true }
 }
 

@@ -58,7 +58,7 @@ describe('the client’s sign-off, on the shoot', () => {
   it('can be shared once the nine parts are in, at any stage; a closed shoot cannot', () => {
     expect(clientShareReady(shoot())).toEqual({ ok: true })
     expect(clientShareReady(shoot({ go_at: 'x', reminder_sent_at: 'x' }))).toEqual({ ok: true })
-    expect(clientShareReady(shoot({ script: null, talent: '' }))).toEqual({ ok: false, reason: 'Fill in the plan first — script or talking points, talent or presenter still to go' })
+    expect(clientShareReady(shoot({ script: null, talent: '' }))).toEqual({ ok: false, reason: 'Fill in the plan first.' })
     expect(clientShareReady(shoot({ status: 'wrapped' }))).toEqual({ ok: false, reason: 'This shoot is closed' })
   })
   it('sharing stamps who and when and clears the last answer; the answer stamps the decision and the note', () => {

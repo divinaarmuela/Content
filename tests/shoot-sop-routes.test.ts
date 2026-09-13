@@ -515,7 +515,7 @@ describe('sharing the plan with the client', () => {
     withClientEmail({ talent: null })
     const no = await share()
     expect(no.status).toBe(422)
-    expect(no.body.error).toMatch(/Fill in the plan first — talent or presenter still to go/)
+    expect(no.body.error).toMatch(/Fill in the plan first./)
     await edit({ talent: 'Sam' })
     emails.length = 0
     const yes = await share()
