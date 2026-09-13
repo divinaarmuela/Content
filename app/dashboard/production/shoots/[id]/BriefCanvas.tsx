@@ -995,11 +995,11 @@ export default function BriefCanvas({
   const tb = 'h-8 gap-1.5 px-2 text-secondary-13'
   const cardToolbar = (card: CanvasCard) => {
     const size = textSizeOf(card)
-    const hasText = card.kind === 'note' || card.kind === 'label'
+    const hasText = card.kind === 'note' || card.kind === 'label' || card.kind === 'todo'
     return (
       <>
         <span className="px-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{KIND_WORD[card.kind]}</span>
-        {card.kind === 'note' && (
+        {(card.kind === 'note' || card.kind === 'todo') && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             <div role="group" aria-label="Colour" className="flex items-center gap-1">
@@ -1040,9 +1040,11 @@ export default function BriefCanvas({
               ))}
             </div>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
-            <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
-              <Pencil className="h-3.5 w-3.5" /> Edit text
-            </Button>
+            {card.kind !== 'todo' && (
+              <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
+                <Pencil className="h-3.5 w-3.5" /> Edit text
+              </Button>
+            )}
           </>
         )}
         {card.kind === 'mockup' && (

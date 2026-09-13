@@ -526,10 +526,10 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         : {}),
       // text size on the two kinds that carry words of their own; anything
       // else, or an unknown value, is simply 'md' by absence
-      ...((kind === 'note' || kind === 'label') && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
+      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
         ? { size: String(r.size) as CanvasTextSize }
         : {}),
-      ...((kind === 'note' || kind === 'label') && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
+      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
         ? { text_color: String(r.text_color) as CanvasTextColor }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),

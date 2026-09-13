@@ -439,10 +439,14 @@ function CanvasCardInner({
   if (card.kind === 'todo') {
     const items = card.items ?? []
     const done = items.filter(t => t.done).length
+    // the same colour, size and text colour a note has (13 Sep 2026)
+    const palette = NOTE_COLORS[card.color ?? 'paper'] ?? NOTE_COLORS.paper
+    const ink = TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? (card.color === 'ink' ? 'text-background' : 'text-foreground')
+    const px = NOTE_FONT_PX[textSizeOf(card)]
     return (
-      <div className={`w-full rounded-inner border border-border bg-surface p-3 shadow-sm ${BOX}`} style={boxStyle(card)}>
+      <div className={`w-full rounded-inner border p-3 shadow-sm ${palette} ${BOX}`} style={boxStyle(card)}>
         <div className="mb-1.5 flex shrink-0 items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-[12px] font-semibold text-foreground">{card.name || 'To-do'}</span>
+          <span className={`min-w-0 truncate font-semibold ${ink}`} style={{ fontSize: px }}>{card.name || 'To-do'}</span>
           {items.length > 0 && (
             <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">{done}/{items.length}</span>
           )}
@@ -458,8 +462,8 @@ function CanvasCardInner({
                 className="mt-[3px] h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
                 onChange={e => onUpdate?.({ ...card, items: items.map(x => x.id === t.id ? { ...x, done: e.target.checked } : x) })} />
               {onUpdate ? (
-                <input key={`${t.id}:${t.text}`} defaultValue={t.text}
-                  className={`min-w-0 flex-1 bg-transparent text-[12px] outline-none ${t.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}
+                <input key={`${t.id}:${t.text}`} defaultValue={t.text} style={{ fontSize: px }}
+                  className={`min-w-0 flex-1 bg-transparent outline-none ${t.done ? 'text-muted-foreground line-through' : ink}`}
                   onBlur={e => {
                     const v = e.target.value.trim()
                     if (v === t.text) return
