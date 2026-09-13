@@ -397,7 +397,7 @@ export default function BriefCanvas({
       id: card.id, startX: e.clientX, startY: e.clientY,
       ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
     }
-    el.setPointerCapture(e.pointerId)
+    try { el.setPointerCapture(e.pointerId) } catch { /* see startResize */ }
   }
 
   /** One visual update per FRAME, from whatever the latest pointer position
@@ -504,7 +504,10 @@ export default function BriefCanvas({
     e.stopPropagation()
     e.preventDefault()
     interactingRef.current = true
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    // capture keeps the moves coming once the finger leaves the 44px square;
+    // a pointer the browser no longer knows (a lost touch, a synthetic
+    // event in a test) must not abort the drag before it starts
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* no capture, still a drag */ }
     // the size lives on the card's own box (the positioned wrapper is
     // zero-width), so grab it once to write to
     const wrap = e.currentTarget.parentElement as HTMLElement | null
