@@ -156,6 +156,11 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
   },
   approved_for_scheduling: {
     scheduled: { roles: ['scheduler'], requires: 'schedule_entry', label: 'Mark scheduled' },
+    // THE WAY BACK (the owner, 13 Sep 2026: "make sure statuses are
+    // reversible … move it back to re-edit and go through quality check
+    // again"): an approved piece can be sent back to the editor; from there
+    // it takes the whole road again — quality check, then the client.
+    revision_required: { roles: ['account_manager', 'quality_reviewer'], label: 'Ask for changes' },
     // MEDIA THE CLIENT HAS NOT SEEN LANDED ON AN APPROVED PIECE.
     //
     // The Schedule composer lets a file be brought in from Google Drive or

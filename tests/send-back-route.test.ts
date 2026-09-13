@@ -191,12 +191,11 @@ describe('POST /api/production/items/[id]/send-back', () => {
     expect(item().status).toBe('client_changes_requested')
   })
 
-  it('a card past the client (ready to post) cannot be sent back this way', async () => {
+  it('a card past the client (ready to post) CAN be sent back — it goes to the editor and through the quality check again (13 Sep 2026)', async () => {
     fake = seed('approved_for_scheduling')
     const r = await post('Changed my mind')
-    expect(r.status).toBe(403)
-    expect(r.json.error).toBe('Nothing moves from Ready to post to Draft')
-    expect(item().status).toBe('approved_for_scheduling')
+    expect(r.status, JSON.stringify(r.json)).toBe(200)
+    expect(item().status).toBe('revision_required')
   })
 
   it('a stale snapshot is refused by the machine\'s own guard, not replayed', async () => {

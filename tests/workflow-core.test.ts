@@ -678,3 +678,16 @@ describe('the quality reviewer at Internal check', () => {
     expect(presentTransitions(am, 'internal_review', availableTransitionsAs(am, 'internal_review'), { clientApprovalRequired: true }).primary?.to).toBe('quality_check')
   })
 })
+
+/* ── the way back from Ready to post (13 Sep 2026) ── */
+
+describe('an approved piece can be sent back for changes', () => {
+  it('the manager or the reviewer sends it to the editor; from there it goes through the quality check again', () => {
+    expect(checkTransitionAs(['account_manager'], 'approved_for_scheduling', 'revision_required').ok).toBe(true)
+    expect(checkTransitionAs(['quality_reviewer'], 'approved_for_scheduling', 'revision_required').ok).toBe(true)
+    expect(checkTransitionAs(['editor'], 'approved_for_scheduling', 'revision_required').ok).toBe(false)
+    expect(checkTransitionAs(['scheduler'], 'approved_for_scheduling', 'revision_required').ok).toBe(false)
+    // and the road back is the same road: revisions → quality check
+    expect(checkTransitionAs(['editor'], 'revision_required', 'quality_check').ok).toBe(true)
+  })
+})

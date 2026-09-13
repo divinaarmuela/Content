@@ -91,6 +91,9 @@ const TASK_TRANSITION_OVERRIDES: Record<string, Override> = {
   // a task has nothing to schedule or publish — Done is the end, for everyone
   'approved_for_scheduling>scheduled': { blocked: true },
   'scheduled>published': { blocked: true },
+  // the "way back" from Ready to post (13 Sep 2026) is for content that
+  // still has to be posted; a task that is Done stays done
+  'approved_for_scheduling>revision_required': { blocked: true },
 }
 
 export function checkTaskTransitionAs(

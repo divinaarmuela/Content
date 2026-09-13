@@ -48,7 +48,9 @@ export default function EditorPage() {
   const live = useWorkRows(viewer)
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   /** who may start a card here — managers, and a general user (their own work) */
-  const canCreate = isManager || viewer?.role === 'general'
+  // an editor can start their own card — it lands in their In Progress and
+  // takes the same road through the quality check (the owner, 13 Sep 2026)
+  const canCreate = isManager || viewer?.role === 'general' || viewer?.role === 'editor'
   const team = useTeamMembers(isManager)
   const { column, show, clearShow } = useBoardParams()
   // the card that is open beside the board, named in the address
