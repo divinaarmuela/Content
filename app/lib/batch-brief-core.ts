@@ -9,6 +9,7 @@
  * reason is logged.
  */
 
+import { SHOOT_BRIEF_SLUG } from './brief-task-core'
 import type { Role } from './identity-core'
 import { planLines, type PlanLine } from './deliverable-group-core'
 import { colourOf, iconOf } from './board-canvas-core'
@@ -611,11 +612,18 @@ export const BATCH_TRANSITION_NOTIFICATIONS: Record<string, ('owner_editor' | 'a
  * the record of where it came from; that is what "wrap it" is for.
  */
 export type ShootDeletion =
-  | { allowed: true; detaching: number; consequence: string }
+  | { allowed: true; detaching: number; removing: number; consequence: string }
   | { allowed: false; reason: string }
 
+/**
+ * The plan's OWN card (the old flow's "shoot brief" task) is not work — it
+ * is the shoot, described as a card. It goes with the shoot. Left behind it
+ * read "Plan being written" on the Overview and Team activity for a shoot
+ * that no longer existed (the owner, 13 Sep 2026: "there is deleted data
+ * here?"). Deliverable cards are kept, as before.
+ */
 export function shootDeletion(
-  items: readonly { status: string }[],
+  items: readonly { status: string; kind?: string | null }[],
 ): ShootDeletion {
   const live = items.filter(i => i.status === 'published' || i.status === 'scheduled')
   if (live.length > 0) {
@@ -626,10 +634,12 @@ export function shootDeletion(
         : `${live.length} pieces from this shoot are already scheduled or live. Wrap the shoot instead — deleting it would lose where those posts came from.`,
     }
   }
-  const n = items.length
+  const briefs = items.filter(i => i.kind === SHOOT_BRIEF_SLUG).length
+  const n = items.length - briefs
   return {
     allowed: true,
     detaching: n,
+    removing: briefs,
     consequence: n === 0
       ? 'Nothing is attached to it, so nothing else changes.'
       : n === 1

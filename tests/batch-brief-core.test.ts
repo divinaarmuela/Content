@@ -316,7 +316,18 @@ describe('deleting a shoot keeps the work that came out of it', () => {
     if (!v.allowed) return
     expect(v.detaching).toBe(4)
     expect(v.consequence).toMatch(/4 pieces are kept/)
-    expect(v.consequence).toMatch(/their own cards/)
+  })
+
+  it('the plan’s own brief card goes with the shoot; the work is kept (13 Sep 2026)', () => {
+    const v = shootDeletion([
+      { status: 'draft_uploaded', kind: 'shoot_brief' },
+      { status: 'draft_uploaded', kind: 'video_edit' },
+    ])
+    expect(v.allowed).toBe(true)
+    if (!v.allowed) return
+    expect(v.removing).toBe(1)
+    expect(v.detaching).toBe(1)
+    expect(v.consequence).toMatch(/one piece is kept/)
   })
 
   it('counts one piece in the singular, because four words of grammar is not too much to ask', () => {

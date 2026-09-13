@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { SHOOT_BRIEF_SLUG } from '../../../../lib/brief-task-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { Batch, Client, ContentItem, ShootProposal, TeamUser } from '@/lib/db-types'
@@ -304,17 +305,22 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     // Read the whole list, not a count: a failed read must NOT be treated as
     // "no items" and silently orphan every one of them to batch_id = null.
-    const items = await table<ContentItem>('content_items').list({ by: { batch_id: id } })
+    const items = await attachOne(
+      await table<ContentItem>('content_items').list({ by: { batch_id: id } }),
+      'work_kind_id', 'work_kinds', ['slug'],
+    )
+    const withKind = items.map(i => ({ ...i, kind: (i.work_kinds as { slug?: string } | null)?.slug ?? null }))
 
-    const verdict = shootDeletion(items)
+    const verdict = shootDeletion(withKind)
     if (!verdict.allowed) {
       return NextResponse.json({ error: verdict.reason }, { status: 409 })
     }
 
-    // detach BEFORE deleting the parent — the pieces become plain cards
-    if (verdict.detaching > 0) {
-      await Promise.all(items.map(i => table<ContentItem>('content_items').update(i.id, { batch_id: null })))
-    }
+    // the plan's own card goes with the shoot; the deliverable cards are
+    // detached BEFORE deleting the parent and become plain cards
+    await Promise.all(withKind.map(i => i.kind === SHOOT_BRIEF_SLUG
+      ? table<ContentItem>('content_items').remove(i.id)
+      : table<ContentItem>('content_items').update(i.id, { batch_id: null })))
 
     await table('batches').remove(id)
     await logActivity({
