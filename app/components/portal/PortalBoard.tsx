@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Chip from '../../dashboard/ui/Chip'
+import { scriptWords } from '../../lib/script-core'
 import type { PortalCard } from '../../lib/portal-data'
 import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
 import { portalPostHref } from '../../lib/post-page-core'
@@ -459,7 +460,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
 
         {/* the written plan, on the same card — the board itself is drawn
             open, under the card, by ShootBoard */}
-        {card.shoot?.shared && (card.shoot.concept || card.shoot.planned_deliverables.length > 0 || card.shoot.shot_list.length > 0) && (
+        {card.shoot?.shared && (card.shoot.concept || card.shoot.planned_deliverables.length > 0 || card.shoot.shot_list.length > 0 || card.shoot.scripts.length > 0) && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setPlanOpen(v => !v)}
               className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>
@@ -488,6 +489,13 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
                     ))}
                   </ul>
                 )}
+                {/* the scripts, one block per video — the same words the team's PDF prints */}
+                {scriptWords(card.shoot.scripts).map(w => (
+                  <div key={w.n} className="flex flex-col gap-1 border-t border-foreground/10 pt-2">
+                    <p className="font-semibold">{w.heading}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed">{w.lines.join('\n')}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>

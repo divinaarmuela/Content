@@ -14,13 +14,15 @@ import {
 } from '@/components/ui/select'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, SHOOT_STAGES, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, shootStage, stageHappened, stageIndex, stageMove,
+  clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
 import { newLineId, planLines, plannedCount, shootCardId } from '../../../../lib/deliverable-group-core'
 import type { ShotRow } from '../../../../lib/batch-brief-core'
 import Chip from '../../../ui/Chip'
+import ScriptsSection from './ScriptsSection'
+import { sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
 import LocationSearch from './LocationSearch'
 
 /**
@@ -49,6 +51,7 @@ export type ShootSopBatch = SopShoot & {
   title: string
   status?: string | null
   shot_list?: ShotRow[]
+  scripts?: unknown
   planned_deliverables?: unknown[]
   location?: string | null
 }
@@ -107,7 +110,7 @@ const Tick = ({ on }: { on: boolean }) => on
   ? <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-green text-ink" aria-hidden><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>
   : <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground" aria-hidden><Circle className="h-3 w-3" /></span>
 
-export function PlanParts({ batch, itemCount, booked, onPatch, onShots }: {
+export function PlanParts({ batch, itemCount, booked, onPatch, onShots, onScripts, team }: {
   batch: ShootSopBatch
   itemCount: number
   /** a booked date moves only through "Change date" with a reason */
@@ -115,6 +118,9 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots }: {
   onPatch: (field: string, value: unknown) => Promise<boolean>
   /** the shot list saves through a coalescer — instant on screen, one request */
   onShots: (next: ShotRow[]) => void
+  /** the scripts, the same way */
+  onScripts?: (next: ScriptBlock[]) => void
+  team?: readonly { id: string; name: string; role: string }[]
 }) {
   const list = briefChecklist(batch, { itemCount })
   const [newLine, setNewLine] = useState('')
@@ -241,10 +247,20 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots }: {
           </div>
         ))}
 
-        {row('script', area('script', 'The script or the talking points, finalised and approved', 3))}
+        {row('script', (
+          <div className="flex flex-col gap-3">
+            {area('script', 'The script or the talking points, finalised and approved', 3)}
+            {onScripts && (
+              <div className="flex flex-col gap-2 border-t border-border pt-3">
+                <p className="text-[13px] font-semibold">Scripts, one per video</p>
+                <ScriptsSection scripts={sanitiseScripts(batch.scripts)} team={team} onChange={onScripts} />
+              </div>
+            )}
+          </div>
+        ))}
 
         {row('when_where', (
-          <div className="grid gap-2 sm:grid-cols-[180px_160px_minmax(0,1fr)]">
+          <div className="grid gap-2 sm:grid-cols-[180px_250px_minmax(0,1fr)]">
             <label className="flex flex-col gap-1 text-[12px] font-semibold">
               Shoot date
               <Input type="date" key={batch.shoot_date ?? ''} defaultValue={batch.shoot_date ?? ''} disabled={booked}
@@ -284,7 +300,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots }: {
 
 /* ── where it is, and the one next move ────────────────────────────────── */
 
-export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient }: {
+export function WherePanel({ batch, role, viewerId, today, itemCount, busy, nameOf, clientEmail, onPatch, onMove, onShareClient, onAskReview, team }: {
   batch: ShootSopBatch
   role: MoveRole
   viewerId: string
@@ -297,8 +313,13 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   onPatch: (field: string, value: unknown) => Promise<boolean>
   onMove: (to: ShootStage, opts?: { reason?: string }) => Promise<void>
   onShareClient: () => Promise<void>
+  /** "Ask for a review": the ids to ask, or [] for the account managers on the client */
+  onAskReview?: (to: string[]) => Promise<void>
+  team?: readonly { id: string; name: string; role: string }[]
 }) {
   const stage = shootStage(batch, today)
+  const [reviewer, setReviewer] = useState('')
+  const reviewLine = reviewWords(batch, nameOf)
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
   const [reason, setReason] = useState('')
@@ -344,6 +365,27 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
                 onChange={e => void onPatch('aligned', e.target.checked)} />
               <span>Aligned with the strategist or creative director{batch.aligned_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.aligned_by) ?? 'the team'}, {stampWords(batch.aligned_at)}</span>}</span>
             </label>
+            {/* ASK FOR A REVIEW (13 Sep 2026): whoever wrote the plan asks
+                the account managers, or one person, to look at it; the
+                tick above is their sign-off */}
+            {onAskReview && (
+              <div className="flex flex-col gap-1.5 pl-8">
+                {reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select value={reviewer} onChange={e => setReviewer(e.target.value)} aria-label="Who should review the plan"
+                    className="h-11 min-w-0 rounded-inner border border-border bg-surface px-2 text-[13px]">
+                    <option value="">The account managers on this client</option>
+                    {(team ?? []).filter(t => t.id !== viewerId && t.role !== 'client').map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <Button variant="outline" className={outlineBtn} disabled={busy}
+                    onClick={() => void onAskReview(reviewer ? [reviewer] : [])}>
+                    {batch.review_asked_at ? 'Ask for a review again' : 'Ask for a review'}
+                  </Button>
+                </div>
+              </div>
+            )}
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
               <input type="checkbox" className="h-5 w-5 accent-[var(--dbx-blue)]" checked={!!batch.client_confirmed_at} disabled={busy}
                 onChange={e => void onPatch('client_confirmed', e.target.checked)} />

@@ -419,3 +419,13 @@ describe('the strip ticks only what happened', () => {
     expect((['shared', 'confirmed', 'reminder_sent', 'footage_handed'] as const).every(k => stageHappened(full, k, TODAY))).toBe(true)
   })
 })
+
+describe('the script part and the script blocks (13 Sep 2026)', () => {
+  it('a block with a hook fills "Script or talking points"; a plain title alone does not', () => {
+    const none = complete({ script: null, scripts: [{ title: 'Only a name' }] })
+    expect(briefChecklist(none).missing.map(m => m.key)).toContain('script')
+    const hooked = complete({ script: null, scripts: [{ hook: 'Once in a while…' }] })
+    expect(briefChecklist(hooked).missing.map(m => m.key)).not.toContain('script')
+    expect(briefItemSource(hooked, 'script')).toBe('field')
+  })
+})

@@ -1,5 +1,6 @@
 import 'server-only'
 import PDFDocument from 'pdfkit'
+import { scriptWords, type ScriptBlock } from './script-core'
 import type { PlannedDeliverable, ShotRow } from './batch-brief-core'
 
 /**
@@ -36,6 +37,8 @@ export type BriefPdfData = {
   clientAvailability?: string | null
   editorPriorities?: string | null
   editDeadline?: string | null
+  /** the script blocks, one section each, both copies */
+  scripts?: ScriptBlock[]
   /** names: the editor and the crew */
   editorName?: string | null
   crewNames?: string[]
@@ -53,6 +56,7 @@ export function briefPdfSections(d: BriefPdfData): { title: string; text: string
   const push = (title: string, text: string) => { if (text) out.push({ title, text }) }
   push('OBJECTIVE', t(d.objective))
   push('SCRIPT OR TALKING POINTS', t(d.script))
+  for (const w of scriptWords(d.scripts ?? [])) push(w.heading.toUpperCase(), w.lines.join('\n'))
   push('TALENT OR PRESENTER', t(d.talent))
   push('PROPS, WARDROBE AND SETUP', t(d.propsWardrobe))
   push('CLIENT AVAILABILITY', t(d.clientAvailability))

@@ -5,6 +5,7 @@ import type { Batch, TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { canOpenBatch } from '../../../../../lib/production-access'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../../../lib/batch-brief-core'
+import { sanitiseScripts } from '../../../../../lib/script-core'
 import { renderBriefPdf } from '../../../../../lib/brief-pdf'
 
 export const maxDuration = 60
@@ -44,6 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       callTime: batch.call_time ?? null,
       objective: batch.objective ?? null,
       script: batch.script ?? null,
+      scripts: sanitiseScripts(batch.scripts),
       talent: batch.talent ?? null,
       propsWardrobe: batch.props_wardrobe ?? null,
       clientAvailability: batch.client_availability ?? null,

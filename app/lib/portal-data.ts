@@ -1,4 +1,5 @@
 import { deliverOnly } from './deliver-only-core'
+import { sanitiseScripts, type ScriptBlock } from './script-core'
 import 'server-only'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -116,6 +117,7 @@ export type PortalShoot = {
   board_name: string | null
   planned_deliverables: PlannedDeliverable[]
   shot_list: ShotRow[]
+  scripts: ScriptBlock[]
   canvas_cards: CanvasCard[]
   /** false = a booked shoot whose PLAN was not shared: the client sees that
    *  it's happening (status, date, location) but none of the working detail */
@@ -203,6 +205,7 @@ export type PortalCard = {
     concept: string | null
     planned_deliverables: PlannedDeliverable[]
     shot_list: ShotRow[]
+    scripts: ScriptBlock[]
     board_cards: number
     /** the planning board itself, the same cards the team's page draws — the
      *  portal renders it read-only, open, under the shoot's card. Empty for
@@ -519,6 +522,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       board_name: shared ? b.board_name ?? null : null,
       planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
       shot_list: shared ? sanitiseShotList(b.shot_list) : [],
+      scripts: shared ? sanitiseScripts(b.scripts) : [],
       // The board goes with the plan BY DEFAULT — the owner's rule — but a
       // shoot whose switch was deliberately turned off keeps it off. The
       // canvas is where the team types rates, margins and honest opinions;
@@ -769,6 +773,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
         concept: shared ? b.concept ?? null : null,
         planned_deliverables: shared ? sanitisePlannedDeliverables(b.planned_deliverables) : [],
         shot_list: shared ? sanitiseShotList(b.shot_list) : [],
+      scripts: shared ? sanitiseScripts(b.scripts) : [],
         board_cards: (boardByShoot.get(b.id) ?? []).length,
         canvas_cards: boardByShoot.get(b.id) ?? [],
         board_name: shared ? b.board_name ?? null : null,

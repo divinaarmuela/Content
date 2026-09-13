@@ -17,6 +17,7 @@
  * means (`stageMove`), refused in words when the SOP says no.
  */
 
+import { sanitiseScripts, scriptsFilled, scriptsText } from './script-core'
 import { planCards, type PlanCard, shootCard, deliverablesBrief } from './deliverable-group-core'
 import { dayKeyInZone } from './timezone-core'
 
@@ -45,6 +46,10 @@ export type SopShoot = {
   acknowledgements?: unknown
   brief_shared_at?: string | null
   aligned_at?: string | null
+  review_asked_at?: string | null
+  /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
+  scripts?: unknown
+  review_asked_to?: unknown
   client_confirmed_at?: string | null
   go_at?: string | null
   reminder_sent_at?: string | null
@@ -70,6 +75,7 @@ export type SopShoot = {
   created_at?: string | null
   brief_shared_by?: string | null
   aligned_by?: string | null
+  review_asked_by?: string | null
   client_confirmed_by?: string | null
   go_by?: string | null
   reminder_sent_by?: string | null
@@ -181,7 +187,7 @@ export function canvasSays(b: Pick<SopShoot, 'canvas_cards'>): { shotList: boole
 export function briefItemSource(b: SopShoot, key: BriefItemKey, input: ChecklistInput = {}): 'field' | 'canvas' | null {
   if (!briefItemFilled(b, key, input)) return null
   if (key === 'shot_list') return Array.isArray(b.shot_list) && b.shot_list.length > 0 ? 'field' : 'canvas'
-  if (key === 'script') return text(b.script).length > 0 ? 'field' : 'canvas'
+  if (key === 'script') return text(b.script).length > 0 || scriptsFilled(b.scripts) ? 'field' : 'canvas'
   return 'field'
 }
 
@@ -190,7 +196,7 @@ export function briefItemFilled(b: SopShoot, key: BriefItemKey, input: Checklist
     case 'objective': return text(b.objective).length > 0
     case 'deliverables': return (Array.isArray(b.planned_deliverables) && b.planned_deliverables.length > 0) || (input.itemCount ?? 0) > 0
     case 'shot_list': return (Array.isArray(b.shot_list) && b.shot_list.length > 0) || canvasSays(b).shotList
-    case 'script': return text(b.script).length > 0 || canvasSays(b).script
+    case 'script': return text(b.script).length > 0 || scriptsFilled(b.scripts) || canvasSays(b).script
     case 'when_where': return text(b.shoot_date).length > 0 && text(b.call_time).length > 0 && text(b.location).length > 0
     case 'talent': return text(b.talent).length > 0
     case 'props': return text(b.props_wardrobe).length > 0
@@ -758,6 +764,10 @@ export function stampLines(b: SopShoot, nameOf: NameOf): StampLine[] {
       done: notYet.length === 0,
     })
   }
+  if (b.review_asked_at) {
+    const to = (Array.isArray(b.review_asked_to) ? b.review_asked_to : []).map(id => by(nameOf, String(id)))
+    lines.push({ key: 'review', text: `Review asked from ${to.length > 0 ? to.join(', ') : 'the team'} by ${by(nameOf, b.review_asked_by)}${withWhen(b.review_asked_at)}`, done: !!b.aligned_at && String(b.aligned_at) >= String(b.review_asked_at) })
+  }
   lines.push(b.aligned_at
     ? { key: 'aligned', text: `Aligned with the strategist — ticked by ${by(nameOf, b.aligned_by)}${withWhen(b.aligned_at)}`, done: true }
     : { key: 'aligned', text: 'Aligned with the strategist — not ticked yet', done: false })
@@ -801,7 +811,7 @@ export function planAsText(b: SopShoot): { label: string; value: string }[] {
     objective: text(b.objective),
     deliverables: lines.join(', '),
     shot_list: shots.map((s, i) => `${i + 1}. ${s}`).join('\n'),
-    script: text(b.script),
+    script: [text(b.script), scriptsText(sanitiseScripts(b.scripts))].filter(Boolean).join('\n\n'),
     when_where: when,
     talent: text(b.talent),
     props: text(b.props_wardrobe),
@@ -971,4 +981,38 @@ export function parseCallTime(raw: string | null | undefined): CallTimeParts | n
 /** parts → the words the plan, the reminder email and the PDF all carry. */
 export function formatCallTime(p: CallTimeParts): string {
   return `${p.hour}:${String(p.minute).padStart(2, '0')} ${p.period}`
+}
+
+/* ── ask for a review (13 Sep 2026) ────────────────────────────────────── */
+
+/** The people a review is asked from: the ids given, else the account
+ *  managers linked to the client (and a super admin among them), never the
+ *  asker. Pure: the route resolves the rows. */
+export function reviewersFor(
+  askerId: string,
+  picked: readonly string[] | null | undefined,
+  managers: readonly { id: string; role: string; active_status?: boolean | null }[],
+): string[] {
+  const chosen = (picked ?? []).map(String).filter(Boolean)
+  const ids = chosen.length > 0
+    ? chosen
+    : managers.filter(m => m.active_status !== false && (m.role === 'account_manager' || m.role === 'super_admin')).map(m => m.id)
+  return [...new Set(ids)].filter(id => id !== askerId)
+}
+
+/** The stamps "Ask for a review" writes. */
+export function reviewAskPatch(now: string, actorId: string, to: readonly string[]): Record<string, unknown> {
+  return { review_asked_at: now, review_asked_by: actorId, review_asked_to: [...to] }
+}
+
+/** Where the review is, in one line — null until asked. Ticking "Aligned
+ *  with the strategist" is the sign-off. */
+export function reviewWords(b: SopShoot, nameOf: NameOf): string | null {
+  if (!b.review_asked_at) return null
+  const to = (Array.isArray(b.review_asked_to) ? b.review_asked_to : []).map(id => nameOf(String(id)) ?? 'the team')
+  const who = to.length > 0 ? to.join(', ') : 'the team'
+  if (b.aligned_at && String(b.aligned_at) >= String(b.review_asked_at)) {
+    return `Reviewed and aligned by ${nameOf(b.aligned_by) ?? 'the team'}${withWhen(b.aligned_at)}`
+  }
+  return `Review asked from ${who} by ${nameOf(b.review_asked_by) ?? 'the team'}${withWhen(b.review_asked_at)} — waiting on their tick`
 }

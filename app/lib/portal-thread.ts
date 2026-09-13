@@ -1,4 +1,5 @@
 import 'server-only'
+import { sanitiseScripts } from './script-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
@@ -201,6 +202,7 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
       board_name: b.board_name ?? null,
       planned_deliverables: sanitisePlannedDeliverables(b.planned_deliverables),
       shot_list: sanitiseShotList(b.shot_list),
+      scripts: sanitiseScripts(b.scripts),
       canvas_cards: canvasCards,
       details_shared: true, // this page only exists for shared shoots
       awaiting_decision: brief?.status === 'client_review' ? { item_id: brief.id } : null,

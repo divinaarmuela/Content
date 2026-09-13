@@ -141,3 +141,17 @@ describe('§7 the 24-hour blocker rule', () => {
     expect(flagCheck({ kind: 'blocked', note: 'x', need: 'footage', viewer, ownerId: 'other' })).toMatchObject({ ok: false, status: 403 })
   })
 })
+
+describe('the scripts on the editor’s card (13 Sep 2026)', () => {
+  it('one row per video after the script, with the hook and the prompts', () => {
+    const rows = beforeYouStart({
+      card: { client_id: 'c1' },
+      shoot: { script: 'Plain notes', scripts: [{ title: 'Hotel', presenter: 'Kareen', hook: 'Every sign', prompts: ['Where did you start?'] }] },
+    })
+    const keys = rows.map(r => r.key)
+    expect(keys.indexOf('script_1')).toBe(keys.indexOf('script') + 1)
+    const row = rows.find(r => r.key === 'script_1')!
+    expect(row.label).toBe('Video 1 · Hotel · Kareen')
+    expect(row.value).toBe('Hook: Every sign\nPrompts:\n1. Where did you start?')
+  })
+})

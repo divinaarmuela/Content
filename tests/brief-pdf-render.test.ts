@@ -36,6 +36,7 @@ const data: BriefPdfData = {
   callTime: '7:30 am', objective: 'Spring membership drive', script: 'Three talking points', talent: 'Sam presents',
   propsWardrobe: 'Club polos', clientAvailability: 'GM on site 8 to 10', editorPriorities: 'Hero reel first', editDeadline: '2026-09-25',
   editorName: 'Ed Itor', crewNames: ['Vik Camera'],
+  scripts: [{ id: 's1', title: 'Hotel project', presenter: 'Kareen', voiceover: true, hook: 'Every sign in Adelaide', prompts: ['Where did you start?'], visual: 'Process b-roll', purpose: 'Design thinking', links: ['https://www.instagram.com/reels/x/'] }],
 }
 
 describe('the plan PDF, as bytes', () => {
@@ -47,6 +48,7 @@ describe('the plan PDF, as bytes', () => {
       'WHAT IS BEING MADE', 'Hero reel',
       'SHOT LIST', 'Drone over the first tee',
       'SCRIPT OR TALKING POINTS', 'Three talking points',
+      'VIDEO 1 · HOTEL PROJECT · KAREEN · VOICEOVER CONCEPT', 'Every sign in Adelaide', 'Where did you start?', 'Process b-roll', 'Design thinking',
       'TALENT OR PRESENTER', 'Sam presents',
       'PROPS, WARDROBE AND SETUP', 'Club polos',
       'CLIENT AVAILABILITY', 'GM on site 8 to 10',
@@ -57,7 +59,7 @@ describe('the plan PDF, as bytes', () => {
   })
   it('the client’s copy has the plan and none of the team’s parts', async () => {
     const text = pdfText(await renderBriefPdf({ ...data, concept: null, audience: 'client' }))
-    for (const w of ['OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'CLIENT AVAILABILITY', 'SHOT LIST']) expect(text, w).toContain(w)
+    for (const w of ['OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'VIDEO 1 · HOTEL PROJECT', 'Every sign in Adelaide', 'CLIENT AVAILABILITY', 'SHOT LIST']) expect(text, w).toContain(w)
     for (const w of ['EDITOR PRIORITIES', 'Hero reel first', 'WHO IS ON THIS SHOOT', 'Vik Camera', 'NOTES FOR THE TEAM', 'Bring the drone']) {
       expect(text, w).not.toContain(w)
     }

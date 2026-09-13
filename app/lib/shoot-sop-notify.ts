@@ -355,3 +355,32 @@ export function ackSummary(batch: Batch, names: Map<string, string>): string {
   const acked = new Set(acksOf(batch).map(a => a.user_id))
   return peopleOnShoot(batch).map(id => `${names.get(id) ?? 'Someone'}${acked.has(id) ? ' ✓' : ''}`).join(', ')
 }
+
+/** "Ask for a review": the reviewers get the plan and the page. Their
+ *  "Aligned with the strategist" tick is the sign-off; a comment on the
+ *  shoot page is how they send it back. Keyed per ask, so asking again
+ *  emails again on purpose. */
+export async function notifyPlanReviewAsked(actor: TeamUser, batch: Batch, reviewerIds: readonly string[]): Promise<number> {
+  const people = await activePeople(reviewerIds)
+  const when = longDate(batch.shoot_date)
+  let sent = 0
+  for (const p of people) {
+    if (p.id === actor.id) continue
+    const r = await notify({
+      actorName: actor.name, actorEmail: actor.email,
+      eventType: 'shoot_review_asked', entityType: 'batch',
+      entityId: `${batch.id}#review#${batch.review_asked_at ?? ''}#${p.id}`,
+      recipientId: p.id, recipientEmail: p.email,
+      subject: `Review the plan: ${batch.title}`,
+      bodyHtml: renderEmail(
+        `${escapeHtml(actor.name || actor.email)} is asking you to review a plan`,
+        `<p>The shoot plan for <strong>${escapeHtml(batch.title)}</strong>${when ? `, shooting ${when},` : ''} is ready for your eyes.</p>` +
+        planHtml(batch) +
+        '<p>Open the shoot. If the direction is right, tick <strong>Aligned with the strategist or creative director</strong> — that is the sign-off. If not, say what to change in the comments and tag the person who wrote it.</p>',
+        'Open the shoot plan', shootUrl(batch.id),
+      ),
+    })
+    if (r === 'sent') sent++
+  }
+  return sent
+}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, Batch } from '@/lib/db-types'
 import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../lib/batch-brief-core'
+import { sanitiseScripts } from '../../../lib/script-core'
 import { renderBriefPdf } from '../../../lib/brief-pdf'
 import { shootStatusLabel } from '../../../lib/portal-words'
 
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
       callTime: batch.call_time ?? null,
       objective: batch.objective ?? null,
       script: batch.script ?? null,
+      scripts: sanitiseScripts(batch.scripts),
       talent: batch.talent ?? null,
       propsWardrobe: batch.props_wardrobe ?? null,
       clientAvailability: batch.client_availability ?? null,

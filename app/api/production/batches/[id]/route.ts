@@ -1,3 +1,4 @@
+import { sanitiseScripts } from '../../../../lib/script-core'
 import { NextResponse } from 'next/server'
 import { SHOOT_BRIEF_SLUG } from '../../../../lib/brief-task-core'
 import { table, withRequestCache } from '@/lib/db'
@@ -162,6 +163,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('concept' in body) patch.concept = String(body.concept ?? '').slice(0, 8000) || null
     if ('location' in body) patch.location = String(body.location ?? '').slice(0, 300) || null
     if ('shot_list' in body) patch.shot_list = sanitiseShotList(body.shot_list)
+    if ('scripts' in body) patch.scripts = sanitiseScripts(body.scripts)
     if ('planned_deliverables' in body) patch.planned_deliverables = sanitisePlannedDeliverables(body.planned_deliverables)
     if ('reference_media' in body) patch.reference_media = sanitiseReferenceMedia(body.reference_media)
     if ('owner_id' in body) patch.owner_id = body.owner_id || null
