@@ -95,7 +95,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         subject,
         bodyHtml: renderEmail(
           subject,
-          `<p><strong>${escapeHtml(item.title)}</strong> may not make its date. ${escapeHtml(user.name || user.email)} flagged it early, as the playbook asks.</p>`
+          `<p><strong>${escapeHtml(item.title)}</strong> may not make its date. ${escapeHtml(user.name || user.email)} flagged it early.</p>`
           + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(check.note)}</blockquote>`
           + (item.due_date ? `<p><strong>Due:</strong> ${escapeHtml(String(item.due_date).slice(0, 10))}</p>` : ''),
           'Open the item',

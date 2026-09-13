@@ -617,7 +617,7 @@ export function sharedLate(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>):
 /** The SOP's sentence, with the number in it. */
 export function sharedLateWords(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>): string {
   const n = Math.max(0, shareLeadDays(b) ?? 0)
-  return `The plan was shared ${n} day${n === 1 ? '' : 's'} before the shoot — the playbook needs ${BRIEF_LEAD_DAYS}. A super admin can override with a reason.`
+  return `The plan was shared ${n} day${n === 1 ? '' : 's'} before the shoot — it needs ${BRIEF_LEAD_DAYS}. A super admin can override with a reason.`
 }
 
 /** Shoots shared late that Ops has not yet been told about — once each. */

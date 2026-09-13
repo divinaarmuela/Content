@@ -285,7 +285,7 @@ export async function runBriefLateNudge(): Promise<{ late: number; told: number 
         subject: `⚠️ Plan shared late: ${b.title}`,
         bodyHtml: renderEmail(
           `${escapeHtml(b.title)} — the plan was shared late`,
-          `<p>The plan went to the team <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before the shoot. The playbook needs 7.</p>` +
+          `<p>The plan went to the team <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before the shoot. It needs 7.</p>` +
           '<p>An account manager cannot confirm it as go now. A super admin can go ahead with a reason, or the shoot date moves.</p>',
           'Open the shoot plan', shootUrl(b.id),
         ),
@@ -308,7 +308,7 @@ export async function runBriefLateNudge(): Promise<{ late: number; told: number 
         bodyHtml: renderEmail(
           `${escapeHtml(b.title)} — the plan is late`,
           `<p>The shoot is ${days <= 0 ? 'today or gone' : `in ${days} day${days === 1 ? '' : 's'}`} and the plan is still being written.</p>` +
-          '<p>The playbook: the plan is locked and shared at least 7 days before the shoot. No plan, no shoot.</p>' +
+          '<p>The plan is locked and shared at least 7 days before the shoot. No plan, no shoot.</p>' +
           '<p>Finish the nine parts and share it with the team, or move the shoot date.</p>',
           'Open the shoot plan', shootUrl(b.id),
         ),
@@ -340,7 +340,7 @@ export async function notifyGoOverride(actor: TeamUser, batch: Batch): Promise<n
       subject: `Went ahead late: ${batch.title}`,
       bodyHtml: renderEmail(
         `${escapeHtml(batch.title)} — confirmed as go, late`,
-        `<p>${escapeHtml(actor.name || actor.email)} confirmed the shoot with the plan shared <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before it (the playbook needs 7).</p>` +
+        `<p>${escapeHtml(actor.name || actor.email)} confirmed the shoot with the plan shared <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before it (it needs 7).</p>` +
         `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>`,
         'Open the shoot plan', shootUrl(batch.id),
       ),

@@ -300,7 +300,7 @@ describe('a plan shared late', () => {
     expect(sharedLate(complete({ brief_shared_at: '2026-09-14T09:00:00Z' }))).toBe(false)
     expect(sharedLate(complete())).toBe(false)
     expect(sharedLateWords(complete({ brief_shared_at: '2026-09-17T09:00:00Z' })))
-      .toBe('The plan was shared 4 days before the shoot — the playbook needs 7. A super admin can override with a reason.')
+      .toBe('The plan was shared 4 days before the shoot — it needs 7. A super admin can override with a reason.')
   })
   it('an account manager cannot confirm it as go; a super admin can, with a reason, and it is kept', () => {
     const late = ready({ brief_shared_at: '2026-09-17T09:00:00Z' })
@@ -359,7 +359,7 @@ describe('the strip and the next step', () => {
     const ready = complete({ ...acked, aligned_at: 'x', client_confirmed_at: 'x' })
     expect(nextStepWords(ready, TODAY)).toMatch(/^Next: press Go\. That books the shoot and puts the editor\u2019s card on the Editor page/)
     const late = complete({ ...ready, brief_shared_at: '2026-09-18T00:00:00Z' })
-    expect(nextStepWords(late, TODAY)).toMatch(/shared 3 days before the shoot — the playbook needs 7/)
+    expect(nextStepWords(late, TODAY)).toMatch(/shared 3 days before the shoot — it needs 7/)
     const go = complete({ ...ready, go_at: 'x' })
     expect(nextStepWords(go, TODAY)).toMatch(/^Confirmed for 21 Sept\. The editor\u2019s card is on the Editor page, due 25 Sept\. Next: Ops presses Reminder sent/)
     expect(nextStepWords(complete({ ...go, reminder_sent_at: 'x' }), TODAY)).toMatch(/^Reminder sent\. Next: the shoot on 21 Sept/)

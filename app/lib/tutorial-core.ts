@@ -220,7 +220,7 @@ const EDITOR: Tutorial = {
         'One card is one shoot’s work: the deliverables are listed on it and the card counts "3 of 6 finals in". A manager can also make a card by hand for a single job.',
         'You only see what is yours: cards handed to you, cards you made, and cards someone tagged you on.',
         'A card says the client, the account manager, what to make, which shoot it is from, the due date, and "Files to work from" when a manager attached footage or a folder.',
-        'A new card says "New — press Acknowledge". Pressing it tells the team you are on it, the same day it lands, as the playbook asks.',
+        'A new card says "New — press Acknowledge". Pressing it tells the team you are on it, the same day it lands.',
       ],
       actions: [
         'Open Editor in the sidebar.',
@@ -250,12 +250,12 @@ const EDITOR: Tutorial = {
     {
       title: 'Quality check, submit, and never sit blocked',
       see: [
-        '"Quality check before submitting" is the playbook’s seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
+        '"Quality check before submitting" is the seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
         'Submit moves the card straight to Quality check, where the quality reviewer looks at it — Abby’s rule: maker, then the reviewer, then the scheduler. From there it goes to the client, then to the scheduler — the card says who has it; you do nothing for those.',
         'After the seven ticks the card asks where the reviewer should look: a Canva link and the page, optional when the final is uploaded here.',
         'A card that comes back sits in In Progress again with "What to change" on it, in the reviewer’s words.',
         '"Something looks wrong — flag it" tells the account managers in one line, the moment you see it, not on the due date.',
-        '"Blocked?" is the 24-hour rule: pick what you need from the playbook’s list, say what is blocked, and the right person is told now. At 12 hours Ops is copied; at 24 hours leadership is told.',
+        '"Blocked?" is the 24-hour rule: pick what you need from the list, say what is blocked, and the right person is told now. At 12 hours Ops is copied; at 24 hours leadership is told.',
         'Once the card is approved, "Handover" has three ticks: the final in the Drive monthly folder, the source files handed off, the next owner tagged.',
       ],
       actions: [
@@ -271,7 +271,7 @@ const EDITOR: Tutorial = {
     {
       title: 'Shoots: read the plan, then get the footage',
       see: [
-        `Shoots is where filming days live. One card is one shoot, in the playbook’s six stages: ${SHOOT_COLUMNS}.`,
+        `Shoots is where filming days live. One card is one shoot, in six stages: ${SHOOT_COLUMNS}.`,
         'You see the shoots you are on as the editor or the crew. The plan — the objective, the shot list, the script, call time and location, the editor priorities and deadline — is on your card under "Before you start" and in the email.',
         'The shoot page itself is the account manager’s; you never need it.',
         'When the account manager shares the plan you are emailed. The shoot cannot be confirmed until everyone on it has pressed "I’ve read the plan" — on your card, or the link in the email.',
@@ -375,7 +375,7 @@ const GENERAL: Tutorial = {
 
 const MANAGER: Tutorial = {
   job: 'Run your clients: plan the shoots, check the work, get it to the client, get it posted.',
-  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is four places: Shoots, Editor, Post approval and the Overview. The flow is the playbook’s: you check, the quality reviewer passes, the client approves, the scheduler posts.',
+  intro: 'You see everything for the clients you manage (a super admin sees every client). Most of your day is four places: Shoots, Editor, Post approval and the Overview. The flow is: you check, the quality reviewer passes, the client approves, the scheduler posts.',
   home: '/dashboard',
   homeLabel: 'Open the Overview',
   steps: [
@@ -393,7 +393,7 @@ const MANAGER: Tutorial = {
       linkLabel: 'Open Clients',
     },
     {
-      title: 'Shoots: plan a shoot the playbook’s way',
+      title: 'Shoots: plan a shoot',
       see: [
         `One card per shoot for your clients, in six stages: ${SHOOT_COLUMNS}. By date shows the same shoots on a calendar.`,
         'New shoot plan makes the shoot: client, title, what it is for, shoot date. Making the plan sets up the shoot; you never create the shoot separately.',
@@ -433,7 +433,7 @@ const MANAGER: Tutorial = {
         `Six columns: ${POST_APPROVAL_COLUMNS}. A submitted card lands in Quality check, with the reviewer — Abby’s rule: maker, then the reviewer, then the scheduler.`,
         'You are told when a card reaches Quality check for your clients. Look at it there; "Ask for changes" sends it back to the maker with your note, in your words. You cannot send it to the client yourself: only the reviewer, or a super admin standing in, passes it on.',
         'The card says where the reviewer should look when the maker gave a Canva link and page.',
-        'Once the reviewer passes it, the card goes With client and "Sent to client" is stamped — that is the playbook’s delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
+        'Once the reviewer passes it, the card goes With client and "Sent to client" is stamped — that is the delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
         'On the client’s yes the card goes to Ready to post and is handed to the client’s schedulers by itself. Some clients post their own content: their cards stop at Delivered.',
         'Filter by Client and by People at the top to see who is doing what.',
       ],
@@ -493,7 +493,7 @@ export const QUALITY_REVIEWER_STEP: TutorialStep = {
   ],
   actions: [
     'Open Post approval and go to the Quality check column, or press the Quality check tile on the Overview.',
-    'Open the card. Check spelling, dates, branding, image quality and platform specs — the playbook’s list.',
+    'Open the card. Check spelling, dates, branding, image quality and platform specs.',
     'Press "Passed — send to client", or "Ask for changes" and say what.',
   ],
   href: POST_APPROVAL,

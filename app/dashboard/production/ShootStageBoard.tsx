@@ -229,7 +229,7 @@ export function ShootStageBoard({
     <div className="flex flex-col gap-2">
       <LaneBoard ariaLabel="Shoots, by stage of the plan" lanes={lanes} />
       <p className="text-[13px] text-muted-foreground">
-        Drag a shoot to the next column, or press Move… on the card. The board only allows what the playbook allows, and says why when it does not.
+        Drag a shoot to the next column, or press Move… on the card. The board only allows the next step that is ready, and says why when it is not.
       </p>
     </div>
   )

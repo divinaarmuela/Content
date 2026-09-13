@@ -93,7 +93,7 @@ export async function notifyBlocked(
       subject,
       `<p><strong>${escapeHtml(actor.name || actor.email)}</strong> is blocked on <strong>${escapeHtml(item.title)}</strong> and needs <strong>${escapeHtml(row.label.toLowerCase())}</strong>.</p>`
       + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(note)}</blockquote>`
-      + '<p>The playbook: nothing stays blocked for more than 24 hours. Ops is copied at 12 hours, leadership at 24.</p>',
+      + '<p>Nothing stays blocked for more than 24 hours. Ops is copied at 12 hours, leadership at 24.</p>',
       'Open the card', cardUrl(item),
     ),
   })))
@@ -139,8 +139,8 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
       + `<strong>Who is waiting:</strong> ${escapeHtml(holder?.name || holder?.email || 'the editor')}<br>`
       + `<strong>What is needed:</strong> ${escapeHtml(note || 'not said')}</p>`
       + (due === '12'
-        ? '<p>This is the 12-hour follow-up, with Ops copied, as the playbook asks.</p>'
-        : '<p>The playbook: nothing stays blocked for more than 24 hours. This is the 24-hour flag to leadership.</p>')
+        ? '<p>This is the 12-hour follow-up, with Ops copied.</p>'
+        : '<p>Nothing stays blocked for more than 24 hours. This is the 24-hour flag to leadership.</p>')
     for (const p of [...new Map(recipients.map(r => [r.id, r])).values()]) {
       await notify({
         eventType: due === '12' ? 'editor_blocked_12h' : 'editor_blocked_24h', entityType: 'content_item',
@@ -185,7 +185,7 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
         eventType: 'editor_ack_nudge', entityType: 'content_item', entityId: `${item.id}#ack-nudge`,
         recipientId: editor.id, recipientEmail: editor.email, subject,
         bodyHtml: renderEmail(subject,
-          `<p><strong>${escapeHtml(item.title)}</strong> was assigned to you and has not been acknowledged. The playbook asks for the same day: open the card and press Acknowledge so the team knows you are on it.</p>`,
+          `<p><strong>${escapeHtml(item.title)}</strong> was assigned to you and has not been acknowledged. Please acknowledge it the same day: open the card and press Acknowledge so the team knows you are on it.</p>`,
           'Open the card', cardUrl(item)),
       })
       out.ack++

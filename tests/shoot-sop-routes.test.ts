@@ -359,7 +359,7 @@ describe('a plan shared late', () => {
     sharedLateReady()
     const am = await move('confirmed')
     expect(am.status).toBe(400)
-    expect(am.body.error).toBe('The plan was shared 4 days before the shoot — the playbook needs 7. A super admin can override with a reason.')
+    expect(am.body.error).toBe('The plan was shared 4 days before the shoot — it needs 7. A super admin can override with a reason.')
     expect(am.body.needsOverride).toBe(true)
     as(SUPER, 'super_admin', 'Divina')
     expect((await move('confirmed')).status).toBe(400)

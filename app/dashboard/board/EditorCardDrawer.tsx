@@ -505,7 +505,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             </select>
             <label htmlFor="ed-from" className="text-[13px] font-semibold">Who are you asking? <span className="font-normal text-muted-foreground">(optional)</span></label>
             <select id="ed-from" value={fromId} onChange={e => setFromId(e.target.value)} className={`${field} h-11`}>
-              <option value="">Whoever the playbook names</option>
+              <option value="">Whoever usually handles it</option>
               {team.filter(u => u.active_status !== false && u.role !== 'client' && u.id !== me?.id).map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
             </select>
             <label htmlFor="ed-block-note" className="text-[13px] font-semibold">What is blocked? One line.</label>
