@@ -8,7 +8,6 @@ import {
   planAsText, type ClientDecision,
 } from './shoot-sop-core'
 import { shootCardId } from './deliverable-group-core'
-import { ackLink, ackSecret } from './shoot-ack-token'
 
 /**
  * WHO IS TOLD WHAT, ALONG THE SHOOT BRIEF SOP — the server half.
@@ -105,15 +104,15 @@ export async function notifyShootOwner(actor: TeamUser, batch: Batch): Promise<b
 export async function notifyBriefShared(actor: TeamUser, batch: Batch): Promise<number> {
   const people = await activePeople(peopleOnShoot(batch))
   const when = longDate(batch.shoot_date)
-  // no secret to sign with (a bare environment): the crew still get the
-  // plan, and are asked to tell the account manager they have read it
-  let secret: string | null = null
-  try { secret = ackSecret() } catch (e) { console.error('acknowledge link:', e instanceof Error ? e.message : e) }
   let sent = 0
   for (const p of people) {
     if (p.id === actor.id) continue
     const isEditor = p.id === batch.editor_id
-    const link = isEditor ? editorCardUrl(batch.id) : secret ? ackLink(DASHBOARD_URL, batch.id, p.id, secret) : null
+    // THE CREW SEE THE PLAN ON THE PAGE (the owner, 13 Sep 2026: "the person
+    // on shoot day shouldn't just have a button in the email — they have to
+    // see it in the page"): the link opens the shoot page, read-only for
+    // them, with "I've read the plan" on it. The editor's link is their card.
+    const link = isEditor ? editorCardUrl(batch.id) : `${DASHBOARD_URL}/dashboard/production/shoots/${batch.id}`
     const r = await notify({
       actorName: actor.name, actorEmail: actor.email,
       eventType: 'shoot_brief_shared', entityType: 'batch',
@@ -127,11 +126,9 @@ export async function notifyBriefShared(actor: TeamUser, batch: Batch): Promise<
         planHtml(batch) +
         (isEditor
           ? '<p>Read it, then press <strong>I’ve read the plan</strong> on your card. The shoot is not confirmed until everyone on it has.</p>'
-          : link
-            ? '<p>Read it, then press the button below — that is all. The shoot is not confirmed until everyone on it has.</p>'
-            : `<p>Read it, then tell ${escapeHtml(actor.name || actor.email)} you have. The shoot is not confirmed until everyone on it has.</p>`),
-        link ? (isEditor ? 'Open your card' : 'I’ve read the plan') : undefined,
-        link ?? undefined,
+          : '<p>Open the plan, read it, then press <strong>I’ve read the plan</strong> on the page. The shoot is not confirmed until everyone on it has.</p>'),
+        isEditor ? 'Open your card' : 'Open the plan',
+        link,
       ),
     })
     if (r === 'sent') sent++

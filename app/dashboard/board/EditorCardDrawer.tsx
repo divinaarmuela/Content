@@ -23,7 +23,6 @@ import type { Platform } from '../../lib/publish-core'
 import { historyLines, type HistoryJob, HISTORY_PREVIEW, NO_HISTORY } from '../../lib/card-history-core'
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
-import { plannedCount, finalsInWords } from '../../lib/deliverable-group-core'
 import {
   BLOCKER_LADDER, BLOCKER_NEEDS, EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
   beforeYouStart, blockerWords, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
@@ -134,8 +133,8 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   /* ── the latest files ── */
   const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
   const slides = useMemo(() => slidesOf(latest), [latest])
-  const planned = plannedCount(shoot?.planned_deliverables)
-  const finals = finalsInWords(slides.length, planned)
+  // no "N of M finals in" (the owner, 14 Sep 2026): editors hand in a Drive or
+  // Dropbox link, not a count of files
 
   /* ── flags off the history ── */
   const flags = useMemo(() => flagsOf(activity as never, me?.id ?? ''), [activity, me?.id])
@@ -300,7 +299,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>
             <Chip tone="muted">{dueWords}</Chip>
-            {finals && <Chip tone="green">{finals}</Chip>}
             {flags.risk && <Chip tone="red">At risk: {flags.risk}</Chip>}
           </div>
           <p className="mt-2 text-[13px] text-muted-foreground">
@@ -309,22 +307,26 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               : item.owner_id ? 'Not acknowledged yet.' : 'Nobody holds this card yet.'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {!ackRow && holder && (
-              <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => void flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')}>
-                <Check className="h-4 w-4" aria-hidden /> Acknowledge — I am on it
-              </Button>
-            )}
-            {/* THE SHOOT PLAN IS READ HERE (13 Sep 2026): the editor never
-                opens the shoot page; the plan is in "Before you start" and
-                this press is the shoot's acknowledgement */}
-            {planRead.on && shoot && (planRead.read
+            {/* ONE BUTTON (the owner, 13 Sep 2026: "why are there two buttons?").
+                On a shoot's card, "I've read the plan" is the acknowledgement
+                — of the plan AND of the card. A card with no shoot behind it
+                keeps the plain "I am on it". */}
+            {planRead.on && shoot ? (planRead.read
               ? <p className="text-[13px] text-muted-foreground">You read the plan {formatInZone(planRead.at, zone, 'short') ?? ''}</p>
               : (
                 <Button className={primaryBtn} disabled={busy}
-                  onClick={() => void post(`/api/production/batches/${shoot.id}/acknowledge`, {}, 'Thanks — you have read the plan', 'Reading the plan')}>
+                  onClick={async () => {
+                    await post(`/api/production/batches/${shoot.id}/acknowledge`, {}, 'Thanks — you have read the plan', 'Reading the plan')
+                    if (!ackRow && holder) await flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')
+                  }}>
                   <Check className="h-4 w-4" aria-hidden /> I’ve read the plan
                 </Button>
-              ))}
+              ))
+            : !ackRow && holder && (
+              <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => void flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')}>
+                <Check className="h-4 w-4" aria-hidden /> I am on it
+              </Button>
+            )}
           </div>
           {blocked && <p role="status" className="mt-2 text-[13px] font-semibold text-accent-red-deep">{blocked}</p>}
         </div>

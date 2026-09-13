@@ -164,7 +164,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
         body: JSON.stringify({
           client_id: clientId, files: chosen,
           title: title.trim() || null, note: note.trim() || null,
-          decision, reviewer_ids: decision === 'ask' ? [approverId] : [],
+          decision, reviewer_ids: decision === 'ask' && approverId ? [approverId] : [],
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -211,7 +211,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
               {!clientId ? 'Who is this post for?'
                 : manager && passesQuality ? 'Add the files, then approve it or send it to the client.'
                 : manager ? 'Add the files, then send them for the quality check.'
-                : 'Add the files, then send it to whoever approves it.'}
+                : 'Add the files, then send them for the quality check.'}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close"
@@ -309,7 +309,11 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
             </div>
 
             {/* ── 4. the decision ── */}
-            {(!manager || asking) && (
+            {/* A SCHEDULER'S UPLOAD GOES TO THE QUALITY CHECKER (the owner, 14
+                Sep 2026: "post approval quality check should be the quality
+                checker — why does it go to the AM?"): no picker for them.
+                A manager may still ask a named person to look. */}
+            {manager && asking && (
               <div className="flex flex-col gap-2">
                 <Label htmlFor="approval-who">Who checks it?</Label>
                 <select id="approval-who" value={approverId} onChange={e => setApproverId(e.target.value)}
@@ -355,8 +359,8 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                   </Button>
                 </>
               ) : (
-                <Button type="button" className={primary} disabled={!ready || !approverId} onClick={() => void send('ask')}>
-                  {busy === 'ask' ? 'Sending…' : 'Send for approval'}
+                <Button type="button" className={primary} disabled={!ready} onClick={() => void send('ask')}>
+                  {busy === 'ask' ? 'Sending…' : 'Send for quality check'}
                 </Button>
               )}
             </div>

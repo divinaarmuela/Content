@@ -33,13 +33,15 @@ describe('a card opens on a board the role has', () => {
   })
   it('scheduler and quality checker: Post approval', () => {
     expect(cardHref('scheduler', { id: 'c1', status: 'approved_for_scheduling' })).toBe('/dashboard/scheduler?card=c1')
-    expect(cardHref('quality_checker', { id: 'c1', status: 'quality_check' })).toBe('/dashboard/scheduler?card=c1')
+    expect(cardHref('quality_checker', { id: 'c1', status: 'quality_check' })).toBe('/dashboard/editor?card=c1')
+    // a post made on Post approval lives there at every stage
+    expect(cardHref('quality_checker', { id: 'c1', status: 'quality_check', adhoc_post: true })).toBe('/dashboard/scheduler?card=c1')
   })
   it('managers and general: the Editor board while being made, Post approval after', () => {
     for (const role of ['account_manager', 'super_admin', 'general'] as Role[]) {
       expect(cardHref(role, { id: 'c1', status: 'draft_uploaded' })).toBe('/dashboard/editor?card=c1')
       expect(cardHref(role, { id: 'c1', status: 'quality_check' })).toBe('/dashboard/editor?card=c1')
-      expect(cardHref(role, { id: 'c1', status: 'client_review' })).toBe('/dashboard/scheduler?card=c1')
+      expect(cardHref(role, { id: 'c1', status: 'client_review' })).toBe('/dashboard/editor?card=c1')
       expect(cardHref(role, { id: 'c1', status: 'scheduled' })).toBe('/dashboard/scheduler?card=c1')
     }
   })
@@ -58,7 +60,7 @@ describe('the stage chips are the role’s own columns', () => {
     expect(overviewChips('scheduler').map(c => c.label)).toEqual(['Ready to post', 'Booked in', 'Posted'])
   })
   it('quality checker: the Quality check column and the plans to review', () => {
-    expect(overviewChips('quality_checker').map(c => c.href)).toEqual(['/dashboard/scheduler?column=quality_check', '/dashboard/production'])
+    expect(overviewChips('quality_checker').map(c => c.href)).toEqual(['/dashboard/editor?column=quality_check', '/dashboard/production'])
     expect(chipCount(overviewChips('quality_checker')[1], {}, 3)).toBe(3)
   })
   it('managers and general: the seven Post approval columns', () => {

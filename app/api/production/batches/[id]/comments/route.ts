@@ -67,11 +67,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if ('response' in g) return g.response
     let comments: unknown[] = []
     try {
-      comments = await withAuthors(await table<BatchComment>('batch_comments').list({
+      comments = await withAuthors((await table<BatchComment>('batch_comments').list({
         by: { batch_id: id },
         orderBy: [['created_at', 'asc']],
         limit: 200,
-      }))
+      // the quality checker's send-back used to be written here (before 13
+      // Sep 2026); those rows are the team's, never the client's thread
+      })).filter(c => !String(c.body ?? '').startsWith('Plan sent back:')))
     } catch {
       // a thread that cannot be read is an empty thread, not an error page
       comments = []

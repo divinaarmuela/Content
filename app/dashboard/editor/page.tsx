@@ -25,8 +25,6 @@ import { NewCardDialog } from '../board/BoardDialogs'
 import { toast } from 'sonner'
 import { flagsOf } from '../../lib/card-flag-core'
 import { EDITOR_LANE_WORDS, reviewerNameOf } from '../../lib/editor-sop-core'
-import { finalsInWords, plannedCount } from '../../lib/deliverable-group-core'
-import { slidesOf } from '../../lib/version-files-core'
 
 /**
  * THE EDITOR PAGE — the Video Editors SOP, and nothing else (the owner,
@@ -87,15 +85,6 @@ export default function EditorPage() {
     // cards), whether the holder acknowledged it, and a standing risk
     const shootTitle = new Map(live.tables.batches.rows.map(b => [b.id, String(b.title ?? '')]))
     const shootDate = new Map(live.tables.batches.rows.map(b => [b.id, (b as { shoot_date?: string | null }).shoot_date ?? null]))
-    // "3 of 6 finals in": the latest version's files against what the shoot
-    // plan promised (deliverable-group-core), drawn on the face
-    const planned = new Map(live.tables.batches.rows.map(b => [b.id, plannedCount((b as { planned_deliverables?: unknown }).planned_deliverables)]))
-    const latestByItem = new Map<string, { n: number; files: number }>()
-    for (const v of live.tables.versions.rows) {
-      const n = Number(v.version_number ?? 0)
-      const cur = latestByItem.get(String(v.item_id))
-      if (!cur || n > cur.n) latestByItem.set(String(v.item_id), { n, files: slidesOf(v).length })
-    }
     const activityByItem = new Map<string, typeof live.tables.activity.rows>()
     for (const a of live.tables.activity.rows) {
       if (a.entity_type !== 'content_item') continue
@@ -110,7 +99,8 @@ export default function EditorPage() {
         reviewer_name: reviewerName,
         shoot_title: c.batch_id ? (shootTitle.get(c.batch_id) ?? null) : null,
         shoot_date: c.batch_id ? (shootDate.get(c.batch_id) ?? null) : null,
-        finals_in: c.batch_id ? finalsInWords(latestByItem.get(c.id)?.files ?? 0, planned.get(c.batch_id) ?? 0) : null,
+        // no "N of M finals in" (14 Sep 2026): the editor hands in a link, not a file count
+        finals_in: null,
         acknowledged: flags.acknowledged,
         risk: flags.risk,
       }

@@ -518,8 +518,29 @@ export function pageCards<T extends BoardViewCard>(
     return cards.filter(c => fresh(c)
       && (mine(c) || (cardColumn(c) !== 'ready_to_post' && !isOut(c.status) && cardColumn(c) !== 'delivered')))
   }
+  // POST APPROVAL IS THE END OF THE EDIT (the owner, 13 Sep 2026: "post
+  // approval items are only shown at the end of editing — either we deliver
+  // directly or we hand over to the scheduler… the card doesn't suddenly
+  // appear in Post approval while they are editing"). A card being made,
+  // checked or with the client is the Editor page's. It arrives here once
+  // it is approved and ready to post. The posts made or uploaded HERE
+  // (adhoc) run through every column.
+  // …and a card HANDED to a scheduler ("we hand over the drive to the
+  // scheduler, which shows in Draft") is theirs from that moment, whatever
+  // column it sits in
+  if (page === 'scheduler') {
+    return cards.filter(c => fresh(c) && (
+      (c as { adhoc_post?: unknown }).adhoc_post === true
+      || ((c as { scheduler_ids?: unknown }).scheduler_ids as unknown[] | null | undefined ?? []).length > 0
+      || (viewer.role === 'scheduler' && mine(c))
+      || POST_APPROVAL_FROM.includes(cardColumn(c))
+    ))
+  }
   return cards.filter(fresh)
 }
+
+/** The columns an EDITED card is on Post approval for: from ready to post on. */
+export const POST_APPROVAL_FROM: readonly BoardColumnKey[] = ['ready_to_post', 'booked', 'posted', 'delivered']
 
 /** A lane is one column, or several columns folded into one narrow strip. */
 export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' | 'for_handoff'

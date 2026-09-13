@@ -131,8 +131,10 @@ describe('sharing the brief', () => {
     expect(String(toEditor.bodyHtml)).toMatch(/Objective<\/td><td[^>]*>Spring membership drive/)
     expect(String(toEditor.bodyHtml)).toMatch(/\/dashboard\/editor\?card=/)
     expect(String(toEditor.bodyHtml)).not.toMatch(/\/dashboard\/production\/shoots\//)
-    expect(String(toCrew.bodyHtml)).toMatch(/\/api\/production\/batches\/b-1\/acknowledge\?token=/)
-    expect(String(toCrew.bodyHtml)).not.toMatch(/\/dashboard\//)
+    // the crew's link opens the PLAN PAGE, read-only for them, with "I've
+    // read the plan" on it (13 Sep 2026) — not a bare button in the email
+    expect(String(toCrew.bodyHtml)).toMatch(/\/dashboard\/production\/shoots\/b-1/)
+    expect(String(toCrew.bodyHtml)).not.toMatch(/acknowledge\?token=/)
     // the editor's card exists from the share, so the button has somewhere to be
     expect(cards().map(c => [c.title, c.owner_id])).toEqual([['Golf Day', ED]])
   })

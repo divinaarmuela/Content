@@ -34,20 +34,23 @@ export function mayBookPosts(role: Role | null | undefined): boolean {
 
 /** The stages a card is still being MADE in — those live on the Editor
  *  board; everything after is Post approval's. */
-const MAKING: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review']
+/** the statuses an EDITED card is on the Editor page for — everything before
+ *  it is approved and ready to post (13 Sep 2026: "post approval items are
+ *  only shown at the end of editing") */
+const MAKING: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review']
 
 /**
  * A card, opened on a board this role has. The old full-card page
  * (`/dashboard/production/<id>`) is not a link anybody is sent to.
  */
-export function cardHref(role: Role | null | undefined, card: { id: string; status?: ItemStatus | string | null }): string {
+export function cardHref(role: Role | null | undefined, card: { id: string; status?: ItemStatus | string | null; adhoc_post?: boolean | null }): string {
   const status = String(card.status ?? '')
-  const onEditor = MAKING.includes(status)
+  // a post made or uploaded on Post approval lives there at every stage
+  const onEditor = card.adhoc_post !== true && MAKING.includes(status)
   let board: string
   switch (role) {
     case 'editor': board = EDITOR_BOARD; break
     case 'scheduler': board = POST_APPROVAL_BOARD; break
-    case 'quality_checker': board = POST_APPROVAL_BOARD; break
     default: board = onEditor ? EDITOR_BOARD : POST_APPROVAL_BOARD
   }
   return `${board}?card=${encodeURIComponent(card.id)}`
@@ -86,12 +89,18 @@ export function overviewChips(role: Role | null | undefined): OverviewChip[] {
   }
   if (role === 'quality_checker') {
     return [
-      { key: 'quality_check', label: 'Quality check', columns: ['quality_check'], href: `${POST_APPROVAL_BOARD}?column=quality_check` },
+      // the checker's desk is the Editor page's Quality check column (13 Sep 2026)
+      { key: 'quality_check', label: 'Quality check', columns: ['quality_check'], href: `${EDITOR_BOARD}?column=quality_check` },
       { key: 'plans_in_review', label: 'Plans to review', columns: [], href: SHOOTS_PAGE, external: 'plans_in_review' },
     ]
   }
-  // general, account manager, super admin: the seven Post approval columns
-  return BOARD_COLUMNS.map(c => ({ key: c.key, label: c.label, columns: [c.key], href: `${POST_APPROVAL_BOARD}?column=${c.key}` }))
+  // general, account manager, super admin: the seven columns — the making
+  // (Draft, Quality check, With client) on the Editor page, the posting
+  // (Ready to post, Booked in, Posted) on Post approval (13 Sep 2026)
+  return BOARD_COLUMNS.map(c => ({
+    key: c.key, label: c.label, columns: [c.key],
+    href: ['draft', 'quality_check', 'with_client'].includes(c.key) ? `${EDITOR_BOARD}?column=${c.key}` : `${POST_APPROVAL_BOARD}?column=${c.key}`,
+  }))
 }
 
 /** Count post cards by status into a chip's columns. */

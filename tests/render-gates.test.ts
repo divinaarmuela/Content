@@ -119,7 +119,8 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
   it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
     expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
-    expect(src(CARD_SHEET)).toMatch(/editor && !adhoc\s*\? <EditorCardDrawer/)
+    // …and the quality checker gets the manager's drawer there (13 Sep 2026)
+    expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && !checker\s*\? <EditorCardDrawer/)
   })
   it('the seven sections are not gated on having data', () => {
     const s = src(EDITOR_DRAWER)

@@ -6,6 +6,7 @@ import CardDetail from '../production/[id]/CardDetail'
 import PostApprovalDetail from './PostApprovalDetail'
 import EditorCardDrawer from './EditorCardDrawer'
 import { useRow } from '@/lib/db-client'
+import { useRole } from '../useRole'
 import type { ContentItem } from '@/lib/db-types'
 import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-sheet-core'
 
@@ -39,7 +40,12 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
   // a post uploaded for approval gets its own drawer (8 Sep 2026); production
   // work keeps the card. Decided from the row, so it is right the first time.
   const { row: opened, loading: openedLoading } = useRow<ContentItem>('content_items', id)
+  const { me } = useRole()
   const adhoc = (opened as { adhoc_post?: unknown } | null)?.adhoc_post === true
+  // the quality checker's desk is the Editor page's Quality check column
+  // (13 Sep 2026): they get the manager's drawer there — Pass, Send back —
+  // not the maker's
+  const checker = me?.role === 'quality_checker'
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY }
@@ -75,7 +81,7 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">Card</SheetTitle>
-        {id && !openedLoading && (editor && !adhoc
+        {id && !openedLoading && (editor && !adhoc && !checker
           ? <EditorCardDrawer key={id} id={id} onClose={onClose} />
           : adhoc || simple
             ? <PostApprovalDetail key={id} id={id} onClose={onClose} />

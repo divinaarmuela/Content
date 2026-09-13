@@ -280,11 +280,9 @@ describe('what each page shows', () => {
     expect(pageCards('editor', rows, manager).map(c => c.id)).toEqual(['a', 'b', 't', 'u'])
   })
 
-  it('Scheduler is the same cards as Production — the whole flow, so they see what is coming', () => {
-    // every card for the clients they hold — not only the queue; the lanes
-    // say what is ready
-    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(pageCards('production', rows, manager).map(c => c.id))
-    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
+  it('Post approval is the end of the edit: only approved, booked and posted cards (13 Sep 2026)', () => {
+    // …plus the card handed to THIS scheduler ('t'), whatever column it sits in
+    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(['c', 'd', 't'])
     expect(pageLanes('scheduler').map(l => l.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
   })
 
@@ -604,7 +602,13 @@ describe('a post made on the Schedule page is not production work', () => {
       const ids = pageCards(page, rows, viewer).map(c => c.id)
       expect(ids, page).toEqual(['work'])
     }
-    expect(pageCards('scheduler', rows, viewer).map(c => c.id)).toEqual(['work', 'adhoc'])
+    // Post approval is the END of the edit (13 Sep 2026): a card being
+    // made or checked is not there; it arrives once approved and ready to post
+    expect(pageCards('scheduler', rows, viewer).map(c => c.id)).toEqual(['adhoc'])
+    const checking = { ...rows[0], status: 'quality_check' as ItemStatus }
+    expect(pageCards('scheduler', [checking, rows[1]], viewer).map(c => c.id)).toEqual(['adhoc'])
+    const ready = { ...rows[0], status: 'approved_for_scheduling' as ItemStatus }
+    expect(pageCards('scheduler', [ready, rows[1]], viewer).map(c => c.id)).toEqual(['work', 'adhoc'])
   })
 })
 

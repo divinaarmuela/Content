@@ -645,7 +645,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       : Promise.resolve([]),
     shootIds.length
       ? table<BatchComment>('batch_comments').list({
-          where: r => shootIds.includes(r.batch_id),
+          // a send-back note written here before 13 Sep 2026 is the team's
+          where: r => shootIds.includes(r.batch_id) && !String(r.body ?? '').startsWith('Plan sent back:'),
           orderBy: [['created_at', 'asc']],
           limit: 500,
         }).then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])).catch(() => [])
