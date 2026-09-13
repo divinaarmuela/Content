@@ -964,6 +964,18 @@ export default function BriefCanvas({
   const selectedCard = cards.find(c => c.id === selected) ?? null
   const ordered = useMemo(() => [...visible].sort((a, b) => a.z - b.z), [visible])
 
+  // THE SELECTED CARD SITS ABOVE ITS NEIGHBOURS, so its toolbar and handles
+  // are never drawn behind the card next to it. Written to the DOM by hand:
+  // a drag writes zIndex straight to the element and clears it on pointerup,
+  // and React never re-applies an inline style it thinks is unchanged.
+  useLayoutEffect(() => {
+    const root = viewportRef.current
+    if (!root) return
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-cid]'))) {
+      el.style.zIndex = el.getAttribute('data-cid') === selected ? '5000' : ''
+    }
+  })
+
   /* ── the card's own tools, by kind ──
    * Words first (what this card IS — so a post and a link are never
    * confused), then what changes its look (colour, text size), then what
@@ -1222,7 +1234,7 @@ export default function BriefCanvas({
               className={`absolute left-0 top-0 outline-none ${viewOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${
                 selected === card.id ? 'rounded-inner ring-2 ring-accent-blue/25 ring-offset-2 ring-offset-background' : ''
               }`}
-              style={{ transform: `translate(${card.x}px, ${card.y}px)`, ...(selected === card.id ? { zIndex: 5000 } : {}) }}
+              style={{ transform: `translate(${card.x}px, ${card.y}px)` }}
               onPointerDown={e => viewOnly ? undefined : onCardPointerDown(e, card)}
               onPointerMove={e => onCardPointerMove(e, card)}
               onPointerUp={e => onCardPointerUp(e, card)}
