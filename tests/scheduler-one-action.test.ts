@@ -55,7 +55,9 @@ describe('the Scheduler page never sends anybody to the Schedule page to post', 
   it('the button opens the one window in place instead', () => {
     const src = code(BUTTON)
     expect(src).toMatch(/import SendForApprovalDialog from '\.\/SendForApprovalDialog'/)
-    expect(src).toMatch(/\{open && <SendForApprovalDialog/)
+    // managers get the card popup from the same button (13 Sep 2026); the
+    // upload-and-send window is still the one place everyone else lands
+    expect(src).toMatch(/<SendForApprovalDialog onClose=\{\(\) => setOpen\(false\)\} \/>/)
   })
 })
 
