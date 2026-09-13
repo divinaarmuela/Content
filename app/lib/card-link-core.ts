@@ -65,6 +65,37 @@ export function linkKindOf(raw: string | null | undefined): LinkCheck {
   return { ok: true, kind, label: LINK_LABELS[kind], url: url.toString().slice(0, 2000) }
 }
 
+/**
+ * THE FOLDER ON A CARD — one answer, wherever it was written.
+ *
+ * Two fields grew up meaning the same thing: `link_url`/`link_kind` (the
+ * card face's "Add a folder link", the Schedule rail's and the Overview's
+ * "Folder to work from") and `raw_assets_url` (the open card's "Files to
+ * work from"). The owner's New post saved the folder into one and the face
+ * read the other, so a card with a Drive folder said "Add a folder link"
+ * (13 Sep 2026). Every reader asks here; both writers now keep the two in
+ * step, and rows written before that still resolve.
+ */
+export function folderOf(card: {
+  link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null
+}): { url: string; kind: 'drive' | 'dropbox' } | null {
+  const link = String(card.link_url ?? '').trim()
+  if (link && (card.link_kind === 'drive' || card.link_kind === 'dropbox')) return { url: link, kind: card.link_kind }
+  const raw = linkKindOf(card.raw_assets_url)
+  if (raw.ok && raw.kind !== 'other') return { url: raw.url, kind: raw.kind }
+  return null
+}
+
+/** The link the card face shows: the pasted link, else the folder. */
+export function cardLinkOf(card: {
+  link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null
+}): { url: string; label: string } | null {
+  const link = String(card.link_url ?? '').trim()
+  if (link) return { url: link, label: linkLabel(card.link_kind) }
+  const folder = folderOf(card)
+  return folder ? { url: folder.url, label: LINK_LABELS[folder.kind] } : null
+}
+
 /** The label for a kind already stored on a row (tolerant of a bad value). */
 export function linkLabel(kind: string | null | undefined): string {
   return (LINK_LABELS as Record<string, string>)[kind ?? ''] ?? LINK_LABELS.other

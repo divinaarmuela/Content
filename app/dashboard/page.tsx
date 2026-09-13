@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { folderOf } from '../lib/card-link-core'
 import { useRouter } from 'next/navigation'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -266,8 +267,7 @@ function ItemRows({ items, empty, todayKey, role }: {
           && !['published', 'scheduled'].includes(i.status)
         // the folder a scheduler was handed (the owner, 13 Sep 2026: "in their
         // UI on schedule or overview it will be folder to work from")
-        const folder = (i as { link_kind?: string | null; link_url?: string | null })
-        const folderUrl = (folder.link_kind === 'drive' || folder.link_kind === 'dropbox') && folder.link_url ? folder.link_url : null
+        const folderUrl = folderOf(i as Parameters<typeof folderOf>[0])?.url ?? null
         return (
           <div key={i.id} className="flex flex-col gap-1">
             <WorkRow

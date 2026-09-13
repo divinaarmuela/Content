@@ -740,6 +740,8 @@ describe('a general user\u2019s Overview and an empty card', () => {
   it('says an empty card needs the final before it goes for checking', () => {
     expect(needsWorkFirst({ current_version_number: null, link_url: null })).toBe(true)
     expect(needsWorkFirst({ current_version_number: 1, link_url: null })).toBe(false)
+    // the open card's folder counts as work to post from (13 Sep 2026)
+    expect(needsWorkFirst({ current_version_number: null, link_url: null, raw_assets_url: 'https://drive.google.com/drive/folders/1lbLSNbYXOn3Vbyk0' })).toBe(false)
     expect(needsWorkFirst({ current_version_number: 0, link_url: 'https://drive.google.com/x' })).toBe(false)
     expect(UPLOAD_FIRST).toBe('Upload the final first')
   })

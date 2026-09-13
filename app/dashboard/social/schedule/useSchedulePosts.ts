@@ -25,6 +25,7 @@
  */
 
 import { DELIVER_ONLY_REASON, deliverOnly } from '@/app/lib/deliver-only-core'
+import { folderOf } from '@/app/lib/card-link-core'
 import { useMemo } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
@@ -356,8 +357,7 @@ export function useSchedulePosts(
           // "used" now means nothing left to post — every file is in a post
           used: elig.ok && elig.slides.length > 0 && slides.length === 0,
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
-          driveFolderUrl: (item as { link_kind?: string | null }).link_kind === 'drive' && typeof (item as { link_url?: unknown }).link_url === 'string'
-            ? String((item as { link_url?: unknown }).link_url) : null,
+          driveFolderUrl: folderOf(item as Parameters<typeof folderOf>[0])?.kind === 'drive' ? folderOf(item as Parameters<typeof folderOf>[0])!.url : null,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
           coverUrl: coverForSlide(slides[0]?.url, itemVersions),
           updatedAt: String(item.updated_at ?? ''),

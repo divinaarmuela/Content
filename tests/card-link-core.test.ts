@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LINK_LABELS, driveFolderIdFromUrl, linkKindOf, linkLabel, nextVersionAfterLink, versionWord,
+  LINK_LABELS, cardLinkOf, driveFolderIdFromUrl, folderOf, linkKindOf, linkLabel, nextVersionAfterLink, versionWord,
 } from '../app/lib/card-link-core'
 
 describe('linkKindOf — a pasted link is a link', () => {
@@ -106,5 +106,26 @@ describe('driveFolderIdFromUrl', () => {
     expect(driveFolderIdFromUrl('https://www.dropbox.com/scl/fo/abc')).toBeNull()
     expect(driveFolderIdFromUrl('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/view')).toBeNull()
     expect(driveFolderIdFromUrl(null)).toBeNull()
+  })
+})
+
+describe('folderOf — one folder on a card, wherever it was written (13 Sep 2026)', () => {
+  const drive = 'https://drive.google.com/drive/folders/1lbLSNbYXOn-3Vbyk0kwb-G6y-aNkj9SK'
+  it('reads the card link when it is a folder', () => {
+    expect(folderOf({ link_url: drive, link_kind: 'drive' })).toEqual({ url: drive, kind: 'drive' })
+  })
+  it('falls back to the open card’s "Files to work from" folder — the owner’s New post wrote only that', () => {
+    expect(folderOf({ raw_assets_url: drive })).toEqual({ url: drive, kind: 'drive' })
+    expect(folderOf({ link_url: 'https://vimeo.com/1', link_kind: 'other', raw_assets_url: drive })).toEqual({ url: drive, kind: 'drive' })
+  })
+  it('a plain link or nothing is no folder', () => {
+    expect(folderOf({ link_url: 'https://vimeo.com/1', link_kind: 'other' })).toBeNull()
+    expect(folderOf({ raw_assets_url: 'https://vimeo.com/1' })).toBeNull()
+    expect(folderOf({})).toBeNull()
+  })
+  it('the face shows the pasted link first, else the folder', () => {
+    expect(cardLinkOf({ link_url: 'https://vimeo.com/1', link_kind: 'other', raw_assets_url: drive })).toEqual({ url: 'https://vimeo.com/1', label: 'Link' })
+    expect(cardLinkOf({ raw_assets_url: drive })).toEqual({ url: drive, label: 'Google Drive' })
+    expect(cardLinkOf({})).toBeNull()
   })
 })

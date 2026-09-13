@@ -49,6 +49,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           ...cur,
           link_url: check.url,
           link_kind: check.kind,
+          // a folder is the card's folder everywhere (card-link-core.folderOf)
+          ...(check.kind !== 'other' ? { raw_assets_url: check.url } : {}),
           current_version_number: next.version,
         }
       })

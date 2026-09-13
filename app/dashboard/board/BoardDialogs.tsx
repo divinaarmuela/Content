@@ -101,7 +101,7 @@ export function LinkDialog({ card, onClose, onSaved }: {
     <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{card?.link_url ? 'Change the Drive folder' : 'Drive folder to post from'}</DialogTitle>
+          <DialogTitle>{card?.link_url ? 'Change the folder link' : 'Folder to work from'}</DialogTitle>
           <DialogDescription>
             Paste the Google Drive or Dropbox folder the scheduler posts from.
           </DialogDescription>

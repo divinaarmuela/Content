@@ -1,6 +1,7 @@
 'use client'
 
 import { deliverOnly } from '@/app/lib/deliver-only-core'
+import { personLabel } from '@/app/lib/identity-core'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
@@ -134,7 +135,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
 
   const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
   const slides = useMemo(() => slidesOf(latest), [latest])
-  const nameOf = (uid: string | null | undefined) => team.find(u => u.id === uid)?.name ?? null
+  // a name, never a whole email address (13 Sep 2026: "With akmaltestmdmedia@gmail.com")
+  const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) || null : null }
   const [savingDeliver, setSavingDeliver] = useState(false)
   const setDeliverOnly = async (on: boolean) => {
     if (!item) return

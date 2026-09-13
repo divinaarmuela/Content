@@ -22,7 +22,7 @@ import {
 } from './workflow-core'
 import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey, cardColumn } from './board-core'
-import { linkLabel, versionWord } from './card-link-core'
+import { cardLinkOf, folderOf, versionWord } from './card-link-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import {
@@ -45,6 +45,8 @@ export type BoardViewCard = {
   deliver_only?: boolean | null
   link_url?: string | null
   link_kind?: string | null
+  /** the open card's "Files to work from" folder — the same folder (card-link-core.folderOf) */
+  raw_assets_url?: string | null
   /** what needs doing — the requirement, in the manager's words */
   brief?: string | null
   owner_id: string | null
@@ -174,7 +176,7 @@ export function cardLines(
     // — the owner, 8 Sep 2026: "I'm just doing something to get approved,
     // what is this tag Video edit doing there"
     kind: (card as { adhoc_post?: unknown }).adhoc_post === true ? 'Post' : (card.work_kinds?.name ?? null),
-    link: card.link_url ? { url: card.link_url, label: linkLabel(card.link_kind) } : null,
+    link: cardLinkOf(card),
     brief: card.brief?.trim() ? card.brief.trim() : null,
     posted: postedLine(readPostedSlides(card.posted_slides)),
     // DELIVERED is the moment the final was sent to the client (the
@@ -918,6 +920,6 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
  * before the press instead of after (the tutorial walk of 11 Sep 2026).
  */
 export const UPLOAD_FIRST = 'Upload the final first'
-export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url'>): boolean {
-  return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim()
+export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url' | 'link_kind' | 'raw_assets_url'>): boolean {
+  return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim() && !folderOf(card)
 }

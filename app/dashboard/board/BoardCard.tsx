@@ -362,7 +362,7 @@ export function BoardCard({
                       Editors SOP gives an editor no such thing) */}
                   {!adhocPost && !editorFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
-                      {lines.link ? 'Change the Drive folder' : 'Drive folder to post from'}
+                      {lines.link ? 'Change the folder link' : 'Add a folder link'}
                     </DropdownMenuItem>
                   )}
                   {/* a booked or posted card has nobody left to hand it to and

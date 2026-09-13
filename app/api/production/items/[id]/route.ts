@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
+import { linkKindOf } from '../../../../lib/card-link-core'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, PublishJob, Client, ContentItem, ItemComment, ScheduleEntry, TeamUser, TeamUserClient,
@@ -215,6 +216,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.review_note = raw ? raw.slice(0, 200) : null
     }
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
+    // ONE FOLDER: the open card's "Files to work from" folder is the same
+    // folder the card face, the Schedule rail and the Overview show
+    // (card-link-core.folderOf, 13 Sep 2026). A pasted non-folder link on
+    // the card is somebody's work and is left alone.
+    if ('raw_assets_url' in patch) {
+      const cur = current as { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null }
+      const linkIsFolder = !String(cur.link_url ?? '').trim() || cur.link_kind === 'drive' || cur.link_kind === 'dropbox'
+      const folder = linkKindOf(patch.raw_assets_url as string | null)
+      if (folder.ok && folder.kind !== 'other') {
+        patch.raw_assets_url = folder.url
+        if (linkIsFolder) { patch.link_url = folder.url; patch.link_kind = folder.kind }
+      } else if (!String(patch.raw_assets_url ?? '').trim()) {
+        patch.raw_assets_url = null
+        if (linkIsFolder && String(cur.link_url ?? '').trim() === String(cur.raw_assets_url ?? '').trim()) { patch.link_url = null; patch.link_kind = null }
+      }
+    }
     // what this save ADDED, decided before the write: the upload queue sends
     // the whole array back every time it appends one file, so the payload is
     // not the news — the difference is

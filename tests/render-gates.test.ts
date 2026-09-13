@@ -214,9 +214,9 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(src(SHOOT)).toMatch(/Notes for the team/)
   })
   it('the card link is the scheduler\u2019s Drive folder, in those words', () => {
-    expect(src(CARD)).toMatch(/Drive folder to post from/)
-    expect(src(CARD)).not.toMatch(/'Add a link'|'Replace the link'/)
-    expect(src(DIALOGS)).toMatch(/Drive folder to post from/)
+    expect(src(CARD)).toMatch(/'Change the folder link' : 'Add a folder link'/)
+    expect(src(CARD)).not.toMatch(/'Add a link'|'Replace the link'|Drive folder to post from/)
+    expect(src(DIALOGS)).toMatch(/'Change the folder link' : 'Folder to work from'/)
     expect(src(DIALOGS)).not.toMatch(/'Add the link'/)
   })
   it('the Editor\u2019s New card (simple) has no kind, deliverable or deliver-only picker', () => {

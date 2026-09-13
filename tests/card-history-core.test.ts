@@ -21,7 +21,8 @@ describe('one activity row in the card’s words', () => {
   const say = (over: Partial<HistoryActivity>) => describeCardActivity(act(over))?.text ?? null
 
   it('names the upload and every new version', () => {
-    expect(say({ action: 'created' })).toBe('Uploaded by Ana')
+    expect(say({ action: 'created' })).toBe('Made by Ana')
+    expect(say({ action: 'created', detail: 'ad-hoc: posted straight from an upload on the Schedule page' })).toBe('Uploaded by Ana')
     expect(say({ action: 'version_added', new_value: 'v3' })).toBe('New files uploaded by Ana · version 3')
   })
 
@@ -93,7 +94,7 @@ describe('one activity row in the card’s words', () => {
   })
 
   it('never leaves a blank where a name should be', () => {
-    expect(say({ actor_name: null })).toBe('Uploaded by someone')
+    expect(say({ actor_name: null })).toBe('Made by someone')
   })
 })
 
@@ -155,7 +156,7 @@ describe('the whole list', () => {
     expect(lines.map(l => l.text)).toEqual([
       'Went out on Instagram',
       'Sent for approval to the client by Ana',
-      'Uploaded by Ana',
+      'Made by Ana',
     ])
   })
 

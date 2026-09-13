@@ -70,7 +70,9 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
   const who = WHO(row)
   switch (row.action) {
     case 'created':
-      return { text: `Uploaded by ${who}` }
+      // an upload on the Schedule page says so in its detail; a card made
+      // on a board with nothing in it yet was not "uploaded" (13 Sep 2026)
+      return { text: String(row.detail ?? '').includes('straight from an upload') ? `Uploaded by ${who}` : `Made by ${who}` }
     case 'version_added': {
       const n = String(row.new_value ?? '').replace(/^v/i, '')
       return n ? { text: `New files uploaded by ${who} · version ${n}` } : { text: `New files uploaded by ${who}` }
