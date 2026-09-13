@@ -14,7 +14,7 @@ import {
 import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
-  REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, handoverReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
+  REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
@@ -496,25 +496,11 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {footageOnly && (
           <p className="text-[13px] text-muted-foreground">This shoot was typed in from the Editor page — it was never planned here, so there is nothing to confirm. Its cards are on the Editor page.</p>
         )}
-        {(stage === 'confirmed' || stage === 'reminder_sent' || stage === 'shoot_day') && handoverReady(batch) && (
-          <p className="text-[13px] text-muted-foreground">
-            The morning after the shoot the footage is handed over by itself — press “Footage is in” only if it is in early.
-          </p>
-        )}
-
-        {/* THE CLIENT, IN ONE PLACE (the owner, 13 Sep 2026: "share button to
-            client should be named differently, and there's another Client
-            portal card at the bottom — confusing"). Not on the portal: one
-            button puts it there. On the portal: the links to send and the
-            way to take it off. No email is ever sent to a client. */}
-        {batch.status !== 'wrapped' && !footageOnly && (
-          <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
-            onShareClient={onShareClient} onPatch={onPatch} />
-        )}
-
+        {/* THE FOLDER BOX SITS UNDER THE BUTTON THAT NEEDS IT (the owner, 14 Sep
+            2026: "footage link, why is it under there?") */}
         {folderShown && (
-          <label className="flex flex-col gap-1 border-t border-border pt-3 text-[12px] font-semibold">
-            Footage folder <span className="font-normal text-muted-foreground">(Dropbox or Drive — the editor gets it on their card)</span>
+          <label className="flex flex-col gap-1 text-[12px] font-semibold">
+            Footage folder
             <Input
               key={batch.footage_url ?? ''}
               value={folder}
@@ -527,6 +513,17 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             />
           </label>
         )}
+
+        {/* THE CLIENT, IN ONE PLACE (the owner, 13 Sep 2026: "share button to
+            client should be named differently, and there's another Client
+            portal card at the bottom — confusing"). Not on the portal: one
+            button puts it there. On the portal: the links to send and the
+            way to take it off. No email is ever sent to a client. */}
+        {batch.status !== 'wrapped' && !footageOnly && (
+          <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
+            onShareClient={onShareClient} onPatch={onPatch} />
+        )}
+
 
         {/* who did what, and when */}
         <div className="flex flex-col gap-1 border-t border-border pt-3">
