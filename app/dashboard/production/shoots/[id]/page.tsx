@@ -276,7 +276,8 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
     return (
       <div className="flex flex-col gap-4">
         <Link href="/dashboard/production" className="inline-flex min-h-11 items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" aria-hidden /> Shoots</Link>
-        <PlanReadOnly batch={batch} cards={canvasCards} references={canvasRefs} crew={crew} viewerId={viewerId} onAcknowledged={() => void load()} />
+        <PlanReadOnly batch={batch} cards={canvasCards} references={canvasRefs} crew={crew} viewerId={viewerId} onAcknowledged={() => void load()}
+          canReview={viewerIsReviewer && !!batch.review_asked_at && !batch.plan_reviewed_at} onPlanReview={planReview} />
       </div>
     )
   }

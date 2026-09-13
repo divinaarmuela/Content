@@ -368,3 +368,13 @@ describe('a link to a card is never hijacked by the tutorial (13 Sep 2026)', () 
     expect(gate).toBeLessThan(offer)
   })
 })
+
+describe('the read-only plan page carries the quality checker’s two answers (14 Sep 2026)', () => {
+  it('Pass the plan and Send back with a note are drawn for a reviewer on a plan in review', () => {
+    const ro = src('app/dashboard/production/shoots/[id]/PlanReadOnly.tsx')
+    expect(ro).toContain('Pass the plan')
+    expect(ro).toContain('Send back with a note')
+    expect(ro).toMatch(/data-plan-review/)
+    expect(src(SHOOT)).toMatch(/canReview=\{viewerIsReviewer && !!batch\.review_asked_at && !batch\.plan_reviewed_at\}/)
+  })
+})

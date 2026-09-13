@@ -21,15 +21,22 @@ const H = 'font-mono text-[12px] uppercase tracking-widest text-muted-foreground
  * writes to the plan. The editor's work is on their card; the crew press
  * "I've read the plan" here.
  */
-export default function PlanReadOnly({ batch, cards, references, crew, viewerId, onAcknowledged }: {
+export default function PlanReadOnly({ batch, cards, references, crew, viewerId, onAcknowledged, canReview = false, onPlanReview }: {
   batch: SopShoot & { id: string; title: string; concept?: string | null; clients?: { name?: string | null } | null }
   cards: CanvasCard[]
   references: ReferenceMedia[]
   crew: { id: string; name: string; role?: string | null; acknowledged_at?: string | null }[]
   viewerId: string
   onAcknowledged: () => void
+  /** THE QUALITY CHECKER'S TWO ANSWERS (the owner, 14 Sep 2026: "I am the
+   *  quality check, why am I getting read only?") — the plan is read here,
+   *  and passed or sent back here */
+  canReview?: boolean
+  onPlanReview?: (pass: boolean, note?: string) => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
+  const [sendBack, setSendBack] = useState(false)
+  const [note, setNote] = useState('')
   const me = crew.find(c => c.id === viewerId)
   const isEditor = batch.editor_id === viewerId
   const parts = planAsText(batch)
@@ -55,7 +62,28 @@ export default function PlanReadOnly({ batch, cards, references, crew, viewerId,
             {batch.clients?.name ?? ''}{batch.shoot_date ? ` · Shoot ${new Date(`${String(batch.shoot_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}
           </p>
         </div>
-        {isEditor ? (
+        {canReview && onPlanReview ? (
+          <div className="flex flex-col items-end gap-2" data-plan-review>
+            {!sendBack ? (
+              <div className="flex flex-wrap gap-2">
+                <Button className="h-11 rounded-full px-5 text-[14px] font-semibold" disabled={busy}
+                  onClick={async () => { setBusy(true); try { await onPlanReview(true) } finally { setBusy(false) } }}>Pass the plan</Button>
+                <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold" disabled={busy} onClick={() => setSendBack(true)}>Send back with a note</Button>
+              </div>
+            ) : (
+              <div className="flex w-full max-w-md flex-col gap-2">
+                <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} autoFocus
+                  aria-label="What needs changing" placeholder="What needs changing, in a line or two"
+                  className="rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" className="h-11 rounded-full px-4 text-[14px]" disabled={busy} onClick={() => setSendBack(false)}>Keep reading</Button>
+                  <Button className="h-11 rounded-full px-5 text-[14px] font-semibold" disabled={busy || !note.trim()}
+                    onClick={async () => { setBusy(true); try { await onPlanReview(false, note.trim()) } finally { setBusy(false) } }}>Send it back</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : isEditor ? (
           <Button asChild className="h-11 rounded-full px-5 text-[14px] font-semibold">
             <Link href={`/dashboard/editor?card=${shootCardId(batch.id)}`}>Open your card</Link>
           </Button>
