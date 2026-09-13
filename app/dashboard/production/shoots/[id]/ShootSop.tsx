@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Check, Circle, FileDown, Link as LinkIcon, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import CallTimePicker from '../../CallTimePicker'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -253,8 +254,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots }: {
             </label>
             <label className="flex flex-col gap-1 text-[12px] font-semibold">
               Call time
-              <Input key={batch.call_time ?? ''} defaultValue={batch.call_time ?? ''} placeholder="7:30 am"
-                className="h-11 text-[15px] font-normal" onBlur={save('call_time')} />
+              <CallTimePicker value={batch.call_time} onSave={v => { if (v !== (batch.call_time ?? '')) void onPatch('call_time', v) }} />
+              <span className="text-[12px] font-normal text-muted-foreground">{String(batch.call_time ?? '').trim() ? `Everyone on set by ${String(batch.call_time).trim()}` : 'When everyone has to be on set, ready'}</span>
             </label>
             <div className="flex flex-col gap-1 text-[12px] font-semibold">
               Location

@@ -943,3 +943,32 @@ export function footageFolderFill(
     .filter(i => i.batch_id === b.id && i.work_kinds?.slug !== 'shoot_brief' && !text(i.raw_assets_url))
     .map(i => ({ id: i.id, raw_assets_url: url }))
 }
+
+/* ── call time: a picker, not a text box (the owner, 13 Sep 2026) ──────── */
+
+export type CallTimeParts = { hour: number; minute: number; period: 'am' | 'pm' }
+
+/** "7:30 am" → parts; also reads "07:30", "7.30am", "19:30". Null when it
+ *  is not a time (an older shoot typed "early" — the box shows it as is). */
+export function parseCallTime(raw: string | null | undefined): CallTimeParts | null {
+  const t = String(raw ?? '').trim().toLowerCase()
+  const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/)
+  if (!m) return null
+  let hour = Number(m[1])
+  const minute = m[2] ? Number(m[2]) : 0
+  if (minute > 59) return null
+  let period: 'am' | 'pm' | null = (m[3] as 'am' | 'pm' | undefined) ?? null
+  if (period) {
+    if (hour < 1 || hour > 12) return null
+  } else {
+    if (hour > 23) return null
+    period = hour >= 12 ? 'pm' : 'am'
+    hour = hour % 12 || 12
+  }
+  return { hour, minute, period }
+}
+
+/** parts → the words the plan, the reminder email and the PDF all carry. */
+export function formatCallTime(p: CallTimeParts): string {
+  return `${p.hour}:${String(p.minute).padStart(2, '0')} ${p.period}`
+}
