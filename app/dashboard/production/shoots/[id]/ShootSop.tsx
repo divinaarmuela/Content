@@ -334,9 +334,6 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview, reviewer: viewerIsReviewer === true }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
   const [folder, setFolder] = useState(batch.footage_url ?? '')
-  // the footage folder box appears from the day before the shoot — before
-  // that it is one more thing to read (the owner, 13 Sep 2026: "so many texts")
-  const folderShown = stageIndex(stage) >= stageIndex('reminder_sent')
   // ONE next button: the stage's own move
   const next: { to: ShootStage; label: string } | null =
     // a gated plan's one action while drafting is the review row (Ask for a
@@ -352,6 +349,10 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
     : stage === 'reminder_sent' || stage === 'shoot_day' ? { to: 'footage_handed', label: 'Footage is in' }
     : null
   const check = next ? can(next.to) : null
+  // THE FOLDER BOX FOLLOWS THE BUTTON (the owner, 14 Sep 2026: "why is the
+  // bar here when the Footage is in button is not there?"): it appears only
+  // when "Footage is in" is the step in front of you, or once it is in
+  const folderShown = next?.to === 'footage_handed' || stage === 'footage_handed'
   const shareReady = clientShareReady(batch, { itemCount })
   const clientLine = clientPlanWords(batch)
   const lines = stampLines(batch, nameOf, { planReview: gate })
