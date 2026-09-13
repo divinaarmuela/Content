@@ -55,11 +55,11 @@ describe('the Quality checker role', () => {
     expect(checkTransitionAs(ed, 'quality_check', 'client_review').ok).toBe(false)
   })
 
-  it('holds Overview, Post approval and Editor by default — not Shoots, Clients, Schedule or Team', () => {
-    for (const href of ['/dashboard', '/dashboard/scheduler', '/dashboard/editor', '/dashboard/notifications', '/dashboard/settings']) {
+  it('holds Overview, Shoots (the plan review), Post approval and Editor by default — not Clients, Schedule or Team', () => {
+    for (const href of ['/dashboard', '/dashboard/production', '/dashboard/scheduler', '/dashboard/editor', '/dashboard/notifications', '/dashboard/settings']) {
       expect(defaultAllows('quality_checker', href), href).toBe(true)
     }
-    for (const href of ['/dashboard/production', '/dashboard/clients', '/dashboard/social/schedule', '/dashboard/team', '/dashboard/leads']) {
+    for (const href of ['/dashboard/clients', '/dashboard/social/schedule', '/dashboard/team', '/dashboard/leads']) {
       expect(defaultAllows('quality_checker', href), href).toBe(false)
     }
   })

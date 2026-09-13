@@ -129,7 +129,9 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     // the owner, 13 Sep 2026: "quality check is a role" — the Quality check
     // column on Post approval is their desk; the Editor page shows the
     // cards as the editor sees them
-    return [...PERSONAL_PAGES, '/dashboard/scheduler', '/dashboard/editor'].includes(href)
+    // …and Shoots, since the plan review happens on the shoot page (13 Sep
+    // 2026, "why can the quality checker only see Editor and Post approval")
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/scheduler', '/dashboard/editor'].includes(href)
   }
   if (role === 'scheduler') {
     // all three: the Scheduler board is their own five columns ("where is

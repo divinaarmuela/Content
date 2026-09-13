@@ -431,7 +431,9 @@ export default function OverviewPage() {
     setNow(new Date())
     setMonth(new Date())
     // ticks so the greeting and the clock stay honest on a page left open
-    const t = setInterval(() => setNow(new Date()), 60_000)
+    // a live clock, with seconds (the owner, 13 Sep 2026: "make sure time on
+    // the right is live and seconds is there")
+    const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
@@ -984,7 +986,7 @@ export default function OverviewPage() {
             title={now ? `Today, ${now.toLocaleDateString('en-AU', { timeZone: zone, day: 'numeric', month: 'long' })}` : 'Today'}
             right={now && (
               <span className="shrink-0 text-[12px] font-semibold text-muted-foreground">
-                {(formatInZone(now, zone, 'time') ?? '')} · {zoneLabel(zone)}
+                {now.toLocaleTimeString('en-AU', { timeZone: zone, hour: 'numeric', minute: '2-digit', second: '2-digit' })} · {zoneLabel(zone)}
               </span>
             )}
           >

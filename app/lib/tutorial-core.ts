@@ -504,7 +504,7 @@ export const QUALITY_REVIEWER_STEP: TutorialStep = {
  *  that used to ride on another role's tutorial, then where answers arrive. */
 export const QUALITY_CHECKER: Tutorial = {
   job: 'Check every piece before it reaches the client or the scheduler.',
-  intro: 'Your desk is the Quality check column on Post approval, for every client. The Editor page shows you the cards as the editors see them.',
+  intro: 'Your desk is the Quality check column on Post approval, for every client. Shoots is where you pass a plan or send it back. The Editor page shows you the cards as the editors see them.',
   steps: [QUALITY_REVIEWER_STEP, WHERE_ANSWERS_ARRIVE],
   home: POST_APPROVAL,
   homeLabel: 'Open Post approval',
