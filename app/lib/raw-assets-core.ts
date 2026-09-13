@@ -66,5 +66,6 @@ export function filesToWorkFromWords(count: number, hasFolder: boolean): string 
   if (count === 0 && !hasFolder) return 'Nothing yet — add files or a folder link for the editor.'
   const files = count === 0 ? null : `${count} ${count === 1 ? 'file' : 'files'}`
   const folder = hasFolder ? 'a folder link' : null
-  return `${[files, folder].filter(Boolean).join(' and ')} to work from.`
+  const what = [files, folder].filter(Boolean).join(' and ')
+  return `${what.charAt(0).toUpperCase()}${what.slice(1)} to work from.`
 }

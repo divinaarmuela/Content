@@ -250,7 +250,7 @@ const EDITOR: Tutorial = {
     {
       title: 'Quality check, submit, and never sit blocked',
       see: [
-        '"Quality check before submitting" is the seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
+        '"Your checks before you submit" is the seven checks: watched start to finish, spelling and on-screen text, audio, branding, transitions, aspect ratio and length, footage quality. Submit unlocks when every one is ticked.',
         'Submit moves the card straight to Quality check, where the quality reviewer looks at it — Abby’s rule: maker, then the reviewer, then the scheduler. From there it goes to the client, then to the scheduler — the card says who has it; you do nothing for those.',
         'After the seven ticks the card asks where the reviewer should look: a Canva link and the page, optional when the final is uploaded here.',
         'A card that comes back sits in In Progress again with "What to change" on it, in the reviewer’s words.',

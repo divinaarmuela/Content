@@ -396,7 +396,8 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
 
       {/* ── 4. quality check, then submit (§4) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-qc">
-        <p id="ed-qc" className={H2}>Quality check before submitting</p>
+        {/* the editor's OWN list from the SOP — not Joy's quality check, which is the next column (the owner, 13 Sep 2026: "how come editor can see the quality check checkbox") */}
+        <p id="ed-qc" className={H2}>Your checks before you submit</p>
         {submitting && holder ? (
           <>
             <p className="text-[12px] text-muted-foreground">Tick each one, then submit.</p>
