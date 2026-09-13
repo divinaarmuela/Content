@@ -45,7 +45,7 @@ describe('the three pages hand the board their page, and the board makes the lan
     expect(lanes).not.toMatch(/flex-none/)
     // five lanes + gaps must fit a laptop's board width
     // 248 since 13 Sep 2026 ("everything looks cramped on the laptop"): the board scrolls sideways instead
-    expect(lanes).toMatch(/className="min-w-\[248px\] max-w-\[360px\] flex-1"/)
+    expect(lanes).toMatch(/className="min-w-\[248px\] flex-1"/)
     expect(lanes).toMatch(/muted=\{lane\.folded\}/)
     // the rail read as a broken sliver on the page: it is gone, and with it
     // the sideways title and the collapse toggle

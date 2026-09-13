@@ -112,11 +112,13 @@ export function LaneBoard({ lanes, initialLane, ariaLabel }: {
     // ROOM FOR THE CARDS (the owner, 13 Sep 2026: "everything looks cramped
     // on the laptop version"). Seven 200px lanes squashed every card; a lane
     // is now at least 248px and the board scrolls sideways when it must —
-    // a readable card beats a whole board of unreadable ones.
+    // a readable card beats a whole board of unreadable ones. No cap: on a
+    // wide screen the lanes share the whole width ("there is a gap on far
+    // right, make sure we utilize the space").
     return (
       <UiLane key={lane.key} title={lane.title} count={lane.count} hint={lane.hint}
         muted={lane.folded}
-        className="min-w-[248px] max-w-[360px] flex-1">
+        className="min-w-[248px] flex-1">
         {stack(lane)}
       </UiLane>
     )
