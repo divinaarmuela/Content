@@ -261,19 +261,29 @@ export default function NewShootPlanDialog({
                     const suggested = team.filter(m => m.role === 'account_manager' || m.role === 'super_admin')
                     const ids = new Set(suggested.map(m => m.id))
                     const rest = team.filter(m => !ids.has(m.id))
+                    // who handles which clients, so the right AM is obvious
+                    // (the owner, 13 Sep 2026: "show email and the client name
+                    // that they handle so I know who to assign it to")
+                    const handles = new Map<string, string[]>()
+                    for (const c of allClients) for (const m of c.managers ?? []) handles.set(m.id, [...(handles.get(m.id) ?? []), c.name])
+                    const words = (m: { id: string; name: string; email: string }) => {
+                      const who = m.name || m.email
+                      const clients = handles.get(m.id) ?? []
+                      return `${who}${m.name && m.email ? ` · ${m.email}` : ''}${clients.length ? ` · ${clients.join(', ')}` : ''}`
+                    }
                     return (
                       <>
                         {suggested.length > 0 && (
                           <SelectGroup>
                             <SelectLabel>Usually plans shoots</SelectLabel>
                             {suggested.map(m => (
-                              <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>
+                              <SelectItem key={m.id} value={m.id}>{words(m)}</SelectItem>
                             ))}
                           </SelectGroup>
                         )}
                         {rest.map(m => (
                           <SelectItem key={m.id} value={m.id}>
-                            {m.name || m.email} · {ROLE_WORD[m.role] ?? m.role}
+                            {words(m)} · {ROLE_WORD[m.role] ?? m.role}
                           </SelectItem>
                         ))}
                       </>
