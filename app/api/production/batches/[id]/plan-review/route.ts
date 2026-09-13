@@ -7,7 +7,7 @@ import { STAND_IN_MARK } from '../../../../../lib/card-history-core'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { notifyPlanReviewed } from '../../../../../lib/shoot-sop-notify'
-import { planReviewPatch } from '../../../../../lib/shoot-sop-core'
+import { planReviewPatch, planSendBackPatch } from '../../../../../lib/shoot-sop-core'
 
 /**
  * THE QUALITY CHECKER'S ANSWER ON A PLAN (the owner, 13 Sep 2026: "shoot
@@ -36,7 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!pass && !note) return NextResponse.json({ error: 'Say what to change — one line is enough' }, { status: 400 })
 
     const now = new Date().toISOString()
-    const done = await batches.claim(id, cur => (cur ? { ...cur, ...(planReviewPatch(now, user.id, pass) as Partial<Batch>) } : null))
+    // a send-back closes the ask too, so the shoot leaves the Quality review column
+    const patch = pass ? planReviewPatch(now, user.id, true) : planSendBackPatch(now, user.id, note)
+    const done = await batches.claim(id, cur => (cur ? { ...cur, ...(patch as Partial<Batch>) } : null))
     if (!done.claimed) return NextResponse.json({ error: 'Could not save — try again' }, { status: 409 })
 
     const standIn = user.role === 'super_admin' && !isQualityReviewer(user)

@@ -331,9 +331,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const gate = planReviewRequired === true
   const stage = shootStage(batch, today, { planReview: gate })
   const [reviewer, setReviewer] = useState('')
+  const [pickOpen, setPickOpen] = useState(false)
   const [sendBack, setSendBack] = useState(false)
   const [sendBackNote, setSendBackNote] = useState('')
-  const reviewLine = reviewWords(batch, nameOf, { planReview: gate })
   const late = briefIsLate(batch, today)
   const clock = clockWords(batch, today)
   const [reason, setReason] = useState('')
@@ -385,65 +385,89 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
                 tick above is their sign-off. THE QUALITY GATE: a plan written
                 or held by anyone but a super admin goes to the quality
                 checker, who passes it or sends it back — Go waits on that. */}
-            {gate && (
-              <div className="flex flex-col gap-1.5" data-plan-review>
-                <p className="flex min-h-11 items-center gap-3 text-[14px]">
-                  <span aria-hidden className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${planReviewPassed(batch) ? 'border-accent-green bg-accent-green text-ink' : 'border-border'}`}>{planReviewPassed(batch) ? '✓' : ''}</span>
-                  <span>Quality review{planReviewPassed(batch) && <span className="text-[12px] text-muted-foreground"> · passed by {nameOf(batch.plan_reviewed_by) ?? 'the team'}, {stampWords(batch.plan_reviewed_at)}</span>}</span>
-                </p>
-                {!planReviewPassed(batch) && !viewerIsReviewer && (
-                  <p className="pl-8 text-[12px] text-muted-foreground" role="status">{reviewLine ?? 'Not asked yet — the quality checker passes the plan before Go.'}</p>
-                )}
-                {viewerIsReviewer && onPlanReview && !planReviewPassed(batch) && (
-                  <div className="flex flex-col gap-2 pl-8">
-                    {reviewLine && <p className="text-[12px] text-muted-foreground" role="status">{reviewLine}</p>}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button className={primaryBtn} disabled={busy} onClick={() => void onPlanReview(true)}>Pass the plan</Button>
-                      {!sendBack && (
-                        <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setSendBack(true)}>Send back with a note</Button>
+            {/* THE QUALITY REVIEW, ONE STATE AT A TIME (the owner, 13 Sep 2026:
+                "again, you are making this super confusing"). Not sent ·
+                with the checker · passed. Only a plan the gate applies to
+                draws any of it. */}
+            {gate && (() => {
+              const passed = planReviewPassed(batch)
+              const asked = !passed && !!batch.review_asked_at
+              const askedTo = (Array.isArray(batch.review_asked_to) ? batch.review_asked_to : []).map(id => nameOf(String(id)) ?? 'the quality checker')
+              const withWho = askedTo.length > 0 ? askedTo.join(', ') : 'the quality checker'
+              const sentBack = !asked && !passed && batch.plan_sent_back_note
+                ? `Sent back by ${nameOf(batch.plan_sent_back_by) ?? 'the quality checker'}: ${batch.plan_sent_back_note}` : null
+              return (
+                <div className="flex flex-col gap-1.5" data-plan-review>
+                  <p className="flex min-h-11 items-center gap-3 text-[14px]">
+                    <span aria-hidden className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${passed ? 'border-accent-green bg-accent-green text-ink' : 'border-border'}`}>{passed ? '✓' : ''}</span>
+                    <span>
+                      {passed
+                        ? <>Quality review passed by {nameOf(batch.plan_reviewed_by) ?? 'the team'}, {stampWords(batch.plan_reviewed_at)}</>
+                        : asked
+                          ? <>With {withWho} for quality review since {stampWords(batch.review_asked_at)}</>
+                          : 'Quality review — not sent yet'}
+                    </span>
+                  </p>
+                  {/* NOT SENT YET: one button; a small link opens the picker */}
+                  {!asked && !passed && onAskReview && (
+                    <div className="flex flex-col gap-2 pl-8" data-review-state="not-sent">
+                      {sentBack && <p className="rounded-inner border border-border bg-tint-amber p-2.5 text-[13px]" role="status">{sentBack}</p>}
+                      {pickOpen && (
+                        <select value={reviewer} onChange={e => setReviewer(e.target.value)} aria-label="Who should review the plan"
+                          className="h-11 min-w-0 rounded-inner border border-border bg-surface px-2 text-[13px]">
+                          <option value="">{REVIEW_DEFAULT_QUALITY}</option>
+                          {(team ?? []).filter(t => t.id !== viewerId && t.role !== 'client').map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button className={primaryBtn} disabled={busy} onClick={() => void onAskReview(reviewer ? [reviewer] : [])}>
+                          Send the plan for quality review
+                        </Button>
+                        {!pickOpen && (
+                          <button type="button" onClick={() => setPickOpen(true)} className="min-h-11 text-[13px] underline underline-offset-4">or pick a person</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {/* WITH THE CHECKER: the reviewer's two answers; a "Send again" link for the asker */}
+                  {asked && (
+                    <div className="flex flex-col gap-2 pl-8" data-review-state="asked">
+                      {viewerIsReviewer && onPlanReview && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button className={primaryBtn} disabled={busy} onClick={() => void onPlanReview(true)}>Pass the plan</Button>
+                          {!sendBack && (
+                            <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setSendBack(true)}>Send back with a note</Button>
+                          )}
+                        </div>
+                      )}
+                      {viewerIsReviewer && onPlanReview && sendBack && (
+                        <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
+                          <label htmlFor="plan-send-back" className="text-[13px] font-semibold">What should change? One line.</label>
+                          <Input id="plan-send-back" value={sendBackNote} onChange={e => setSendBackNote(e.target.value)} maxLength={2000}
+                            placeholder="The objective does not say which pillar this serves" className="h-11 text-[15px] font-normal" />
+                          <div className="flex items-center gap-2">
+                            <Button className={primaryBtn} disabled={busy || !sendBackNote.trim()}
+                              onClick={async () => { await onPlanReview(false, sendBackNote.trim()); setSendBack(false); setSendBackNote('') }}>Send back</Button>
+                            <Button variant="ghost" className={outlineBtn} onClick={() => { setSendBack(false); setSendBackNote('') }}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                      {onAskReview && batch.review_asked_by === viewerId && (
+                        <button type="button" disabled={busy} onClick={() => void onAskReview([])} className="min-h-11 w-fit text-[13px] underline underline-offset-4">Send again</button>
                       )}
                     </div>
-                    {sendBack && (
-                      <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-                        <label htmlFor="plan-send-back" className="text-[13px] font-semibold">What should change? One line.</label>
-                        <Input id="plan-send-back" value={sendBackNote} onChange={e => setSendBackNote(e.target.value)} maxLength={2000}
-                          placeholder="The objective does not say which pillar this serves" className="h-11 text-[15px] font-normal" />
-                        <div className="flex items-center gap-2">
-                          <Button className={primaryBtn} disabled={busy || !sendBackNote.trim()}
-                            onClick={async () => { await onPlanReview(false, sendBackNote.trim()); setSendBack(false); setSendBackNote('') }}>Send back</Button>
-                          <Button variant="ghost" className={outlineBtn} onClick={() => { setSendBack(false); setSendBackNote('') }}>Cancel</Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {viewerIsReviewer && onPlanReview && planReviewPassed(batch) && role === 'super_admin' && (
-                  <div className="pl-8">
-                    <Button variant="ghost" className={outlineBtn} disabled={busy} onClick={() => void onPlanReview(false, 'Pass taken back')}>Take the pass back</Button>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* ONLY A PLAN THAT NEEDS THE GATE shows the review at all (the
-                owner, 13 Sep 2026: "September 18th is created by an admin and
-                didn't assign anyone — why does it show sending for review") */}
-            {gate && onAskReview && !planReviewPassed(batch) && (
-              <div className="flex flex-col gap-1.5 pl-8">
-                <div className="flex flex-wrap items-center gap-2">
-                  <select value={reviewer} onChange={e => setReviewer(e.target.value)} aria-label="Who should review the plan"
-                    className="h-11 min-w-0 rounded-inner border border-border bg-surface px-2 text-[13px]">
-                    <option value="">{REVIEW_DEFAULT_QUALITY}</option>
-                    {(team ?? []).filter(t => t.id !== viewerId && t.role !== 'client').map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <Button variant="outline" className={outlineBtn} disabled={busy}
-                    onClick={() => void onAskReview(reviewer ? [reviewer] : [])}>
-                    {batch.review_asked_at ? 'Ask for a review again' : 'Ask for a review'}
-                  </Button>
+                  )}
+                  {/* PASSED: nothing to press; a super admin can take it back */}
+                  {passed && onPlanReview && role === 'super_admin' && (
+                    <div className="pl-8" data-review-state="passed">
+                      <button type="button" disabled={busy} onClick={() => void onPlanReview(false, 'Pass taken back')} className="min-h-11 text-[13px] underline underline-offset-4">Take the pass back</button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )
+            })()}
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
               <input type="checkbox" className="h-5 w-5 accent-[var(--dbx-blue)]" checked={!!batch.client_confirmed_at} disabled={busy}
                 onChange={e => void onPatch('client_confirmed', e.target.checked)} />

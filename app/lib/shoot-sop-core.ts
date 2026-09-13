@@ -51,6 +51,8 @@ export type SopShoot = {
   /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
   scripts?: unknown
   review_asked_to?: unknown
+  plan_sent_back_at?: string | null
+  plan_sent_back_note?: string | null
   client_confirmed_at?: string | null
   go_at?: string | null
   reminder_sent_at?: string | null
@@ -78,6 +80,7 @@ export type SopShoot = {
   aligned_by?: string | null
   review_asked_by?: string | null
   plan_reviewed_by?: string | null
+  plan_sent_back_by?: string | null
   client_confirmed_by?: string | null
   go_by?: string | null
   reminder_sent_by?: string | null
@@ -1097,7 +1100,19 @@ export const NO_QUALITY_CHECKER = 'No quality checker on the Team page yet — s
 
 /** The stamps "Ask for a review" writes. */
 export function reviewAskPatch(now: string, actorId: string, to: readonly string[]): Record<string, unknown> {
-  return { review_asked_at: now, review_asked_by: actorId, review_asked_to: [...to] }
+  // a fresh ask closes an earlier send-back
+  return { review_asked_at: now, review_asked_by: actorId, review_asked_to: [...to], plan_sent_back_at: null, plan_sent_back_by: null, plan_sent_back_note: null }
+}
+
+/** "Send back with a note": the ask is closed (the shoot leaves the Quality
+ *  review column), any pass is cleared, and the note is kept on the shoot
+ *  so the writer reads it above the one button. */
+export function planSendBackPatch(now: string, actorId: string, note: string): Record<string, unknown> {
+  return {
+    plan_reviewed_at: null, plan_reviewed_by: null,
+    review_asked_at: null, review_asked_by: null, review_asked_to: null,
+    plan_sent_back_at: now, plan_sent_back_by: actorId, plan_sent_back_note: note.trim().slice(0, 2000) || null,
+  }
 }
 
 /* ── THE QUALITY REVIEW GATE ON A PLAN (13 Sep 2026) ──────────────────────

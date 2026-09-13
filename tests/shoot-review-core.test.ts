@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { reviewAskPatch, reviewWords, reviewersFor, type SopShoot } from '../app/lib/shoot-sop-core'
+import { planSendBackPatch, reviewAskPatch, reviewWords, reviewersFor, type SopShoot } from '../app/lib/shoot-sop-core'
 
 /**
  * ASK FOR A REVIEW (13 Sep 2026): a general user writes the plan and asks
@@ -29,7 +29,7 @@ describe('who is asked', () => {
 describe('the stamps and the line', () => {
   const base = { id: 'b', client_id: 'c', title: 'Golf', status: 'brief', owner_id: ME } as unknown as SopShoot
   it('stamps who asked, whom, and when', () => {
-    expect(reviewAskPatch('2026-09-13T06:00:00Z', ME, [AM])).toEqual({ review_asked_at: '2026-09-13T06:00:00Z', review_asked_by: ME, review_asked_to: [AM] })
+    expect(reviewAskPatch('2026-09-13T06:00:00Z', ME, [AM])).toMatchObject({ review_asked_at: '2026-09-13T06:00:00Z', review_asked_by: ME, review_asked_to: [AM], plan_sent_back_note: null })
   })
   it('reads "waiting on their tick" until the tick lands after the ask', () => {
     expect(reviewWords(base, nameOf)).toBeNull()
@@ -122,5 +122,17 @@ describe('Go waits on the pass', () => {
     expect(stampLines(asked, n, { planReview: true }).find(l => l.key === 'plan_review')).toMatchObject({ done: false, text: expect.stringMatching(/^Waiting on the quality checker since/) })
     expect(stampLines(passed, n, { planReview: true }).find(l => l.key === 'plan_review')).toMatchObject({ done: true, text: expect.stringMatching(/^Passed quality review by Joy/) })
     expect(stampLines(plan, n).find(l => l.key === 'plan_review')).toBeUndefined()
+  })
+})
+
+describe('sent back (13 Sep 2026)', () => {
+  it('closes the ask, clears the pass and keeps the note; the next ask clears the note', () => {
+    const back = planSendBackPatch('t', 'joy', '  The objective is missing  ')
+    expect(back).toEqual({
+      plan_reviewed_at: null, plan_reviewed_by: null,
+      review_asked_at: null, review_asked_by: null, review_asked_to: null,
+      plan_sent_back_at: 't', plan_sent_back_by: 'joy', plan_sent_back_note: 'The objective is missing',
+    })
+    expect(reviewAskPatch('u', 'am', ['joy'])).toMatchObject({ plan_sent_back_at: null, plan_sent_back_note: null })
   })
 })

@@ -187,7 +187,16 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(s).toContain('Send back with a note')
     // no review row at all on a plan that does not need the gate (a super
     // admin's own plan): the picker and the button sit inside `gate &&`
-    expect(s).toMatch(/\{gate && onAskReview && !planReviewPassed\(batch\) && \(/)
+    // ONE STATE AT A TIME (13 Sep 2026): not sent → one button; with the
+    // checker → the reviewer's two answers only; passed → nothing to press
+    expect(s).toMatch(/data-review-state="not-sent"/)
+    expect(s).toMatch(/\{!asked && !passed && onAskReview && \(/)
+    expect(s).toContain('Send the plan for quality review')
+    expect(s).toContain('or pick a person')
+    expect(s).toMatch(/\{asked && \(\s*<div className="flex flex-col gap-2 pl-8" data-review-state="asked">\s*\{viewerIsReviewer && onPlanReview && \(/)
+    expect(s).toMatch(/\{passed && onPlanReview && role === 'super_admin' && \(/)
+    expect(s).toContain('Quality review — not sent yet')
+    expect(s).not.toContain('Ask for a review again')
     expect(s).not.toContain('REVIEW_DEFAULT_MANAGERS')
     expect(s).toMatch(/planReview: input\.planReview|planReview \}/)
     const board = src('app/dashboard/production/ShootStageBoard.tsx')
