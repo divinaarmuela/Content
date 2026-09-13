@@ -21,8 +21,6 @@ import {
 import { newLineId, planLines, plannedCount, shootCardId } from '../../../../lib/deliverable-group-core'
 import type { ShotRow } from '../../../../lib/batch-brief-core'
 import Chip from '../../../ui/Chip'
-import ScriptsSection from './ScriptsSection'
-import { sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
 import LocationSearch from './LocationSearch'
 
 /**
@@ -115,7 +113,7 @@ const Tick = ({ on }: { on: boolean }) => on
   ? <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-green text-ink" aria-hidden><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>
   : <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground" aria-hidden><Circle className="h-3 w-3" /></span>
 
-export function PlanParts({ batch, itemCount, booked, onPatch, onShots, onScripts, team }: {
+export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: {
   batch: ShootSopBatch
   itemCount: number
   /** a booked date moves only through "Change date" with a reason */
@@ -123,8 +121,6 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, onScript
   onPatch: (field: string, value: unknown) => Promise<boolean>
   /** the shot list saves through a coalescer — instant on screen, one request */
   onShots: (next: ShotRow[]) => void
-  /** the scripts, the same way */
-  onScripts?: (next: ScriptBlock[]) => void
   team?: readonly { id: string; name: string; role: string }[]
 }) {
   const list = briefChecklist(batch, { itemCount })
@@ -255,12 +251,6 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, onScript
         {row('script', (
           <div className="flex flex-col gap-3">
             {area('script', 'The script or the talking points, finalised and approved', 3)}
-            {onScripts && (
-              <div className="flex flex-col gap-2 border-t border-border pt-3">
-                <p className="text-[13px] font-semibold">Scripts, one per video</p>
-                <ScriptsSection scripts={sanitiseScripts(batch.scripts)} team={team} onChange={onScripts} />
-              </div>
-            )}
           </div>
         ))}
 

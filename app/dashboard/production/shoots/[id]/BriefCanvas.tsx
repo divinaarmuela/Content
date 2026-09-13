@@ -377,6 +377,14 @@ export default function BriefCanvas({
     if (e.button !== 0) return
     e.stopPropagation()
     const el = (e.currentTarget as HTMLElement)
+    // the pressed card goes on top NOW, in the press — the layout effect
+    // that lifts the selected card runs a render later, and for that moment
+    // its toolbar drew behind the neighbours (the owner, 13 Sep 2026: "it
+    // takes some time to not overlap instead of instant")
+    for (const other of Array.from(el.parentElement?.querySelectorAll<HTMLElement>('[data-cid]') ?? [])) {
+      if (other !== el) other.style.zIndex = ''
+    }
+    el.style.zIndex = '5000'
     // EVERYTHING the drag loop needs is measured and looked up ONCE, here.
     // Doing it per pointermove (a DOM query + offsetWidth/offsetHeight, which
     // force synchronous layout) was the board's lag: pointer events outrun

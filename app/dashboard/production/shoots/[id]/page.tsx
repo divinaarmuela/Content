@@ -23,7 +23,6 @@ import {
 } from './ShootSop'
 import { STAGE_LABEL, createdWords, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
 import { sanitiseCanvasCards, type CanvasCard, type ReferenceMedia, type ShotRow } from '../../../../lib/batch-brief-core'
-import { sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
 import { createCoalescer } from '../../../../lib/coalesce-core'
 import Chip from '../../../ui/Chip'
 
@@ -175,31 +174,6 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
     setBatch(b => (b ? { ...b, shot_list: next } : b))
     shotSaver.current?.push(next)
   }
-  /** the scripts, the same way: instant on screen, one PATCH */
-  const saveScripts = useCallback(async (list: ScriptBlock[]) => {
-    setSaveState('saving')
-    const res = await fetch(`/api/production/batches/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scripts: list }),
-    })
-    if (!res.ok) {
-      setSaveState('idle')
-      toast.error((await res.json().catch(() => ({}))).error ?? 'Could not save the scripts')
-      void load()
-      return
-    }
-    setLastEdited({ name: 'you', at: new Date().toISOString() })
-    setSaveState('saved')
-    window.setTimeout(() => setSaveState(s => (s === 'saved' ? 'idle' : s)), 2000)
-  }, [id, load])
-  const saveScriptsRef = useRef(saveScripts)
-  useEffect(() => { saveScriptsRef.current = saveScripts }, [saveScripts])
-  const scriptSaver = useRef<ReturnType<typeof createCoalescer<ScriptBlock[]>> | null>(null)
-  if (!scriptSaver.current) scriptSaver.current = createCoalescer<ScriptBlock[]>(list => { void saveScriptsRef.current(list) }, 600)
-  useEffect(() => () => scriptSaver.current?.flush(), [])
-  const editScripts = (next: ScriptBlock[]) => {
-    setBatch(b => (b ? { ...b, scripts: next } : b))
-    scriptSaver.current?.push(next)
-  }
 
   /** a move along the playbook's timeline — Share, Go, Reminder, Footage is in */
   const moveStage = async (to: ShootStage, opts?: { reason?: string }) => {
@@ -345,7 +319,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── the plan ── */}
         <div className="flex flex-col gap-4">
-          <PlanParts batch={batch} itemCount={deliverableItems.length} booked={booked} onPatch={patchThenLoad} onShots={editShots} onScripts={editScripts} team={team} />
+          <PlanParts batch={batch} itemCount={deliverableItems.length} booked={booked} onPatch={patchThenLoad} onShots={editShots} team={team} />
 
           <Card>
             <CardContent className="p-4">
