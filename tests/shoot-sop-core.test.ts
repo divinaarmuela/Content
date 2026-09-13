@@ -5,7 +5,7 @@ import {
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageHappened, stageMove, withAck, withoutAck, type SopShoot,
   briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
-  STAGE_STRIP, footageAfterWords, footageDueTargets, footageFolderFill, footageReadyToHand, handoverReady, nextStepWords,
+  STAGE_STRIP, canConfirmFootage, footageAfterWords, footageDueTargets, footageFolderFill, footageReadyToHand, footageReceiptTargets, handoverReady, nextStepWords, stampLines,
 } from '../app/lib/shoot-sop-core'
 import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
 
@@ -508,5 +508,28 @@ describe('the Quality review column', () => {
   })
   it('the next step says who is waited on', () => {
     expect(nextStepWords(asked(), TODAY, { planReview: { required: true } })).toMatch(/^With the quality checker/)
+  })
+})
+
+describe('the editor confirms the footage arrived (14 Sep 2026)', () => {
+  const handed = (over: Partial<SopShoot> = {}) => complete({ go_at: 'x', brief_shared_at: 'x', footage_handed_at: '2026-09-22T02:00:00Z', ...over })
+  it('only the shoot’s editor may press it, and only once the footage is in', () => {
+    expect(canConfirmFootage(handed(), ED)).toBe(true)
+    expect(canConfirmFootage(handed(), AM)).toBe(false)
+    expect(canConfirmFootage(complete(), ED)).toBe(false)
+    expect(canConfirmFootage(handed({ footage_received_at: 'x' }), ED)).toBe(false)
+  })
+  it('the morning after an unconfirmed handover is the one time the reminder goes', () => {
+    expect(footageReceiptTargets([handed()], '2026-09-22').map(b => b.id)).toEqual([])   // handed today
+    expect(footageReceiptTargets([handed()], '2026-09-23').map(b => b.id)).toEqual(['b-1'])
+    expect(footageReceiptTargets([handed({ footage_received_at: 'x' })], '2026-09-23')).toEqual([])
+    expect(footageReceiptTargets([handed({ footage_receipt_nudged_at: 'x' })], '2026-09-23')).toEqual([])
+    expect(footageReceiptTargets([handed({ editor_id: null })], '2026-09-23')).toEqual([])
+  })
+  it('the shoot page says whether they have it', () => {
+    const names = (id: string | null | undefined) => (id === ED ? 'Sam' : null)
+    expect(stampLines(handed(), names).find(l => l.key === 'footage_received')?.text).toMatch(/^Footage sent — Sam has not confirmed/)
+    expect(stampLines(handed({ footage_received_at: '2026-09-23T01:00:00Z', footage_received_by: ED }), names).find(l => l.key === 'footage_received')?.text).toMatch(/^Footage received by Sam/)
+    expect(stampLines(complete(), names).some(l => l.key === 'footage_received')).toBe(false)
   })
 })

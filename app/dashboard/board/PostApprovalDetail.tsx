@@ -576,8 +576,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           onClose={() => setHanding(false)} />
       )}
 
-      {/* ── 2b. what the editor works FROM (a manager adds; 11 Sep 2026) ── */}
-      {!adhoc && isManager !== undefined && (
+      {/* ── 2b. what the maker works FROM (a manager adds; 11 Sep 2026) —
+          on a post handed to a scheduler with a Drive folder this IS the
+          job (the owner, 14 Sep 2026: "I submitted a Drive and task to a
+          scheduler to work on") ── */}
+      {isManager !== undefined && (
         <FilesToWorkFrom
           item={item as unknown as { id: string; raw_assets?: unknown; raw_assets_url?: string | null }}
           isManager={isManager}
@@ -597,7 +600,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               scheduled how come I can add another") */}
           {!frozenCard && (
             <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
-              <Plus className="h-4 w-4" aria-hidden /> Add another
+              <Plus className="h-4 w-4" aria-hidden /> {slides.length === 0 ? 'Add the finished files' : 'Add another'}
             </Button>
           )}
         </div>

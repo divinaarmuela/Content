@@ -306,6 +306,20 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               ? `Acknowledged ${formatInZone(String(ackRow.created_at), zone, 'short') ?? ''}`
               : item.owner_id ? 'Not acknowledged yet.' : 'Nobody holds this card yet.'}
           </p>
+          {/* GOT THE FOOTAGE (the owner, 14 Sep 2026): once the footage is
+              handed over, the editor says they have it — one press, one line */}
+          {shoot?.footage_handed_at && holder && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {shoot.footage_received_at
+                ? <p className="text-[13px] text-muted-foreground">Footage received {formatInZone(String(shoot.footage_received_at), zone, 'short') ?? ''}</p>
+                : (
+                  <Button className={primaryBtn} disabled={busy}
+                    onClick={() => void post(`/api/production/batches/${shoot.id}/footage-received`, {}, 'Thanks — the team knows you have the footage', 'Confirming the footage')}>
+                    <Check className="h-4 w-4" aria-hidden /> Got the footage
+                  </Button>
+                )}
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {/* ONE BUTTON (the owner, 13 Sep 2026: "why are there two buttons?").
                 On a shoot's card, "I've read the plan" is the acknowledgement

@@ -426,7 +426,7 @@ describe('the handover without a press', () => {
   })
   it('the morning after the shoot, the footage is handed over by itself and the editor told to start', async () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
-    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
     expect(batch().footage_handed_at).toBeTruthy()
     expect(batch().footage_due_nudged_at).toBeTruthy()
     expect(cards().map(c => [c.title, c.owner_id])).toEqual([['Golf Day', ED]])
@@ -436,18 +436,18 @@ describe('the handover without a press', () => {
     expect(String(told[0].subject)).toMatch(/^Footage should be in: Golf Day — start the edit, due /)
     // once: a second morning does nothing
     emails.length = 0
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
     expect(emails).toHaveLength(0)
     // a person who already pressed "Footage is in" is left alone by the sweep
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_handed_at: 'x', footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
     // and on the day itself, nothing yet
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(0) })
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
   })
   it('a shoot shot with no folder link asks the crew and the AM for it, once — and the pasted link is the handover (13 Sep 2026)', async () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1) })
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: emails.length })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: emails.length, unconfirmed: 0 })
     expect(emails.length).toBeGreaterThan(0)
     expect(emails.map(e => e.recipientEmail)).toContain('am@zz.invalid')
     expect(emails.every(e => /paste the folder link/.test(String(e.subject)))).toBe(true)
@@ -455,7 +455,7 @@ describe('the handover without a press', () => {
     expect(batch().footage_handed_at).toBeFalsy()
     // a second morning does not ask again
     emails.length = 0
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
     // the link goes in — that is the handover, no press
     expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })).status).toBe(200)
     expect(batch().footage_handed_at).toBeTruthy()
@@ -463,12 +463,12 @@ describe('the handover without a press', () => {
   })
   it('a shoot shot with no editor named asks its account manager for one, once', async () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), editor_id: null })
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 1, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 1, askedForFolder: 0, unconfirmed: 0 })
     expect(emails.map(e => e.recipientEmail)).toEqual(['am@zz.invalid'])
     expect(String(emails[0].subject)).toMatch(/^Name the editor: Golf Day was shot/)
     expect(batch().footage_handed_at).toBeFalsy()
     emails.length = 0
-    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 0, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
   })
 })
 
@@ -509,7 +509,7 @@ describe('the footage folder', () => {
   })
   it('the morning sweep fills it too, and a folder pasted after the handover reaches the cards then', async () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
-    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0, askedForFolder: 0 })
+    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0, askedForFolder: 0, unconfirmed: 0 })
     expect(cards().every(c => c.raw_assets_url === 'https://www.dropbox.com/scl/fo/golf-day')).toBe(true)
 
     // without a link the morning sweep hands nothing over — it asks for the

@@ -117,6 +117,8 @@ describe('who did what, and when', () => {
       '✓ Go by Ada, Tue 15 Sept, 11:00 am',
       '· Reminder not sent yet',
       '✓ Footage in — by itself, the morning after, Tue 22 Sept, 7:00 am',
+      // the editor has not said they have it yet (14 Sep 2026)
+      '· Footage sent — Martin has not confirmed they have it yet',
     ])
   })
   it('an old row with stamps but no people reads "by the team"', () => {

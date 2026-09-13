@@ -85,6 +85,11 @@ export type SopShoot = {
   go_by?: string | null
   reminder_sent_by?: string | null
   footage_handed_by?: string | null
+  /** the editor pressed "Got the footage" (14 Sep 2026) */
+  footage_received_at?: string | null
+  footage_received_by?: string | null
+  /** the one reminder when it sits unconfirmed the morning after */
+  footage_receipt_nudged_at?: string | null
   /* ── the client's answer, on the shoot itself: the plan went to the
    *    portal from this page, and the client approved it or asked for
    *    changes there ── */
@@ -878,6 +883,13 @@ export function stampLines(b: SopShoot, nameOf: NameOf, opts?: { planReview?: bo
   lines.push(b.footage_handed_at
     ? { key: 'footage', text: `Footage in — ${b.footage_handed_by ? `by ${by(nameOf, b.footage_handed_by)}` : 'by itself, the morning after'}${withWhen(b.footage_handed_at)}`, done: true }
     : { key: 'footage', text: 'Footage not in yet', done: false })
+  // THE EDITOR SAYS THEY HAVE IT (the owner, 14 Sep 2026: "how do we know
+  // if he has received the footage?") — a line the moment it is handed over
+  if (b.footage_handed_at) {
+    lines.push(b.footage_received_at
+      ? { key: 'footage_received', text: `Footage received by ${by(nameOf, b.footage_received_by)}${withWhen(b.footage_received_at)}`, done: true }
+      : { key: 'footage_received', text: `Footage sent — ${by(nameOf, b.editor_id)} has not confirmed they have it yet`, done: false })
+  }
   return lines
 }
 
@@ -1005,6 +1017,23 @@ export function footageDueTargets<T extends SopShoot>(shoots: readonly T[], toda
     else hand.push(b)
   }
   return { hand, askEditor, askFolder }
+}
+
+/** THE MORNING AFTER THE HANDOVER: an editor who has not pressed "Got the
+ *  footage" is reminded once, and the account manager told (14 Sep 2026). */
+export function footageReceiptTargets<T extends SopShoot>(shoots: readonly T[], today: string): T[] {
+  return shoots.filter(b => {
+    if (!b.footage_handed_at || b.footage_received_at || b.footage_receipt_nudged_at || b.status === 'wrapped' || !b.editor_id) return false
+    // handed over before today, IN MELBOURNE — a stamp written at 00:30
+    // here is "yesterday" in UTC, and must not be nudged the same morning
+    const handedDay = new Date(String(b.footage_handed_at)).toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
+    return handedDay < today
+  })
+}
+
+/** May this person press "Got the footage"? The shoot's editor, once it is in. */
+export function canConfirmFootage(b: Pick<SopShoot, 'editor_id' | 'footage_handed_at' | 'footage_received_at'>, userId: string): boolean {
+  return !!b.footage_handed_at && !b.footage_received_at && b.editor_id === userId
 }
 
 /** A folder link pasted once the shoot has happened IS the handover: the

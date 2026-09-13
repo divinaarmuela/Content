@@ -7,7 +7,7 @@ import { ensureShootCard } from './plan-cards'
 import { logActivity } from './workflow'
 import { announceBatchChange, announceItemChange } from './production-live'
 import { escapeHtml, notify, renderEmail } from './mailer'
-import { footageDueTargets, footageFolderFill, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
+import { footageDueTargets, footageFolderFill, footageReceiptTargets, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
 import { shootCardId } from './deliverable-group-core'
 
 /**
@@ -275,7 +275,46 @@ async function notifyNameTheEditor(batch: Batch): Promise<number> {
  * claimed first, so two runs cannot hand over or tell twice; a shoot that a
  * person already handed over (footage_handed_at) is skipped by the rule.
  */
-export async function runFootageDueSweep(): Promise<{ handed: number; askedForEditor: number; askedForFolder: number }> {
+/**
+ * THE EDITOR HAS NOT SAID THEY HAVE THE FOOTAGE (14 Sep 2026): the morning
+ * after the handover, one reminder to them and one line to the managers.
+ */
+async function notifyFootageUnconfirmed(batch: Batch): Promise<number> {
+  const editor = await editorOf(batch)
+  if (!editor) return 0
+  let sent = 0
+  const r = await notify({
+    eventType: 'shoot_footage_in', entityType: 'batch',
+    entityId: `${batch.id}#footage-unconfirmed`,
+    recipientId: editor.id, recipientEmail: editor.email,
+    subject: `Do you have the footage? ${batch.title}`,
+    bodyHtml: renderEmail(
+      `${escapeHtml(batch.title)} — the footage was sent, nobody has said it arrived`,
+      `<p>The footage for <strong>${escapeHtml(batch.title)}</strong> was handed to you ${longDate(String(batch.footage_handed_at).slice(0, 10)) ?? 'yesterday'}.</p>` +
+      '<p>Open your card and press <strong>Got the footage</strong> so the team knows — or write on the card if it is not there.</p>',
+      'Open your card', cardUrl(batch.id),
+    ),
+  })
+  if (r === 'sent') sent++
+  for (const p of await managersOf(batch)) {
+    if (p.id === editor.id) continue
+    const m = await notify({
+      eventType: 'shoot_footage_in', entityType: 'batch',
+      entityId: `${batch.id}#footage-unconfirmed`,
+      recipientId: p.id, recipientEmail: p.email,
+      subject: `${editor.name} hasn’t confirmed the footage: ${batch.title}`,
+      bodyHtml: renderEmail(
+        `${escapeHtml(batch.title)} — footage sent, not confirmed`,
+        `<p>${escapeHtml(editor.name)} was handed the footage ${longDate(String(batch.footage_handed_at).slice(0, 10)) ?? 'yesterday'} and has not pressed “Got the footage”. They have been reminded — worth a message if it is urgent.</p>`,
+        'Open the shoot', shootUrl(batch.id),
+      ),
+    })
+    if (m === 'sent') sent++
+  }
+  return sent
+}
+
+export async function runFootageDueSweep(): Promise<{ handed: number; askedForEditor: number; askedForFolder: number; unconfirmed: number }> {
   const today = melbourneToday()
   const candidates = await table<Batch>('batches').list({
     where: r => !!r.shoot_date && !r.footage_handed_at && !r.footage_due_nudged_at && r.status !== 'wrapped',
@@ -316,7 +355,19 @@ export async function runFootageDueSweep(): Promise<{ handed: number; askedForEd
     if (!stamped.claimed) continue
     askedForFolder += await notifyPasteTheFolder(stamped.row)
   }
-  return { handed, askedForEditor, askedForFolder }
+  // the editor has the footage since yesterday and has not said so
+  let unconfirmed = 0
+  const handedOver = await table<Batch>('batches').list({
+    where: r => !!r.footage_handed_at && !r.footage_received_at && !r.footage_receipt_nudged_at && r.status !== 'wrapped',
+    limit: 500,
+  })
+  for (const b of footageReceiptTargets(handedOver, today)) {
+    const stamped = await table<Batch>('batches').claim(b.id, cur =>
+      cur && !cur.footage_receipt_nudged_at && !cur.footage_received_at ? { ...cur, footage_receipt_nudged_at: now } : null)
+    if (!stamped.claimed) continue
+    unconfirmed += await notifyFootageUnconfirmed(stamped.row)
+  }
+  return { handed, askedForEditor, askedForFolder, unconfirmed }
 }
 
 /** the cards are the editor's from go — used by the go path and by naming the editor later */
