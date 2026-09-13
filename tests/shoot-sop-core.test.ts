@@ -175,8 +175,10 @@ describe('dragging a shoot to a column', () => {
     expect(stageMove(complete({ go_at: 'x' }), 'shoot_day', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/calendar/) })
   })
   it('footage is handed over only after the day, to a named editor, with priorities and a deadline', () => {
-    const shot = complete({ go_at: 'x', shoot_date: '2026-09-10' })
+    const shot = complete({ go_at: 'x', shoot_date: '2026-09-10', footage_url: 'https://www.dropbox.com/scl/fo/golf' })
     expect(stageMove(complete({ go_at: 'x' }), 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: 'The shoot has not happened yet' })
+    // "why can we click footage is in but [no] link was pasted" (the owner, 13 Sep 2026)
+    expect(stageMove({ ...shot, footage_url: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/footage folder link/) })
     expect(stageMove({ ...shot, editor_id: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/Name the editor/) })
     expect(stageMove({ ...shot, edit_deadline: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/priorities and the deadline/) })
     expect(stageMove(shot, 'footage_handed', am, now, AM)).toMatchObject({ ok: true, patch: { footage_handed_at: now, footage_handed_by: AM } })

@@ -281,7 +281,11 @@ describe('the handover: Production → Editor', () => {
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1), editor_id: null })
     expect((await move('footage_handed')).body.error).toMatch(/Name the editor/)
 
+    // the folder link is part of the handover (the owner, 13 Sep 2026)
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1) })
+    expect((await move('footage_handed')).body.error).toMatch(/footage folder link/)
+
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
     as(VG, 'general', 'Vik Camera')
     const r = await move('footage_handed')
     expect(r.status).toBe(200)
@@ -305,7 +309,7 @@ describe('the handover: Production → Editor', () => {
     expect(cards()).toHaveLength(1)
   })
   it('a card that already exists keeps its owner; only its empty fields are filled', async () => {
-    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1) })
+    fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', shoot_date: dayShift(-1), footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })
     const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
     ;(t.content_items ??= {})[planCardId('b-1', 'l1')] = {
       id: planCardId('b-1', 'l1'), client_id: 'c-1', batch_id: 'b-1', title: 'Hero reel', status: 'draft_uploaded',
@@ -486,8 +490,10 @@ describe('the footage folder', () => {
     expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0 })
     expect(cards().every(c => c.raw_assets_url === 'https://www.dropbox.com/scl/fo/golf-day')).toBe(true)
 
+    // the morning sweep hands over without a link (the editor is told either way);
+    // a person pressing the button needs the link first
     fake.restore(); fake = seed({ go_at: 'x', brief_shared_at: 'x', status: 'locked', shoot_date: dayShift(-1) })
-    expect((await move('footage_handed')).status).toBe(200)
+    expect(await runFootageDueSweep()).toEqual({ handed: 1, askedForEditor: 0 })
     expect(cards().every(c => !c.raw_assets_url)).toBe(true)
     as(VG, 'general')
     expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/late' })).status).toBe(200)

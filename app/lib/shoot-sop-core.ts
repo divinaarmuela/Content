@@ -499,6 +499,9 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
       if (days === null || days > 0) return { ok: false, reason: 'The shoot has not happened yet' }
       if (!b.editor_id) return { ok: false, reason: 'Name the editor on the shoot first — the footage is handed to them' }
       if (!text(b.editor_priorities) || !text(b.edit_deadline)) return { ok: false, reason: 'Write the editor priorities and the deadline first — that is the handover' }
+      // the owner, 13 Sep 2026: "why can we click footage is in but [no] link
+      // was pasted" — the editor has nothing to cut without the folder
+      if (!text(b.footage_url)) return { ok: false, reason: 'Paste the footage folder link first — that is what the editor works from' }
       return { ok: true, patch: { footage_handed_at: now, footage_handed_by: actorId }, label: 'Footage handed to the editor' }
     }
   }
