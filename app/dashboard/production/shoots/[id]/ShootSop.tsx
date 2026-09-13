@@ -343,6 +343,10 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
     // review); Share appears once the quality checker passed it
     stage === 'drafting' && gate && !planReviewPassed(batch) ? null
     : stage === 'drafting' || (stage === 'quality_review' && planReviewPassed(batch)) ? { to: 'shared', label: 'Share the plan with the team' }
+    // the calendar carried it on before it was shared (14 Sep 2026): the
+    // review row is the action while the gate is open, then Share, then Footage
+    : (stage === 'reminder_sent' || stage === 'shoot_day') && !batch.brief_shared_at && gate && !planReviewPassed(batch) ? null
+    : (stage === 'reminder_sent' || stage === 'shoot_day') && !batch.brief_shared_at ? { to: 'shared', label: 'Share the plan with the team' }
     : stage === 'shared' ? { to: 'confirmed', label: askOverride ? 'Go anyway (super admin)' : 'Confirm — it is go' }
     : stage === 'confirmed' ? { to: 'reminder_sent', label: 'Reminder sent to everyone' }
     : stage === 'reminder_sent' || stage === 'shoot_day' ? { to: 'footage_handed', label: 'Footage is in' }

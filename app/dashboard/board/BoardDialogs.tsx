@@ -563,6 +563,11 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  deliverable on that shoot the card answers for, when the shoot has them */
   const [shootId, setShootId] = useState('')
   const [groupId, setGroupId] = useState('')
+  /** A SHOOT NOT PLANNED HERE, BY NAME ONLY (the owner, 14 Sep 2026: "make
+   *  sure I can type, or the editor can type, but don't create a card in
+   *  shoot plan"): the name goes on the card as its first line; no shoot
+   *  is ever made */
+  const [shootText, setShootText] = useState('')
   /** FILES TO WORK FROM (the owner, 11 Sep 2026: "she will show the files
    *  there"): a manager hands the editor the footage, stills or references
    *  with the card, and/or the folder they live in */
@@ -580,9 +585,9 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     if (!open) return
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
-    setShootId(''); setGroupId(''); setWorkFiles([]); setFolder('')
+    setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setFolder('')
   }, [open, defaultClientId, clients, viewer.id])
-  useEffect(() => { setShootId(''); setGroupId('') }, [clientId])
+  useEffect(() => { setShootId(''); setGroupId(''); setShootText('') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])
 
   const linkCheck = linkKindOf(link)
@@ -607,7 +612,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       // an editing card end up creating a card on the Shoots page? It
       // shouldn't do that, at all"): a card is from one of the client's
       // planned shoots, or from no shoot
-      const batchId = shootId
+      const batchId = shootId === 'typed' ? '' : shootId
+      const briefText = [shootId === 'typed' && shootText.trim() ? `From the shoot: ${shootText.trim()}` : '', brief.trim()].filter(Boolean).join('\n\n')
       const res = await fetch('/api/production/items', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -615,7 +621,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           title: title.trim(),
           work_kind_id: kindRow.id,
           owner_id: owner || null,
-          ...(brief.trim() ? { brief: brief.trim() } : {}),
+          ...(briefText ? { brief: briefText } : {}),
           ...(due ? { due_date: due } : {}),
           ...(batchId ? { batch_id: batchId } : {}),
           ...(groupId ? { group_id: groupId } : {}),
@@ -699,8 +705,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   <SelectContent>
                     <SelectItem value="none">Not from a shoot</SelectItem>
                     {shoots.map(b => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
+                    {simple && <SelectItem value="typed">Another shoot — I’ll type its name</SelectItem>}
                   </SelectContent>
                 </Select>
+                {shootId === 'typed' && (
+                  <Input value={shootText} onChange={e => setShootText(e.target.value)} placeholder="e.g. Clinic open day, 3 Sept" className={field} aria-label="The shoot’s name" />
+                )}
               </div>
               {!simple && groups.length > 0 && (
                 <div className="flex flex-col gap-2">

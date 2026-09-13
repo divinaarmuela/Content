@@ -553,8 +553,13 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
     return { ok: true, patch: {}, label: 'Asked for a quality review', askReview: true }
   }
 
+  // SHARING IS A STAMP, NOT A MOVE (the owner, 14 Sep 2026: "shoot day is
+  // today, still it did not allow to send to the team"): a plan the calendar
+  // has already carried to Shoot day can still be shared, right up to the
+  // footage coming in — it never counts as moving backwards
+  const lateShare = to === 'shared' && !b.brief_shared_at && from !== 'footage_handed'
   const forward = stageIndex(to) > stageIndex(from)
-  if (!forward) {
+  if (!forward && !lateShare) {
     if (from === 'shoot_day') return { ok: false, reason: 'The calendar put it on Shoot day — change the shoot date to move it' }
     if (to === 'shoot_day') return { ok: false, reason: 'The calendar decides Shoot day — set the date instead' }
     // clear every stamp past the target column
@@ -604,6 +609,11 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
     case 'footage_handed': {
       const days = daysUntilShoot(b, input.today)
       if (days === null || days > 0) return { ok: false, reason: 'The shoot has not happened yet' }
+      // THE ORDER HOLDS ON A SAME-DAY SHOOT TOO (the owner, 14 Sep 2026: "they
+      // have to share first, however quality check has to go through first
+      // before sending the footage in"): review, then share, then footage
+      if (gated && !planReviewPassed(b)) return { ok: false, reason: PLAN_REVIEW_WORDS }
+      if (!b.brief_shared_at) return { ok: false, reason: 'Share the plan with the team first' }
       if (!b.editor_id) return { ok: false, reason: 'Name the editor on the shoot first — the footage is handed to them' }
       if (!text(b.editor_priorities) || !text(b.edit_deadline)) return { ok: false, reason: 'Write the editor priorities and the deadline first — that is the handover' }
       // the owner, 13 Sep 2026: "why can we click footage is in but [no] link

@@ -176,7 +176,7 @@ describe('dragging a shoot to a column', () => {
     expect(stageMove(complete({ go_at: 'x' }), 'shoot_day', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/calendar/) })
   })
   it('footage is handed over only after the day, to a named editor, with priorities and a deadline', () => {
-    const shot = complete({ go_at: 'x', shoot_date: '2026-09-10', footage_url: 'https://www.dropbox.com/scl/fo/golf' })
+    const shot = complete({ go_at: 'x', brief_shared_at: 'x', shoot_date: '2026-09-10', footage_url: 'https://www.dropbox.com/scl/fo/golf' })
     expect(stageMove(complete({ go_at: 'x' }), 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: 'The shoot has not happened yet' })
     // "why can we click footage is in but [no] link was pasted" (the owner, 13 Sep 2026)
     expect(stageMove({ ...shot, footage_url: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/footage folder link/) })
@@ -192,7 +192,8 @@ describe('dragging a shoot to a column', () => {
     const back = stageMove(far, 'shared', am, now, AM)
     expect(back).toMatchObject({ ok: true, patch: { go_at: null, go_by: null, reminder_sent_at: null, footage_handed_at: null, footage_handed_by: null } })
     if (back.ok) expect(back.patch).not.toHaveProperty('brief_shared_at')
-    expect(stageMove(complete({ shoot_date: TODAY }), 'shared', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/change the shoot date/) })
+    // an UNSHARED plan on shoot day is shared, not "moved back" (14 Sep 2026)
+    expect(stageMove(complete({ shoot_date: TODAY }), 'shared', am, now, AM)).toMatchObject({ ok: true, patch: { brief_shared_at: now } })
     expect(stageMove(complete({ status: 'wrapped' }), 'drafting', am, now, AM)).toMatchObject({ ok: false, reason: 'This shoot is closed' })
   })
   it('a scheduler and a client never move a shoot', () => {
@@ -531,5 +532,26 @@ describe('the editor confirms the footage arrived (14 Sep 2026)', () => {
     expect(stampLines(handed(), names).find(l => l.key === 'footage_received')?.text).toMatch(/^Footage sent — Sam has not confirmed/)
     expect(stampLines(handed({ footage_received_at: '2026-09-23T01:00:00Z', footage_received_by: ED }), names).find(l => l.key === 'footage_received')?.text).toMatch(/^Footage received by Sam/)
     expect(stampLines(complete(), names).some(l => l.key === 'footage_received')).toBe(false)
+  })
+})
+
+describe('sharing late (14 Sep 2026)', () => {
+  it('a plan the calendar carried to Shoot day can still be shared with the team', () => {
+    const now = '2026-09-21T02:00:00Z'
+    const today = '2026-09-21'
+    const onTheDay = complete({ shoot_date: '2026-09-21' })
+    expect(shootStage(onTheDay, today)).toBe('shoot_day')
+    const r = stageMove(onTheDay, 'shared', { role: 'account_manager', today, planReview: { required: false } } as never, now, AM)
+    expect(r).toMatchObject({ ok: true })
+    expect((r as { patch: Record<string, unknown> }).patch.brief_shared_at).toBe(now)
+    // and the ORDER holds: no footage in before the review (gated) and the share
+    const gatedIn = { role: 'account_manager', today, planReview: { required: true } } as never
+    const shot = complete({ shoot_date: '2026-09-20', footage_url: 'https://www.dropbox.com/scl/fo/x' })
+    expect(stageMove(shot, 'footage_handed', gatedIn, now, AM)).toMatchObject({ ok: false, reason: PLAN_REVIEW_WORDS })
+    expect(stageMove(complete({ ...shot, plan_reviewed_at: 'x', review_asked_at: 'x' }), 'footage_handed', gatedIn, now, AM)).toMatchObject({ ok: false, reason: 'Share the plan with the team first' })
+    expect(stageMove(complete({ ...shot, plan_reviewed_at: 'x', review_asked_at: 'x', brief_shared_at: 'x' }), 'footage_handed', gatedIn, now, AM)).toMatchObject({ ok: true })
+    // a plan already shared is not "shared" again from Shoot day: that is the calendar's column
+    const shared = complete({ shoot_date: '2026-09-21', brief_shared_at: 'x' })
+    expect(stageMove(shared, 'shared', { role: 'account_manager', today, planReview: { required: false } } as never, now, AM)).toMatchObject({ ok: false, reason: /change the shoot date/ })
   })
 })

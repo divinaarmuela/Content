@@ -83,7 +83,10 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
   })
   it('a card NEVER makes a shoot (the owner, 13 Sep 2026: it should not do that, at all)', () => {
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
-    expect(dialogs).not.toMatch(/type its name|footage_only|\/api\/production\/batches'/)
+    expect(dialogs).not.toMatch(/footage_only|\/api\/production\/batches'/)
+    // …but the shoot's NAME can be typed onto the card (14 Sep 2026)
+    expect(dialogs).toMatch(/Another shoot — I’ll type its name/)
+    expect(dialogs).toMatch(/From the shoot: \$\{shootText\.trim\(\)\}/)
     expect(dialogs).toMatch(/\{\(shoots\.length > 0 \|\| simple\) && !forPosting && \(/)
     // and the server takes no such flag either
     expect(src('app/api/production/batches/route.ts')).not.toMatch(/footageOnlyPatch|body\.footage_only/)
