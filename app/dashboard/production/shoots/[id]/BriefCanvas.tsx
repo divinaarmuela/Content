@@ -1352,8 +1352,12 @@ export default function BriefCanvas({
                     <div key={mode} role="presentation" aria-label={mode === 'w' ? 'Resize from the left' : 'Resize from the right'}
                       title="Drag to change the width"
                       data-resize={mode}
-                      className="absolute top-1/2 flex h-11 w-11 -translate-y-1/2 touch-none cursor-ew-resize items-center justify-center"
-                      style={{ left: mode === 'w' ? -22 : card.w - 22 }}
+                      className={`absolute flex h-11 w-11 touch-none cursor-ew-resize items-center justify-center ${card.kind === 'label' ? '' : 'top-1/2 -translate-y-1/2'}`}
+                      // a heading is one line tall: a mid-edge handle lands on the
+                      // comment bubble in its top-right corner (the owner, 13 Sep
+                      // 2026: "it's overlapping that thing") — its handles sit on
+                      // the bottom edge instead
+                      style={{ left: mode === 'w' ? -22 : card.w - 22, ...(card.kind === 'label' ? { top: 'calc(100% - 22px)' } : {}) }}
                       onPointerDown={e => startResize(e, card, mode)}
                       onPointerMove={e => moveResize(e, card)}
                       onPointerUp={() => endResize(card)}>

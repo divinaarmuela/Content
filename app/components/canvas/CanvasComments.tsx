@@ -53,7 +53,7 @@ export function CanvasCommentBadge({ cardId }: { cardId: string }) {
       onPointerDown={e => e.stopPropagation()}
       onClick={e => { e.stopPropagation(); ctx.open(cardId) }}
       onDoubleClick={e => e.stopPropagation()}
-      className="absolute -right-3 -top-3 z-10 flex h-11 w-11 items-center justify-center"
+      className="absolute -right-4 -top-4 z-10 flex h-11 w-11 items-center justify-center"
     >
       <span
         className={
