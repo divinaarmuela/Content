@@ -499,7 +499,11 @@ export default function BriefCanvas({
     if (!d || d.id !== card.id) return
     dragState.current = null
     if (d.raf) cancelAnimationFrame(d.raf)
-    if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = '' }
+    // a plain press KEEPS the lift: clearing it here and waiting for the
+    // selection render to put it back left the card behind its neighbours
+    // whenever it was already the selected one (no render came) — the owner
+    // saw the toolbar "behind the right side" for ten seconds (13 Sep 2026)
+    if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = d.moved ? '' : '5000' }
     const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
     if (bar) bar.style.display = ''
     interactingRef.current = false
