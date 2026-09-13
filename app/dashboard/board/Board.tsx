@@ -295,6 +295,7 @@ export function Board({
                 viewer={viewer}
                 names={names}
                 managers={managersOf?.(c.client_id) ?? []}
+                kinds={kinds}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}

@@ -159,7 +159,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     const s = src('app/dashboard/board/BoardCard.tsx')
     expect(s).toMatch(/needsWorkFirst\(card\) \? UPLOAD_FIRST : 'Quality check, then submit'/)
     expect(s).toMatch(/adhoc_post === true \|\| editorFace \? null : canEdit \?/)
-    expect(s).toMatch(/\{!settled && !adhocPost && !editorFace && \(/)
+    expect(s).toMatch(/\{!settled && !adhocPost && !editorFace && !schedulerFace && \(/)
     // a red "at risk" chip has no place on a Done card (the live walk of 12 Sep 2026)
     expect(s).toMatch(/card\.status === 'scheduled' \|\| card\.status === 'published' \? null : riskChip/)
   })
@@ -284,5 +284,32 @@ describe('the shoot canvas is editable on a touch device (13 Sep 2026)', () => {
     expect(canvas).not.toMatch(/addCard\(\{ kind: 'link', url: v \}\)/)
     expect(canvas).toContain('Show as a post')
     expect(canvas).toContain("mockup: 'Post'")
+  })
+})
+
+describe('Post approval is assets only (13 Sep 2026: "what is this video edit tag")', () => {
+  const CARD = src('app/dashboard/board/BoardCard.tsx')
+  it('the kind-of-work chip is not drawn on a Post approval card unless it is an internal task', () => {
+    expect(CARD).toMatch(/const kindChip = editorFace \? null : schedulerFace \? \(internalTask \? 'Task' : null\) : lines\.kind/)
+    expect(CARD).toMatch(/\{kindChip && <Chip/)
+    expect(CARD).not.toMatch(/lines\.kind && !editorFace/)
+  })
+  it('the folder link is named plainly, and the kind of work is not changed from this board', () => {
+    expect(CARD).toContain('Add a folder link')
+    expect(CARD).toContain('No folder link yet')
+    expect(CARD).not.toMatch(/>\s*Add link\s*</)
+    expect(CARD).toMatch(/!settled && !adhocPost && !editorFace && !schedulerFace && \(/)
+  })
+  it('the drawer eyebrow says Post, not the kind of work', () => {
+    const D = src('app/dashboard/board/PostApprovalDetail.tsx')
+    expect(D).toMatch(/uses_media === false \? \(kind\?\.name \?\? 'Task'\) : 'Post'/)
+  })
+  it('nobody is named by their email address on a board', () => {
+    for (const p of ['app/dashboard/editor/page.tsx', 'app/dashboard/scheduler/page.tsx']) {
+      const s = src(p)
+      expect(s, p).not.toMatch(/u\.name \|\| u\.email/)
+      expect(s, p).toMatch(/personLabel\(u\.name, u\.email\)/)
+    }
+    expect(src('app/lib/act-as-core.ts')).toMatch(/personLabel\(nameOf\(actor\)\)/)
   })
 })

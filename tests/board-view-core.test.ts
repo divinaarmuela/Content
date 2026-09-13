@@ -708,7 +708,7 @@ describe('the card menu on a settled card', () => {
   const src = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
   it('hides Hand to and Change the kind of work once a card is booked or posted', () => {
     expect(src).toContain("const settled = card.status === 'scheduled' || card.status === 'published'")
-    expect(src).toContain('{!settled && !adhocPost && !editorFace && (')
+    expect(src).toContain('{!settled && !adhocPost && !editorFace && !schedulerFace && (')
     expect(src).toContain('{onHandTo && !settled && (')
   })
 })

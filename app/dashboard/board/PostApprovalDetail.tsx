@@ -456,7 +456,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       <div className="flex flex-col gap-3 border-b border-border px-5 pb-4 pt-5">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {client?.name ?? ''} · {adhoc ? 'Post' : (kind?.name ?? 'Work')}
+            {/* every card here is a piece to post; only an internal task keeps its own word (13 Sep 2026) */}
+            {client?.name ?? ''} · {adhoc ? 'Post' : (kind as { uses_media?: boolean | null } | null)?.uses_media === false ? (kind?.name ?? 'Task') : 'Post'}
           </p>
           <h2 className="text-section-title truncate">{item.title}</h2>
           {editingHead && (

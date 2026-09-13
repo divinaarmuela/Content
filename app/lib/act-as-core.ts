@@ -1,3 +1,4 @@
+import { personLabel } from './identity-core'
 /**
  * "Act as this person" — the pure half.
  *
@@ -82,7 +83,8 @@ export function auditActorName(
   actor: string | { name?: string | null } | null | undefined,
   actingBy: string | { name?: string | null } | null | undefined
 ): string {
-  const who = nameOf(actor) || 'someone'
+  // never a whole email address on a screen (13 Sep 2026)
+  const who = personLabel(nameOf(actor)) || 'someone'
   const by = nameOf(actingBy)
   return by ? `${who} (${by} acting as them)` : who
 }

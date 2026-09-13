@@ -1,5 +1,7 @@
 'use client'
 
+import { personLabel } from '../../lib/identity-core'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -61,7 +63,7 @@ export default function EditorPage() {
 
   /** id → name for everyone on the team, from the rows already on the wire */
   const names = useMemo(
-    () => new Map(live.tables.team.rows.map(u => [u.id, u.name || u.email])),
+    () => new Map(live.tables.team.rows.map(u => [u.id, personLabel(u.name, u.email)])),
     [live.tables.team.rows])
   /** the account managers on each client, for the card face */
   const managersOf = useMemo(() => {
@@ -121,7 +123,7 @@ export default function EditorPage() {
   const mayFilter = viewer !== null && mayFilterPeople(viewer)
   const filter = useBoardFilters('editor')
   const who = useMemo(
-    () => new Map(live.tables.team.rows.map(u => [u.id, { name: u.name || u.email, role: String(u.role ?? '') }])),
+    () => new Map(live.tables.team.rows.map(u => [u.id, { name: personLabel(u.name, u.email), role: String(u.role ?? '') }])),
     [live.tables.team.rows])
   const clientNames = useMemo(() => new Map(live.tables.clients.rows.map(c => [c.id, c.name])), [live.tables.clients.rows])
   const clientRows = useMemo(() => clientsOnCards(allCards, clientNames), [allCards, clientNames])

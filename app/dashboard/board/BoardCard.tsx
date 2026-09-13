@@ -18,6 +18,7 @@ import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
 import { footageAfterWords } from '../../lib/shoot-sop-core'
+import { isInternalKind } from '../../lib/task-kind-core'
 import { blockedChip, reviewWords } from '../../lib/editor-sop-core'
 
 /**
@@ -85,13 +86,15 @@ export function CompactCard({ card, today, onOpen }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking, tour, onAcknowledge, page, managers = [],
+  statsHref, booking, tour, onAcknowledge, page, managers = [], kinds = [],
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
   names: Map<string, string>
   /** the client's account managers — named on the editor's and scheduler's cards */
   managers?: readonly string[]
+  /** the kinds of work, so Post approval can tell a piece to post from an internal task */
+  kinds?: readonly { id: string; slug?: string | null; uses_media?: boolean | null }[]
   today: string
   /** something is being saved on this card — the buttons wait */
   busy?: boolean
@@ -152,6 +155,13 @@ export function BoardCard({
   // the Editor page shows the editor's face to EVERYONE — a manager's tools
   // live on Post approval (the owner, 12 Sep 2026: "too many options")
   const editorFace = page === 'editor'
+  // POST APPROVAL IS ASSETS ONLY (the owner, 13 Sep 2026: "what is this video
+  // edit tag under post approval"): every card here is a piece to post, so
+  // the kind of work says nothing — except an internal TASK, which is not
+  const schedulerFace = page === 'scheduler'
+  const kindRow = kinds.find(k => k.id === (card as { work_kind_id?: string | null }).work_kind_id) ?? null
+  const internalTask = kindRow ? isInternalKind(kindRow) : false
+  const kindChip = editorFace ? null : schedulerFace ? (internalTask ? 'Task' : null) : lines.kind
   const showStage = !editorFace && statusesIn(column).length > 1
   const review = editorFace ? reviewWords(card.status, (card as { reviewer_name?: string | null }).reviewer_name ?? null) : null
   // the maker's submit lives behind the seven-point quality check in the
@@ -182,7 +192,7 @@ export function BoardCard({
       tone={tone}
       people={people}
       chips={<>
-        {lines.kind && !editorFace && <Chip tone={kindTone(card.work_kinds?.color)}>{lines.kind}</Chip>}
+        {kindChip && <Chip tone={kindTone(card.work_kinds?.color)}>{kindChip}</Chip>}
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
         {finals && <Chip tone="green">{finals}</Chip>}
@@ -256,11 +266,11 @@ export function BoardCard({
           <Button variant="outline" disabled={busy}
             onClick={e => { e.preventDefault(); onLink(card) }}
             className="h-11 rounded-full border-dashed border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
-            Add link
+            Add a folder link
           </Button>
         ) : editorFace ? null : (
           <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-border px-3.5 text-[13px] font-semibold text-muted-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:text-cream/70">
-            No link yet
+            No folder link yet
           </span>
         )}
 
@@ -355,7 +365,9 @@ export function BoardCard({
                       no kind left to change; an uploaded post's kind is "Post"
                       (the owner, 10 Sep 2026: "why is Hand to shown on a
                       posted card") */}
-                  {!settled && !adhocPost && !editorFace && (
+                  {/* the kind of work is the Editor page's business; on Post
+                      approval every card is a piece to post (13 Sep 2026) */}
+                  {!settled && !adhocPost && !editorFace && !schedulerFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
                       Change the kind of work
                     </DropdownMenuItem>

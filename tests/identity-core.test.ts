@@ -4,7 +4,7 @@ import {
   parseAllowlist,
   isAllowlistedSuperAdmin,
   roleSatisfies,
-  buildDedupeKey,
+  buildDedupeKey, personLabel,
 } from '../app/lib/identity-core'
 
 describe('parseAllowlist', () => {
@@ -84,5 +84,15 @@ describe('the general role (9 Sep 2026)', () => {
   it('may publish, and has a name', () => {
     expect(mayPublish('general')).toBe(true)
     expect(ROLE_LABEL.general).toBe('General')
+  })
+})
+
+describe('personLabel: a name, never a whole email (13 Sep 2026)', () => {
+  it('prefers the name, falls back to the email’s local part with a capital', () => {
+    expect(personLabel('Karly Merau', 'karly@x.com')).toBe('Karly Merau')
+    expect(personLabel('', 'akmaltestmdmedia@gmail.com')).toBe('Akmaltestmdmedia')
+    expect(personLabel(null, 'raven.arellano@x.com')).toBe('Raven arellano')
+    expect(personLabel('joy@x.com')).toBe('Joy')
+    expect(personLabel('', '')).toBe('')
   })
 })

@@ -105,3 +105,18 @@ export function buildDedupeKey(
 ): string {
   return [eventType, entityType, entityId, recipientEmail.trim().toLowerCase()].join('::')
 }
+
+/**
+ * How a person is NAMED on a screen: their name, or — when the Team row has
+ * none — the part of their email before the @, capitalised, never the whole
+ * address (the owner, 13 Sep 2026: a card read "akmaltestmdmedia@gmail.com ·
+ * version 1"). Pure; every name map and the history line read it.
+ */
+export function personLabel(name: string | null | undefined, email?: string | null): string {
+  const n = String(name ?? '').trim()
+  const pick = n && !n.includes('@') ? n : String(n || email || '').trim()
+  if (!pick) return ''
+  if (!pick.includes('@')) return pick
+  const local = pick.split('@')[0].replace(/[._-]+/g, ' ').trim()
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : pick
+}
