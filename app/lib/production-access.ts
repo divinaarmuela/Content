@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { Batch, ContentItem, ItemComment, BatchComment, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { schedulerIdsOf, SCHEDULER_STATUSES, type ItemStatus } from './workflow-core'
-import { isOnShoot } from './shoot-sop-core'
+import { canManageShoot, isOnShoot, type SopManager } from './shoot-sop-core'
 
 /**
  * Every id the access helpers build a query around passes through here.
@@ -233,9 +233,29 @@ export async function batchClientIds(user: TeamUser): Promise<string[] | null> {
   if (user.role === 'super_admin') return null
   if (user.role === 'general') return null
   if (user.role === 'client') return user.client_id ? [user.client_id] : []
+  // an editor or scheduler sees only the shoots they are NAMED on (held via
+  // heldBatchIds), never a client's whole list (the owner, 12 Sep 2026:
+  // "shouldn't it be the ones they've tagged")
+  if (user.role === 'editor' || user.role === 'scheduler') return []
   const rows = await table<TeamUserClient>('team_user_clients')
     .list({ by: { team_user_id: user.id } })
   return rows.map(r => r.client_id)
+}
+
+/**
+ * THIS USER, AS THE SHOOT PAGE JUDGES THEM: the role and, for an account
+ * manager, the clients they are on — so `canManageShoot` can say whether
+ * the shoot page and its buttons are theirs. Editors, schedulers and crew
+ * carry an empty list and manage nothing.
+ */
+export async function shootManager(user: TeamUser): Promise<SopManager> {
+  const ids = await batchClientIds(user)
+  return { id: user.id, role: user.role as SopManager['role'], clientIds: ids ?? undefined }
+}
+
+/** May this user work the shoot page for this shoot? */
+export async function canManageBatch(user: TeamUser, batch: Pick<Batch, 'client_id' | 'owner_id' | 'created_by'>): Promise<boolean> {
+  return canManageShoot(await shootManager(user), batch)
 }
 
 /** Assert this user may see this item at all; returns the item row. */

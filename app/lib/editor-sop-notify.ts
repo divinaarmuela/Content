@@ -6,7 +6,7 @@ import { itemPath } from './workflow-core'
 import {
   ackNudgeDue, assignedAtOf, blockerNeed, blockerNudgeDue, type BlockerNeed,
 } from './editor-sop-core'
-import { todayKey } from './work-calendar-core'
+import { dayKeyInZone } from './timezone-core'
 
 /**
  * THE VIDEO EDITORS SOP, THE PARTS THAT SEND EMAIL — §6 and §7.
@@ -154,7 +154,11 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
   }
 
   // §6: acknowledge the same day — the morning after, one nudge
-  const today = todayKey()
+  // "today" is the sweep's own clock in Melbourne, and the day a card was
+  // assigned is read in the same zone — the real clock and a UTC date
+  // nudged every unacknowledged card once midnight passed (13 Sep 2026)
+  const TZ = 'Australia/Melbourne'
+  const today = dayKeyInZone(now, TZ) ?? now.toISOString().slice(0, 10)
   const unacked = await table<ContentItem>('content_items').list({
     where: r => !!r.owner_id && r.status === 'draft_uploaded' && !(r as { ack_nudged_at?: unknown }).ack_nudged_at,
     limit: 500,
@@ -170,7 +174,7 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
       const mine = rows.filter(a => String(a.entity_id) === item.id)
       const acknowledged = mine.some(a => a.action === 'acknowledged' && a.actor_id === item.owner_id)
       const assignedAt = assignedAtOf(item, mine)
-      if (!ackNudgeDue({ assignedAt, acknowledged, ack_nudged_at: (item as { ack_nudged_at?: string | null }).ack_nudged_at, todayKey: today })) continue
+      if (!ackNudgeDue({ assignedAt: assignedAt ? dayKeyInZone(assignedAt, TZ) : null, acknowledged, ack_nudged_at: (item as { ack_nudged_at?: string | null }).ack_nudged_at, todayKey: today })) continue
       const claimed = await table<ContentItem>('content_items').claim(item.id, cur =>
         cur && !(cur as { ack_nudged_at?: unknown }).ack_nudged_at ? { ...cur, ack_nudged_at: now.toISOString() } : null)
       if (!claimed.claimed) continue

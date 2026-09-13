@@ -13,6 +13,8 @@ import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
  * cards. Every refusal is in plain words; every write is idempotent.
  */
 
+// the crew's "I've read the plan" link is signed with a secret the app holds
+process.env.CLERK_SECRET_KEY ??= 'test-secret-for-the-acknowledge-link'
 const emails: Record<string, unknown>[] = []
 const AM = 'a1a1a1a1-0000-4000-8000-000000000001'
 const ED = 'e1e1e1e1-0000-4000-8000-000000000001'
@@ -53,6 +55,8 @@ vi.mock('../app/lib/authz', () => ({
 }))
 
 const detail = await import('../app/api/production/batches/[id]/route')
+const shareClient = await import('../app/api/production/batches/[id]/share-client/route')
+const portalAct = await import('../app/api/portal/act/route')
 const stage = await import('../app/api/production/batches/[id]/stage/route')
 const ack = await import('../app/api/production/batches/[id]/acknowledge/route')
 const { runBriefLateNudge } = await import('../app/lib/shoot-sop-notify')
@@ -117,12 +121,36 @@ describe('sharing the brief', () => {
     // everyone on the shoot is asked to read it — never the AM who wrote it
     expect(emails.map(e => e.recipientEmail).sort()).toEqual(['sam@zz.invalid', 'vik@zz.invalid'])
     expect(emails[0].subject).toBe('Read the plan: Golf Day')
+    // THE PLAN TRAVELS IN THE EMAIL, and nobody is sent to the shoot page:
+    // the editor's link is their card, the crew's is a one-press acknowledge
+    const toEditor = emails.find(e => e.recipientEmail === 'sam@zz.invalid')!
+    const toCrew = emails.find(e => e.recipientEmail === 'vik@zz.invalid')!
+    expect(String(toEditor.bodyHtml)).toMatch(/Objective<\/td><td[^>]*>Spring membership drive/)
+    expect(String(toEditor.bodyHtml)).toMatch(/\/dashboard\/editor\?card=/)
+    expect(String(toEditor.bodyHtml)).not.toMatch(/\/dashboard\/production\/shoots\//)
+    expect(String(toCrew.bodyHtml)).toMatch(/\/api\/production\/batches\/b-1\/acknowledge\?token=/)
+    expect(String(toCrew.bodyHtml)).not.toMatch(/\/dashboard\//)
+    // the editor's card exists from the share, so the button has somewhere to be
+    expect(cards().map(c => [c.title, c.owner_id])).toEqual([['Golf Day', ED]])
   })
-  it('a scheduler cannot move a shoot', async () => {
+  it('the editor and the crew cannot move a shoot — the page and its buttons are the manager’s', async () => {
     as(VG, 'scheduler')
     const r = await move('shared')
-    expect(r.status).toBe(422)
-    expect(r.body.error).toMatch(/Only the team on the shoot/)
+    expect(r.status).toBe(403)
+    expect(r.body.error).toMatch(/The shoot page is the account manager’s/)
+    expect(r.body.redirect).toBe('/dashboard/editor')
+    as(ED, 'editor')
+    expect((await move('shared')).status).toBe(403)
+    // a general user manages any shoot; the creator manages theirs whatever their role
+    as(VG, 'general')
+    expect((await move('shared')).status).toBe(200)
+  })
+  it('the creator of a shoot works its page whatever their role', async () => {
+    fake.restore(); fake = seed({ owner_id: OUT, created_by: ED })
+    as(ED, 'editor', 'Sam Editor')
+    expect((await open()).status).toBe(200)
+    expect((await edit({ objective: 'Changed by the creator' })).status).toBe(200)
+    expect((await move('shared')).status).toBe(200)
   })
 })
 
@@ -137,19 +165,42 @@ describe('acknowledging', () => {
     const r = await acknowledge()
     expect(r.status).toBe(403)
   })
-  it('the crew and the editor can OPEN the shoot, with who has read it; the team list is the manager’s', async () => {
+  it('the editor on the shoot is sent to their Editor page; the manager opens it with who has read it, and every name', async () => {
     as(VG, 'general', 'Vik Camera')
     await acknowledge()
     as(ED, 'editor', 'Sam Editor')
     const r = await open()
-    expect(r.status).toBe(200)
-    expect(r.body.crew.map((c: any) => [c.name, !!c.acknowledged_at])).toEqual([['Vik Camera', true], ['Sam Editor', false]])
-    expect(r.body.editor_name).toBe('Sam Editor')
-    expect(r.body.team).toEqual([])
+    expect(r.status).toBe(403)
+    expect(r.body.redirect).toBe('/dashboard/editor')
     as(OUT, 'editor', 'Kit Outsider')
     expect((await open()).status).toBe(403)
+    expect((await open()).body.redirect).toBeUndefined()
     as(AM, 'account_manager')
-    expect((await open()).body.team.map((t: any) => t.name)).toContain('Sam Editor')
+    const mine = await open()
+    expect(mine.status).toBe(200)
+    expect(mine.body.crew.map((c: any) => [c.name, !!c.acknowledged_at])).toEqual([['Vik Camera', true], ['Sam Editor', false]])
+    expect(mine.body.editor_name).toBe('Sam Editor')
+    expect(mine.body.team.map((t: any) => t.name)).toContain('Sam Editor')
+    expect(mine.body.names.owner_id).toBe('Priya Patel')
+    expect(mine.body.names[VG]).toBe('Vik Camera')
+  })
+  it('the crew member’s one press from the email records it — once, and only with a good link', async () => {
+    const { signAckToken } = await import('../app/lib/shoot-ack-token')
+    const secret = process.env.CLERK_SECRET_KEY!
+    const get = (token: string) => ack.GET(new Request(`https://x.test/ack?token=${encodeURIComponent(token)}`), P('b-1'))
+    const good = await get(signAckToken('b-1', VG, secret))
+    expect(good.status).toBe(200)
+    expect(await good.text()).toMatch(/Thanks — you’ve read the plan/)
+    expect(batch().acknowledgements.map((a: any) => a.user_id)).toEqual([VG])
+    // pressed twice: still once
+    await get(signAckToken('b-1', VG, secret))
+    expect(batch().acknowledgements).toHaveLength(1)
+    // a forged, expired or foreign link records nothing
+    expect((await get(signAckToken('b-1', ED, 'wrong-secret'))).status).toBe(400)
+    expect((await get(signAckToken('b-1', ED, secret, Date.now() - 40 * 86_400_000))).status).toBe(400)
+    expect((await get(signAckToken('b-2', ED, secret))).status).toBe(400)
+    expect((await get(signAckToken('b-1', OUT, secret))).status).toBe(403)
+    expect(batch().acknowledgements).toHaveLength(1)
   })
   it('a manager can take an acknowledgement back', async () => {
     as(ED, 'editor'); await acknowledge()
@@ -201,19 +252,24 @@ describe('go', () => {
     expect(String(reminders[0].bodyHtml)).toMatch(/Call time:<\/strong> 7:30 am/)
     expect(String(reminders[0].bodyHtml)).toMatch(/Location:<\/strong> Royal Melbourne/)
   })
-  it('the ticks are the AM’s to set; the people are the AM’s or a general user’s', async () => {
+  it('the ticks and the people are the manager’s — the AM, the creator, a super admin, a general user; and each tick says who', async () => {
     as(ED, 'editor')
     expect((await edit({ aligned: true })).status).toBe(403)
     expect((await edit({ crew_ids: [OUT] })).status).toBe(403)
-    // a general user raises shoots for any client and must be able to staff them
+    // a general user raises shoots for any client and must be able to work them
     as(VG, 'general')
-    expect((await edit({ aligned: true })).status).toBe(403)
+    expect((await edit({ aligned: true })).status).toBe(200)
+    expect(batch().aligned_by).toBe(VG)
+    expect((await edit({ aligned: false })).status).toBe(200)
+    expect(batch().aligned_by ?? null).toBeNull()
     expect((await edit({ crew_ids: [OUT] })).status).toBe(200)
     expect((await edit({ editor_id: ED })).status).toBe(200)
     as(AM, 'account_manager')
     expect((await edit({ editor_id: VG })).body.error).toMatch(/one of the editors/)
     expect((await edit({ crew_ids: [VG, OUT, 'nobody'] })).status).toBe(200)
     expect(batch().crew_ids).toEqual([VG, OUT])
+    expect((await edit({ client_confirmed: true })).status).toBe(200)
+    expect(batch().client_confirmed_by).toBe(AM)
   })
 })
 
@@ -399,17 +455,15 @@ describe('the footage folder', () => {
     const t = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
     t.team_users[SC] = { id: SC, name: 'Cath Crew', email: 'cath@zz.invalid', role: 'scheduler', active_status: true }
   }
-  it('is checked as a link, and pasted by whoever has the footage — a crew member of any role, but only that field', async () => {
+  it('is checked as a link, and pasted by the manager — the crew and the editor do nothing on the shoot page', async () => {
     withCrewScheduler()
     as(AM, 'account_manager')
     expect((await edit({ footage_url: 'not a link' })).status).toBe(422)
     expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/golf-day' })).status).toBe(200)
     expect(batch().footage_url).toBe('https://www.dropbox.com/scl/fo/golf-day')
     as(SC, 'scheduler', 'Cath Crew')
-    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc' })).status).toBe(200)
-    expect(batch().footage_url).toBe('https://drive.google.com/drive/folders/abc')
-    expect((await edit({ title: 'Nope' })).status).toBe(403)
-    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc', title: 'Nope' })).status).toBe(403)
+    expect((await edit({ footage_url: 'https://drive.google.com/drive/folders/abc' })).status).toBe(403)
+    expect(batch().footage_url).toBe('https://www.dropbox.com/scl/fo/golf-day')
     as(OUT, 'editor')
     expect((await edit({ footage_url: 'https://drive.google.com/x' })).status).toBe(403)
   })
@@ -438,5 +492,67 @@ describe('the footage folder', () => {
     as(VG, 'general')
     expect((await edit({ footage_url: 'https://www.dropbox.com/scl/fo/late' })).status).toBe(200)
     expect(cards().every(c => c.raw_assets_url === 'https://www.dropbox.com/scl/fo/late')).toBe(true)
+  })
+})
+
+/* ── the client, from the shoot page and back from the portal (13 Sep 2026) ── */
+
+describe('sharing the plan with the client', () => {
+  const share = (id = 'b-1') => json(shareClient.POST(new Request('https://x.test/share', { method: 'POST' }), P(id)))
+  const answer = (body: Record<string, unknown>) => json(portalAct.POST(new Request('https://x.test/act', { method: 'POST', body: JSON.stringify(body) })))
+  const withClientEmail = (over: Record<string, unknown> = {}) => {
+    fake.restore(); fake = seed(over)
+    const t = fake.tree().mdm!.tables! as Record<string, Record<string, Record<string, unknown>>>
+    t.clients['c-1'] = { ...t.clients['c-1'], email: 'client@zz.invalid', share_token: '11111111-2222-4333-8444-555555555555' }
+  }
+  it('needs the nine parts, then puts the plan on the portal, emails the client, and stamps who and when', async () => {
+    withClientEmail({ talent: null })
+    const no = await share()
+    expect(no.status).toBe(422)
+    expect(no.body.error).toMatch(/Fill in the plan first — talent or presenter still to go/)
+    await edit({ talent: 'Sam' })
+    emails.length = 0
+    const yes = await share()
+    expect(yes.status).toBe(200)
+    expect(yes.body.emailed).toBe(true)
+    expect(batch().shared_with_client).toBe(true)
+    expect(batch().client_shared_by).toBe(AM)
+    expect(batch().client_shared_at).toBeTruthy()
+    const toClient = emails.find(e => e.recipientEmail === 'client@zz.invalid')!
+    expect(toClient.toClient).toBe(true)
+    expect(String(toClient.subject)).toMatch(/^Your shoot plan: Golf Day/)
+    expect(String(toClient.bodyHtml)).toMatch(/\/portal\/11111111-2222-4333-8444-555555555555/)
+    expect(String(toClient.bodyHtml)).toMatch(/Shot list<\/td>/)
+    // an editor cannot send the plan to the client
+    as(ED, 'editor')
+    expect((await share()).status).toBe(403)
+  })
+  it('the client’s answer lands on the shoot, the managers are told, and a second answer is refused until it is shared again', async () => {
+    withClientEmail()
+    await share()
+    emails.length = 0
+    // approve, from the share link — no plan document anywhere
+    const ok = await answer({ token: '11111111-2222-4333-8444-555555555555', shoot_id: 'b-1', action: 'approve', author_name: 'Dee' })
+    expect(ok.status).toBe(200)
+    expect(batch().client_decision).toBe('approved')
+    expect(batch().client_decided_at).toBeTruthy()
+    const told = emails.filter(e => e.eventType === 'shoot_plan_client_answer')
+    expect(told.map(e => e.recipientEmail).sort()).toEqual(['abby@zz.invalid', 'am@zz.invalid'])
+    expect(String(told[0].subject)).toMatch(/^Dee · ZZ TEST approved the plan: Golf Day/)
+    // approved is final until the plan is shared again
+    expect((await answer({ token: '11111111-2222-4333-8444-555555555555', shoot_id: 'b-1', action: 'request_changes', comment: 'Later' })).status).toBe(403)
+    // shared again: the answer is cleared, and changes can be asked for, with the note kept
+    as(AM, 'account_manager')
+    await share()
+    expect(batch().client_decision ?? null).toBeNull()
+    const changes = await answer({ token: '11111111-2222-4333-8444-555555555555', shoot_id: 'b-1', action: 'request_changes', comment: 'Swap the opening shot' })
+    expect(changes.status).toBe(200)
+    expect(batch().client_decision).toBe('changes')
+    expect(batch().client_decision_note).toBe('Swap the opening shot')
+    expect(fake.rows('batch_comments').map((c: any) => c.body)).toEqual(['Swap the opening shot'])
+    // a bad token, another client's shoot, and a shoot never shared: refused
+    expect((await answer({ token: 'nope', shoot_id: 'b-1', action: 'approve' })).status).toBe(401)
+    fake.restore(); fake = seed({ shared_with_client: false })
+    expect((await answer({ token: '11111111-2222-4333-8444-555555555555', shoot_id: 'b-1', action: 'approve' })).status).toBe(401)
   })
 })

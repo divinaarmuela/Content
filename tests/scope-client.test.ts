@@ -161,17 +161,16 @@ describe('visibleBatches', () => {
     expect(visibleBatches({ id: 'u1', role: 'super_admin' }, batches, [], [], []).map(b => b.id))
       .toEqual(['bA', 'bB'])
   })
-  it('is the client-team shoots plus the ones held', () => {
+  it('an editor sees only the shoots they are named on, never the client-team list (12 Sep 2026)', () => {
     const rows: any[] = [{ id: 'i1', client_id: 'c9', owner_id: 'u1', batch_id: 'bB' }]
     expect(visibleBatches({ id: 'u1', role: 'editor' }, batches, rows, onC1, []).map(b => b.id))
-      .toEqual(['bA', 'bB'])
+      .toEqual(['bB'])
     expect(visibleBatches({ id: 'u1', role: 'editor' }, batches, [], onC1, []).map(b => b.id))
-      .toEqual(['bA'])
+      .toEqual([])
   })
-  it('scopes a SCHEDULER by client team, not by status', () => {
-    // batchClientIds: only super_admin is unrestricted for shoots
+  it('a SCHEDULER on a client team still sees only the shoots they are named on', () => {
     expect(visibleBatches({ id: 'u1', role: 'scheduler' }, batches, [], onC1, []).map(b => b.id))
-      .toEqual(['bA'])
+      .toEqual([])
   })
 })
 

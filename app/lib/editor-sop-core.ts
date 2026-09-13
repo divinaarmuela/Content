@@ -239,6 +239,30 @@ export function ackNudgeDue(input: {
   return input.assignedAt.slice(0, 10) < input.todayKey
 }
 
+/* ── the shoot plan, read on the card (13 Sep 2026) ─────────────────────── */
+
+export type PlanReadState =
+  | { on: false }
+  | { on: true; read: false }
+  | { on: true; read: true; at: string }
+
+/**
+ * THE EDITOR NEVER OPENS THE SHOOT PAGE. "I've read the plan" is on their
+ * card: shown when the card comes from a shoot and this person is on it (its
+ * editor or its crew), pressed once, then the date it was pressed.
+ */
+export function planReadState(
+  shoot: { editor_id?: string | null; crew_ids?: unknown; acknowledgements?: unknown } | null | undefined,
+  userId: string | null | undefined,
+): PlanReadState {
+  if (!shoot || !userId) return { on: false }
+  const crew = Array.isArray(shoot.crew_ids) ? shoot.crew_ids.map(String) : []
+  if (shoot.editor_id !== userId && !crew.includes(userId)) return { on: false }
+  const acks = Array.isArray(shoot.acknowledgements) ? shoot.acknowledgements as { user_id?: unknown; at?: unknown }[] : []
+  const mine = acks.find(a => a && a.user_id === userId && typeof a.at === 'string')
+  return mine ? { on: true, read: true, at: String(mine.at) } : { on: true, read: false }
+}
+
 /* ── §7 the 24-hour blocker rule ────────────────────────────────────────── */
 
 export type BlockerNeed = 'footage' | 'brief' | 'context' | 'clarify'

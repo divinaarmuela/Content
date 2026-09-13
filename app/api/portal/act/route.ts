@@ -8,9 +8,11 @@ import { performTransition, logActivity, type ContentItem } from '../../../lib/w
 import { itemPath, type ItemStatus } from '../../../lib/workflow-core'
 import { NOT_WITH_YOU, planDecidable, portalActions } from '../../../lib/portal-core'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
-import { announceItemChange } from '../../../lib/production-live'
+import { announceBatchChange, announceItemChange } from '../../../lib/production-live'
 import { actOnPostingApproval } from '../../../lib/posting-approval'
-import { AuthzError, type TeamUser } from '../../../lib/authz'
+import { AuthzError, requireRole, type TeamUser } from '../../../lib/authz'
+import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-core'
+import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -80,13 +82,50 @@ export async function POST(req: Request) {
     const body = await req.json()
     const rawToken = String(body.token ?? '')
     const token = rawToken.split('--').pop() ?? rawToken
-    if (!/^[0-9a-f-]{36}$/i.test(token)) {
-      return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
+    let client: Client | null = null
+    if (/^[0-9a-f-]{36}$/i.test(token)) {
+      client = (await table<Client>('clients').list({ where: c => c.share_token === token, limit: 1 }))[0] ?? null
+    } else if (body.shoot_id) {
+      // the signed-in portal has no token: the client's own login is the authority
+      try {
+        const me = await requireRole('client')
+        client = me.client_id ? await table<Client>('clients').get(me.client_id) : null
+      } catch { client = null }
     }
-    const client = (await table<Client>('clients').list({
-      where: c => c.share_token === token, limit: 1,
-    }))[0]
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
+
+    // ── THE PLAN ON THE SHOOT ITSELF (13 Sep 2026): shared from the shoot
+    //    page, approved or sent back here, no plan document in between ──
+    if (body.shoot_id && (body.action === 'approve' || body.action === 'request_changes')) {
+      const shootId = String(body.shoot_id)
+      const batches = table<Batch>('batches')
+      const shoot = await batches.get(shootId)
+      if (!shoot || shoot.client_id !== client.id) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+      if (!clientDecisionOpen(shoot)) return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+      const noteText = String(body.comment ?? '').trim().slice(0, 2000)
+      if (body.action === 'request_changes' && !noteText) {
+        return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
+      }
+      const decision = body.action === 'approve' ? 'approved' : 'changes'
+      const now = new Date().toISOString()
+      const done = await batches.claim(shootId, cur => cur && clientDecisionOpen(cur) ? { ...cur, ...(clientDecisionPatch(decision, noteText || null, now) as Partial<Batch>) } : null)
+      if (!done.claimed) return NextResponse.json({ error: NOT_WITH_YOU }, { status: 409 })
+      const speakerName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
+      const who = speakerName ? `${speakerName} · ${client.name}` : client.name
+      const actorRow = await portalActor(client.id, client.name)
+      await logActivity({
+        actor: actorRow, clientId: client.id, entityType: 'batch', entityId: shootId,
+        action: decision === 'approved' ? 'sop_client_approved' : 'sop_client_changes', detail: noteText || undefined,
+      })
+      // their words also land in the shoot's own thread, where the team reads it
+      if (noteText) {
+        await table('batch_comments').insert({ batch_id: shootId, author_id: actorRow.id, body: speakerName ? `${noteText}\n— ${speakerName}` : noteText, card_id: null, resolved: false })
+          .catch(e => console.error('shoot note from the portal:', e))
+      }
+      await notifyClientPlanDecision(done.row, decision, noteText || null, who).catch(e => console.error('client plan answer notify:', e))
+      announceBatchChange({ batch_id: shootId, client_id: client.id, status: done.row.status ?? 'brief', kind: 'updated' })
+      return NextResponse.json({ ok: true, decision })
+    }
 
     const itemId = String(body.item_id ?? '')
     const found = await table<ContentItemRow>('content_items').get(itemId)

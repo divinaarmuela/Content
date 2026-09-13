@@ -43,9 +43,10 @@ describe('New shoot plan form — one shoot, one card', () => {
     expect(SRC).not.toMatch(/\/api\/production\/groups/)
     expect(SRC).not.toMatch(/Array\.from\(\{ length: count \}/)
     expect(SRC).not.toMatch(/group_id/)
-    expect(SRC).toMatch(/const payload = \[\{/)
-    // the one create request the form makes
-    expect(SRC.match(/fetch\('\/api\/production\/items'/g)).toHaveLength(1)
+    // the one create request the form makes: THE SHOOT ITSELF (13 Sep 2026),
+    // with no plan document riding the content pipeline
+    expect(SRC.match(/fetch\('\/api\/production\/batches'/g)).toHaveLength(1)
+    expect(SRC).not.toMatch(/fetch\('\/api\/production\/items'/)
   })
 
   it('"What this shoot is for" is one box, right under the title, above the shoot date', () => {
@@ -72,9 +73,8 @@ describe('New shoot plan form — one shoot, one card', () => {
     expect(SRC).not.toMatch(/Kind of work/)
     expect(SRC).not.toMatch(/work-kinds\/suggest/)
     expect(SRC).not.toMatch(/New task|New card/)
-    // the plan is always a plan: the shoot-plan kind, and the client's sign-off
-    expect(SRC).toMatch(/work_kind_id: briefKind\.id/)
-    expect(SRC).toMatch(/client_approval_required: true/)
+    // the plan IS the shoot: no work kind, no plan document to approve
+    expect(SRC).not.toMatch(/work_kind_id|briefKind|client_approval_required/)
   })
 
   it('has no files, no footage fields, no two-step phone form', () => {
@@ -101,12 +101,14 @@ describe('Shoot page — a shoot with no plan lines', () => {
     'utf8',
   )
 
-  it('shows the plan section to anyone who can edit, lines or none — the checklist points at it', () => {
+  it('the deliverables are typed INSIDE the Deliverables row, lines or none', () => {
     // the owner, 11 Sep 2026: "where in the shoot page?" — a new shoot had
-    // nowhere to type its deliverables. Drawn for editors of the plan, with
-    // an empty-state line and the one-card rule under it.
-    expect(PAGE).toMatch(/\{\(planned\.length > 0 \|\| canEdit\) && \(/)
-    expect(PAGE).toMatch(/Nothing listed yet\. Add a line for each thing coming out of the shoot/)
-    expect(PAGE).toMatch(/The editor gets one card for the whole shoot/)
+    // nowhere to type its deliverables. Now the row holds the lines, always
+    // drawn, with an empty-state line and the one-card rule under it.
+    const SOP = readFileSync(join(process.cwd(), 'app', 'dashboard', 'production', 'shoots', '[id]', 'ShootSop.tsx'), 'utf8')
+    expect(SOP).toMatch(/\{planned\.length === 0 && itemCount === 0 && \(/)
+    expect(SOP).toMatch(/Nothing listed yet\. One line for each thing coming out/)
+    expect(SOP).toMatch(/The editor gets one card for the whole shoot/)
+    expect(PAGE).not.toMatch(/planned\.length/)
   })
 })

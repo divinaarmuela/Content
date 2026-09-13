@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { Batch, Client, ContentItem, ShootProposal, TeamUser } from '@/lib/db-types'
-import { requireRole, roleSatisfies, authzErrorResponse } from '../../../../lib/authz'
-import { canOpenBatch } from '../../../../lib/production-access'
+import { requireRole, authzErrorResponse } from '../../../../lib/authz'
+import { canOpenBatch, shootManager } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
@@ -14,22 +14,29 @@ import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { acksOf, isOnShoot, peopleOnShoot } from '../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, acksOf, canManageShoot, peopleOnShoot } from '../../../../lib/shoot-sop-core'
 
-/** Load a brief the caller may touch, or answer with the right refusal. */
+/**
+ * Load a shoot the caller may WORK — the shoot page and every button on it
+ * are the manager's (the AM on the client, the shoot's creator, a super
+ * admin, a general user). Anyone else, including the editor and the crew,
+ * is refused with where to go instead (the owner, 12 Sep 2026: "editors
+ * shouldn't be seeing that page on the dashboard").
+ */
 async function loadBatch(user: Awaited<ReturnType<typeof requireRole>>, id: string) {
   const found = await table<Batch>('batches').get(id)
   if (!found) return { response: NextResponse.json({ error: 'Shoot not found' }, { status: 404 }) }
   const batch = (await attachOne([found], 'client_id', 'clients', ['name']))[0]
-  // client membership, having created the shoot, or holding a job on it
-  // (the brief task handed to someone off the client team) all open the plan
-  if (!(await canOpenBatch(user, batch))) {
-    return { response: NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 }) }
+  const me = await shootManager(user)
+  if (!canManageShoot(me, batch)) {
+    // somebody on the shoot is sent to their card; a stranger is simply refused
+    const onIt = (await canOpenBatch(user, batch)) || peopleOnShoot(batch).includes(user.id)
+    return { response: NextResponse.json(onIt ? NOT_YOUR_PAGE : { error: 'You are not on this client or this shoot' }, { status: 403 }) }
   }
   return { batch }
 }
 
-/** One brief, with its items — the working surface's data. */
+/** One shoot, with its cards and its people — the shoot page's data. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
@@ -37,17 +44,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const loaded = await loadBatch(user, id)
     if ('response' in loaded) return loaded.response
+    const b = loaded.batch
 
-    // ONE read of the people table serves both names below; the other three
-    // reads are of three different tables, so the whole page costs four.
-    const [itemRows, people, proposal] = await Promise.all([
+    // ONE read of the people table serves every name below; the other reads
+    // are of different tables, so the whole page costs five.
+    const [itemRows, people, proposal, clientRow] = await Promise.all([
       table<ContentItem>('content_items').list({
         by: { batch_id: id }, orderBy: [['created_at', 'asc']], limit: 100,
       }),
       table<TeamUser>('team_users').list(),
-      loaded.batch.proposal_id
-        ? table<ShootProposal>('shoot_proposals').get(loaded.batch.proposal_id)
-        : Promise.resolve(null),
+      b.proposal_id ? table<ShootProposal>('shoot_proposals').get(b.proposal_id) : Promise.resolve(null),
+      table<Client>('clients').get(b.client_id),
     ])
     const items = await attachOne(itemRows, 'work_kind_id', 'work_kinds', ['slug'])
     const personById = new Map(people.map(u => [u.id, u]))
@@ -55,44 +62,40 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const p = uid ? personById.get(uid) : null
       return p ? (p.name || p.email) : null
     }
-    // THE PEOPLE ON THE SHOOT (the Shoot Brief SOP): the crew and the editor,
-    // each with whether they have read the brief — for everyone who can open
-    // the shoot, because "3 of 5 acknowledged" is the card's line. The pickers
-    // (who can be the editor, who is on the crew) are the manager's, so the
-    // team list goes only to them.
-    const acked = new Map(acksOf(loaded.batch).map(a => [a.user_id, a.at]))
-    const crew = peopleOnShoot(loaded.batch).map(uid => ({
+    // THE PEOPLE ON THE SHOOT: the crew and the editor, each with whether
+    // and when they read the plan
+    const acked = new Map(acksOf(b).map(a => [a.user_id, a.at]))
+    const crew = peopleOnShoot(b).map(uid => ({
       id: uid, name: nameOf(uid) ?? 'Someone', role: personById.get(uid)?.role ?? null,
       acknowledged_at: acked.get(uid) ?? null,
     }))
-    const team = roleSatisfies(user.role, 'account_manager')
-      ? people.filter(p => p.active_status === true && p.role !== 'client')
-          .map(p => ({ id: p.id, name: p.name || p.email, role: p.role }))
-      : []
-    const lockedBy = loaded.batch.locked_by ? personById.get(loaded.batch.locked_by) ?? null : null
-    const editedBy = loaded.batch.last_edited_by ? personById.get(loaded.batch.last_edited_by) ?? null : null
-    // the client's portal link, for the "Copy portal link" button — an AM
-    // shares it deliberately; the token never reaches editor/scheduler payloads
-    const tokenRow = roleSatisfies(user.role, 'account_manager')
-      ? await table<Client>('clients').get(loaded.batch.client_id)
-      : null
+    const team = people.filter(p => p.active_status === true && p.role !== 'client')
+      .map(p => ({ id: p.id, name: p.name || p.email, role: p.role }))
+    // every stamp's person, by name — "by the team" where the row predates
+    // the column (the page reads the null)
+    const names: Record<string, string | null> = {}
+    for (const col of ['created_by', 'owner_id', 'brief_shared_by', 'aligned_by', 'client_confirmed_by', 'client_shared_by', 'go_by', 'reminder_sent_by', 'footage_handed_by', 'editor_id', 'last_edited_by', 'go_override_by'] as const) {
+      names[col] = nameOf(b[col])
+    }
+    for (const uid of peopleOnShoot(b)) names[uid] = nameOf(uid)
 
     return NextResponse.json({
-      batch: loaded.batch,
-      portal_token: tokenRow?.share_token ?? null,
+      batch: b,
+      portal_token: clientRow?.share_token ?? null,
+      client_email: clientRow?.email ?? null,
       items,
-      locked_by_name: lockedBy?.name || lockedBy?.email || null,
-      last_edited_by_name: editedBy?.name || editedBy?.email || null,
-      last_edited_at: loaded.batch.last_edited_at ?? null,
+      last_edited_by_name: names.last_edited_by,
+      last_edited_at: b.last_edited_at ?? null,
       proposal: proposal ?? null,
       viewer_role: user.role,
       viewer_id: user.id,
       crew,
       team,
-      editor_name: nameOf(loaded.batch.editor_id),
-      go_by_name: nameOf(loaded.batch.go_by),
-      brief_shared_by_name: nameOf(loaded.batch.brief_shared_by),
-      footage_handed_by_name: nameOf(loaded.batch.footage_handed_by),
+      names,
+      editor_name: names.editor_id,
+      go_by_name: names.go_by,
+      brief_shared_by_name: names.brief_shared_by,
+      footage_handed_by_name: names.footage_handed_by,
     })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
@@ -102,8 +105,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Field-level edits — the browser sends ONLY the field that changed, so two
- *  people editing different parts of a brief cannot clobber each other's
- *  jsonb wholesale. Status never moves here; that is the transition route. */
+ *  people editing different parts of a plan cannot clobber each other's
+ *  jsonb wholesale. Stages never move here; that is the stage route. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
@@ -113,19 +116,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('response' in loaded) return loaded.response
     const batch = loaded.batch
     const body = await req.json()
-    // THE FOOTAGE FOLDER is the one field anyone on the shoot may set — the
-    // crew have the footage, whatever their role (11 Sep 2026). Everything
-    // else on a shoot is the team's (editor and up), as it always was.
-    const onlyFootage = body && typeof body === 'object' && Object.keys(body).length > 0 && Object.keys(body).every(k => k === 'footage_url')
-    if (!roleSatisfies(user.role, 'editor') && !(onlyFootage && isOnShoot(batch, user.id))) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
-    }
+    if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
 
-    // an AM changing a LOCKED date is its own audited act, with a reason
+    // a manager changing a BOOKED date is its own audited act, with a reason
     if (body.action === 'change_date') {
-      if (!roleSatisfies(user.role, 'account_manager')) {
-        return NextResponse.json({ error: 'Only an account manager can change a booked date' }, { status: 403 })
-      }
       const reason = String(body.reason ?? '').trim()
       const newDate = String(body.shoot_date ?? '').trim()
       if (!reason) return NextResponse.json({ error: 'Say why the date is moving — the team sees this' }, { status: 422 })
@@ -147,11 +141,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json(data)
     }
 
+    const now = new Date().toISOString()
     const patch: Record<string, unknown> = {}
-    // board edits arrive as per-card ops and merge server-side, so two people
+    // canvas edits arrive as per-card ops and merge server-side, so two people
     // moving different cards both win. Per-card last-write-wins; the small
-    // read-modify-write window is accepted for v1 (realtime reload keeps
-    // collisions rare; a jsonb-merge SQL function is the future tightening).
+    // read-modify-write window is accepted for v1.
     if (body.canvas_op && typeof body.canvas_op === 'object') {
       patch.canvas_cards = applyCanvasOp(batch.canvas_cards, {
         upsert: (body.canvas_op as { upsert?: unknown }).upsert,
@@ -169,13 +163,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('shot_list' in body) patch.shot_list = sanitiseShotList(body.shot_list)
     if ('planned_deliverables' in body) patch.planned_deliverables = sanitisePlannedDeliverables(body.planned_deliverables)
     if ('reference_media' in body) patch.reference_media = sanitiseReferenceMedia(body.reference_media)
-    if ('owner_id' in body) {
-      if (!roleSatisfies(user.role, 'account_manager')) {
-        return NextResponse.json({ error: 'Only an account manager can change the owner' }, { status: 403 })
-      }
-      patch.owner_id = body.owner_id || null
-    }
-    // ── the Shoot Brief SOP's nine parts (the ones the brief did not hold) ──
+    if ('owner_id' in body) patch.owner_id = body.owner_id || null
+    // ── the Shoot Brief SOP's nine parts ──
     for (const [field, max] of [
       ['objective', 2000], ['script', 8000], ['call_time', 60], ['talent', 1000],
       ['props_wardrobe', 2000], ['client_availability', 1000], ['editor_priorities', 2000],
@@ -199,13 +188,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       patch.edit_deadline = d || null
     }
-    // ── the people on the shoot: the AM's call ──
+    // ── the people on the shoot ──
     if ('editor_id' in body || 'crew_ids' in body) {
-      // the AM's call — and a general user's, who may raise a shoot for any
-      // client and must be able to staff it (the walk of 11 Sep 2026)
-      if (!roleSatisfies(user.role, 'account_manager') && user.role !== 'general') {
-        return NextResponse.json({ error: 'Only an account manager picks who is on the shoot' }, { status: 403 })
-      }
       const team = await table<TeamUser>('team_users').list({ where: u => u.active_status === true && u.role !== 'client' })
       const byId = new Map(team.map(u => [u.id, u]))
       if ('editor_id' in body) {
@@ -220,42 +204,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         patch.crew_ids = [...new Set(raw.filter(uid => byId.has(uid)))]
       }
     }
-    // ── the AM's two ticks on the way to "go" ──
-    for (const [flag, col] of [['aligned', 'aligned_at'], ['client_confirmed', 'client_confirmed_at']] as const) {
+    // ── the two ticks on the way to "go" — with who ticked them ──
+    for (const [flag, col, who] of [['aligned', 'aligned_at', 'aligned_by'], ['client_confirmed', 'client_confirmed_at', 'client_confirmed_by']] as const) {
       if (flag in body) {
-        if (!roleSatisfies(user.role, 'account_manager')) {
-          return NextResponse.json({ error: 'Only an account manager confirms that' }, { status: 403 })
-        }
-        patch[col] = body[flag] === true ? new Date().toISOString() : null
+        const on = body[flag] === true
+        patch[col] = on ? now : null
+        patch[who] = on ? user.id : null
       }
     }
     if ('shared_with_client' in body) {
-      // showing a shoot plan on the client portal is an AM call
-      if (!roleSatisfies(user.role, 'account_manager')) {
-        return NextResponse.json({ error: 'Only an account manager can share a shoot with the client' }, { status: 403 })
-      }
+      // the switch turns the portal off; turning it ON is "Share the plan
+      // with the client", which emails them (the share-client route)
       patch.shared_with_client = body.shared_with_client === true
+      if (body.shared_with_client === true && !batch.client_shared_at) { patch.client_shared_at = now; patch.client_shared_by = user.id }
     }
-    if ('share_board' in body) {
-      // the working board is shared separately from the brief — an AM call too
-      if (!roleSatisfies(user.role, 'account_manager')) {
-        return NextResponse.json({ error: 'Only an account manager can share the board with the client' }, { status: 403 })
-      }
-      patch.share_board = body.share_board === true
-    }
-    if ('board_name' in body) {
-      patch.board_name = String(body.board_name ?? '').trim().slice(0, 80) || null
-    }
+    if ('share_board' in body) patch.share_board = body.share_board === true
+    if ('board_name' in body) patch.board_name = String(body.board_name ?? '').trim().slice(0, 80) || null
     if ('shoot_date' in body) {
-      // freely editable while still a plan; once locked, the date is a
+      // freely editable while still a plan; once booked, the date is a
       // commitment and moves only through change_date above
       if (batch.status !== 'brief') {
-        return NextResponse.json({ error: 'The shoot is booked — use "Change date" (account managers)' }, { status: 409 })
+        return NextResponse.json({ error: 'The shoot is booked — use “Change date”' }, { status: 409 })
       }
       const d = body.shoot_date ? String(body.shoot_date) : ''
       if (d) {
-        // a bad or out-of-range date reaches the year check-constraint and 500s
-        // when locking; validate it here where we can give a real message
         const t = new Date(`${d}T00:00:00`)
         const yr = t.getUTCFullYear()
         if (Number.isNaN(t.getTime()) || yr < 2024 || yr > 2100) {
@@ -273,12 +245,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // stamp who last edited — best-effort, so a failure here never loses the
     // edit the user just made
     try {
-      await table('batches').update(id, { last_edited_by: user.id, last_edited_at: new Date().toISOString() })
+      await table('batches').update(id, { last_edited_by: user.id, last_edited_at: now })
     } catch { /* the edit itself already landed */ }
+    for (const [flag, col] of [['aligned', 'aligned_at'], ['client_confirmed', 'client_confirmed_at']] as const) {
+      if (flag in body) {
+        await logActivity({
+          actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
+          action: patch[col] ? `sop_${flag}` : `sop_${flag}_undone`,
+        })
+      }
+    }
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status ?? 'brief', kind: 'updated' })
     // the plan of a shoot that is already booked is work now: a shoot with
-    // no card yet gets its one card straight away (the same claim booking
-    // used); a shoot that has one is left alone
+    // no card yet gets its one card straight away
     if ('planned_deliverables' in patch && data.status !== 'brief') {
       try {
         await ensureShootCard(user, data)
@@ -290,9 +269,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // filed under the month it was raised in — put it right the moment the
     // date exists
     if ('shoot_date' in patch) onShootDateChanged(data)
-    // THE EDITOR NAMED AFTER GO gets the cards the moment they are named —
-    // the same handover go does, so nothing waits for a press
-    if ('editor_id' in patch && patch.editor_id && (data.go_at || data.status !== 'brief')) {
+    // THE EDITOR NAMED AFTER SHARING OR GO gets the card the moment they are
+    // named — the same handover go does, so nothing waits for a press
+    if ('editor_id' in patch && patch.editor_id && (data.go_at || data.brief_shared_at || data.status !== 'brief')) {
       try { await handOverAtGo(user, data) } catch (e) { console.error('handover after naming the editor:', e) }
     }
     // a footage folder pasted AFTER the handover reaches the cards now
@@ -308,17 +287,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /**
- * Delete a shoot, keeping whatever was made under it.
- *
- * This used to refuse the moment the shoot had ANY content item — which meant
- * the moment its plan was written, a shoot plan being an item itself. A shoot
- * booked by mistake became permanent as soon as somebody described it, and the
- * only route out was to wrap a shoot that never happened.
- *
- * The task quota card already had the right answer: detach the pieces first,
- * then delete the promise, so real work is never orphaned into a deleted
- * parent. Same shape of problem, same fix. `shootDeletion` holds the rule and
- * the sentence, so the dialog warns with the words the server enforces.
+ * Delete a shoot, keeping whatever was made under it: the pieces are
+ * detached first (they become plain cards), then the shoot goes.
+ * `shootDeletion` holds the rule and the sentence, so the dialog warns with
+ * the words the server enforces.
  */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
@@ -330,7 +302,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     // Read the whole list, not a count: a failed read must NOT be treated as
     // "no items" and silently orphan every one of them to batch_id = null.
-    // The helper throws instead of returning an error to ignore.
     const items = await table<ContentItem>('content_items').list({ by: { batch_id: id } })
 
     const verdict = shootDeletion(items)

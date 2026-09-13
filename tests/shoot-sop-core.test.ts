@@ -140,12 +140,20 @@ describe('dragging a shoot to a column', () => {
 
   it('Drafting → Shared needs the nine parts, and says which are missing', () => {
     const half = complete({ talent: '', props_wardrobe: null })
-    const r = stageMove(half, 'shared', ed, now, ED)
+    const r = stageMove(half, 'shared', am, now, AM)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.reason).toMatch(/talent or presenter, props, wardrobe and setup still to fill in/)
-    const ok = stageMove(complete(), 'shared', ed, now, ED)
+    const ok = stageMove(complete(), 'shared', am, now, AM)
     expect(ok.ok).toBe(true)
-    if (ok.ok) expect(ok.patch).toEqual({ brief_shared_at: now, brief_shared_by: ED })
+    if (ok.ok) expect(ok.patch).toEqual({ brief_shared_at: now, brief_shared_by: AM })
+    // THE SHOOT PAGE IS THE MANAGER'S (12 Sep 2026): the editor on the shoot
+    // cannot share it, nor can the crew — whatever is filled in
+    expect(stageMove(complete(), 'shared', ed, now, ED)).toMatchObject({ ok: false, reason: expect.stringMatching(/account manager on this client, the person who created the shoot/) })
+    // …but the person who created it can, whatever their role
+    expect(stageMove(complete({ created_by: ED }), 'shared', ed, now, ED)).toMatchObject({ ok: true })
+    // an account manager NOT on this client is refused when their clients are known
+    expect(stageMove(complete(), 'shared', { ...am, clientIds: ['other'] }, now, 'other-am')).toMatchObject({ ok: false })
+    expect(stageMove(complete(), 'shared', { ...am, clientIds: ['c-1'] }, now, 'other-am')).toMatchObject({ ok: true })
   })
   it('only an account manager signs off as go, and only once everything is in', () => {
     const shared = complete({ brief_shared_at: 'x', aligned_at: 'x', client_confirmed_at: 'x', acknowledgements: [{ user_id: VG, at: 'x' }, { user_id: ED, at: 'x' }] })
@@ -168,10 +176,12 @@ describe('dragging a shoot to a column', () => {
   })
   it('footage is handed over only after the day, to a named editor, with priorities and a deadline', () => {
     const shot = complete({ go_at: 'x', shoot_date: '2026-09-10' })
-    expect(stageMove(complete({ go_at: 'x' }), 'footage_handed', ed, now, ED)).toMatchObject({ ok: false, reason: 'The shoot has not happened yet' })
-    expect(stageMove({ ...shot, editor_id: null }, 'footage_handed', ed, now, ED)).toMatchObject({ ok: false, reason: expect.stringMatching(/Name the editor/) })
-    expect(stageMove({ ...shot, edit_deadline: null }, 'footage_handed', ed, now, ED)).toMatchObject({ ok: false, reason: expect.stringMatching(/priorities and the deadline/) })
-    expect(stageMove(shot, 'footage_handed', ed, now, ED)).toMatchObject({ ok: true, patch: { footage_handed_at: now, footage_handed_by: ED } })
+    expect(stageMove(complete({ go_at: 'x' }), 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: 'The shoot has not happened yet' })
+    expect(stageMove({ ...shot, editor_id: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/Name the editor/) })
+    expect(stageMove({ ...shot, edit_deadline: null }, 'footage_handed', am, now, AM)).toMatchObject({ ok: false, reason: expect.stringMatching(/priorities and the deadline/) })
+    expect(stageMove(shot, 'footage_handed', am, now, AM)).toMatchObject({ ok: true, patch: { footage_handed_at: now, footage_handed_by: AM } })
+    // "how come editor can press Footage is in" (the owner, 12 Sep 2026) — they cannot
+    expect(stageMove(shot, 'footage_handed', ed, now, ED)).toMatchObject({ ok: false })
   })
   it('moving back is a manager’s, clears the stamps past the column, and never crosses the calendar', () => {
     const far = complete({ brief_shared_at: 'x', go_at: 'x', reminder_sent_at: 'x' })
@@ -235,6 +245,11 @@ describe('who sees a shoot', () => {
   it('the client’s team by assignment, and anyone on the shoot whichever client it is for', () => {
     expect(canSeeShoot({ id: 'x', role: 'account_manager' }, b, ['c-1'])).toBe(true)
     expect(canSeeShoot({ id: 'x', role: 'account_manager' }, b, ['c-9'])).toBe(false)
+    // an editor or scheduler on the client's team sees only the shoots they
+    // are named on (the owner, 12 Sep 2026)
+    expect(canSeeShoot({ id: 'x', role: 'editor' }, b, ['c-1'])).toBe(false)
+    expect(canSeeShoot({ id: 'x', role: 'scheduler' }, b, ['c-1'])).toBe(false)
+    expect(canSeeShoot({ id: 'x', role: 'editor' }, { ...b, editor_id: 'x' }, ['c-1'])).toBe(true)
     expect(canSeeShoot({ id: AM, role: 'account_manager' }, b, [])).toBe(true)   // created it
     expect(canSeeShoot({ id: ED, role: 'editor' }, b, [])).toBe(true)            // the editor
     expect(canSeeShoot({ id: VG, role: 'scheduler' }, b, [])).toBe(true)         // on the crew
@@ -336,11 +351,11 @@ describe('the strip and the next step', () => {
     expect(nextStepWords(half, TODAY)).toMatch(/Refused until all nine parts are filled/)
     expect(nextStepWords(complete(), TODAY)).toBe('Next: share the plan with the team. Everyone on it is emailed and asked to read it.')
     const shared = complete({ brief_shared_at: '2026-09-11T00:00:00Z' })
-    expect(nextStepWords(shared, TODAY)).toMatch(/everyone on the shoot presses \u201cI\u2019ve read the plan\u201d — waiting on 2 of 2/)
+    expect(nextStepWords(shared, TODAY)).toMatch(/everyone on the shoot presses \u201cI\u2019ve read the plan\u201d — on their Editor card, or the link in their email — waiting on 2 of 2/)
     const acked = complete({ ...shared, acknowledgements: [{ user_id: ED, at: 'x' }, { user_id: VG, at: 'x' }] })
-    expect(nextStepWords(acked, TODAY)).toMatch(/account manager ticks \u201cAligned with the strategist\u201d/)
+    expect(nextStepWords(acked, TODAY)).toMatch(/^Next: tick \u201cAligned with the strategist\u201d/)
     const ready = complete({ ...acked, aligned_at: 'x', client_confirmed_at: 'x' })
-    expect(nextStepWords(ready, TODAY)).toMatch(/^Next: the account manager presses Go\. That books the shoot and puts the editor\u2019s card on the Editor page/)
+    expect(nextStepWords(ready, TODAY)).toMatch(/^Next: press Go\. That books the shoot and puts the editor\u2019s card on the Editor page/)
     const late = complete({ ...ready, brief_shared_at: '2026-09-18T00:00:00Z' })
     expect(nextStepWords(late, TODAY)).toMatch(/shared 3 days before the shoot — the playbook needs 7/)
     const go = complete({ ...ready, go_at: 'x' })

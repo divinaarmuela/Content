@@ -210,6 +210,8 @@ export function batchClientIdsOf(
   if (viewer.role === 'super_admin') return null
   if (viewer.role === 'general') return null
   if (viewer.role === 'client') return viewer.client_id ? [viewer.client_id] : []
+  // editors and schedulers: only the shoots they are named on (heldBatchIdsOf)
+  if (viewer.role === 'editor' || viewer.role === 'scheduler') return []
   return assignments.filter(a => a.team_user_id === viewer.id).map(a => a.client_id)
 }
 

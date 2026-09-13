@@ -8,6 +8,7 @@ import { logActivity } from './workflow'
 import { announceBatchChange, announceItemChange } from './production-live'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { footageDueTargets, footageFolderFill, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
+import { shootCardId } from './deliverable-group-core'
 
 /**
  * PRODUCTION → EDITOR, WITHOUT A PRESS.
@@ -28,6 +29,8 @@ import { footageDueTargets, footageFolderFill, handoverPlan, handoverReady, type
 
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 const shootUrl = (id: string) => `${DASHBOARD_URL}/dashboard/production/shoots/${id}`
+/** the editor never opens the shoot page: their link is their card */
+const cardUrl = (batchId: string) => `${DASHBOARD_URL}/dashboard/editor?card=${shootCardId(batchId)}`
 
 const melbourneToday = (): string =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
@@ -139,8 +142,8 @@ export async function notifyEditorAtGo(actor: Actor, batch: Batch, plan: Pick<Ha
       `<p>${n === 1 ? '<strong>Your card</strong> for this shoot is' : `<strong>${n} cards</strong> on the Editor page are`} on the Editor page — the footage follows the shoot` +
       (due ? `, and the edits are due <strong>${due}</strong>` : '') + '.</p>' +
       (batch.editor_priorities ? `<p><strong>Priorities:</strong> ${escapeHtml(batch.editor_priorities)}</p>` : '') +
-      '<p>Read the plan now and press <strong>I’ve read the plan</strong>; you will be told the morning the footage is in.</p>',
-      'Open the shoot plan', shootUrl(batch.id),
+      '<p>The plan is on the card. Read it and press <strong>I’ve read the plan</strong> there if you have not; you will be told the morning the footage is in.</p>',
+      'Open your card', cardUrl(batch.id),
     ),
   })
   return r === 'sent'
@@ -173,7 +176,7 @@ export async function notifyFootageIn(actor: Actor, batch: Batch, plan: Pick<Han
       (due ? `, due <strong>${due}</strong>` : '') + '.</p>' +
       (batch.footage_url ? `<p><strong>Footage folder:</strong> <a href="${escapeHtml(batch.footage_url)}">${escapeHtml(batch.footage_url)}</a></p>` : '') +
       (batch.editor_priorities ? `<p><strong>Priorities:</strong> ${escapeHtml(batch.editor_priorities)}</p>` : ''),
-      'Open the shoot', shootUrl(batch.id),
+      'Open your card', cardUrl(batch.id),
     ),
   })
   return r === 'sent'

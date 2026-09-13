@@ -65,8 +65,11 @@ describe('the editor SOP sweep fires each nudge once', () => {
     expect(await runEditorSopNudges(new Date(NOW.getTime() + 3600_000))).toEqual({ twelve: 0, twentyFour: 0, ack: 0 })
     expect(emails).toEqual([])
 
-    // twelve more hours on, the first card reaches its 24-hour flag, once
-    expect(await runEditorSopNudges(new Date(NOW.getTime() + 12 * 3600_000))).toEqual({ twelve: 0, twentyFour: 1, ack: 0 })
-    expect(emails.map(e => String(e.entityId)).sort()).toEqual(['twelve#blocked-24#o1', 'twelve#blocked-24#s1'])
+    // twelve more hours on (7 am the next Melbourne morning): the first card
+    // reaches its 24-hour flag, once — and the two cards assigned the evening
+    // before, still unacknowledged, get their morning-after nudge (§6)
+    expect(await runEditorSopNudges(new Date(NOW.getTime() + 12 * 3600_000))).toEqual({ twelve: 0, twentyFour: 1, ack: 2 })
+    expect(emails.filter(e => /blocked-24/.test(String(e.entityId))).map(e => String(e.entityId)).sort()).toEqual(['twelve#blocked-24#o1', 'twelve#blocked-24#s1'])
+    expect(emails.filter(e => e.eventType === 'editor_ack_nudge')).toHaveLength(2)
   })
 })

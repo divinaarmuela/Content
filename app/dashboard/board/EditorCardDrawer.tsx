@@ -23,7 +23,7 @@ import { flagsOf } from '../../lib/card-flag-core'
 import { plannedCount, finalsInWords } from '../../lib/deliverable-group-core'
 import {
   BLOCKER_LADDER, BLOCKER_NEEDS, EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
-  beforeYouStart, blockerWords, handoverState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
+  beforeYouStart, blockerWords, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
 
@@ -222,6 +222,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   })
   const from = workFrom({ card: item as never, shoot: shoot as never, driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null })
   const handover = handoverState(item as never)
+  const planRead = planReadState(shoot, me?.id)
   const qcDone = qcDoneFor(item as never)
   const blocked = blockerWords(item as never, nameOf, when)
   const history = historyLines({
@@ -251,11 +252,24 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               ? `Acknowledged ${formatInZone(String(ackRow.created_at), zone, 'short') ?? ''}`
               : item.owner_id ? 'Not acknowledged yet — the playbook asks for the same day it lands.' : 'Nobody holds this card yet.'}
           </p>
-          {!ackRow && holder && (
-            <Button variant="outline" className={`${outlineBtn} mt-2`} disabled={busy} onClick={() => void flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')}>
-              <Check className="h-4 w-4" aria-hidden /> Acknowledge — I am on it
-            </Button>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {!ackRow && holder && (
+              <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => void flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')}>
+                <Check className="h-4 w-4" aria-hidden /> Acknowledge — I am on it
+              </Button>
+            )}
+            {/* THE SHOOT PLAN IS READ HERE (13 Sep 2026): the editor never
+                opens the shoot page; the plan is in "Before you start" and
+                this press is the shoot's acknowledgement */}
+            {planRead.on && shoot && (planRead.read
+              ? <p className="text-[13px] text-muted-foreground">You read the plan {formatInZone(planRead.at, zone, 'short') ?? ''}</p>
+              : (
+                <Button className={primaryBtn} disabled={busy}
+                  onClick={() => void post(`/api/production/batches/${shoot.id}/acknowledge`, {}, 'Thanks — you have read the plan', 'Reading the plan')}>
+                  <Check className="h-4 w-4" aria-hidden /> I’ve read the plan
+                </Button>
+              ))}
+          </div>
           {blocked && <p role="status" className="mt-2 text-[13px] font-semibold text-accent-red-deep">{blocked}</p>}
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted">

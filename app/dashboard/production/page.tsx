@@ -12,7 +12,6 @@ import {
   applyFilters, clientsOnCards, filterWords, filteredEmpty, mayFilterPeople, peopleOnCards, validChoice,
 } from '../../lib/people-filter-core'
 import type { BatchStatus } from '../../lib/batch-brief-core'
-import type { ItemStatus } from '../../lib/workflow-core'
 import { isBriefTask } from '../../lib/work-pages-core'
 import {
   dayLabel, eventsFor, movePatch, moveUrl, type CalEvent,
@@ -96,15 +95,6 @@ export default function ProductionPage() {
     if (liveError) toast.error('Could not load shoots')
   }, [liveError])
 
-  /** the plan document behind each shoot, for the "Plan …" line on its card
-   *  and so a shoot cannot be given a second plan */
-  const planByShoot = useMemo(() => {
-    const m = new Map<string, ItemStatus>()
-    for (const i of live.items as unknown as { batch_id?: string | null; status: ItemStatus; work_kinds?: { slug?: string } | null }[]) {
-      if (i.batch_id && isBriefTask(i)) m.set(i.batch_id, i.status)
-    }
-    return m
-  }, [live.items])
   /** cards pointed at each shoot, bar the shoot's own plan — a deliverable
    *  is a line on the plan or a card */
   const itemCountByShoot = useMemo(() => {
@@ -272,7 +262,6 @@ export default function ProductionPage() {
         <ShootStageBoard
           shoots={visibleShoots}
           itemCounts={itemCountByShoot}
-          plans={planByShoot}
           names={teamNames}
           role={viewer.role}
           viewerId={viewer.id}
@@ -291,7 +280,6 @@ export default function ProductionPage() {
         onCreated={() => setView('stage')}
         clients={clients}
         batches={shoots ?? []}
-        briefedBatchIds={[...planByShoot.keys()]}
         team={team}
       />
     </div>

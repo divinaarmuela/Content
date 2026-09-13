@@ -188,6 +188,9 @@ export type PortalCard = {
   actions: PortalActions
   /** the item the approve / ask-for-a-change acts on: the piece itself, or a shoot's brief */
   act_item_id: string | null
+  /** the SHOOT the decision acts on, when the plan was shared from the
+   *  shoot page with no plan document behind it (13 Sep 2026) */
+  act_shoot_id?: string | null
   /** where a comment on this card is filed: the item's thread, or the shoot's */
   comment_target: { kind: 'item'; id: string } | { kind: 'shoot'; id: string } | null
   comments: PortalCardComment[]
@@ -723,6 +726,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
     const dateLabel = shootDayLabel(b.shoot_date ?? null)
     const standing = shootStanding({
       sharedWithClient: shared, briefStatus: brief?.status, shootStatus: b.status as string, dateLabel,
+      clientDecision: (b as { client_decision?: string | null }).client_decision ?? null,
     })
     const shootComments = shared
       ? [...(commentsByShoot.get(b.id) ?? []), ...(brief ? commentsByItem.get(brief.id) ?? [] : [])]
@@ -754,6 +758,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       // the decision acts on the plan's brief item — the same item the
       // dashboard moves, through the same state machine
       act_item_id: standing.actions.approve && brief ? brief.id : null,
+      act_shoot_id: standing.actions.approve && !brief ? b.id : null,
       comment_target: shared ? { kind: 'shoot', id: b.id } : null,
       comments: shootComments,
       status: null,

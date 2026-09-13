@@ -8,12 +8,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clockWords, overrideWords, shootStage, stageMove,
+  FOOTAGE_ONLY_WORDS, SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clientPlanWords, clockWords, isFootageOnly, overrideWords, shootStage, stageMove,
   type MoveRole, type ShootStage, type SopShoot,
 } from '../../lib/shoot-sop-core'
+import { shootCardId } from '../../lib/deliverable-group-core'
 import { LaneBoard, type Lane } from './LaneBoard'
-import { BRIEF_KIND_LABELS } from '../../lib/brief-task-core'
-import type { ItemStatus } from '../../lib/workflow-core'
 import WorkCard, { type Person, type WorkTone } from '../ui/WorkCard'
 import Chip from '../ui/Chip'
 
@@ -44,15 +43,6 @@ const TONE: Partial<Record<ShootStage, WorkTone>> = {
   footage_handed: 'green',
 }
 
-/** the plan's approval, as a colour: with the client is blue, approved is
- *  green, sent back is amber, and being written is quiet */
-function planTone(status: ItemStatus): 'blue' | 'green' | 'amber' | 'muted' {
-  if (status === 'client_review') return 'blue'
-  if (status === 'approved_for_scheduling' || status === 'scheduled' || status === 'published') return 'green'
-  if (status === 'revision_required' || status === 'client_changes_requested') return 'amber'
-  return 'muted'
-}
-
 function initialsOf(name: string) {
   const parts = name.trim().split(/\s+/)
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '') || name.slice(0, 2)).toUpperCase()
@@ -63,7 +53,7 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, plans, names, role, viewerId, today, onMove, busyId, laneEmpty,
+  shoots, itemCounts, names, role, viewerId, today, onMove, busyId, laneEmpty,
 }: {
   shoots: StageShoot[]
   /** an empty column's sentence while the page is narrowed to a client or a
@@ -71,10 +61,6 @@ export function ShootStageBoard({
   laneEmpty?: (laneLabel: string) => string | null
   /** cards already pointed at each shoot — a deliverable is a line OR a card */
   itemCounts: Map<string, number>
-  /** where each shoot's PLAN DOCUMENT is in its own approval (being written,
-   *  with the client, approved) — the one line that used to need the old
-   *  work board to read; the moves are on the shoot page */
-  plans?: Map<string, ItemStatus>
   names: Map<string, string>
   role: MoveRole
   viewerId: string
@@ -113,9 +99,13 @@ export function ShootStageBoard({
     void onMove(s, to)
   }
 
+  // the shoot page is the manager's; an editor or a scheduler on the shoot
+  // opens the shoot's card on Editor instead (12 Sep 2026)
+  const manages = role === 'super_admin' || role === 'general' || role === 'account_manager'
   const open = (s: StageShoot) => {
     if (justDragged.current) return
-    router.push(`/dashboard/production/shoots/${s.id}`)
+    if (manages || s.owner_id === viewerId || s.created_by === viewerId) router.push(`/dashboard/production/shoots/${s.id}`)
+    else router.push(`/dashboard/editor?card=${shootCardId(s.id)}`)
   }
 
   const card = (s: StageShoot) => {
@@ -127,6 +117,9 @@ export function ShootStageBoard({
     const editorName = s.editor_id ? names.get(s.editor_id) : undefined
     const people: Person[] = editorName ? [{ id: s.editor_id!, name: editorName, initials: initialsOf(editorName) }] : []
     const moves = SHOOT_STAGES.filter(st => st.key !== stage && allowed(s, st.key))
+    // who made it, and how many have read it — on every card (13 Sep 2026)
+    const creator = names.get(s.created_by ?? s.owner_id ?? '') ?? 'the team'
+    const who = `Created by ${creator}${ack.total > 0 ? ` · read ${ack.done} of ${ack.total}` : ''}`
     const note = stage === 'drafting' && !list.complete
       ? `Still to fill in: ${list.missing.map(m => m.label.toLowerCase()).join(', ')}`
       : stage === 'shared' && !ack.complete && ack.total > 0
@@ -163,7 +156,8 @@ export function ShootStageBoard({
           people={people}
           chips={<>
             {clock && <Chip tone={late ? 'red' : stage === 'shoot_day' ? 'amber' : 'muted'} className="h-auto whitespace-normal text-left">{clock}</Chip>}
-            {(stage === 'drafting' || stage === 'shared') && (
+            {isFootageOnly(s) ? <Chip tone="surface">{FOOTAGE_ONLY_WORDS}</Chip>
+              : (stage === 'drafting' || stage === 'shared') && (
               <Chip tone={list.complete ? 'green' : 'surface'}>{list.words}</Chip>
             )}
             {(stage === 'shared' || stage === 'confirmed') && ack.total > 0 && (
@@ -171,11 +165,9 @@ export function ShootStageBoard({
             )}
             {s.shoot_date && <Chip><CalendarDays className="h-3.5 w-3.5" aria-hidden />{whenShort(s.shoot_date)}</Chip>}
             {overrideWords(s) && <Chip tone="amber">{overrideWords(s)}</Chip>}
-            {plans?.get(s.id) && (
-              <Chip tone={planTone(plans.get(s.id)!)}>{BRIEF_KIND_LABELS[plans.get(s.id)!]}</Chip>
-            )}
+            {clientPlanWords(s) && <Chip tone={s.client_decision === 'approved' ? 'green' : s.client_decision === 'changes' ? 'amber' : 'blue'} className="h-auto whitespace-normal text-left">{clientPlanWords(s)}</Chip>}
           </>}
-          note={note}
+          note={<>{who}{note ? <><br />{note}</> : null}</>}
           actions={moves.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

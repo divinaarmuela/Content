@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { writeFileSync } from 'node:fs'
 
 /**
- * EVERY BUTTON ON THE SHOOT PLAN, PRESSED FOR REAL — 12 Sep 2026.
+ * EVERY BUTTON ON THE SHOOT PLAN, PRESSED FOR REAL — 12 Sep 2026, rebuilt
+ * 13 Sep 2026 with the shoot page revamp: the page and its buttons are the
+ * manager's (the AM on the client, the creator, a super admin, a general
+ * user); the editor reads the plan on their card and the crew from a
+ * one-press link; the client is shared with from the page and answers on
+ * the portal; every action that names a person emails them.
  *
  * The owner: "send a test agent to go through every part of the shoot plan,
  * its buttons, what happens and does it make sense. No mistakes." So every
@@ -56,7 +61,7 @@ import { attachOne } from '../../lib/db-join'
 import type { Batch, ContentItem, TeamUserClient } from '../../lib/db-types'
 import type { TeamUser } from '../../app/lib/authz'
 import {
-  BRIEF_ITEMS, ackState, briefChecklist, briefIsLate, canSeeShoot, clockWords, footageDueTargets, goReady, hasAcknowledged,
+  BRIEF_ITEMS, ackState, acksOf, briefChecklist, briefIsLate, canSeeShoot, clientPlanWords, clockWords, footageDueTargets, goReady, hasAcknowledged,
   lateNudgeTargets, lateShareNudgeTargets, nextStepWords, overrideWords, shootStage, STAGE_LABEL, sharedLate, type SopShoot,
 } from '../../app/lib/shoot-sop-core'
 import { shootCardId } from '../../app/lib/deliverable-group-core'
@@ -66,7 +71,11 @@ import { runFootageDueSweep } from '../../app/lib/shoot-handover'
 import { POST as createShoot } from '../../app/api/production/batches/route'
 import { GET as getShoot, PATCH as patchShoot, DELETE as deleteShoot } from '../../app/api/production/batches/[id]/route'
 import { POST as moveShoot } from '../../app/api/production/batches/[id]/stage/route'
-import { POST as acknowledgeShoot, DELETE as unacknowledge } from '../../app/api/production/batches/[id]/acknowledge/route'
+import { POST as acknowledgeShoot, GET as acknowledgeByLink, DELETE as unacknowledge } from '../../app/api/production/batches/[id]/acknowledge/route'
+import { POST as shareWithClient } from '../../app/api/production/batches/[id]/share-client/route'
+import { POST as portalAct } from '../../app/api/portal/act/route'
+import { signAckToken, ackSecret } from '../../app/lib/shoot-ack-token'
+import { NOT_YOUR_PAGE, stampLines, isFootageOnly } from '../../app/lib/shoot-sop-core'
 
 vi.setConfig({ testTimeout: 240_000, hookTimeout: 120_000 })
 
@@ -88,6 +97,11 @@ const GENERAL: TeamUser = {
   id: 'a0000000-0000-4000-8000-0000000000b3', role: 'general',
   email: 'zz-general@mdmedia-test.invalid', name: 'ZZ General', clerk_user_id: null,
 } as TeamUser
+/** the ZZ TEST client, signed in on their portal (the act route's no-token path) */
+const CLIENT_USER: TeamUser = {
+  id: 'a0000000-0000-4000-8000-0000000000c1', role: 'client', client_id: TEST_CLIENT_ID,
+  email: 'zz-client-login@mdmedia-test.invalid', name: 'ZZ Client', clerk_user_id: null,
+} as TeamUser
 
 const STAMP = Date.now()
 const TAG = `ZZ TEST BUTTONS ${STAMP}`
@@ -108,7 +122,7 @@ const say = (line: string) => { script.push(line); console.log(line) }
 const SCRIPT_PATH = 'C:/Users/User/AppData/Local/Temp/claude/C--Users-User-myProjects-content/c33ff7c1-ad55-46c0-8973-dffcbb410744/scratchpad/shoot-buttons-script.txt'
 
 const as = (who: TeamUser) => {
-  Object.assign(h.user, { id: who.id, role: who.role, email: who.email, name: who.name, clerk_user_id: who.clerk_user_id ?? null })
+  Object.assign(h.user, { id: who.id, role: who.role, email: who.email, name: who.name, clerk_user_id: who.clerk_user_id ?? null, client_id: (who as { client_id?: string | null }).client_id ?? null })
 }
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const json = async (res: Response | undefined) => res ? ({ status: res.status, body: await res.json().catch(() => ({})) }) : ({ status: 0, body: { error: 'no response' } })
@@ -124,6 +138,13 @@ const move = async (id: string, to: string, reason?: string) =>
 const patch = async (id: string, body: Record<string, unknown>) =>
   json(await patchShoot(new Request('https://x.test/batch', { method: 'PATCH', body: JSON.stringify(body) }), params(id)))
 const ack = async (id: string) => json(await acknowledgeShoot(new Request('https://x.test/ack', { method: 'POST' }), params(id)))
+/** the crew member's one press: the signed link from their email */
+const ackLinkPress = async (id: string, who: string, secret = ackSecret()) => {
+  const res = await acknowledgeByLink(new Request(`https://x.test/ack?token=${encodeURIComponent(signAckToken(id, who, secret))}`), params(id))
+  return { status: res.status, text: await res.text() }
+}
+const share = async (id: string) => json(await shareWithClient(new Request('https://x.test/share', { method: 'POST' }), params(id)))
+const clientAnswer = async (body: Record<string, unknown>) => json(await portalAct(new Request('https://x.test/act', { method: 'POST', body: JSON.stringify(body) })))
 const unack = async (id: string, who: string) => json(await unacknowledge(new Request('https://x.test/ack', { method: 'DELETE', body: JSON.stringify({ user_id: who }) }), params(id)))
 const open = async (id: string) => json(await getShoot(new Request('https://x.test/batch'), params(id)))
 
@@ -194,26 +215,39 @@ beforeAll(() => withRequestCache(async () => {
 describe('the shoot plan, every button, live', () => {
   it('1. New shoot plan — who can open it afterwards', async () => {
     as(SUPER)
+    const since0 = new Date().toISOString()
     const made = await json(await createShoot(new Request('https://x.test/batches', {
-      method: 'POST', body: JSON.stringify({ client_id: TEST_CLIENT_ID, title: `${TAG} A`, shoot_date: plusDays(10), location: '12 Test St, Melbourne' }),
+      method: 'POST', body: JSON.stringify({ client_id: TEST_CLIENT_ID, title: `${TAG} A`, shoot_date: plusDays(10), location: '12 Test St, Melbourne', owner_id: IDS.am }),
     })))
     expect(made.status, JSON.stringify(made.body)).toBe(201)
     shootA = String(made.body.id); created.batches.add(shootA)
-    say('\nStep 1 — super admin pressed Create the shoot plan')
+    say('\nStep 1 — super admin pressed Create the shoot plan, naming the AM')
     const b = await screen(shootA, SUPER, 'Super admin')
+    expect(b.created_by).toBe(SUPER.id)
+    expect(b.owner_id).toBe(am.id)
+    expect(stampLines(b, () => null)[0].text).toMatch(/^Created by the team, /)
+    // the AM named by somebody else is told
+    const named = await toldUntil(since0, [shootA], t => t.some(x => x.recipient_email === am.email && /^You’re the account manager on/.test(x.subject)))
+    noLeak(named)
+    expect(named.filter(t => t.recipient_email === am.email && /^You’re the account manager on/.test(t.subject)).length).toBe(1)
+    say(`   told: ${named.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
     expect(shootStage(b, melbourneToday())).toBe('drafting')
     expect(briefChecklist(b).words).toBe('0 of 9 filled')
     expect(nextStepWords(b, melbourneToday())).toMatch(/^Next: fill in the plan/)
     expect(clockWords(b, melbourneToday())).toBe('10 days to the shoot')
 
-    // who may open the page: the client's AM, general, super admin — not an
-    // editor or scheduler who is not on it
+    // WHO MAY OPEN THE PAGE (12 Sep 2026): the AM on the client, general,
+    // super admin — never an editor or a scheduler, on the shoot or not
     as(am); expect((await open(shootA)).status).toBe(200)
     as(GENERAL); expect((await open(shootA)).status).toBe(200)
     as(OTHER); expect((await open(shootA)).status).toBe(403)
-    // the test editor is on the ZZ TEST client's team, so the shoot is theirs to open
-    as(editor); expect((await open(shootA)).status).toBe(200)
-    say('   opens for: AM, general, super admin, the client team · refused: a scheduler not on the client or the shoot')
+    // the editor is not on this shoot yet: refused plainly; once named (step 3)
+    // they are sent to their Editor page instead
+    as(editor)
+    const ed = await open(shootA)
+    expect(ed.status).toBe(403)
+    expect(ed.body.redirect ?? null).toBeNull()
+    say('   opens for: AM, general, super admin · refused: the editor, a scheduler')
 
     // an empty plan cannot be shared
     as(am)
@@ -276,19 +310,23 @@ describe('the shoot plan, every button, live', () => {
     as(OTHER)
     expect((await patch(shootA, { crew_ids: [OTHER.id] })).status).toBe(403)
     as(editor)
-    // the editor is on the shoot now: the page opens, but the people are the AM's call
-    expect((await open(shootA)).status).toBe(200)
+    // the editor is on the shoot now: still not their page — sent to Editor
+    const onIt = await open(shootA)
+    expect(onIt.status).toBe(403)
+    expect(onIt.body.error).toBe(NOT_YOUR_PAGE.error)
+    expect(onIt.body.redirect).toBe('/dashboard/editor')
     expect((await patch(shootA, { editor_id: null })).status).toBe(403)
     b = await row(shootA)
     expect(b.editor_id).toBe(editor.id)
-    say('   editor sees the shoot now; cannot change who is on it')
+    say('   editor is on the shoot; the page is still not theirs')
   })
 
   it('4. Share the plan — the team is emailed; go is refused until everyone has read it', async () => {
     say('\nStep 4 — Share')
     as(scheduler)
     const notMine = await move(shootA, 'shared')
-    expect(notMine.status).toBe(422)
+    expect(notMine.status).toBe(403)
+    expect(notMine.body.redirect).toBe('/dashboard/editor')
     say(`   crew member presses Share → refused: "${notMine.body.error}"`)
     as(am)
     // wrong order first: go, reminder, shoot day, footage from Draft
@@ -309,6 +347,22 @@ describe('the shoot plan, every button, live', () => {
     noLeak(told)
     expect(told.filter(t => /^Read the plan:/.test(t.subject)).map(t => t.recipient_email).sort()).toEqual([editor.email, scheduler.email].sort())
     say(`   told: ${told.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    // the plan travels in the email; the editor's link is their card, the crew's is one press
+    const bodies = await table<{ id: string; recipient_email?: string; subject?: string; body_html?: string; entity_id?: string }>('notification_log')
+      .list({ fresh: true, where: n => String(n.entity_id ?? '').startsWith(`${shootA}#shared#`) })
+    const toEditor = bodies.find(n => n.recipient_email === editor.email)!
+    const toCrew = bodies.find(n => n.recipient_email === scheduler.email)!
+    expect(String(toEditor.body_html)).toMatch(/Launch the spring range/)
+    expect(String(toEditor.body_html)).toMatch(/\/dashboard\/editor\?card=/)
+    expect(String(toEditor.body_html)).not.toMatch(/\/dashboard\/production\/shoots\//)
+    expect(String(toCrew.body_html)).toMatch(new RegExp(`/api/production/batches/${shootA}/acknowledge\\?token=`))
+    expect(String(toCrew.body_html)).not.toMatch(/\/dashboard\//)
+    // the editor's card exists from the share, owned by them
+    const early = await cardsOf(shootA)
+    expect(early.length).toBe(1)
+    expect(early[0].owner_id).toBe(editor.id)
+    expect(b.brief_shared_by).toBe(am.id)
+    say('   the editor got the plan and a link to their card; the crew got the plan and a one-press link; the card is the editor’s already')
     const again = await move(shootA, 'shared')
     expect(again.status).toBe(422)
     expect(again.body.error).toBe('Already in Shared with team')
@@ -328,38 +382,48 @@ describe('the shoot plan, every button, live', () => {
     expect((await ack(shootA)).status).toBe(200)
     expect((await ack(shootA)).status).toBe(200)
     expect(ackState(await row(shootA)).words).toBe('1 of 2 acknowledged')
-    as(scheduler)
-    expect((await ack(shootA)).status).toBe(200)
+    // the crew member: the link in the email, no login — once; a forged link never
+    const forged = await ackLinkPress(shootA, scheduler.id, 'not-the-secret')
+    expect(forged.status).toBe(400)
+    const pressed = await ackLinkPress(shootA, scheduler.id)
+    expect(pressed.status, pressed.text).toBe(200)
+    expect(pressed.text).toMatch(/Thanks — you’ve read the plan/)
+    expect((await ackLinkPress(shootA, scheduler.id)).status).toBe(200)
     let b = await row(shootA)
     expect(ackState(b).complete).toBe(true)
     expect(hasAcknowledged(b, scheduler.id)).toBe(true)
-    say('   editor pressed twice → counted once · crew pressed → 2 of 2 acknowledged')
+    expect(acksOf(b).length).toBe(2)
+    say('   editor pressed on their card twice → counted once · crew pressed the email link (twice, forged once) → 2 of 2 acknowledged')
     as(editor)
     expect((await unack(shootA, scheduler.id)).status).toBe(403)
     as(am)
     expect((await unack(shootA, scheduler.id)).status).toBe(200)
     expect(ackState(await row(shootA)).words).toBe('1 of 2 acknowledged')
     say('   Undo by an editor → refused · Undo by the AM → 1 of 2')
-    as(scheduler)
-    expect((await ack(shootA)).status).toBe(200)
+    expect((await ackLinkPress(shootA, scheduler.id)).status).toBe(200)
     b = await screen(shootA, am, 'AM')
-    expect(nextStepWords(b, melbourneToday())).toMatch(/^Next: the account manager ticks/)
+    expect(nextStepWords(b, melbourneToday())).toMatch(/^Next: tick/)
+    const readLine = stampLines(b, id => id === editor.id ? 'Editor' : id === scheduler.id ? 'Crew' : null).find(l => l.key === 'read')!
+    expect(readLine.text).toMatch(/^Read by (Editor|Crew), .*; (Editor|Crew), /)
+    say(`   what happened: "${readLine.text}"`)
   })
 
   it('6. the two ticks and Go — one press books the shoot and makes the editor’s one card', async () => {
     say('\nStep 6 — Go')
     as(editor)
     expect((await patch(shootA, { aligned: true })).status).toBe(403)
-    expect((await move(shootA, 'confirmed')).status).toBe(422)
+    expect((await move(shootA, 'confirmed')).status).toBe(403)
     as(am)
     expect((await patch(shootA, { aligned: true })).status).toBe(200)
+    expect((await row(shootA)).aligned_by).toBe(am.id)
     const stillNo = await move(shootA, 'confirmed')
     expect(stillNo.status).toBe(422)
     expect(stillNo.body.error).toMatch(/Client availability and location confirmed/)
     expect((await patch(shootA, { client_confirmed: true })).status).toBe(200)
     let b = await row(shootA)
     expect(goReady(b).ok).toBe(true)
-    expect(nextStepWords(b, melbourneToday())).toMatch(/^Next: the account manager presses Go/)
+    expect(nextStepWords(b, melbourneToday())).toMatch(/^Next: press Go/)
+    expect(b.client_confirmed_by).toBe(am.id)
     const since = new Date().toISOString()
     const go = await move(shootA, 'confirmed')
     expect(go.status, JSON.stringify(go.body)).toBe(200)
@@ -392,15 +456,71 @@ describe('the shoot plan, every button, live', () => {
     expect((await patch(shootA, { shoot_date: plusDays(12) })).status).toBe(409)
   })
 
+  it('6b. Share the plan with the client — the client is emailed, answers on the portal, and the managers are told', async () => {
+    say('\nStep 6b — the client')
+    as(editor)
+    expect((await share(shootA)).status).toBe(403)
+    as(am)
+    const since = new Date().toISOString()
+    const shared = await share(shootA)
+    expect(shared.status, JSON.stringify(shared.body)).toBe(200)
+    let b = await row(shootA)
+    expect(b.shared_with_client).toBe(true)
+    expect(b.client_shared_by).toBe(am.id)
+    expect(b.client_shared_at).toBeTruthy()
+    expect(clientPlanWords(b)).toMatch(/^With the client since /)
+    const clientEmail = String(shared.body.client_email ?? '')
+    if (clientEmail.endsWith('.invalid')) {
+      const told = await toldUntil(since, [shootA], t => t.some(x => x.recipient_email === clientEmail && /^Your shoot plan:/.test(x.subject)))
+      noLeak(told)
+      expect(told.filter(t => t.recipient_email === clientEmail && /^Your shoot plan:/.test(t.subject)).length).toBe(1)
+      say(`   told: ${told.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    } else {
+      // the ZZ TEST client has no .invalid email on file: the mailer refuses a
+      // real address, and the share says so rather than pretending
+      expect(shared.body.emailed).toBe(false)
+      say(`   the ZZ TEST client has ${clientEmail ? 'a non-test' : 'no'} email on file — the share put the plan on the portal and emailed nobody`)
+    }
+    // the client answers on their portal (signed in): changes first, then approves
+    as(CLIENT_USER)
+    const since2 = new Date().toISOString()
+    const changes = await clientAnswer({ shoot_id: shootA, action: 'request_changes', comment: 'Swap the opening shot', author_name: 'Dee' })
+    expect(changes.status, JSON.stringify(changes.body)).toBe(200)
+    b = await row(shootA)
+    expect(b.client_decision).toBe('changes')
+    expect(clientPlanWords(b)).toMatch(/^Client asked for changes .*: Swap the opening shot$/)
+    const answered = await toldUntil(since2, [shootA], t => t.some(x => x.recipient_email === am.email && /asked for changes to the plan/.test(x.subject)))
+    noLeak(answered)
+    expect(answered.some(t => t.recipient_email === am.email && /^Dee · ZZ TEST.* asked for changes to the plan:/.test(t.subject))).toBe(true)
+    say(`   client asked for changes → "${clientPlanWords(b)}" · told: ${answered.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    // shared again after the change: the answer is cleared, then approved
+    as(am)
+    expect((await share(shootA)).status).toBe(200)
+    expect((await row(shootA)).client_decision ?? null).toBeNull()
+    as(CLIENT_USER)
+    const since3 = new Date().toISOString()
+    expect((await clientAnswer({ shoot_id: shootA, action: 'approve', author_name: 'Dee' })).status).toBe(200)
+    b = await row(shootA)
+    expect(b.client_decision).toBe('approved')
+    expect(clientPlanWords(b)).toMatch(/^Client approved /)
+    expect((await clientAnswer({ shoot_id: shootA, action: 'request_changes', comment: 'Too late' })).status).toBe(403)
+    const approved = await toldUntil(since3, [shootA], t => t.some(x => x.recipient_email === am.email && /approved the plan/.test(x.subject)))
+    noLeak(approved)
+    expect(approved.filter(t => t.recipient_email === am.email && /approved the plan:/.test(t.subject)).length).toBe(1)
+    say(`   client approved → "${clientPlanWords(b)}" · told: ${approved.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
+    say(`   what happened: ${stampLines(b, id => id === am.id ? 'AM' : null).map(l => l.text).join(' / ')}`)
+  })
+
   it('7. Reminder sent — everyone on the shoot gets call time and location', async () => {
     say('\nStep 7 — Reminder sent')
     as(scheduler)
-    expect((await move(shootA, 'reminder_sent')).status).toBe(422)
+    expect((await move(shootA, 'reminder_sent')).status).toBe(403)
     as(am)
     const since = new Date().toISOString()
     const rem = await move(shootA, 'reminder_sent')
     expect(rem.status, JSON.stringify(rem.body)).toBe(200)
     expect(rem.body.moved).toBe('Reminder sent')
+    expect((await row(shootA)).reminder_sent_by).toBe(am.id)
     const told = await toldUntil(since, [shootA], t => t.filter(x => /^Shoot reminder:/.test(x.subject)).length >= 2)
     noLeak(told)
     expect(told.filter(t => /^Shoot reminder:/.test(t.subject)).map(t => t.recipient_email).sort()).toEqual([editor.email, scheduler.email].sort())
@@ -421,26 +541,34 @@ describe('the shoot plan, every button, live', () => {
     expect(shootStage(b, melbourneToday())).toBe('shoot_day')
     expect(clockWords(b, melbourneToday())).toBe('Shoot is today')
     expect(nextStepWords(b, melbourneToday())).toMatch(/^Shooting today\./)
-    // the footage folder: the crew may paste it, whatever their role; a stranger may not
+    // the footage folder and "Footage is in" are the manager's (the owner, 12
+    // Sep 2026: "how come editor can press Footage is in")
     as(OTHER)
     expect((await patch(shootA, { footage_url: 'https://www.dropbox.com/scl/fo/abc/h' })).status).toBe(403)
     as(scheduler)
+    expect((await patch(shootA, { footage_url: 'https://www.dropbox.com/scl/fo/abc/h' })).status).toBe(403)
+    as(editor)
+    expect((await patch(shootA, { footage_url: 'https://www.dropbox.com/scl/fo/abc/h' })).status).toBe(403)
+    const notTheirs = await move(shootA, 'footage_handed')
+    expect(notTheirs.status).toBe(403)
+    say(`   editor presses Footage is in → refused: "${notTheirs.body.error}"`)
+    as(am)
     const badLink = await patch(shootA, { footage_url: 'dropbox folder' })
     expect(badLink.status).toBe(422)
     const folder = await patch(shootA, { footage_url: 'https://www.dropbox.com/scl/fo/abc/h' })
     expect(folder.status, JSON.stringify(folder.body)).toBe(200)
     b = await row(shootA)
     expect(b.footage_url).toBe('https://www.dropbox.com/scl/fo/abc/h')
-    say('   crew pasted the Dropbox folder · a scheduler not on the shoot is refused · "dropbox folder" is refused')
-    // Footage is in — the editor may press it
-    as(editor)
+    say('   AM pasted the Dropbox folder · the crew and the editor are refused · "dropbox folder" is refused')
+    // Footage is in — the AM presses it
     const since = new Date().toISOString()
     const inn = await move(shootA, 'footage_handed')
     expect(inn.status, JSON.stringify(inn.body)).toBe(200)
     expect(inn.body.moved).toBe('Footage handed to the editor')
     expect(inn.body.handed?.total).toBe(1)
-    b = await screen(shootA, editor, 'Editor')
+    b = await screen(shootA, am, 'AM')
     expect(shootStage(b, melbourneToday())).toBe('footage_handed')
+    expect(b.footage_handed_by).toBe(am.id)
     const cards = await cardsOf(shootA)
     expect(cards.length).toBe(1)
     expect(cards[0].raw_assets_url).toBe('https://www.dropbox.com/scl/fo/abc/h')
@@ -512,7 +640,7 @@ describe('the shoot plan, every button, live', () => {
       say(`   shared with 3 days to go → Ops told: ${told.map(t => `${t.recipient_email} "${t.subject}"`).join(', ')}`)
     }
     as(editor); expect((await ack(shootB)).status).toBe(200)
-    as(scheduler); expect((await ack(shootB)).status).toBe(200)
+    expect((await ackLinkPress(shootB, scheduler.id)).status).toBe(200)
     as(am)
     expect((await patch(shootB, { aligned: true, client_confirmed: true })).status).toBe(200)
     b = await screen(shootB, am, 'AM')
@@ -541,8 +669,8 @@ describe('the shoot plan, every button, live', () => {
     say('\nStep 10 — back, the sweep, delete')
     as(editor)
     const back = await move(shootB, 'shared')
-    expect(back.status).toBe(422)
-    expect(back.body.error).toBe('Only an account manager can move a shoot back')
+    expect(back.status).toBe(403)
+    expect(back.body.error).toBe(NOT_YOUR_PAGE.error)
     as(am)
     expect((await move(shootB, 'shared')).status).toBe(200)
     let b = await row(shootB)
@@ -553,7 +681,7 @@ describe('the shoot plan, every button, live', () => {
     expect((await move(shootB, 'confirmed', 'Still going ahead')).status).toBe(200)
     // the shoot day passes with nobody pressing anything
     await table('batches').update(shootB, { shoot_date: plusDays(-1) } as never)
-    b = await screen(shootB, editor, 'Editor')
+    b = await screen(shootB, am, 'AM')
     expect(shootStage(b, melbourneToday())).toBe('shoot_day')
     expect(clockWords(b, melbourneToday())).toBe('Shot yesterday')
     const since = new Date().toISOString()
@@ -561,9 +689,10 @@ describe('the shoot plan, every button, live', () => {
     if (await sweepSafe('footage')) {
       const swept = await runFootageDueSweep()
       expect(swept.handed).toBeGreaterThanOrEqual(1)
-      b = await screen(shootB, editor, 'Editor')
+      b = await screen(shootB, am, 'AM')
       expect(shootStage(b, melbourneToday())).toBe('footage_handed')
       expect(b.footage_due_nudged_at).toBeTruthy()
+      expect(stampLines(b, () => null).find(l => l.key === 'footage')?.text).toMatch(/^Footage in — by itself, the morning after/)
       const told = await toldUntil(since, [shootB], t => t.some(x => x.recipient_email === editor.email && /^Footage should be in:/.test(x.subject)))
       noLeak(told)
       expect(told.filter(t => t.recipient_email === editor.email && /^Footage should be in:/.test(t.subject)).length).toBe(1)
@@ -611,8 +740,22 @@ describe('the shoot plan, every button, live', () => {
     expect(sees(scheduler)).toBe(true)
     expect(sees(OTHER)).toBe(false)
     as(OTHER); expect((await open(shootA)).status).toBe(403)
-    as(scheduler); expect((await open(shootA)).status).toBe(200)
-    say('\nStep 11 — sees shoot A: super admin, general, AM, editor, crew · not: another scheduler')
+    as(scheduler); expect((await open(shootA)).body.redirect).toBe('/dashboard/editor')
+    say('\nStep 11 — on the board, shoot A is seen by: super admin, general, AM, editor, crew · not: another scheduler · only the managers open its page')
+    // a shoot typed by name on the Editor page: footage in, no plan, nothing to press
+    as(am)
+    const typed = await json(await createShoot(new Request('https://x.test/batches', {
+      method: 'POST', body: JSON.stringify({ client_id: TEST_CLIENT_ID, title: `${TAG} C typed`, footage_only: true }),
+    })))
+    expect(typed.status, JSON.stringify(typed.body)).toBe(201)
+    created.batches.add(String(typed.body.id))
+    const c = await row(String(typed.body.id))
+    expect(isFootageOnly(c)).toBe(true)
+    expect(shootStage(c, melbourneToday())).toBe('footage_handed')
+    expect(c.shoot_date).toBe(plusDays(0))
+    expect(c.created_by).toBe(am.id)
+    expect(nextStepWords(c, melbourneToday())).toMatch(/^Footage only — this shoot was never planned here/)
+    say(`   typed shoot "${c.title}": ${STAGE_LABEL[shootStage(c, melbourneToday())]} · ${nextStepWords(c, melbourneToday())}`)
     const all = await toldSince(new Date(STAMP).toISOString(), [shootA, shootB])
     noLeak(all)
     expect(all.every(t => t.recipient_email.endsWith('.invalid') || t.status !== 'sent')).toBe(true)

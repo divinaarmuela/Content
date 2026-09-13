@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Batch, ContentItem } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
-import { canOpenBatch } from '../../../../../lib/production-access'
+import { shootManager } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceBatchChange } from '../../../../../lib/production-live'
 import { ensureShootCard } from '../../../../../lib/plan-cards'
@@ -11,27 +11,29 @@ import { notifyBatchTransition } from '../../../../../lib/workflow'
 import { notifyBriefShared, notifyGoOverride, notifyShootReminder } from '../../../../../lib/shoot-sop-notify'
 import { fillFootageFolder, handOverAtGo, handOverCards, notifyFootageIn } from '../../../../../lib/shoot-handover'
 import {
-  SHOOT_STAGES, shootStage, stageMove, type ShootStage,
+  NOT_YOUR_PAGE, SHOOT_STAGES, canManageShoot, shootStage, stageMove, type ShootStage,
 } from '../../../../../lib/shoot-sop-core'
 
 const melbourneToday = (): string =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 
 /**
- * Move a shoot along the Shoot Brief SOP — the drag on the Shoot brief
- * boards page, and the buttons on the shoot page (Share, Go, Reminder sent,
- * Footage handed over).
+ * Move a shoot along the Shoot Brief SOP — the one "next" button on the
+ * shoot page (Share, Go, Reminder sent, Footage is in) and the drag on the
+ * Shoots board.
+ *
+ * WHO: the account manager on the client, the shoot's creator, a super
+ * admin, a general user (`canManageShoot`). An editor or a crew member is
+ * refused — the owner, 12 Sep 2026: "how come editor can press Footage is
+ * in".
  *
  * The column is never written: the STAMP the column means is, and only if
  * the SOP allows it (`stageMove`). The write is a claim that re-reads the
  * shoot and checks it is still in the column the mover saw, so two people
- * dragging at once produce one move and one plain refusal.
- *
- * Handing the footage over is the bridge to the Editor page: every line of
- * the plan without a card gets one, the shoot's cards are given to the
- * editor with the deadline and the priorities where those are empty, and
- * the editor is told. Both halves are idempotent (one fixed card id per shoot; only
- * empty fields filled), so a second drag creates and changes nothing.
+ * pressing at once produce one move and one plain refusal. Every move that
+ * names a person emails them: Share (editor and crew), Go (editor),
+ * Reminder (everyone on the shoot), Footage is in (editor), a late override
+ * (Ops and the managers).
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
@@ -47,15 +49,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const batches = table<Batch>('batches')
     const batch = await batches.get(id)
     if (!batch) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    if (!(await canOpenBatch(user, batch))) {
-      return NextResponse.json({ error: 'You are not on this client or assigned to this shoot' }, { status: 403 })
-    }
+    const me = await shootManager(user)
+    if (!canManageShoot(me, batch)) return NextResponse.json(NOT_YOUR_PAGE, { status: 403 })
 
     const today = melbourneToday()
     const now = new Date().toISOString()
     const itemCount = await table<ContentItem>('content_items').count({ by: { batch_id: id } })
     const overrideReason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : null
-    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason }, now, user.id)
+    const move = stageMove(batch, to, { role: user.role, today, checklist: { itemCount }, overrideReason, clientIds: me.clientIds }, now, user.id)
     // NO BRIEF, NO SHOOT: a plan shared late is refused; the sentence says a
     // super admin can go ahead with a reason, and this is the request that
     // was missing one — a 400, not a rule they can never satisfy
@@ -80,12 +81,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       action: 'sop_stage', oldValue: from, newValue: to, detail: move.label,
     })
 
-    // the people are told before the answer comes back: the mail is the
-    // handover ("read the brief", "footage is in"), and a failure to tell
-    // somebody is logged, never allowed to undo the move
-    // go booked the shoot: the same after-effects "Book the shoot" has — the
-    // shoot gets its one card, the team is told, the Drive folder is named
-    // by the month. Best-effort, as they are on the transition route.
+    // go booked the shoot: the shoot gets its one card, the team is told,
+    // the Drive folder is named by the month. Best-effort, as on the
+    // transition route.
     if (to === 'confirmed' && batch.status === 'brief' && updated.status === 'locked') {
       await logActivity({
         actor: user, clientId: batch.client_id, entityType: 'batch', entityId: id,
@@ -103,14 +101,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await notifyGoOverride(user, updated).catch(e => console.error('go override notify:', e))
     }
     let handed: { total: number } | null = null
+    if (to === 'shared') {
+      // THE EDITOR READS THE PLAN ON THEIR CARD (13 Sep 2026): the shoot's
+      // one card is made and given to them the moment the plan is shared,
+      // so "I've read the plan" is on the card their email opens
+      try { handed = await handOverCards(user, updated, 'from the shoot') } catch (e) { console.error('card at share:', e) }
+      await notifyBriefShared(user, updated).catch(e => console.error('brief shared notify:', e))
+    }
     // GO IS THE HANDOVER (11 Sep 2026): the card is the editor's from the
     // moment the shoot is confirmed — the footage follows the shoot, and the
     // morning after it the sweep says so. No drag, no press.
     if (to === 'confirmed') {
       handed = await handOverAtGo(user, updated)
-    }
-    if (to === 'shared') {
-      await notifyBriefShared(user, updated).catch(e => console.error('brief shared notify:', e))
     }
     if (to === 'reminder_sent') {
       await notifyShootReminder(user, updated).catch(e => console.error('reminder notify:', e))

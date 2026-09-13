@@ -36,8 +36,6 @@ const ROLE_WORD: Record<string, string> = {
   editor: 'editor',
 }
 
-type WorkKind = { id: string; slug: string; name: string; default_roles: string[] }
-
 // One shoot, one card: a client, the shoot it belongs to (or a new one), a
 // title, what needs doing, and the link to the plan. No quantities, no format
 // rows, no files — the work that comes out of the shoot is added later as
@@ -57,7 +55,7 @@ const BLANK = {
  * The page says what it already knows (`preset`); the dialog owns the rest.
  */
 export default function NewShootPlanDialog({
-  open, onOpenChange, onCreated, preset, clients, batches, briefedBatchIds, team: teamProp,
+  open, onOpenChange, onCreated, preset, clients, batches, team: teamProp,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -67,8 +65,6 @@ export default function NewShootPlanDialog({
   preset?: { client_id?: string; batch_id?: string }
   clients: ClientRow[]
   batches: Batch[]
-  /** shoots that already have a shoot plan — they cannot take a second one */
-  briefedBatchIds?: string[]
   /** the assignable members the PAGE already fetched (useTeamMembers) — pass
    *  it so the dialog does not ask `/api/team` a second time */
   team?: TeamMember[]
@@ -122,21 +118,6 @@ export default function NewShootPlanDialog({
       .catch(() => setAllClients([]))
   }, [open])
 
-  // the shoot-plan kind is what makes the server treat this card as a plan
-  // (it rides the item pipeline under the `shoot_brief` kind). Loaded on
-  // first open, never on a page that merely renders the closed dialog.
-  const [kinds, setKinds] = useState<WorkKind[]>([])
-  const kindsFetchedRef = useRef(false)
-  useEffect(() => {
-    if (!open || kindsFetchedRef.current) return
-    kindsFetchedRef.current = true
-    fetch('/api/production/work-kinds?active=1')
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => setKinds(j?.kinds ?? []))
-      .catch(() => {})
-  }, [open])
-  const briefKind = kinds.find(k => k.slug === 'shoot_brief') ?? null
-
   // What the caller already knows, folded in when the dialog opens. The two
   // fields are read out as primitives on purpose: an inline `preset={{…}}`
   // object is a new identity every render, and depending on it would loop.
@@ -154,54 +135,29 @@ export default function NewShootPlanDialog({
 
   const createPlan = async () => {
     if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
-    if (!briefKind) return toast.error('Still loading — try again in a moment')
     setNewBusy(true)
     try {
-      // ONE card, one request
-      const payload = [{
-        client_id: draft.client_id,
-        // an explicitly chosen shoot, or null to create one with the plan
-        batch_id: draft.batch_id || null,
-        title: draft.title.trim(),
-        priority: draft.priority,
-        due_date: draft.due_date || null,
-        ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
-        work_kind_id: briefKind.id,
-        brief_url: draft.brief_url.trim() || null,
-        brief: draft.brief.trim() || null,
-        // a plan always goes to the client
-        client_approval_required: true,
-      }]
-      const res = await fetch('/api/production/items', {
+      // THE SHOOT IS THE PLAN (13 Sep 2026): one request makes the shoot,
+      // and the nine parts are written on its page. No plan document rides
+      // the content pipeline any more.
+      const res = await fetch('/api/production/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: payload }),
+        body: JSON.stringify({
+          client_id: draft.client_id,
+          title: draft.title.trim(),
+          description: draft.brief.trim() || null,
+          shoot_date: draft.due_date || null,
+          ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
+        }),
       })
       const created = await res.json().catch(() => null)
       if (!res.ok) throw new Error(created?.error ?? 'Create failed')
-      // the server answers 207 when a write in the body did not land; with
-      // one card that means "not saved", and it is said as such
-      const partial = res.status === 207 && created && !Array.isArray(created)
-      const rows = (Array.isArray(created)
-        ? created
-        : partial
-          ? (created.created ?? [])
-          : []) as { id: string; owner_id?: string | null; batch_id?: string | null }[]
-      const failed = (partial ? created.failed ?? [] : []) as { title: string }[]
-      // where it went, and a way to go there: the plan lives on its shoot's
-      // page, so that is where the toast opens
-      const first = rows[0]
-      const href = first?.batch_id
-        ? `/dashboard/production/shoots/${first.batch_id}`
-        : '/dashboard/production'
-      if (failed.length > 0) {
-        toast.error('The shoot plan could not be saved. Try again.', { duration: 12_000 })
-      } else {
-        toastOpen('Shoot plan created — it is in Draft on Shoots', href, router.push)
-      }
+      const made = created as { id: string; owner_id?: string | null }
+      toastOpen('Shoot plan created — it is in Draft on Shoots', `/dashboard/production/shoots/${made.id}`, router.push)
       onOpenChange(false)
       setDraft({ ...BLANK })
-      onCreated(rows.length > 0 ? rows : undefined)
+      onCreated([made])
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
       // may well have created it. Check before inviting a retry that would
@@ -283,7 +239,7 @@ export default function NewShootPlanDialog({
                 <SelectContent>
                   <SelectItem value="none">Nobody yet — assign one later</SelectItem>
                   {(() => {
-                    const suggested = briefKind ? team.filter(m => briefKind.default_roles.includes(m.role)) : []
+                    const suggested = team.filter(m => m.role === 'account_manager' || m.role === 'super_admin')
                     const ids = new Set(suggested.map(m => m.id))
                     const rest = team.filter(m => !ids.has(m.id))
                     return (

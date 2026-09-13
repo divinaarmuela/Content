@@ -91,8 +91,9 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
    * manager reads it and moves the card. Production work keeps its one-tap
    * approve. */
   const decides = !card.adhoc_post
-  const canApprove = decides && card.actions.approve && !acted && !!card.act_item_id
-  const canAsk = decides && card.actions.askForChange && !acted && !!card.act_item_id
+  const target = card.act_item_id ? { item_id: card.act_item_id } : card.act_shoot_id ? { shoot_id: card.act_shoot_id } : null
+  const canApprove = decides && card.actions.approve && !acted && !!target
+  const canAsk = decides && card.actions.askForChange && !acted && !!target
   const canComment = card.actions.comment && !!card.comment_target
   /** every asset, at full size, each with its own comment — the one image,
    *  cropped, was "terrible with these assets" */
@@ -112,7 +113,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
   /** Approve sends NO note — one tap is the whole decision. Asking for a
    *  change sends the words, and wants a few. */
   const act = async (action: 'approve' | 'request_changes') => {
-    if (!card.act_item_id || busy) return
+    if (!target || busy) return
     const text = action === 'request_changes' ? note.trim() : ''
     if (action === 'request_changes' && !text) {
       toast.error('Tell us what to change — a few words is enough')
@@ -122,11 +123,13 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
     if (who) { try { localStorage.setItem(NAME_KEY, who) } catch { /* fine */ } }
     setBusy(action)
     try {
-      if (token) {
+      if (token || 'shoot_id' in target) {
+        // the share link's token, or — for a shoot decided on from the
+        // signed-in portal — the signed-in client themselves
         const res = await fetch('/api/portal/act', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, item_id: card.act_item_id, action, comment: text, author_name: who }),
+          body: JSON.stringify({ ...(token ? { token } : {}), ...target, action, comment: text, author_name: who }),
         })
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Something went wrong')
       } else {

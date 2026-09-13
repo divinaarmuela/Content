@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { Batch, ContentItem } from '@/lib/db-types'
+import type { Batch, ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { batchClientIds, heldBatchIds } from '../../../lib/production-access'
 import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
 import { onBatchCreated } from '../../../lib/gdrive-hooks'
+import { notifyShootOwner } from '../../../lib/shoot-sop-notify'
+import { footageOnlyPatch } from '../../../lib/shoot-sop-core'
+
+const melbourneToday = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 import {
   sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
 } from '../../../lib/batch-brief-core'
@@ -77,6 +81,18 @@ export async function POST(req: Request) {
     }
     if (month !== null && (!Number.isInteger(month) || month < 1 || month > 12)) month = null
     if (year !== null && (!Number.isInteger(year) || year < 2024 || year > 2100)) year = null
+    // A SHOOT THAT WAS NEVER PLANNED HERE (13 Sep 2026): typed by name on the
+    // Editor page's New card — made already shot, footage in, no plan
+    const footageOnly = body.footage_only === true
+    // "Account manager for this shoot": any active team member bar a client
+    let ownerId: string = user.id
+    if (body.owner_id) {
+      const named = await table<TeamUserRow>('team_users').get(String(body.owner_id))
+      if (!named || named.active_status !== true || named.role === 'client') {
+        return NextResponse.json({ error: 'The account manager has to be an active team member' }, { status: 400 })
+      }
+      ownerId = named.id
+    }
     // the helper's untyped insert takes a partial row (created_at/updated_at
     // are stamped for us); the result is a full batch row
     const data = await table('batches').insert({
@@ -91,10 +107,14 @@ export async function POST(req: Request) {
         reference_media: sanitiseReferenceMedia(body.reference_media),
         month,
         year,
-        owner_id: user.id,
+        // the account manager on the shoot: the one named in the popup, or
+        // whoever made it; the creator is stamped either way
+        owner_id: ownerId,
+        created_by: user.id,
         // Postgres defaulted the status; a shoot that reads back without one
         // is a plan no gate in batch-brief-core recognises
         status: 'brief',
+        ...(footageOnly ? footageOnlyPatch(new Date().toISOString(), user.id, shootDate ?? melbourneToday()) : {}),
       }) as unknown as Batch
     await logActivity({
       actor: user, clientId: data.client_id,
@@ -102,6 +122,10 @@ export async function POST(req: Request) {
       action: 'created', newValue: data.title,
     })
     announceBatchChange({ batch_id: data.id, client_id: data.client_id, status: data.status ?? 'brief', kind: 'created' })
+    // the account manager named by somebody else is told the shoot is theirs
+    if (ownerId !== user.id && !footageOnly) {
+      await notifyShootOwner(user, data).catch(e => console.error('shoot owner notify:', e))
+    }
     // the shoot's folder tree, in the background: never awaited, never able to
     // fail the create. With Drive unconnected this does nothing at all.
     onBatchCreated(data)

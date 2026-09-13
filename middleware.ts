@@ -60,7 +60,14 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  if (isProtectedRoute(req)) {
+  // THE CREW'S ONE PRESS (13 Sep 2026): "I've read the plan" from the email
+  // is a signed per-person token on a GET — no login, the token is the
+  // authority (verified in the route), exactly as the portal's links are
+  const isAckLink = req.method === 'GET'
+    && /^\/api\/production\/batches\/[^/]+\/acknowledge$/.test(req.nextUrl.pathname)
+    && req.nextUrl.searchParams.has('token')
+
+  if (isProtectedRoute(req) && !isAckLink) {
     // auth.protect() answers a signed-out request with a hard 404, so the page
     // never admits it exists. Correct for an API, wrong for a page someone
     // sends a colleague: the link preview reads "404: This page could not be

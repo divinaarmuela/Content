@@ -272,14 +272,14 @@ const EDITOR: Tutorial = {
       title: 'Shoots: read the plan, then get the footage',
       see: [
         `Shoots is where filming days live. One card is one shoot, in the playbook’s six stages: ${SHOOT_COLUMNS}.`,
-        'You see the shoots you are on as the editor or the crew. Open one for the plan: the objective, the shot list, the script, call time and location, and the editor priorities and deadline.',
-        'The plan is built on a Milanote-style canvas on the shoot page — shot list, references, mood board.',
-        'When the account manager shares the plan you are emailed. The shoot cannot be confirmed until everyone on it has pressed "I’ve read the plan".',
+        'You see the shoots you are on as the editor or the crew. The plan — the objective, the shot list, the script, call time and location, the editor priorities and deadline — is on your card under "Before you start" and in the email.',
+        'The shoot page itself is the account manager’s; you never need it.',
+        'When the account manager shares the plan you are emailed. The shoot cannot be confirmed until everyone on it has pressed "I’ve read the plan" — on your card, or the link in the email.',
         'After the shoot, when the footage is handed over, the cards for that shoot land on your Editor page — owned by you, with the deadline and the priorities from the plan — and you are emailed.',
       ],
       actions: [
-        'When the email arrives, open the shoot and read the plan.',
-        'Press "I’ve read the plan".',
+        'When the email arrives, open your card and read the plan.',
+        'Press "I’ve read the plan" on the card.',
         'When "Footage is in" arrives, go to Editor and press Acknowledge on the new cards.',
       ],
       href: SHOOTS,
@@ -397,7 +397,7 @@ const MANAGER: Tutorial = {
       see: [
         `One card per shoot for your clients, in six stages: ${SHOOT_COLUMNS}. By date shows the same shoots on a calendar.`,
         'New shoot plan makes the shoot: client, title, what it is for, shoot date. Making the plan sets up the shoot; you never create the shoot separately.',
-        'On the shoot page: the nine-part checklist (objective, deliverables, shot list, script, date and call time and location, talent, props and wardrobe, client availability, editor priorities and deadline) with "6 of 9 filled" and what is missing; the Milanote-style canvas for the shot list, references and mood board; who is on the shoot; the plan’s own approval.',
+        'On the shoot page: the nine-part plan (objective, deliverables, shot list, script, date and call time and location, talent, props and wardrobe, client availability, editor priorities and deadline) with "6 of 9 filled" and what is missing; the Milanote-style canvas for references and the mood board; who is on the shoot; where it is, with who did what and when.',
         '"Editor: who edits the footage after the shoot" and "Crew on the day". Everyone you add is emailed when you share the plan and must press "I’ve read the plan".',
         'The seven-day rule: the plan must be shared with the team seven days before the day. A late plan turns red and Ops is nudged; Go is refused, and only a super admin can go anyway with a reason.',
         'Go is the one sign-off: it needs the checklist complete, "Aligned with the strategist" and client availability ticked, and every acknowledgement in. It also books the date.',
@@ -405,7 +405,7 @@ const MANAGER: Tutorial = {
       ],
       actions: [
         'Press New shoot plan.',
-        'Fill the nine parts. Send the plan for review, or share it with the client and log their answer.',
+        'Fill the nine parts. If the client needs to sign it off, press "Share the plan with the client" — they approve it on their portal and the answer shows under Where it is.',
         'Pick the editor and crew, then share the plan with the team — seven days out.',
         'Tick aligned and confirmed, wait for "2 of 2 acknowledged", press "Confirm — it is go".',
         'After the shoot, nothing to press: the morning after, it moves to Footage in by itself.',

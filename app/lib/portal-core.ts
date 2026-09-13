@@ -401,6 +401,10 @@ export type ShootFacts = {
   shootStatus: string | null | undefined
   /** the shoot date, already written for a person ("Thu 17 Sep"), or null */
   dateLabel?: string | null
+  /** the client's answer ON THE SHOOT (13 Sep 2026): the plan is shared from
+   *  the shoot page and approved or sent back on the portal, with no plan
+   *  document behind it — 'approved' | 'changes' | null (not answered) */
+  clientDecision?: string | null
 }
 
 export type ShootStanding = {
@@ -414,7 +418,10 @@ export function shootStanding(f: ShootFacts): ShootStanding {
   const shoot = String(f.shootStatus ?? 'brief')
   const brief = String(f.briefStatus ?? '')
   const shared = f.sharedWithClient === true
-  const decide = planDecidable(shared, brief)
+  // no plan document: the shoot itself is decided on, until it is approved
+  const onShoot = shared && !brief
+  const decision = String(f.clientDecision ?? '')
+  const decide = planDecidable(shared, brief) || (onShoot && decision !== 'approved')
   const actions: PortalActions = { approve: decide, askForChange: decide, comment: shared }
   const on = f.dateLabel ? ` on ${f.dateLabel}` : ''
   const forDay = f.dateLabel ? ` for ${f.dateLabel}` : ''
@@ -425,6 +432,12 @@ export function shootStanding(f: ShootFacts): ShootStanding {
   }
   if (shoot === 'shot') {
     return { column: 'approved', line: `Filmed${on} — being edited now.`, tone: 'blue', actions }
+  }
+  if (onShoot && decision === 'approved' && shoot !== 'locked') {
+    return { column: 'approved', line: 'Plan approved — we’ll confirm the date shortly.', tone: 'green', actions }
+  }
+  if (onShoot && decision === 'changes') {
+    return { column: 'your_review', line: 'We have your notes and we’ll come back with an updated plan. You can approve it here once it is.', tone: undefined, actions }
   }
   // the plan is theirs to decide on
   if (decide) {

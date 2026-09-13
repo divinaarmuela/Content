@@ -255,6 +255,15 @@ export interface Batch {
   owner_id: string | null
   footage_due_nudged_at: string | null
   footage_url: string | null
+  created_by: string | null
+  aligned_by: string | null
+  client_confirmed_by: string | null
+  reminder_sent_by: string | null
+  client_shared_at: string | null
+  client_shared_by: string | null
+  client_decision: string | null
+  client_decided_at: string | null
+  client_decision_note: string | null
   objective: string | null
   script: string | null
   call_time: string | null
@@ -1264,7 +1273,7 @@ export const TABLE_COLUMNS = {
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
   batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
   board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
   boards: ['id', 'client_id', 'parent_board_id', 'item_id', 'name', 'icon', 'colour', 'created_by', 'created_at', 'updated_at'],
@@ -1344,7 +1353,7 @@ export const NULLABLE_COLUMNS = {
   assistant_chats: [],
   assistant_prefs: [],
   batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'footage_due_nudged_at', 'footage_url', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['author_id', 'resolved_at'],
   board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],
   boards: ['parent_board_id', 'item_id', 'created_by'],

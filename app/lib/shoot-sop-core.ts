@@ -18,6 +18,7 @@
  */
 
 import { planCards, type PlanCard, shootCard, deliverablesBrief } from './deliverable-group-core'
+import { dayKeyInZone } from './timezone-core'
 
 /* ── the shoot, as these rules read it ─────────────────────────────────── */
 
@@ -62,6 +63,26 @@ export type SopShoot = {
   /** where the footage lives — the Dropbox or Drive folder whoever has it
    *  pasted on the shoot page; handed to every card as "Files to work from" */
   footage_url?: string | null
+  /* ── who did what (13 Sep 2026: "do we actually know … reviewed by who
+   *    and created by who") — every stamp carries its person; a row from
+   *    before these columns reads as "by the team" ── */
+  created_by?: string | null
+  created_at?: string | null
+  brief_shared_by?: string | null
+  aligned_by?: string | null
+  client_confirmed_by?: string | null
+  go_by?: string | null
+  reminder_sent_by?: string | null
+  footage_handed_by?: string | null
+  /* ── the client's answer, on the shoot itself: the plan went to the
+   *    portal from this page, and the client approved it or asked for
+   *    changes there ── */
+  shared_with_client?: boolean | null
+  client_shared_at?: string | null
+  client_shared_by?: string | null
+  client_decision?: string | null
+  client_decided_at?: string | null
+  client_decision_note?: string | null
 }
 
 export type Ack = { user_id: string; at: string }
@@ -368,20 +389,53 @@ export function bookingPatch(b: Pick<SopShoot, 'status' | 'shoot_date'>, now: st
 
 export type MoveRole = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'client'
 
+/* ── whose page this is ────────────────────────────────────────────────── */
+
+/**
+ * WHO MAY DO WHAT ON A SHOOT (the owner, 12 Sep 2026: "shouldn't it be the
+ * AM or the person who created the brief"): the account manager(s) on the
+ * client, the person who created the shoot, a super admin, and a general
+ * user. They write the nine parts, tick the two ticks, move the stages,
+ * paste the footage folder and pick the editor and crew. Editors,
+ * schedulers and crew do NOTHING on the shoot page and never open it — they
+ * read the plan on their Editor card or in their email.
+ */
+export type SopManager = {
+  id: string
+  role: MoveRole
+  /** the clients this person is assigned to — an account manager's list;
+   *  undefined means "not known here", and the role alone is trusted (the
+   *  board and the tests); the routes always pass the real list */
+  clientIds?: readonly string[]
+}
+
+export const NOT_YOURS = 'Only the account manager on this client, the person who created the shoot, or a super admin can do that'
+
+/** Where an editor, a scheduler or a crew member is sent instead: their
+ *  shoots are cards on the Editor page, and the plan is on the card. */
+export const NOT_YOUR_PAGE = { error: 'The shoot page is the account manager’s. Your shoots are cards on the Editor page — the plan is on the card.', redirect: '/dashboard/editor' } as const
+
+export function canManageShoot(who: SopManager, b: Pick<SopShoot, 'client_id' | 'owner_id' | 'created_by'>): boolean {
+  if (who.role === 'super_admin' || who.role === 'general') return true
+  if (who.role === 'client') return false
+  if (b.owner_id === who.id || b.created_by === who.id) return true
+  if (who.role !== 'account_manager') return false
+  return who.clientIds === undefined || who.clientIds.includes(b.client_id)
+}
+
 export type MoveInput = {
   role: MoveRole
   today: string
   checklist?: ChecklistInput
   /** a super admin's reason for going ahead with a plan shared late */
   overrideReason?: string | null
+  /** the mover's clients, when known — see `SopManager` */
+  clientIds?: readonly string[]
 }
 
 export type MoveResult =
   | { ok: true; patch: Record<string, unknown>; label: string }
   | { ok: false; reason: string; needsOverride?: boolean }
-
-const isManager = (r: MoveRole) => r === 'account_manager' || r === 'super_admin'
-const canEdit = (r: MoveRole) => isManager(r) || r === 'editor' || r === 'general'
 
 /**
  * What dragging a shoot to a column means, and whether the SOP allows it.
@@ -392,17 +446,18 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
   const from = shootStage(b, input.today)
   if (from === to) return { ok: false, reason: `Already in ${STAGE_LABEL[to]}` }
   if (b.status === 'wrapped') return { ok: false, reason: 'This shoot is closed' }
-  if (input.role === 'client' || input.role === 'scheduler') return { ok: false, reason: 'Only the team on the shoot moves it' }
+  // the shoot page is the manager's: the AM on the client, the creator, a
+  // super admin, a general user — nobody else moves a shoot
+  if (!canManageShoot({ id: actorId, role: input.role, clientIds: input.clientIds }, b)) return { ok: false, reason: NOT_YOURS }
 
   const forward = stageIndex(to) > stageIndex(from)
   if (!forward) {
-    if (!isManager(input.role)) return { ok: false, reason: 'Only an account manager can move a shoot back' }
     if (from === 'shoot_day') return { ok: false, reason: 'The calendar put it on Shoot day — change the shoot date to move it' }
     if (to === 'shoot_day') return { ok: false, reason: 'The calendar decides Shoot day — set the date instead' }
     // clear every stamp past the target column
     const patch: Record<string, unknown> = {}
     if (stageIndex(to) < stageIndex('footage_handed')) { patch.footage_handed_at = null; patch.footage_handed_by = null }
-    if (stageIndex(to) < stageIndex('reminder_sent')) patch.reminder_sent_at = null
+    if (stageIndex(to) < stageIndex('reminder_sent')) { patch.reminder_sent_at = null; patch.reminder_sent_by = null }
     if (stageIndex(to) < stageIndex('confirmed')) { patch.go_at = null; patch.go_by = null }
     if (stageIndex(to) < stageIndex('shared')) { patch.brief_shared_at = null; patch.brief_shared_by = null }
     return { ok: true, patch, label: `Moved back to ${STAGE_LABEL[to]}` }
@@ -410,13 +465,11 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
 
   switch (to) {
     case 'shared': {
-      if (!canEdit(input.role)) return { ok: false, reason: 'Only the team writing the plan can share it' }
       const list = briefChecklist(b, input.checklist)
       if (!list.complete) return { ok: false, reason: `Not yet — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in. Nothing moves forward on half-information.` }
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
     }
     case 'confirmed': {
-      if (!isManager(input.role)) return { ok: false, reason: 'Only an account manager signs a shoot off as go' }
       if (from === 'drafting') return { ok: false, reason: 'Share the plan with the team first' }
       const go = goReady(b, { ...input.checklist, role: input.role, overrideReason: input.overrideReason })
       if (!go.ok) return { ok: false, reason: go.reasons[0], needsOverride: go.needsOverride }
@@ -436,14 +489,12 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
       }
     }
     case 'reminder_sent': {
-      if (!canEdit(input.role)) return { ok: false, reason: 'Only the team sends the reminder' }
       if (from !== 'confirmed') return { ok: false, reason: 'Sign the shoot off as go before the reminder goes out' }
-      return { ok: true, patch: { reminder_sent_at: now }, label: 'Reminder sent' }
+      return { ok: true, patch: { reminder_sent_at: now, reminder_sent_by: actorId }, label: 'Reminder sent' }
     }
     case 'shoot_day':
       return { ok: false, reason: 'The calendar moves a shoot here on the day — set the shoot date instead' }
     case 'footage_handed': {
-      if (!canEdit(input.role)) return { ok: false, reason: 'Only the team hands footage over' }
       const days = daysUntilShoot(b, input.today)
       if (days === null || days > 0) return { ok: false, reason: 'The shoot has not happened yet' }
       if (!b.editor_id) return { ok: false, reason: 'Name the editor on the shoot first — the footage is handed to them' }
@@ -526,7 +577,10 @@ export function lateNudgeTargets<T extends SopShoot>(shoots: readonly T[], today
  *  dates exist. 7 or more is on time. */
 export function shareLeadDays(b: Pick<SopShoot, 'shoot_date' | 'brief_shared_at'>): number | null {
   const shot = text(b.shoot_date).slice(0, 10)
-  const shared = text(b.brief_shared_at).slice(0, 10)
+  // the share stamp is an instant; its DAY is Melbourne's, not UTC's — at
+  // 00:30 Melbourne the UTC date is still yesterday (a test caught it at
+  // midnight, 13 Sep 2026)
+  const shared = dayKeyInZone(text(b.brief_shared_at) || null, 'Australia/Melbourne') ?? ''
   if (!shot || !shared) return null
   const a = Date.parse(`${shot}T00:00:00Z`)
   const s = Date.parse(`${shared}T00:00:00Z`)
@@ -573,7 +627,10 @@ export function canSeeShoot(
 ): boolean {
   if (viewer.role === 'super_admin' || viewer.role === 'general') return true
   if (viewer.role === 'client') return viewer.client_id === b.client_id
-  if (clientIdsOfViewer.includes(b.client_id)) return true
+  // the client-wide view is the ACCOUNT MANAGER's: an editor or scheduler on
+  // a client's team sees only the shoots they are named on (the owner, 12
+  // Sep 2026: "shouldn't it be the ones they've tagged")
+  if (viewer.role === 'account_manager' && clientIdsOfViewer.includes(b.client_id)) return true
   return isOnShoot(b, viewer.id)
 }
 
@@ -584,6 +641,154 @@ function shortDay(iso: string | null | undefined): string | null {
   if (!d) return null
   const t = new Date(`${d}T00:00:00`)
   return Number.isNaN(t.getTime()) ? null : t.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
+}
+
+/** An instant as a person reads it, in Melbourne: "Mon 14 Sept, 9:10 am". */
+export function stampWords(iso: string | null | undefined): string | null {
+  const t = new Date(text(iso))
+  if (!text(iso) || Number.isNaN(t.getTime())) return null
+  // a bare day (YYYY-MM-DD) is a calendar day, not an instant — no time on it
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text(iso))) return new Date(`${text(iso)}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/^(\w{3}),/, '$1')
+  return t.toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    .replace(/^(\w{3}),/, '$1').replace(/\s?(am|pm)$/i, ' $1')
+}
+
+/* ── the client's answer, on the shoot ─────────────────────────────────── */
+
+export type ClientDecision = 'approved' | 'changes'
+
+/** The plan can go to the client once the nine parts are in, at any stage
+ *  from Draft on — the creator often reviews it themselves and sends it
+ *  (the owner, 13 Sep 2026); a closed shoot sends nothing. */
+export function clientShareReady(b: SopShoot, input: ChecklistInput = {}): { ok: true } | { ok: false; reason: string } {
+  if (b.status === 'wrapped') return { ok: false, reason: 'This shoot is closed' }
+  const list = briefChecklist(b, input)
+  if (!list.complete) return { ok: false, reason: `Fill in the plan first — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to go` }
+  return { ok: true }
+}
+
+/** The stamps "Share the plan with the client" writes. Sharing again after
+ *  the client asked for changes clears their answer, so the card waits on
+ *  them once more. */
+export function clientSharePatch(now: string, actorId: string): Record<string, unknown> {
+  return {
+    shared_with_client: true, client_shared_at: now, client_shared_by: actorId,
+    client_decision: null, client_decided_at: null, client_decision_note: null,
+  }
+}
+
+/** The client's answer from the portal, on the shoot. */
+export function clientDecisionPatch(decision: ClientDecision, note: string | null, now: string): Record<string, unknown> {
+  return { client_decision: decision, client_decided_at: now, client_decision_note: text(note).slice(0, 2000) || null }
+}
+
+/** Is the client's answer still wanted — shared, and not yet approved? */
+export function clientDecisionOpen(b: SopShoot): boolean {
+  return b.shared_with_client === true && b.client_decision !== 'approved'
+}
+
+/** Where the plan is with the client, in one line — null until it was
+ *  shared from the shoot page. */
+export function clientPlanWords(b: SopShoot): string | null {
+  if (b.client_decision === 'approved') return `Client approved${stampWords(b.client_decided_at) ? ` ${stampWords(b.client_decided_at)}` : ''}`
+  if (b.client_decision === 'changes') {
+    const note = text(b.client_decision_note)
+    return `Client asked for changes${stampWords(b.client_decided_at) ? ` ${stampWords(b.client_decided_at)}` : ''}${note ? `: ${note}` : ''}`
+  }
+  if (b.client_shared_at) return `With the client since ${stampWords(b.client_shared_at)}`
+  if (b.shared_with_client) return 'On the client portal'
+  return null
+}
+
+/* ── who did what: every stamp with its person and time ────────────────── */
+
+export type NameOf = (userId: string | null | undefined) => string | null
+
+const by = (nameOf: NameOf, id: string | null | undefined) => nameOf(id) ?? 'the team'
+const withWhen = (iso: string | null | undefined) => { const w = stampWords(iso); return w ? `, ${w}` : '' }
+
+/** "Created by Ada, Fri 12 Sept" — a row from before the column reads
+ *  "by the team". */
+export function createdWords(b: Pick<SopShoot, 'created_by' | 'owner_id' | 'created_at'>, nameOf: NameOf): string {
+  return `Created by ${by(nameOf, b.created_by ?? b.owner_id)}${withWhen(b.created_at)}`
+}
+
+export type StampLine = { key: string; text: string; done: boolean }
+
+/**
+ * THE WHAT-HAPPENED LOG OF A SHOOT, read off its stamps (the owner, 13 Sep
+ * 2026: "do we actually know … reviewed by who and created by who"). One
+ * line per step, with the person and the time; a step not taken yet says
+ * so. The same lines feed "Where it is" and the board card.
+ */
+export function stampLines(b: SopShoot, nameOf: NameOf): StampLine[] {
+  const lines: StampLine[] = []
+  lines.push({ key: 'created', text: createdWords(b, nameOf), done: true })
+  lines.push(b.brief_shared_at
+    ? { key: 'shared', text: `Shared with the team by ${by(nameOf, b.brief_shared_by)}${withWhen(b.brief_shared_at)}`, done: true }
+    : { key: 'shared', text: 'Not shared with the team yet', done: false })
+  const people = peopleOnShoot(b)
+  if (people.length > 0) {
+    const acked = new Map(acksOf(b).map(a => [a.user_id, a.at]))
+    const read = people.filter(id => acked.has(id)).map(id => `${by(nameOf, id)}${withWhen(acked.get(id))}`)
+    const notYet = people.filter(id => !acked.has(id)).map(id => by(nameOf, id))
+    lines.push({
+      key: 'read',
+      text: (read.length > 0 ? `Read by ${read.join('; ')}` : 'Nobody has read the plan yet') + (notYet.length > 0 ? ` · not yet: ${notYet.join(', ')}` : ''),
+      done: notYet.length === 0,
+    })
+  }
+  lines.push(b.aligned_at
+    ? { key: 'aligned', text: `Aligned with the strategist — ticked by ${by(nameOf, b.aligned_by)}${withWhen(b.aligned_at)}`, done: true }
+    : { key: 'aligned', text: 'Aligned with the strategist — not ticked yet', done: false })
+  lines.push(b.client_confirmed_at
+    ? { key: 'client_confirmed', text: `Client availability and location confirmed — ticked by ${by(nameOf, b.client_confirmed_by)}${withWhen(b.client_confirmed_at)}`, done: true }
+    : { key: 'client_confirmed', text: 'Client availability and location — not ticked yet', done: false })
+  if (b.client_shared_at || b.shared_with_client) {
+    lines.push({ key: 'client_shared', text: b.client_shared_at ? `Shared with the client by ${by(nameOf, b.client_shared_by)}${withWhen(b.client_shared_at)}` : 'On the client portal', done: true })
+    const answer = b.client_decision ? clientPlanWords(b) : null
+    lines.push(answer
+      ? { key: 'client_answer', text: answer, done: b.client_decision === 'approved' }
+      : { key: 'client_answer', text: 'Waiting on the client', done: false })
+  }
+  lines.push(b.go_at
+    ? { key: 'go', text: `Go by ${by(nameOf, b.go_by)}${withWhen(b.go_at)}${overrideWords(b) ? ` · ${overrideWords(b)}` : ''}`, done: true }
+    : { key: 'go', text: 'Not confirmed as go yet', done: false })
+  lines.push(b.reminder_sent_at
+    ? { key: 'reminder', text: `Reminder sent by ${by(nameOf, b.reminder_sent_by)}${withWhen(b.reminder_sent_at)}`, done: true }
+    : { key: 'reminder', text: 'Reminder not sent yet', done: false })
+  lines.push(b.footage_handed_at
+    ? { key: 'footage', text: `Footage in — ${b.footage_handed_by ? `by ${by(nameOf, b.footage_handed_by)}` : 'by itself, the morning after'}${withWhen(b.footage_handed_at)}`, done: true }
+    : { key: 'footage', text: 'Footage not in yet', done: false })
+  return lines
+}
+
+/* ── the plan, as text: for the email a crew member reads without the page ── */
+
+function listWords(v: unknown, pick: (x: Record<string, unknown>) => string): string[] {
+  if (!Array.isArray(v)) return []
+  return v.map(x => (x && typeof x === 'object' ? pick(x as Record<string, unknown>) : String(x ?? ''))).map(s => s.trim()).filter(Boolean)
+}
+
+/** The nine parts as `label: value` lines, in the SOP's order — what the
+ *  email carries so a crew member never needs the page. */
+export function planAsText(b: SopShoot): { label: string; value: string }[] {
+  const shots = listWords(b.shot_list, x => String(x.text ?? x.title ?? ''))
+  const lines = listWords(b.planned_deliverables, x => String(x.title ?? (x.qty ? `${x.qty} × ${x.type ?? ''}` : '')))
+  const when = [shortDay(b.shoot_date) ? `${shortDay(b.shoot_date)}` : '', text(b.call_time) ? `call time ${text(b.call_time)}` : '', text(b.location)].filter(Boolean).join(' · ')
+  const editor = [text(b.editor_priorities), text(b.edit_deadline) ? `due ${shortDay(b.edit_deadline) ?? text(b.edit_deadline)}` : ''].filter(Boolean).join(' · ')
+  const value: Record<BriefItemKey, string> = {
+    objective: text(b.objective),
+    deliverables: lines.join(', '),
+    shot_list: shots.map((s, i) => `${i + 1}. ${s}`).join('\n'),
+    script: text(b.script),
+    when_where: when,
+    talent: text(b.talent),
+    props: text(b.props_wardrobe),
+    client_availability: text(b.client_availability),
+    editor,
+  }
+  return BRIEF_ITEMS.map(i => ({ label: i.label, value: value[i.key] || 'Not filled in yet' }))
 }
 
 /**
@@ -608,10 +813,10 @@ export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): 
     case 'shared': {
       const ack = ackState(b)
       if (ack.total === 0) return 'Next: add the editor and the crew, so there is somebody to read the plan.'
-      if (!ack.complete) return `Next: everyone on the shoot presses “I’ve read the plan” — waiting on ${ack.missing.length} of ${ack.total}.`
-      if (!b.aligned_at || !b.client_confirmed_at) return 'Next: the account manager ticks “Aligned with the strategist” and “Client and location confirmed”, then presses Go.'
+      if (!ack.complete) return `Next: everyone on the shoot presses “I’ve read the plan” — on their Editor card, or the link in their email — waiting on ${ack.missing.length} of ${ack.total}.`
+      if (!b.aligned_at || !b.client_confirmed_at) return 'Next: tick “Aligned with the strategist” and “Client and location confirmed”, then press Go.'
       if (!b.go_at && sharedLate(b)) return `${sharedLateWords(b)}`
-      return 'Next: the account manager presses Go. That books the shoot and puts the editor’s card on the Editor page.'
+      return 'Next: press Go. That books the shoot and puts the editor’s card on the Editor page.'
     }
     case 'confirmed':
       return `Confirmed${when ? ` for ${when}` : ''}. The editor’s card is on the Editor page${due ? `, due ${due}` : ''}. Next: Ops presses Reminder sent the day before the shoot.`
@@ -623,6 +828,7 @@ export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): 
       return 'Shot. The footage is handed to the editor this morning by itself — press “Footage is in” if it is already.'
     }
     case 'footage_handed':
+      if (isFootageOnly(b)) return 'Footage only — this shoot was never planned here. Its cards are on the Editor page; nothing to press.'
       return `Footage should be in — the editor has been told. The work is on the Editor page${due ? `, due ${due}` : ''}.`
   }
 }
@@ -668,6 +874,34 @@ export function footageDueTargets<T extends SopShoot>(shoots: readonly T[], toda
   }
   return { hand, askEditor }
 }
+
+/* ── a shoot that was never planned here: footage only ─────────────────── */
+
+/**
+ * "SIMPLY TYPE THE SHOOT NAME THERE" (the owner, 13 Sep 2026): a card on
+ * the Editor page can come from a shoot that was never planned in the app.
+ * Typing its name makes a lightweight shoot — already shot, footage in, no
+ * plan — so the card has a shoot to belong to and the Shoots board shows
+ * it in Footage in. It never needs Go, a share or a reminder.
+ */
+export function footageOnlyPatch(now: string, actorId: string, shootDate: string): Record<string, unknown> {
+  return {
+    status: 'shot', shoot_date: shootDate.slice(0, 10),
+    footage_handed_at: now, footage_handed_by: actorId,
+    owner_id: actorId, created_by: actorId,
+  }
+}
+
+/** Footage in, and nothing of a plan ever written: no share, no go, none of
+ *  the nine parts bar the date. */
+export function isFootageOnly(b: SopShoot): boolean {
+  if (!b.footage_handed_at || b.brief_shared_at || b.go_at) return false
+  return !text(b.objective) && !text(b.script) && !text(b.editor_priorities) && !text(b.talent)
+    && !(Array.isArray(b.shot_list) && b.shot_list.length > 0)
+    && !(Array.isArray(b.planned_deliverables) && b.planned_deliverables.length > 0)
+}
+
+export const FOOTAGE_ONLY_WORDS = 'No plan — footage only'
 
 /* ── the footage folder: where the footage lives ───────────────────────── */
 
