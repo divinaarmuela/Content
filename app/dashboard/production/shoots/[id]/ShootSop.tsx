@@ -550,7 +550,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
           <ul className="flex flex-col gap-1" aria-label="Who did what, and when">
             {lines.map(l => (
               <li key={l.key} className={`flex gap-2 text-[13px] ${l.done ? '' : 'text-muted-foreground'}`}>
-                <span aria-hidden className="w-4 shrink-0 text-center">{l.done ? '✓' : '·'}</span>
+                {/* a tick for what happened; nothing for what has not — the dots read
+                    as strays (the owner, 14 Sep 2026) */}
+                <span aria-hidden className="w-4 shrink-0 text-center">{l.done ? '✓' : ''}</span>
                 <span>{l.text}</span>
               </li>
             ))}
