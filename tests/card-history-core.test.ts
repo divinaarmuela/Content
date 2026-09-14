@@ -33,6 +33,11 @@ describe('one activity row in the card’s words', () => {
       .toBe('Sent for approval to the client by Ana')
   })
 
+  it('says who a move reached, and what the mailer said (14 Sep 2026)', () => {
+    expect(say({ action: 'notified', detail: 'Told: Joy Quality (sent), Abby Ops (muted)' })).toBe('Told: Joy Quality (sent), Abby Ops (muted)')
+    expect(say({ action: 'notified', detail: '' })).toBe('Told nobody')
+  })
+
   it('says when a super admin passed the quality check in the reviewer’s place', () => {
     expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'client_review', detail: `Passed — send to client · ${STAND_IN_MARK}` }))
       .toBe("Passed by Ana in the reviewer's place and sent to the client")

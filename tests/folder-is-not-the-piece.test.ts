@@ -157,6 +157,19 @@ describe('Submit for quality check on an editor’s card (not a posting job)', (
     expect(r.json.error).toBe('Add a new version with the revisions first.')
   })
 
+  it('the card records who the move reached (the owner, 14 Sep 2026: "quality check did not notify — check what happened")', async () => {
+    fake = seed({ item: { adhoc_post: null, link_url: 'https://drive.google.com/drive/folders/1final', link_kind: 'drive', raw_assets_url: null } })
+    const r = await move('quality_check')
+    expect(r.status).toBe(200)
+    // the fan-out runs after the response; give it a tick
+    await new Promise(res => setTimeout(res, 50))
+    const told = (fake.rows('workflow_activity') as unknown as { action: string; entity_id: string; detail?: string }[])
+      .filter(a => a.action === 'notified' && a.entity_id === ITEM)
+    expect(told).toHaveLength(1)
+    // nobody wears the quality hat here, so the super admin stood in and was told
+    expect(told[0].detail).toBe('Told: Akmal (sent)')
+  })
+
   it('a card with neither a link nor files says to paste the link, not to upload', async () => {
     fake = seed({ item: { adhoc_post: null, link_url: null, link_kind: null, raw_assets_url: null } })
     const r = await move('quality_check')

@@ -990,6 +990,8 @@ export async function performTransition(
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   const schedulerIds = [...(opts?.schedulerIds ?? []).filter(x => typeof x === 'string'), ...defaults].slice(0, 20)
   afterResponse('notification fan-out', async () => {
+    // who this move reached, written onto the card when the fan-out is done
+    const told: string[] = []
     // one email per person per move, whichever audiences name them (the
     // reviewer who is also the client's manager, the Ops contact who is a
     // super admin)
@@ -1061,7 +1063,7 @@ export async function performTransition(
               turns: isBriefTask ? BRIEF_STATUS_TURN : undefined,
             })
         const dueWords = longDate(item.due_date)
-        await notify({
+        const outcome = await notify({
           actorName,
           actorEmail,
           actorClerkId: system ? null : actor.clerk_user_id,
@@ -1115,7 +1117,26 @@ export async function performTransition(
               : `${DASHBOARD_URL}${itemPath({ ...item, status: to }, (person as { role?: string | null }).role)}`
           ),
         })
+        told.push(`${person.name || person.email} (${outcome})`)
       }
+    }
+    // WHO WAS TOLD, ON THE CARD (the owner, 14 Sep 2026: "quality check did
+    // not notify — can you check what happened?"): the answer is a line in
+    // the card's history — each person reached and what the mailer said
+    // (sent, muted by their own setting, failed, duplicate), or why nobody was
+    try {
+      await logActivity({
+        actor: null, clientId: item.client_id,
+        entityType: 'content_item', entityId: item.id,
+        action: 'notified', newValue: to,
+        detail: told.length > 0
+          ? `Told: ${told.join(', ')}`
+          : audiences.length === 0
+            ? 'Told nobody — this move tells no one'
+            : 'Told nobody — no active person matched (no quality checker, manager or holder on this card)',
+      })
+    } catch (e) {
+      console.error('notified line:', e)
     }
   })
 

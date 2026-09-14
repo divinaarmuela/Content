@@ -240,8 +240,9 @@ describe('an account manager posts a file with no piece behind it', () => {
     const trail = log.map(a => `${a.action}:${a.new_value ?? ''}`)
     expect(trail.some(t => t.startsWith('created'))).toBe(true)
     expect(trail.some(t => t.includes('approved_for_scheduling'))).toBe(true)
-    // the sign-off is THIS person's, never the app's
-    expect(log.every(a => a.actor_id === AM.id)).toBe(true)
+    // the sign-off is THIS person's, never the app's — the app's own line is
+    // "Told: …", who the move reached (14 Sep 2026), and that one is nobody's
+    expect(log.filter(a => a.action !== 'notified').every(a => a.actor_id === AM.id)).toBe(true)
   })
 
   it('composes and books the post in, with no approval step in the way', async () => {

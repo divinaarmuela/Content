@@ -108,6 +108,9 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       return { text: `Post changed after approval by ${who} · it needs approving again` }
     case 'status_change':
       return statusLine(row, who)
+    // who a move reached, and what the mailer said (14 Sep 2026)
+    case 'notified':
+      return { text: String(row.detail ?? '').trim() || 'Told nobody' }
     default:
       // 'updated', 'comment_added', 'deleted', 'link_added' and anything new
       return null
