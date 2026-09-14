@@ -39,7 +39,7 @@ import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from 
 import {
   CALENDAR_PAGE, EDITOR_BOARD, POST_APPROVAL_BOARD, SHOOTS_PAGE, actionFor, cardHref, chipCount, linkAllowed, overviewChips, shootHref,
 } from '../lib/overview-links-core'
-import { briefIsLate, type SopShoot } from '../lib/shoot-sop-core'
+import { briefIsLate, footageFolderNeeded, type SopShoot } from '../lib/shoot-sop-core'
 import { BOARD_COLUMNS, boardColumn, columnOf, type BoardColumnKey } from '../lib/board-core'
 import { STATUS_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { itemStatusLabel } from '../lib/brief-task-core'
@@ -693,6 +693,20 @@ export default function OverviewPage() {
         href: '/dashboard/production?view=shoots',
         actionLabel: 'Open the shoots',
         stats: [{ value: late, label: 'not shared 7 days before the shoot' }],
+      })
+      // FOOTAGE FOLDER NEEDED (the owner, 14 Sep 2026: "how does the AM know
+      // it needs the footage? It needs to show clearly on the Overview — the
+      // super admin too"): the shoot day has passed and no folder link is on
+      // the shoot, so the editor's card has nowhere to work from. Shown at
+      // zero too, so "nothing waiting" is said.
+      const needFootage = live.batches.filter(b => footageFolderNeeded(b as unknown as SopShoot, todayKey)).length
+      out.push({
+        key: 'footage-needed',
+        title: 'Footage folder needed',
+        tone: needFootage > 0 ? 'amber' : 'paper',
+        href: '/dashboard/production?view=shoots',
+        actionLabel: 'Open the shoots',
+        stats: [{ value: needFootage, label: 'shot, no folder link yet — paste it on the shoot or the editor’s card' }],
       })
     }
     return out

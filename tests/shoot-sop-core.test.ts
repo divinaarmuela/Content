@@ -555,3 +555,16 @@ describe('sharing late (14 Sep 2026)', () => {
     expect(stageMove(shared, 'shared', { role: 'account_manager', today, planReview: { required: false } } as never, now, AM)).toMatchObject({ ok: false, reason: /change the shoot date/ })
   })
 })
+
+describe('the footage folder is still missing after the shoot day (the owner, 14 Sep 2026)', () => {
+  it('a shot shoot with no folder link needs one; a folder, a future date or a wrapped shoot does not', async () => {
+    const { footageFolderNeeded } = await import('../app/lib/shoot-sop-core')
+    const today = '2026-09-14'
+    expect(footageFolderNeeded({ shoot_date: '2026-09-13', footage_url: null } as never, today)).toBe(true)
+    expect(footageFolderNeeded({ shoot_date: '2026-09-14', footage_url: '' } as never, today)).toBe(true)
+    expect(footageFolderNeeded({ shoot_date: '2026-09-13', footage_url: 'https://drive.google.com/drive/folders/1x' } as never, today)).toBe(false)
+    expect(footageFolderNeeded({ shoot_date: '2026-09-20', footage_url: null } as never, today)).toBe(false)
+    expect(footageFolderNeeded({ shoot_date: '2026-09-13', footage_url: null, status: 'wrapped' } as never, today)).toBe(false)
+    expect(footageFolderNeeded({ shoot_date: null, footage_url: null } as never, today)).toBe(false)
+  })
+})

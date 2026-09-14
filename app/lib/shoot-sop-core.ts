@@ -349,6 +349,19 @@ export function briefIsLate(b: SopShoot, today: string): boolean {
 
 export const LATE_WORDS = 'Plan is late — needed 7 days before the shoot'
 
+/** THE FOOTAGE FOLDER IS STILL MISSING after the shoot day: the editor's card
+ *  has nowhere to work from until the account manager (or the crew) pastes
+ *  it — on the shoot page or on the card (the owner, 14 Sep 2026: "how does
+ *  the AM know it needs the footage? It needs to show clearly on the
+ *  Overview, for the super admin too"). Wrapped shoots are done. */
+export function footageFolderNeeded(b: SopShoot, today: string): boolean {
+  if (b.status === 'wrapped') return false
+  const days = daysUntilShoot(b, today)
+  return days !== null && days <= 0 && text(b.footage_url).length === 0
+}
+
+export const FOOTAGE_NEEDED_WORDS = 'Footage folder link needed — the editor has nowhere to work from'
+
 /** The clock on the card: "12 days to the shoot", "Shoot is today", the late line. */
 export function clockWords(b: SopShoot, today: string): string | null {
   const days = daysUntilShoot(b, today)

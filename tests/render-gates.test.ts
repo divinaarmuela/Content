@@ -567,3 +567,16 @@ describe('a scheduler’s upload on a card shows the same rows as the New post w
     expect(s).toContain('clearGroup(uploadGroup)')
   })
 })
+
+describe('the Overview says when a footage folder is needed (14 Sep 2026)', () => {
+  it('managers, super admins and general users get the tile, next to Shoot plans late', () => {
+    const s = src('app/dashboard/page.tsx')
+    expect(s).toContain("key: 'footage-needed'")
+    expect(s).toContain("title: 'Footage folder needed'")
+    expect(s).toContain('footageFolderNeeded(b as unknown as SopShoot, todayKey)')
+    // inside the same role gate as the late tile
+    const gate = s.indexOf("viewer.role === 'super_admin' || viewer.role === 'account_manager' || viewer.role === 'general'")
+    expect(gate).toBeGreaterThan(-1)
+    expect(s.indexOf("key: 'footage-needed'")).toBeGreaterThan(gate)
+  })
+})
