@@ -590,6 +590,10 @@ export function stageMove(b: SopShoot, to: ShootStage, input: MoveInput, now: st
       // owner, 13 Sep 2026: "share plan with team only available once the
       // quality checker has passed it — make sure it's that way")
       if (gated && !planReviewPassed(b)) return { ok: false, reason: PLAN_REVIEW_WORDS }
+      // THE PLAN IS SHARED WITH PEOPLE (the owner, 14 Sep 2026: "how come
+      // share with the team is available when they did not even pick the
+      // people to send to yet"): an editor or crew has to be named first
+      if (peopleOnShoot(b).length === 0) return { ok: false, reason: NOBODY_ON_SHOOT_WORDS }
       const list = briefChecklist(b, input.checklist)
       if (!list.complete) return { ok: false, reason: `Not yet — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in.` }
       return { ok: true, patch: { brief_shared_at: now, brief_shared_by: actorId }, label: 'Plan shared with the team' }
@@ -1218,6 +1222,8 @@ export function planReviewRequired(b: Pick<SopShoot, 'created_by' | 'owner_id'>,
 }
 
 export const PLAN_REVIEW_WORDS = 'The quality checker has not passed the plan yet — ask for a review'
+
+export const NOBODY_ON_SHOOT_WORDS = 'Pick the editor and the crew first — the plan is shared with them'
 
 export function planReviewPassed(b: Pick<SopShoot, 'plan_reviewed_at'>): boolean {
   return !!b.plan_reviewed_at

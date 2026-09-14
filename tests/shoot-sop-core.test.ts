@@ -568,3 +568,14 @@ describe('the footage folder is still missing after the shoot day (the owner, 14
     expect(footageFolderNeeded({ shoot_date: null, footage_url: null } as never, today)).toBe(false)
   })
 })
+
+describe('the plan is shared with people (the owner, 14 Sep 2026)', () => {
+  it('sharing waits until an editor or crew is named; with either, it goes', async () => {
+    const { stageMove, NOBODY_ON_SHOOT_WORDS } = await import('../app/lib/shoot-sop-core')
+    const am = { role: 'account_manager' as const, today: TODAY }
+    const now = '2026-09-14T04:00:00.000Z'
+    expect(stageMove(complete({ editor_id: null, crew_ids: [] }), 'shared', am, now, AM)).toMatchObject({ ok: false, reason: NOBODY_ON_SHOOT_WORDS })
+    expect(stageMove(complete({ editor_id: null, crew_ids: [VG] }), 'shared', am, now, AM)).toMatchObject({ ok: true })
+    expect(stageMove(complete({ crew_ids: [] }), 'shared', am, now, AM)).toMatchObject({ ok: true })
+  })
+})
