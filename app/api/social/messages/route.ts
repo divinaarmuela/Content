@@ -12,14 +12,19 @@ import { noteConversations } from '@/app/lib/inbox-people'
  * before its account was connected; a hidden contact reappears the moment
  * they message the account again.
  */
-function sinceConnection(raw: unknown, connectedAt: Map<string, number>): unknown {
+export function sinceConnection(raw: unknown, connectedAt: Map<string, number>, connectedIds: Set<string>): unknown {
   const r = raw as { data?: unknown } | null
   const list = Array.isArray(r?.data) ? r.data : Array.isArray(raw) ? raw : null
   if (!list) return raw
   const filtered = list.filter(c => {
     const { accountId, updatedTime } = (c ?? {}) as { accountId?: string; updatedTime?: string }
+    // A DISCONNECTED ACCOUNT'S DMS ARE GONE (the owner, 14 Sep 2026:
+    // "akmal.ashwin is disconnected, so its DMs shouldn't be there"). The
+    // provider still streams a once-connected account's threads; the inbox
+    // shows only accounts currently in social_accounts.
+    if (accountId && !connectedIds.has(accountId)) return false
     const connected = accountId ? connectedAt.get(accountId) : undefined
-    if (connected === undefined || !updatedTime) return true // can't judge — keep
+    if (connected === undefined || !updatedTime) return true // connected, but no time to judge — keep
     return new Date(updatedTime).getTime() >= connected
   })
   return Array.isArray(r?.data) ? { ...(r as object), data: filtered } : filtered
@@ -49,7 +54,9 @@ export async function GET(req: Request) {
         .filter(a => a.connected_at)
         .map(a => [a.provider_account_id, new Date(a.connected_at).getTime()]),
     )
-    const visible = sinceConnection(conversations, connectedAt)
+    // every currently-connected account, so a disconnected one's threads drop
+    const connectedIds = new Set(accounts.map(a => a.provider_account_id))
+    const visible = sinceConnection(conversations, connectedAt, connectedIds)
     // a note of who was in it, so the People table can answer "did they also
     // reach out?" — the Inbox itself stores nothing. Nothing extra is fetched.
     await noteConversations(visible)
