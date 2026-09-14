@@ -185,8 +185,13 @@ describe('notification routing — the gatekeeper rule', () => {
     expect(checkTransition('editor', 'client_changes_requested', 'client_review').ok).toBe(false)
     expect(checkTransition('client', 'client_changes_requested', 'client_review').ok).toBe(false)
   })
-  it("the owner hears about their item's client-facing moments", () => {
-    expect(TRANSITION_NOTIFICATIONS['internal_review>client_review']).toContain('owner_editor')
+  it("the owner hears when it comes back, is approved and goes out — not when it is with the client (14 Sep 2026)", () => {
+    // the owner: "I'm the editor, why am I getting this email" ("now With client")
+    for (const key of ['quality_check>client_review', 'internal_review>client_review', 'revision_complete>client_review', 'approved_for_scheduling>client_review', 'client_changes_requested>client_review'] as const) {
+      expect(TRANSITION_NOTIFICATIONS[key], key).not.toContain('owner_editor')
+    }
+    expect(TRANSITION_NOTIFICATIONS['quality_check>revision_required']).toContain('owner_editor')
+    expect(TRANSITION_NOTIFICATIONS['client_changes_requested>revision_required']).toContain('owner_editor')
     expect(TRANSITION_NOTIFICATIONS['client_review>approved_for_scheduling']).toContain('owner_editor')
     expect(TRANSITION_NOTIFICATIONS['scheduled>published']).toContain('owner_editor')
   })
@@ -638,7 +643,7 @@ describe('a new version on a piece the client already approved', () => {
     expect(TRANSITION_NOTIFICATIONS['approved_for_scheduling>client_review'])
       .toEqual(TRANSITION_NOTIFICATIONS['internal_review>client_review'])
     expect(TRANSITION_NOTIFICATIONS['approved_for_scheduling>client_review'])
-      .toEqual(['client_users', 'account_managers', 'owner_editor'])
+      .toEqual(['client_users', 'account_managers'])
   })
 
   it('says something different to the client, because it is not a first look', () => {

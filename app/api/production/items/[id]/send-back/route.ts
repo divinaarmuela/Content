@@ -8,7 +8,8 @@ import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { OPEN_ITEM_CTA } from '../../../../../lib/email-voice-core'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { canReadClientComments } from '../../../../../lib/comment-access-core'
-import { actingRoles, STATUS_LABELS, type ItemStatus } from '../../../../../lib/workflow-core'
+import { isQualityReviewer } from '../../../../../lib/identity-core'
+import { actingRoles, itemPath, STATUS_LABELS, type ItemStatus } from '../../../../../lib/workflow-core'
 import { canMoveTo, columnOf } from '../../../../../lib/board-core'
 import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
@@ -42,8 +43,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return withRequestCache(async () => {
   try {
     const user = await requireSignedIn()
-    if (!canReadClientComments(user.role)) {
-      return NextResponse.json({ error: 'Only an account manager can send a card back' }, { status: 403 })
+    // the managers, and the quality reviewer, whose "Ask for changes" must
+    // carry the words too (the owner, 14 Sep 2026)
+    if (!canReadClientComments(user.role) && !isQualityReviewer(user)) {
+      return NextResponse.json({ error: 'Only an account manager or the quality checker can send a card back' }, { status: 403 })
     }
     const { id } = await params
     const item = await loadItemForUser(user, id)
@@ -141,7 +144,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(note)}</blockquote>` +
             `<p><strong>What happens next:</strong> make the changes, then hand it on for checking. It is now “${escapeHtml(STATUS_LABELS[current.status])}”.</p>`,
             OPEN_ITEM_CTA,
-            `${DASHBOARD_URL}/dashboard/production/${id}`,
+            // the assignee's own board, with the card open (14 Sep 2026)
+            `${DASHBOARD_URL}${itemPath({ ...item, status: current.status }, owner.role)}`,
           ),
         })
         if (result !== 'failed') notified = { id: owner.id, name: owner.name || owner.email }

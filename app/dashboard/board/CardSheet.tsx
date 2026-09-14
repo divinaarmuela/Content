@@ -42,10 +42,13 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
   const { row: opened, loading: openedLoading } = useRow<ContentItem>('content_items', id)
   const { me } = useRole()
   const adhoc = (opened as { adhoc_post?: unknown } | null)?.adhoc_post === true
-  // the quality checker's desk is the Editor page's Quality check column
-  // (13 Sep 2026): they get the manager's drawer there — Pass, Send back —
-  // not the maker's
-  const checker = me?.role === 'quality_checker'
+  // THE MAKER'S DRAWER IS THE EDITOR'S ALONE (14 Sep 2026): on the Editor
+  // page an account manager, a super admin, a general user and the quality
+  // checker all get the manager's drawer — Pass, Send back, approve, Hand to
+  // — because that is where their email now sends them for a card being
+  // made. It used to be everyone but the checker, so a manager's link
+  // opened a card with no buttons.
+  const maker = me?.role === 'editor'
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY }
@@ -81,7 +84,7 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">Card</SheetTitle>
-        {id && !openedLoading && (editor && !adhoc && !checker
+        {id && !openedLoading && (editor && !adhoc && maker
           ? <EditorCardDrawer key={id} id={id} onClose={onClose} />
           : adhoc || simple
             ? <PostApprovalDetail key={id} id={id} onClose={onClose} />

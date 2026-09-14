@@ -78,13 +78,16 @@ export function eventWords(eventType: string): string | null {
  * Where a row points. Every entity type gets a destination — a notification
  * you cannot open is a notification that wasted your attention.
  */
-export function notificationHref(entityType: string, entityId: string): string | null {
+export function notificationHref(entityType: string, entityId: string, role?: string | null): string | null {
   // entity ids carry suffixes like "#v2" / "#<owner>" for dedupe
   const id = (entityId ?? '').split('#')[0]
   const isUuid = /^[0-9a-f-]{36}$/i.test(id)
 
   switch (entityType) {
-    case 'content_item': return isUuid ? `/dashboard/production/${id}` : null
+    // the reader's own board with the card open (workflow-core.itemPath):
+    // the bell knows no status, so everyone but a scheduler lands on the
+    // Editor page, where the sheet opens any card by id
+    case 'content_item': return isUuid ? `${role === 'scheduler' ? '/dashboard/scheduler' : '/dashboard/editor'}?card=${id}` : null
     // a calendar note: the id is "<client id>#<note id>", the bell opens that
     // client's week (9 Sep 2026)
     case 'schedule_note': return isUuid ? `/dashboard/social/schedule?client=${id}` : null

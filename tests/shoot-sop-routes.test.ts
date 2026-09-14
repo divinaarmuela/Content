@@ -626,3 +626,26 @@ describe('send the plan again (14 Sep 2026)', () => {
     expect(no.status).toBe(403)
   })
 })
+
+describe('delivery only, said on the shoot (the owner, 14 Sep 2026)', () => {
+  it('the switch writes the shoot and every card on it, both ways', async () => {
+    const { table } = await import('@/lib/db')
+    await table('content_items').insert({
+      id: 'i-1', client_id: 'c-1', batch_id: 'b-1', title: 'Reel 1', status: 'draft_uploaded',
+      content_type: 'reel', owner_id: null, scheduler_ids: [], current_version_number: 0, client_approval_required: true,
+    } as never)
+    await table('content_items').insert({
+      id: 'i-other', client_id: 'c-1', batch_id: 'b-other', title: 'Not this shoot', status: 'draft_uploaded',
+      content_type: 'reel', owner_id: null, scheduler_ids: [], current_version_number: 0, client_approval_required: true,
+    } as never)
+    const on = await edit({ deliver_only: true })
+    expect(on.status).toBe(200)
+    expect(batch().deliver_only).toBe(true)
+    expect(cards().find(c => c.id === 'i-1').deliver_only).toBe(true)
+    expect(cards().find(c => c.id === 'i-other').deliver_only ?? null).toBeNull()
+    const off = await edit({ deliver_only: false })
+    expect(off.status).toBe(200)
+    expect(batch().deliver_only).toBe(false)
+    expect(cards().find(c => c.id === 'i-1').deliver_only).toBe(false)
+  })
+})

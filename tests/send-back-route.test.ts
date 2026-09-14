@@ -211,3 +211,14 @@ describe('POST /api/production/items/[id]/send-back', () => {
     expect(h.emails).toEqual([])
   })
 })
+
+describe('the quality checker sends a card back with the words (14 Sep 2026)', () => {
+  it('may send a card back from Quality check, and the words land on the card', async () => {
+    fake = seed('quality_check')
+    h.user = { id: 'u-qc', role: 'quality_checker', email: 'qc@x.invalid', name: 'Joy', clerk_user_id: null }
+    const r = await post('Tighten the first cut')
+    expect(r.status).toBe(200)
+    expect(item().status).toBe('revision_required')
+    expect(item().change_note).toBe('Tighten the first cut')
+  })
+})

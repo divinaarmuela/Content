@@ -70,7 +70,7 @@ async function notifyManagers(clientId: string, item: { id: string; adhoc_post?:
         `Client comment on ${itemTitle}`,
         `<p>${escapeHtml(body.slice(0, 500))}</p><p style="color:#a1a1aa;font-size:12px;">From ${escapeHtml(clientName)}'s portal. Review it and assign an editor task if changes are needed.</p>`,
         'Open the item',
-        `${DASHBOARD_URL}${itemPath(item)}`
+        `${DASHBOARD_URL}${itemPath(item, (m as { role?: string | null }).role)}`
       ),
     })
   }
@@ -276,7 +276,7 @@ export async function POST(req: Request) {
                   `Approved with a note: ${item.title}`,
                   `<p><strong>${escapeHtml(item.title)}</strong> was approved by ${escapeHtml(speaker)} with this note — it may say when they want it posted:</p><p>“${escapeHtml(comment.slice(0, 500))}”</p>`,
                   'Open the item',
-                  `${DASHBOARD_URL}${itemPath(item)}`
+                  `${DASHBOARD_URL}${itemPath(item, 'scheduler')}`
                 ),
               })
             }

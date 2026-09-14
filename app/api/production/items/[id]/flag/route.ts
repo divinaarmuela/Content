@@ -99,7 +99,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(check.note)}</blockquote>`
           + (item.due_date ? `<p><strong>Due:</strong> ${escapeHtml(String(item.due_date).slice(0, 10))}</p>` : ''),
           'Open the item',
-          `${DASHBOARD_URL}${itemPath(item)}`,
+          `${DASHBOARD_URL}${itemPath(item, (m as { role?: string | null }).role)}`,
         ),
       })))
     }

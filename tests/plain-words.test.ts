@@ -175,9 +175,12 @@ describe('notifications say something, and go somewhere', () => {
     expect(notificationHref('booking', 'anything')).toBe('/dashboard/bookings')
   })
 
-  it('strips the dedupe suffix off an entity id', () => {
+  it('strips the dedupe suffix off an entity id, and opens the card on the reader’s board (14 Sep 2026)', () => {
     const id = '3f2504e0-4f89-11d3-9a0c-0305e82c3301'
-    expect(notificationHref('content_item', `${id}#v2`)).toBe(`/dashboard/production/${id}`)
+    expect(notificationHref('content_item', `${id}#v2`)).toBe(`/dashboard/editor?card=${id}`)
+    expect(notificationHref('content_item', `${id}#v2`, 'editor')).toBe(`/dashboard/editor?card=${id}`)
+    expect(notificationHref('content_item', `${id}#v2`, 'scheduler')).toBe(`/dashboard/scheduler?card=${id}`)
+    expect(notificationHref('content_item', `${id}#v2`)).not.toContain('/dashboard/production/')
   })
 })
 

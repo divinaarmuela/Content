@@ -124,8 +124,9 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
   it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
     expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
-    // …and the quality checker gets the manager's drawer there (13 Sep 2026)
-    expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && !checker\s*\? <EditorCardDrawer/)
+    // …and everyone but an editor — the quality checker, the managers — gets
+    // the manager's drawer there (13 and 14 Sep 2026)
+    expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && maker\s*\? <EditorCardDrawer/)
   })
   it('the seven sections are not gated on having data', () => {
     const s = src(EDITOR_DRAWER)
@@ -434,5 +435,23 @@ describe('the reviewer’s card shows the finished edit as what it is (14 Sep 20
   it('the link route marks what it saved, and the item patch never turns a finished edit into the folder', () => {
     expect(src('app/api/production/items/[id]/link/route.ts')).toContain('link_final: final,')
     expect(src('app/api/production/items/[id]/route.ts')).toMatch(/link_final !== true\s*\n\s*&& \(!String\(cur\.link_url/)
+  })
+})
+
+describe('delivery only is a switch on the shoot page (14 Sep 2026)', () => {
+  it('the shoot page draws it for the managers, the route cascades it, and a plan card is born with it', () => {
+    expect(src('app/dashboard/production/shoots/[id]/ShootSop.tsx')).toContain('data-deliver-only')
+    expect(src('app/dashboard/production/shoots/[id]/ShootSop.tsx')).toMatch(/onPatch\('deliver_only', e\.target\.checked\)/)
+    expect(src('app/api/production/batches/[id]/route.ts')).toMatch(/if \('deliver_only' in patch\)/)
+    expect(src('app/lib/plan-cards.ts')).toContain('deliver_only: batch.deliver_only ?? null')
+  })
+})
+
+describe('the maker’s drawer is the editor’s alone (14 Sep 2026)', () => {
+  it('on the Editor page everyone but an editor gets the manager’s drawer, so an emailed manager has buttons', () => {
+    const s = src('app/dashboard/board/CardSheet.tsx')
+    expect(s).toMatch(/const maker = me\?\.role === 'editor'/)
+    expect(s).toMatch(/editor && !adhoc && maker\s*\n\s*\? <EditorCardDrawer/)
+    expect(s).not.toContain("me?.role === 'quality_checker'")
   })
 })

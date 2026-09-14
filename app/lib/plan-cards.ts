@@ -28,7 +28,7 @@ import { announceItemChange } from './production-live'
  */
 export async function ensureShootCard(
   actor: TeamUser,
-  batch: Pick<Batch, 'id' | 'client_id' | 'planned_deliverables' | 'owner_id'> & Partial<Pick<Batch, 'title' | 'editor_priorities'>>,
+  batch: Pick<Batch, 'id' | 'client_id' | 'planned_deliverables' | 'owner_id'> & Partial<Pick<Batch, 'title' | 'editor_priorities' | 'deliver_only'>>,
 ): Promise<ContentItem[]> {
   const card = shootCard({ id: batch.id, client_id: batch.client_id, title: batch.title ?? null }, batch.planned_deliverables)
   if (!card) return []
@@ -57,6 +57,8 @@ export async function ensureShootCard(
     priority: 'normal',
     caption: null,
     client_approval_required: true,
+    // born with the shoot's word on delivery (the owner, 14 Sep 2026)
+    deliver_only: batch.deliver_only ?? null,
     current_version_number: 0,
     raw_assets_url: null,
     brief: deliverablesBrief(planLines(batch.planned_deliverables), batch.editor_priorities ?? null) || null,

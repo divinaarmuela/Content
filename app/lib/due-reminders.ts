@@ -5,7 +5,7 @@ import type {
   ContentItem, PublishJob as PublishJobRow, TeamUser as TeamUserRow, TeamUserClient,
 } from '@/lib/db-types'
 import { notify, renderEmail } from './mailer'
-import { STATUS_LABELS, type ItemStatus } from './workflow-core'
+import { itemPath, STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { itemStatusLabel } from './brief-task-core'
 import { DASHBOARD_URL } from './app-url'
 
@@ -20,7 +20,7 @@ type DueItem = {
   clients: { name: string } | null
   work_kinds: { slug: string } | null
 }
-type Person = { id: string; email: string; name: string }
+type Person = { id: string; email: string; name: string; role?: string | null }
 
 const melbourneToday = (): string =>
   new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
@@ -166,7 +166,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
             ? '<p>It is approved and waiting to be scheduled.</p>'
             : '<p>It has not reached scheduling yet.</p>'),
           'Open the item',
-          `${DASHBOARD_URL}/dashboard/production/${item.id}`
+          `${DASHBOARD_URL}${itemPath(item, person.role)}`
         ),
       })
       if (result === 'sent') emails++
@@ -207,7 +207,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
           (reason ? `<p>What went wrong: ${reason}</p>` : '') +
           '<p>Open the post to fix it and send it again.</p>',
           'Open the post',
-          `${DASHBOARD_URL}/dashboard/production/${item.id}`
+          `${DASHBOARD_URL}${itemPath(item, person.role)}`
         ),
       })
       if (result === 'sent') emails++

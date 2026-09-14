@@ -589,11 +589,14 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   // (their view starts at approval), and "needs a posting date" arrived
   // before there was anything to book — the live role-play of 11 Sep 2026.
   // They are handed the card silently here and told at the approval below.
-  'quality_check>client_review': ['client_users', 'account_managers', 'owner_editor'],
+  // NOT the editor: with the client is not their business (the owner, 14 Sep
+  // 2026: "I'm the editor, why am I getting this email"); they hear when it
+  // comes back for changes, when it is approved, and when it goes out
+  'quality_check>client_review': ['client_users', 'account_managers'],
   'quality_check>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'quality_check>revision_required': ['owner_editor', 'account_managers'],
-  'internal_review>client_review': ['client_users', 'account_managers', 'owner_editor'],
-  'revision_complete>client_review': ['client_users', 'account_managers', 'owner_editor'],
+  'internal_review>client_review': ['client_users', 'account_managers'],
+  'revision_complete>client_review': ['client_users', 'account_managers'],
   'client_review>client_changes_requested': ['account_managers', 'creator'], // NEVER the editor directly
   // a new cut pulled the piece back off the client's desk: the manager has to
   // know there is something to check, and the CLIENT must not be told that the
@@ -605,9 +608,9 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   // heard anything, and the post sat unsendable until somebody opened the
   // board days later. Same three audiences as every other route into
   // client_review.
-  'approved_for_scheduling>client_review': ['client_users', 'account_managers', 'owner_editor'],
+  'approved_for_scheduling>client_review': ['client_users', 'account_managers'],
   'client_changes_requested>revision_required': ['owner_editor'],
-  'client_changes_requested>client_review': ['client_users', 'account_managers', 'owner_editor'],
+  'client_changes_requested>client_review': ['client_users', 'account_managers'],
   // approving prefers the people the approver picked, then the item's own
   // scheduler_ids. Only when nobody at all has been named does the approval
   // reach every scheduler — an open queue has to be announced to somebody.
@@ -619,14 +622,33 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
 }
 
 /**
- * WHERE A LINK TO THIS PIECE GOES.
+ * WHERE A LINK TO THIS PIECE GOES — the board the READER has, with the card
+ * open on it.
  *
- * The owner, 8 Sep 2026: "nothing goes in the Production page" — a post
- * uploaded for approval (`adhoc_post`) lives on the Post approval board and
- * nowhere else, so every email and every bell notification about it must
- * land THERE, not on the Production card page. Production work keeps its
- * card page.
+ * The owner, 8 Sep 2026: "nothing goes in the Production page"; 14 Sep 2026:
+ * "editor is the Editor's page, Post approval is the scheduler's page — why
+ * are they using the same?" Every email and bell link used to send everyone
+ * to the old full card page, which an editor cannot even open. Now:
+ *
+ *   an editor         → the Editor page, always
+ *   a scheduler       → Post approval, always
+ *   everyone else     → the Editor page while the piece is being made (the
+ *                       quality checker and the managers get the approve /
+ *                       send-back drawer there), Post approval once it is
+ *                       approved; a post uploaded for approval (`adhoc_post`)
+ *                       lives on Post approval at every stage
+ *
+ * `?card=` is what the card sheet on both boards reads (card-sheet-core).
  */
-export function itemPath(item: { id: string; adhoc_post?: unknown }): string {
-  return item.adhoc_post === true ? `/dashboard/scheduler?item=${item.id}` : `/dashboard/production/${item.id}`
+export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review']
+export const EDITOR_BOARD_PATH = '/dashboard/editor'
+export const POST_APPROVAL_BOARD_PATH = '/dashboard/scheduler'
+
+export function itemPath(
+  item: { id: string; adhoc_post?: unknown; status?: unknown },
+  role?: string | null,
+): string {
+  const beingMade = item.adhoc_post !== true && EDITING_STATUSES.includes(String(item.status ?? ''))
+  const onEditor = role === 'editor' || (role !== 'scheduler' && beingMade)
+  return `${onEditor ? EDITOR_BOARD_PATH : POST_APPROVAL_BOARD_PATH}?card=${encodeURIComponent(item.id)}`
 }

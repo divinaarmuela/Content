@@ -566,7 +566,8 @@ describe('each role\'s Overview', () => {
     expect(tiles[1].stats).toEqual([{ value: 0, label: 'waiting on you' }, { value: 1, label: 'nobody asked yet' }])
     expect(tiles[1].href).toBe('/dashboard/scheduler?show=decide')
     expect(tiles[2].key).toBe('quality')
-    expect(tiles[2].href).toBe('/dashboard/scheduler?column=quality_check')
+    // the checker's desk is the Editor page's Quality check lane (14 Sep 2026)
+    expect(tiles[2].href).toBe('/dashboard/editor?column=quality_check')
     expect(tiles[3].stats[0].value).toBe(1)          // d
     expect(tiles[3].href).toBe('/dashboard/scheduler?column=with_client')
   })
@@ -748,5 +749,15 @@ describe('a general user\u2019s Overview and an empty card', () => {
     expect(needsWorkFirst({ current_version_number: null, link_url: null, raw_assets_url: 'https://drive.google.com/drive/folders/1lbLSNbYXOn3Vbyk0' })).toBe(false)
     expect(needsWorkFirst({ current_version_number: 0, link_url: 'https://drive.google.com/x' })).toBe(false)
     expect(UPLOAD_FIRST).toBe('Upload the final first')
+  })
+})
+
+describe('the quality reviewer’s "Ask for changes" asks for the words (14 Sep 2026)', () => {
+  it('is a send-back with a note, like a manager’s, never a bare move', async () => {
+    const { actionFor, SEND_BACK_LABEL } = await import('../app/lib/board-view-core')
+    expect(actionFor('revision_required', 'Ask for changes', ['quality_reviewer'])).toEqual({ kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL })
+    expect(actionFor('revision_required', 'Ask for changes', ['account_manager'])).toEqual({ kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL })
+    // the editor's own move keeps its short face label
+    expect(actionFor('quality_check', 'Revisions done — ready for quality check', ['editor'])).toEqual({ kind: 'transition', to: 'quality_check', label: 'Revisions done' })
   })
 })

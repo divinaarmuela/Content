@@ -52,6 +52,7 @@ export type ShootSopBatch = SopShoot & {
   scripts?: unknown
   planned_deliverables?: unknown[]
   location?: string | null
+  deliver_only?: boolean | null
 }
 export type CrewRow = { id: string; name: string; role: string | null; acknowledged_at: string | null }
 export type TeamRow = { id: string; name: string; role: string }
@@ -524,6 +525,19 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             portal card at the bottom — confusing"). Not on the portal: one
             button puts it there. On the portal: the links to send and the
             way to take it off. No email is ever sent to a client. */}
+        {/* DELIVERY ONLY (the owner, 14 Sep 2026: "when we finish a shoot, how
+            can we set it up for only delivery — we won't be sending to a
+            scheduler"): one switch; every card on the shoot takes the word,
+            and the cards the plan makes are born with it */}
+        {(role === 'account_manager' || role === 'super_admin' || role === 'general') && (
+          <label className="flex min-h-11 w-fit cursor-pointer items-start gap-2 border-t border-border pt-3 text-[13px]" data-deliver-only>
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-foreground" checked={batch.deliver_only === true} disabled={busy}
+              onChange={e => void onPatch('deliver_only', e.target.checked)} />
+            <span>
+              <span className="font-semibold">Delivery only</span> — the client posts these themselves. Every card on this shoot ends at approval; nothing goes to a scheduler.
+            </span>
+          </label>
+        )}
         {batch.status !== 'wrapped' && !footageOnly && (
           <ClientBlock batch={batch} portalToken={portalToken} busy={busy} shareReady={shareReady} clientLine={clientLine}
             onShareClient={onShareClient} onPatch={onPatch} />

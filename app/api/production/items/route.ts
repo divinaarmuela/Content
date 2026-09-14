@@ -444,6 +444,17 @@ export async function POST(req: Request) {
     // Each row is its own write, so a batch upload can half-succeed. Saying
     // "500" over eight items that were created and two that were not is the
     // worst answer available — the caller is told exactly what landed.
+    // a card made on a shoot takes the shoot's word on delivery when it says
+    // none itself (the owner, 14 Sep 2026: delivery only, said on the shoot)
+    const shootIds = [...new Set(rows.filter(r => r.deliver_only === null && typeof r.batch_id === 'string').map(r => String(r.batch_id)))]
+    if (shootIds.length > 0) {
+      const shoots = await table<Batch>('batches').list({ where: b => shootIds.includes(b.id) })
+      const word = new Map(shoots.map(b => [b.id, (b as { deliver_only?: boolean | null }).deliver_only ?? null]))
+      for (const r of rows) {
+        if (r.deliver_only === null && typeof r.batch_id === 'string') r.deliver_only = word.get(r.batch_id) ?? null
+      }
+    }
+
     const settled = await Promise.allSettled(
       rows.map(r => table('content_items').insert(r) as Promise<unknown> as Promise<ContentItem>),
     )

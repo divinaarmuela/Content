@@ -49,7 +49,7 @@ export async function notifyManagersBooked(
           (trial ? `<p><strong>${escapeHtml(trial)}.</strong> The client's own feed will not show it until it graduates.</p>` : '') +
           `<p>Nothing is needed from you — this is so you know.</p>`,
           'See it',
-          `${DASHBOARD_URL}${itemPath(item)}`,
+          `${DASHBOARD_URL}${itemPath(item, (m as { role?: string | null }).role)}`,
         ),
       })
     }

@@ -74,7 +74,8 @@ async function opsAndLeadership(): Promise<{ ops: Person[]; leadership: Person[]
   }
 }
 
-const cardUrl = (item: Pick<ContentItem, 'id'> & { adhoc_post?: unknown }) => `${DASHBOARD_URL}${itemPath(item)}`
+/** the reader's own board, with the card open (workflow-core.itemPath) */
+const cardUrl = (item: Pick<ContentItem, 'id'> & { adhoc_post?: unknown; status?: unknown }, role?: string | null) => `${DASHBOARD_URL}${itemPath(item, role)}`
 
 /** "I'm blocked" pressed: the right people are told at once. */
 export async function notifyBlocked(
@@ -94,7 +95,7 @@ export async function notifyBlocked(
       `<p><strong>${escapeHtml(actor.name || actor.email)}</strong> is blocked on <strong>${escapeHtml(item.title)}</strong> and needs <strong>${escapeHtml(row.label.toLowerCase())}</strong>.</p>`
       + `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(note)}</blockquote>`
       + '<p>Nothing stays blocked for more than 24 hours. Ops is copied at 12 hours, leadership at 24.</p>',
-      'Open the card', cardUrl(item),
+      'Open the card', cardUrl(item, (p as { role?: string | null }).role),
     ),
   })))
   return { told: people }
@@ -146,7 +147,7 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
         eventType: due === '12' ? 'editor_blocked_12h' : 'editor_blocked_24h', entityType: 'content_item',
         entityId: `${item.id}#blocked-${due}#${p.id}`,
         recipientId: p.id, recipientEmail: p.email, subject,
-        bodyHtml: renderEmail(subject, body, 'Open the card', cardUrl(item)),
+        bodyHtml: renderEmail(subject, body, 'Open the card', cardUrl(item, (p as { role?: string | null }).role)),
       })
     }
     if (due === '12') out.twelve++
@@ -186,7 +187,7 @@ export async function runEditorSopNudges(now: Date = new Date()): Promise<{ twel
         recipientId: editor.id, recipientEmail: editor.email, subject,
         bodyHtml: renderEmail(subject,
           `<p><strong>${escapeHtml(item.title)}</strong> was assigned to you and has not been acknowledged. Please acknowledge it the same day: open the card and press Acknowledge so the team knows you are on it.</p>`,
-          'Open the card', cardUrl(item)),
+          'Open the card', cardUrl(item, (editor as { role?: string | null }).role)),
       })
       out.ack++
     }

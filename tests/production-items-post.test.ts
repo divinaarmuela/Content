@@ -213,3 +213,28 @@ describe('POST /api/production/items — a batch upload that half-lands', () => 
     expect(onItemsCreated.mock.calls[0][0]).toHaveLength(1)
   })
 })
+
+describe('a card made on a shoot takes the shoot’s word on delivery (14 Sep 2026)', () => {
+  it('inherits deliver_only from the shoot when the card says nothing, and keeps its own word when it does', async () => {
+    fake.restore()
+    fake = seedDb({
+      work_kinds: WORK_KINDS as unknown as Row[],
+      // a plain card needs a booked shoot behind it (canCreateItemsUnder)
+      batches: [{ ...BATCH, status: 'shot', deliver_only: true }, { ...BATCH, id: 'b-plain', status: 'shot', title: 'Plain shoot' }] as unknown as Row[],
+      content_items: [],
+    })
+    const { status } = await post({ adhoc_reason: 'x', items: [
+      { client_id: 'c1', title: 'On the delivery-only shoot', work_kind_id: 'wk-edit', batch_id: 'b1' },
+      { client_id: 'c1', title: 'Says no itself', work_kind_id: 'wk-edit', batch_id: 'b1', deliver_only: false },
+      { client_id: 'c1', title: 'On a plain shoot', work_kind_id: 'wk-edit', batch_id: 'b-plain' },
+      { client_id: 'c1', title: 'On no shoot', work_kind_id: 'wk-edit' },
+    ] })
+    expect(status).toBe(201)
+    const rows = fake.rows('content_items') as { title: string; deliver_only?: boolean | null }[]
+    const word = (title: string) => rows.find(r => r.title === title)?.deliver_only ?? null
+    expect(word('On the delivery-only shoot')).toBe(true)
+    expect(word('Says no itself')).toBe(false)
+    expect(word('On a plain shoot')).toBeNull()
+    expect(word('On no shoot')).toBeNull()
+  })
+})

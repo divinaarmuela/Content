@@ -8,7 +8,7 @@ import type { Batch, Client, ContentItem, ShootProposal, TeamUser } from '@/lib/
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { canOpenBatch, shootManager } from '../../../../lib/production-access'
 import { logActivity } from '../../../../lib/workflow'
-import { announceBatchChange } from '../../../../lib/production-live'
+import { announceBatchChange, announceItemChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
 import { ensureShootCard } from '../../../../lib/plan-cards'
 import { fillFootageFolder, handOverAtGo, handOverFootageNow, melbourneToday } from '../../../../lib/shoot-handover'
@@ -201,6 +201,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         patch.footage_url = null
       }
     }
+    // DELIVERY ONLY, SAID ON THE SHOOT (the owner, 14 Sep 2026): the word goes
+    // on the shoot here, and onto every card on it once the write is in
+    if ('deliver_only' in body) patch.deliver_only = body.deliver_only === true ? true : body.deliver_only === false ? false : null
     if ('edit_deadline' in body) {
       const d = body.edit_deadline ? String(body.edit_deadline).slice(0, 10) : ''
       if (d && Number.isNaN(new Date(`${d}T00:00:00`).getTime())) {
@@ -276,6 +279,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           action: patch[col] ? `sop_${flag}` : `sop_${flag}_undone`,
         })
       }
+    }
+    // the shoot's word on delivery reaches every card on it (a card's own
+    // word can still be changed afterwards); the plan's new cards are born
+    // with it (plan-cards.ts)
+    if ('deliver_only' in patch) {
+      const onShoot = await table<ContentItem>('content_items').list({ by: { batch_id: id }, limit: 500 })
+      await Promise.all(onShoot.map(i => table('content_items').update(i.id, { deliver_only: patch.deliver_only })))
+      for (const i of onShoot) announceItemChange({ item_id: i.id, client_id: i.client_id, status: i.status, kind: 'updated' })
     }
     announceBatchChange({ batch_id: id, client_id: batch.client_id, status: data.status ?? 'brief', kind: 'updated' })
     // the plan of a shoot that is already booked is work now: a shoot with

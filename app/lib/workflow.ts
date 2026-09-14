@@ -283,7 +283,7 @@ export function notifyFilesToWorkFrom(actor: TeamUser, item: ContentItem, added:
           : '')
         + (folder ? `<p><strong>Folder:</strong> <a href="${escapeHtml(folder)}">${escapeHtml(folder)}</a></p>` : ''),
         OPEN_ITEM_CTA,
-        `${DASHBOARD_URL}${itemPath(item)}`,
+        `${DASHBOARD_URL}${itemPath(item, owner.role)}`,
       ),
     })
   })
@@ -319,7 +319,7 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
           : '') +
         (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
         OPEN_ITEM_CTA,
-        `${DASHBOARD_URL}${itemPath(item)}`
+        `${DASHBOARD_URL}${itemPath(item, owner?.role)}`
       ),
     })
   })
@@ -379,7 +379,7 @@ export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: stri
         + (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : '')
         + `<p>It is on your board now — open it to see everything on the card.</p>`,
         OPEN_ITEM_CTA,
-        `${DASHBOARD_URL}${itemPath(item)}`,
+        `${DASHBOARD_URL}${itemPath(item, row.role)}`,
       ),
     })
   })
@@ -479,7 +479,7 @@ export async function notifyScheduleHandoff(
       `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext('approved_for_scheduling'))}</p>` +
       (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
       'Open the item',
-      `${DASHBOARD_URL}${itemPath(item)}`
+      `${DASHBOARD_URL}${itemPath(item, p.role)}`
     ),
   })))
   return people.length
@@ -1108,7 +1108,7 @@ export async function performTransition(
               ? (clientShareToken
                   ? `${DASHBOARD_URL}/portal/${clientShareToken}`
                   : `${DASHBOARD_URL}/client`)
-              : `${DASHBOARD_URL}${itemPath(item)}`
+              : `${DASHBOARD_URL}${itemPath({ ...item, status: to }, (person as { role?: string | null }).role)}`
           ),
         })
       }

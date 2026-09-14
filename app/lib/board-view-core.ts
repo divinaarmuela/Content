@@ -297,11 +297,17 @@ export function actionFor(to: ItemStatus, label: string, hats: readonly Hat[]): 
   // a manager sending work back says what to change — the send-back route
   // asks for the words and tells the assignee; "Log the client's changes"
   // from With client is the first half of that same route
-  if ((to === 'revision_required' || to === 'client_changes_requested') && isManagerHat(hats)) {
+  // …and so does the quality reviewer (the owner, 14 Sep 2026: "the editor
+  // should get a notification of what needs changing" — a bare move said
+  // nothing)
+  if ((to === 'revision_required' || to === 'client_changes_requested') && (isManagerHat(hats) || hats.includes('quality_reviewer'))) {
     return { kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL }
   }
   // the machine's words are "Submit for review" / "Mark scheduled" / "Mark
   // published"; on the card each move is said as the fact it records
+  // the card face is narrow: "Revisions done — ready for quality check" was
+  // cut to "…ready for quality che" (the owner's screenshot, 14 Sep 2026)
+  if (to === 'quality_check' && label.startsWith('Revisions done')) return { kind: 'transition', to, label: 'Revisions done' }
   if (to === 'internal_review') return { kind: 'transition', to, label: READY_FOR_CHECK_LABEL }
   if (to === 'scheduled') return { kind: 'transition', to, label: BOOKED_LABEL }
   if (to === 'published') return { kind: 'transition', to, label: POSTED_LABEL }
@@ -889,7 +895,9 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   // quality reviewer, and how much of it nobody was asked to look at
   const quality: OverviewTile = {
     key: 'quality', title: 'Quality check', tone: 'amber',
-    href: boardHref('scheduler', { column: 'quality_check' }), actionLabel: 'See them',
+    // the checker's desk is the Editor page's Quality check lane: Post
+    // approval never holds a card at that stage (14 Sep 2026)
+    href: boardHref('editor', { column: 'quality_check' }), actionLabel: 'See them',
     stats: [
       { value: count(cards, c => c.status === 'quality_check'), label: 'waiting on a quality reviewer' },
       { value: count(cards, c => c.status === 'quality_check' && nobodyAskedYet(c)), label: 'not asked to anyone' },

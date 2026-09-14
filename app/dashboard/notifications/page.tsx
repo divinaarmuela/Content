@@ -14,6 +14,7 @@ import { eventWords, notificationHref, EMAIL_FAILED_WORDS } from '@/app/lib/noti
 import { LoadFailed } from '../NotSetUp'
 import HelpHint from '../HelpHint'
 import PageTitle from '../ui/PageTitle'
+import { useRole } from '../useRole'
 
 /**
  * The person's real notification history — the same rows the email outbox
@@ -44,7 +45,7 @@ const ICON = (eventType: string) => {
 }
 
 /** Where a notification points. Every entity type has a destination now. */
-const linkFor = (r: Row): string | null => notificationHref(r.entity_type, r.entity_id)
+const linkFor = (r: Row, role: string | null): string | null => notificationHref(r.entity_type, r.entity_id, role)
 
 const when = (iso: string) => {
   const d = new Date(iso)
@@ -55,6 +56,7 @@ const when = (iso: string) => {
 }
 
 export default function NotificationsPage() {
+  const { role } = useRole()
   const [rows, setRows] = useState<Row[] | null>(null)
   // a server outage used to render as "Nothing yet", which is a lie about
   // the state of the world, not a display bug
@@ -104,7 +106,7 @@ export default function NotificationsPage() {
           <CardContent className="flex flex-col divide-y divide-border p-0">
             {rows.map(r => {
               const Icon = ICON(r.event_type)
-              const href = linkFor(r)
+              const href = linkFor(r, role)
               const inner = (
                 <div className="flex items-center gap-3 px-4 py-3">
                   {!r.read_at

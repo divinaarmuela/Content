@@ -13,7 +13,7 @@ import type { Role } from './identity-core'
 import { defaultAllows, SCHEDULE_PAGE } from './page-access-core'
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from './board-core'
 import { EDITOR_LANES } from './editor-sop-core'
-import type { ItemStatus } from './workflow-core'
+import { itemPath, type ItemStatus } from './workflow-core'
 
 export const EDITOR_BOARD = '/dashboard/editor'
 export const POST_APPROVAL_BOARD = '/dashboard/scheduler'
@@ -37,23 +37,14 @@ export function mayBookPosts(role: Role | null | undefined): boolean {
 /** the statuses an EDITED card is on the Editor page for — everything before
  *  it is approved and ready to post (13 Sep 2026: "post approval items are
  *  only shown at the end of editing") */
-const MAKING: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review']
 
 /**
  * A card, opened on a board this role has. The old full-card page
  * (`/dashboard/production/<id>`) is not a link anybody is sent to.
  */
 export function cardHref(role: Role | null | undefined, card: { id: string; status?: ItemStatus | string | null; adhoc_post?: boolean | null }): string {
-  const status = String(card.status ?? '')
-  // a post made or uploaded on Post approval lives there at every stage
-  const onEditor = card.adhoc_post !== true && MAKING.includes(status)
-  let board: string
-  switch (role) {
-    case 'editor': board = EDITOR_BOARD; break
-    case 'scheduler': board = POST_APPROVAL_BOARD; break
-    default: board = onEditor ? EDITOR_BOARD : POST_APPROVAL_BOARD
-  }
-  return `${board}?card=${encodeURIComponent(card.id)}`
+  // one rule for the Overview, every email and the bell (workflow-core.itemPath)
+  return itemPath(card, role)
 }
 
 /** A shoot's own page — every role that has Shoots opens it there. */

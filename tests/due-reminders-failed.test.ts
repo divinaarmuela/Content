@@ -71,7 +71,9 @@ describe('the morning sweep', () => {
     // the reason the job recorded, so a scheduler knows whether to re-export
     // the video or simply try again — and a way back to the post
     expect(String(emails[0].bodyHtml)).toContain('Could not prepare a copy for Instagram')
-    expect(String(emails[0].bodyHtml)).toContain('/dashboard/production/item-1')
+    // the reader's own board with the card open (14 Sep 2026), never the old card page
+    expect(String(emails[0].bodyHtml)).toContain('?card=item-1')
+    expect(String(emails[0].bodyHtml)).not.toContain('/dashboard/production/item-1')
     // once per day, whatever the sweep is re-run
     expect(String(emails[0].entityId)).toMatch(/^item-1#failed#/)
   })
