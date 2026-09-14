@@ -489,3 +489,14 @@ describe('a client’s comment on a board card reaches the manager on the full-s
     expect(src('app/lib/card-people-core.ts')).toContain('name: tagNameOf(u)')
   })
 })
+
+describe('a New post on Post approval is handed to a scheduler (14 Sep 2026)', () => {
+  it('the picker lists scheduler users only, starts unpicked, and the post cannot be made without one', () => {
+    const s = src('app/dashboard/board/BoardDialogs.tsx')
+    expect(s).toContain("const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : team")
+    expect(s).toContain("useState(forPosting ? '' : viewer.id)")
+    expect(s).toMatch(/&& \(!forPosting \|\| !!owner\)/)
+    expect(s).toContain("placeholder={forPosting ? 'Pick a scheduler' : 'Pick a person'}")
+    expect(s).toContain('No scheduler on the Team page yet')
+  })
+})

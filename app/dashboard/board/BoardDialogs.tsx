@@ -403,8 +403,11 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
   const [postFolder, setPostFolder] = useState('')
   useEffect(() => { setTo(''); setNote(''); setPostFolder('') }, [card])
 
+  // A CARD IS HANDED TO A SCHEDULER (the owner, 14 Sep 2026: "the AM or
+  // super admin hands over to a scheduler, who picks the files from the link
+  // and uploads them for approval"): the picker offers the scheduler users
   const people: HandTo[] = team
-    .filter(u => u.active_status !== false && u.role !== 'client')
+    .filter(u => u.active_status !== false && u.role === 'scheduler')
     .map(u => ({ id: u.id, name: u.name || u.email, email: u.email, role: u.role }))
   const groups = handToGroups(people)
   const chosen = people.find(p => p.id === to) ?? null
@@ -525,7 +528,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
 }
 
 export type ClientChoice = { id: string; name: string }
-export type PersonChoice = { id: string; name: string; email: string }
+export type PersonChoice = { id: string; name: string; email: string; role?: string | null }
 
 /**
  * A new card: one deliverable, one client, one link. Kind is free text.
@@ -550,13 +553,18 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   onCreated?: (id: string) => void
 }) {
   const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
+  // A POST IS HANDED TO A SCHEDULER (the owner, 14 Sep 2026: "the option
+  // should be the scheduler users"): they pick the files from the folder
+  // and upload them for approval. A card for editing can go to anyone.
+  const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : team
   const [clientId, setClientId] = useState(defaultClientId ?? '')
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState('')
   const [link, setLink] = useState('')
   const [brief, setBrief] = useState('')
   const [due, setDue] = useState('')
-  const [owner, setOwner] = useState(viewer.id)
+  // a post starts unassigned so the manager picks the scheduler on purpose
+  const [owner, setOwner] = useState(forPosting ? '' : viewer.id)
   const [busy, setBusy] = useState(false)
   /** WHICH SHOOT THIS IS FROM (the owner, 11 Sep 2026: "make sure editing
    *  we can choose from which shoot") — the client's shoots, and the
@@ -593,6 +601,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const linkCheck = linkKindOf(link)
   const folderCheck = linkKindOf(folder)
   const canSave = !!clientId && !!title.trim() && (simple || !!normaliseKindName(kind)) && (link.trim() === '' || linkCheck.ok) && (folder.trim() === '' || folderCheck.ok)
+    && (!forPosting || !!owner)
 
   const save = async () => {
     if (!canSave) return
@@ -664,7 +673,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         <DialogHeader>
           <DialogTitle>{forPosting ? 'New post' : 'New card'}</DialogTitle>
           <DialogDescription>{forPosting
-            ? 'Say what needs doing, attach the files or the folder, and hand it to whoever posts it.'
+            ? 'Say what needs doing, add the folder link, and hand it to a scheduler — they pick the files from it and upload them for approval.'
             : 'One card for one client. Say what needs doing and attach the files to work from.'}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -770,16 +779,19 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                 <span>Deliver only — the client posts this themselves, nobody here schedules it</span>
               </label>
             )}
-            {isManager && team.length > 0 && (
+            {isManager && handTo.length > 0 && (
               <div className="flex flex-col gap-2">
                 <Label>{forPosting ? 'Hand to' : 'Who'}</Label>
                 <Select value={owner} onValueChange={v => v && setOwner(v)}>
-                  <SelectTrigger className={field}><SelectValue placeholder="Pick a person" /></SelectTrigger>
+                  <SelectTrigger className={field}><SelectValue placeholder={forPosting ? 'Pick a scheduler' : 'Pick a person'} /></SelectTrigger>
                   <SelectContent>
-                    {team.map(p => <SelectItem key={p.id} value={p.id}>{p.id === viewer.id ? 'Me' : p.name || p.email}</SelectItem>)}
+                    {handTo.map(p => <SelectItem key={p.id} value={p.id}>{p.id === viewer.id ? 'Me' : p.name || p.email}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {isManager && forPosting && handTo.length === 0 && (
+              <p className="text-[13px] text-muted-foreground" role="status">No scheduler on the Team page yet — add one there, then hand this post to them.</p>
             )}
           </div>
         </div>
