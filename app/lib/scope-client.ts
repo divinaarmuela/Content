@@ -327,10 +327,14 @@ export function visibleItems<T extends ScopeItem>(
         if (!clientIds.includes(r.client_id)) return false
       } else if (!(clientIds.includes(r.client_id) || assigned!(r))) return false
     }
-    // a scheduler OWNING a job must see it at any status — the status gate is
-    // for other people's items
+    // a scheduler OWNING a job, or HANDED it (scheduler_ids), must see it at
+    // any status — including Draft, where a handed card now lands so they
+    // work from the files (the owner, 14 Sep 2026). The status gate is only
+    // for other people's items.
     if (viewer.role === 'scheduler'
-      && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status) || r.owner_id === viewer.id)) {
+      && !((SCHEDULER_STATUSES as readonly string[]).includes(r.status)
+        || r.owner_id === viewer.id
+        || schedulerIdsOf(r).includes(viewer.id))) {
       return false
     }
     // DELIVER ONLY (11 Sep 2026): the client posts it, so an approved card

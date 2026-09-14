@@ -103,6 +103,9 @@ describe('a manager hands an approved edit to a scheduler', () => {
     const r = await hand([SCHED.id])
     expect(r.status).toBe(200)
     expect(card().scheduler_ids).toEqual([SCHED.id])
+    // INTO DRAFT, not Ready to post — the scheduler works from the handed
+    // files and sends the post for the quality check (the owner, 14 Sep 2026)
+    expect(card().status).toBe('draft_uploaded')
 
     // told once, with the card open on the scheduler's own board
     const toCath = h.emails.filter(e => e.recipientEmail === SCHED.email)

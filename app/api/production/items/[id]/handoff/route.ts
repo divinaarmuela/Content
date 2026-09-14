@@ -50,10 +50,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const sent = await notifyScheduleHandoff(user, item, valid)
 
-    // persist the assignment: their dashboard shows THEIR items, the way an
-    // editor's board shows their own jobs
-    await table('content_items').update(id, { scheduler_ids: valid })
-    announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'updated' })
+    // INTO THE SCHEDULER'S DRAFT, NOT READY TO POST (the owner, 14 Sep 2026:
+    // "handing over to a scheduler should go in Draft — the drive files are
+    // what they work from"). The handed folder and the editor's edit stay on
+    // the card as the source; the scheduler produces the post and sends it
+    // for the quality check. A card the scheduler only has to book (already
+    // scheduled) is left where it is.
+    const patch: Record<string, unknown> = { scheduler_ids: valid }
+    const toDraft = item.status === 'approved_for_scheduling'
+    if (toDraft) patch.status = 'draft_uploaded'
+    await table('content_items').update(id, patch)
+    announceItemChange({ item_id: id, client_id: item.client_id, status: toDraft ? 'draft_uploaded' : item.status, kind: 'updated' })
 
     await logActivity({
       actor: user, clientId: item.client_id,
