@@ -67,10 +67,11 @@ describe('resolveNav by role', () => {
   it('gives a super admin everything except the grant-only page', () => {
     const list = seen('super_admin')
     for (const h of [...hrefs(NAV_MAIN), ...hrefs(NAV_TOOLS)]) {
-      if (h === '/dashboard/bookings') continue  // grant-only: nobody holds it by role
+      if (h === '/dashboard/bookings' || h === '/dashboard/reports') continue  // grant-only: nobody holds it by role
       expect(list, h).toContain(h)
     }
     expect(list).not.toContain('/dashboard/bookings')
+    expect(list).not.toContain('/dashboard/reports')
   })
 
   it('keeps leads and audience out of an account manager world', () => {
@@ -78,7 +79,8 @@ describe('resolveNav by role', () => {
     expect(list).not.toContain('/dashboard/leads')
     expect(list).not.toContain('/dashboard/audience')
     expect(list).toContain('/dashboard/clients')
-    expect(list).toContain('/dashboard/reports')
+    // Reports is hidden for now (14 Sep 2026): grant-only
+    expect(list).not.toContain('/dashboard/reports')
     // '/dashboard/scheduler' is the manager's approval board — theirs, not a
     // scheduler's (8 Sep 2026)
     for (const h of ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/social']) {

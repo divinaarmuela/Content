@@ -390,7 +390,10 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
                 "again, you are making this super confusing"). Not sent ·
                 with the checker · passed. Only a plan the gate applies to
                 draws any of it. */}
-            {gate && (() => {
+            {/* …and only until Go: a confirmed shoot's plan is past its review
+                (the owner, 14 Sep 2026: "make sure no quality review popover
+                is shown there") */}
+            {gate && !batch.go_at && (() => {
               const passed = planReviewPassed(batch)
               const asked = !passed && !!batch.review_asked_at
               const askedTo = (Array.isArray(batch.review_asked_to) ? batch.review_asked_to : []).map(id => nameOf(String(id)) ?? 'the quality checker')

@@ -275,9 +275,9 @@ describe('what each page shows', () => {
     expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'with_client', 'for_handoff', 'done'])
   })
 
-  it('a manager on the Editor page sees the making, not the posting', () => {
-    // every card still being made, whatever its kind and whoever holds it
-    expect(pageCards('editor', rows, manager).map(c => c.id)).toEqual(['a', 'b', 't', 'u'])
+  it('a manager on the Editor page sees every lane — a card lives there from In Progress to Done (14 Sep 2026)', () => {
+    // every card, whatever its kind, whoever holds it, approved and booked too
+    expect(pageCards('editor', rows, manager).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
   })
 
   it('Post approval is the end of the edit: only approved, booked and posted cards (13 Sep 2026)', () => {
@@ -482,9 +482,9 @@ describe('Posted keeps the last two weeks', () => {
     expect(pageCards('production', rows, manager, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
     expect(pageCards('scheduler', rows, scheduler, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
     expect(pageCards('editor', rows, editor, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
-    // a manager looking in sees the making — posted cards were never theirs here
-    expect(pageCards('editor', rows, manager, TODAY).map(c => c.id)).toEqual([])
-    expect(pageCards('editor', [...rows, card({ id: 'mk', owner_id: 'x', status: 'draft_uploaded' })], manager, TODAY).map(c => c.id)).toEqual(['mk'])
+    // a manager sees every lane, with the same cut on old posted cards
+    expect(pageCards('editor', rows, manager, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
+    expect(pageCards('editor', [...rows, card({ id: 'mk', owner_id: 'x', status: 'draft_uploaded' })], manager, TODAY).map(c => c.id)).toEqual(['new', 'ready', 'mk'])
     // without a date nothing is cut — nothing here reads a clock
     expect(pageCards('production', rows, manager).map(c => c.id)).toEqual(['old', 'new', 'ready'])
     expect(pageCards('production', rows, manager, null).map(c => c.id)).toEqual(['old', 'new', 'ready'])

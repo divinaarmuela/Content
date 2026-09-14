@@ -67,7 +67,9 @@ const GRANTABLE_HREFS = new Set(GRANTABLE_PAGES.map(p => p.href))
  * hand it to every super admin or invent a role for four people. So it is
  * granted per person, and the default for everyone is no.
  */
-export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings'])
+// Reports is hidden for now (the owner, 14 Sep 2026: "hide reports page for
+// now") — grant-only, so nobody's default, super admins included
+export const GRANT_ONLY_PAGES = new Set<string>(['/dashboard/bookings', '/dashboard/reports'])
 
 /**
  * The Schedule page — the posting calendar under Social. It is a CHILD of

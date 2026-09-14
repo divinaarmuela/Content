@@ -520,9 +520,12 @@ export function pageCards<T extends BoardViewCard>(
     // a general user's Editor page is their own cards too — the making is
     // theirs, the checking is the manager's
     if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => mine(c) && fresh(c))
-    // a manager on the Editor page sees the making, not the posting
-    return cards.filter(c => fresh(c)
-      && (mine(c) || (cardColumn(c) !== 'ready_to_post' && !isOut(c.status) && cardColumn(c) !== 'delivered')))
+    // A MANAGER SEES EVERY LANE (the owner, 14 Sep 2026: "so for every card
+    // it will live there, in Editor — approved, or handed over, or finished").
+    // It used to hide Ready to post and Done from managers, so an approved
+    // card the editor still saw under For Handoff was one the super admin
+    // "didn't have" — and the hand-over to a scheduler happens right there.
+    return cards.filter(fresh)
   }
   // POST APPROVAL IS THE END OF THE EDIT (the owner, 13 Sep 2026: "post
   // approval items are only shown at the end of editing — either we deliver
