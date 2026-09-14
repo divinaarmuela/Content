@@ -150,3 +150,17 @@ describe('a manager hands an approved edit to a scheduler', () => {
     expect(d).toMatch(/finished \? 'Add files' : 'Add the finished files'/)
   })
 })
+
+describe('the maker adds their link while making the card (the owner, 14 Sep 2026)', () => {
+  it('the New card window draws a Drive or Dropbox link box for an editor, saved as their finished-edit link', () => {
+    const s = readFileSync(join(process.cwd(), 'app/dashboard/board/BoardDialogs.tsx'), 'utf8')
+    // the box, for the maker only (a manager has the Files to work from folder instead)
+    expect(s).toContain('{!isManager && (')
+    expect(s).toContain('<Label htmlFor="new-link">Your Drive or Dropbox link (optional)</Label>')
+    expect(s).toContain('<Input id="new-link" value={link} onChange={e => setLink(e.target.value)}')
+    // the same link the card\u2019s Your finished edit box saves: final, so it never reads as a footage folder
+    expect(s).toContain('body: JSON.stringify({ url: cardLink, ...(isManager ? {} : { final: true }) })')
+    // the window says so in plain words
+    expect(s).toContain('Say what needs doing and add your Drive or Dropbox link if you have one.')
+  })
+})
