@@ -39,7 +39,6 @@ function heroMedia(cards: PortalCard[]): string | null {
 
 const COUNTERS: [keyof ReturnType<typeof heroCounts>, string][] = [
   ['review', 'Needs your review'],
-  ['production', 'In production'],
   ['approved', 'Approved & scheduled'],
   ['published', 'Published'],
 ]

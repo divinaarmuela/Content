@@ -10,7 +10,8 @@ import { heroCounts, portalSections, sectionCounts } from '../app/lib/portal-cor
  * The client's name in giant type at the top with the four counters and the
  * MD logo, a sticky strip with their name once scrolled, then the sections
  * top to bottom: Needs your review · their shoots (each with the planning
- * board OPEN underneath) · In production · Approved & scheduled · Published.
+ * board OPEN underneath) · Approved & scheduled · Published. Nothing in
+ * production is on the client's page (14 Sep 2026).
  * Inside: today's cards — one tap to approve, no note, comments pinned to
  * everything. No quotas, no second "final post" approval.
  */
@@ -38,8 +39,9 @@ describe('the hero and the strip', () => {
     expect(page).toMatch(/MDLogo-trim\.png/)
   })
 
-  it('shows the four counters, in the same four words as the section headings', () => {
-    for (const w of ['Needs your review', 'In production', 'Approved & scheduled', 'Published']) expect(page).toContain(w)
+  it('shows the three counters, in the same three words as the section headings — nothing in production', () => {
+    for (const w of ['Needs your review', 'Approved & scheduled', 'Published']) expect(page).toContain(w)
+    expect(page).not.toContain('In production')
     expect(page).toMatch(/heroCounts\(data\.cards, data\.post_approvals\)/)
   })
 
@@ -57,10 +59,11 @@ describe('the hero and the strip', () => {
 
 describe('the sections, in order, with the board open over each shoot', () => {
   // the owner, 9 Sep 2026: "your shoot shows first before needs your review"
-  it('reads shoots → post approvals → review → production → approved → published', () => {
+  it('reads shoots → post approvals → review → approved → published, with no production section', () => {
+    expect(view).not.toContain("grid('production')")
     const order = [
       'data-portal-section="shoots"', '<PortalPostApprovals', "grid('review')",
-      "grid('production')", "grid('approved')", "grid('published')",
+      "grid('approved')", "grid('published')",
     ].map(s => view.indexOf(s))
     expect(order.every(i => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
@@ -105,19 +108,21 @@ describe('the four piles, from the five columns', () => {
   const c = (kind: 'work' | 'shoot', column: string, approve = false, id = `card-${++n}`) =>
     ({ kind, id, column, actions: { approve, askForChange: approve, comment: true } }) as never
 
-  it('folds the columns into the four sections a client reads', () => {
+  it('folds the columns into the three sections a client reads — nothing in production (14 Sep 2026)', () => {
     const cards = [
       c('work', 'your_review', true), c('work', 'your_review'), c('work', 'making'), c('work', 'checking'),
       c('work', 'approved'), c('work', 'posted'),
     ]
     const s = portalSections(cards)
-    expect(s.map(x => [x.key, x.cards.length])).toEqual([['review', 1], ['production', 3], ['approved', 1], ['published', 1]])
-    expect(sectionCounts(cards)).toEqual({ review: 1, production: 3, approved: 1, published: 1 })
+    expect(s.map(x => [x.key, x.cards.length])).toEqual([['review', 1], ['approved', 1], ['published', 1]])
+    expect(sectionCounts(cards)).toEqual({ review: 1, approved: 1, published: 1 })
+    // being made, being checked, and back with the team after the client's notes: not on the page
+    expect(s.flatMap(x => x.cards).map((x: { column: string }) => x.column)).not.toContain('making')
   })
 
   it('a plan waiting on the client counts as needing their review; other shoots count nowhere', () => {
     const cards = [c('work', 'making'), c('shoot', 'your_review', true), c('shoot', 'approved'), c('shoot', 'posted')]
-    expect(heroCounts(cards)).toEqual({ review: 1, production: 1, approved: 0, published: 0 })
+    expect(heroCounts(cards)).toEqual({ review: 1, approved: 0, published: 0 })
   })
 
   /**
@@ -129,21 +134,21 @@ describe('the four piles, from the five columns', () => {
   it('a post waiting on the client counts once, under review and nowhere else', () => {
     const approvedCard = c('work', 'approved', false, 'item-1')
     const cards = [approvedCard, c('work', 'making', false, 'item-2'), c('work', 'posted', false, 'item-3')]
-    expect(heroCounts(cards)).toEqual({ review: 0, production: 1, approved: 1, published: 1 })
+    expect(heroCounts(cards)).toEqual({ review: 0, approved: 1, published: 1 })
 
     const counts = heroCounts(cards, [{ id: 'item-1' }])
-    expect(counts).toEqual({ review: 1, production: 1, approved: 0, published: 1 })
-    // the four counters still add up to the three cards on the page
-    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(cards.length)
+    expect(counts).toEqual({ review: 1, approved: 0, published: 1 })
+    // the three counters still add up to the cards ON the page (the one being made is not)
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(cards.filter(x => (x as { column: string }).column !== 'making').length)
   })
 
   it('counts a booked post waiting on the client once, not twice', () => {
     const cards = [c('work', 'posted', false, 'item-9')]
-    expect(heroCounts(cards, [{ id: 'item-9' }])).toEqual({ review: 1, production: 0, approved: 0, published: 0 })
+    expect(heroCounts(cards, [{ id: 'item-9' }])).toEqual({ review: 1, approved: 0, published: 0 })
   })
 
   it('a post approval with no card of its own still counts as waiting on them', () => {
-    expect(heroCounts([], [{ id: 'gone' }])).toEqual({ review: 1, production: 0, approved: 0, published: 0 })
+    expect(heroCounts([], [{ id: 'gone' }])).toEqual({ review: 1, approved: 0, published: 0 })
   })
 })
 

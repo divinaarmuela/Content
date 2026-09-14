@@ -24,7 +24,6 @@ const DASH_TOKENS: React.CSSProperties = {
 
 const COUNTERS: [keyof ReturnType<typeof heroCounts>, string][] = [
   ['review', 'Needs your review'],
-  ['production', 'In production'],
   ['approved', 'Approved & scheduled'],
   ['published', 'Published'],
 ]

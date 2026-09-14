@@ -463,8 +463,8 @@ const MANAGER: Tutorial = {
       title: 'The client’s portal',
       see: [
         'Each client has a share link on their page. It opens without an account.',
-        'On it: their shoot plan first; then the posts waiting on them ("Needs your review"); then the work being made and being checked, approved, and live with each channel’s line and the numbers.',
-        'The portal never names who on the team has a card, or the checking stages — only "Being made" and "Being checked".',
+        'On it: their shoot plan first; then the posts waiting on them ("Needs your review"); then what is approved and booked, and what is live with each channel’s line and the numbers.',
+        'Nothing in production is on their page (14 Sep 2026): a piece being made or checked appears only when it comes to them for a decision.',
         'Their answers and comments come back to you in Notifications and on the card. "Reply to the client" on a card lands on their portal.',
       ],
       actions: [

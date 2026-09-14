@@ -115,7 +115,8 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
 
       {grid('review')}
 
-      {grid('production')}
+      {/* nothing in production on the client's page (14 Sep 2026): a piece
+          appears when it comes to them, and again once approved and live */}
       {grid('approved')}
       {grid('published')}
       {/* the client's followers — only when their manager switched it on */}

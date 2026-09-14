@@ -265,7 +265,7 @@ export function columnCounts<T extends { column: PortalColumnKey }>(cards: T[]):
 
 // ── the four sections of the page ───────────────────────────────────────────
 
-export type PortalSectionKey = 'review' | 'production' | 'approved' | 'published'
+export type PortalSectionKey = 'review' | 'approved' | 'published'
 
 export type PortalSection<T> = {
   key: PortalSectionKey
@@ -278,31 +278,32 @@ export type PortalSection<T> = {
 
 /**
  * The page reads top to bottom in the order a client cares: what needs THEM,
- * then what the team is making, then what is approved and booked, then what
- * is live. The five columns fold into those four:
+ * then what is approved and booked, then what is live. The five columns
+ * fold into those three:
  *   Needs your review     = with the client for a decision
- *   In production         = being made, being checked, and "we have your notes"
  *   Approved & scheduled  = approved, and booked in
  *   Published             = live (and a wrapped shoot)
- * A shoot card follows the same rule through its column, so a plan waiting
- * on the client counts as needing their review.
+ * NOTHING IN PRODUCTION (the owner, 14 Sep 2026: "let's not show anything
+ * that's in production or in process in the client portal"): a piece being
+ * made, being checked, or back with the team after the client's notes is
+ * not on the client's page at all until it comes to them. A shoot card
+ * follows the same rule through its column, so a plan waiting on the client
+ * counts as needing their review.
  */
 export function portalSections<T extends { column: PortalColumnKey; actions: PortalActions }>(cards: T[]): PortalSection<T>[] {
   const review = cards.filter(c => c.column === 'your_review' && c.actions.approve)
-  const production = cards.filter(c => c.column === 'making' || c.column === 'checking' || (c.column === 'your_review' && !c.actions.approve))
   const approved = cards.filter(c => c.column === 'approved')
   const published = cards.filter(c => c.column === 'posted')
   return [
     { key: 'review', title: 'Needs your review', empty: 'Nothing is waiting on you right now.', cards: review },
-    { key: 'production', title: 'In production', empty: 'Nothing in production right now.', cards: production },
     { key: 'approved', title: 'Approved & scheduled', empty: 'Nothing approved yet.', cards: approved },
     { key: 'published', title: 'Published', empty: 'Published posts appear here with live links.', cards: published },
   ]
 }
 
-/** The four hero counters — the same four words, the same four piles. */
+/** The three hero counters — the same three words, the same three piles. */
 export function sectionCounts<T extends { column: PortalColumnKey; actions: PortalActions }>(cards: T[]): Record<PortalSectionKey, number> {
-  const out = { review: 0, production: 0, approved: 0, published: 0 } as Record<PortalSectionKey, number>
+  const out = { review: 0, approved: 0, published: 0 } as Record<PortalSectionKey, number>
   for (const s of portalSections(cards)) out[s.key] = s.cards.length
   return out
 }
