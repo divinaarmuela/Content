@@ -48,7 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'Pick at least one active team member' }, { status: 400 })
     }
 
-    const sent = await notifyScheduleHandoff(user, item, valid)
+    const toDraftMode = item.status === 'approved_for_scheduling'
+    const sent = await notifyScheduleHandoff(user, item, valid, toDraftMode ? 'work' : 'schedule')
 
     // INTO THE SCHEDULER'S DRAFT, NOT READY TO POST (the owner, 14 Sep 2026:
     // "handing over to a scheduler should go in Draft — the drive files are
