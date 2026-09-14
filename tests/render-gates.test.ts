@@ -556,3 +556,14 @@ describe('a new shoot plan offers an account manager their own clients; a genera
     expect(s).toContain('allClients.filter(c => (c.managers ?? []).some(m => m.id === me?.id))')
   })
 })
+
+describe('a scheduler’s upload on a card shows the same rows as the New post window (14 Sep 2026)', () => {
+  it('the card owns an upload group, draws its rows with bytes, bar, speed and time left, and clears them once saved', () => {
+    const s = src('app/dashboard/board/PostApprovalDetail.tsx')
+    expect(s).toContain('const uploadGroup = `card:${id}`')
+    expect(s).toContain('const cardUploads = useUploadGroup(uploadGroup)')
+    expect(s).toContain("uploadFiles(files, { purpose: 'social', group: uploadGroup })")
+    expect(s).toContain('<UploadRows uploads={cardUploads} onDismiss={dismissUpload} />')
+    expect(s).toContain('clearGroup(uploadGroup)')
+  })
+})

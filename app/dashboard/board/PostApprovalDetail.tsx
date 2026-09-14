@@ -27,7 +27,8 @@ import {
 } from '../../lib/card-history-core'
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { networkName } from '../../lib/publish-core'
-import { uploadFiles } from '../uploadQueue'
+import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
+import { UploadOverall, UploadRows, useUploadGroup } from '../UploadRows'
 import { usePlayable } from '../social/usePlayable'
 import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
@@ -249,6 +250,13 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const replaceInput = useRef<HTMLInputElement>(null)
   const addInput = useRef<HTMLInputElement>(null)
   const replacing = useRef<number | null>(null)
+  // THE SAME UPLOAD ROWS THE NEW POST WINDOW SHOWS (the owner, 14 Sep 2026:
+  // "when a scheduler uploads the files from the Drive for the quality check,
+  // make sure the UI is similar to New post — they don't see an uploading
+  // count in the card"): this card's uploads, with bytes, bar, speed, time
+  // left and a way to stop, drawn under the files header until they are saved
+  const uploadGroup = `card:${id}`
+  const cardUploads = useUploadGroup(uploadGroup)
 
   const writeVersion = async (next: Slide[], what: string) => {
     if (!item) return
@@ -268,6 +276,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? json?.problems?.[0] ?? 'Could not save the files'))
       toast.success(`${what} — saved as version ${json?.version?.version_number ?? ''}`.trim())
+      clearGroup(uploadGroup)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save the files')
     } finally {
@@ -275,7 +284,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     }
   }
   const upload = async (files: File[]): Promise<Slide[]> => {
-    const { done } = await Promise.resolve(uploadFiles(files, { purpose: 'social' }))
+    const { done } = await Promise.resolve(uploadFiles(files, { purpose: 'social', group: uploadGroup }))
     const landed = await done
     return landed.map(({ file, url }) => ({
       url, name: file.name, bytes: file.size, source: 'upload' as const,
@@ -639,6 +648,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           )}
         </div>
         {working && <p role="status" className="text-[13px] text-muted-foreground">{working}…</p>}
+        {cardUploads.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-card-uploads>
+            {cardUploads.length > 1 && <UploadOverall uploads={cardUploads} />}
+            <UploadRows uploads={cardUploads} onDismiss={dismissUpload} />
+          </div>
+        )}
         {slides.length === 0 && (
           <p className="text-[14px] text-muted-foreground">{finished ? 'The finished edit is the link above; no files were uploaded.' : 'No files yet.'}</p>
         )}
