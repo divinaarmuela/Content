@@ -155,3 +155,30 @@ describe('the scripts on the editor’s card (13 Sep 2026)', () => {
     expect(row.value).toBe('Hook: Every sign\nPrompts:\n1. Where did you start?')
   })
 })
+
+describe('the plan’s rows belong to the plan’s card (the owner, 14 Sep 2026)', () => {
+  const s = {
+    card: { client_id: 'c1', brief: 'Cut the two teaser reels', due_date: '2026-09-25', change_note: 'Tighten the intro', platform_targets: ['instagram'] },
+    shoot: {
+      objective: 'Launch the spring range', planned_deliverables: [{ id: 'l1', title: '5 reels' }],
+      shot_list: [{ id: 's1', text: 'Walk in' }], editor_priorities: 'Reel 1 first', script: 'Hello',
+    },
+    specs: [{ platform: 'Instagram', lines: ['9:16', 'up to 90 s'] }],
+  }
+  it('the card the shoot made carries the whole plan', async () => {
+    const { briefRowsFor } = await import('../app/lib/editor-sop-core')
+    const rows = briefRowsFor(s as never, true)
+    expect(rows.map(r => r.key)).toEqual(['objective', 'deliverables', 'specs', 'deadline', 'shot_list', 'script', 'notes', 'previous'])
+    expect(rows.find(r => r.key === 'objective')!.value).toBe('Launch the spring range')
+  })
+  it('a card made on a board with a shoot picked carries its own words only — no objective, specs, deliverables or shot list from the shoot, and no Not given rows', async () => {
+    const { briefRowsFor } = await import('../app/lib/editor-sop-core')
+    const rows = briefRowsFor(s as never, false)
+    expect(rows.map(r => r.key)).toEqual(['objective', 'deadline', 'notes', 'previous'])
+    expect(rows[0]).toMatchObject({ label: 'What needs doing', value: 'Cut the two teaser reels' })
+    expect(rows.find(r => r.key === 'notes')!.value).toBe('Tighten the intro')
+    expect(rows.every(r => r.value !== null)).toBe(true)
+    // nothing to say: only where previous edits are
+    expect(briefRowsFor({ card: { client_id: 'c1' } } as never, false).map(r => r.key)).toEqual(['previous'])
+  })
+})

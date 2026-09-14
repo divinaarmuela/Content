@@ -15,6 +15,7 @@ import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import { linkKindOf } from '../../lib/card-link-core'
+import { shootCardId } from '../../lib/deliverable-group-core'
 import { cardPeople } from '../../lib/card-people-core'
 import { channelSpecs, PLATFORM_MEDIA } from '../../lib/media-fit-core'
 import type { Platform } from '../../lib/publish-core'
@@ -23,7 +24,7 @@ import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
 import {
   BLOCKER_LADDER, BLOCKER_NEEDS, EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
-  beforeYouStart, blockerWords, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
+  briefRowsFor, blockerWords, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
 
@@ -221,10 +222,12 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
   const specs = channelSpecs({ platforms, types: ['video'] })
     .map(s => ({ platform: s.label, lines: s.groups.flatMap(g => g.lines) }))
-  const brief = beforeYouStart({
+  // the plan's rows only on the card the shoot made (editor-sop-core.briefRowsFor)
+  const fromPlan = !!item.batch_id && item.id === shootCardId(String(item.batch_id))
+  const brief = briefRowsFor({
     card: item as never, shoot: shoot as never, specs,
     driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null,
-  })
+  }, fromPlan)
   const from = workFrom({ card: item as never, shoot: shoot as never, driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null })
   const handover = handoverState(item as never)
   const planRead = planReadState(shoot, me?.id)

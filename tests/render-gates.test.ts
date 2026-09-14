@@ -526,3 +526,12 @@ describe('a card still with the editor shows no files box on the manager’s dra
     expect(s).toContain('Waiting for the editor’s Drive or Dropbox link.')
   })
 })
+
+describe('the editor’s card borrows the plan only when the shoot made it (14 Sep 2026)', () => {
+  it('reads the rows through briefRowsFor with the shoot-card check', () => {
+    const s = src('app/dashboard/board/EditorCardDrawer.tsx')
+    expect(s).toContain('const fromPlan = !!item.batch_id && item.id === shootCardId(String(item.batch_id))')
+    expect(s).toContain('const brief = briefRowsFor({')
+    expect(s).not.toMatch(/const brief = beforeYouStart\(/)
+  })
+})

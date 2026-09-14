@@ -147,6 +147,25 @@ export function beforeYouStart(s: BriefSources): BriefRow[] {
   ]
 }
 
+/**
+ * THE PLAN'S ROWS BELONG TO THE PLAN'S CARD (the owner, 14 Sep 2026: "an
+ * editor created a card and picked a shoot — why are the objectives all
+ * there from the shoot? Platform specs etc. shouldn't be there. Only the
+ * card the shoot made, that we were notified from"). A card the shoot made
+ * when its plan was shared carries the objective, the deliverables, the
+ * platform specs, the shot list and the scripts. A card somebody made on a
+ * board — New card with a shoot picked — carries its own words: what needs
+ * doing, the deadline, the change note, previous edits; nothing borrowed,
+ * and no "Not given" rows for things nobody wrote.
+ */
+export function briefRowsFor(s: BriefSources, fromPlan: boolean): BriefRow[] {
+  if (fromPlan) return beforeYouStart(s)
+  const own = new Set(['objective', 'deadline', 'notes', 'previous'])
+  return beforeYouStart({ card: s.card, shoot: null, specs: [], driveFolderUrl: s.driveFolderUrl })
+    .filter(r => own.has(r.key) && r.value !== null)
+    .map(r => (r.key === 'objective' ? { ...r, label: 'What needs doing' } : r))
+}
+
 /** §1 where the work comes from and where the finals go. */
 export function workFrom(s: BriefSources): { footage: string | null; finalsFolder: string | null } {
   return {
