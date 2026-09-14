@@ -206,13 +206,26 @@ export function textColorOf(card: { text_color?: string | null } | null | undefi
   return (CANVAS_TEXT_COLORS as readonly string[]).includes(String(v)) ? (v as CanvasTextColor) : null
 }
 
+/** THE KINDS WITH WORDS OF THEIR OWN — a note, a heading, a to-do and, since
+ *  14 Sep 2026 (the owner: "allow the board to have toolbar too like size
+ *  texts etc"), a board tile, whose name is its words. Only these carry a
+ *  text size, a text colour and an alignment. */
+export const TEXT_STYLED_KINDS = ['note', 'label', 'todo', 'board'] as const
+export function hasTextStyle(kind: string | null | undefined): boolean {
+  return (TEXT_STYLED_KINDS as readonly string[]).includes(String(kind ?? ''))
+}
+
 /** WHERE THE WORDS SIT in a note, a heading or a to-do (the owner, 13 Sep
- *  2026: "allow alignment, either left, middle or right"). Absent = left. */
+ *  2026: "allow alignment, either left, middle or right"). Absent = left —
+ *  except on a board tile, whose name has always sat in the middle. */
 export const CANVAS_TEXT_ALIGNS = ['left', 'center', 'right'] as const
 export type CanvasTextAlign = (typeof CANVAS_TEXT_ALIGNS)[number]
-export function textAlignOf(card: { align?: string | null } | null | undefined): CanvasTextAlign {
+export function defaultAlignOf(kind: string | null | undefined): CanvasTextAlign {
+  return kind === 'board' ? 'center' : 'left'
+}
+export function textAlignOf(card: { align?: string | null; kind?: string | null } | null | undefined): CanvasTextAlign {
   const v = card?.align
-  return (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(v)) ? (v as CanvasTextAlign) : 'left'
+  return (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(v)) ? (v as CanvasTextAlign) : defaultAlignOf(card?.kind)
 }
 
 export const CANVAS_TEXT_SIZES = ['sm', 'md', 'lg', 'xl'] as const
@@ -535,15 +548,15 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...((CANVAS_NOTE_COLORS as readonly string[]).includes(color)
         ? { color: color as CanvasCard['color'] }
         : {}),
-      // text size on the two kinds that carry words of their own; anything
-      // else, or an unknown value, is simply 'md' by absence
-      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
+      // text size on the kinds that carry words of their own (TEXT_STYLED_KINDS);
+      // anything else, or an unknown value, is simply 'md' by absence
+      ...(hasTextStyle(kind) && (CANVAS_TEXT_SIZES as readonly string[]).includes(String(r.size ?? ''))
         ? { size: String(r.size) as CanvasTextSize }
         : {}),
-      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
+      ...(hasTextStyle(kind) && (CANVAS_TEXT_COLORS as readonly string[]).includes(String(r.text_color ?? ''))
         ? { text_color: String(r.text_color) as CanvasTextColor }
         : {}),
-      ...((kind === 'note' || kind === 'label' || kind === 'todo') && (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(r.align ?? ''))
+      ...(hasTextStyle(kind) && (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(r.align ?? ''))
         ? { align: String(r.align) as CanvasTextAlign }
         : {}),
       ...(kind === 'arrow' ? { from, to } : {}),

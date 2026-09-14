@@ -519,8 +519,10 @@ describe('text size on a note or a heading (13 Sep 2026)', () => {
       { id: 'n3', kind: 'note', x: 0, y: 0, text: 'c' },
       { id: 'l1', kind: 'label', x: 0, y: 0, text: 'd', size: 'sm' },
       { id: 'i1', kind: 'image', x: 0, y: 0, url: 'https://cdn.co/a.jpg', size: 'lg' },
+      // a board tile's name is its words (14 Sep 2026)
+      { id: 'b1', kind: 'board', x: 0, y: 0, name: 'References', size: 'lg' },
     ])
-    expect(cards.map(c => c.size ?? null)).toEqual(['xl', null, null, 'sm', null])
+    expect(cards.map(c => c.size ?? null)).toEqual(['xl', null, null, 'sm', null, 'lg'])
     // absent is Normal, which is exactly the size every older board renders at
     expect(textSizeOf(cards[2])).toBe('md')
     expect(NOTE_FONT_PX.md).toBe(13)
@@ -545,7 +547,9 @@ describe('text colour on a note or a heading (13 Sep 2026)', () => {
       { id: 'h', kind: 'label', x: 0, y: 0, text: 'A', text_color: 'white' },
       { id: 'i', kind: 'image', x: 0, y: 0, url: 'https://x/y.png', text_color: 'red' },
       { id: 'b', kind: 'note', x: 0, y: 0, text_color: 'neon' },
+      { id: 'bd', kind: 'board', x: 0, y: 0, name: 'References', text_color: 'blue' },
     ])
+    expect(cards.find(c => c.id === 'bd')?.text_color).toBe('blue')
     expect(cards.find(c => c.id === 'n')?.text_color).toBe('red')
     expect(cards.find(c => c.id === 'h')?.text_color).toBe('white')
     expect(cards.find(c => c.id === 'i')).not.toHaveProperty('text_color')
@@ -564,7 +568,13 @@ describe('where the words sit: left, middle or right (13 Sep 2026)', () => {
       { id: 't', kind: 'todo', x: 0, y: 0, items: [], align: 'right' },
       { id: 'i', kind: 'image', x: 0, y: 0, url: 'https://x/y.png', align: 'right' },
       { id: 'b', kind: 'note', x: 0, y: 0, align: 'justify' },
+      { id: 'bd', kind: 'board', x: 0, y: 0, name: 'References', align: 'right' },
     ])
+    expect(cards.find(c => c.id === 'bd')?.align).toBe('right')
+    // a board's name sits in the middle unless told otherwise; everything else starts left
+    expect(textAlignOf({ kind: 'board' })).toBe('center')
+    expect(textAlignOf({ kind: 'board', align: 'left' })).toBe('left')
+    expect(textAlignOf({ kind: 'note' })).toBe('left')
     expect(cards.find(c => c.id === 'n')?.align).toBe('center')
     expect(cards.find(c => c.id === 'h')?.align).toBe('right')
     expect(cards.find(c => c.id === 't')?.align).toBe('right')

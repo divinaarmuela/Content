@@ -19,7 +19,8 @@ import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
-  type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf } from '../../../../lib/batch-brief-core'
+  type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
+  hasTextStyle, defaultAlignOf } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -549,7 +550,7 @@ export default function BriefCanvas({
     const dx = r.mode === 'w' ? -rawDx : rawDx
     const dy = r.mode === 'se' ? (e.clientY - r.startY) / s : 0
     // never narrower than the card's widest word, at its text size
-    const words = card.kind === 'todo' ? card.name : card.text
+    const words = card.kind === 'todo' || card.kind === 'board' ? card.name : card.text
     const next = resizeCard(card.kind, { w: r.ow, h: r.oh }, dx, dy, e.shiftKey && r.mode === 'se', words, textSizeOf(card))
     // a sideways-only pull on a content-tall card keeps it content-tall:
     // the height is only claimed once it moves
@@ -597,7 +598,7 @@ export default function BriefCanvas({
    *  its widest word at the new size rather than cutting it. */
   const setTextSize = (card: CanvasCard, size: CanvasTextSize) => {
     if (size === textSizeOf(card)) return
-    const w = Math.max(card.w, minCardWidth(card.kind, card.text, size))
+    const w = Math.max(card.w, minCardWidth(card.kind, card.kind === 'todo' || card.kind === 'board' ? card.name : card.text, size))
     const next: CanvasCard = { ...card, size, w }
     upsertLocal(next); persist([next])
   }
@@ -1007,7 +1008,11 @@ export default function BriefCanvas({
   const tb = 'h-8 gap-1.5 px-2 text-secondary-13'
   const cardToolbar = (card: CanvasCard) => {
     const size = textSizeOf(card)
-    const hasText = card.kind === 'note' || card.kind === 'label' || card.kind === 'todo'
+    // a board tile's name is its words (the owner, 14 Sep 2026: "allow the
+    // board to have toolbar too like size texts etc")
+    const hasText = hasTextStyle(card.kind)
+    // a board's name sits in the middle unless told otherwise
+    const baseAlign = defaultAlignOf(card.kind)
     return (
       <>
         <span className="px-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{KIND_WORD[card.kind]}</span>
@@ -1060,7 +1065,7 @@ export default function BriefCanvas({
                 return (
                   <button key={al} type="button" aria-label={`Align ${al === 'center' ? 'middle' : al}`} title={`Align ${al === 'center' ? 'middle' : al}`}
                     aria-pressed={on}
-                    onClick={() => { if (on) return; const next = { ...card, align: al === 'left' ? undefined : al }; upsertLocal(next); persist([next]) }}
+                    onClick={() => { if (on) return; const next = { ...card, align: al === baseAlign ? undefined : al }; upsertLocal(next); persist([next]) }}
                     className={`flex h-7 w-7 items-center justify-center rounded-md [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
                       on ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
                     }`}>
@@ -1070,7 +1075,8 @@ export default function BriefCanvas({
               })}
             </div>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
-            {card.kind !== 'todo' && (
+            {/* a to-do names itself on this bar; a board renames in its dialog */}
+            {card.kind !== 'todo' && card.kind !== 'board' && (
               <Button size="sm" variant="ghost" className={tb} onClick={() => editCard(card)}>
                 <Pencil className="h-3.5 w-3.5" /> Edit text
               </Button>

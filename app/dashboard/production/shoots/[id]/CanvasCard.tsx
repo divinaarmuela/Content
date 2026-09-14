@@ -422,18 +422,27 @@ function CanvasCardInner({
     // words go small — so a resize never clips the icon or the name
     // (board-canvas-core.boardTileLayout, 14 Sep 2026)
     const tile = boardTileLayout(card.h)
+    // the name is the tile's words: its size, colour and where it sits come
+    // off the toolbar as a heading's do (the owner, 14 Sep 2026: "allow the
+    // board to have toolbar too like size texts etc"); the middle is the
+    // default, so every tile drawn before this looks the same
+    const nameSize = textSizeOf(card)
+    const namePx = (tile.small ? NOTE_FONT_PX : LABEL_FONT_PX)[nameSize]
+    const nameInk = TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? ''
+    const nameAlign = textAlignOf(card)
+    const alignClass = nameAlign === 'left' ? 'items-start text-left' : nameAlign === 'right' ? 'items-end text-right' : 'items-center text-center'
     return (
       <div
         data-kind="board"
         data-tile={tile.small ? 'small' : tile.openFloats ? 'short' : 'full'}
-        className={`group relative flex select-none flex-col items-center justify-center overflow-hidden rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${tile.small ? 'gap-1.5' : 'gap-2'} ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
+        className={`group relative flex select-none flex-col justify-center overflow-hidden rounded-inner p-3 shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${alignClass} ${tile.small ? 'gap-1.5' : 'gap-2'} ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
         style={boxStyle(card)}
       >
         <div className={`flex shrink-0 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10 ${tile.small ? 'h-10 w-10' : 'h-14 w-14'}`}>
           <Icon className={tile.small ? 'h-5 w-5' : 'h-7 w-7'} />
         </div>
-        <p className={`line-clamp-2 max-w-full break-words font-semibold leading-tight ${tile.small ? 'text-[13px]' : 'text-[15px]'}`}>{card.name || 'Board'}</p>
-        <p className={`truncate max-w-full text-muted-foreground ${tile.small ? 'text-[11px]' : 'text-[12px]'}`}>{insideLabel ?? 'Empty'}</p>
+        <p className={`line-clamp-2 max-w-full break-words font-semibold leading-tight ${nameInk}`} style={{ fontSize: namePx }}>{card.name || 'Board'}</p>
+        <p className={`truncate max-w-full ${nameInk ? `${nameInk} opacity-80` : 'text-muted-foreground'} ${tile.small ? 'text-[11px]' : 'text-[12px]'}`}>{insideLabel ?? 'Empty'}</p>
         <button
           type="button"
           aria-label={`Open ${card.name || 'Board'}`}
