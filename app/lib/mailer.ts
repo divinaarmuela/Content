@@ -45,6 +45,28 @@ type Smtp2goAttachment = { filename: string; content: Buffer; contentType?: stri
 
 /** The one send path. Throws on any failure — callers decide what a failure
  *  means (notify() records it; direct senders surface it). */
+/** A readable plain-text version of an HTML email body. */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, text: string) => {
+      const t = String(text).replace(/<[^>]+>/g, '').trim()
+      return t && !t.includes(href) ? `${t} (${href})` : href
+    })
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(l => l.trim()).join('\n')
+    .trim()
+}
+
 async function smtp2goSend(input: {
   from: string
   to: string[]
@@ -67,6 +89,10 @@ async function smtp2goSend(input: {
       ...(input.cc?.length ? { cc: input.cc } : {}),
       subject: input.subject,
       html_body: input.html,
+      // a plain-text alternative — an HTML-only email scores higher for spam
+      // (the owner, 14 Sep 2026: "emails sometimes go through as spam"). The
+      // domain's SPF/DKIM in DNS is the real fix; this is the code half.
+      text_body: htmlToText(input.html),
       ...(input.replyTo ? { custom_headers: [{ header: 'Reply-To', value: input.replyTo }] } : {}),
       ...(input.attachments?.length
         ? {

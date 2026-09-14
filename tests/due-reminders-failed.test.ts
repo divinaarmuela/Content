@@ -88,7 +88,7 @@ describe('the morning sweep', () => {
     fake = base({ content_items: [item({ status: 'in_editing', due_date: '2026-08-01' })] })
     await runDueReminders()
     const subjects = emails.map(e => String(e.subject))
-    expect(subjects.every(s => s.startsWith('⚠️ Overdue'))).toBe(true)
+    expect(subjects.every(s => s.startsWith('Overdue'))).toBe(true)
   })
 
   it('honours the handoff: an item assigned to schedulers reminds those schedulers', async () => {

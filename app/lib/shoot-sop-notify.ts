@@ -285,7 +285,7 @@ export async function runBriefLateNudge(): Promise<{ late: number; told: number 
         eventType: 'shoot_brief_late', entityType: 'batch',
         entityId: `${b.id}#shared-late`,
         recipientId: p.id, recipientEmail: p.email,
-        subject: `⚠️ Plan shared late: ${b.title}`,
+        subject: `Plan shared late: ${b.title}`,
         bodyHtml: renderEmail(
           `${escapeHtml(b.title)} — the plan was shared late`,
           `<p>The plan went to the team <strong>${lead} day${lead === 1 ? '' : 's'}</strong> before the shoot. It needs 7.</p>` +
@@ -307,7 +307,7 @@ export async function runBriefLateNudge(): Promise<{ late: number; told: number 
         eventType: 'shoot_brief_late', entityType: 'batch',
         entityId: `${b.id}#late`,
         recipientId: p.id, recipientEmail: p.email,
-        subject: `⚠️ ${LATE_WORDS}: ${b.title}`,
+        subject: `${LATE_WORDS}: ${b.title}`,
         bodyHtml: renderEmail(
           `${escapeHtml(b.title)} — the plan is late`,
           `<p>The shoot is ${days <= 0 ? 'today or gone' : `in ${days} day${days === 1 ? '' : 's'}`} and the plan is still being written.</p>` +

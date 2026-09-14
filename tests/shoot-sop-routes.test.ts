@@ -396,7 +396,7 @@ describe('a plan shared late', () => {
     emails.length = 0
     expect(await runBriefLateNudge()).toEqual({ late: 1, told: 2 })
     expect(emails.map(e => e.recipientEmail).sort()).toEqual(['abby@zz.invalid', 'am@zz.invalid'])
-    expect(String(emails[0].subject)).toBe('\u26a0\ufe0f Plan shared late: Golf Day')
+    expect(String(emails[0].subject)).toBe('Plan shared late: Golf Day')
     expect(String(emails[0].bodyHtml)).toMatch(/3 days<\/strong> before the shoot/)
     expect(batch().late_share_nudged_at).toBeTruthy()
     emails.length = 0

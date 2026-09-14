@@ -452,6 +452,10 @@ export async function notifyScheduleHandoff(
   actor: TeamUser,
   item: ContentItem,
   schedulerIds: string[],
+  // 'work' — the manager handed a For Handoff card so the scheduler works
+  // from the files and sends the post for the quality check (14 Sep 2026);
+  // 'schedule' — a signed-off card that only needs a posting date
+  mode: 'work' | 'schedule' = 'schedule',
 ): Promise<number> {
   const ids = schedulerIds.filter(x => typeof x === 'string').slice(0, 20)
   if (ids.length === 0) return 0
@@ -471,15 +475,17 @@ export async function notifyScheduleHandoff(
     entityId: `${item.id}#handoff#${p.id}#v${item.current_version_number}`,
     recipientId: p.id,
     recipientEmail: p.email,
-    subject: `${item.title} needs a posting date`,
+    subject: mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
     bodyHtml: renderEmail(
-      `${item.title} needs a posting date`,
-      `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>` +
+      mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
+      (mode === 'work'
+        ? `<p>${escapeHtml(actor.name || actor.email)} handed you <strong>${escapeHtml(item.title)}</strong> to work on. The folder below is what you work from — make the post, then send it for the quality check.</p>`
+        : `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>`) +
       folderLine(item as { link_url?: string | null; link_kind?: string | null }) +
-      `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext('approved_for_scheduling'))}</p>` +
+      `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext(mode === 'work' ? 'draft_uploaded' : 'approved_for_scheduling'))}</p>` +
       (longDate(item.due_date) ? `<p><strong>Due:</strong> ${escapeHtml(longDate(item.due_date)!)}</p>` : ''),
       'Open the item',
-      `${DASHBOARD_URL}${itemPath(item, p.role)}`
+      `${DASHBOARD_URL}${itemPath({ ...item, status: mode === 'work' ? 'draft_uploaded' : item.status }, p.role)}`
     ),
   })))
   return people.length

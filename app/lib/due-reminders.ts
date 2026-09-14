@@ -157,7 +157,7 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
         entityId: `${item.id}#${today}`,
         recipientId: person.id,
         recipientEmail: person.email,
-        subject: `${tag === 'OVERDUE' ? '⚠️ Overdue' : tag === 'due today' ? 'Due today' : 'Due tomorrow'}: ${item.title}`,
+        subject: `${tag === 'OVERDUE' ? 'Overdue' : tag === 'due today' ? 'Due today' : 'Due tomorrow'}: ${item.title}`,
         bodyHtml: renderEmail(
           `${item.title} — ${tag}`,
           `<p><strong>${item.title}</strong> for ${item.clients?.name ?? 'a client'} is <strong>${tag}</strong> ` +
