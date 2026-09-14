@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCanvasComments } from '../../../../components/canvas/CanvasComments'
 import { useGesture } from '@use-gesture/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -126,6 +127,16 @@ export default function BriefCanvas({
   const [sound, setSound] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  // the board opens full screen when the address asks — the manager's email
+  // from a client's comment on a card (14 Sep 2026)
+  useEffect(() => {
+    try { if (new URLSearchParams(window.location.search).get('board') === 'full') setFullscreen(true) } catch { /* no address */ }
+  }, [])
+  // the open thread follows the board into full screen: the page's panel sits
+  // behind the fixed layer, so the board draws it itself (BriefBoardComments)
+  const commentsCtx = useCanvasComments()
+  const onFullscreen = commentsCtx?.onFullscreen
+  useEffect(() => { onFullscreen?.(fullscreen) }, [fullscreen, onFullscreen])
   const [sheetCard, setSheetCard] = useState<CanvasCard | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [linkPrompt, setLinkPrompt] = useState(false)
@@ -1226,6 +1237,12 @@ export default function BriefCanvas({
       )}
 
       {crumbs}
+
+      {fullscreen && commentsCtx?.panel && (
+        <div data-fullscreen-comments className="absolute inset-y-0 right-0 z-10 w-[340px] max-w-full overflow-y-auto border-l border-border bg-background p-3 pt-[69px]">
+          {commentsCtx.panel}
+        </div>
+      )}
 
       <div
         ref={viewportRef}

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { MessageCircle } from 'lucide-react'
 import { badgeLabel } from '../../lib/canvas-comments-core'
 
@@ -22,6 +22,11 @@ export type CanvasCommentsValue = {
   open: (cardId: string) => void
   /** the card whose thread is open, for the badge to say so */
   openCardId: string | null
+  /** the open thread itself, for a full-screen board to draw beside the
+   *  canvas — outside it the panel sits behind the fixed layer (14 Sep 2026) */
+  panel?: ReactNode
+  /** the board says when it goes full screen, so the panel moves */
+  onFullscreen?: (on: boolean) => void
 }
 
 const CanvasCommentsContext = createContext<CanvasCommentsValue | null>(null)

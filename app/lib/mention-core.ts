@@ -110,3 +110,15 @@ export function insertMention(
   const inserted = `@${name.trim()} `
   return { text: head + inserted + tail, caret: head.length + inserted.length }
 }
+
+/**
+ * THE NAME "@" REACHES A PERSON BY: their name, else their email. A blank
+ * name — not only a missing one — falls through to the email, so the person
+ * the picker offers (card-people-core) is the person the server finds
+ * (comment-tags.taggableTeam). Before 14 Sep 2026 a team member saved with
+ * an empty name could be offered and never matched: the tag tagged nobody
+ * and nobody was told.
+ */
+export function tagNameOf(u: { name?: string | null; email?: string | null }): string {
+  return String(u.name ?? '').trim() || String(u.email ?? '').trim()
+}

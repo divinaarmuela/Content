@@ -1211,3 +1211,44 @@ async function generalOwnerOf(item: { owner_id?: string | null }): Promise<TeamU
   const owner = await table<TeamUserRow>('team_users').get(item.owner_id).catch(() => null)
   return owner && owner.role === 'general' && owner.active_status ? owner : null
 }
+
+/**
+ * A CARD MADE BY THE PERSON DOING THE WORK (the owner, 14 Sep 2026: "when an
+ * editor creates their own task, does it notify the AM? They should"). The
+ * client's account managers hear — or the super admins, when the client has
+ * none — with the card open on their own board. A manager making a card
+ * tells nobody: it is their own client. After the response, like every
+ * other email here.
+ */
+export function notifyCardMade(actor: TeamUser, item: ContentItem) {
+  if (actor.role === 'account_manager' || actor.role === 'super_admin') return
+  afterResponse('card-made notification', async () => {
+    const managers = await resolveAudience('account_managers', item)
+    const client = item.client_id
+      ? await table<{ id: string; name?: string | null }>('clients').get(item.client_id).catch(() => null)
+      : null
+    const who = actor.name || actor.email
+    const clientName = client?.name ? String(client.name) : null
+    const subject = `${who} made a card${clientName ? ` for ${clientName}` : ''}: ${item.title}`
+    const brief = String((item as { brief?: string | null }).brief ?? '').trim()
+    await Promise.all(managers.filter(m => m.id !== actor.id).map(m => notify({
+      actorName: actor.name,
+      actorEmail: actor.email,
+      actorClerkId: actor.clerk_user_id,
+      eventType: 'card_made',
+      entityType: 'content_item',
+      entityId: `${item.id}#made#${m.id}`,
+      recipientId: m.id,
+      recipientEmail: m.email,
+      subject,
+      bodyHtml: renderEmail(
+        subject,
+        `<p><strong>${escapeHtml(who)}</strong> made a card on ${escapeHtml(clientName ?? 'a client')}${item.batch_id ? ' from a shoot' : ''}: <strong>${escapeHtml(item.title)}</strong>.</p>` +
+        (brief ? `<p><strong>What needs doing:</strong> ${escapeHtml(brief.slice(0, 500))}</p>` : '') +
+        '<p>Nothing is needed from you yet — this is so you know it exists and can see it on your board.</p>',
+        OPEN_ITEM_CTA,
+        `${DASHBOARD_URL}${itemPath(item, (m as { role?: string | null }).role)}`,
+      ),
+    })))
+  })
+}

@@ -63,7 +63,10 @@ export function commentSubject(shootTitle: string, cardLabel: string | null | un
 /** The team's shoot page, opened on that card's thread when there is one. */
 export function shootCommentPath(batchId: string, cardId: string | null | undefined): string {
   const base = `/dashboard/production/shoots/${encodeURIComponent(batchId)}`
-  return cardId ? `${base}?card=${encodeURIComponent(cardId)}` : base
+  // on a card: the board opens full screen with that card's thread beside it
+  // (the owner, 14 Sep 2026: "the link to the AM should take them to the
+  // board full screen, not the shoots page")
+  return cardId ? `${base}?card=${encodeURIComponent(cardId)}&board=full` : base
 }
 
 /** The client's portal shoot page, on the same card. */

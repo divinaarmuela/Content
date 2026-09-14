@@ -469,3 +469,23 @@ describe('typing @ in a team note offers the people on the card (14 Sep 2026)', 
     expect((src('app/dashboard/board/BoardCard.tsx').match(/h-auto min-h-11 max-w-full whitespace-normal rounded-full/g) ?? []).length).toBe(2)
   })
 })
+
+describe('a client’s comment on a board card reaches the manager on the full-screen board (14 Sep 2026)', () => {
+  it('the link asks for the board full screen, the board obeys, and draws the thread inside its fixed layer', () => {
+    const canvas = src('app/dashboard/production/shoots/[id]/BriefCanvas.tsx')
+    expect(canvas).toMatch(/get\('board'\) === 'full'\) setFullscreen\(true\)/)
+    expect(canvas).toContain('data-fullscreen-comments')
+    expect(canvas).toMatch(/onFullscreen\?\.\(fullscreen\)/)
+    const comments = src('app/dashboard/production/shoots/[id]/BriefBoardComments.tsx')
+    expect(comments).toMatch(/panel: fullscreen \? panel : null, onFullscreen: setFullscreen/)
+    expect(comments).toMatch(/\{openCard && !fullscreen && \(/)
+  })
+  it('a card an editor makes for themselves tells the client’s managers; the roster names people the way the picker does', () => {
+    expect(src('app/api/production/items/route.ts')).toContain('notifyCardMade(user, item')
+    const wf = src('app/lib/workflow.ts')
+    expect(wf).toContain('export function notifyCardMade(actor: TeamUser, item: ContentItem)')
+    expect(wf).toMatch(/if \(actor\.role === 'account_manager' \|\| actor\.role === 'super_admin'\) return\s*\n\s*afterResponse\('card-made notification'/)
+    expect(src('app/lib/comment-tags.ts')).toContain('name: tagNameOf(u)')
+    expect(src('app/lib/card-people-core.ts')).toContain('name: tagNameOf(u)')
+  })
+})

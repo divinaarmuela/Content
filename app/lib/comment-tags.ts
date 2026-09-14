@@ -4,7 +4,7 @@ import type { NotificationLog, TeamUser as TeamUserRow } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { OPEN_ITEM_CTA } from './email-voice-core'
-import { resolveTags, type Mentionable } from './mention-core'
+import { resolveTags, tagNameOf, type Mentionable } from './mention-core'
 import { cardPathForRole } from './card-comment-core'
 import { DASHBOARD_URL } from './app-url'
 
@@ -33,7 +33,9 @@ export type Taggable = Mentionable & { email: string; role?: string }
 export async function taggableTeam(): Promise<Taggable[]> {
   const rows = await table<TeamUserRow>('team_users')
     .list({ where: u => u.role !== 'client' && u.active_status })
-  return rows.map(u => ({ id: String(u.id), name: String(u.name ?? u.email ?? ''), email: String(u.email ?? ''), role: String(u.role ?? '') }))
+  // the name the picker offers is the name the server finds — a blank name
+  // falls through to the email (mention-core.tagNameOf, 14 Sep 2026)
+  return rows.map(u => ({ id: String(u.id), name: tagNameOf(u), email: String(u.email ?? ''), role: String(u.role ?? '') }))
 }
 
 /** The pure rule lives in mention-core; re-exported so the routes import

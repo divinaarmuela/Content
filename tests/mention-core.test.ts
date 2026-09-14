@@ -94,3 +94,13 @@ describe('insertMention', () => {
     expect(out.caret).toBe('ask @Divina '.length)
   })
 })
+
+describe('tagNameOf — the name "@" reaches a person by (14 Sep 2026)', () => {
+  it('is the name, else the email; a blank name falls through to the email', async () => {
+    const { tagNameOf } = await import('../app/lib/mention-core')
+    expect(tagNameOf({ name: 'Priya Patel', email: 'priya@x.invalid' })).toBe('Priya Patel')
+    expect(tagNameOf({ name: '  ', email: 'sam@x.invalid' })).toBe('sam@x.invalid')
+    expect(tagNameOf({ name: null, email: 'sam@x.invalid' })).toBe('sam@x.invalid')
+    expect(tagNameOf({ name: '', email: null })).toBe('')
+  })
+})

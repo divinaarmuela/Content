@@ -1,5 +1,5 @@
 import { isQualityReviewer, roleLabel } from './identity-core'
-import type { Mentionable } from './mention-core'
+import { tagNameOf, type Mentionable } from './mention-core'
 
 /**
  * THE PEOPLE ON A CARD — who "@" offers in a team note (the owner, 14 Sep
@@ -61,6 +61,6 @@ export function cardPeople(
   for (const id of schedulers) take(byId.get(id), `${roleLabel(byId.get(id)?.role)} · scheduling it`)
 
   return picked
-    .map(({ u, hint }) => ({ id: u.id, name: String(u.name ?? '').trim() || String(u.email ?? ''), email: String(u.email ?? ''), hint }))
+    .map(({ u, hint }) => ({ id: u.id, name: tagNameOf(u), email: String(u.email ?? ''), hint }))
     .filter(p => p.name.length > 0)
 }

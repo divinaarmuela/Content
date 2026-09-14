@@ -39,6 +39,7 @@ vi.mock('../app/lib/production-access', () => ({
 vi.mock('../app/lib/workflow', () => ({
   logActivity,
   notifyJobAssigned,
+  notifyCardMade: vi.fn(),
   sanitiseRawAssets: (v: unknown) => (Array.isArray(v) ? v : []),
 }))
 vi.mock('../app/lib/production-live', () => ({ announceItemChange, announceBatchChange }))

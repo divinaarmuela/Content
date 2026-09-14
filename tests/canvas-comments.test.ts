@@ -142,7 +142,7 @@ describe('the words for a card', () => {
     expect(commentSubject('Golf Day', null)).toBe('Golf Day')
     expect(onCardLine('Hero reel image')).toBe('on: Hero reel image')
     expect(onCardLine(null)).toBeNull()
-    expect(shootCommentPath('b-1', 'c1')).toBe('/dashboard/production/shoots/b-1?card=c1')
+    expect(shootCommentPath('b-1', 'c1')).toBe('/dashboard/production/shoots/b-1?card=c1&board=full')
     expect(shootCommentPath('b-1', null)).toBe('/dashboard/production/shoots/b-1')
   })
 })

@@ -40,6 +40,10 @@ export default function BriefBoardComments({ batchId, cards, children, className
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [open, setOpen] = useState<string | null>(null)
+  // full screen turns the board into a fixed layer over the page, which hid
+  // this panel behind it (the owner, 14 Sep 2026: "I clicked the comment
+  // icon but it is not showing"); the board draws the panel itself then
+  const [fullscreen, setFullscreen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -113,22 +117,29 @@ export default function BriefBoardComments({ batchId, cards, children, className
     return true
   }
 
-  const ctx = useMemo(() => ({ counts, open: openThread, openCardId: open }), [counts, openThread, open])
+  const panel = openCard ? (
+    <CardCommentPanel
+      card={openCard}
+      comments={commentsOnCard(openCard.id, comments)}
+      onSend={send}
+      onClose={() => setOpen(null)}
+      viewer="team"
+      className={fullscreen ? '' : 'lg:sticky lg:top-4'}
+    />
+  ) : null
+  const ctx = useMemo(
+    () => ({ counts, open: openThread, openCardId: open, panel: fullscreen ? panel : null, onFullscreen: setFullscreen }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [counts, openThread, open, fullscreen, comments],
+  )
 
   return (
     <CanvasCommentsProvider value={ctx}>
-      <div className={cn('grid gap-3', openCard && 'lg:grid-cols-[minmax(0,1fr)_340px]', className)}>
+      <div className={cn('grid gap-3', openCard && !fullscreen && 'lg:grid-cols-[minmax(0,1fr)_340px]', className)}>
         <div className="min-w-0">{children}</div>
-        {openCard && (
+        {openCard && !fullscreen && (
           <div ref={panelRef} className="min-w-0">
-            <CardCommentPanel
-              card={openCard}
-              comments={commentsOnCard(openCard.id, comments)}
-              onSend={send}
-              onClose={() => setOpen(null)}
-              viewer="team"
-              className="lg:sticky lg:top-4"
-            />
+            {panel}
           </div>
         )}
       </div>

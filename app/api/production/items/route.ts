@@ -18,7 +18,7 @@ import {
   createdItemIds, taggedBatchIds, taggedItemIds,
 } from '../../../lib/production-access'
 import { scopeContextOf, visibleItems, type ScopeViewer } from '../../../lib/scope-client'
-import { logActivity, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
+import { logActivity, notifyCardMade, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { takeClaimLock, releaseClaimLock, briefLockKey } from '../../../lib/claim-lock'
@@ -481,6 +481,8 @@ export async function POST(req: Request) {
       announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
       // the handoff: an item created FOR an editor emails them the job
       notifyJobAssigned(user, item as unknown as Parameters<typeof notifyJobAssigned>[1])
+      // …and a card the maker made for themselves tells the client's managers
+      notifyCardMade(user, item as unknown as Parameters<typeof notifyCardMade>[1])
     }
     // a folder per deliverable, and the master link prefilled from it — in
     // the background, so a slow Drive never delays a batch upload
