@@ -593,12 +593,25 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
   const shoots = shootRows.filter(b => b.client_id === clientId && b.status !== 'wrapped')
   const groups = groupRows.filter(g => g.batch_id === shootId)
+  // RESET ONCE, WHEN THE DIALOG OPENS — never on a data tick (the owner, 14
+  // Sep 2026: "I assigned the editor in Who, made the card, but the editor
+  // was not notified"). `clients` is live data with a new array reference on
+  // every realtime update; when this effect depended on it, an update while
+  // the dialog was open silently reset every field, putting "Who" back to
+  // Me — so the card was owned by the creator and nobody was told.
+  const openedRef = useRef(false)
   useEffect(() => {
-    if (!open) return
+    if (!open) { openedRef.current = false; return }
+    if (openedRef.current) return
+    openedRef.current = true
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
-    setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(viewer.id)
+    setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(forPosting ? '' : viewer.id)
     setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setFolder('')
-  }, [open, defaultClientId, clients, viewer.id])
+  }, [open, defaultClientId, clients, viewer.id, forPosting])
+  // a late clients load still seeds the picker, without clobbering a choice
+  useEffect(() => {
+    if (open && !clientId && !defaultClientId && clients.length > 0) setClientId(clients[0].id)
+  }, [open, clientId, defaultClientId, clients])
   useEffect(() => { setShootId(''); setGroupId(''); setShootText('') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])
 

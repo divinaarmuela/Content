@@ -142,3 +142,13 @@ describe('one primary button in the Post approval header', () => {
     expect(src).toMatch(/New post/)
   })
 })
+
+describe('the New card / New post dialog does not reset itself on a data tick (14 Sep 2026)', () => {
+  it('the open-reset effect is gated by a ref, so a live clients update cannot revert "Who" to Me', () => {
+    const src = code('app/dashboard/board/BoardDialogs.tsx')
+    // the reset runs once per open, guarded by openedRef — not every time
+    // the live `clients` array gets a new reference
+    expect(src).toMatch(/const openedRef = useRef\(false\)/)
+    expect(src).toMatch(/if \(openedRef\.current\) return/)
+  })
+})
