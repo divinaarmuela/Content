@@ -76,7 +76,7 @@ export default function NewShootPlanDialog({
 
   // managers assign the plan to somebody at creation; that person gets the
   // job-pack email (what needs doing + the target date)
-  const { can, role } = useRole()
+  const { can, role, me } = useRole()
   // managers, and a general user (who raises shoots for any client), name
   // the account manager at creation
   const isManager = can('account_manager') || role === 'general'
@@ -202,7 +202,12 @@ export default function NewShootPlanDialog({
             {/* type the name, pick from what matches (13 Sep 2026) */}
             <ClientTypeahead
               id="plan-client"
-              clients={(allClients.length > 0 ? allClients : clients).map(c => ({ id: c.id, name: c.name }))}
+              // AN ACCOUNT MANAGER PLANS FOR THEIR OWN CLIENTS (the owner, 14 Sep
+              // 2026: "when an AM creates their shoot card they see the clients
+              // they are assigned to; a general user can choose any")
+              clients={(role === 'account_manager'
+                ? allClients.filter(c => (c.managers ?? []).some(m => m.id === me?.id))
+                : allClients.length > 0 ? allClients : clients).map(c => ({ id: c.id, name: c.name }))}
               value={draft.client_id}
               onChange={v => setDraft(d => ({ ...d, client_id: v, batch_id: '' }))}
             />

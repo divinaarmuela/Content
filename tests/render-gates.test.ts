@@ -535,3 +535,24 @@ describe('the editor’s card borrows the plan only when the shoot made it (14 S
     expect(s).not.toMatch(/const brief = beforeYouStart\(/)
   })
 })
+
+describe('the editor’s card opens the plan and its board, read only and without comments (14 Sep 2026)', () => {
+  it('the card links to the shoot page; a read-only viewer gets the plan with the canvas and no comment thread or badges', () => {
+    const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
+    expect(drawer).toContain('data-plan-link')
+    expect(drawer).toContain('href={`/dashboard/production/shoots/${shoot.id}`}')
+    const page = src('app/dashboard/production/shoots/[id]/page.tsx')
+    expect(page).toMatch(/if \(readOnly\) \{[\s\S]*?<PlanReadOnly /)
+    const plan = src('app/dashboard/production/shoots/[id]/PlanReadOnly.tsx')
+    expect(plan).toContain('canEdit={false}')
+    expect(plan).not.toMatch(/BriefComments|BriefBoardComments|CanvasCommentsProvider/)
+  })
+})
+
+describe('a new shoot plan offers an account manager their own clients; a general user or super admin any (14 Sep 2026)', () => {
+  it('the dialog narrows the client list by the managers on each client', () => {
+    const s = src('app/dashboard/production/NewItemDialog.tsx')
+    expect(s).toContain("role === 'account_manager'")
+    expect(s).toContain('allClients.filter(c => (c.managers ?? []).some(m => m.id === me?.id))')
+  })
+})

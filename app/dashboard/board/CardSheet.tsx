@@ -48,7 +48,10 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
   // — because that is where their email now sends them for a card being
   // made. It used to be everyone but the checker, so a manager's link
   // opened a card with no buttons.
-  const maker = me?.role === 'editor'
+  // …and a general user who HOLDS the card is its maker too (the owner, 14
+  // Sep 2026: "general users use all three pages and create tasks for
+  // themselves"): their own card gets the link box and the submit
+  const maker = me?.role === 'editor' || (me?.role === 'general' && !!me?.id && opened?.owner_id === me.id)
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY }

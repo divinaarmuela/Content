@@ -14,6 +14,7 @@ import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
+import Link from 'next/link'
 import { linkKindOf } from '../../lib/card-link-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
 import { cardPeople } from '../../lib/card-people-core'
@@ -293,6 +294,15 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => void flag({ kind: 'acknowledged' }, 'Acknowledged — the team knows you are on it')}>
                 <Check className="h-4 w-4" aria-hidden /> I am on it
               </Button>
+            )}
+            {/* the plan and its board, read only for the editor — no comments,
+                nothing to move (the owner, 14 Sep 2026: "the editor card gets
+                the read-only view of the canvas board — they can click it") */}
+            {shoot && (
+              <Link href={`/dashboard/production/shoots/${shoot.id}`} data-plan-link
+                className="inline-flex min-h-11 items-center gap-1 text-[13px] font-semibold underline underline-offset-4">
+                Open the plan and board <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              </Link>
             )}
           </div>
           {blocked && <p role="status" className="mt-2 text-[13px] font-semibold text-accent-red-deep">{blocked}</p>}
