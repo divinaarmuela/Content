@@ -77,13 +77,37 @@ export function linkKindOf(raw: string | null | undefined): LinkCheck {
  * step, and rows written before that still resolve.
  */
 export function folderOf(card: {
-  link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null
+  link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null
 }): { url: string; kind: 'drive' | 'dropbox' } | null {
   const link = String(card.link_url ?? '').trim()
-  if (link && (card.link_kind === 'drive' || card.link_kind === 'dropbox')) return { url: link, kind: card.link_kind }
+  // a link marked as the finished edit is never the folder (14 Sep 2026)
+  if (link && card.link_final !== true && (card.link_kind === 'drive' || card.link_kind === 'dropbox')) return { url: link, kind: card.link_kind }
   const raw = linkKindOf(card.raw_assets_url)
   if (raw.ok && raw.kind !== 'other') return { url: raw.url, kind: raw.kind }
   return null
+}
+
+/**
+ * THE FINISHED EDIT ON A CARD — the link the editor pasted as their work,
+ * never the folder to work from (the owner, 14 Sep 2026: the quality
+ * reviewer's card showed the submitted link only as "the folder").
+ *
+ * The link route marks it (`link_final`: true for the editor's "Your
+ * finished edit" box, false for a folder). A row from before the mark
+ * counts its link as the work when it is not also the folder — and never
+ * on a posting job, whose link is always the folder the scheduler works
+ * from.
+ */
+export function finishedEditOf(card: {
+  link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null
+  link_final?: boolean | null; adhoc_post?: boolean | null
+}): { url: string; label: string } | null {
+  const link = String(card.link_url ?? '').trim()
+  if (!link) return null
+  if (card.link_final === true) return { url: link, label: linkLabel(card.link_kind) }
+  if (card.link_final === false || card.adhoc_post === true) return null
+  if (link === String(card.raw_assets_url ?? '').trim()) return null
+  return { url: link, label: linkLabel(card.link_kind) }
 }
 
 /** The link the card face shows: the pasted link, else the folder. */

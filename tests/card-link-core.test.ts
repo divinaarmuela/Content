@@ -129,3 +129,30 @@ describe('folderOf — one folder on a card, wherever it was written (13 Sep 202
     expect(cardLinkOf({})).toBeNull()
   })
 })
+
+describe('finishedEditOf — the editor’s link is the work, never the folder (14 Sep 2026)', () => {
+  const folder = 'https://drive.google.com/drive/folders/1work'
+  const edit = 'https://drive.google.com/file/d/1final/view'
+  it('a link marked final is the finished edit, and is not the folder', async () => {
+    const { finishedEditOf, folderOf } = await import('../app/lib/card-link-core')
+    const card = { link_url: edit, link_kind: 'drive', raw_assets_url: folder, link_final: true }
+    expect(finishedEditOf(card)).toEqual({ url: edit, label: 'Google Drive' })
+    expect(folderOf(card)).toEqual({ url: folder, kind: 'drive' })
+    // …even when the editor put the finals in the folder they worked from
+    expect(finishedEditOf({ link_url: folder, link_kind: 'drive', raw_assets_url: folder, link_final: true })).toEqual({ url: folder, label: 'Google Drive' })
+  })
+  it('a link marked as a folder is no finished edit', async () => {
+    const { finishedEditOf, folderOf } = await import('../app/lib/card-link-core')
+    const card = { link_url: folder, link_kind: 'drive', raw_assets_url: folder, link_final: false }
+    expect(finishedEditOf(card)).toBeNull()
+    expect(folderOf(card)).toEqual({ url: folder, kind: 'drive' })
+  })
+  it('a row from before the mark: the link is the work when it is not also the folder, never on a posting job', async () => {
+    const { finishedEditOf } = await import('../app/lib/card-link-core')
+    expect(finishedEditOf({ link_url: edit, link_kind: 'drive', raw_assets_url: folder })).toEqual({ url: edit, label: 'Google Drive' })
+    expect(finishedEditOf({ link_url: 'https://vimeo.com/1', link_kind: 'other' })).toEqual({ url: 'https://vimeo.com/1', label: 'Link' })
+    expect(finishedEditOf({ link_url: folder, link_kind: 'drive', raw_assets_url: folder })).toBeNull()
+    expect(finishedEditOf({ link_url: edit, link_kind: 'drive', raw_assets_url: null, adhoc_post: true })).toBeNull()
+    expect(finishedEditOf({})).toBeNull()
+  })
+})

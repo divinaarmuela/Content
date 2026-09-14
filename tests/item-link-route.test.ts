@@ -143,6 +143,7 @@ describe('PUT /api/production/items/[id]/link', () => {
     expect((await put(folder)).status).toBe(200)
     expect(item().link_url).toBe(folder)
     expect(item().raw_assets_url).toBe(folder)
+    expect(item().link_final).toBe(false)
   })
 
   it('the finished edit (final: true) leaves the folder to work from alone', async () => {
@@ -155,6 +156,7 @@ describe('PUT /api/production/items/[id]/link', () => {
     expect(item().link_url).toBe(DRIVE_1)
     expect(item().link_kind).toBe('drive')
     expect(item().raw_assets_url).toBe(folder)
+    expect(item().link_final).toBe(true)
     expect(item().current_version_number).toBe(2)
   })
 

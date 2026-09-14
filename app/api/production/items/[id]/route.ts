@@ -222,7 +222,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the card is somebody's work and is left alone.
     if ('raw_assets_url' in patch) {
       const cur = current as { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null }
-      const linkIsFolder = !String(cur.link_url ?? '').trim() || cur.link_kind === 'drive' || cur.link_kind === 'dropbox'
+      // …and never the editor's finished edit (link_final, 14 Sep 2026)
+      const linkIsFolder = (cur as { link_final?: boolean | null }).link_final !== true
+        && (!String(cur.link_url ?? '').trim() || cur.link_kind === 'drive' || cur.link_kind === 'dropbox')
       const folder = linkKindOf(patch.raw_assets_url as string | null)
       if (folder.ok && folder.kind !== 'other') {
         patch.raw_assets_url = folder.url

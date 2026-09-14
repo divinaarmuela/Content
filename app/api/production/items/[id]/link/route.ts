@@ -57,6 +57,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           ...cur,
           link_url: check.url,
           link_kind: check.kind,
+          // the mark card-link-core.finishedEditOf reads: the finished edit, or a folder
+          link_final: final,
           // a folder is the card's folder everywhere (card-link-core.folderOf)
           // — unless this link is the finished edit, which is not the folder
           ...(check.kind !== 'other' && !final ? { raw_assets_url: check.url } : {}),
@@ -109,7 +111,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (!canEditItemFields(user, item)) {
       return NextResponse.json({ error: 'Only whoever holds this card — or a manager — can change its link' }, { status: 403 })
     }
-    const data = await table('content_items').update(id, { link_url: null, link_kind: null })
+    const data = await table('content_items').update(id, { link_url: null, link_kind: null, link_final: null })
     if (!data) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     await logActivity({
       actor: user, clientId: item.client_id,

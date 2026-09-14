@@ -2,6 +2,7 @@ import { deliverOnlyFor } from './deliver-only'
 import { DELIVERED_ACTION, DELIVERED_LINE, stageWordFor } from './deliver-only-core'
 import 'server-only'
 import { isQualityReviewer } from './identity-core'
+import { afterResponse } from './after-response'
 import { DbError, table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
@@ -261,7 +262,7 @@ async function notifyStandInPass(
 export function notifyFilesToWorkFrom(actor: TeamUser, item: ContentItem, added: WorkFile[], folder: string | null) {
   if (!item.owner_id || item.owner_id === actor.id) return
   if (added.length === 0 && !folder) return
-  void (async () => {
+  afterResponse('files-to-work-from notification', async () => {
     const owner = await table<TeamUserRow>('team_users').get(item.owner_id!)
     if (!owner || !owner.active_status) return
     const what = added.length > 0
@@ -285,12 +286,12 @@ export function notifyFilesToWorkFrom(actor: TeamUser, item: ContentItem, added:
         `${DASHBOARD_URL}${itemPath(item)}`,
       ),
     })
-  })().catch(e => console.error('files-to-work-from notification error:', e))
+  })
 }
 
 export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
   if (!item.owner_id || item.owner_id === actor.id) return
-  void (async () => {
+  afterResponse('job-assigned notification', async () => {
     const owner = await table<TeamUserRow>('team_users').get(item.owner_id!)
     const editor = owner && owner.active_status ? owner : null
     if (!editor) return
@@ -321,7 +322,7 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
         `${DASHBOARD_URL}${itemPath(item)}`
       ),
     })
-  })().catch(e => console.error('job-assigned notification error:', e))
+  })
 }
 
 /**
@@ -349,7 +350,7 @@ function folderLine(item: { link_url?: string | null; link_kind?: string | null 
 
 export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: string | null) {
   if (!item.owner_id || item.owner_id === actor.id) return
-  void (async () => {
+  afterResponse('handed-over notification', async () => {
     const row = await table<TeamUserRow>('team_users').get(item.owner_id!)
     if (!row || !row.active_status || row.role === 'client') return
     const by = actor.name || actor.email
@@ -381,7 +382,7 @@ export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: stri
         `${DASHBOARD_URL}${itemPath(item)}`,
       ),
     })
-  })().catch(e => console.error('handed-over notification error:', e))
+  })
 }
 
 /**
@@ -397,7 +398,7 @@ export function notifyBatchTransition(
 ) {
   const audiences = BATCH_TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []
   if (audiences.length === 0) return
-  void (async () => {
+  afterResponse('batch transition notification', async () => {
     const stub: ContentItem = {
       id: batch.id, client_id: batch.client_id, batch_id: batch.id,
       title: batch.title, content_type: 'other', status: 'draft_uploaded',
@@ -439,7 +440,7 @@ export function notifyBatchTransition(
         })
       }
     }
-  })().catch(e => console.error('batch transition notification error:', e))
+  })
 }
 
 /**
@@ -501,7 +502,7 @@ export function notifyPublishQueued(
     timezone?: string | null
   },
 ) {
-  void (async () => {
+  afterResponse('publish notification', async () => {
     let recipients: { id: string; email: string; name: string }[]
     if (opts.recipientIds && opts.recipientIds.length > 0) {
       const wanted = opts.recipientIds.slice(0, 20)
@@ -539,7 +540,7 @@ export function notifyPublishQueued(
         `${DASHBOARD_URL}${itemPath(item)}`
       ),
     })))
-  })().catch(e => console.error('publish notification error:', e))
+  })
 }
 
 /**
@@ -714,14 +715,14 @@ export async function performTransition(
   // itself: the provider has already published it, and refusing to record that
   // because a schedule row is missing would leave the board claiming a live
   // post is still waiting.
-  const linked = item as { link_url?: string | null; raw_assets_url?: string | null; adhoc_post?: unknown }
+  const linked = item as { link_url?: string | null; raw_assets_url?: string | null; adhoc_post?: unknown; link_final?: boolean | null }
   const hasLink = typeof linked.link_url === 'string' && linked.link_url.trim() !== ''
   // A POSTING JOB'S FOLDER IS NOT THE PIECE (the owner, 13 Sep 2026: an AM
   // makes the card with a Drive folder for the scheduler, who "uploads the
   // files and chooses which one to schedule"). Such a card (`adhoc_post`,
   // the manager's New post on Post approval) whose only link is that folder
   // has nothing for the quality checker yet.
-  const folderOnly = linked.adhoc_post === true && hasLink
+  const folderOnly = linked.adhoc_post === true && hasLink && linked.link_final !== true
     && linked.link_url === (linked.raw_assets_url ?? null)
   if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
@@ -896,8 +897,7 @@ export async function performTransition(
     detail: system ? actor.label : standIns.length > 0 ? `${check.rule.label} · ${STAND_IN_MARK}` : check.rule.label,
   })
   if (!system && standIns.length > 0) {
-    void notifyStandInPass(actor, { ...item, status: to }, standIns, to)
-      .catch(e => console.error('stand-in pass notification error:', e))
+    afterResponse('stand-in pass notification', () => notifyStandInPass(actor, { ...item, status: to }, standIns, to))
   }
   if (selfPosts && to === 'approved_for_scheduling') {
     // the card's history says where it ended: delivered, the client's to post
@@ -920,8 +920,7 @@ export async function performTransition(
     // of 11 Sep 2026). They hold the card now and are told at the approval
     // (the `assigned_schedulers` audience on client_review → approved).
     if (!system && to === 'approved_for_scheduling') {
-      void notifyScheduleHandoff(actor, { ...item, scheduler_ids: defaults, status: to }, defaults)
-        .catch(e => console.error('default scheduler handoff notification error:', e))
+      afterResponse('default scheduler handoff notification', () => notifyScheduleHandoff(actor, { ...item, scheduler_ids: defaults, status: to }, defaults))
     }
   }
 
@@ -978,14 +977,15 @@ export async function performTransition(
     if (to === 'scheduled') mirrorLatestVersionSoon(item.id, 'scheduled')
   }
 
-  // notifications — fire-and-forget; the outbox dedupe makes retries safe
+  // notifications — after the response, kept alive by the platform (see
+  // after-response.ts); the outbox dedupe makes retries safe
   const skip = new Set(opts?.skipAudiences ?? [])
   if (selfPosts) { skip.add('assigned_schedulers'); skip.add('schedulers') }
   const audiences = (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   const schedulerIds = [...(opts?.schedulerIds ?? []).filter(x => typeof x === 'string'), ...defaults].slice(0, 20)
-  void (async () => {
+  afterResponse('notification fan-out', async () => {
     // one email per person per move, whichever audiences name them (the
     // reviewer who is also the client's manager, the Ops contact who is a
     // super admin)
@@ -1113,7 +1113,7 @@ export async function performTransition(
         })
       }
     }
-  })().catch(e => console.error('notification fan-out error:', e))
+  })
 
   // live hint for every open board/queue/calendar/item page
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: to, kind: 'transition' })

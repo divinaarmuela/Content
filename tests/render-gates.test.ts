@@ -403,4 +403,36 @@ describe('a board tile at a short height keeps its icon and words (14 Sep 2026)'
       expect(s, file).toMatch(/flex shrink-0 items-center justify-center rounded-card/)
     }
   })
+
+  it('the shoot brief tile takes text size, colour and alignment off the toolbar, like a heading', () => {
+    // the owner, 14 Sep 2026: "allow the board to have toolbar too like size texts etc"
+    const tile = src('app/dashboard/production/shoots/[id]/CanvasCard.tsx')
+    expect(tile).toMatch(/const namePx = \(tile\.small \? NOTE_FONT_PX : LABEL_FONT_PX\)\[nameSize\]/)
+    expect(tile).toMatch(/const nameInk = TEXT_COLOR_CLASS\[textColorOf\(card\) \?\? ''\]/)
+    expect(tile).toMatch(/const nameAlign = textAlignOf\(card\)/)
+    const canvas = src('app/dashboard/production/shoots/[id]/BriefCanvas.tsx')
+    expect(canvas).toMatch(/const hasText = hasTextStyle\(card\.kind\)/)
+    // a board renames in its own dialog: no "Edit text" on its bar
+    expect(canvas).toMatch(/card\.kind !== 'todo' && card\.kind !== 'board' && \(/)
+    // the align buttons know a board starts in the middle
+    expect(canvas).toMatch(/align: al === baseAlign \? undefined : al/)
+  })
+})
+
+describe('the reviewer’s card shows the finished edit as what it is (14 Sep 2026)', () => {
+  // the owner's screenshot: the editor's submitted link appeared only as
+  // "Open the folder" under Files to work from, "0 files · Add the finished
+  // files" asked the reviewer for files, and the close × sat alone on a row
+  it('Post approval’s drawer opens the finished edit above the folder, and the close sits in the corner', () => {
+    const s = src('app/dashboard/board/PostApprovalDetail.tsx')
+    expect(s).toMatch(/const finished = item \? finishedEditOf\(/)
+    expect(s).toContain('data-finished-edit')
+    expect(s).toContain('Open the finished edit · {finished.label}')
+    expect(s).toMatch(/finished \? 'Add files' : 'Add the finished files'/)
+    expect(s).toMatch(/className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted"/)
+  })
+  it('the link route marks what it saved, and the item patch never turns a finished edit into the folder', () => {
+    expect(src('app/api/production/items/[id]/link/route.ts')).toContain('link_final: final,')
+    expect(src('app/api/production/items/[id]/route.ts')).toMatch(/link_final !== true\s*\n\s*&& \(!String\(cur\.link_url/)
+  })
 })

@@ -33,6 +33,7 @@ import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
+import { finishedEditOf } from '../../lib/card-link-core'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -450,13 +451,16 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const frozenCard = status === 'scheduled' || status === 'published'
   const primary = 'h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90'
   const secondary = 'h-11 rounded-full px-4 text-[14px] font-semibold'
+  // THE FINISHED EDIT — the editor's link, drawn as what it is (the owner,
+  // 14 Sep 2026: the reviewer's card showed it only as "Open the folder")
+  const finished = item ? finishedEditOf(item as Parameters<typeof finishedEditOf>[0]) : null
 
   return (
     <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">
       {/* ── 1. what and where ── */}
       {/* the buttons sit UNDER the title, full width: beside it they squeezed
           the title to "ZZ walk test ca…" (seen in the browser, 12 Sep 2026) */}
-      <div className="flex flex-col gap-3 border-b border-border px-5 pb-4 pt-5">
+      <div className="relative flex flex-col gap-3 border-b border-border px-5 pb-4 pr-14 pt-5">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
             {/* every card here is a piece to post; only an internal task keeps its own word (13 Sep 2026) */}
@@ -542,11 +546,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               <span className="sr-only">opens in a new tab</span>
             </a>
           )}
-          <button type="button" onClick={onClose} aria-label="Close"
-            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted">
-            <X className="h-[18px] w-[18px]" aria-hidden />
-          </button>
         </div>
+        {/* the close sits in the corner for everyone: under the title it was
+            a lone × on its own row for a reviewer, who has no other buttons
+            there (the owner, 14 Sep 2026: "a random x") */}
+        <button type="button" onClick={onClose} aria-label="Close"
+          className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full hover:bg-muted">
+          <X className="h-[18px] w-[18px]" aria-hidden />
+        </button>
       </div>
 
       {/* ── 2. the decision ── */}
@@ -576,6 +583,19 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           onClose={() => setHanding(false)} />
       )}
 
+      {/* ── 2a. THE FINISHED EDIT — the link the editor handed in, above the
+          folder they worked from, so the reviewer opens the work first ── */}
+      {finished && (
+        <div data-finished-edit className="flex flex-col gap-2 border-b border-border px-5 py-4">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Finished edit</p>
+          <a href={finished.url} target="_blank" rel="noreferrer noopener"
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-foreground px-4 text-[14px] font-semibold text-background hover:bg-foreground/90">
+            <ExternalLink className="h-4 w-4" aria-hidden /> Open the finished edit · {finished.label}
+            <span className="sr-only">, opens in a new tab</span>
+          </a>
+        </div>
+      )}
+
       {/* ── 2b. what the maker works FROM (a manager adds; 11 Sep 2026) —
           on a post handed to a scheduler with a Drive folder this IS the
           job (the owner, 14 Sep 2026: "I submitted a Drive and task to a
@@ -600,12 +620,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               scheduled how come I can add another") */}
           {!frozenCard && (
             <Button variant="outline" className={secondary} disabled={working !== null} onClick={() => addInput.current?.click()}>
-              <Plus className="h-4 w-4" aria-hidden /> {slides.length === 0 ? 'Add the finished files' : 'Add another'}
+              <Plus className="h-4 w-4" aria-hidden /> {slides.length > 0 ? 'Add another' : finished ? 'Add files' : 'Add the finished files'}
             </Button>
           )}
         </div>
         {working && <p role="status" className="text-[13px] text-muted-foreground">{working}…</p>}
-        {slides.length === 0 && <p className="text-[14px] text-muted-foreground">No files yet.</p>}
+        {slides.length === 0 && (
+          <p className="text-[14px] text-muted-foreground">{finished ? 'The finished edit is the link above; no files were uploaded.' : 'No files yet.'}</p>
+        )}
         {slides.map((s, i) => {
           const about = said.filter(c => splitSlideTag(String(c.body ?? '')).index === i)
           // a file the channel holds, or that has gone out, is not one to
