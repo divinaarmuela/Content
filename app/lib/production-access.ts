@@ -134,6 +134,23 @@ export async function taggedItemIds(user: TeamUser): Promise<string[]> {
  * must at least be visible in the logs. Newest first, so a prolific creator
  * loses their oldest rows past the cap, never their latest.
  */
+/** The item ids the quality reviewer moved out of the gate — their desk keeps
+ *  what they reviewed (scope-client.reviewedItemIdsOf, 14 Sep 2026). */
+export async function reviewedItemIds(user: TeamUser): Promise<string[]> {
+  if (!isQualityReviewer(user)) return []
+  try {
+    const rows = await table<WorkflowActivity>('workflow_activity').list({
+      where: a => a.actor_id === user.id && a.entity_type === 'content_item' && a.action === 'status_change' && a.old_value === 'quality_check',
+      orderBy: [['created_at', 'desc']],
+      limit: 3000,
+    })
+    return [...new Set(rows.map(a => a.entity_id).filter(Boolean))]
+  } catch (err) {
+    console.error('[scope] could not read reviewed items for', user.id, err)
+    return []
+  }
+}
+
 export async function createdItemIds(user: TeamUser): Promise<string[]> {
   if (user.role === 'client' || user.role === 'super_admin') return []
   try {
@@ -167,16 +184,17 @@ export async function assignedItemsFilter(
   user: TeamUser,
 ): Promise<(item: ContentItem) => boolean> {
   const me = assertUuid(user.id)
-  const [batches, tagged] = await Promise.all([heldBatchIds(user), taggedItemIds(user)])
+  const [batches, tagged, reviewed] = await Promise.all([heldBatchIds(user), taggedItemIds(user), reviewedItemIds(user)])
   const heldBatches = new Set(batches.map(assertUuid))
   const taggedItems = new Set(tagged.map(assertUuid))
+  const reviewedItems = new Set(reviewed)
   return (item: ContentItem) =>
     item.owner_id === me
     || schedulerIdsOf(item).includes(me)
     || (item.batch_id != null && heldBatches.has(item.batch_id))
     || taggedItems.has(item.id)
-    // the quality reviewer's desk
-    || (isQualityReviewer(user) && item.status === 'quality_check')
+    // the quality reviewer's desk, and what they reviewed
+    || (isQualityReviewer(user) && (item.status === 'quality_check' || reviewedItems.has(item.id)))
 }
 
 /** The item ids assignment opens, for the surfaces that filter in memory
@@ -275,7 +293,7 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
 
   // the quality reviewer's desk: a card in the gate opens for them whoever's
   // client it is (the Team's Playbook, 11 Sep 2026)
-  if (isQualityReviewer(user) && item.status === 'quality_check') {
+  if (isQualityReviewer(user) && (item.status === 'quality_check' || (await reviewedItemIds(user)).includes(item.id))) {
     return item as ContentItem & Record<string, unknown> & {
       status: ItemStatus
       scheduler_ids?: string[] | null

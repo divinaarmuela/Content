@@ -31,7 +31,7 @@ import type {
 import { CLIENT_LABELS, type ItemStatus } from '../lib/workflow-core'
 import { slidesOf } from '../lib/version-files-core'
 import {
-  createdItemIdsOf, scopeContextOf, taggedIdsOf, visibleBatches, visibleClientIdsOf, visibleGroups,
+  createdItemIdsOf, reviewedItemIdsOf, scopeContextOf, taggedIdsOf, visibleBatches, visibleClientIdsOf, visibleGroups,
   visibleItems, type ScopeContext, type ScopeViewer,
 } from '../lib/scope-client'
 
@@ -398,6 +398,9 @@ export function useItemScopeContext(
       : [],
     createdItemIds: viewer && item
       ? createdItemIdsOf(itemActivity, viewer.id).filter(id => id === item.id)
+      : [],
+    reviewedItemIds: viewer && item
+      ? reviewedItemIdsOf(itemActivity, viewer.id).filter(id => id === item.id)
       : [],
   }), [siblings, batch, batchComments, itemComments, itemActivity, viewer, item?.id])
 

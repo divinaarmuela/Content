@@ -161,6 +161,6 @@ describe('Submit for quality check on an editor’s card (not a posting job)', (
     fake = seed({ item: { adhoc_post: null, link_url: null, link_kind: null, raw_assets_url: null } })
     const r = await move('quality_check')
     expect(r.status).toBe(400)
-    expect(r.json.error).toBe('Paste the link to the finished edit, or upload the files, before submitting')
+    expect(r.json.error).toBe('Paste the link to the finished edit before submitting')
   })
 })

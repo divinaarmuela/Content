@@ -163,10 +163,12 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(s).toMatch(/\{ to: 'quality_check' \}/)
     expect(s).not.toMatch(/to: 'internal_review'/)
   })
-  it('the editor’s card is a link or files, the checks and a submit — no review link, no Drive picker (14 Sep 2026)', () => {
+  it('the editor’s card is a link, the checks and a submit — no review link, no Drive picker, no upload (14 Sep 2026)', () => {
     const s = src(EDITOR_DRAWER)
     expect(s).not.toMatch(/Review link|ed-review-link|Pick the final from Google Drive|Source files \(Dropbox\)/)
-    expect(s).toMatch(/Or upload files/)
+    // the owner: "why is there an add files feature in the editor card — it's just supposed to be a link"
+    expect(s).not.toMatch(/Or upload files|uploadFiles\(|type="file"/)
+    expect(s).toContain("'Add your Drive or Dropbox link first'")
   })
   it('the card face for the maker opens the card ("Quality check, then submit"); the link controls are the manager’s', () => {
     const s = src('app/dashboard/board/BoardCard.tsx')

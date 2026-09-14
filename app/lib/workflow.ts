@@ -762,7 +762,7 @@ export async function performTransition(
           throw new AuthzError(
             folderOnly || linked.raw_assets_url
               ? 'Upload the finished files first — the folder is what you work from, not the piece to check'
-              : 'Paste the link to the finished edit, or upload the files, before submitting',
+              : 'Paste the link to the finished edit before submitting',
             400,
           )
         }

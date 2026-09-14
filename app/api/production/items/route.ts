@@ -15,7 +15,7 @@ import { isValidOwner, resolveKindForWrite, type WorkKind } from '../../../lib/w
 import { taskExemptFromClientScope } from '../../../lib/item-edit-core'
 import {
   accessibleClientIds, canOpenBatch, openTaggedIds,
-  createdItemIds, taggedBatchIds, taggedItemIds,
+  createdItemIds, reviewedItemIds, taggedBatchIds, taggedItemIds,
 } from '../../../lib/production-access'
 import { scopeContextOf, visibleItems, type ScopeViewer } from '../../../lib/scope-client'
 import { logActivity, notifyCardMade, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
     }
     // the same tables the boards subscribe to (see useLiveWork.ts), read once
     // inside this request's cache
-    const [assignments, batches, workKinds, itemTags, batchTags, createdIds] = await Promise.all([
+    const [assignments, batches, workKinds, itemTags, batchTags, createdIds, reviewedIds] = await Promise.all([
       user.role === 'super_admin' || user.role === 'client'
         ? Promise.resolve([] as TeamUserClient[])
         : table<TeamUserClient>('team_user_clients').list({ by: { team_user_id: user.id } }),
@@ -66,6 +66,7 @@ export async function GET(req: Request) {
       // what this person CREATED — a grant like a tag: making a thing keeps
       // it visible after handing it on
       createdItemIds(user),
+      reviewedItemIds(user),
     ])
     if (user.role === 'client' && !viewer.client_id) return NextResponse.json([])
 
@@ -95,6 +96,7 @@ export async function GET(req: Request) {
         taggedItemIds: itemTags,
         taggedBatchIds: batchTags,
         createdItemIds: createdIds,
+        reviewedItemIds: reviewedIds,
         workKinds: workKinds as unknown as { id: string; slug: string }[],
       }),
     ).slice(0, 500)

@@ -316,3 +316,29 @@ describe('visibleClientIdsOf', () => {
     expect([...(out ?? [])].sort()).toEqual(['c1', 'cX', 'cY'])
   })
 })
+
+describe('the quality reviewer’s desk keeps what they reviewed (the owner, 14 Sep 2026)', () => {
+  it('a card they passed or sent back stays visible and openable; one another reviewer moved does not', async () => {
+    const { visibleItems, itemIsVisible, scopeContextOf, reviewedItemIdsOf } = await import('../app/lib/scope-client')
+    const joy = { id: 'u-joy', role: 'quality_checker', client_id: null }
+    const items = [
+      { id: 'i-gate', client_id: 'c-1', status: 'quality_check', owner_id: 'u-ed', scheduler_ids: [] },
+      { id: 'i-passed', client_id: 'c-1', status: 'client_review', owner_id: 'u-ed', scheduler_ids: [] },
+      { id: 'i-back', client_id: 'c-2', status: 'revision_required', owner_id: 'u-ed', scheduler_ids: [] },
+      { id: 'i-other', client_id: 'c-2', status: 'client_review', owner_id: 'u-ed', scheduler_ids: [] },
+    ]
+    const activity = [
+      { entity_type: 'content_item', entity_id: 'i-passed', action: 'status_change', old_value: 'quality_check', actor_id: 'u-joy' },
+      { entity_type: 'content_item', entity_id: 'i-back', action: 'status_change', old_value: 'quality_check', actor_id: 'u-joy' },
+      { entity_type: 'content_item', entity_id: 'i-other', action: 'status_change', old_value: 'quality_check', actor_id: 'u-sa' },
+    ]
+    expect(reviewedItemIdsOf(activity, 'u-joy').sort()).toEqual(['i-back', 'i-passed'])
+    const ctx = scopeContextOf({ viewer: joy as never, activity })
+    expect(visibleItems(joy as never, items as never, [], ctx).map(i => i.id).sort()).toEqual(['i-back', 'i-gate', 'i-passed'])
+    expect(itemIsVisible(joy as never, items[1] as never, [], ctx)).toBe(true)
+    expect(itemIsVisible(joy as never, items[3] as never, [], ctx)).toBe(false)
+    // the server's way: already-resolved ids
+    const server = scopeContextOf({ viewer: joy as never, reviewedItemIds: ['i-passed'] })
+    expect(visibleItems(joy as never, items as never, [], server).map(i => i.id).sort()).toEqual(['i-gate', 'i-passed'])
+  })
+})

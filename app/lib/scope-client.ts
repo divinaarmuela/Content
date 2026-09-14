@@ -69,6 +69,9 @@ export type ScopeContext = {
    *  thing keeps it on your board even after you hand it to someone else
    *  (the owner's rule, 9 Sep 2026: Raina must see the brief she wrote) */
   createdItemIds?: Iterable<string>
+  /** the items the quality reviewer moved out of the gate — their desk
+   *  keeps what they reviewed (reviewedItemIdsOf, 14 Sep 2026) */
+  reviewedItemIds?: Iterable<string>
   /** work_kinds rows, when the items carry only `work_kind_id` */
   workKinds?: { id: string; slug: string }[]
   /**
@@ -113,6 +116,22 @@ export type ScopeActivity = {
   entity_id?: string | null
   action?: string | null
   actor_id?: string | null
+  old_value?: string | null
+}
+
+/** The item ids the quality reviewer PASSED OR SENT BACK — moved out of the
+ *  gate by them, read off the activity log. A card they reviewed stays on
+ *  their desk afterwards (the owner, 14 Sep 2026: "quality reviewer cards
+ *  disappear once they review them — why?"): before this, the desk was
+ *  only what sat in Quality check at that moment. */
+export function reviewedItemIdsOf(
+  activity: readonly ScopeActivity[] | null | undefined,
+  viewerId: string,
+): string[] {
+  return [...new Set((activity ?? [])
+    .filter(a => a?.entity_type === 'content_item' && a?.action === 'status_change' && a?.old_value === 'quality_check' && a?.actor_id === viewerId)
+    .map(a => String(a?.entity_id ?? ''))
+    .filter(Boolean))]
 }
 
 /** The item ids somebody CREATED, read off the activity log — the only place
@@ -153,6 +172,8 @@ export function scopeContextOf(input: {
   taggedBatchIds?: Iterable<string>
   /** already-resolved created-item ids — the server's way */
   createdItemIds?: Iterable<string>
+  /** already-resolved reviewed-item ids — the server's way */
+  reviewedItemIds?: Iterable<string>
   /** or the comment rows to read them off — the browser's way */
   itemComments?: readonly ScopeComment[]
   batchComments?: readonly ScopeComment[]
@@ -177,6 +198,10 @@ export function scopeContextOf(input: {
     ...(input.createdItemIds ?? []),
     ...createdItemIdsOf(input.activity, viewer.id),
   ]
+  const reviewed = tagsOff ? [] : [
+    ...(input.reviewedItemIds ?? []),
+    ...reviewedItemIdsOf(input.activity, viewer.id),
+  ]
   return {
     batches: input.batches ?? [],
     selfPostingClientIds: new Set((input.clients ?? []).filter(c => c.posts_own_content === true).map(c => c.id)),
@@ -184,6 +209,7 @@ export function scopeContextOf(input: {
     taggedItemIds: [...new Set(itemTags)],
     taggedBatchIds: [...new Set(batchTags)],
     createdItemIds: [...new Set(created)],
+    reviewedItemIds: [...new Set(reviewed)],
     ...(input.items ? { items: input.items } : {}),
     ...(input.schedulerPostFilter === undefined ? {} : { schedulerPostFilter: input.schedulerPostFilter }),
   }
@@ -291,7 +317,9 @@ export function visibleItems<T extends ScopeItem>(
   // THE QUALITY REVIEWER'S DESK (the Team's Playbook, 11 Sep 2026): every
   // card waiting in the gate is theirs to check, whoever's client it is and
   // whatever their own role says — the hat is worn on every item
-  const inGate = (r: ScopeItem) => isQualityReviewer(viewer) && r.status === 'quality_check'
+  // …and stays theirs once they have reviewed it (14 Sep 2026)
+  const reviewedItems = new Set(ctx.reviewedItemIds ?? [])
+  const inGate = (r: ScopeItem) => isQualityReviewer(viewer) && (r.status === 'quality_check' || reviewedItems.has(r.id))
   const scoped = items.filter(r => {
     if (inGate(r)) return true
     if (clientIds !== null) {
@@ -418,8 +446,8 @@ export function itemIsVisible(
   ctx: ScopeContext = {},
 ): boolean {
   if (!item) return false
-  // the quality reviewer opens anything in the gate
-  if (isQualityReviewer(viewer) && item.status === 'quality_check') return true
+  // the quality reviewer opens anything in the gate, and anything they reviewed
+  if (isQualityReviewer(viewer) && (item.status === 'quality_check' || new Set(ctx.reviewedItemIds ?? []).has(item.id))) return true
   if (viewer.role === 'scheduler') {
     if (!(SCHEDULER_STATUSES as readonly string[]).includes(item.status)
       && item.owner_id !== viewer.id) return false

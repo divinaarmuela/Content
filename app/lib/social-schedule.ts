@@ -12,7 +12,7 @@ import type {
 import { NextResponse } from 'next/server'
 import { AuthzError, authzErrorResponse, type TeamUser } from './authz'
 import { mayPublish } from './identity-core'
-import { accessibleClientIds, createdItemIds, loadItemForUser, taggedBatchIds, taggedItemIds } from './production-access'
+import { accessibleClientIds, createdItemIds, loadItemForUser, reviewedItemIds, taggedBatchIds, taggedItemIds } from './production-access'
 import { scopeContextOf, visibleItems } from './scope-client'
 import { actingRoles } from './workflow-core'
 import { actOnPostingApproval } from './posting-approval'
@@ -1991,13 +1991,14 @@ async function scopeItemsFor(
 ): Promise<ContentItem[]> {
   // the grants too — tags and creation — or this page shows a person less
   // than the boards do and the items API does
-  const [assignments, batches, workKinds, itemTags, batchTags, createdIds] = await Promise.all([
+  const [assignments, batches, workKinds, itemTags, batchTags, createdIds, reviewedIds] = await Promise.all([
     table<TeamUserClient>('team_user_clients').list().catch(() => []),
     table<Batch>('batches').list().catch(() => []),
     table<WorkKind>('work_kinds').list().catch(() => []),
     taggedItemIds(viewer).catch(() => [] as string[]),
     taggedBatchIds(viewer).catch(() => [] as string[]),
     createdItemIds(viewer),
+    reviewedItemIds(viewer),
   ])
   const who = { id: viewer.id, role: viewer.role, client_id: viewer.client_id ?? null }
   return visibleItems(
@@ -2011,6 +2012,7 @@ async function scopeItemsFor(
       taggedItemIds: itemTags,
       taggedBatchIds: batchTags,
       createdItemIds: createdIds,
+      reviewedItemIds: reviewedIds,
       workKinds: workKinds as unknown as { id: string; slug: string }[],
     }),
   ) as unknown as ContentItem[]

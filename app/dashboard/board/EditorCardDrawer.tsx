@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, Upload, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, X } from 'lucide-react'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import type { Role } from '../../lib/identity-core'
@@ -15,7 +15,6 @@ import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import { Thumb } from '../social/schedule/tiles'
-import { uploadFiles } from '../uploadQueue'
 import { slidesOf, type Slide } from '../../lib/version-files-core'
 import { linkKindOf } from '../../lib/card-link-core'
 import { cardPeople } from '../../lib/card-people-core'
@@ -157,23 +156,12 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   }
   const flag = (body: Record<string, unknown>, said: string) => post(`/api/production/items/${id}/flag`, body, said)
 
-  /* ── your versions: upload, Drive pick ── */
-  const fileInput = useRef<HTMLInputElement>(null)
+  /* ── files already on the card (from before the link-only rule) can still
+     be taken off; nothing new is uploaded here — the editor's work is the
+     link (the owner, 14 Sep 2026: "why is there an add files feature in the
+     editor card, it's just supposed to be a link") ── */
   const writeVersion = async (next: Slide[], what: string) => {
     await post(`/api/production/items/${id}/versions`, { files: next, file_url: next[0]?.url ?? '' }, what, 'Saving the files')
-  }
-  const onFiles = async (files: File[]) => {
-    if (files.length === 0) return
-    setWorking('Uploading')
-    try {
-      const { done } = uploadFiles(files, { purpose: 'social' })
-      const up = await done
-      const added: Slide[] = up.map(u => ({ url: u.url, name: u.file.name, type: u.file.type.startsWith('video/') ? 'video' : 'image' }))
-      await writeVersion([...slides, ...added], `Added ${added.length} — saved as a new version`)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'The upload did not finish')
-      setWorking(null)
-    }
   }
   const removeFile = (i: number) => void writeVersion(slides.filter((_, j) => j !== i), 'File removed — saved as a new version')
 
@@ -212,7 +200,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
   const submit = async () => {
     if (!submitting) return
-    if (slides.length === 0 && !item?.link_url) { toast.error('Add your Drive or Dropbox link, or upload the files, first'); return }
+    if (slides.length === 0 && !item?.link_url) { toast.error('Add your Drive or Dropbox link first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -376,11 +364,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           <div className="flex flex-wrap items-center gap-2">
             <input id="ed-source" value={source} onChange={e => setSource(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" aria-label="Drive or Dropbox link to the finished edit" className={`${field} min-w-0 flex-1`} />
             <Button variant="outline" className={outlineBtn} disabled={busy || (source.trim() !== '' && !sourceCheck.ok) || source.trim() === (item.link_url ?? '')} onClick={() => void saveSource()}>Save</Button>
-            <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => fileInput.current?.click()}>
-              <Upload className="h-4 w-4" aria-hidden /> Or upload files
-            </Button>
-            <input ref={fileInput} type="file" multiple accept="image/*,video/*" className="hidden"
-              onChange={e => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void onFiles(f) }} />
           </div>
         ) : item.link_url ? (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[14px] underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
@@ -428,7 +411,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             </ul>
             <div className="flex flex-wrap items-center gap-2">
               <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || (slides.length === 0 && !item.link_url)} onClick={() => void submit()}
-                title={slides.length === 0 && !item.link_url ? 'Add your Drive or Dropbox link, or upload the files, first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+                title={slides.length === 0 && !item.link_url ? 'Add your Drive or Dropbox link first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
