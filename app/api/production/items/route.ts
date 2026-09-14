@@ -480,6 +480,16 @@ export async function POST(req: Request) {
         // an ad-hoc creation records WHY it skipped the shoot gate
         ...(item.batch_id ? {} : adhocReason ? { detail: `ad-hoc: ${adhocReason.slice(0, 300)}` } : {}),
       })
+      // A CARD THE MAKER MADE FOR THEMSELVES IS ACKNOWLEDGED BY MAKING IT (the
+      // owner, 14 Sep 2026: "they themselves should not need to accept it").
+      // The same-day acknowledgement is for a card somebody else handed over.
+      if (item.owner_id && item.owner_id === user.id) {
+        await logActivity({
+          actor: user, clientId: item.client_id,
+          entityType: 'content_item', entityId: item.id,
+          action: 'acknowledged', detail: 'made it themselves',
+        })
+      }
       announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'created' })
       // the handoff: an item created FOR an editor emails them the job
       notifyJobAssigned(user, item as unknown as Parameters<typeof notifyJobAssigned>[1])

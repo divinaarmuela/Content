@@ -239,3 +239,32 @@ describe('a card made on a shoot takes the shoot’s word on delivery (14 Sep 20
     expect(word('On no shoot')).toBeNull()
   })
 })
+
+describe('a card the maker made for themselves needs no acknowledgement (the owner, 14 Sep 2026)', () => {
+  const acks = () => logActivity.mock.calls.map(c => c[0] as { action: string; entityId: string; detail?: string }).filter(a => a.action === 'acknowledged')
+  it('is acknowledged by making it; a card made for somebody else still waits for them, and they are told', async () => {
+    fake.restore()
+    fake = seedDb({
+      work_kinds: WORK_KINDS as unknown as Row[],
+      batches: [BATCH] as unknown as Row[],
+      team_users: [
+        { id: 'user-1', name: 'Ada', email: 'am@x.invalid', role: 'super_admin', active_status: true },
+        { id: 'user-2', name: 'Sam', email: 'sam@x.invalid', role: 'editor', active_status: true },
+      ] as unknown as Row[],
+      content_items: [],
+    })
+    const { status, json } = await post({ adhoc_reason: 'x', items: [
+      { client_id: 'c1', title: 'Mine', work_kind_id: 'wk-edit', owner_id: 'user-1' },
+      { client_id: 'c1', title: 'Handed to Sam', work_kind_id: 'wk-edit', owner_id: 'user-2' },
+      { client_id: 'c1', title: 'Nobody yet', work_kind_id: 'wk-edit' },
+    ] })
+    expect(status).toBe(201)
+    const mine = (json as { id: string; title: string }[]).find(r => r.title === 'Mine')!
+    expect(acks().map(a => a.entityId)).toEqual([mine.id])
+    expect(acks()[0].detail).toBe('made it themselves')
+    // the editor a manager hands the new card to is emailed the job (notifyJobAssigned)
+    const handed = (json as { id: string; title: string }[]).find(r => r.title === 'Handed to Sam')!
+    expect(notifyJobAssigned.mock.calls.some(c => (c[1] as { id: string }).id === handed.id)).toBe(true)
+    expect(notifyJobAssigned.mock.calls.some(c => (c[1] as { id: string }).id === mine.id)).toBe(true) // called, and skips the maker inside
+  })
+})
