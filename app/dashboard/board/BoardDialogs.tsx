@@ -690,13 +690,18 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               made with the colours, fonts and voice in view (9 Sep 2026) */}
           {clientId && <BrandCard clientId={clientId} />}
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-title">Title</Label>
-            <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Spring reel 2" className={field} autoFocus />
+            {/* a post and a card are different things to name (the owner, 14 Sep
+                2026: "why is the title and what needs doing for Post approval
+                the same as Editor?") */}
+            <Label htmlFor="new-title">{forPosting ? 'What is the post' : 'Title'}</Label>
+            <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder={forPosting ? 'Spring reel — Instagram and TikTok' : 'Spring reel 2'} className={field} autoFocus />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="new-brief">What needs doing</Label>
+            <Label htmlFor="new-brief">{forPosting ? 'Notes for the scheduler' : 'What needs doing'}</Label>
             <Textarea id="new-brief" rows={3} value={brief} onChange={e => setBrief(e.target.value)}
-              placeholder="What the person making this needs to know — it goes to them."
+              placeholder={forPosting
+                ? 'Which files to post, where, when, and the caption if you have one — it goes to them.'
+                : 'What the person making this needs to know — it goes to them.'}
               className="rounded-[20px] border-border bg-surface px-4 py-3" />
           </div>
           {!simple && (
@@ -737,8 +742,10 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           )}
           {isManager && (
             <div className="flex flex-col gap-2 rounded-[20px] border border-border p-3">
-              <Label htmlFor="new-work-files">Files to work from (optional)</Label>
-              <p className="text-[13px] text-muted-foreground">Footage, stills or references for the person making this. They are told when the card lands.</p>
+              <Label htmlFor="new-work-files">{forPosting ? 'The files to post (optional)' : 'Files to work from (optional)'}</Label>
+              <p className="text-[13px] text-muted-foreground">{forPosting
+                ? 'The finished pieces the scheduler posts from. They are told when the post lands.'
+                : 'Footage, stills or references for the person making this. They are told when the card lands.'}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={busy}
                   onClick={() => workInput.current?.click()}>
@@ -761,7 +768,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   ))}
                 </ul>
               )}
-              <Label htmlFor="new-folder">Or the folder they live in</Label>
+              <Label htmlFor="new-folder">{forPosting ? 'Or the folder they are in — the scheduler picks from it' : 'Or the folder they live in'}</Label>
               <Input id="new-folder" value={folder} onChange={e => setFolder(e.target.value)} placeholder="https://drive.google.com/… or Dropbox" className={field} />
               {folder.trim() !== '' && (
                 <p className="text-[13px] text-muted-foreground">{folderCheck.ok ? `This is a ${folderCheck.label} link.` : folderCheck.reason}</p>
