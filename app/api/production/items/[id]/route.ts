@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import { linkKindOf } from '../../../../lib/card-link-core'
+import { finishedEditOf, linkKindOf } from '../../../../lib/card-link-core'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, PublishJob, Client, ContentItem, ItemComment, ScheduleEntry, TeamUser, TeamUserClient,
@@ -221,10 +221,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // (card-link-core.folderOf, 13 Sep 2026). A pasted non-folder link on
     // the card is somebody's work and is left alone.
     if ('raw_assets_url' in patch) {
-      const cur = current as { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null }
-      // …and never the editor's finished edit (link_final, 14 Sep 2026)
-      const linkIsFolder = (cur as { link_final?: boolean | null }).link_final !== true
-        && (!String(cur.link_url ?? '').trim() || cur.link_kind === 'drive' || cur.link_kind === 'dropbox')
+      const cur = current as { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null }
+      // …and never the editor's finished edit (the owner, 14 Sep 2026: "folder
+      // to work from and submitted folder are different — why does it
+      // override?"): the card link follows the folder only while it IS the
+      // folder (card-link-core.finishedEditOf says nothing was handed in)
+      const linkIsFolder = finishedEditOf(cur) === null
       const folder = linkKindOf(patch.raw_assets_url as string | null)
       if (folder.ok && folder.kind !== 'other') {
         patch.raw_assets_url = folder.url

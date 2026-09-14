@@ -434,7 +434,8 @@ describe('the reviewer’s card shows the finished edit as what it is (14 Sep 20
   })
   it('the link route marks what it saved, and the item patch never turns a finished edit into the folder', () => {
     expect(src('app/api/production/items/[id]/link/route.ts')).toContain('link_final: final,')
-    expect(src('app/api/production/items/[id]/route.ts')).toMatch(/link_final !== true\s*\n\s*&& \(!String\(cur\.link_url/)
+    // the folder box never replaces a finished edit — marked or merely different from the folder
+    expect(src('app/api/production/items/[id]/route.ts')).toContain('const linkIsFolder = finishedEditOf(cur) === null')
   })
 })
 
