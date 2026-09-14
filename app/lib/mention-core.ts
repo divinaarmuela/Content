@@ -63,7 +63,7 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 }
 
 /** The members a picker should offer for what has been typed so far. */
-export function filterMentionable(members: Mentionable[], query: string, limit = 6): Mentionable[] {
+export function filterMentionable<T extends Mentionable>(members: T[], query: string, limit = 6): T[] {
   const q = query.trim().toLowerCase()
   const usable = members.filter(m => m.name.trim().length > 0)
   const ranked = usable

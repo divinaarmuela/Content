@@ -34,6 +34,7 @@ import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import { finishedEditOf } from '../../lib/card-link-core'
+import { cardPeople } from '../../lib/card-people-core'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -805,6 +806,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         draft={draft} setDraft={setDraft} sending={sending} onSend={() => void sendNote()}
         toClient={toClient} setToClient={setToClient}
         noteBox={noteBox}
+        mentionable={cardPeople(item, team as never, clientLinks as never, me?.id)}
         replyLabel={replyOn !== null && slides[replyOn] ? `About ${slides[replyOn].type === 'video' ? 'video' : 'photo'} ${replyOn + 1} of ${slides.length}` : null}
         onClearReply={() => setReplyOn(null)}
         extras={<>

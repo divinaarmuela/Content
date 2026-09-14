@@ -776,7 +776,11 @@ export async function performTransition(
   // cut the manager just rejected sends it round the loop unchanged; the
   // audit trail already knows when changes were asked for, so compare against
   // it. An item with no such record predates the trail — let it through.
-  if (!system && !isBriefTask && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
+  // …unless the work is a LINK (the owner, 14 Sep 2026: "submitting the same
+  // drive link is fine — currently if I submit the same one after revision it
+  // doesn't allow me"): the editor fixes the files behind the same Drive or
+  // Dropbox link, so there is no new version to ask for
+  if (!system && !isBriefTask && !hasLink && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would
     // block the move forever with a message about a version nobody asked for

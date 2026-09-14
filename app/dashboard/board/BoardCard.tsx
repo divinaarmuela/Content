@@ -309,7 +309,9 @@ export function BoardCard({
               title={blocked ? UPLOAD_FIRST : undefined}
               aria-label={blocked ? `${primary.label} — ${UPLOAD_FIRST}` : undefined}
               onClick={e => { e.preventDefault(); if (!blocked) onAction(card, primary) }}
-              className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
+              // a long label wraps inside the card instead of running out of it
+              // (the owner's screenshot, 14 Sep 2026)
+              className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
               {busy ? 'Saving…' : blocked ? UPLOAD_FIRST : primary.label}
             </Button>
           )
@@ -317,7 +319,7 @@ export function BoardCard({
         {!primary && more.length > 0 && (
           <Button variant="outline" disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, more[0]) }}
-            className="h-11 rounded-full border-border bg-surface px-4 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border bg-surface px-4 py-2 text-left text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
             {busy ? 'Saving…' : more[0].label}
           </Button>
         )}

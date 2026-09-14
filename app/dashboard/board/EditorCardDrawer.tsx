@@ -18,6 +18,7 @@ import { Thumb } from '../social/schedule/tiles'
 import { uploadFiles } from '../uploadQueue'
 import { slidesOf, type Slide } from '../../lib/version-files-core'
 import { linkKindOf } from '../../lib/card-link-core'
+import { cardPeople } from '../../lib/card-people-core'
 import { channelSpecs, PLATFORM_MEDIA } from '../../lib/media-fit-core'
 import type { Platform } from '../../lib/publish-core'
 import { historyLines, type HistoryJob, HISTORY_PREVIEW, NO_HISTORY } from '../../lib/card-history-core'
@@ -535,6 +536,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           isManager={isManager} clientName={client?.name} readsClient={canReadClientComments(me?.role ?? null)}
           draft={note} setDraft={setNote} sending={sendingNote} onSend={() => void sendNote()}
           toClient={toClient} setToClient={setToClient}
+          mentionable={cardPeople(item, team as never, clientLinks as never, me?.id)}
           placeholder={managers.length > 0 ? `Write to ${managers.map(m => m.name || m.email).join(', ')}…` : 'Write to the account manager…'}
         />
       </section>

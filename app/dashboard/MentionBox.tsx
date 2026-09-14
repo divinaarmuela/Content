@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { AtSign } from 'lucide-react'
 import {
   filterMentionable, insertMention, mentionQuery, type Mentionable,
@@ -19,19 +19,29 @@ import {
  * hover-only affordance. Every row is a 44px target.
  */
 export default function MentionBox({
-  value, onChange, members, placeholder, rows = 2, disabled, onSubmit, id,
+  value, onChange, members, placeholder, rows = 2, disabled, onSubmit, id, textareaRef, className,
 }: {
   value: string
   onChange: (v: string) => void
-  members: Mentionable[]
+  /** who the list offers — with their email and job when the caller knows
+   *  them (the people on a card, card-people-core), so the right one is picked */
+  members: (Mentionable & { email?: string; hint?: string })[]
   placeholder?: string
   rows?: number
   disabled?: boolean
   /** Ctrl/Cmd+Enter */
   onSubmit?: () => void
   id?: string
+  /** the caller's own handle on the box, to focus it after a reply is pinned */
+  textareaRef?: RefObject<HTMLTextAreaElement | null>
+  /** the box's look, when the caller's is not this one */
+  className?: string
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null)
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  const setRefs = (el: HTMLTextAreaElement | null) => {
+    ref.current = el
+    if (textareaRef) textareaRef.current = el
+  }
   const [caret, setCaret] = useState(0)
   const [active, setActive] = useState(0)
   const [pendingCaret, setPendingCaret] = useState<number | null>(null)
@@ -72,7 +82,7 @@ export default function MentionBox({
     <div className="relative flex flex-col gap-2">
       <textarea
         id={id}
-        ref={ref}
+        ref={setRefs}
         rows={rows}
         value={value}
         disabled={disabled}
@@ -92,11 +102,11 @@ export default function MentionBox({
         }}
         aria-autocomplete="list"
         aria-expanded={open}
-        className="w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border"
+        className={className ?? 'w-full resize-y rounded-tile border border-border bg-transparent p-2.5 text-body-15 outline-none placeholder:text-muted-foreground focus:border-border'}
       />
       {open && (
         <ul role="listbox" aria-label="Tag someone"
-          className="absolute left-0 top-full z-30 mt-1 w-64 max-w-full overflow-hidden rounded-inner border border-border bg-popover shadow-lg">
+          className="absolute left-0 top-full z-30 mt-1 w-80 max-w-full overflow-hidden rounded-inner border border-border bg-popover shadow-lg">
           {options.map((m, i) => (
             <li key={m.id} role="option" aria-selected={i === active}>
               <button type="button"
@@ -105,8 +115,13 @@ export default function MentionBox({
                 className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-body-15 ${
                   i === active ? 'bg-foreground/[0.06]' : ''
                 }`}>
-                <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
-                {m.name}
+                <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="truncate">{m.name}</span>
+                  {(m.hint || m.email) && (
+                    <span className="truncate text-[12px] text-muted-foreground">{[m.hint, m.email].filter(Boolean).join(' · ')}</span>
+                  )}
+                </span>
               </button>
             </li>
           ))}

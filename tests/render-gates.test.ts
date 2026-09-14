@@ -455,3 +455,16 @@ describe('the maker’s drawer is the editor’s alone (14 Sep 2026)', () => {
     expect(s).not.toContain("me?.role === 'quality_checker'")
   })
 })
+
+describe('typing @ in a team note offers the people on the card (14 Sep 2026)', () => {
+  it('both drawers hand the note box the card’s people, with email and job, and the face buttons wrap', () => {
+    expect(src('app/dashboard/board/CardSaid.tsx')).toContain('<MentionBox')
+    expect(src('app/dashboard/board/CardSaid.tsx')).toMatch(/members=\{isManager && toClient \? \[\] : mentionable\}/)
+    for (const f of ['app/dashboard/board/PostApprovalDetail.tsx', 'app/dashboard/board/EditorCardDrawer.tsx']) {
+      expect(src(f), f).toMatch(/mentionable=\{cardPeople\(item, team as never, clientLinks as never, me\?\.id\)\}/)
+    }
+    expect(src('app/dashboard/MentionBox.tsx')).toMatch(/\[m\.hint, m\.email\]\.filter\(Boolean\)\.join\(' · '\)/)
+    // "Revisions done — ready for quality check" ran out of the card
+    expect((src('app/dashboard/board/BoardCard.tsx').match(/h-auto min-h-11 max-w-full whitespace-normal rounded-full/g) ?? []).length).toBe(2)
+  })
+})

@@ -5,7 +5,9 @@ import { MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Chip from '../ui/Chip'
+import MentionBox from '../MentionBox'
 import { splitSlideTag } from '../../lib/slide-comment-core'
+import type { CardPerson } from '../../lib/card-people-core'
 
 /**
  * WHAT WAS SAID — the one comments section, drawn the same on the Editor
@@ -28,7 +30,7 @@ export default function CardSaid({
   isManager, clientName, readsClient,
   draft, setDraft, sending, onSend,
   toClient, setToClient,
-  placeholder, replyLabel, onClearReply, noteBox, extras,
+  placeholder, replyLabel, onClearReply, noteBox, extras, mentionable,
 }: {
   rows: SaidRow[]
   nameOf: (uid: string | null | undefined) => string | null
@@ -55,7 +57,12 @@ export default function CardSaid({
   noteBox?: RefObject<HTMLTextAreaElement | null>
   /** anything drawn under the heading first: where to look, the change asked for */
   extras?: ReactNode
+  /** who "@" offers: the people on this card (card-people-core, 14 Sep 2026) */
+  mentionable?: CardPerson[]
 }) {
+  const hint = isManager
+    ? (toClient ? 'They see this on their portal — no email is sent' : 'A note for the team — @name to tag someone')
+    : (placeholder ?? 'A note for the team — @name to tag someone')
   return (
     <div className="flex flex-col gap-3 px-5 py-4" data-card-said>
       <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What was said</p>
@@ -94,12 +101,25 @@ export default function CardSaid({
         </p>
       )}
       <div className="flex items-end gap-2">
+        {mentionable ? (
+          // typing "@" offers the people on this card, with their email and
+          // job (the owner, 14 Sep 2026); a reply to the client tags nobody
+          <div className="min-w-0 flex-1">
+            <MentionBox
+              value={draft} onChange={setDraft} rows={2} disabled={sending}
+              members={isManager && toClient ? [] : mentionable}
+              textareaRef={noteBox}
+              onSubmit={onSend}
+              placeholder={hint}
+              className="min-h-11 w-full resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px] outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        ) : (
         <textarea ref={noteBox} rows={2} value={draft} onChange={e => setDraft(e.target.value)}
           aria-label={isManager && toClient ? `A reply to ${clientName ?? 'the client'}` : 'A note for the team'}
-          placeholder={isManager
-            ? (toClient ? 'They see this on their portal — no email is sent' : 'A note for the team — @name to tag someone')
-            : (placeholder ?? 'A note for the team — @name to tag someone')}
+          placeholder={hint}
           className="min-h-11 flex-1 resize-none rounded-inner border border-border bg-surface p-2.5 text-[14px]" />
+        )}
         <Button className="h-11 w-11 rounded-full p-0" disabled={sending || !draft.trim()} onClick={onSend} aria-label="Add note">
           <MessageCircle className="h-4 w-4" aria-hidden />
         </Button>

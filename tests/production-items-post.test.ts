@@ -230,7 +230,7 @@ describe('a card made on a shoot takes the shoot’s word on delivery (14 Sep 20
       { client_id: 'c1', title: 'On no shoot', work_kind_id: 'wk-edit' },
     ] })
     expect(status).toBe(201)
-    const rows = fake.rows('content_items') as { title: string; deliver_only?: boolean | null }[]
+    const rows = fake.rows('content_items') as unknown as { title: string; deliver_only?: boolean | null }[]
     const word = (title: string) => rows.find(r => r.title === title)?.deliver_only ?? null
     expect(word('On the delivery-only shoot')).toBe(true)
     expect(word('Says no itself')).toBe(false)

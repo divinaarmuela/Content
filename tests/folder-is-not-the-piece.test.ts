@@ -70,7 +70,7 @@ const move = async (to: string) => {
 }
 
 let fake: ReturnType<typeof seedDb>
-const seed = (over: { item?: Record<string, unknown>; versions?: Row[] } = {}) => seedDb({
+const seed = (over: { item?: Record<string, unknown>; versions?: Row[]; activity?: Row[] } = {}) => seedDb({
   clients: [{ id: 'c1', name: 'Park Noire', timezone: 'Australia/Melbourne', posts_own_content: false }] as unknown as Row[],
   team_users: [SUPER, CATH].map(u => ({ ...u, active_status: true })) as unknown as Row[],
   team_user_clients: [] as Row[],
@@ -84,6 +84,7 @@ const seed = (over: { item?: Record<string, unknown>; versions?: Row[] } = {}) =
     ...over.item,
   }] as unknown as Row[],
   asset_versions: over.versions ?? [],
+  workflow_activity: over.activity ?? [],
 } as never)
 
 beforeEach(() => { h.user = SUPER })
@@ -130,6 +131,30 @@ describe('Submit for quality check on an editor’s card (not a posting job)', (
     fake = seed({ item: { adhoc_post: null } })
     const r = await move('quality_check')
     expect(r.status).toBe(200)
+  })
+
+  it('after a revision was asked for, the same link goes back for the quality check (the owner, 14 Sep 2026)', async () => {
+    // the editor fixed the files behind the same Drive link: there is no new
+    // uploaded version to demand
+    fake = seed({
+      item: { adhoc_post: null, status: 'revision_required', link_url: 'https://drive.google.com/drive/folders/1final', link_kind: 'drive', raw_assets_url: null },
+      activity: [{ id: 'a1', entity_type: 'content_item', entity_id: ITEM, action: 'status_change', new_value: 'revision_required', created_at: new Date().toISOString(), actor_id: SUPER.id }] as unknown as Row[],
+    })
+    const r = await move('quality_check')
+    expect(r.status).toBe(200)
+    expect(r.json.status).toBe('quality_check')
+  })
+
+  it('a card with uploaded files still needs a newer version after a revision was asked for', async () => {
+    const asked = new Date().toISOString()
+    fake = seed({
+      item: { adhoc_post: null, status: 'revision_required', link_url: null, link_kind: null, raw_assets_url: null },
+      versions: [{ id: 'v1', item_id: ITEM, version_number: 1, created_at: '2026-09-01T00:00:00.000Z', files: [{ url: 'https://r2/reel.mp4', name: 'reel.mp4', type: 'video' }], file_url: 'https://r2/reel.mp4' }] as unknown as Row[],
+      activity: [{ id: 'a1', entity_type: 'content_item', entity_id: ITEM, action: 'status_change', new_value: 'revision_required', created_at: asked, actor_id: SUPER.id }] as unknown as Row[],
+    })
+    const r = await move('quality_check')
+    expect(r.status).toBe(400)
+    expect(r.json.error).toBe('Add a new version with the revisions first.')
   })
 
   it('a card with neither a link nor files says to paste the link, not to upload', async () => {
