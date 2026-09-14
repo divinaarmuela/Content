@@ -14,7 +14,7 @@ import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
 import { HandToDialog } from './BoardDialogs'
 import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
-import { STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
+import { EDITING_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
@@ -455,6 +455,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // THE FINISHED EDIT — the editor's link, drawn as what it is (the owner,
   // 14 Sep 2026: the reviewer's card showed it only as "Open the folder")
   const finished = item ? finishedEditOf(item as Parameters<typeof finishedEditOf>[0]) : null
+  // WHILE THE CARD IS WITH THE EDITOR THERE ARE NO FILES (the owner, 14 Sep
+  // 2026: "the card in Editor is showing add final files when it should be
+  // the Drive or Dropbox link"): an edit is a link until it is approved and
+  // handed to a scheduler, who uploads the files here. A post uploaded for
+  // approval is files from the start.
+  const stillEditing = !!item && !adhoc && EDITING_STATUSES.includes(String(item.status))
 
   return (
     <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">
@@ -609,7 +615,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         />
       )}
 
-      {/* ── 3. the files: the versions the editor made ── */}
+      {/* ── 3. the files: the scheduler's uploads, once the card is theirs ── */}
+      {stillEditing && !finished && (
+        <div className="flex flex-col gap-1 border-b border-border px-5 py-4">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Finished edit</p>
+          <p className="text-[14px] text-muted-foreground">Waiting for the editor’s Drive or Dropbox link.</p>
+        </div>
+      )}
+      {!stillEditing && (
       <div className="flex flex-col gap-4 border-b border-border px-5 py-4">
         <div className="flex items-center justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -750,6 +763,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         <input ref={addInput} type="file" multiple accept="image/*,video/*" className="hidden"
           onChange={e => { void onAddPicked(Array.from(e.target.files ?? [])); e.target.value = '' }} />
       </div>
+      )}
 
       {/* the editor's own tools (which shoot, acknowledge, a deadline at risk,
           a final from Drive, the source files) live on the editor's card on
