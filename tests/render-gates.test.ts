@@ -385,3 +385,22 @@ describe('a shoot’s plan page is not behind the shell’s section gate (14 Sep
     expect(shell).toContain('shoots\\/[^/]+$/.test(path)) return null')
   })
 })
+
+describe('a board tile at a short height keeps its icon and words (14 Sep 2026)', () => {
+  // the owner: "the board card when resize, it hides the emoji and text" —
+  // the centred column was clipped at both ends while the hidden Open button
+  // kept its row. Both canvases draw the tile from boardTileLayout now.
+  it('both canvases ask boardTileLayout and float Open when the column would not fit', () => {
+    for (const [file, h] of [
+      ['app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'card.h'],
+      ['app/dashboard/boards/CanvasItemView.tsx', 'item.h'],
+    ] as const) {
+      const s = src(file)
+      expect(s, file).toContain(`boardTileLayout(${h})`)
+      expect(s, file).toMatch(/tile\.openFloats \? 'absolute inset-x-3 bottom-2' : 'mt-1'/)
+      expect(s, file).toMatch(/tile\.small \? 'h-10 w-10' : 'h-14 w-14'/)
+      // the icon box never shrinks under the words
+      expect(s, file).toMatch(/flex shrink-0 items-center justify-center rounded-card/)
+    }
+  })
+})

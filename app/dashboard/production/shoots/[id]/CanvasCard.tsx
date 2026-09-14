@@ -14,7 +14,7 @@ import {
 } from '../../../../lib/board-autoplay-core'
 import { useAutoplaySlot, useReducedMotion } from '../../../../lib/board-autoplay-client'
 import { useInstagramVideo, usePortalToken } from '../../../../lib/instagram-video-client'
-import { colourOf, iconOf } from '../../../../lib/board-canvas-core'
+import { boardTileLayout, colourOf, iconOf } from '../../../../lib/board-canvas-core'
 import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 // canvas comments — see the marked block at the bottom of this file
 import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
@@ -418,23 +418,30 @@ function CanvasCardInner({
     // a tinted square, the icon, the name, the count — and an Open button
     // that is 44px and stops the pointer so it never starts a drag
     const Icon = ICON[iconOf(card.icon)]
+    // a short tile gives things up in order — Open floats, then the icon and
+    // words go small — so a resize never clips the icon or the name
+    // (board-canvas-core.boardTileLayout, 14 Sep 2026)
+    const tile = boardTileLayout(card.h)
     return (
       <div
         data-kind="board"
-        className={`group flex select-none flex-col items-center justify-center gap-2 overflow-hidden rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
+        data-tile={tile.small ? 'small' : tile.openFloats ? 'short' : 'full'}
+        className={`group relative flex select-none flex-col items-center justify-center overflow-hidden rounded-inner p-3 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06)] ${tile.small ? 'gap-1.5' : 'gap-2'} ${COLOUR_CLASS[colourOf('board', card.colour)]}`}
         style={boxStyle(card)}
       >
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10">
-          <Icon className="h-7 w-7" />
+        <div className={`flex shrink-0 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10 ${tile.small ? 'h-10 w-10' : 'h-14 w-14'}`}>
+          <Icon className={tile.small ? 'h-5 w-5' : 'h-7 w-7'} />
         </div>
-        <p className="line-clamp-2 max-w-full break-words text-[15px] font-semibold leading-tight">{card.name || 'Board'}</p>
-        <p className="truncate max-w-full text-[12px] text-muted-foreground">{insideLabel ?? 'Empty'}</p>
+        <p className={`line-clamp-2 max-w-full break-words font-semibold leading-tight ${tile.small ? 'text-[13px]' : 'text-[15px]'}`}>{card.name || 'Board'}</p>
+        <p className={`truncate max-w-full text-muted-foreground ${tile.small ? 'text-[11px]' : 'text-[12px]'}`}>{insideLabel ?? 'Empty'}</p>
         <button
           type="button"
           aria-label={`Open ${card.name || 'Board'}`}
           onPointerDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); onOpen?.() }}
-          className="mt-1 inline-flex h-11 shrink-0 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background opacity-0 transition-opacity hover:bg-foreground/90 focus:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
+          className={`inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background opacity-0 transition-opacity hover:bg-foreground/90 focus:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 ${
+            tile.openFloats ? 'absolute inset-x-3 bottom-2' : 'mt-1'
+          }`}
         >
           Open
         </button>

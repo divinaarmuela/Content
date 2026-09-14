@@ -5,7 +5,7 @@ import { ExternalLink, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Chip from '../ui/Chip'
 import {
-  colourOf, countLabel, iconOf, linkService, sanitizeRichText, SERVICE_LABEL, type Inside, type ItemKind,
+  boardTileLayout, colourOf, countLabel, iconOf, linkService, sanitizeRichText, SERVICE_LABEL, type Inside, type ItemKind,
 } from '@/app/lib/board-canvas-core'
 import { COLOUR_CLASS, ICON } from './canvasTone'
 import NoteEditor from './NoteEditor'
@@ -127,24 +127,32 @@ export default function CanvasItemView({
   if (kind === 'board') {
     const Icon = ICON[iconOf(child?.icon)]
     const name = child?.name ?? item.label ?? 'Board'
+    // a short tile gives things up in order — Open floats, then the icon and
+    // words go small — so a resize never clips the icon or the name
+    // (board-canvas-core.boardTileLayout, 14 Sep 2026)
+    const tile = boardTileLayout(item.h)
     return (
       <div
         data-item={item.id}
         data-kind="board"
-        className={cn(shell, 'items-center justify-center gap-2 p-3 text-center')}
+        data-tile={tile.small ? 'small' : tile.openFloats ? 'short' : 'full'}
+        className={cn(shell, 'items-center justify-center p-3 text-center', tile.small ? 'gap-1.5' : 'gap-2')}
         style={style}
         onDoubleClick={() => item.child_board_id && onOpenBoard(item.child_board_id)}
       >
-        <div className="flex h-14 w-14 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10">
-          <Icon className="h-7 w-7" />
+        <div className={cn('flex shrink-0 items-center justify-center rounded-card bg-surface/70 dark:bg-foreground/10', tile.small ? 'h-10 w-10' : 'h-14 w-14')}>
+          <Icon className={tile.small ? 'h-5 w-5' : 'h-7 w-7'} />
         </div>
-        <p className="line-clamp-2 max-w-full text-[15px] font-semibold leading-tight">{name}</p>
-        <p className="text-[12px] text-muted-foreground">{countLabel(inside ?? { cards: 0, boards: 0 })}</p>
+        <p className={cn('line-clamp-2 max-w-full break-words font-semibold leading-tight', tile.small ? 'text-[13px]' : 'text-[15px]')}>{name}</p>
+        <p className={cn('truncate max-w-full text-muted-foreground', tile.small ? 'text-[11px]' : 'text-[12px]')}>{countLabel(inside ?? { cards: 0, boards: 0 })}</p>
         <button
           type="button"
           data-no-drag
           onClick={() => item.child_board_id && onOpenBoard(item.child_board_id)}
-          className="mt-1 inline-flex h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background opacity-0 transition-opacity hover:bg-foreground/90 focus:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
+          className={cn(
+            'inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background opacity-0 transition-opacity hover:bg-foreground/90 focus:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100',
+            tile.openFloats ? 'absolute inset-x-3 bottom-2' : 'mt-1',
+          )}
         >
           Open
         </button>

@@ -161,6 +161,40 @@ export function iconOf(stored: string | null | undefined): BoardIcon {
   return isBoardIcon(stored) ? stored : DEFAULT_ICON
 }
 
+/* ── the board tile at a person's size ──────────────────────────────────── */
+
+/**
+ * HOW A BOARD TILE LAYS ITSELF OUT AT THE HEIGHT IT WAS GIVEN.
+ *
+ * The tile is a centred column — icon, name, count, Open — that wants about
+ * 200px, while its resize floor is 140px. Clipped and centred, a shorter
+ * tile lost the icon off the top and the name off the bottom while the Open
+ * button, invisible until hovered, kept its 48px of room (the owner, 14 Sep
+ * 2026: "the board card when resize, it hides the emoji and text"). So the
+ * tile gives things up in order: first Open leaves the column and floats
+ * over the bottom edge, then the icon and the words go small. No height —
+ * the tile follows its content — is the full layout. Both canvases (the
+ * boards page and the shoot brief) draw the tile from this one answer.
+ */
+export type BoardTileLayout = {
+  /** the Open button floats over the bottom edge instead of taking a row */
+  openFloats: boolean
+  /** a 40px icon and 13px words instead of 56px and 15px */
+  small: boolean
+}
+
+/** the column with Open in it: 24 padding + 56 icon + 8 + two 15px lines +
+ *  8 + the count + 8 + 4 + a 44px button */
+export const BOARD_TILE_FULL_H = 208
+/** the column without Open, at full size */
+export const BOARD_TILE_SMALL_H = 168
+
+export function boardTileLayout(h: number | null | undefined): BoardTileLayout {
+  const n = Number(h)
+  if (!Number.isFinite(n) || n <= 0) return { openFloats: false, small: false }
+  return { openFloats: n < BOARD_TILE_FULL_H, small: n < BOARD_TILE_SMALL_H }
+}
+
 /* ── the rows, as the core sees them ───────────────────────────────────── */
 
 export type CanvasItem = {

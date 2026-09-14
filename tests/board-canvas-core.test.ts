@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   BOARD_ICONS, CANVAS_COLOURS, CANVAS_EXTENT, COLUMN_HEADER, COLUMN_PAD, DEFAULT_SIZE, DEFAULT_VIEW,
-  GRID, MIN_SIZE, ZOOM_MAX, ZOOM_MIN,
-  breadcrumbs, canvasToScreen, carryStack, clampSize, colourOf, columnUnder, commentCountLabel,
+  BOARD_TILE_FULL_H, BOARD_TILE_SMALL_H, GRID, MIN_SIZE, ZOOM_MAX, ZOOM_MIN,
+  boardTileLayout, breadcrumbs, canvasToScreen, carryStack, clampSize, colourOf, columnUnder, commentCountLabel,
   commentsFor, countInside, countLabel, defaultLinkLabel, descendantBoardIds, drawOrder, fitAll,
   iconOf, isSafeUrl, itemBoardId, itemsInColumn, keyboardNudge, linkService, moveTo, nextZ,
   placeNew, plainText, resizeTo, sanitizeRichText, screenToCanvas, snap, stackInColumn,
@@ -42,6 +42,23 @@ describe('the grid', () => {
 })
 
 describe('sizes', () => {
+  it('a board tile at its floor still shows its icon and words (the owner, 14 Sep 2026)', () => {
+    // no height: the tile follows its content, so the full column fits
+    expect(boardTileLayout(undefined)).toEqual({ openFloats: false, small: false })
+    expect(boardTileLayout(null)).toEqual({ openFloats: false, small: false })
+    expect(boardTileLayout(0)).toEqual({ openFloats: false, small: false })
+    // the default tile is shorter than the column with Open in it
+    expect(DEFAULT_SIZE.board.h).toBeLessThan(BOARD_TILE_FULL_H)
+    expect(boardTileLayout(DEFAULT_SIZE.board.h)).toEqual({ openFloats: true, small: false })
+    // at the floor everything goes small and Open floats — nothing is clipped
+    expect(MIN_SIZE.board.h).toBeLessThan(BOARD_TILE_SMALL_H)
+    expect(boardTileLayout(MIN_SIZE.board.h)).toEqual({ openFloats: true, small: true })
+    expect(boardTileLayout(140)).toEqual({ openFloats: true, small: true })
+    // tall enough for the whole column: the full layout
+    expect(boardTileLayout(BOARD_TILE_FULL_H)).toEqual({ openFloats: false, small: false })
+    expect(boardTileLayout(320)).toEqual({ openFloats: false, small: false })
+  })
+
   it('clamps a resize below the minimum', () => {
     for (const kind of Object.keys(MIN_SIZE) as (keyof typeof MIN_SIZE)[]) {
       expect(clampSize(kind, { w: 1, h: 1 })).toEqual(MIN_SIZE[kind])
