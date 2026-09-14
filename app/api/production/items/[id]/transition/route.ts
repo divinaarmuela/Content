@@ -79,6 +79,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(updated)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
+    // a refused move leaves its reason in the deployment log, so "did not
+    // notify" can be read as "was refused, because …" (14 Sep 2026: two 400s
+    // on one card with no reason in sight)
+    console.warn('transition refused', { status, error, path: new URL(req.url).pathname })
     return NextResponse.json({ error }, { status })
   }
   })

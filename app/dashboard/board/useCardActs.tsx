@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { BOARD_COLUMNS, columnOf } from '../../lib/board-core'
 import type { BoardViewCard, BoardViewer, CardAction } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
-import { PostChangesDialog, PostedElsewhereDialog, SendBackDialog } from './BoardDialogs'
+import { HandToDialog, PostChangesDialog, PostedElsewhereDialog, SendBackDialog } from './BoardDialogs'
 
 /**
  * ANSWERING A CARD — the one place the three answers are performed.
@@ -32,6 +32,8 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
   const [sendBackFor, setSendBackFor] = useState<T | null>(null)
   const [postChangesFor, setPostChangesFor] = useState<T | null>(null)
   const [postedFor, setPostedFor] = useState<T | null>(null)
+  /** the card just approved, waiting for the scheduler it goes to */
+  const [handFor, setHandFor] = useState<T | null>(null)
 
   /** one move through the ordinary transition route */
   const transition = useCallback(async (card: T, to: string, label: string) => {
@@ -47,6 +49,15 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
       const column = BOARD_COLUMNS.find(c => c.key === columnOf(to as BoardViewCard['status']))
       toast.success(`${label} — now in ${column?.label ?? 'its new column'}`)
       onDone?.()
+      // APPROVED, THEN HANDED (the owner, 14 Sep 2026: "after we log the
+      // client's approval, don't go straight to Ready to post — ask which
+      // scheduler, with the notes and the approved Drive, so they work from
+      // it and send the files through Post approval"): the hand-over dialog
+      // opens on the spot for a manager. A card the client posts themselves
+      // (deliver only) has no scheduler to hand to.
+      if (to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true) {
+        setHandFor({ ...card, status: to } as T)
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not move it')
     } finally {
@@ -98,6 +109,7 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} onSent={onDone} />
       <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
       <PostedElsewhereDialog card={postedFor} onClose={() => setPostedFor(null)} onPosted={onDone} />
+      <HandToDialog card={handFor} viewer={viewer} onClose={() => setHandFor(null)} onHanded={onDone} />
     </>
   )
 

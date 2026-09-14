@@ -24,7 +24,7 @@ import {
   briefAfterHandover, handToGroups, personLabel, type HandTo,
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
-import { linkKindOf } from '../../lib/card-link-core'
+import { folderOf, linkKindOf } from '../../lib/card-link-core'
 import { findKindByName, kindIdForContentType, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
@@ -401,7 +401,9 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
   /** the Drive or Dropbox folder the scheduler posts from (the owner, 11 Sep
    *  2026: "we might assign the scheduler by giving them the drive link") */
   const [postFolder, setPostFolder] = useState('')
-  useEffect(() => { setTo(''); setNote(''); setPostFolder('') }, [card])
+  // the approved Drive the scheduler works from, prefilled from the card so
+  // the hand-over carries it without retyping (the owner, 14 Sep 2026)
+  useEffect(() => { setTo(''); setNote(''); setPostFolder(card ? (folderOf(card as never)?.url ?? '') : '') }, [card])
 
   // A CARD IS HANDED TO A SCHEDULER (the owner, 14 Sep 2026: "the AM or
   // super admin hands over to a scheduler, who picks the files from the link
@@ -416,12 +418,14 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
     if (!card || !chosen) return
     setBusy(true)
     try {
-      // the folder first, so the hand-over email can name it
-      if (postFolder.trim()) {
+      // the folder first, so the hand-over email can name it — saved as the
+      // card's folder to work from, never over the editor's finished edit
+      // (the item PATCH keeps a handed-in link as it is); unchanged, untouched
+      if (postFolder.trim() && postFolder.trim() !== (folderOf(card as never)?.url ?? '')) {
         const check = linkKindOf(postFolder)
         if (!check.ok) throw new Error(check.reason)
-        const put = await fetch(`/api/production/items/${card.id}/link`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: check.url }),
+        const put = await fetch(`/api/production/items/${card.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_assets_url: check.url }),
         })
         if (!put.ok) throw new Error(await readError(put, 'Could not save the folder'))
       }

@@ -502,3 +502,16 @@ describe('a New post on Post approval is handed to a scheduler (14 Sep 2026)', (
     expect(s).toContain('No scheduler on the Team page yet')
   })
 })
+
+describe('logging the client’s approval hands the card to a scheduler on the spot (14 Sep 2026)', () => {
+  it('the approve move opens the Hand to dialog for a manager, prefilled with the approved Drive, and the folder never overwrites the finished edit', () => {
+    const acts = src('app/dashboard/board/useCardActs.tsx')
+    expect(acts).toContain('<HandToDialog card={handFor}')
+    expect(acts).toMatch(/to === 'approved_for_scheduling' && \['account_manager', 'super_admin', 'general'\]\.includes\(viewer\.role\) && card\.deliver_only !== true/)
+    const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
+    expect(dialogs).toContain("setPostFolder(card ? (folderOf(card as never)?.url ?? '') : '')")
+    // the folder is saved as the folder to work from through the item PATCH, not as the card link
+    expect(dialogs).toMatch(/method: 'PATCH', headers: \{ 'Content-Type': 'application\/json' \}, body: JSON\.stringify\(\{ raw_assets_url: check\.url \}\)/)
+    expect(dialogs).not.toMatch(/\/link`, \{\s*method: 'PUT'[^}]*url: check\.url/)
+  })
+})
