@@ -3,13 +3,19 @@ import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 
 /**
- * THE FOLDER TO WORK FROM IS NOT THE FINISHED PIECE (the owner, 13 Sep 2026).
+ * THE FOLDER TO WORK FROM IS NOT THE FINISHED PIECE (the owner, 13 Sep 2026)
+ * — ON A POSTING JOB.
  *
  * An account manager makes a New post with a Drive folder and hands it to a
  * scheduler, who "uploads the files and chooses which one to schedule". Until
  * they do, "Ready for quality check" has nothing for the quality checker —
- * the card's only link is the folder it was made with. Drives the REAL
- * transition route on the in-memory database.
+ * the card's only link is the folder it was made with.
+ *
+ * THE EDITOR'S CARD IS THE OTHER WAY ROUND (the owner, 14 Sep 2026: "editors
+ * don't need to upload files — it's the link only"): the pasted Drive or
+ * Dropbox link IS the finished edit, even when it is the same folder the
+ * card was made with. Drives the REAL transition route on the in-memory
+ * database.
  */
 
 const ITEM = 'aaaaaaaa-0000-4000-8000-000000000009'
@@ -72,8 +78,9 @@ const seed = (over: { item?: Record<string, unknown>; versions?: Row[] } = {}) =
     id: ITEM, client_id: 'c1', title: 'Spring reel 2', status: 'draft_uploaded', content_type: 'other',
     owner_id: CATH.id, scheduler_ids: [], current_version_number: 1, batch_id: null,
     work_kind_id: null, client_approval_required: true, due_date: null,
-    // the New post window writes the folder to BOTH fields
-    link_url: FOLDER, link_kind: 'drive', raw_assets_url: FOLDER,
+    // the New post window writes the folder to BOTH fields, and flags the
+    // card as a posting job
+    link_url: FOLDER, link_kind: 'drive', raw_assets_url: FOLDER, adhoc_post: true,
     ...over.item,
   }] as unknown as Row[],
   asset_versions: over.versions ?? [],
@@ -104,5 +111,31 @@ describe('Ready for quality check on a card made with a folder to work from', ()
     fake = seed({ item: { link_url: 'https://www.dropbox.com/scl/fo/final-reel', link_kind: 'dropbox', raw_assets_url: FOLDER } })
     const r = await move('quality_check')
     expect(r.status).toBe(200)
+  })
+})
+
+describe('Submit for quality check on an editor’s card (not a posting job)', () => {
+  beforeEach(() => { h.user = { ...CATH, role: 'editor' } })
+
+  it('goes through on the pasted link alone — no files needed (the owner, 14 Sep 2026)', async () => {
+    fake = seed({ item: { adhoc_post: null, link_url: 'https://drive.google.com/drive/folders/1final', link_kind: 'drive', raw_assets_url: null } })
+    const r = await move('quality_check')
+    expect(r.status).toBe(200)
+    expect(r.json.status).toBe('quality_check')
+  })
+
+  it('goes through even when the pasted link is the folder the card was made with', async () => {
+    // the 14 Sep failure: the link route had copied the pasted link into
+    // raw_assets_url as well, so every editor's submit read as "folder only"
+    fake = seed({ item: { adhoc_post: null } })
+    const r = await move('quality_check')
+    expect(r.status).toBe(200)
+  })
+
+  it('a card with neither a link nor files says to paste the link, not to upload', async () => {
+    fake = seed({ item: { adhoc_post: null, link_url: null, link_kind: null, raw_assets_url: null } })
+    const r = await move('quality_check')
+    expect(r.status).toBe(400)
+    expect(r.json.error).toBe('Paste the link to the finished edit, or upload the files, before submitting')
   })
 })

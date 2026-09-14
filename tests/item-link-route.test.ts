@@ -41,9 +41,9 @@ vi.mock('../app/lib/production-live', () => ({ announceItemChange: vi.fn() }))
 
 const { PUT, DELETE } = await import('../app/api/production/items/[id]/link/route')
 
-const put = async (url: unknown) => {
+const put = async (url: unknown, extra: Record<string, unknown> = {}) => {
   const res = await PUT(
-    new Request(`https://x.test/api/production/items/${ITEM}/link`, { method: 'PUT', body: JSON.stringify({ url }) }),
+    new Request(`https://x.test/api/production/items/${ITEM}/link`, { method: 'PUT', body: JSON.stringify({ url, ...extra }) }),
     { params: Promise.resolve({ id: ITEM }) },
   )
   return { status: res.status, json: await res.json() as any }
@@ -136,6 +136,26 @@ describe('PUT /api/production/items/[id]/link', () => {
     // claim() re-decided on the rival's row: theirs was v2, so this is v3
     expect(r.json.version).toBe(3)
     expect(item()).toMatchObject({ link_url: DRIVE_2, current_version_number: 3 })
+  })
+
+  it('a pasted Drive folder is the card’s folder too (one folder, wherever it was written)', async () => {
+    const folder = 'https://drive.google.com/drive/folders/1work'
+    expect((await put(folder)).status).toBe(200)
+    expect(item().link_url).toBe(folder)
+    expect(item().raw_assets_url).toBe(folder)
+  })
+
+  it('the finished edit (final: true) leaves the folder to work from alone', async () => {
+    // the 14 Sep 2026 failure: the editor's pasted edit overwrote the footage
+    // folder on their own card, and then read as "folder only" at submit
+    const folder = 'https://drive.google.com/drive/folders/1work'
+    expect((await put(folder)).status).toBe(200)
+    const r = await put(DRIVE_1, { final: true })
+    expect(r.status).toBe(200)
+    expect(item().link_url).toBe(DRIVE_1)
+    expect(item().link_kind).toBe('drive')
+    expect(item().raw_assets_url).toBe(folder)
+    expect(item().current_version_number).toBe(2)
   })
 
   it('DELETE clears the link and keeps the version number', async () => {

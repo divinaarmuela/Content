@@ -21,6 +21,13 @@ import { linkKindOf, nextVersionAfterLink } from '../../../../../lib/card-link-c
  * scheduling, or a manager (item-edit-core). ONE conditional write: the
  * version number is read and bumped inside `claim()`, so two people pasting
  * at the same moment get versions N+1 and N+2, never both N+1.
+ *
+ * `final: true` says the link is the FINISHED EDIT (the editor's "Your
+ * finished edit" box), not the folder to work from: the card's folder
+ * (`raw_assets_url`) is left as it was. Without it a pasted Drive or
+ * Dropbox folder is the card's folder everywhere (card-link-core.folderOf).
+ * Before 14 Sep 2026 every pasted folder link overwrote the folder, so the
+ * editor's edit replaced the footage folder on their own card.
  */
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
@@ -35,6 +42,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const body = await req.json().catch(() => ({}))
     const check = linkKindOf(body?.url)
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
+    const final = body?.final === true
 
     const items = table<ContentItem>('content_items')
     let outcome: { version: number; changed: boolean; replaced: boolean } | null = null
@@ -50,7 +58,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           link_url: check.url,
           link_kind: check.kind,
           // a folder is the card's folder everywhere (card-link-core.folderOf)
-          ...(check.kind !== 'other' ? { raw_assets_url: check.url } : {}),
+          // — unless this link is the finished edit, which is not the folder
+          ...(check.kind !== 'other' && !final ? { raw_assets_url: check.url } : {}),
           current_version_number: next.version,
         }
       })

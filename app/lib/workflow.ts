@@ -714,14 +714,21 @@ export async function performTransition(
   // itself: the provider has already published it, and refusing to record that
   // because a schedule row is missing would leave the board claiming a live
   // post is still waiting.
+  const linked = item as { link_url?: string | null; raw_assets_url?: string | null; adhoc_post?: unknown }
+  const hasLink = typeof linked.link_url === 'string' && linked.link_url.trim() !== ''
+  // A POSTING JOB'S FOLDER IS NOT THE PIECE (the owner, 13 Sep 2026: an AM
+  // makes the card with a Drive folder for the scheduler, who "uploads the
+  // files and chooses which one to schedule"). Such a card (`adhoc_post`,
+  // the manager's New post on Post approval) whose only link is that folder
+  // has nothing for the quality checker yet.
+  const folderOnly = linked.adhoc_post === true && hasLink
+    && linked.link_url === (linked.raw_assets_url ?? null)
   if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
-    } else if (typeof (item as { link_url?: string | null }).link_url === 'string'
-        && (item as { link_url?: string | null }).link_url
-        && (item as { link_url?: string | null }).link_url !== ((item as { raw_assets_url?: string | null }).raw_assets_url ?? null)) {
-      // A CARD WITH A LINK IS EVIDENCE ENOUGH — when the link is the WORK.
+    } else if (hasLink && !folderOnly) {
+      // A CARD WITH A LINK IS EVIDENCE ENOUGH — the link is the work.
       //
       // Since the board reset a card is one deliverable with one pasted link —
       // Google Drive or Dropbox — instead of nested versions carrying slides.
@@ -729,11 +736,17 @@ export async function performTransition(
       // was refused at "Submit for review" with a message telling the person to
       // add the link they had already added.
       //
-      // BUT the folder to work FROM is not the finished piece (the owner, 13
-      // Sep 2026: an AM makes the card with a Drive folder for the scheduler,
-      // who "uploads the files and chooses which one to schedule"). A card
-      // whose only link is that folder has nothing for the quality checker
-      // yet, so it falls through to the version check below.
+      // THE EDITOR'S LINK IS THE PIECE (the owner, 14 Sep 2026: "editors
+      // don't need to upload files — it's the link only"). Their finished
+      // edit is the Drive or Dropbox link pasted on the card, and the quality
+      // checker opens it. Only a posting job is different (`folderOnly`
+      // above): it falls through to the version check below.
+      //
+      // (14 Sep 2026: the link route had begun copying every pasted folder
+      // link into `raw_assets_url` too, so an editor's pasted edit equalled
+      // the "folder" and every submit was refused with "Upload the finished
+      // files first". The folder rule now reads the posting-job flag, not a
+      // coincidence of two fields.)
     } else {
       const latest = (await table<AssetVersion>('asset_versions')
         .list({ by: { item_id: item.id }, orderBy: [['version_number', 'desc']], limit: 1 }))[0] ?? null
@@ -746,9 +759,9 @@ export async function performTransition(
       } else {
         if (!latest) {
           throw new AuthzError(
-            (item as { raw_assets_url?: string | null }).raw_assets_url
+            folderOnly || linked.raw_assets_url
               ? 'Upload the finished files first — the folder is what you work from, not the piece to check'
-              : 'Add a version with links before submitting',
+              : 'Paste the link to the finished edit, or upload the files, before submitting',
             400,
           )
         }

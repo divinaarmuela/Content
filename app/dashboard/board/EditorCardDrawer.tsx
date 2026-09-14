@@ -189,7 +189,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
     setWorking('Saving the link')
     try {
       const res = url
-        ? await fetch(`/api/production/items/${id}/link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+        ? await fetch(`/api/production/items/${id}/link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, final: true }) })
         : await fetch(`/api/production/items/${id}/link`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save the link')
       toast.success(url ? 'Source files link saved' : 'Source files link removed')
