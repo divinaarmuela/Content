@@ -158,7 +158,9 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   })
   it('submit is behind the seven checks and a file', () => {
     const s = src(EDITOR_DRAWER)
-    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| \(slides\.length === 0 && !item\.link_url\)\}/)
+    // the link is the work: no files gate the submit (14 Sep 2026)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| !item\.link_url\}/)
+    expect(s).not.toMatch(/asset_versions|slidesOf|<Thumb /)
     // the submit goes straight to the quality reviewer (Abby's rule), never to a manager's check
     expect(s).toMatch(/\{ to: 'quality_check' \}/)
     expect(s).not.toMatch(/to: 'internal_review'/)

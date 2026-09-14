@@ -8,14 +8,12 @@ import CardSaid from './CardSaid'
 import type { Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
-import type { AssetVersion, Batch, Client, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
+import type { Batch, Client, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
-import { Thumb } from '../social/schedule/tiles'
-import { slidesOf, type Slide } from '../../lib/version-files-core'
 import { linkKindOf } from '../../lib/card-link-core'
 import { cardPeople } from '../../lib/card-people-core'
 import { channelSpecs, PLATFORM_MEDIA } from '../../lib/media-fit-core'
@@ -37,8 +35,8 @@ import { columnOf } from '../../lib/board-core'
  *                             platform specs, deadline; shot list, notes,
  *                             brand guidelines, previous edits
  *   2. Work from          §1  the Dropbox folder in; finals to Drive
- *   3. Your versions      §1  the final export — upload, or a copy from
- *                             Drive; where the source files were handed off
+ *   3. Your finished edit §1  the Drive or Dropbox link to the final —
+ *                             nothing else (the owner, 14 Sep 2026)
  *   4. Quality check      §4  the seven checks, then submit
  *   5. Handover           §5  three ticks once approved
  *   6. I'm blocked        §7  the 24-hour rule, with the SOP's who-to-ask
@@ -64,7 +62,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const { me } = useRole()
   const { row: item } = useRow<ContentItem>('content_items', id)
   const byItem = useMemo(() => ({ item_id: id }), [id])
-  const { rows: versions } = useTable<AssetVersion>('asset_versions', { by: byItem })
   const byEntity = useMemo(() => ({ entity_id: id }), [id])
   const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -129,9 +126,6 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
 
   const [working, setWorking] = useState<string | null>(null)
 
-  /* ── the latest files ── */
-  const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
-  const slides = useMemo(() => slidesOf(latest), [latest])
   // no "N of M finals in" (the owner, 14 Sep 2026): editors hand in a Drive or
   // Dropbox link, not a count of files
 
@@ -156,14 +150,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   }
   const flag = (body: Record<string, unknown>, said: string) => post(`/api/production/items/${id}/flag`, body, said)
 
-  /* ── files already on the card (from before the link-only rule) can still
-     be taken off; nothing new is uploaded here — the editor's work is the
-     link (the owner, 14 Sep 2026: "why is there an add files feature in the
-     editor card, it's just supposed to be a link") ── */
-  const writeVersion = async (next: Slide[], what: string) => {
-    await post(`/api/production/items/${id}/versions`, { files: next, file_url: next[0]?.url ?? '' }, what, 'Saving the files')
-  }
-  const removeFile = (i: number) => void writeVersion(slides.filter((_, j) => j !== i), 'File removed — saved as a new version')
+  /* ── NO FILES ON THE EDITOR'S CARD (the owner, 14 Sep 2026: "the editor
+     card should not have the files — only a Drive or Dropbox link"): the
+     work is the link; files a card carries from before are not drawn here ── */
 
   // NO DRIVE PICKER (the owner, 14 Sep 2026: "they have to upload their own
   // Drive from review, not pick from the existing Drive"): the editor hands
@@ -200,7 +189,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
   const submit = async () => {
     if (!submitting) return
-    if (slides.length === 0 && !item?.link_url) { toast.error('Add your Drive or Dropbox link first'); return }
+    if (!item?.link_url) { toast.error('Add your Drive or Dropbox link first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -228,10 +217,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
   const lane = EDITOR_LANES.find(l => l.columns.includes(column)) ?? EDITOR_LANES[0]
   const holder = me?.id === item.owner_id
   const frozen = ['scheduled', 'published'].includes(status)
-  const editing = holder && ['draft_uploaded', 'revision_required', 'revision_complete'].includes(status)
   const review = reviewWords(status, reviewerNameOf(team as never))
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
-  const specs = channelSpecs({ platforms, types: slides.some(s => s.type === 'video') || slides.length === 0 ? ['video'] : ['image'] })
+  const specs = channelSpecs({ platforms, types: ['video'] })
     .map(s => ({ platform: s.label, lines: s.groups.flatMap(g => g.lines) }))
   const brief = beforeYouStart({
     card: item as never, shoot: shoot as never, specs,
@@ -351,10 +339,9 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
         </p>
       </section>
 
-      {/* ── 3. your versions (§1, finals only) ── */}
       {/* ── 3. YOUR FINISHED EDIT (the owner, 14 Sep 2026: "make it simple —
-          upload a Drive link or files, and comments, that's it for the
-          editor"): one box for the Drive or Dropbox link, or the files ── */}
+          a Drive link and comments, that's it for the editor"; "only a Drive
+          or Dropbox link"): one box for the link, nothing else ── */}
       <section className="flex flex-col gap-3 border-b border-border px-5 py-4" aria-labelledby="ed-versions">
         <div className="flex items-center justify-between">
           <p id="ed-versions" className={H2}>Your finished edit</p>
@@ -367,28 +354,13 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
           </div>
         ) : item.link_url ? (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[14px] underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
-        ) : slides.length === 0 ? (
+        ) : (
           <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : 'Nothing handed in yet.'}</p>
-        ) : null}
+        )}
         {holder && !frozen && item.link_url && (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
         )}
         {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
-        {slides.length > 0 && (
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {slides.map((s, i) => (
-              <li key={`${s.url}-${i}`} className="relative">
-                <Thumb slide={s} className="aspect-[4/5] w-full rounded-tile" label={s.name} />
-                {editing && !frozen && (
-                  <button type="button" aria-label={`Remove ${s.name}`} disabled={busy} onClick={() => removeFile(i)}
-                    className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground hover:bg-background">
-                    <X className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       {/* ── 4. quality check, then submit (§4) ── */}
@@ -410,8 +382,8 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || (slides.length === 0 && !item.link_url)} onClick={() => void submit()}
-                title={slides.length === 0 && !item.link_url ? 'Add your Drive or Dropbox link first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !item.link_url} onClick={() => void submit()}
+                title={!item.link_url ? 'Add your Drive or Dropbox link first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
@@ -420,7 +392,7 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
                 </Button>
               )}
             </div>
-            {slides.length === 0 && <p className="text-[12px] text-muted-foreground">Upload the final first.</p>}
+            {!item.link_url && <p className="text-[12px] text-muted-foreground">Add your Drive or Dropbox link first.</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">
