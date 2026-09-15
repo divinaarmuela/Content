@@ -32,7 +32,7 @@ import {
 import {
   applySlideLimit, canReschedule, channelBlockReason,
   coverForSlide, eligibility, MIN_LEAD_MS, POST_NOW_WINDOW_MS, TOO_SOON,
-  assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, validateComposition,
+  assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, samePostKey, validateComposition,
   type CoverSource, type Eligibility, type SocialPostStatus,
 } from './social-schedule-core'
 import {
@@ -647,13 +647,19 @@ async function insertPost(
   // …and a second OPEN post is fine when it is made of DIFFERENT files: the
   // folder's ticks (9 Sep 2026). The lock only stops the same files being
   // put into two posts by two presses.
-  const wanted = input.slides.map(s => s.url).sort().join('|')
+  // …and the same files going out DIFFERENTLY — a Story of the picture that
+  // is also a feed post — are two posts, not one pressed twice (the owner,
+  // 15 Sep 2026: "the Story dropdown, when picked, does not allow me to
+  // post"): social-schedule-core.samePostKey
+  const wanted = samePostKey(input.slides, input.channels, input.perChannel as never)
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
     if (!held) return false                       // not written yet, or gone — the lock's age decides
     if (!isOpenPost(held.status)) return 'free'   // booked, out, or cancelled: decisively not held
-    const theirs = asArray<Slide>(held.slides).map(s => s.url).sort().join('|')
-    if (theirs === wanted || theirs === '') return true
+    const theirFiles = asArray<Slide>(held.slides)
+    if (theirFiles.length === 0) return true       // not written yet: the lock's age decides
+    const theirs = samePostKey(theirFiles, asArray<string>(held.channels), (held.per_channel ?? null) as never)
+    if (theirs === wanted) return true
     return 'free'                                 // an open post of OTHER files: the folder's ticks
   })
   if (!gate.ok) throw new DuplicatePostError(gate.holder, item.id)

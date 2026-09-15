@@ -1497,3 +1497,27 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
 export const MIN_LEAD_MS = 15 * 60_000
 export const POST_NOW_WINDOW_MS = 2 * 60_000
 export const TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle. To send it straight away, choose Post now.'
+
+/**
+ * WHEN ARE TWO POSTS THE SAME POST? (the owner, 15 Sep 2026: "the Story
+ * dropdown, when picked, does not allow me to post" — three presses, three
+ * refusals, because the picture was already on an open feed post.)
+ *
+ * The lock on a piece stops the same files being put into two posts by two
+ * presses. It used to look at the files alone, so a Story of the picture that
+ * is also going out as a feed post read as a duplicate. It is not: the same
+ * picture as a Story and as a feed post are two posts. So the key is the
+ * files AND where they go — each channel with the kind of post it gets.
+ * Same files, same channels, same kinds: one post pressed twice. Anything
+ * else is a second post.
+ */
+export function samePostKey(
+  slides: readonly { url: string }[] | null | undefined,
+  channels: readonly string[] | null | undefined,
+  perChannel: Record<string, { kind?: string | null } | null | undefined> | null | undefined,
+): string {
+  const files = (slides ?? []).map(s => String(s.url)).sort().join('|')
+  const where = [...(channels ?? [])].map(String).sort()
+    .map(c => `${c}:${String(perChannel?.[c]?.kind ?? '')}`).join(',')
+  return `${files}#${where}`
+}

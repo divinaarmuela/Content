@@ -680,6 +680,15 @@ export default function NewPostDialog({
   /** what this post WILL be, chosen or worked out — the thing a location has
    *  to be checked against */
   const effectiveKind = pickedKind || autoKind || undefined
+  /** A STORY HAS NO CAPTION (the owner, 15 Sep 2026: "it's showing me
+   *  captions as an option, which is not an option on a Story"): Instagram
+   *  and Facebook show no words under a Story, so the box goes when every
+   *  chosen channel is getting one — the words belong in the picture. */
+  const allStory = chosen.length > 0 && chosen.every(a => {
+    const p = String(a.platform)
+    const k = state.perChannel[a.id]?.kind ?? (isPlatform(p) ? autoKindFor(p, media) : null)
+    return k === 'story'
+  })
   /**
    * TRIAL REEL IS A POST TYPE (the owner, 10 Sep 2026: "add a new type in
    * the popup, like trial reel"). It lives in the header's type menu beside
@@ -1502,6 +1511,11 @@ export default function NewPostDialog({
 
             {pane === 'write' && (
             <>
+            {allStory ? (
+              <p className="rounded-inner border border-border p-3 text-[13px] text-muted-foreground" data-story-no-caption>
+                A Story has no caption — put any words into the picture or video itself.
+              </p>
+            ) : (
             <label className="flex flex-col gap-1.5 rounded-inner border border-border p-3">
               <span className="text-[12px] font-semibold text-muted-foreground">Caption</span>
               <textarea
@@ -1513,6 +1527,7 @@ export default function NewPostDialog({
                 className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
               />
             </label>
+            )}
 
             {groups.length > 0 && !locked && (
               <div data-tour="post-options" className="flex flex-col gap-2.5">
