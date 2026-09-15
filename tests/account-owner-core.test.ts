@@ -134,6 +134,12 @@ describe('whom the post is for, from the New post window to the Schedule window 
     expect(w).toContain("const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)")
     expect(w).toContain('const theirs = accounts.filter(a => a.contact_id === who).map(a => a.id)')
     expect(w).toContain('if (seededFor.current || state.postId || !itemRow) return')
+    // never the wrong account (15 Sep 2026): a person's post with no account
+    // connected starts with nothing picked and says so — not the business's
+    expect(w).toContain('const personHasNoAccounts = !!postForId && !accounts.some(a => a.contact_id === postForId)')
+    expect(w).toContain('It will not go to the business’s accounts.')
+    // an editing card may be for anyone on the client; a post only for the connected
+    expect(src('app/dashboard/board/BoardDialogs.tsx')).toContain('(!forPosting || accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id))')
     const c = src('app/dashboard/board/PostApprovalDetail.tsx')
     expect(c).toContain('Posting for: {postFor ? `${postFor.name} — their personal account` : `${client?.name ?? \'the client\'} — the business`}')
   })

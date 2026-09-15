@@ -347,13 +347,19 @@ export default function NewPostDialog({
    * people opens on that person's channels, not the first account on the
    * list. Once, for a new post only; a saved post keeps its own channels. */
   const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)
+  const postForId = (itemRow as { for_contact_id?: string | null } | null)?.for_contact_id ?? null
+  const postForPerson = postForId ? contacts.find(c => c.id === postForId) ?? null : null
+  /** NEVER THE WRONG ACCOUNT (the owner, 15 Sep 2026: "we might be editing
+   *  for the client but end up posting"): a post for a person whose accounts
+   *  are not connected yet starts with NO channel picked, and says so —
+   *  it does not fall back to the business's accounts */
+  const personHasNoAccounts = !!postForId && !accounts.some(a => a.contact_id === postForId)
   const seededFor = useRef(false)
   useEffect(() => {
     if (seededFor.current || state.postId || !itemRow) return
-    const who = (itemRow as { for_contact_id?: string | null }).for_contact_id ?? null
+    const who = postForId
     if (!who) { seededFor.current = true; return }
     const theirs = accounts.filter(a => a.contact_id === who).map(a => a.id)
-    if (theirs.length === 0) return
     seededFor.current = true
     for (const a of accounts) {
       const on = theirs.includes(a.id)
@@ -1242,6 +1248,11 @@ export default function NewPostDialog({
             </div>
             ))}
           </Dropdown>
+          {personHasNoAccounts && (
+            <p role="alert" className="mt-1 text-[12px] font-medium text-accent-red-deep">
+              This post is for {postForPerson?.name ?? 'a person'}, who has no account connected yet — send them their connect link from Social channels. It will not go to the business’s accounts.
+            </p>
+          )}
 
           {kinds.length > 0 && (
             <Dropdown

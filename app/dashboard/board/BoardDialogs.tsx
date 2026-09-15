@@ -596,11 +596,14 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const [postFor, setPostFor] = useState('company')
   const { rows: contactRows } = useTable<{ id: string; client_id: string; name: string; role?: string | null; is_primary?: boolean | null }>('client_contacts')
   const { rows: accountRows } = useTable<{ id: string; client_id: string | null; contact_id?: string | null; active?: boolean }>('social_accounts')
-  // a post: the people with an account connected; an editing card: anyone on
-  // the client — the work is for them, whatever is connected (15 Sep 2026)
+  // a POST: only people with an account connected (the owner, 15 Sep 2026:
+  // "the options should be the ones connected"). An EDITING card: anyone on
+  // the client — the work can be for them before they connect ("we might be
+  // editing for the client"); the post window refuses to fall back to the
+  // business's accounts when theirs are not there yet
   const postForChoices = ownerChoices(
     clients.find(c => c.id === clientId)?.name ?? 'The business',
-    contactRows.filter(c => c.client_id === clientId && accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id)),
+    contactRows.filter(c => c.client_id === clientId && (!forPosting || accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id))),
   )
   const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
