@@ -14,6 +14,7 @@ import { AuthzError, requireRole, type TeamUser } from '../../../lib/authz'
 import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-core'
 import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
 import { DASHBOARD_URL } from '../../../lib/app-url'
+import { clientByPortalToken } from '../../../lib/portal-owner'
 
 
 /**
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
     const token = rawToken.split('--').pop() ?? rawToken
     let client: Client | null = null
     if (/^[0-9a-f-]{36}$/i.test(token)) {
-      client = (await table<Client>('clients').list({ where: c => c.share_token === token, limit: 1 }))[0] ?? null
+      client = await clientByPortalToken(token)
     } else if (body.shoot_id) {
       // the signed-in portal has no token: the client's own login is the authority
       try {

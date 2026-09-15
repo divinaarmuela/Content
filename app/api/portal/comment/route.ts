@@ -9,6 +9,7 @@ import { NOT_WITH_YOU, portalActions } from '../../../lib/portal-core'
 import type { ItemStatus } from '../../../lib/workflow-core'
 import { sanitiseCanvasCards } from '../../../lib/batch-brief-core'
 import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../lib/canvas-comments-core'
+import { clientByPortalToken } from '../../../lib/portal-owner'
 
 /**
  * A comment from the portal — on a piece, on a shoot, or pinned to ONE card
@@ -26,9 +27,7 @@ export async function POST(req: Request) {
     if (!/^[0-9a-f-]{36}$/i.test(token)) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     }
-    const client = (await table<Client>('clients').list({
-      where: c => c.share_token === token, limit: 1,
-    }))[0]
+    const client = await clientByPortalToken(token)
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
 
     const kind = String(body.kind ?? '')

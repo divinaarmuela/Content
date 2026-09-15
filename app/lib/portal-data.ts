@@ -42,6 +42,8 @@ import {
   type PortalActions, type PortalCardComment, type PortalCardTone, type PortalColumnKey, type PortalLink,
 } from './portal-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
+import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
+import { portalOwnerByToken } from './portal-owner'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -305,7 +307,7 @@ export async function accountManagerName(clientId: string): Promise<string | nul
   return (am?.name ?? '').trim().split(/\s+/)[0] || null
 }
 
-export async function getPortalData(clientId: string): Promise<PortalData | null> {
+export async function getPortalData(clientId: string, scope: PortalScope = { kind: 'business' }): Promise<PortalData | null> {
   const now = new Date()
 
   // The zone has to be read BEFORE "this month" can be worked out: on the last
@@ -335,7 +337,7 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
       where: r => r.shared_with_client === true || ['locked', 'shot', 'wrapped'].includes(r.status ?? ''),
       orderBy: [['shoot_date', 'desc']],
       limit: 6,
-    }).catch(() => [] as Batch[]),
+    }).then(rows => rows.filter(b => belongsToPortal(b as { for_contact_id?: string | null }, scope))).catch(() => [] as Batch[]),
     // who the client actually deals with — read alongside everything else
     accountManagerName(clientId),
     // the toggled-on intake forms — its own tolerant read (see loadPortalIntake)
@@ -352,7 +354,11 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   // admin. The client's lists are the things they were promised.
   const isInternal = (i: { work_kinds?: KindRow }) =>
     isBrief(i) || isInternalKind(i.work_kinds)
-  const items = itemRows.filter(i => !isInternal(i as unknown as { work_kinds?: KindRow }))
+  // WHOSE PORTAL (15 Sep 2026): the business's own pieces on the business
+  // portal, a person's own on theirs — never each other's
+  const items = itemRows
+    .filter(i => !isInternal(i as unknown as { work_kinds?: KindRow }))
+    .filter(i => belongsToPortal(i as unknown as { for_contact_id?: string | null }, scope))
   // …except when the plan is with the client: the brief stays out of the item
   // lists, but its decision has to reach the shoot card it belongs to
   const briefByBatch = new Map<string, { id: string; status: string }>()
@@ -792,7 +798,8 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
   refreshStaleAnalyticsInBackground(clientId)
 
   return {
-    client: { id: clientRow.id as string, name: clientRow.name as string, timezone: tz },
+    // a person's portal wears their name (portal-owner-core.portalName)
+    client: { id: clientRow.id as string, name: portalName(clientRow.name as string, scope), timezone: tz },
     cards,
     brand_logo_url: brandLogoUrl(clientRow.brand_profile ? normaliseProfile(clientRow.brand_profile) : null),
     am_name: amRes,
@@ -825,6 +832,12 @@ export async function getPortalData(clientId: string): Promise<PortalData | null
 }
 
 export async function getPortalDataByToken(token: string): Promise<PortalData | null> {
+  // the client's token opens the business portal; a person's token opens theirs
+  const owner = await portalOwnerByToken(token)
+  return owner ? getPortalData(owner.client.id, owner.scope) : null
+}
+
+async function getPortalDataByClientToken(token: string): Promise<PortalData | null> {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null
   const row = (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0]
   if (!row) return null

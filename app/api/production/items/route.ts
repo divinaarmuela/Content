@@ -433,7 +433,10 @@ export async function POST(req: Request) {
         raw_assets_url: it.raw_assets_url ? String(it.raw_assets_url).slice(0, 2000) : null,
         // WHOM THE POST IS FOR (15 Sep 2026): the business, or one of the
         // client's people — checked below to be on this client
-        for_contact_id: typeof it.for_contact_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(it.for_contact_id) ? it.for_contact_id : null,
+        for_contact_id: typeof it.for_contact_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(it.for_contact_id)
+          ? it.for_contact_id
+          // a card from a shoot is for whoever the shoot is for (15 Sep 2026)
+          : (it.batch_id ? ((batchById.get(it.batch_id) as { for_contact_id?: string | null } | undefined)?.for_contact_id ?? null) : null),
         brief: it.brief ? String(it.brief).slice(0, 5000) : null,
         raw_assets: sanitiseRawAssets(it.raw_assets),
         // the caller decides; an internal task defaults to NO client step

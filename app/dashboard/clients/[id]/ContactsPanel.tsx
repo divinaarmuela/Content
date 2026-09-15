@@ -1,5 +1,8 @@
 'use client'
 
+import { Link2 } from 'lucide-react'
+import { toast as say } from 'sonner'
+
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -170,6 +173,21 @@ export default function ContactsPanel({ clientId }: { clientId: string }) {
                     )}
                   </div>
                   <div className="flex gap-0.5">
+                    {/* THEIR OWN PORTAL (15 Sep 2026): minted the first time, the same link after */}
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Copy their portal link"
+                      aria-label={`Copy ${c.name}’s portal link`}
+                      onClick={() => {
+                        void fetch(`/api/website/clients/${clientId}/contacts/portal-link`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId: c.id }),
+                        }).then(async res => {
+                          const json = await res.json().catch(() => ({})) as { url?: string; error?: string }
+                          if (!res.ok || !json.url) throw new Error(json.error ?? 'Could not make the link')
+                          await navigator.clipboard.writeText(json.url)
+                          say.success(`${c.name}’s portal link copied — send it to them`)
+                        }).catch(e => say.error(e instanceof Error ? e.message : 'Could not copy the link'))
+                      }}>
+                      <Link2 className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7"
                       onClick={() => setDraft(c)} aria-label={`Edit ${c.name}`}>
                       <Pencil className="h-3.5 w-3.5" />

@@ -102,7 +102,8 @@ describe('whom the post is for, from the New post window to the Schedule window 
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
   it('the New post window offers the business, or a person with an account connected, and the card carries it', () => {
     const d = src('app/dashboard/board/BoardDialogs.tsx')
-    expect(d).toContain('<Label htmlFor="new-post-for">Posting for</Label>')
+    // a post says "Posting for"; an editing card says "This work is for" (15 Sep 2026)
+    expect(d).toContain("<Label htmlFor=\"new-post-for\">{forPosting ? 'Posting for' : 'This work is for'}</Label>")
     expect(d).toContain('accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id)')
     expect(d).toContain('...(forPosting && contactIdOf(postFor) ? { for_contact_id: contactIdOf(postFor) } : {}),')
     const r = src('app/api/production/items/route.ts')

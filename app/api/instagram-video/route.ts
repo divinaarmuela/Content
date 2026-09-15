@@ -3,6 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../lib/authz'
 import { instagramShortcode } from '../../lib/link-preview-core'
+import { clientByPortalToken } from '../../lib/portal-owner'
 import {
   actorInput, cacheDecision, fromActorItem, VIDEO_TTL_MS,
   type InstagramVideoRow, type VideoAnswer,
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
       if (typeof body.token === 'string' && body.token) {
         const token = body.token.split('--').pop() ?? body.token
         if (!/^[0-9a-f-]{36}$/i.test(token)) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
-        const client = (await table<Client>('clients').list({ where: c => c.share_token === token, limit: 1 }))[0]
+        const client = await clientByPortalToken(token)
         if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
       } else {
         await requireRole('editor')

@@ -40,7 +40,10 @@ describe('the board-only portal page', () => {
 describe('Copy board link on the shoot page', () => {
   const s = src(SOP)
   it('builds the board URL from the portal token and the shoot id', () => {
-    expect(s).toMatch(/\/portal\/\$\{portalToken\}\/board\/\$\{batch\.id\}/)
+    // the portal link is the business's, or — for a shoot made for one of
+    // the client's people — that person's own (15 Sep 2026); the board rides on it
+    expect(s).toMatch(/if \(!forWho\) return `\$\{window\.location\.origin\}\/portal\/\$\{portalToken\}`/)
+    expect(s).toMatch(/navigator\.clipboard\.writeText\(`\$\{link\}\/board\/\$\{batch\.id\}`\)/)
     expect(s).toContain('Copy board link')
   })
   it('is drawn only once the plan is on the portal, and turns the board on before copying', () => {

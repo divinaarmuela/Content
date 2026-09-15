@@ -1,6 +1,7 @@
 'use client'
 
 import BulletArea from './BulletArea'
+import ShootFor from '../../ShootFor'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -743,9 +744,47 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
       </a>
     </Button>
   )
+  /* WHO THE SHOOT IS FOR, AND WHAT THEIR PORTAL CALLS IT (the owner, 15 Sep
+   * 2026): the business, or one of the client's people — with the two
+   * toggles that decide the plan's title on a person's portal. A person's
+   * portal is their own link, minted the first time it is copied. */
+  const forWho = (batch as { for_contact_id?: string | null }).for_contact_id ?? null
+  const showBusiness = (batch as { portal_show_business?: boolean | null }).portal_show_business !== false
+  const showPerson = (batch as { portal_show_person?: boolean | null }).portal_show_person !== false
+  const portalLinkFor = async (): Promise<string> => {
+    if (!forWho) return `${window.location.origin}/portal/${portalToken}`
+    const res = await fetch(`/api/website/clients/${batch.client_id}/contacts/portal-link`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactId: forWho }),
+    })
+    const json = await res.json().catch(() => ({})) as { url?: string; error?: string }
+    if (!res.ok || !json.url) throw new Error(json.error ?? 'Could not make their link')
+    return json.url
+  }
+  const forBlock = (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[12px] font-semibold">Who this shoot is for</p>
+      <ShootFor clientId={batch.client_id} value={forWho ?? ''} onChange={v => void onPatch('for_contact_id', v || null)} disabled={busy} />
+      {forWho && (
+        <div className="flex flex-wrap gap-4 text-[13px]">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2">
+            <input type="checkbox" className="h-4 w-4 accent-[var(--dbx-blue)]" checked={showBusiness} disabled={busy}
+              onChange={e => void onPatch('portal_show_business', e.target.checked)} />
+            Show the business name on their portal
+          </label>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2">
+            <input type="checkbox" className="h-4 w-4 accent-[var(--dbx-blue)]" checked={showPerson} disabled={busy}
+              onChange={e => void onPatch('portal_show_person', e.target.checked)} />
+            Show their name on their portal
+          </label>
+        </div>
+      )}
+      <p className="text-[12px] text-muted-foreground">{forWho ? 'This plan lands on that person’s own portal, not the business’s.' : 'This plan lands on the business’s portal.'}</p>
+    </div>
+  )
   if (!onPortal) {
     return (
       <div className="flex flex-col gap-2 border-t border-border pt-3">
+        {forBlock}
         <p className="text-[12px] font-semibold">The client</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className={outlineBtn} disabled={busy || !shareReady.ok} onClick={() => void onShareClient()}>
@@ -761,13 +800,14 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
   }
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3" data-client-on-portal>
+      {forBlock}
       <p className="text-[14px] font-semibold" role="status">{clientLine ?? 'On the client portal'}</p>
       <div className="flex flex-wrap gap-2">
         {portalToken && (
           <Button variant="outline" className={outlineBtn}
             onClick={() => {
-              void navigator.clipboard.writeText(`${window.location.origin}/portal/${portalToken}`)
-                .then(() => setCopied('Portal link copied — send it to the client'))
+              void portalLinkFor().then(link => navigator.clipboard.writeText(link))
+                .then(() => setCopied(forWho ? 'Their portal link copied — send it to them' : 'Portal link copied — send it to the client'))
                 .catch(() => setCopied('Could not copy — copy it from the Clients page'))
             }}>
             <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
@@ -779,10 +819,10 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
         {portalToken && (
           <Button variant="outline" className={outlineBtn}
             onClick={() => {
-              const link = `${window.location.origin}/portal/${portalToken}/board/${batch.id}`
               const boardOff = (batch as { share_board?: boolean | null }).share_board === false
               const turnOn = boardOff ? onPatch('share_board', true) : Promise.resolve(true)
-              void turnOn.then(ok => ok ? navigator.clipboard.writeText(link) : Promise.reject(new Error('not shared')))
+              void turnOn.then(ok => ok ? portalLinkFor() : Promise.reject(new Error('not shared')))
+                .then(link => navigator.clipboard.writeText(`${link}/board/${batch.id}`))
                 .then(() => setCopied('Board link copied — send it to the client'))
                 .catch(() => setCopied('Could not copy the board link'))
             }}>

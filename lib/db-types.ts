@@ -264,6 +264,9 @@ export interface Batch {
   footage_received_by: string | null
   footage_receipt_nudged_at: string | null
   footage_url: string | null
+  for_contact_id: string | null
+  portal_show_business: boolean | null
+  portal_show_person: boolean | null
   created_by: string | null
   aligned_by: string | null
   client_confirmed_by: string | null
@@ -473,6 +476,7 @@ export interface ClientContact {
   phone: string
   is_primary: boolean
   notes: string
+  share_token: string | null
 }
 
 export interface ClientCredential {
@@ -1289,7 +1293,7 @@ export const TABLE_COLUMNS = {
   assistant_chats: ['id', 'created_at', 'updated_at', 'clerk_user_id', 'title', 'messages'],
   assistant_prefs: ['clerk_user_id', 'email', 'instructions', 'updated_at', 'updated_by', 'id'],
   batch_comments: ['id', 'created_at', 'batch_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'id', 'created_at', 'updated_at', 'client_id', 'title', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['id', 'board_id', 'item_id', 'author_id', 'author_name', 'author_role', 'body', 'created_at', 'resolved_at'],
   board_items: ['id', 'board_id', 'kind', 'x', 'y', 'w', 'h', 'z', 'colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by', 'created_at', 'updated_at'],
   boards: ['id', 'client_id', 'parent_board_id', 'item_id', 'name', 'icon', 'colour', 'created_by', 'created_at', 'updated_at'],
@@ -1303,7 +1307,7 @@ export const TABLE_COLUMNS = {
   claim_locks: ['id'],
   client_agreements: ['id', 'created_at', 'updated_at', 'client_id', 'deliverable_lines', 'services', 'notes', 'updated_by', 'start_date'],
   client_brand: ['client_id', 'updated_at', 'updated_by', 'profile', 'docs', 'scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at', 'id'],
-  client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes'],
+  client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes', 'share_token'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
@@ -1369,7 +1373,7 @@ export const NULLABLE_COLUMNS = {
   assistant_chats: [],
   assistant_prefs: [],
   batch_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
-  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
+  batches: ['status', 'concept', 'location', 'shot_list', 'planned_deliverables', 'reference_media', 'locked_at', 'locked_by', 'shot_at', 'proposal_id', 'share_board', 'board_name', 'last_edited_by', 'last_edited_at', 'canvas_cards', 'drive_folder_id', 'drive_url', 'plan_reviewed_at', 'plan_reviewed_by', 'plan_sent_back_at', 'plan_sent_back_by', 'plan_sent_back_note', 'shared_with_client', 'description', 'shoot_date', 'month', 'year', 'owner_id', 'deliver_only', 'footage_due_nudged_at', 'footage_received_at', 'footage_received_by', 'footage_receipt_nudged_at', 'footage_url', 'for_contact_id', 'portal_show_business', 'portal_show_person', 'created_by', 'aligned_by', 'client_confirmed_by', 'reminder_sent_by', 'client_shared_at', 'client_shared_by', 'client_decision', 'client_decided_at', 'client_decision_note', 'review_asked_at', 'review_asked_by', 'review_asked_to', 'scripts', 'objective', 'script', 'call_time', 'talent', 'props_wardrobe', 'client_availability', 'editor_priorities', 'edit_deadline', 'editor_id', 'crew_ids', 'acknowledgements', 'brief_shared_at', 'brief_shared_by', 'aligned_at', 'client_confirmed_at', 'go_at', 'go_by', 'reminder_sent_at', 'footage_handed_at', 'footage_handed_by', 'late_nudged_at', 'go_override_reason', 'go_override_by', 'late_share_nudged_at'],
   board_comments: ['author_id', 'resolved_at'],
   board_items: ['colour', 'text', 'url', 'label', 'child_board_id', 'column_title', 'parent_item_id', 'created_by'],
   boards: ['parent_board_id', 'item_id', 'created_by'],
@@ -1383,7 +1387,7 @@ export const NULLABLE_COLUMNS = {
   claim_locks: [],
   client_agreements: ['notes', 'updated_by', 'start_date'],
   client_brand: ['scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at'],
-  client_contacts: [],
+  client_contacts: ['share_token'],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],

@@ -8,7 +8,7 @@ import CardSaid from './CardSaid'
 import type { Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, Client, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
+import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
@@ -79,6 +79,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const { rows: comments } = useTable<ItemComment>('item_comments', { by: byItem })
   const byClient = useMemo(() => ({ client_id: item?.client_id ?? '' }), [item?.client_id])
   const { rows: clientLinks } = useTable<TeamUserClient>('team_user_clients', { by: byClient })
+  // whom the work is for — one of the client's people, or the business (15 Sep 2026)
+  const { rows: clientPeople } = useTable<ClientContact>('client_contacts', { by: byClient })
   const managers = useMemo(() => {
     const ids = new Set(clientLinks.map(l => l.team_user_id))
     return team.filter(u => ids.has(u.id) && u.role === 'account_manager' && u.active_status !== false)
@@ -254,7 +256,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       {/* ── the header: what, for whom, where it is ── */}
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <p className={H2}>{client?.name ?? ''}{shoot ? ` · From the shoot: ${shoot.title}` : ''}</p>
+          <p className={H2}>{client?.name ?? ''}{(() => { const who = (item as { for_contact_id?: string | null }).for_contact_id; const p = who ? clientPeople.find(c => c.id === who) : null; return p ? ` · for ${p.name}` : '' })()}{shoot ? ` · From the shoot: ${shoot.title}` : ''}</p>
           <h2 className="text-section-title">{item.title}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>

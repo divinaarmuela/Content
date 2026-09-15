@@ -18,6 +18,7 @@ import {
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
 import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
+import { portalToggles } from '../../../../lib/portal-owner-core'
 
 /**
  * Load a shoot the caller may WORK — the shoot page and every button on it
@@ -184,6 +185,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('planned_deliverables' in body) patch.planned_deliverables = sanitisePlannedDeliverables(body.planned_deliverables)
     if ('reference_media' in body) patch.reference_media = sanitiseReferenceMedia(body.reference_media)
     if ('owner_id' in body) patch.owner_id = body.owner_id || null
+    // WHO THE SHOOT IS FOR, and what its plan is called on a person's portal (15 Sep 2026)
+    if ('for_contact_id' in body) {
+      const who = typeof body.for_contact_id === 'string' && body.for_contact_id.trim() ? body.for_contact_id.trim() : null
+      if (who) {
+        const person = await table<{ id: string; client_id: string }>('client_contacts').get(who).catch(() => null)
+        if (!person || person.client_id !== batch.client_id) {
+          return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })
+        }
+      }
+      patch.for_contact_id = who
+    }
+    if ('portal_show_business' in body || 'portal_show_person' in body) {
+      const cur = batch as { portal_show_business?: boolean | null; portal_show_person?: boolean | null }
+      Object.assign(patch, portalToggles(
+        'portal_show_business' in body ? body.portal_show_business !== false : cur.portal_show_business !== false,
+        'portal_show_person' in body ? body.portal_show_person !== false : cur.portal_show_person !== false,
+      ))
+    }
     // ── the Shoot Brief SOP's nine parts ──
     for (const [field, max] of [
       ['objective', 2000], ['script', 8000], ['call_time', 60], ['talent', 1000],

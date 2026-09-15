@@ -5,6 +5,7 @@ import { sanitisePlannedDeliverables, sanitiseShotList } from '../../../lib/batc
 import { sanitiseScripts } from '../../../lib/script-core'
 import { renderBriefPdf } from '../../../lib/brief-pdf'
 import { shootStatusLabel } from '../../../lib/portal-words'
+import { clientByPortalToken } from '../../../lib/portal-owner'
 
 
 
@@ -21,9 +22,7 @@ export async function GET(req: Request) {
     if (!/^[0-9a-f-]{36}$/i.test(token) || !id) {
       return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     }
-    const client = (await table<Client>('clients').list({
-      where: c => c.share_token === token, limit: 1,
-    }))[0]
+    const client = await clientByPortalToken(token)
     if (!client) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
 
     const found = await table<Batch>('batches').get(id)

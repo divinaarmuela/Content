@@ -95,8 +95,18 @@ export async function POST(req: Request) {
     }
     // the helper's untyped insert takes a partial row (created_at/updated_at
     // are stamped for us); the result is a full batch row
+    // WHO THE SHOOT IS FOR (15 Sep 2026): the business, or one of the
+    // client's people — checked to be on this client
+    const forContact = typeof body.for_contact_id === 'string' && body.for_contact_id.trim() ? body.for_contact_id.trim() : null
+    if (forContact) {
+      const person = await table<{ id: string; client_id: string }>('client_contacts').get(forContact).catch(() => null)
+      if (!person || person.client_id !== body.client_id) {
+        return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })
+      }
+    }
     const data = await table('batches').insert({
         client_id: body.client_id,
+        for_contact_id: forContact,
         title: String(body.title).slice(0, 120),
         description: body.description ? String(body.description).slice(0, 2000) : null,
         concept: body.concept ? String(body.concept).slice(0, 8000) : null,

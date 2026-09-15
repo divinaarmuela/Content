@@ -20,6 +20,7 @@ import { toastOpen } from '../toastLink'
 import HelpHint from '../HelpHint'
 import { STAGE_STRIP } from '../../lib/shoot-sop-core'
 import type { TeamMember } from './workHooks'
+import ShootFor from './ShootFor'
 
 export type ClientRow = { id: string; name: string }
 export type Batch = {
@@ -43,7 +44,7 @@ const ROLE_WORD: Record<string, string> = {
 // ordinary cards pointed at it.
 const BLANK = {
   client_id: '', batch_id: '', title: '', priority: 'normal', due_date: '',
-  owner_id: '', brief: '', brief_url: '',
+  owner_id: '', brief: '', brief_url: '', for_contact_id: '',
 }
 
 /**
@@ -151,6 +152,7 @@ export default function NewShootPlanDialog({
           description: draft.brief.trim() || null,
           shoot_date: draft.due_date || null,
           ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
+          ...(draft.for_contact_id ? { for_contact_id: draft.for_contact_id } : {}),
         }),
       })
       const created = await res.json().catch(() => null)
@@ -233,6 +235,14 @@ export default function NewShootPlanDialog({
             )
           })()}
           {draft.client_id && <div className="sm:col-span-2"><BrandCard clientId={draft.client_id} /></div>}
+          {/* WHO THE SHOOT IS FOR (the owner, 15 Sep 2026): the business, or one
+              of the client's people — it lands on their own portal */}
+          {draft.client_id && (
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label>Who this shoot is for</Label>
+              <ShootFor clientId={draft.client_id} value={draft.for_contact_id} onChange={v => setDraft(d => ({ ...d, for_contact_id: v }))} />
+            </div>
+          )}
           <div className="grid gap-1.5 sm:col-span-2">
             <Label>Title *</Label>
             <Input value={draft.title} placeholder="e.g. October clinic day" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />

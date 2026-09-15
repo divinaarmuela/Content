@@ -14,6 +14,7 @@ import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
+import { portalOwnerByToken } from './portal-owner'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -50,10 +51,9 @@ export type PortalShootDetail = {
 }
 
 export async function resolvePortalClient(rawToken: string) {
-  const token = decodeURIComponent(rawToken).split('--').pop() ?? rawToken
-  if (!/^[0-9a-f-]{36}$/i.test(token)) return null
-  const row = (await table<Client>('clients').list({ where: r => r.share_token === token, limit: 1 }))[0]
-  return row ? { id: row.id, name: row.name, token } : null
+  // the client's token, or one of their people's (15 Sep 2026)
+  const owner = await portalOwnerByToken(rawToken)
+  return owner ? { id: owner.client.id, name: owner.client.name, token: owner.token } : null
 }
 
 type AuthorRow = { name: string | null; role: string | null } | null
