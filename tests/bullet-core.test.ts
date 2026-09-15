@@ -76,8 +76,12 @@ describe('where the points are drawn (source pins)', () => {
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
   it('the shoot page writes the script as bullets; the card, the plan text and the PDF draw them', () => {
     const sop = src('app/dashboard/production/shoots/[id]/ShootSop.tsx')
-    expect(sop).toContain("<BulletArea value={batch.script} placeholder=\"The script or the talking points, one point per line\"")
+    // the one-box script is gone from the page (15 Sep 2026: "remove the script
+    // and talking points"); the scripts editor is the row. An older plan's
+    // one-box words still print as bullets on the card, the plan and the PDF.
+    expect(sop).not.toContain('<BulletArea value={batch.script}')
     expect(sop).not.toContain("area('script'")
+    expect(sop).toContain("<ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} />")
     expect(src('app/lib/editor-sop-core.ts')).toContain("{ key: 'script', label: 'Script or talking points', value: bulletText(shoot?.script) }")
     expect(src('app/lib/shoot-sop-core.ts')).toContain('script: [bulletText(b.script), scriptsText(sanitiseScripts(b.scripts))].filter(Boolean).join(\'\\n\\n\')')
     expect(src('app/lib/brief-pdf.ts')).toContain("push('SCRIPT OR TALKING POINTS', bulletText(d.script) ?? '')")

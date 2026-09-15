@@ -1,6 +1,5 @@
 'use client'
 
-import BulletArea from './BulletArea'
 import ShootFor from '../../ShootFor'
 import ScriptsEditor from './ScriptsEditor'
 
@@ -255,15 +254,11 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
         {row('script', (
           <div className="flex flex-col gap-3">
-            {/* BULLET POINTS (the owner, 15 Sep 2026: "make the script and talking
-                points bullet points — currently the box is just a box") */}
-            <BulletArea value={batch.script} placeholder="The script or the talking points, one point per line" rows={4}
-              onSave={v => void onPatch('script', v || null)} />
             {/* THE SCRIPTS, ONE PER VIDEO (the owner, 15 Sep 2026: "there will be
                 multiple scripts per brief — a script name, the body, then add
-                another"): each prints as its own section on the PDF and on
-                the editor's card */}
-            <p className="text-[12px] font-semibold">Scripts</p>
+                another"; later that day: "remove the script and talking points"
+                box): each prints as its own section on the PDF and on the
+                editor's card. A plan's older one-box script still prints. */}
             <ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} />
           </div>
         ))}
