@@ -566,12 +566,20 @@ function CanvasCardInner({
     return (
       <div className={`rounded-inner border p-3 shadow-sm ${palette} ${BOX}`} style={boxStyle(card)}>
         {editing ? (
+          // THE NOTE KEEPS ITS SIZE WHILE IT IS EDITED (the owner, 15 Sep 2026:
+          // "when I click a note it shrinks the card when it's in focus"): the
+          // editor grows to its own words, so a note that wrapped to eight
+          // lines is still eight lines the moment it is focused — never a
+          // fixed three rows. A note with a height of its own fills that
+          // height, as it did when shown.
           <textarea
             autoFocus
             defaultValue={card.text ?? ''}
-            rows={Math.max(3, (card.text ?? '').split('\n').length)}
+            rows={1}
+            ref={el => { if (el && !card.h) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
+            onInput={e => { if (card.h) return; const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
             style={{ fontSize: noteFont, lineHeight: noteLine }}
-            className={`min-h-0 w-full flex-1 resize-none bg-transparent outline-none placeholder:text-muted-foreground ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
+            className={`min-h-0 w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground ${card.h ? 'flex-1' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {

@@ -13,8 +13,11 @@
  */
 export const BULLET = '•'
 
-/** A leading bullet, dash, asterisk or "1." / "1)" numbering, with its space. */
-const MARKER = /^\s*(?:[•·\-–—*]|\d{1,2}[.)])\s+/
+/** A leading bullet, dash, asterisk or "1." / "1)" numbering, with the space
+ *  after it — or with nothing after it, which is a bullet whose words have
+ *  just been deleted (the owner, 15 Sep 2026: "when I delete a line the
+ *  bullet does not get deleted too"). */
+const MARKER = /^\s*(?:[•·\-–—*]|\d{1,2}[.)])(?:\s+|$)/
 
 /** The points in the text: one per line, trimmed, markers stripped, blanks dropped. */
 export function bulletLines(text: string | null | undefined): string[] {
@@ -52,4 +55,35 @@ export function bulletBoxValue(typed: string | null | undefined): string {
       return `${BULLET} ${bare}`
     })
     .join('\n')
+}
+
+/**
+ * BACKSPACE ON A BULLET DELETES THE POINT (the owner, 15 Sep 2026: "when I
+ * delete a line the bullet does not get deleted too — this is bad user
+ * experience"). The box redraws bullets on every keystroke, so Backspace
+ * could empty a point's words but never take the bullet itself away. With
+ * the caret at or inside a line's bullet ("• |words"), Backspace now removes
+ * the line: its words join the end of the line above, the way any editor
+ * merges lines. On the first line there is nothing above — an empty first
+ * point goes, a first point with words stays.
+ *
+ * Pure: hands back the new text and where the caret goes, or null when the
+ * keystroke should behave normally.
+ */
+export function backspaceAtBullet(text: string, caret: number): { text: string; caret: number } | null {
+  const lineStart = text.lastIndexOf('\n', caret - 1) + 1
+  const line = text.slice(lineStart)
+  const marker = MARKER.exec(line)?.[0] ?? ''
+  // only when the caret sits at, or inside, the bullet — never in the words
+  if (!marker || caret - lineStart > marker.length) return null
+  const lineEnd = text.indexOf('\n', lineStart)
+  const end = lineEnd === -1 ? text.length : lineEnd
+  const words = text.slice(lineStart + marker.length, end)
+  const rest = text.slice(end)                                 // "\n…" or ""
+  if (lineStart === 0) {
+    if (words.trim() !== '') return null                        // the first point keeps its words
+    return { text: rest.replace(/^\n/, ''), caret: 0 }
+  }
+  const above = text.slice(0, lineStart - 1)                   // without the newline before this line
+  return { text: above + words + rest, caret: above.length }
 }

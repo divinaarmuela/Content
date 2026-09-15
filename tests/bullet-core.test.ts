@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { bulletBoxValue, bulletLines, bulletText, storedBullets } from '../app/lib/bullet-core'
+import { backspaceAtBullet, bulletBoxValue, bulletLines, bulletText, storedBullets } from '../app/lib/bullet-core'
 
 /**
  * BULLET POINTS FROM A BOX OF TEXT (the owner, 15 Sep 2026: "make the script
@@ -46,6 +46,32 @@ describe('bulletBoxValue — what the typing box shows', () => {
   })
 })
 
+describe('backspaceAtBullet — deleting a point (the owner, 15 Sep 2026: "when I delete a line the bullet does not get deleted too")', () => {
+  it('a bullet whose words were deleted is stripped, never doubled', () => {
+    expect(bulletBoxValue('• one\n•')).toBe('• one\n• ')
+    expect(bulletLines('• one\n•')).toEqual(['one'])
+  })
+  it('Backspace on an empty point removes the line and lands on the end of the line above', () => {
+    const t = '• one\n• '
+    expect(backspaceAtBullet(t, t.length)).toEqual({ text: '• one', caret: 5 })
+  })
+  it('Backspace at a point’s bullet joins its words onto the line above', () => {
+    const t = '• one\n• two\n• three'
+    // caret right after "• " on the second line
+    expect(backspaceAtBullet(t, 8)).toEqual({ text: '• onetwo\n• three', caret: 5 })
+    // caret ON the bullet itself
+    expect(backspaceAtBullet(t, 6)).toEqual({ text: '• onetwo\n• three', caret: 5 })
+  })
+  it('in the words, Backspace is just Backspace', () => {
+    expect(backspaceAtBullet('• one\n• two', 9)).toBeNull()
+  })
+  it('the first point: empty goes, words stay', () => {
+    expect(backspaceAtBullet('• \n• two', 2)).toEqual({ text: '• two', caret: 0 })
+    expect(backspaceAtBullet('• one\n• two', 2)).toBeNull()
+    expect(backspaceAtBullet('• ', 2)).toEqual({ text: '', caret: 0 })
+  })
+})
+
 describe('where the points are drawn (source pins)', () => {
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
   it('the shoot page writes the script as bullets; the card, the plan text and the PDF draw them', () => {
@@ -58,7 +84,11 @@ describe('where the points are drawn (source pins)', () => {
   })
   it('the box: Enter starts the next point, blur saves the plain lines', () => {
     const box = src('app/dashboard/production/shoots/[id]/BulletArea.tsx')
-    expect(box).toContain("if (e.key !== 'Enter' || e.shiftKey) return")
+    expect(box).toContain("if (e.key === 'Enter' && !e.shiftKey) {")
+    // Backspace on a bullet deletes the point; the caret follows the words
+    expect(box).toContain("if (e.key === 'Backspace' && el.selectionStart === el.selectionEnd) {")
+    expect(box).toContain('const gone = backspaceAtBullet(text, el.selectionStart ?? 0)')
+    expect(box).toContain('if (next !== raw) place(el, Math.max(0, Math.min(next.length, at + (next.length - raw.length))))')
     expect(box).toContain('const stored = storedBullets(text)')
     expect(box).toContain('if (stored !== storedBullets(value)) onSave(stored)')
   })
