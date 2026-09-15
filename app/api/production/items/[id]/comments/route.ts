@@ -65,6 +65,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const ts = Number(body.video_timestamp_sec)
     const videoTs = Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
+    // WHICH CLIP (15 Sep 2026): a card with six clips keeps six conversations
+    const videoFile = typeof body.video_file_id === 'string' && /^[A-Za-z0-9_-]{10,}$/.test(body.video_file_id) ? body.video_file_id : null
+    const videoName = videoFile && typeof body.video_file_name === 'string' ? body.video_file_name.trim().slice(0, 200) || null : null
 
     const comment = await table('item_comments').insert({
       item_id: id,
@@ -73,6 +76,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       visibility,
       body: text,
       video_timestamp_sec: videoTs,
+      video_file_id: videoFile,
+      video_file_name: videoName,
       assigned_to: assignedTo,
       // an unstamped boolean reads back absent, and every "still open" filter
       // — the badge, the Waiting-on-you card — tests `resolved === false`

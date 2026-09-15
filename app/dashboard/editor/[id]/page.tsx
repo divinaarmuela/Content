@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Link as LinkIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow } from '@/lib/db-client'
 import type { Batch, Client, ContentItem } from '@/lib/db-types'
@@ -16,6 +17,7 @@ import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
 import { workFrom } from '../../../lib/editor-sop-core'
+import { reviewPath } from '../../../lib/video-review-core'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -38,12 +40,15 @@ const folderUrl = (folderId: string) => `https://drive.google.com/drive/folders/
 
 /** The manager's or checker's answers on the card, above the brief: the
  *  board's own buttons and dialogs, so a press here is a press on the board. */
-function ManagerActions({ item, viewer }: { item: ContentItem; viewer: BoardViewer }) {
+function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null }) {
   const card = item as unknown as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
   const { primary, more } = cardActions(card, viewer)
   const busy = busyId === card.id
-  if (!primary && more.length === 0) return null
+  // WITH THE CLIENT: the portal link, to copy and send (the owner, 15 Sep 2026:
+  // "there is one card with the client but no client portal button on the card")
+  const withClient = String(item.status) === 'client_review' && !!portalLink
+  if (!primary && more.length === 0 && !withClient) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3" aria-label="Your answers on this card">
       {primary && (
@@ -58,6 +63,13 @@ function ManagerActions({ item, viewer }: { item: ContentItem; viewer: BoardView
           {a.label}
         </Button>
       ))}
+      {withClient && (
+        <Button variant="outline" disabled={busy}
+          onClick={() => { void navigator.clipboard.writeText(portalLink as string).then(() => toast.success('Portal link copied — send it to the client')).catch(() => toast.error('Could not copy the link')) }}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
+          <LinkIcon className="mr-1.5 h-4 w-4" aria-hidden /> Copy the client’s portal link
+        </Button>
+      )}
       {dialogs}
     </div>
   )
@@ -118,7 +130,9 @@ export default function EditorCardPage() {
             of everything behind it, wide, each one playable here */}
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
           <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
-            fallbackFolder={from.footage} wideFiles />
+            fallbackFolder={from.footage} wideFiles
+            // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)
+            reviewHref={t => reviewPath(id, t.id, t.name)} />
         </section>
 
         {/* ── the card itself, beside the files ── */}
@@ -128,7 +142,8 @@ export default function EditorCardPage() {
             : (
               <>
                 {!maker && me && me.role !== 'client' && (
-                  <ManagerActions item={item} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }} />
+                  <ManagerActions item={item} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
+                    portalLink={client?.share_token ? `${window.location.origin}/portal/${client.share_token}?card=${encodeURIComponent(id)}` : null} />
                 )}
                 <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
               </>

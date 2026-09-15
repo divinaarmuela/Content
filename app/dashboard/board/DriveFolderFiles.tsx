@@ -15,8 +15,11 @@ import {
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref }: {
   url: string | null | undefined
+  /** THE CLIP'S OWN PAGE (15 Sep 2026): where a press on a clip goes — the
+   *  review page with the comments — instead of Drive's preview on the card */
+  reviewHref?: (tile: FolderTile) => string
   /** the card's page: more tiles across, and a bigger player */
   wide?: boolean
 }) {
@@ -89,7 +92,7 @@ export default function DriveFolderFiles({ url, wide = false }: {
                 const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
                 return (
                   <li key={t.id} className={`flex flex-col gap-1 rounded-inner border p-2 ${open ? 'border-foreground' : 'border-border'}`}>
-                    <button type="button" onClick={() => setShowing(open ? null : t)} aria-pressed={open}
+                    <button type="button" onClick={() => { if (reviewHref && t.kind === 'video') { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
                       aria-label={`${tileActionWords(t.kind)} ${t.name}`}
                       className="relative block aspect-square w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-90">
                       {t.thumb

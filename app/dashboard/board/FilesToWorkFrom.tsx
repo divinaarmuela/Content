@@ -31,7 +31,7 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
@@ -46,6 +46,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   fallbackFolder?: string | null
   /** the card's page: more tiles across */
   wideFiles?: boolean
+  /** the card's page: a press on a clip opens its review page (15 Sep 2026) */
+  reviewHref?: (tile: { id: string; name: string }) => string
   /** the person holding the card — they may change the folder link too (the
    *  owner, 15 Sep 2026: "allow the editor, or anyone assigned to that card,
    *  or a super admin or AM to replace the folder to work from") */
@@ -156,7 +158,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           <span className="sr-only">, opens in a new tab</span>
         </a>
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>

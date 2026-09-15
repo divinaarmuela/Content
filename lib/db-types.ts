@@ -850,6 +850,8 @@ export interface ItemComment {
   video_timestamp_sec: number | null
   assigned_to: string | null
   resolved: boolean
+  video_file_id: string | null
+  video_file_name: string | null
 }
 
 export interface JournalPost {
@@ -1328,7 +1330,7 @@ export const TABLE_COLUMNS = {
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
-  item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved'],
+  item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline'],
   monthly_commitments: ['video_quota', 'id', 'created_at', 'client_id', 'month', 'year', 'reel_quota', 'carousel_quota', 'story_quota', 'static_quota', 'other_quota', 'notes'],
@@ -1408,7 +1410,7 @@ export const NULLABLE_COLUMNS = {
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],
   intake_templates: ['updated_by'],
-  item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to'],
+  item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline'],
   monthly_commitments: ['video_quota', 'notes'],

@@ -26,7 +26,9 @@ describe('the card’s page', () => {
   const page = src('app/dashboard/editor/[id]/page.tsx')
   it('draws the folder’s files wide, and the card beside them', () => {
     // one block, said once (15 Sep 2026): the files box carries the heading, the folder and the wide tiles
-    expect(page).toContain('fallbackFolder={from.footage} wideFiles />')
+    expect(page).toContain('fallbackFolder={from.footage} wideFiles')
+    // a press on a clip opens its review page (15 Sep 2026)
+    expect(page).toContain('reviewHref={t => reviewPath(id, t.id, t.name)} />')
     expect(page).not.toContain('Footage folder: ')
     expect(page).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(360px,560px)]')
     expect(page).toContain('<PageTitle')
