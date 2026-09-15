@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Copy, Link2, Mail } from 'lucide-react'
+import { Check, Copy, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { publicUrl } from '@/app/lib/public-url'
 import { CONNECTABLE, connectLinkPath } from '@/app/lib/connect-link-core'
@@ -35,7 +35,6 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
     CONNECTABLE.filter(p => !connected.includes(p)).slice(0, 3))
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(false)
-  const [mailing, setMailing] = useState(false)
   /** WHO THE LINK IS FOR (the owner, 15 Sep 2026: "say it's for their
    *  business — we send them the link; the other option is the client's
    *  personal one"): 'company', or one of the client's contacts */
@@ -44,7 +43,6 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
    *  we can simply add a name and share the link") */
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newEmail, setNewEmail] = useState('')
   const [savingPerson, setSavingPerson] = useState(false)
   const addPerson = async () => {
     const name = newName.trim()
@@ -53,13 +51,13 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
     try {
       const res = await fetch(`/api/website/clients/${clientId}/contacts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email: newEmail.trim() }),
+        body: JSON.stringify({ name }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not add them'))
       const made = (json?.contact ?? json?.data ?? json) as { id?: string }
       if (made?.id) setLinkFor(made.id)
-      setAdding(false); setNewName(''); setNewEmail('')
+      setAdding(false); setNewName('')
       toast.success(`${name} added — the link is now theirs`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not add them')
@@ -70,27 +68,6 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
   const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
 
   const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor))), [token, picked, linkFor])
-
-  /** the same link, emailed by us — to their portal logins and the contact
-   *  email on their record — for the manager who would rather not paste */
-  const email = async () => {
-    setMailing(true)
-    try {
-      const res = await fetch('/api/social/connect/invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, networks: picked.join(','), for: contactIdOf(linkFor) }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(String(json?.error ?? 'Could not send it'))
-      const who = (json.recipients as { email: string }[] | undefined)?.map(r => r.email).join(', ')
-      toast.success(json.sent > 0 ? `Sent to ${who}` : 'Nothing was sent — check the client’s email settings')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not send it')
-    } finally {
-      setMailing(false)
-    }
-  }
 
   const toggle = (p: Platform) =>
     setPicked(cur => cur.includes(p) ? cur.filter(x => x !== p) : CONNECTABLE.filter(x => x === p || cur.includes(x)))
@@ -126,14 +103,12 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
               className="min-h-10 w-full max-w-[420px] rounded-full border border-border bg-background px-3 text-[13px]">
               {ownerChoices(clientName, contacts).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. A person’s link is emailed to them alone.</span>
+            <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. Copy the link and send it yourself — nothing is emailed from here.</span>
             {!adding ? (
               <button type="button" onClick={() => setAdding(true)} className="w-fit text-[12px] font-semibold underline underline-offset-4">+ Add a person</button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Their name" aria-label="The person’s name"
-                  className="min-h-10 rounded-full border border-border bg-background px-3 text-[13px]" />
-                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Their email (for the link)" aria-label="The person’s email" type="email"
                   className="min-h-10 rounded-full border border-border bg-background px-3 text-[13px]" />
                 <button type="button" onClick={addPerson} disabled={savingPerson}
                   className="inline-flex min-h-10 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50">{savingPerson ? 'Adding…' : 'Add'}</button>
@@ -162,10 +137,6 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
             <button type="button" onClick={copy} disabled={picked.length === 0}
               className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50">
               {copied ? <><Check className="h-4 w-4" aria-hidden /> Copied</> : <><Copy className="h-4 w-4" aria-hidden /> Copy link</>}
-            </button>
-            <button type="button" onClick={email} disabled={picked.length === 0 || mailing}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold disabled:opacity-50">
-              <Mail className="h-4 w-4" aria-hidden /> {mailing ? 'Sending…' : 'Email it to the client'}
             </button>
           </div>
           {picked.length === 0 && (
