@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { managesClients } from '../../../../../lib/identity-core'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { ItemComment, TeamUser, TeamUserClient } from '@/lib/db-types'
@@ -147,7 +148,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         : []
       const managerIds = (await attachOne(managerLinks, 'team_user_id', 'team_users', ['id', 'role', 'active_status']))
         .map(r => r.team_users as unknown as { id: string; role: string; active_status: boolean } | null)
-        .filter((u): u is { id: string; role: string; active_status: boolean } => !!u && u.active_status && u.role === 'account_manager')
+        .filter((u): u is { id: string; role: string; active_status: boolean } => !!u && u.active_status && managesClients(u.role))
         .map(u => u.id)
       // …and the super admin who created the card (13 Sep 2026: "the AM gets
       // the notification and editor/scheduler gets notification")

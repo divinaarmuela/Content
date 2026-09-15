@@ -1,7 +1,7 @@
 'use client'
 
 import { deliverOnly } from '@/app/lib/deliver-only-core'
-import { personLabel } from '@/app/lib/identity-core'
+import { managesClients, personLabel } from '@/app/lib/identity-core'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
@@ -197,7 +197,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   }
   const managerNames = clientLinks
     .map(l => team.find(u => u.id === l.team_user_id))
-    .filter((u): u is TeamUser => !!u && u.role === 'account_manager' && u.active_status !== false)
+    .filter((u): u is TeamUser => !!u && managesClients(u.role) && u.active_status !== false)
     .map(u => u.name || u.email)
   const roleOf = (uid: string | null | undefined) => team.find(u => u.id === uid)?.role ?? null
   /**

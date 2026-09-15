@@ -1,4 +1,4 @@
-import { isQualityReviewer, roleLabel } from './identity-core'
+import { isQualityReviewer, managesClients, roleLabel } from './identity-core'
 import { tagNameOf, type Mentionable } from './mention-core'
 
 /**
@@ -51,7 +51,7 @@ export function cardPeople(
   }
 
   // the client's account managers first — they own the relationship
-  for (const u of active) if (u.role === 'account_manager' && onClient.has(u.id)) take(u, `${roleLabel(u.role)} · this client`)
+  for (const u of active) if (managesClients(u.role) && onClient.has(u.id)) take(u, `${roleLabel(u.role)} · this client`)
   // the quality checkers: the role, or the flag on another role
   for (const u of active) if (isQualityReviewer(u)) take(u, u.role === 'quality_checker' ? roleLabel(u.role) : `${roleLabel(u.role)} · quality checker`)
   // the super admins see everything

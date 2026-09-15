@@ -120,3 +120,16 @@ export function personLabel(name: string | null | undefined, email?: string | nu
   const local = pick.split('@')[0].replace(/[._-]+/g, ' ').trim()
   return local ? local.charAt(0).toUpperCase() + local.slice(1) : pick
 }
+
+/**
+ * A CLIENT'S MANAGER IS WHOEVER IS ASSIGNED ON THE CLIENT (the owner, 15 Sep
+ * 2026: "their role is super admin but they can be tagged as AM, because I
+ * have added them as AM in the client" — a card read "Account manager: none
+ * on this client yet" under a super admin who was the AM). Being on the
+ * client's team as an account manager OR a super admin is what counts; the
+ * emails already read it that way (workflow.resolveAudience), and now so
+ * do the card face, the drawer, the post card, comment notices and @-mentions.
+ */
+export function managesClients(role: string | null | undefined): boolean {
+  return role === 'account_manager' || role === 'super_admin'
+}

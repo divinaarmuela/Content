@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, X } from 'lucide-react'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
-import type { Role } from '../../lib/identity-core'
+import { managesClients, type Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
@@ -83,7 +83,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const { rows: clientPeople } = useTable<ClientContact>('client_contacts', { by: byClient })
   const managers = useMemo(() => {
     const ids = new Set(clientLinks.map(l => l.team_user_id))
-    return team.filter(u => ids.has(u.id) && u.role === 'account_manager' && u.active_status !== false)
+    return team.filter(u => ids.has(u.id) && managesClients(u.role) && u.active_status !== false)
   }, [clientLinks, team])
   const thread = useMemo(() => {
     if (!me) return [] as ItemComment[]

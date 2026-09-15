@@ -1,6 +1,6 @@
 'use client'
 
-import { personLabel } from '../../lib/identity-core'
+import { managesClients, personLabel } from '../../lib/identity-core'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -104,7 +104,7 @@ export default function SchedulerPage() {
     const byClient = new Map<string, string[]>()
     const role = new Map(live.tables.team.rows.map(u => [u.id, u.role]))
     for (const a of live.tables.assignments.rows) {
-      if (role.get(a.team_user_id) !== 'account_manager') continue
+      if (!managesClients(role.get(a.team_user_id))) continue   // a super admin on the client is its AM too (15 Sep 2026)
       const name = names.get(a.team_user_id)
       if (name) byClient.set(a.client_id, [...(byClient.get(a.client_id) ?? []), name])
     }
