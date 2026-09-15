@@ -19,15 +19,15 @@ const full: BriefPdfData = {
 describe('the plan PDF sections', () => {
   it('the team copy has every part of the plan, the editor brief, the crew and the notes, in the page order', () => {
     expect(briefPdfSections({ ...full, audience: 'team' }).map(s => s.title)).toEqual([
-      'OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'TALENT OR PRESENTER', 'PROPS, WARDROBE AND SETUP', 'CLIENT AVAILABILITY',
+      'OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'TALENT OR PRESENTER', 'PROPS, WARDROBE AND SETUP',
       'EDITOR PRIORITIES AND DEADLINE', 'WHO IS ON THIS SHOOT', 'NOTES FOR THE TEAM',
     ])
     const ed = briefPdfSections(full).find(s => s.title === 'EDITOR PRIORITIES AND DEADLINE')!
     expect(ed.text).toBe('Editor: Ed Itor\nDeadline: 2026-09-25\nHero reel first')
   })
-  it('the client copy stops at client availability', () => {
+  it('the client copy stops at props, wardrobe and setup — client availability is gone (15 Sep 2026)', () => {
     expect(briefPdfSections({ ...full, audience: 'client' }).map(s => s.title)).toEqual([
-      'OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'TALENT OR PRESENTER', 'PROPS, WARDROBE AND SETUP', 'CLIENT AVAILABILITY',
+      'OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'TALENT OR PRESENTER', 'PROPS, WARDROBE AND SETUP',
     ])
   })
   it('an empty part is simply not printed', () => {

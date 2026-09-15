@@ -102,7 +102,7 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
     },
     {
       title: 'Plan the next shoot',
-      body: 'On Shoots, press New shoot plan, fill the nine parts, pick the editor and crew, share the plan seven days before the day, and press Go once everyone has read it.',
+      body: 'On Shoots, press New shoot plan, fill the eight parts, pick the editor and crew, share the plan seven days before the day, and press Go once everyone has read it.',
       href: '/dashboard/production',
       linkLabel: 'Open Shoots',
     },
@@ -143,7 +143,7 @@ const PRODUCTION_FOR_MANAGERS: GettingStartedPanel = {
     },
     {
       title: 'Fill it in, share it seven days out',
-      body: 'Open the shoot: fill the nine parts of the plan, pick the editor and crew, then share it with the team at least seven days before the day. A late plan turns red and Ops is told. The card moves right as each step is done.',
+      body: 'Open the shoot: fill the eight parts of the plan, pick the editor and crew, then share it with the team at least seven days before the day. A late plan turns red and Ops is told. The card moves right as each step is done.',
     },
     {
       title: 'Go, shoot, hand over',

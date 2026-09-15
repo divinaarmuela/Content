@@ -36,13 +36,13 @@ describe('the nine things a brief must contain', () => {
   it('lists them in the SOP’s order and words', () => {
     expect(BRIEF_ITEMS.map(i => i.label)).toEqual([
       'Objective', 'Deliverables', 'Shot list', 'Script or talking points', 'Date, call time and location',
-      'Talent or presenter', 'Props, wardrobe and setup', 'Client availability', 'Editor priorities and deadline',
+      'Talent or presenter', 'Props, wardrobe and setup', 'Editor priorities and deadline',
     ])
   })
   it('counts what is filled and names what is missing, in plain words', () => {
     const list = briefChecklist(complete({ script: '', call_time: null, edit_deadline: null }))
-    expect(list.filled).toBe(6)
-    expect(list.words).toBe('6 of 9 filled')
+    expect(list.filled).toBe(5)
+    expect(list.words).toBe('5 of 8 filled')
     expect(list.missing.map(m => m.key)).toEqual(['script', 'when_where', 'editor'])
     expect(briefChecklist(complete()).words).toBe('Plan complete')
   })
@@ -352,7 +352,7 @@ describe('the strip and the next step', () => {
   it('says what to do next, and who, at every stage', () => {
     const half = complete({ objective: null, script: null })
     expect(nextStepWords(half, TODAY)).toMatch(/^Next: fill in the plan — objective, script or talking points still to go/)
-    expect(nextStepWords(half, TODAY)).toMatch(/Refused until all nine parts are filled/)
+    expect(nextStepWords(half, TODAY)).toMatch(/Refused until all eight parts are filled/)
     expect(nextStepWords(complete(), TODAY)).toBe('Next: share the plan with the team. Everyone on it is emailed and asked to read it.')
     const shared = complete({ brief_shared_at: '2026-09-11T00:00:00Z' })
     expect(nextStepWords(shared, TODAY)).toMatch(/everyone on the shoot presses \u201cI\u2019ve read the plan\u201d — on their Editor card, or the link in their email — waiting on 2 of 2/)

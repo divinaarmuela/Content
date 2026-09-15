@@ -111,7 +111,7 @@ describe('who did what, and when', () => {
       '✓ Shared with the team by Ada, Mon 14 Sept, 9:10 am',
       '· Read by Martin, Mon 14 Sept, 10:00 am · not yet: Yusuf',
       '✓ Aligned with the strategist — ticked by Ada, Mon 14 Sept, 11:00 am',
-      '· Client availability and location — not ticked yet',
+      '· Location — not ticked yet',
       '✓ Shared with the client by Ada, Mon 14 Sept, 12:00 pm',
       '✓ Client approved Tue 15 Sept, 10:00 am',
       '✓ Go by Ada, Tue 15 Sept, 11:00 am',
@@ -136,13 +136,13 @@ describe('the plan as text — what the email carries', () => {
     const text = planAsText(shoot({ script: null }))
     expect(text.map(t => t.label)).toEqual([
       'Objective', 'Deliverables', 'Shot list', 'Script or talking points', 'Date, call time and location',
-      'Talent or presenter', 'Props, wardrobe and setup', 'Client availability', 'Editor priorities and deadline',
+      'Talent or presenter', 'Props, wardrobe and setup', 'Editor priorities and deadline',
     ])
     expect(text[1].value).toBe('5 reels, 1 photo set')
     expect(text[2].value).toBe('1. Drone over the 1st\n2. Interview')
     expect(text[3].value).toBe('Not filled in yet')
     expect(text[4].value).toBe('21 Sept · call time 7:30 am · Royal Melbourne')
-    expect(text[8].value).toBe('Hero reel first · due 25 Sept')
+    expect(text[7].value).toBe('Hero reel first · due 25 Sept')
   })
 })
 

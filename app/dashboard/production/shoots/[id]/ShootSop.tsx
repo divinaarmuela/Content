@@ -1,5 +1,7 @@
 'use client'
 
+import BulletArea from './BulletArea'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { Check, Circle, FileDown, Link as LinkIcon, Plus, X } from 'lucide-react'
@@ -251,7 +253,10 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
         {row('script', (
           <div className="flex flex-col gap-3">
-            {area('script', 'The script or the talking points, finalised and approved', 3)}
+            {/* BULLET POINTS (the owner, 15 Sep 2026: "make the script and talking
+                points bullet points — currently the box is just a box") */}
+            <BulletArea value={batch.script} placeholder="The script or the talking points, one point per line" rows={4}
+              onSave={v => void onPatch('script', v || null)} />
           </div>
         ))}
 
@@ -278,7 +283,6 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
 
         {row('talent', line('talent', 'Who is on camera, confirmed and briefed'))}
         {row('props', area('props_wardrobe', 'What is needed and who is bringing it'))}
-        {row('client_availability', line('client_availability', 'When the client or their team is on the day'))}
         {row('editor', (
           <div className="flex flex-col gap-1.5">
             {area('editor_priorities', 'What to cut first, and what the video is meant to achieve')}
@@ -475,7 +479,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
               <input type="checkbox" className="h-5 w-5 accent-[var(--dbx-blue)]" checked={!!batch.client_confirmed_at} disabled={busy}
                 onChange={e => void onPatch('client_confirmed', e.target.checked)} />
-              <span>Client availability and location confirmed{batch.client_confirmed_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.client_confirmed_by) ?? 'the team'}, {stampWords(batch.client_confirmed_at)}</span>}</span>
+              <span>Location confirmed{batch.client_confirmed_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.client_confirmed_by) ?? 'the team'}, {stampWords(batch.client_confirmed_at)}</span>}</span>
             </label>
           </div>
         )}

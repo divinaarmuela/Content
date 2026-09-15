@@ -18,6 +18,7 @@
  */
 
 import { sanitiseScripts, scriptsFilled, scriptsText } from './script-core'
+import { bulletText } from './bullet-core'
 import { planCards, type PlanCard, shootCard, deliverablesBrief } from './deliverable-group-core'
 import { dayKeyInZone } from './timezone-core'
 
@@ -137,7 +138,7 @@ export function isOnShoot(b: Pick<SopShoot, 'owner_id' | 'editor_id' | 'crew_ids
 
 export type BriefItemKey =
   | 'objective' | 'deliverables' | 'shot_list' | 'script' | 'when_where'
-  | 'talent' | 'props' | 'client_availability' | 'editor'
+  | 'talent' | 'props' | 'editor'
 
 export type BriefItem = { key: BriefItemKey; label: string; hint: string }
 
@@ -150,7 +151,6 @@ export const BRIEF_ITEMS: readonly BriefItem[] = [
   { key: 'when_where', label: 'Date, call time and location', hint: 'Confirmed, with the address' },
   { key: 'talent', label: 'Talent or presenter', hint: 'Who is on camera, and that they know what is expected' },
   { key: 'props', label: 'Props, wardrobe and setup', hint: 'What is needed and who is bringing it' },
-  { key: 'client_availability', label: 'Client availability', hint: 'If the client or their team is on the day' },
   { key: 'editor', label: 'Editor priorities and deadline', hint: 'So the editor knows the goal and the turnaround the moment footage lands' },
 ]
 
@@ -210,7 +210,6 @@ export function briefItemFilled(b: SopShoot, key: BriefItemKey, input: Checklist
     case 'when_where': return text(b.shoot_date).length > 0 && text(b.call_time).length > 0 && text(b.location).length > 0
     case 'talent': return text(b.talent).length > 0
     case 'props': return text(b.props_wardrobe).length > 0
-    case 'client_availability': return text(b.client_availability).length > 0
     case 'editor': return text(b.editor_priorities).length > 0 && text(b.edit_deadline).length > 0
   }
 }
@@ -255,7 +254,7 @@ export function daysUntilShoot(b: Pick<SopShoot, 'shoot_date'>, today: string): 
 export type ShootStage = 'drafting' | 'quality_review' | 'shared' | 'confirmed' | 'reminder_sent' | 'shoot_day' | 'footage_handed'
 
 export const SHOOT_STAGES: readonly { key: ShootStage; label: string; meaning: string; empty: string }[] = [
-  { key: 'drafting', label: 'Draft', meaning: 'The account manager is writing the plan. It leaves here once all nine parts are filled in.', empty: 'Nothing being written.' },
+  { key: 'drafting', label: 'Draft', meaning: 'The account manager is writing the plan. It leaves here once all eight parts are filled in.', empty: 'Nothing being written.' },
   // THE QUALITY REVIEW COLUMN (the owner, 13 Sep 2026: "add a new column so
   // when we set it for quality review then it goes there, like other pages")
   { key: 'quality_review', label: 'Quality review', meaning: 'The plan is with the quality checker. It leaves here when they pass it, or send it back with a note.', empty: 'Nothing waiting on the quality checker.' },
@@ -439,7 +438,7 @@ export function goReady(b: SopShoot, input: GoInput = {}): GoCheck {
   const list = briefChecklist(b, input)
   if (!list.complete) reasons.push(`The plan is not complete — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to fill in`)
   if (!b.aligned_at) reasons.push('Tick “Aligned with the strategist” once the direction is agreed')
-  if (!b.client_confirmed_at) reasons.push('Tick “Client availability and location confirmed”')
+  if (!b.client_confirmed_at) reasons.push('Tick “Location confirmed”')
   if (input.planReview?.required && !planReviewPassed(b)) reasons.push(PLAN_REVIEW_WORDS)
   const ack = ackState(b)
   if (ack.total === 0) reasons.push('Add the people on this shoot — nobody has been asked to read the plan')
@@ -892,8 +891,8 @@ export function stampLines(b: SopShoot, nameOf: NameOf, opts?: { planReview?: bo
     ? { key: 'aligned', text: `Aligned with the strategist — ticked by ${by(nameOf, b.aligned_by)}${withWhen(b.aligned_at)}`, done: true }
     : { key: 'aligned', text: 'Aligned with the strategist — not ticked yet', done: false })
   lines.push(b.client_confirmed_at
-    ? { key: 'client_confirmed', text: `Client availability and location confirmed — ticked by ${by(nameOf, b.client_confirmed_by)}${withWhen(b.client_confirmed_at)}`, done: true }
-    : { key: 'client_confirmed', text: 'Client availability and location — not ticked yet', done: false })
+    ? { key: 'client_confirmed', text: `Location confirmed — ticked by ${by(nameOf, b.client_confirmed_by)}${withWhen(b.client_confirmed_at)}`, done: true }
+    : { key: 'client_confirmed', text: 'Location — not ticked yet', done: false })
   if (b.client_shared_at || b.shared_with_client) {
     lines.push({ key: 'client_shared', text: b.client_shared_at ? `Shared with the client by ${by(nameOf, b.client_shared_by)}${withWhen(b.client_shared_at)}` : 'On the client portal', done: true })
     const answer = b.client_decision ? clientPlanWords(b) : null
@@ -938,11 +937,11 @@ export function planAsText(b: SopShoot): { label: string; value: string }[] {
     objective: text(b.objective),
     deliverables: lines.join(', '),
     shot_list: shots.map((s, i) => `${i + 1}. ${s}`).join('\n'),
-    script: [text(b.script), scriptsText(sanitiseScripts(b.scripts))].filter(Boolean).join('\n\n'),
+    // the points wear their bullets everywhere they are drawn (15 Sep 2026)
+    script: [bulletText(b.script), scriptsText(sanitiseScripts(b.scripts))].filter(Boolean).join('\n\n'),
     when_where: when,
     talent: text(b.talent),
     props: text(b.props_wardrobe),
-    client_availability: text(b.client_availability),
     editor,
   }
   return BRIEF_ITEMS.map(i => ({ label: i.label, value: value[i.key] || 'Not filled in yet' }))
@@ -966,7 +965,7 @@ export function nextStepWords(b: SopShoot, today: string, input: GoInput = {}): 
     case 'drafting': {
       const list = briefChecklist(b, input)
       if (!list.complete) {
-        return `Next: fill in the plan — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to go — then share it with the team. Refused until all nine parts are filled.`
+        return `Next: fill in the plan — ${list.missing.map(m => m.label.toLowerCase()).join(', ')} still to go — then share it with the team. Refused until all eight parts are filled.`
       }
       return 'Next: share the plan with the team. Everyone on it is emailed and asked to read it.'
     }

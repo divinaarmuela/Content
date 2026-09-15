@@ -20,6 +20,7 @@
  */
 
 import { sanitiseScripts, scriptWords } from './script-core'
+import { bulletText } from './bullet-core'
 import { isQualityReviewer } from './identity-core'
 import type { ItemStatus } from './workflow-core'
 import type { BoardColumnKey } from './board-core'
@@ -140,7 +141,7 @@ export function beforeYouStart(s: BriefSources): BriefRow[] {
     { key: 'specs', label: 'Platform specs', value: specs.length ? specs.join('\n') : null },
     { key: 'deadline', label: 'Deadline', value: clean(s.card.due_date)?.slice(0, 10) ?? clean(shoot?.edit_deadline)?.slice(0, 10) ?? null },
     { key: 'shot_list', label: 'Shot list', value: shotListWords(shoot?.shot_list) },
-    { key: 'script', label: 'Script or talking points', value: clean(shoot?.script) },
+    { key: 'script', label: 'Script or talking points', value: bulletText(shoot?.script) },
     ...scriptWords(sanitiseScripts(shoot?.scripts)).map(w => ({ key: `script_${w.n}`, label: w.heading, value: w.lines.join('\n') })),
     { key: 'notes', label: 'Strategist notes', value: notes.length ? notes.join('\n') : null },
     { key: 'previous', label: 'Previous edits', value: 'What went out for this client', href: `/dashboard/editor?client=${encodeURIComponent(s.card.client_id)}&column=posted` },

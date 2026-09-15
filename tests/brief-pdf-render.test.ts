@@ -51,7 +51,6 @@ describe('the plan PDF, as bytes', () => {
       'VIDEO 1 · HOTEL PROJECT · KAREEN · VOICEOVER CONCEPT', 'Every sign in Adelaide', 'Where did you start?', 'Process b-roll', 'Design thinking',
       'TALENT OR PRESENTER', 'Sam presents',
       'PROPS, WARDROBE AND SETUP', 'Club polos',
-      'CLIENT AVAILABILITY', 'GM on site 8 to 10',
       'EDITOR PRIORITIES AND DEADLINE', 'Ed Itor', '2026-09-25', 'Hero reel first',
       'WHO IS ON THIS SHOOT', 'Vik Camera',
       'NOTES FOR THE TEAM', 'Bring the drone',
@@ -59,7 +58,7 @@ describe('the plan PDF, as bytes', () => {
   })
   it('the client’s copy has the plan and none of the team’s parts', async () => {
     const text = pdfText(await renderBriefPdf({ ...data, concept: null, audience: 'client' }))
-    for (const w of ['OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'VIDEO 1 · HOTEL PROJECT', 'Every sign in Adelaide', 'CLIENT AVAILABILITY', 'SHOT LIST']) expect(text, w).toContain(w)
+    for (const w of ['OBJECTIVE', 'SCRIPT OR TALKING POINTS', 'VIDEO 1 · HOTEL PROJECT', 'Every sign in Adelaide', 'SHOT LIST']) expect(text, w).toContain(w)
     for (const w of ['EDITOR PRIORITIES', 'Hero reel first', 'WHO IS ON THIS SHOOT', 'Vik Camera', 'NOTES FOR THE TEAM', 'Bring the drone']) {
       expect(text, w).not.toContain(w)
     }

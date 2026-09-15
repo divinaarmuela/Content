@@ -49,7 +49,8 @@ describe('§2 before you start', () => {
     expect(by.specs).toBe('Instagram: 9:16 · up to 90 s')
     expect(by.deadline).toBe('2026-09-25')
     expect(by.shot_list).toBe('1. Walk in\n2. Product on the counter')
-    expect(by.script).toBe('Hello')
+    // the points wear their bullets on the card (15 Sep 2026)
+    expect(by.script).toBe('• Hello')
     expect(by.notes).toBe('Reel 1 first\nTighten the intro')
   })
   it('§1 says where to work from and where the finals go', () => {
