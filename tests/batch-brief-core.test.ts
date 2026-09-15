@@ -605,8 +605,41 @@ describe('bold words on the board (the owner, 15 Sep 2026)', () => {
   it('the toolbar has a Bold button and the card wears it (source pins)', async () => {
     const { readFileSync } = await import('node:fs')
     const bar = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
-    expect(bar).toContain('aria-label="Bold" title="Bold" aria-pressed={textBoldOf(card)}')
+    expect(bar).toContain('aria-label="Bold" title="Bold — the highlighted words, or the whole card" aria-pressed={textBoldOf(card)}')
     const card = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
     expect((card.match(/textBoldOf\(card\) \? 'font-bold' : ''/g) ?? []).length).toBe(4)
+  })
+})
+
+describe('bold words inside a note (the owner, 15 Sep 2026: "just make it bold when they highlight it")', () => {
+  it('reads **runs** as bold and the rest as plain', async () => {
+    const { boldRuns } = await import('../app/lib/batch-brief-core')
+    expect(boldRuns('**HOOK:** The wealthiest people')).toEqual([{ text: 'HOOK:', bold: true }, { text: ' The wealthiest people', bold: false }])
+    expect(boldRuns('plain')).toEqual([{ text: 'plain', bold: false }])
+    expect(boldRuns('')).toEqual([])
+    expect(boldRuns('a **b** c **d**')).toEqual([{ text: 'a ', bold: false }, { text: 'b', bold: true }, { text: ' c ', bold: false }, { text: 'd', bold: true }])
+  })
+  it('bolds the highlight, keeps edge spaces outside the marks, and un-bolds a second press', async () => {
+    const { toggleBoldSelection } = await import('../app/lib/batch-brief-core')
+    const t = 'HOOK: The wealthiest'
+    const on = toggleBoldSelection(t, 0, 5)
+    expect(on).toEqual({ text: '**HOOK:** The wealthiest', start: 0, end: 9 })
+    expect(toggleBoldSelection(on.text, 2, 7)).toEqual({ text: t, start: 0, end: 5 })
+    expect(toggleBoldSelection(on.text, 0, 9)).toEqual({ text: t, start: 0, end: 5 })
+    expect(toggleBoldSelection('say hello there', 3, 10)).toEqual({ text: 'say **hello** there', start: 4, end: 13 })
+    expect(toggleBoldSelection('x', 1, 1)).toEqual({ text: 'x', start: 1, end: 1 })
+  })
+  it('the note draws the runs, Cmd/Ctrl+B works in the box, and the toolbar bolds a highlight first (source pins)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const card = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect(card).toContain('{card.text ? <BoldWords text={card.text} /> : ')
+    expect(card).toContain('if (boldHotkey(e)) return')
+    const bar = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(bar).toContain('if ((el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) && (el.selectionStart ?? 0) !== (el.selectionEnd ?? 0)) {')
+    // a task and a heading draw the runs and take the hotkey too
+    expect(card).toContain('<BoldWords text={t.text} />')
+    expect(card).toContain('{card.text ? <BoldWords text={card.text} /> : (onUpdate ?')
+    expect((card.match(/if \(boldHotkey\(e\)\) return/g) ?? []).length).toBe(3)
+    expect(bar).toContain('onMouseDown={e => e.preventDefault()}')
   })
 })

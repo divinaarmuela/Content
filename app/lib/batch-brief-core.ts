@@ -698,3 +698,52 @@ export function shootDeletion(
       : `Its ${n} pieces are kept and stay on the board as their own cards — only the shoot goes.`,
   }
 }
+
+/**
+ * BOLD WORDS INSIDE A NOTE (the owner, 15 Sep 2026, a photo of a script on a
+ * note with "HOOK:" highlighted: "this is the part where they wanted to just
+ * make it bold — when they highlight it"). A run of words between ** and **
+ * is bold; everything else is plain. The marks live in the note's text, so
+ * the PDF, the portal and an old browser still read the words.
+ */
+export type BoldRun = { text: string; bold: boolean }
+
+export function boldRuns(text: string | null | undefined): BoldRun[] {
+  const s = String(text ?? '')
+  const out: BoldRun[] = []
+  const re = /\*\*([^*\n][^*]*?)\*\*/g
+  let at = 0
+  for (const m of s.matchAll(re)) {
+    const i = m.index ?? 0
+    if (i > at) out.push({ text: s.slice(at, i), bold: false })
+    out.push({ text: m[1], bold: true })
+    at = i + m[0].length
+  }
+  if (at < s.length) out.push({ text: s.slice(at), bold: false })
+  return out
+}
+
+/**
+ * Bold the highlighted words, or un-bold them when they already are. Hands
+ * back the new text and where the highlight lands, so the caret stays on
+ * the same words. Whitespace at the edges of the highlight is left outside
+ * the marks, so "**word **" never happens.
+ */
+export function toggleBoldSelection(text: string, start: number, end: number): { text: string; start: number; end: number } {
+  const [a, b] = start <= end ? [start, end] : [end, start]
+  if (a === b) return { text, start: a, end: b }
+  // already wrapped: **word** around the highlight, or the highlight includes the marks
+  if (text.slice(a - 2, a) === '**' && text.slice(b, b + 2) === '**') {
+    return { text: text.slice(0, a - 2) + text.slice(a, b) + text.slice(b + 2), start: a - 2, end: b - 2 }
+  }
+  const picked = text.slice(a, b)
+  if (picked.startsWith('**') && picked.endsWith('**') && picked.length >= 4) {
+    return { text: text.slice(0, a) + picked.slice(2, -2) + text.slice(b), start: a, end: b - 4 }
+  }
+  const lead = picked.length - picked.trimStart().length
+  const trail = picked.length - picked.trimEnd().length
+  const core = picked.slice(lead, picked.length - trail)
+  if (!core) return { text, start: a, end: b }
+  const next = text.slice(0, a + lead) + '**' + core + '**' + text.slice(b - trail)
+  return { text: next, start: a + lead, end: a + lead + core.length + 4 }
+}

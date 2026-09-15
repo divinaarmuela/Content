@@ -21,7 +21,7 @@ import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
-  hasTextStyle, defaultAlignOf, textBoldOf } from '../../../../lib/batch-brief-core'
+  hasTextStyle, defaultAlignOf, textBoldOf, toggleBoldSelection } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -1086,8 +1086,22 @@ export default function BriefCanvas({
               })}
             </div>
             {/* BOLD (the owner, 15 Sep 2026: "add a Bold text feature on the board") */}
-            <button type="button" aria-label="Bold" title="Bold" aria-pressed={textBoldOf(card)}
-              onClick={() => { const next = { ...card, bold: textBoldOf(card) ? undefined : true }; upsertLocal(next); persist([next]) }}
+            <button type="button" aria-label="Bold" title="Bold — the highlighted words, or the whole card" aria-pressed={textBoldOf(card)}
+              // keep the note's box focused, so the highlight is still there on the press
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => {
+                // HIGHLIGHTED WORDS FIRST (15 Sep 2026): with words highlighted in
+                // the note's box, only those go bold; otherwise the whole card
+                const el = document.activeElement
+                if ((el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) && (el.selectionStart ?? 0) !== (el.selectionEnd ?? 0)) {
+                  const r = toggleBoldSelection(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
+                  el.value = r.text
+                  el.setSelectionRange(r.start, r.end)
+                  el.dispatchEvent(new Event('input', { bubbles: true }))
+                  return
+                }
+                const next = { ...card, bold: textBoldOf(card) ? undefined : true }; upsertLocal(next); persist([next])
+              }}
               className={`ml-0.5 flex h-7 w-7 items-center justify-center rounded-md [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
                 textBoldOf(card) ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
               }`}>
