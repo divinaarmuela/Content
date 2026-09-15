@@ -2,6 +2,7 @@
 
 import ShootFor from '../../ShootFor'
 import ScriptsEditor from './ScriptsEditor'
+import TickBox from '../../../ui/TickBox'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -227,9 +228,8 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
             {shots.length === 0 && <p className="text-[13px] text-muted-foreground">No shots yet. Scene by scene, what needs to be captured on the day.</p>}
             {shots.map((shot, i) => (
               <div key={shot.id} className="flex items-center gap-2">
-                <input type="checkbox" checked={shot.done} aria-label={`Shot ${i + 1} captured`}
-                  onChange={e => onShots(shots.map((s, j) => j === i ? { ...s, done: e.target.checked } : s))}
-                  className="h-5 w-5 shrink-0 accent-[var(--dbx-blue)]" />
+                <TickBox checked={shot.done} label={`Shot ${i + 1} captured`}
+                  onChange={on => onShots(shots.map((s, j) => j === i ? { ...s, done: on } : s))} />
                 {/* keyed by the shot's id ONLY — keying on the text remounted
                     the field on every echo and dropped focus mid-word */}
                 <Input key={shot.id} defaultValue={shot.text} aria-label={`Shot ${i + 1}`}
@@ -384,8 +384,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {stage !== 'footage_handed' && (
           <div className="flex flex-col gap-1">
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
-              <input type="checkbox" className="h-5 w-5 accent-[var(--dbx-blue)]" checked={!!batch.aligned_at} disabled={busy}
-                onChange={e => void onPatch('aligned', e.target.checked)} />
+              <TickBox checked={!!batch.aligned_at} disabled={busy} onChange={on => void onPatch('aligned', on)} />
               <span>Aligned with the strategist or creative director{batch.aligned_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.aligned_by) ?? 'the team'}, {stampWords(batch.aligned_at)}</span>}</span>
             </label>
             {/* ASK FOR A REVIEW (13 Sep 2026): whoever wrote the plan asks
@@ -480,8 +479,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
               )
             })()}
             <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
-              <input type="checkbox" className="h-5 w-5 accent-[var(--dbx-blue)]" checked={!!batch.client_confirmed_at} disabled={busy}
-                onChange={e => void onPatch('client_confirmed', e.target.checked)} />
+              <TickBox checked={!!batch.client_confirmed_at} disabled={busy} onChange={on => void onPatch('client_confirmed', on)} />
               <span>Location confirmed{batch.client_confirmed_at && <span className="text-[12px] text-muted-foreground"> · {nameOf(batch.client_confirmed_by) ?? 'the team'}, {stampWords(batch.client_confirmed_at)}</span>}</span>
             </label>
           </div>
@@ -541,8 +539,7 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             and the cards the plan makes are born with it */}
         {(role === 'account_manager' || role === 'super_admin' || role === 'general') && (
           <label className="flex min-h-11 w-fit cursor-pointer items-start gap-2 border-t border-border pt-3 text-[13px]" data-deliver-only>
-            <input type="checkbox" className="mt-1 h-4 w-4 accent-foreground" checked={batch.deliver_only === true} disabled={busy}
-              onChange={e => void onPatch('deliver_only', e.target.checked)} />
+            <TickBox className="mt-0.5" checked={batch.deliver_only === true} disabled={busy} onChange={on => void onPatch('deliver_only', on)} />
             <span>
               <span className="font-semibold">Delivery only</span> — the client posts these themselves. Every card on this shoot ends at approval; nothing goes to a scheduler.
             </span>
@@ -769,13 +766,11 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
       {forWho && (
         <div className="flex flex-wrap gap-4 text-[13px]">
           <label className="flex min-h-11 cursor-pointer items-center gap-2">
-            <input type="checkbox" className="h-4 w-4 accent-[var(--dbx-blue)]" checked={showBusiness} disabled={busy}
-              onChange={e => void onPatch('portal_show_business', e.target.checked)} />
+            <TickBox checked={showBusiness} disabled={busy} onChange={on => void onPatch('portal_show_business', on)} />
             Show the business name on their portal
           </label>
           <label className="flex min-h-11 cursor-pointer items-center gap-2">
-            <input type="checkbox" className="h-4 w-4 accent-[var(--dbx-blue)]" checked={showPerson} disabled={busy}
-              onChange={e => void onPatch('portal_show_person', e.target.checked)} />
+            <TickBox checked={showPerson} disabled={busy} onChange={on => void onPatch('portal_show_person', on)} />
             Show their name on their portal
           </label>
         </div>

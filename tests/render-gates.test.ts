@@ -454,7 +454,8 @@ describe('the reviewer’s card shows the finished edit as what it is (14 Sep 20
 describe('delivery only is a switch on the shoot page (14 Sep 2026)', () => {
   it('the shoot page draws it for the managers, the route cascades it, and a plan card is born with it', () => {
     expect(src('app/dashboard/production/shoots/[id]/ShootSop.tsx')).toContain('data-deliver-only')
-    expect(src('app/dashboard/production/shoots/[id]/ShootSop.tsx')).toMatch(/onPatch\('deliver_only', e\.target\.checked\)/)
+    // one drawn tick box on the shoot page (15 Sep 2026): the switch is a TickBox, the patch is the same
+    expect(src('app/dashboard/production/shoots/[id]/ShootSop.tsx')).toMatch(/onPatch\('deliver_only', on\)/)
     expect(src('app/api/production/batches/[id]/route.ts')).toMatch(/if \('deliver_only' in patch\)/)
     expect(src('app/lib/plan-cards.ts')).toContain('deliver_only: batch.deliver_only ?? null')
   })
