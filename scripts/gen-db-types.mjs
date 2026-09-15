@@ -417,7 +417,12 @@ const GHOST_COLUMNS = {
   //     morning check's verdict, { level: ok|watch|act, reason, can_post,
   //     expires_at, checked_at } (app/lib/account-health-core.ts), on the
   //     account's own row so the Schedule page's icons read it live.
-  social_accounts: [['health', col('unknown', true, true)]],
+  //   social_accounts.contact_id — WHOSE ACCOUNT IS THIS (15 Sep 2026: "sometimes
+  //     we are connecting their personal account"). Null for the client's own
+  //     business page; a client_contacts id when it is that person's own
+  //     account (app/lib/account-owner-core.ts). A label on our row only —
+  //     nothing at the posting provider changes.
+  social_accounts: [['health', col('unknown', true, true)], ['contact_id', col('string', true)]],
   //   content_items.link_url / link_kind — A CARD CARRIES A LINK (the three
   //     pages reset, 6 Sep 2026). Where the work lives: a Google Drive or
   //     Dropbox URL somebody pasted, labelled by host ('drive' | 'dropbox' |

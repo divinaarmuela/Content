@@ -1140,6 +1140,7 @@ export interface SocialAccount {
   connected_at: string
   last_synced_at: string
   health: unknown | null
+  contact_id: string | null
 }
 
 export interface SocialPost {
@@ -1341,7 +1342,7 @@ export const TABLE_COLUMNS = {
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
   schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
-  social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health'],
+  social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health', 'contact_id'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
@@ -1421,7 +1422,7 @@ export const NULLABLE_COLUMNS = {
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],
   schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
-  social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health'],
+  social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health', 'contact_id'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],

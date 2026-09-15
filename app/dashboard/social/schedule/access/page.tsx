@@ -7,7 +7,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTable } from '@/lib/db-client'
-import type { Client, SocialAccount, TeamUser, TeamUserClient } from '@/lib/db-types'
+import type { Client, ClientContact, SocialAccount, TeamUser, TeamUserClient } from '@/lib/db-types'
+import { accountSections, contactIdOf, ownerChoices, ownerLabel } from '../../../../lib/account-owner-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { accessibleClientIdsOf, type ScopeViewer } from '@/app/lib/scope-client'
 import { isValidZone, zoneLabel } from '@/app/lib/timezone-core'
@@ -88,6 +89,9 @@ export default function AccessPage() {
   const assignments = useTable<TeamUserClient>('team_user_clients')
   const team = useTable<TeamUser>('team_users')
   const accountRows = useTable<SocialAccount>('social_accounts', { by: byClient, enabled: on })
+  // the client's people — a connection can be one of theirs (15 Sep 2026)
+  const contactRows = useTable<ClientContact>('client_contacts', { by: byClient, enabled: on })
+  const contacts = contactRows.rows
 
   /** the clients this person may pick between — the same answer the calendar's
    *  picker gives, from the same helper, so the two cannot disagree */
@@ -448,8 +452,21 @@ export default function AccessPage() {
             </p>
           </div>
         ) : (
+          // THE COMPANY, THEN EACH PERSON (the owner, 15 Sep 2026: "master social
+          // channel client, and underneath the client name and their accounts
+          // too — sometimes we are connecting their personal account")
+          <div className="flex flex-col gap-4">
+          {accountSections(clientName, accounts, contacts).map(section => (
+          <section key={section.key} className="flex flex-col gap-2" aria-label={section.title}>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h3 className="text-[14px] font-semibold">{section.title}</h3>
+              <span className="text-[12px] text-muted-foreground">{section.hint}</span>
+            </div>
+            {section.accounts.length === 0 && (
+              <p className="text-[12px] text-muted-foreground">No business account connected yet — “Add an account” connects the official page.</p>
+            )}
           <ul className="flex flex-col gap-2">
-            {accounts.map(a => {
+            {section.accounts.map(a => {
               const words = accountHealthWords(view?.health[a.id], now)
               const brand = brandFor(a.platform)
               const isStray = view?.stray.includes(a.id) ?? false
@@ -489,7 +506,7 @@ export default function AccessPage() {
                       )}
                     </div>
                     <p className="text-[12px] text-muted-foreground">
-                      {words.detail}{' '}
+                      {ownerLabel(a, clientName, contacts)} · {words.detail}{' '}
                       {view ? `${lastCheckedWords(view.checkedAt, now)}.` : ''}
                     </p>
                   </div>
@@ -531,6 +548,9 @@ export default function AccessPage() {
               )
             })}
           </ul>
+          </section>
+          ))}
+          </div>
         )}
 
         {/* which group at the posting service */}
@@ -667,6 +687,7 @@ export default function AccessPage() {
         <EditAccount
           account={editing}
           client={client}
+          contacts={contacts}
           onClose={() => setEditing(null)}
           onSaved={message => { setEditing(null); setNote(message) }}
         />
@@ -723,13 +744,16 @@ export default function AccessPage() {
  * dialog says so, rather than offering a per-account zone that would quietly
  * be a second answer to the same question.
  */
-function EditAccount({ account, client, onClose, onSaved }: {
+function EditAccount({ account, client, contacts, onClose, onSaved }: {
   account: SocialAccount
   client: Client
+  contacts: readonly ClientContact[]
   onClose: () => void
   onSaved: (message: string) => void
 }) {
   const [name, setName] = useState(account.name ?? '')
+  /** whose account: 'company', or a contact's id (15 Sep 2026) */
+  const [owner, setOwner] = useState(account.contact_id ?? 'company')
   const [zone, setZone] = useState(client.timezone ?? 'Australia/Melbourne')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -753,7 +777,7 @@ function EditAccount({ account, client, onClose, onSaved }: {
         fetch(`/api/social/accounts/${account.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim() }),
+          body: JSON.stringify({ name: name.trim(), contact_id: contactIdOf(owner) }),
         }),
       ]
       if (zoneChanged) {
@@ -811,6 +835,23 @@ function EditAccount({ account, client, onClose, onSaved }: {
           <span className="text-[12px] text-muted-foreground">
             Only on our screens. The handle comes from the platform and is read
             back from it every time we check.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px] font-semibold text-muted-foreground">
+            Whose account is this?
+          </span>
+          <select
+            value={owner}
+            onChange={e => setOwner(e.target.value)}
+            className="min-h-11 w-full rounded-full border border-border bg-paper px-4 text-[14px] outline-none"
+          >
+            {ownerChoices(client.name, contacts).map(c => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <span className="text-[12px] text-muted-foreground">
+            The official page sits under the client; a person’s own account sits under their name. A label on our screens only — nothing changes at the platform.
           </span>
         </label>
         <label className="flex flex-col gap-1">

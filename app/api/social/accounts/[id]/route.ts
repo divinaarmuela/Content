@@ -104,11 +104,15 @@ export async function PATCH(
     try {
       const user = await requireRole('scheduler')
       const { id } = await params
-      const body = await req.json().catch(() => ({})) as { name?: unknown }
-      if (typeof body.name !== 'string') {
+      const body = await req.json().catch(() => ({})) as { name?: unknown; contact_id?: unknown }
+      // WHOSE ACCOUNT IS THIS (15 Sep 2026): null for the client's own page,
+      // a contact's id for that person's own account — a label on our row
+      const wantsOwner = 'contact_id' in body
+      const contactId = wantsOwner && typeof body.contact_id === 'string' && body.contact_id.trim() ? body.contact_id.trim() : null
+      if (typeof body.name !== 'string' && !wantsOwner) {
         return NextResponse.json({ error: 'Give the account a name' }, { status: 400 })
       }
-      const name = body.name.trim().slice(0, 80)
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : null
 
       // whose account is this? The row first, then the scope check — a name
       // is not worth leaking which ids exist, so a row nobody may touch and a
@@ -118,15 +122,21 @@ export async function PATCH(
         return NextResponse.json({ error: 'That account is no longer connected' }, { status: 404 })
       }
       if (row.client_id) await assertClientAccess(user, row.client_id)
+      if (contactId) {
+        const contact = await table<{ id: string; client_id: string }>('client_contacts').get(contactId).catch(() => null)
+        if (!contact || contact.client_id !== row.client_id) {
+          return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })
+        }
+      }
 
       // claim, not check-then-write: two people renaming at once resolve to
       // one answer rather than one silently overwriting the other
       const saved = await table<SocialAccount>('social_accounts').claim(id, cur =>
-        cur ? { ...cur, name: name || null } : null)
+        cur ? { ...cur, ...(name !== null ? { name: name || null } : {}), ...(wantsOwner ? { contact_id: contactId } : {}) } : null)
       if (!saved.claimed) {
         return NextResponse.json({ error: 'That account is no longer connected' }, { status: 404 })
       }
-      return NextResponse.json({ ok: true, name: saved.row.name })
+      return NextResponse.json({ ok: true, name: saved.row.name, contact_id: saved.row.contact_id ?? null })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })
