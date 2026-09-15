@@ -288,6 +288,12 @@ function CanvasCardInner({
   const { near, inRange, chosen } = useAutoplaySlot(card.id, frameRef,
     autoKind === 'instagram' ? 'watch' : autoKind !== 'none' && !reducedMotion ? 'play' : 'off')
   const auto = decideAutoplay({ kind: autoKind, reducedMotion, near, inRange, chosen, userPlaying: playing })
+  /* THE BROWSER SAID NO (the owner, 15 Sep 2026: "the video here is not
+   * playing — sometimes it works, sometimes it does not", on an iMac):
+   * Safari refuses a silent autoplay when its Auto-Play setting says so,
+   * and a card that was waiting on autoplay then sat frozen with no
+   * button. `refused` remembers the refusal, and a play badge takes over. */
+  const [refused, setRefused] = React.useState(false)
   React.useEffect(() => { if (near) setSeen(true) }, [near])
   // the Instagram frame reports in when it has painted; until then the
   // thumbnail is the face, so the board never shows a blank square
@@ -296,8 +302,8 @@ function CanvasCardInner({
   React.useEffect(() => {
     const v = videoRef.current
     if (!v || playing) return
-    if (auto.play) v.play().catch(() => { /* the browser said no; the badge is still there */ })
-    else v.pause()
+    if (auto.play) v.play().then(() => setRefused(false)).catch(() => setRefused(true))
+    else { v.pause(); setRefused(false) }
   }, [auto.play, playing])
 
   // Sound, in place. A <video> is told directly; a frame is told over
@@ -609,9 +615,10 @@ function CanvasCardInner({
             className="absolute inset-0 h-full w-full select-none object-cover" />
         )}
         {film && (
-          <video ref={videoRef} src={auto.load ? film : undefined} muted loop playsInline
-            preload={auto.load ? 'metadata' : 'none'} onError={() => { if (ig.video) ig.refresh() }}
-            className="absolute inset-0 h-full w-full select-none object-cover" style={{ pointerEvents: 'none' }} />
+          <video ref={videoRef} src={playing || auto.load ? film : undefined} muted loop={!playing} playsInline
+            controls={playing} autoPlay={playing}
+            preload={playing || auto.load ? 'metadata' : 'none'} onError={() => { if (ig.video) ig.refresh() }}
+            className="absolute inset-0 h-full w-full select-none object-cover" style={{ pointerEvents: playing ? 'auto' : 'none' }} />
         )}
         {soundTrack}
         {/* Instagram's frame comes only behind the tap — inside a mock-up
@@ -626,8 +633,13 @@ function CanvasCardInner({
             <PlatformMark provider={post.provider} className="h-8 w-8" />
           </div>
         )}
-        {auto.play && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} />}
-        {autoKind === 'instagram' && !playing && (post.media === 'video' || !post.thumb) && (
+        {auto.play && !refused && <SoundBadge on={soundOn} onToggle={toggleSound} label={post.title ?? 'post'} />}
+        {/* a play badge whenever the clip is not moving: Instagram's frame
+            behind a tap, or our own player when autoplay was not allowed or
+            this card is not one of the few playing (15 Sep 2026) */}
+        {!playing && (autoKind === 'instagram'
+          ? (post.media === 'video' || !post.thumb)
+          : (!!film && (!auto.play || refused))) && (
           <PlayBadge onPlay={onPlay} label={post.title ?? 'post'} />
         )}
       </div>
@@ -925,7 +937,7 @@ function CanvasCardInner({
               className={`w-full select-none bg-black ${card.h ? 'h-full object-cover' : ''}`}
               style={{ pointerEvents: playing ? 'auto' : 'none' }}
             />
-            {!playing && (auto.play
+            {!playing && (auto.play && !refused
               ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.name ?? 'video'} />
               : <PlayBadge onPlay={onPlay} label={card.name ?? 'video'} />)}
           </div>
@@ -1084,7 +1096,7 @@ function CanvasCardInner({
               cannot — never one that does nothing. A clip already moving
               offers sound instead. An Instagram card never wears our badge:
               its frame is the face and the play button on it is theirs. */}
-          {auto.play
+          {auto.play && !refused
             ? <SoundBadge on={soundOn} onToggle={toggleSound} label={card.title ?? 'post'} />
             : autoKind === 'instagram' || playing
               ? null
