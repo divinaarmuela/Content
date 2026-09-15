@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Link as LinkIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow } from '@/lib/db-client'
@@ -18,6 +18,9 @@ import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
 import { workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
+import { canTransferEditing } from '../../../lib/editor-transfer-core'
+import TransferEditingDialog from '../../board/TransferEditingDialog'
+import { useState } from 'react'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -48,7 +51,13 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
   // WITH THE CLIENT: the portal link, to copy and send (the owner, 15 Sep 2026:
   // "there is one card with the client but no client portal button on the card")
   const withClient = String(item.status) === 'client_review' && !!portalLink
-  if (!primary && more.length === 0 && !withClient) return null
+  // TRANSFER THE EDITING JOB (the owner, 15 Sep 2026): the client's account
+  // manager or a super admin moves the edit — the whole card — to another
+  // editor while it is still being made. The route checks the manager is
+  // on this client; the button is offered to both manager roles.
+  const [transferOpen, setTransferOpen] = useState(false)
+  const transferable = canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)
+  if (!primary && more.length === 0 && !withClient && !transferable) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3" aria-label="Your answers on this card">
       {primary && (
@@ -69,6 +78,16 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
           <LinkIcon className="mr-1.5 h-4 w-4" aria-hidden /> Copy the client’s portal link
         </Button>
+      )}
+      {transferable && (
+        <Button variant="outline" disabled={busy} onClick={() => setTransferOpen(true)}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
+          <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> Transfer the editing job
+        </Button>
+      )}
+      {transferable && (
+        <TransferEditingDialog open={transferOpen} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
+          viewerId={viewer.id} onClose={() => setTransferOpen(false)} />
       )}
       {dialogs}
     </div>
