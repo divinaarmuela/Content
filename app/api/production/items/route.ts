@@ -241,6 +241,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'owner_id must be an active team member' }, { status: 400 })
       }
     }
+    // whom a post is for must be one of THAT client's people (15 Sep 2026)
+    for (const it of items as { client_id?: string; for_contact_id?: unknown }[]) {
+      if (typeof it.for_contact_id !== 'string' || !it.for_contact_id) continue
+      const person = await table<{ id: string; client_id: string }>('client_contacts').get(it.for_contact_id).catch(() => null)
+      if (!person || person.client_id !== it.client_id) {
+        return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })
+      }
+    }
     const batchIds = [...new Set(items.map((it: { batch_id?: string }) => it.batch_id).filter(Boolean))] as string[]
     const batchRows = batchIds.length
       ? await table<Batch>('batches').list({ where: b => batchIds.includes(b.id) })
@@ -423,6 +431,9 @@ export async function POST(req: Request) {
         priority: it.priority ?? 'normal',
         caption: it.caption ?? null,
         raw_assets_url: it.raw_assets_url ? String(it.raw_assets_url).slice(0, 2000) : null,
+        // WHOM THE POST IS FOR (15 Sep 2026): the business, or one of the
+        // client's people — checked below to be on this client
+        for_contact_id: typeof it.for_contact_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(it.for_contact_id) ? it.for_contact_id : null,
         brief: it.brief ? String(it.brief).slice(0, 5000) : null,
         raw_assets: sanitiseRawAssets(it.raw_assets),
         // the caller decides; an internal task defaults to NO client step

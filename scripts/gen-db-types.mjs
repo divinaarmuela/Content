@@ -440,6 +440,12 @@ const GHOST_COLUMNS = {
     //     versions and the numbers afterwards, but it is NOT production work,
     //     so it never appears on the Production, Editor or Scheduler boards.
     ['adhoc_post', col('boolean', true)],
+    //   content_items.for_contact_id — WHOM THE POST IS FOR (15 Sep 2026: "it's
+    //     either Turnkey, or a client account that's been connected"). Null for
+    //     the client's business accounts; a client_contacts id when the post
+    //     goes out on that person's own accounts. The Schedule window's channel
+    //     picker opens on that person's channels.
+    ['for_contact_id', col('string', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

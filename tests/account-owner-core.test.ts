@@ -97,3 +97,25 @@ describe('the route and the page (source pins)', () => {
     expect(src('lib/db-types.ts')).toMatch(/export interface SocialAccount \{[\s\S]*?contact_id: string \| null/)
   })
 })
+
+describe('whom the post is for, from the New post window to the Schedule window (the owner, 15 Sep 2026)', () => {
+  const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
+  it('the New post window offers the business, or a person with an account connected, and the card carries it', () => {
+    const d = src('app/dashboard/board/BoardDialogs.tsx')
+    expect(d).toContain('<Label htmlFor="new-post-for">Posting for</Label>')
+    expect(d).toContain('accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id)')
+    expect(d).toContain('...(forPosting && contactIdOf(postFor) ? { for_contact_id: contactIdOf(postFor) } : {}),')
+    const r = src('app/api/production/items/route.ts')
+    expect(r).toContain("for_contact_id: typeof it.for_contact_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(it.for_contact_id) ? it.for_contact_id : null,")
+    expect(r).toContain("return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })")
+    expect(src('lib/db-types.ts')).toMatch(/export interface ContentItem \{[\s\S]*?for_contact_id: string \| null/)
+  })
+  it('the Schedule window opens a new post on that person’s channels; the post’s card says whom it is for', () => {
+    const w = src('app/dashboard/social/schedule/NewPostDialog.tsx')
+    expect(w).toContain("const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)")
+    expect(w).toContain('const theirs = accounts.filter(a => a.contact_id === who).map(a => a.id)')
+    expect(w).toContain('if (seededFor.current || state.postId || !itemRow) return')
+    const c = src('app/dashboard/board/PostApprovalDetail.tsx')
+    expect(c).toContain('Posting for: {postFor ? `${postFor.name} — their personal account` : `${client?.name ?? \'the client\'} — the business`}')
+  })
+})

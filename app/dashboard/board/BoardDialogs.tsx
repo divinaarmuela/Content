@@ -25,6 +25,7 @@ import {
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
 import { folderOf, linkKindOf } from '../../lib/card-link-core'
+import { contactIdOf, ownerChoices } from '../../lib/account-owner-core'
 import { findKindByName, kindIdForContentType, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
@@ -589,6 +590,16 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  themselves — the card ends at their approval, no scheduler */
   const [deliverOnlyCard, setDeliverOnlyCard] = useState(false)
   const workInput = useRef<HTMLInputElement | null>(null)
+  /** WHOM THE POST IS FOR (the owner, 15 Sep 2026: "it's either Turnkey, or a
+   *  client account that's been connected"): the business, or a person on
+   *  the client who has an account connected */
+  const [postFor, setPostFor] = useState('company')
+  const { rows: contactRows } = useTable<{ id: string; client_id: string; name: string; role?: string | null; is_primary?: boolean | null }>('client_contacts')
+  const { rows: accountRows } = useTable<{ id: string; client_id: string | null; contact_id?: string | null; active?: boolean }>('social_accounts')
+  const postForChoices = ownerChoices(
+    clients.find(c => c.id === clientId)?.name ?? 'The business',
+    contactRows.filter(c => c.client_id === clientId && accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id)),
+  )
   const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')
   const shoots = shootRows.filter(b => b.client_id === clientId && b.status !== 'wrapped')
@@ -612,7 +623,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   useEffect(() => {
     if (open && !clientId && !defaultClientId && clients.length > 0) setClientId(clients[0].id)
   }, [open, clientId, defaultClientId, clients])
-  useEffect(() => { setShootId(''); setGroupId(''); setShootText('') }, [clientId])
+  useEffect(() => { setShootId(''); setGroupId(''); setShootText(''); setPostFor('company') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])
 
   const linkCheck = linkKindOf(link)
@@ -656,6 +667,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           ...(deliverOnlyCard ? { deliver_only: true } : {}),
           // a New post is a posting job: Post approval board only, never the Editor page
           ...(forPosting ? { adhoc_post: true } : {}),
+          ...(forPosting && contactIdOf(postFor) ? { for_contact_id: contactIdOf(postFor) } : {}),
           content_type: 'other',
           // a card made straight from a link has no shoot behind it — the
           // link is where the work is from
@@ -712,6 +724,18 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           {/* the client's brand, the moment they are picked — so the card is
               made with the colours, fonts and voice in view (9 Sep 2026) */}
           {clientId && <BrandCard clientId={clientId} />}
+          {forPosting && clientId && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-post-for">Posting for</Label>
+              <Select value={postFor} onValueChange={v => v && setPostFor(v)}>
+                <SelectTrigger id="new-post-for" className={field}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {postForChoices.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-[12px] text-muted-foreground">The business, or one of their people with an account connected — the Schedule window opens on those channels.</p>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             {/* a post and a card are different things to name (the owner, 14 Sep
                 2026: "why is the title and what needs doing for Post approval

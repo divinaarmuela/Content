@@ -112,6 +112,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const { rows: versions } = useTable<AssetVersion>('asset_versions', { by: byItem })
   const { rows: comments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
+  // whom the post is for — one of the client's people, or the business (15 Sep 2026)
+  const { rows: contactRows } = useTable<{ id: string; client_id: string; name: string }>('client_contacts')
+  const postFor = (item as { for_contact_id?: string | null } | null)?.for_contact_id
+    ? contactRows.find(c => c.id === (item as { for_contact_id?: string | null }).for_contact_id) ?? null
+    : null
   // THE POSTS THAT CARRY EACH FILE, so the file can say "Scheduled · Fri 9:00"
   // or "Went out on Instagram" — the owner, 9 Sep 2026: "in schedule to
   // show that it's scheduled and in post approval page"
@@ -506,6 +511,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               ? `Account manager: ${managerNames.join(', ')}`
               : 'No account manager on this client yet'}
           </p>
+          {adhoc && (
+            <p className="text-[13px] text-muted-foreground">
+              Posting for: {postFor ? `${postFor.name} — their personal account` : `${client?.name ?? 'the client'} — the business`}
+            </p>
+          )}
           {/* DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
               themselves — the card ends at their approval, no scheduler.
               The client's own setting is the default; this is the card's word */}

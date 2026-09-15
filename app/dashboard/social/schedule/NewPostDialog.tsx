@@ -6,9 +6,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
-import type { ClientContact, EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
+import type { ClientContact, ContentItem, EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
-import { useTable } from '@/lib/db-client'
+import { useRow, useTable } from '@/lib/db-client'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
 import { coverPatchFor, currentCover } from '@/app/lib/cover-core'
@@ -343,6 +343,24 @@ export default function NewPostDialog({
 
   const chosen = useMemo(
     () => accounts.filter(a => state.channels.includes(a.id)), [accounts, state.channels])
+  /* WHOM THE POST IS FOR (15 Sep 2026): a card made "for" one of the client's
+   * people opens on that person's channels, not the first account on the
+   * list. Once, for a new post only; a saved post keeps its own channels. */
+  const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)
+  const seededFor = useRef(false)
+  useEffect(() => {
+    if (seededFor.current || state.postId || !itemRow) return
+    const who = (itemRow as { for_contact_id?: string | null }).for_contact_id ?? null
+    if (!who) { seededFor.current = true; return }
+    const theirs = accounts.filter(a => a.contact_id === who).map(a => a.id)
+    if (theirs.length === 0) return
+    seededFor.current = true
+    for (const a of accounts) {
+      const on = theirs.includes(a.id)
+      if (state.channels.includes(a.id) !== on) dispatch({ type: 'channel', id: a.id, on })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemRow, accounts])
   /** a booked or posted post whose accounts have since been removed still
    *  went somewhere: the record says where (the owner removed the TikTok
    *  and Facebook accounts from Zernio on 10 Sep 2026, and last night's
