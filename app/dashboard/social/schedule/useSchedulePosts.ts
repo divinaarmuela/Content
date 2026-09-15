@@ -29,7 +29,7 @@ import { folderOf } from '@/app/lib/card-link-core'
 import { useMemo } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
-  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, PublishJob, ScheduleNote,
+  AssetVersion, Batch, BatchComment, Client, ClientContact, ContentItem, ItemComment, PublishJob, ScheduleNote,
   SocialAccount, SocialPost, TeamUserClient, WorkflowActivity, WorkKind,
 } from '@/lib/db-types'
 import {
@@ -151,6 +151,8 @@ export type ScheduleData = {
   notes: ScheduleNote[]
   accounts: SocialAccount[]
   allAccounts: SocialAccount[]
+  /** the client's people — a connection can be one of theirs (15 Sep 2026) */
+  contacts: ClientContact[]
   media: RailMedia[]
   /** this client signs every post off themselves — nobody skips the wait */
   clientSignsOff: boolean
@@ -186,6 +188,7 @@ export function useSchedulePosts(
   // this follows that precedent rather than inventing a second answer
   const versions = useTable<AssetVersion>('asset_versions', { enabled: on })
   const accounts = useTable<SocialAccount>('social_accounts', { by: byClient, enabled: on })
+  const contacts = useTable<ClientContact>('client_contacts', { by: byClient, enabled: on })
   const notes = useTable<ScheduleNote>('schedule_notes', { by: byClient, enabled: on })
   const clients = useTable<Client>('clients')
   const assignments = useTable<TeamUserClient>('team_user_clients')
@@ -391,6 +394,7 @@ export function useSchedulePosts(
     accounts: liveAccounts,
     /** every account on the client, revoked ones included — for the bar */
     allAccounts: clientAccounts,
+    contacts: contacts.rows,
     media,
     clientSignsOff,
     postWithoutApproval,

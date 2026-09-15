@@ -342,6 +342,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
           target={target}
           tz={data.tz}
           accounts={data.accounts}
+          contacts={data.contacts}
           suggested={suggested.slice(0, 3)}
           role={role}
           userId={userId}

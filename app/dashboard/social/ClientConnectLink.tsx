@@ -40,6 +40,33 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
    *  business — we send them the link; the other option is the client's
    *  personal one"): 'company', or one of the client's contacts */
   const [linkFor, setLinkFor] = useState('company')
+  /** ADD A PERSON ON THE SPOT (the owner, 15 Sep 2026: "if no name appears
+   *  we can simply add a name and share the link") */
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [savingPerson, setSavingPerson] = useState(false)
+  const addPerson = async () => {
+    const name = newName.trim()
+    if (!name) { toast.error('Give the person a name'); return }
+    setSavingPerson(true)
+    try {
+      const res = await fetch(`/api/website/clients/${clientId}/contacts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: newEmail.trim() }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(String(json?.error ?? 'Could not add them'))
+      const made = (json?.contact ?? json?.data ?? json) as { id?: string }
+      if (made?.id) setLinkFor(made.id)
+      setAdding(false); setNewName(''); setNewEmail('')
+      toast.success(`${name} added — the link is now theirs`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not add them')
+    } finally {
+      setSavingPerson(false)
+    }
+  }
   const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
 
   const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor))), [token, picked, linkFor])
@@ -84,7 +111,7 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
       <button type="button" onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 text-left text-[13px] font-semibold">
         <Link2 className="h-4 w-4" aria-hidden />
-        Link for the client to connect their own accounts
+        Connect link — for the business, or for one of their people
         <span className="ml-auto text-[12px] font-normal text-muted-foreground">{open ? 'Hide' : 'Show'}</span>
       </button>
       {open && (
@@ -100,6 +127,19 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
               {ownerChoices(clientName, contacts).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
             <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. A person’s link is emailed to them alone.</span>
+            {!adding ? (
+              <button type="button" onClick={() => setAdding(true)} className="w-fit text-[12px] font-semibold underline underline-offset-4">+ Add a person</button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Their name" aria-label="The person’s name"
+                  className="min-h-10 rounded-full border border-border bg-background px-3 text-[13px]" />
+                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Their email (for the link)" aria-label="The person’s email" type="email"
+                  className="min-h-10 rounded-full border border-border bg-background px-3 text-[13px]" />
+                <button type="button" onClick={addPerson} disabled={savingPerson}
+                  className="inline-flex min-h-10 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-50">{savingPerson ? 'Adding…' : 'Add'}</button>
+                <button type="button" onClick={() => setAdding(false)} className="min-h-10 px-2 text-[13px] text-muted-foreground">Cancel</button>
+              </div>
+            )}
           </label>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Networks on the link">
             {CONNECTABLE.map(p => {

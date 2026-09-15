@@ -76,6 +76,23 @@ describe('the route and the page (source pins)', () => {
     expect(p).toContain("ownerChoices(client.name, contacts)")
     expect(p).toContain('contact_id: contactIdOf(owner)')
   })
+  it('the composer groups the channel picker by whom the post is for — the business, then each person (15 Sep 2026)', () => {
+    const d = src('app/dashboard/social/schedule/NewPostDialog.tsx')
+    expect(d).toContain("accountSections(clientName || 'The business', accounts, contacts).filter(s => s.accounts.length > 0).map(section => (")
+    expect(d).toContain('role="group" aria-label={section.title}')
+    expect(d).toContain("title={ownerLabel(a, clientName || 'The business', contacts)}")
+    const h = src('app/dashboard/social/schedule/useSchedulePosts.ts')
+    expect(h).toContain("const contacts = useTable<ClientContact>('client_contacts', { by: byClient, enabled: on })")
+    expect(src('app/dashboard/social/schedule/useComposeFlow.tsx')).toContain('contacts={data.contacts}')
+  })
+  it('the Social channels card draws the business first, then each person; the connect-link box can add a person on the spot', () => {
+    const c = src('app/dashboard/clients/SocialChannels.tsx')
+    expect(c).toContain('accountSections(clientName, accounts, contacts)')
+    const l = src('app/dashboard/social/ClientConnectLink.tsx')
+    expect(l).toContain('Connect link — for the business, or for one of their people')
+    expect(l).toContain('+ Add a person')
+    expect(l).toContain('fetch(`/api/website/clients/${clientId}/contacts`, {')
+  })
   it('the column exists on the connection row', () => {
     expect(src('lib/db-types.ts')).toMatch(/export interface SocialAccount \{[\s\S]*?contact_id: string \| null/)
   })

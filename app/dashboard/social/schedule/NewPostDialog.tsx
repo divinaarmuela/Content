@@ -6,7 +6,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SAVE_WAIT_MS, withTimeout } from '@/app/lib/wait-core'
-import type { EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
+import type { ClientContact, EncodeJob, FollowerSnapshot, SocialAccount } from '@/lib/db-types'
+import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { useTable } from '@/lib/db-client'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
@@ -160,12 +161,17 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 }
 
 export default function NewPostDialog({
-  target, tz, accounts, suggested, role, userId, clientSignsOff, locations, clientName,
+  target, tz, accounts, contacts = [], suggested, role, userId, clientSignsOff, locations, clientName,
   reviewOnly, onClose, onOpenPost, onEditMedia, onDone,
 }: {
   target: ComposerTarget
   tz: string
   accounts: SocialAccount[]
+  /** WHOM TO POST FOR (the owner, 15 Sep 2026: "a dropdown to choose whom to
+   *  post it for — not just the client's business name, sometimes it will be
+   *  Turnkey › Justin"): the client's people, so the channel picker groups
+   *  the business's accounts and each person's own */
+  contacts?: ClientContact[]
   suggested: SuggestedTime[]
   role: Role | null
   /** who is looking, so the first-time walkthrough runs once per person and
@@ -1190,7 +1196,10 @@ export default function NewPostDialog({
                 This client has no channels connected yet.
               </p>
             )}
-            {accounts.map(a => {
+            {accountSections(clientName || 'The business', accounts, contacts).filter(s => s.accounts.length > 0).map(section => (
+            <div key={section.key} className="flex flex-col" role="group" aria-label={section.title}>
+            <p className="px-2 pb-0.5 pt-2 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{section.title}</p>
+            {section.accounts.map(a => {
               const on = state.channels.includes(a.id)
               return (
                 <button
@@ -1212,6 +1221,8 @@ export default function NewPostDialog({
                 </button>
               )
             })}
+            </div>
+            ))}
           </Dropdown>
 
           {kinds.length > 0 && (
@@ -1575,10 +1586,12 @@ export default function NewPostDialog({
                     key={a.id}
                     type="button"
                     onClick={() => dispatch({ type: 'channel', id: a.id, on: true })}
+                    title={ownerLabel(a, clientName || 'The business', contacts)}
                     className="flex min-h-11 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted"
                   >
                     <PlatformIcon platform={String(a.platform)} size={16} className="rounded-full" />
                     {a.username || a.name}
+                    {a.contact_id && <span className="font-normal text-muted-foreground">· {contacts.find(c => c.id === a.contact_id)?.name ?? ''}</span>}
                   </button>
                 ))}
               </div>
