@@ -280,6 +280,18 @@ body:has(.dbx) {
    create a scroll container, so position: sticky is preserved. Belt-and-braces
    against any element that tries to push the page wider than the viewport. */
 html { scroll-behavior: smooth; overflow-x: clip; max-width: 100%; }
+/* …BUT NOT ON THE DASHBOARD (15 Sep 2026, the shoot page: "when I click the
+   editor dropdown the right side goes blank and the page is stuck"). Every
+   Radix menu, select and dialog locks the page with `body { overflow: hidden }`
+   while it is open. With the root clipped, the body's overflow no longer
+   propagates to the viewport, so that lock turns the body itself into a
+   scroll container — and a `position: sticky` rail (the shoot page's right
+   column) is then stuck to the body, not the viewport: it jumps to the top of
+   its row, 2,000px off screen, taking the open dropdown with it. Measured
+   live: rail top −701px → −2739px the moment the select opened. A visible
+   root lets the body's own `overflow-x: clip` reach the viewport instead, the
+   lock reaches the viewport too, and sticky stays sticky. */
+html:has(.dbx) { overflow-x: visible; }
 
 /* hide the scrollbar everywhere — scrolling still works (Lenis drives it) */
 html { scrollbar-width: none; -ms-overflow-style: none; }

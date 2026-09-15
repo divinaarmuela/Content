@@ -74,4 +74,10 @@ describe('the lanes show a scrollbar (13 Sep 2026)', () => {
     expect(css).toMatch(/\.dbx \[data-lane-scroll\]::-webkit-scrollbar \{ display: block; height: 10px; \}/)
     expect(css).toMatch(/\.dbx \[data-lane-scroll\] \{ scrollbar-width: thin/)
   })
+  it('the dashboard’s root is not clipped, so a Radix scroll lock cannot unstick a sticky rail (the shoot page, 15 Sep 2026)', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    const css = readFileSync('app/globals.css', 'utf8')
+    expect(css).toMatch(/^html \{ scroll-behavior: smooth; overflow-x: clip; max-width: 100%; \}$/m)
+    expect(css).toMatch(/^html:has\(\.dbx\) \{ overflow-x: visible; \}$/m)
+  })
 })
