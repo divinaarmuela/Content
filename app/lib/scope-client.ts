@@ -337,6 +337,14 @@ export function visibleItems<T extends ScopeItem>(
         || schedulerIdsOf(r).includes(viewer.id))) {
       return false
     }
+    // AWAITING THE HAND-OVER (the owner, 15 Sep 2026: "this is still the
+    // editing part — it's the AM's or super admin's duty to hand it over to
+    // a scheduler for posting"): an approved card nobody has been handed is
+    // not a scheduler's yet — not on their board, not in their queue
+    if (viewer.role === 'scheduler' && r.status === 'approved_for_scheduling'
+      && !(r.owner_id === viewer.id || schedulerIdsOf(r).includes(viewer.id))) {
+      return false
+    }
     // DELIVER ONLY (11 Sep 2026): the client posts it, so an approved card
     // for them is never a scheduler's — by the card's own word, or the
     // client's setting when the card says nothing

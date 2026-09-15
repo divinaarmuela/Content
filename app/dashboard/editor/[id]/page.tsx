@@ -20,6 +20,7 @@ import { workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import { canTransferEditing } from '../../../lib/editor-transfer-core'
 import TransferEditingDialog from '../../board/TransferEditingDialog'
+import { HandToDialog } from '../../board/BoardDialogs'
 import { useState } from 'react'
 
 /**
@@ -57,7 +58,14 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
   // on this client; the button is offered to both manager roles.
   const [transferOpen, setTransferOpen] = useState(false)
   const transferable = canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)
-  if (!primary && more.length === 0 && !withClient && !transferable) return null
+  // CLIENT APPROVED, AWAITING THE HAND-OVER (the owner, 15 Sep 2026: "it's
+  // the AM's or super admin's duty to hand it over to a scheduler"): the
+  // approved card is still the editing side's; this is the press that gives
+  // it to a scheduler, into their Draft
+  const [handOpen, setHandOpen] = useState(false)
+  const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true
+    && ['account_manager', 'super_admin', 'general'].includes(viewer.role)
+  if (!primary && more.length === 0 && !withClient && !transferable && !awaitingHand) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3" aria-label="Your answers on this card">
       {primary && (
@@ -79,6 +87,13 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
           <LinkIcon className="mr-1.5 h-4 w-4" aria-hidden /> Copy the client’s portal link
         </Button>
       )}
+      {awaitingHand && (
+        <Button disabled={busy} onClick={() => setHandOpen(true)}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
+          Hand to…
+        </Button>
+      )}
+      {awaitingHand && <HandToDialog card={handOpen ? card : null} viewer={viewer} onClose={() => setHandOpen(false)} />}
       {transferable && (
         <Button variant="outline" disabled={busy} onClick={() => setTransferOpen(true)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">

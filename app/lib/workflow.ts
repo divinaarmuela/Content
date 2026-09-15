@@ -146,17 +146,18 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
         .list({ where: u => u.role === 'scheduler' && u.active_status })
     }
     case 'assigned_schedulers': {
-      // the people this card was handed to — or, when nobody was (the card
-      // page no longer hands posting out; the card simply reaches Ready to
-      // post), every active scheduler, so the queue is never silent — unless
-      // the card's owner is a general user, who books their own in
+      // the people this card was handed to — and, when nobody was, NOBODY
+      // (the owner, 15 Sep 2026: "don't notify the schedulers — it's still
+      // the editing part; it's the AM's or super admin's duty to hand it
+      // over to a scheduler for posting"). An approved card that has not
+      // been handed is not a scheduler's yet, so no scheduler hears of it;
+      // the managers do, and the hand-over tells the one it goes to. The one
+      // exception: a general user's own card, which they book in themselves.
       const ids = (Array.isArray(item.scheduler_ids) ? item.scheduler_ids : [])
         .filter((x): x is string => typeof x === 'string').slice(0, 20)
       if (ids.length === 0) {
         const own = await generalOwnerOf(item)
-        if (own) return [own]
-        return table<TeamUserRow>('team_users')
-          .list({ where: u => u.role === 'scheduler' && u.active_status })
+        return own ? [own] : []
       }
       return table<TeamUserRow>('team_users')
         .list({ where: u => ids.includes(u.id) && u.active_status })
@@ -613,6 +614,13 @@ async function autoWrapBatch(batchId: string, byWord: string): Promise<void> {
   }
 }
 
+/** THE CLIENT SAID YES (the owner, 15 Sep 2026: "go to handover, mentioning
+ *  client approved"): what the history and the managers' email say when the
+ *  client approves in their portal — the card is still the editing side's
+ *  until a manager hands it to a scheduler */
+export const CLIENT_APPROVED_LINE = 'Client approved — to be handed to a scheduler'
+export const CLIENT_APPROVED_NEXT = 'The client approved it. It stays on the editing side until the account manager or a super admin presses Hand to… on the card — it then lands in that scheduler’s Draft. No scheduler has been told.'
+
 export async function performTransition(
   actor: TeamUser | SystemActor,
   item: ContentItem,
@@ -900,6 +908,7 @@ export async function performTransition(
     && !isBriefTask && !isInternal
     ? await flaggedReviewers()
     : []
+  const clientApproved = !system && actor.role === 'client' && from === 'client_review' && to === 'approved_for_scheduling'
   await logActivity({
     // no actor_id for the system, and the label carries who told us instead —
     // "Posted by Instagram" reads correctly in a trail of human names
@@ -910,7 +919,7 @@ export async function performTransition(
     action: 'status_change',
     oldValue: from,
     newValue: to,
-    detail: system ? actor.label : standIns.length > 0 ? `${check.rule.label} · ${STAND_IN_MARK}` : check.rule.label,
+    detail: system ? actor.label : standIns.length > 0 ? `${check.rule.label} · ${STAND_IN_MARK}` : clientApproved ? CLIENT_APPROVED_LINE : check.rule.label,
   })
   if (!system && standIns.length > 0 && !opts?.quiet) {
     afterResponse('stand-in pass notification', () => notifyStandInPass(actor, { ...item, status: to }, standIns, to))
@@ -1036,12 +1045,10 @@ export async function performTransition(
           const chosen = picked.filter(u =>
             u.active_status && u.role !== 'client')
           if (chosen.length > 0) people = chosen
-        } else if (people.length === 0 && to === 'approved_for_scheduling') {
-          // approved and handed to nobody: the queue is open, so every
-          // scheduler hears "anyone can pick it up". Silence here was the bug —
-          // the status says it is their turn and no email ever said so.
-          people = await resolveAudience('schedulers', item)
         }
+        // approved and handed to nobody: nobody with the scheduler hat hears
+        // (15 Sep 2026) — the card waits on the editing side for the manager's
+        // hand-over, and that is what tells the scheduler it goes to
       }
       // A client has no login, so their email has to carry THEIR link — the
       // share token, read once for the whole loop rather than per recipient.
@@ -1066,6 +1073,7 @@ export async function performTransition(
         // move is not theirs.
         const subject = audience === 'client_users'
           ? `${item.title} — ${label}`
+          : clientApproved ? `Client approved: ${item.title} — hand it to a scheduler`
           : transitionSubject({
               title: item.title,
               to,
@@ -1109,7 +1117,7 @@ export async function performTransition(
               : `<p><strong>${escapeHtml(item.title)}</strong> moved from “${escapeHtml(stageLabel(from))}” to “${escapeHtml(stageLabel(to))}” by ${escapeHtml(actorWord)}.</p>` +
                 // it never said what the reader had to do, or by when,
                 // with the due date sitting right there in scope
-                `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext(to))}</p>` +
+                `<p><strong>What happens next:</strong> ${escapeHtml(clientApproved ? CLIENT_APPROVED_NEXT : whatHappensNext(to))}</p>` +
                 (dueWords ? `<p><strong>Due:</strong> ${escapeHtml(dueWords)}</p>` : '') +
                 (opts?.note?.trim() && audience !== 'client_users'
                   ? `<p><strong>Note:</strong><br>${escapeHtml(opts.note.trim()).replace(/\n/g, '<br>')}</p>`

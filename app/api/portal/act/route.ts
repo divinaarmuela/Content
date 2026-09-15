@@ -256,33 +256,8 @@ export async function POST(req: Request) {
         // so fire-and-forget here silently lost the emails
         await notifyManagers(client.id, item, item.title, speaker, comment).catch(e =>
           console.error('portal manager notify error:', e))
-        // an APPROVAL note often carries the "when" — the schedulers who'll
-        // actually set the date must hear it too (they never see comments)
-        if (action === 'approve') {
-          await (async () => {
-            const schedulers = await table<TeamUserRow>('team_users').list({
-              by: { active_status: true }, where: u => u.role === 'scheduler',
-            })
-            for (const s of schedulers) {
-              await notify({
-                actorName: speaker,
-                actorEmail: 'portal+client@mdmmarketing.com.au',
-                eventType: 'approval_note',
-                entityType: 'content_item',
-                entityId: `${item.id}#note`,
-                recipientId: s.id,
-                recipientEmail: s.email,
-                subject: `Approved with a note: ${item.title}`,
-                bodyHtml: renderEmail(
-                  `Approved with a note: ${item.title}`,
-                  `<p><strong>${escapeHtml(item.title)}</strong> was approved by ${escapeHtml(speaker)} with this note — it may say when they want it posted:</p><p>“${escapeHtml(comment.slice(0, 500))}”</p>`,
-                  'Open the item',
-                  `${DASHBOARD_URL}${itemPath(item, 'scheduler')}`
-                ),
-              })
-            }
-          })().catch(e => console.error('approval-note scheduler notify error:', e))
-        }
+        // (the note used to be relayed to every scheduler as well — no longer:
+        // no scheduler is on the card until a manager hands it over, 15 Sep 2026)
       }
       return NextResponse.json({ ok: true, status: transitioned?.status })
     }
