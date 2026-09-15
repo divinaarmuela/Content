@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { contactIdOf } from '../../../lib/account-owner-core'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Compass, Images, Moon, StickyNote, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -96,6 +97,17 @@ export default function SchedulePage() {
   }, [])
 
   const data = useSchedulePosts(viewer, clientId)
+  /** WHOSE ACCOUNTS (15 Sep 2026): 'all', 'company', or a contact's id — the
+   *  bar, the calendar, the rail and a new upload all follow it */
+  const [owner, setOwner] = useState('all')
+  useEffect(() => { setOwner('all') }, [clientId])
+  const ownerContact = owner === 'all' ? null : contactIdOf(owner)
+  const ownerAccountIds = useMemo(() => new Set(
+    (owner === 'all' ? data.allAccounts : data.allAccounts.filter(a => (a.contact_id ?? null) === ownerContact)).map(a => a.id)),
+    [owner, ownerContact, data.allAccounts])
+  const ownerMedia = useMemo(
+    () => owner === 'all' ? data.media : data.media.filter(m => (m.forContactId ?? null) === ownerContact),
+    [owner, ownerContact, data.media])
 
   /** the channel the profiles bar is filtering to, as the core reads it */
   const selected = useMemo(
@@ -114,6 +126,8 @@ export default function SchedulePage() {
    */
   const flow = useComposeFlow({
     clientId, data, role: me?.role ?? null, userId: me?.id ?? null, suggested,
+    // whom a new upload is for — the page's own dropdown (15 Sep 2026)
+    forContact: ownerContact,
     // "Show on calendar" from the window that follows a press
     onShowDay: key => setAnchor(key),
   })
@@ -293,7 +307,7 @@ export default function SchedulePage() {
       const res = await fetch('/api/social/schedule/from-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId, files: slides, scheduled_for: at }),
+        body: JSON.stringify({ client_id: clientId, files: slides, scheduled_for: at, for_contact_id: ownerContact }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -378,7 +392,7 @@ export default function SchedulePage() {
 
   /** every post for this client on the selected channel */
   const channelPosts = useMemo(
-    () => livePosts.filter(p => matchesChannel(p.channels, selected)),
+    () => livePosts.filter(p => matchesChannel(p.channels, selected) && (owner === 'all' || p.channels.some(id => ownerAccountIds.has(id)))),
     [livePosts, selected])
 
   const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
@@ -546,7 +560,7 @@ export default function SchedulePage() {
 
   const rail = (
     <MediaRail
-      media={data.media}
+      media={ownerMedia}
       waiting={data.waiting}
       drafts={draftCount}
       onDrafts={() => { setOnlyWaiting(false); setView('List') }}
@@ -594,6 +608,9 @@ export default function SchedulePage() {
             clients={data.clients}
             clientId={clientId}
             onClient={pickClient}
+            owner={owner}
+            onOwner={setOwner}
+            contacts={data.contacts}
             accounts={data.allAccounts}
             channel={channel}
             onChannel={setChannel}

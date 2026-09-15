@@ -79,8 +79,10 @@ export type ComposeFlow = {
   windows: React.ReactNode
 }
 
-export function useComposeFlow({ clientId, data, role, userId, suggested, reviewOnly, onShowDay }: {
+export function useComposeFlow({ clientId, data, role, userId, suggested, reviewOnly, onShowDay, forContact = null }: {
   clientId: string | null
+  /** whom a new upload is for: null for the business, a contact's id for a person (15 Sep 2026) */
+  forContact?: string | null
   data: ScheduleData
   role: Role | null
   /** who is looking — carried into the post window so its first-time
@@ -272,6 +274,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
       {choosing && (
         <NewPostSources
           clientId={clientId}
+          forContact={forContact}
           media={data.media}
           at={choosing.at}
           tz={data.tz}

@@ -14,6 +14,7 @@ import { PLATFORM_RULES } from '@/app/lib/publish-core'
 import { initialsOf as accountInitials } from '@/app/lib/social-access-core'
 import AccountAvatar from '../AccountAvatar'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
+import { contactIdOf, ownerChoices } from '@/app/lib/account-owner-core'
 
 /**
  * Who this week is for, and which of their channels is on screen.
@@ -274,7 +275,14 @@ function EmptySlot({ platform, onConnect }: { platform: string; onConnect?: (pla
 
 export default function ProfilesBar({
   clients, clientId, onClient, accounts, channel, onChannel, view, onView, onReconnect, onConnect, onAskClient,
+  owner = 'all', onOwner, contacts = [],
 }: {
+  /** WHOSE ACCOUNTS TO LOOK AT (the owner, 15 Sep 2026: "the Schedule page
+   *  shows approved items per client or per account — pick from the
+   *  dropdown"): everyone, the business, or one of the client's people */
+  owner?: string
+  onOwner?: (owner: string) => void
+  contacts?: readonly { id: string; name: string; role?: string | null; is_primary?: boolean | null }[]
   /** start the network's sign-in again for this account (the Schedule
    *  page's own connect flow — see page.tsx) */
   onReconnect?: (account: SocialAccount) => void
@@ -294,7 +302,7 @@ export default function ProfilesBar({
   onView: (v: ScheduleViewName) => void
 }) {
   const client = clients.find(c => c.id === clientId) ?? null
-  const slots = profileSlots(accounts)
+  const slots = profileSlots(owner === 'all' ? accounts : accounts.filter(a => (a.contact_id ?? null) === contactIdOf(owner)))
 
   return (
     <div data-tour="profiles-bar" className="flex flex-wrap items-center gap-3 border-b border-border py-2">
@@ -306,6 +314,20 @@ export default function ProfilesBar({
           {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
         </SelectContent>
       </Select>
+      {/* the business, or one of their people — only people with an account connected */}
+      {client && onOwner && (
+        <Select value={owner} onValueChange={v => v && onOwner(v)}>
+          <SelectTrigger aria-label="Whose accounts" className="h-11 w-[220px] shrink-0 rounded-full border-border bg-surface text-[13px] font-semibold">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Everyone on {client.name}</SelectItem>
+            {ownerChoices(client.name, contacts.filter(c => accounts.some(a => a.contact_id === c.id))).map(c => (
+              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       {/* the networks scroll rather than wrap: ten slots and a calendar have
           to share one row on a laptop */}

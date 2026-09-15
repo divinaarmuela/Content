@@ -37,7 +37,7 @@ import type { RailMedia } from './useSchedulePosts'
  * check, exactly as it does today.
  */
 export default function NewPostSources({
-  clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable, allowUploads = true,
+  clientId, media, at, tz, role, postWithoutApproval, clientSignsOff, driveAvailable, allowUploads = true, forContact = null,
   handedFolders = [],
   onPick, onApprove, onCreated, onOpenExisting, onClose,
 }: {
@@ -45,6 +45,8 @@ export default function NewPostSources({
    *  the Drive tab offers each folder beside the client's own */
   handedFolders?: readonly { itemId: string; title: string }[]
   clientId: string | null
+  /** whom a new upload is for — the Schedule page's own dropdown (15 Sep 2026) */
+  forContact?: string | null
   media: RailMedia[]
   /** the time the click meant, carried through to the composer */
   at: string | null
@@ -226,7 +228,7 @@ export default function NewPostSources({
       const res = await fetch('/api/social/schedule/from-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: clientId, files: chosen, scheduled_for: at }),
+        body: JSON.stringify({ client_id: clientId, files: chosen, scheduled_for: at, for_contact_id: forContact ?? null }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {

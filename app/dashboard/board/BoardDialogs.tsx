@@ -600,7 +600,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   // the client — the work is for them, whatever is connected (15 Sep 2026)
   const postForChoices = ownerChoices(
     clients.find(c => c.id === clientId)?.name ?? 'The business',
-    contactRows.filter(c => c.client_id === clientId && (!forPosting || accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id))),
+    contactRows.filter(c => c.client_id === clientId && accountRows.some(a => a.client_id === clientId && a.active !== false && a.contact_id === c.id)),
   )
   const { rows: shootRows } = useTable<{ id: string; client_id: string; title: string; status?: string }>('batches')
   const { rows: groupRows } = useTable<{ id: string; client_id: string; batch_id?: string | null; title: string; target?: number }>('deliverable_groups')

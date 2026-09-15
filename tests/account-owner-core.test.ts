@@ -113,6 +113,22 @@ describe('whom the post is for, from the New post window to the Schedule window 
     expect(r).toContain("return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })")
     expect(src('lib/db-types.ts')).toMatch(/export interface ContentItem \{[\s\S]*?for_contact_id: string \| null/)
   })
+  it('the Schedule page has a whose-accounts dropdown; the bar, the calendar, the rail and an upload follow it (15 Sep 2026)', () => {
+    const bar = src('app/dashboard/social/schedule/ProfilesBar.tsx')
+    expect(bar).toContain('<SelectItem value="all">Everyone on {client.name}</SelectItem>')
+    expect(bar).toContain("const slots = profileSlots(owner === 'all' ? accounts : accounts.filter(a => (a.contact_id ?? null) === contactIdOf(owner)))")
+    const p = src('app/dashboard/social/schedule/page.tsx')
+    expect(p).toContain("() => livePosts.filter(p => matchesChannel(p.channels, selected) && (owner === 'all' || p.channels.some(id => ownerAccountIds.has(id)))),")
+    expect(p).toContain('    <MediaRail\n      media={ownerMedia}')
+    expect(p).toContain('forContact: ownerContact,')
+    expect(src('app/dashboard/social/schedule/useComposeFlow.tsx')).toContain('forContact={forContact}')
+    expect(src('app/dashboard/social/schedule/NewPostSources.tsx')).toContain('for_contact_id: forContact ?? null')
+    // Post approval's window asks too, and the upload route writes it on the card
+    expect(src('app/dashboard/scheduler/SendForApprovalDialog.tsx')).toContain('for_contact_id: contactIdOf(postFor),')
+    const u = src('app/lib/schedule-upload.ts')
+    expect(u).toContain("if (!person || person.client_id !== clientId) throw new ComposeError(['That person is not on this client'])")
+    expect(u).toContain('for_contact_id: forContact,')
+  })
   it('the Schedule window opens a new post on that person’s channels; the post’s card says whom it is for', () => {
     const w = src('app/dashboard/social/schedule/NewPostDialog.tsx')
     expect(w).toContain("const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)")

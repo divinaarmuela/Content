@@ -60,6 +60,8 @@ import { UPLOAD_ADHOC_REASON, contentTypeForFiles, titleForUpload } from './sche
 
 export type UploadPostInput = {
   client_id: string
+  /** whom the post is for: the business (null), or one of the client's people (15 Sep 2026) */
+  for_contact_id?: string | null
   /** the slides — files already in OUR storage (an upload, or a Drive file
    *  already copied across by `/api/social/schedule/drive`) */
   files: unknown
@@ -176,7 +178,7 @@ async function clientSignsOff(clientId: string): Promise<{ client: Client | null
  * editor hat on their own upload and lets them move it forward.
  */
 async function createBackingItem(
-  user: TeamUser, clientId: string, title: string, contentType: string, signsOff: boolean,
+  user: TeamUser, clientId: string, title: string, contentType: string, signsOff: boolean, forContact: string | null,
 ): Promise<ContentItem> {
   const kinds = await table<WorkKind>('work_kinds').list().catch(() => [] as WorkKind[])
   const kind = resolveKindForWrite(kinds as WorkKind[], null)
@@ -186,6 +188,7 @@ async function createBackingItem(
     id: randomUUID(),
     work_kind_id: kind.id,
     client_id: clientId,
+    for_contact_id: forContact,
     batch_id: null,
     title,
     content_type: contentType,
@@ -246,6 +249,13 @@ export async function createPostFromFiles(
 
   const { client, signsOff } = await clientSignsOff(clientId)
   if (!client) throw new AuthzError('That client no longer exists', 404)
+  // WHOM THE POST IS FOR (15 Sep 2026): the business, or one of the client's
+  // people — checked to be on this client
+  const forContact = typeof input.for_contact_id === 'string' && input.for_contact_id.trim() ? input.for_contact_id.trim() : null
+  if (forContact) {
+    const person = await table<{ id: string; client_id: string }>('client_contacts').get(forContact).catch(() => null)
+    if (!person || person.client_id !== clientId) throw new ComposeError(['That person is not on this client'])
+  }
 
   const slides = await checkedSlides(input.files)
   const contentType = contentTypeForFiles(slides)
@@ -268,7 +278,7 @@ export async function createPostFromFiles(
     caption: input.title ? String(input.title) : (input.caption ?? null),
   })
 
-  const item = await createBackingItem(user, clientId, title, contentType, signsOff)
+  const item = await createBackingItem(user, clientId, title, contentType, signsOff, forContact)
 
   // version 1 — the same call the item page's upload makes, so the numbering,
   // the Drive mirror and the video preview all happen as usual

@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { clearGroup, dismissUpload, uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
 import { useSchedulePosts } from '../social/schedule/useSchedulePosts'
+import { contactIdOf, ownerChoices } from '../../lib/account-owner-core'
 import { useRole } from '../useRole'
 
 /** the client worked on last — the same key the Schedule page remembers */
@@ -54,6 +55,9 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
     () => (me ? { id: me.id, role: me.role } : null), [me])
 
   const [clientId, setClientId] = useState<string | null>(null)
+  /** WHOM THE POST IS FOR (15 Sep 2026): the business, or a person with an account connected */
+  const [postFor, setPostFor] = useState('company')
+  useEffect(() => { setPostFor('company') }, [clientId])
   const data = useSchedulePosts(viewer, clientId)
   const client = data.clients.find(c => c.id === clientId) ?? null
 
@@ -163,6 +167,7 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_id: clientId, files: chosen,
+          for_contact_id: contactIdOf(postFor),
           title: title.trim() || null, note: note.trim() || null,
           decision, reviewer_ids: decision === 'ask' && approverId ? [approverId] : [],
         }),
@@ -251,6 +256,17 @@ export default function SendForApprovalDialog({ onClose }: { onClose: () => void
                   onClick={() => { setClientId(null); setChosen([]) }}>change</button>
               </p>
             )}
+
+            {/* whom the post is for: the business, or a person with an account connected (15 Sep 2026) */}
+            <label className="flex flex-col gap-1">
+              <span className="text-[12px] font-semibold text-muted-foreground">Posting for</span>
+              <select value={postFor} onChange={e => setPostFor(e.target.value)}
+                className="min-h-11 w-full rounded-full border border-border bg-paper px-4 text-[14px] outline-none">
+                {ownerChoices(client?.name ?? 'The business', data.contacts.filter(c => data.accounts.some(a => a.contact_id === c.id))).map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </label>
 
             {/* ── 2. the files ── */}
             <div

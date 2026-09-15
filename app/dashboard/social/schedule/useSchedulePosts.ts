@@ -68,6 +68,8 @@ export type SchedulePostRow = SocialPost & {
  *  it cannot start a post yet. */
 export type RailMedia = {
   itemId: string
+  /** whom the piece is for: null for the business, a contact's id for a person (15 Sep 2026) */
+  forContactId?: string | null
   title: string
   contentType: string
   slides: Slide[]
@@ -343,6 +345,7 @@ export function useSchedulePosts(
         const slides = elig.ok ? remainingSlides(elig.slides, gone) : []
         return {
           itemId: item.id,
+          forContactId: (item as { for_contact_id?: string | null }).for_contact_id ?? null,
           title: item.title,
           contentType: String(item.content_type ?? ''),
           slides,
