@@ -33,8 +33,12 @@ describe('the card’s page', () => {
   it('chooses the same three cards the drawer did: the post’s, the maker’s, the manager’s', () => {
     expect(page).toContain('const maker = usesMakerDrawer(me, item)')
     expect(page).toContain('? <PostApprovalDetail key={id} id={id} onClose={back} />')
-    expect(page).toContain('? <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
-    expect(page).toContain(': <CardDetail key={id} id={id} layout="sheet" onClose={back} />')
+    // one card for everyone on the team (15 Sep 2026): the brief, with a
+    // manager's or checker's own buttons above it — never the lined table
+    expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
+    expect(page).not.toContain('<CardDetail')
+    expect(page).toContain("{!maker && me && me.role !== 'client' && (")
+    expect(page).toContain('const { primary, more } = cardActions(card, viewer)')
   })
   it('the maker’s drawer leaves the folder’s files to the page, so they are not drawn twice', () => {
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')

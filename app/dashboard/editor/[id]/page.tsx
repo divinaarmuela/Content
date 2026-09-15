@@ -10,7 +10,9 @@ import { useRole } from '../../useRole'
 import PageTitle from '../../ui/PageTitle'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
 import PostApprovalDetail from '../../board/PostApprovalDetail'
-import CardDetail from '../../production/[id]/CardDetail'
+import { Button } from '@/components/ui/button'
+import { useCardActs } from '../../board/useCardActs'
+import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
 import DriveFolderFiles from '../../board/DriveFolderFiles'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
@@ -34,6 +36,33 @@ import { workFrom } from '../../../lib/editor-sop-core'
  * turns that into this page.
  */
 const folderUrl = (folderId: string) => `https://drive.google.com/drive/folders/${folderId}`
+
+/** The manager's or checker's answers on the card, above the brief: the
+ *  board's own buttons and dialogs, so a press here is a press on the board. */
+function ManagerActions({ item, viewer }: { item: ContentItem; viewer: BoardViewer }) {
+  const card = item as unknown as BoardViewCard
+  const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
+  const { primary, more } = cardActions(card, viewer)
+  const busy = busyId === card.id
+  if (!primary && more.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3" aria-label="Your answers on this card">
+      {primary && (
+        <Button disabled={busy} onClick={() => act(card, primary)}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
+          {busy ? 'Saving…' : primary.label}
+        </Button>
+      )}
+      {more.map(a => (
+        <Button key={`${a.kind}-${a.to}`} variant="outline" disabled={busy} onClick={() => act(card, a)}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
+          {a.label}
+        </Button>
+      ))}
+      {dialogs}
+    </div>
+  )
+}
 
 export default function EditorCardPage() {
   const { id } = useParams<{ id: string }>()
@@ -101,9 +130,14 @@ export default function EditorCardPage() {
         <aside className="min-w-0 overflow-hidden rounded-card border border-border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]" aria-label="The card">
           {adhoc
             ? <PostApprovalDetail key={id} id={id} onClose={back} />
-            : maker
-              ? <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
-              : <CardDetail key={id} id={id} layout="sheet" onClose={back} />}
+            : (
+              <>
+                {!maker && me && me.role !== 'client' && (
+                  <ManagerActions item={item} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }} />
+                )}
+                <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
+              </>
+            )}
         </aside>
       </div>
     </div>
