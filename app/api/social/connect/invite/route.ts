@@ -6,7 +6,7 @@ import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { notify, renderEmail, escapeHtml } from '../../../../lib/mailer'
 import { clientPortalUsers } from '../../../../lib/social-connect'
 import { assertClientAccess } from '../../../../lib/social-schedule'
-import { connectLinkPath, isConnectable, parseNetworks } from '../../../../lib/connect-link-core'
+import { connectLinkPath, isConnectable, parseFor, parseNetworks } from '../../../../lib/connect-link-core'
 import { platformLabel } from '../../../../lib/posting-card-core'
 
 /**
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   try {
     const user = await requireRole('scheduler')
     const body = await req.json().catch(() => ({})) as {
-      clientId?: unknown; platform?: unknown; networks?: unknown; reason?: unknown
+      clientId?: unknown; platform?: unknown; networks?: unknown; reason?: unknown; for?: unknown
     }
     const clientId = typeof body.clientId === 'string' ? body.clientId : ''
     if (!clientId) return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
@@ -58,14 +58,32 @@ export async function POST(req: Request) {
 
     // who would actually receive it — asked BEFORE anything is minted, so a
     // client with nobody to email is told that instead
+    // WHO THE LINK IS FOR (15 Sep 2026): a link for one of the client's people
+    // goes to that person, and the accounts they connect are tagged as theirs
+    const forId = parseFor(body.for)
+    const person = forId
+      ? await table<{ id: string; client_id: string; name: string; email?: string | null }>('client_contacts').get(forId).catch(() => null)
+      : null
+    if (forId && (!person || person.client_id !== clientId)) {
+      return NextResponse.json({ error: 'That person is not on this client' }, { status: 400 })
+    }
     const portal = await clientPortalUsers(clientId)
     const contact = client.email?.trim().toLowerCase() ?? ''
-    const people: { id: string | null; name: string; email: string }[] = [
+    const people: { id: string | null; name: string; email: string }[] = person
+      ? (person.email?.trim()
+        ? [{ id: null, name: person.name, email: person.email.trim().toLowerCase() }]
+        : [])
+      : [
       ...portal.map(p => ({ id: p.id, name: p.name, email: p.email })),
       ...(contact && !portal.some(p => p.email.toLowerCase() === contact)
         ? [{ id: null, name: client.contact_name || client.name, email: contact }]
         : []),
     ]
+    if (person && people.length === 0) {
+      return NextResponse.json({
+        error: `${person.name} has no email on the client record. Add one, or copy the link and send it yourself.`,
+      }, { status: 400 })
+    }
     if (people.length === 0) {
       return NextResponse.json({
         error: 'This client has no email on record and nobody on their portal. Add a contact email on the client, or copy the link and send it yourself.',
@@ -79,7 +97,7 @@ export async function POST(req: Request) {
       await table('clients').update(clientId, { share_token: token })
     }
     const base = (process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-    const link = `${base}${connectLinkPath(token, networks)}`
+    const link = `${base}${connectLinkPath(token, networks, forId)}`
 
     const labels = networks.map(platformLabel)
     const list = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`

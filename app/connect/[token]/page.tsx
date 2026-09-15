@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
 import { table } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
-import { isShareToken, parseNetworks } from '../../lib/connect-link-core'
+import { isShareToken, parseFor, parseNetworks } from '../../lib/connect-link-core'
 import { needsReconnect, readStoredHealth } from '../../lib/account-health-core'
 
 const healthFacts = (raw: unknown) => {
@@ -46,6 +46,11 @@ export default async function ConnectPage({ params, searchParams }: {
   if (!client) notFound()
 
   const networksParam = Array.isArray(q.networks) ? q.networks[0] : q.networks
+  // who the link is for: one of the client's people, or the business (15 Sep 2026)
+  const forParam = parseFor(Array.isArray(q.for) ? q.for[0] : q.for)
+  const forPerson = forParam
+    ? await table<{ id: string; client_id: string; name: string }>('client_contacts').get(forParam).then(c => c && c.client_id === client.id ? c : null).catch(() => null)
+    : null
   const networks = parseNetworks(networksParam ?? null)
   const accounts = (await table<SocialAccount>('social_accounts').list({ by: { client_id: client.id } }))
     .filter(a => a.active !== false)
@@ -64,7 +69,7 @@ export default async function ConnectPage({ params, searchParams }: {
           <p className="text-[11px] uppercase tracking-[0.2em] opacity-60" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
             MD Media · {client.name}
           </p>
-          <h1 className="text-[28px] font-semibold leading-tight sm:text-[34px]">Connect your social accounts</h1>
+          <h1 className="text-[28px] font-semibold leading-tight sm:text-[34px]">{forPerson ? `${forPerson.name}, connect your own accounts` : `Connect ${client.name}’s business accounts`}</h1>
           <p className="max-w-prose text-[15px] leading-[1.5] opacity-80">
             Press <strong>Connect</strong> next to each network, sign in to it as you normally would, and
             allow MD Media to post on your behalf. You come straight back here. Nothing is posted
@@ -76,6 +81,7 @@ export default async function ConnectPage({ params, searchParams }: {
           token={token}
           networks={networks}
           networksParam={networksParam ?? ''}
+          forContact={forPerson?.id ?? null}
           initial={accounts}
           justConnected={justConnected ?? null}
           returnError={returnError ?? null}

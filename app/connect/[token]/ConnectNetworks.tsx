@@ -27,8 +27,10 @@ import PlatformIcon, { brandFor } from '@/app/dashboard/social/PlatformIcon'
  *   · the WRONG account got connected — "Connect a different account"
  *     runs the sign-in again, and the network's own picker takes over.
  */
-export default function ConnectNetworks({ token, networks, networksParam, initial, justConnected, returnError }: {
+export default function ConnectNetworks({ token, networks, networksParam, initial, justConnected, returnError, forContact = null }: {
   token: string
+  /** the link's `for=` — the person whose own accounts these are, or null for the business (15 Sep 2026) */
+  forContact?: string | null
   networks: Platform[]
   /** the link's own `networks=` value, sent back so the server checks the
    *  press against the manager's ticks, not the button's */
@@ -50,7 +52,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
     // re-show a cancelled sign-in
     const tidy = () => {
       const url = new URL(window.location.href)
-      for (const k of ['connected', 'clientId', 'error']) url.searchParams.delete(k)
+      for (const k of ['connected', 'clientId', 'error']) url.searchParams.delete(k)   // `for` and `networks` stay: they are the link
       window.history.replaceState({}, '', url.toString())
     }
     if (returnError) { tidy(); return }
@@ -59,7 +61,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       let found = connected.some(a => a.platform === justConnected && !a.reconnect)
       for (let attempt = 0; attempt < 5 && !cancelled && !found; attempt++) {
         try {
-          const res = await fetch(`/api/connect/${encodeURIComponent(token)}`, { method: 'PUT' })
+          const res = await fetch(`/api/connect/${encodeURIComponent(token)}${forContact ? `?for=${encodeURIComponent(forContact)}` : ''}`, { method: 'PUT' })
           const json = await res.json().catch(() => ({}))
           if (Array.isArray(json?.connected)) {
             setConnected(json.connected)
@@ -86,7 +88,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       const res = await fetch(`/api/connect/${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, networks: networksParam }),
+        body: JSON.stringify({ platform, networks: networksParam, for: forContact }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not start the sign-in'))

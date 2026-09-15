@@ -5,6 +5,9 @@ import { Check, Copy, Link2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { publicUrl } from '@/app/lib/public-url'
 import { CONNECTABLE, connectLinkPath } from '@/app/lib/connect-link-core'
+import { contactIdOf, ownerChoices } from '@/app/lib/account-owner-core'
+import { useTable } from '@/lib/db-client'
+import type { ClientContact } from '@/lib/db-types'
 import type { Platform } from '@/app/lib/publish-core'
 import PlatformIcon, { brandFor } from './PlatformIcon'
 
@@ -20,9 +23,10 @@ import PlatformIcon, { brandFor } from './PlatformIcon'
  * Connect button on each. The token is the client's portal token — the
  * same door the portal link opens — so only their managers see this.
  */
-export default function ClientConnectLink({ token, clientId, connected }: {
+export default function ClientConnectLink({ token, clientId, clientName, connected }: {
   token: string
   clientId: string
+  clientName: string
   /** the networks already connected — ticked off by default, since asking
    *  the client for those again is asking twice */
   connected: readonly string[]
@@ -32,8 +36,13 @@ export default function ClientConnectLink({ token, clientId, connected }: {
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(false)
   const [mailing, setMailing] = useState(false)
+  /** WHO THE LINK IS FOR (the owner, 15 Sep 2026: "say it's for their
+   *  business — we send them the link; the other option is the client's
+   *  personal one"): 'company', or one of the client's contacts */
+  const [linkFor, setLinkFor] = useState('company')
+  const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
 
-  const link = useMemo(() => publicUrl(connectLinkPath(token, picked)), [token, picked])
+  const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor))), [token, picked, linkFor])
 
   /** the same link, emailed by us — to their portal logins and the contact
    *  email on their record — for the manager who would rather not paste */
@@ -43,7 +52,7 @@ export default function ClientConnectLink({ token, clientId, connected }: {
       const res = await fetch('/api/social/connect/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, networks: picked.join(',') }),
+        body: JSON.stringify({ clientId, networks: picked.join(','), for: contactIdOf(linkFor) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not send it'))
@@ -84,6 +93,14 @@ export default function ClientConnectLink({ token, clientId, connected }: {
             Tick the networks they should sign in to, copy the link, send it. They press Connect on each, sign
             in to the network, and the account lands here — no account of ours needed.
           </p>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-semibold text-muted-foreground">This link is for</span>
+            <select value={linkFor} onChange={e => setLinkFor(e.target.value)} aria-label="Who the link is for"
+              className="min-h-10 w-full max-w-[420px] rounded-full border border-border bg-background px-3 text-[13px]">
+              {ownerChoices(clientName, contacts).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. A person’s link is emailed to them alone.</span>
+          </label>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Networks on the link">
             {CONNECTABLE.map(p => {
               const on = picked.includes(p)

@@ -948,15 +948,24 @@ export async function dueJobIds(): Promise<string[]> {
 }
 
 /** Refresh the cached account list for a client from the provider. */
-export async function syncSocialAccounts(clientId: string, profileId: string): Promise<number> {
+export async function syncSocialAccounts(
+  clientId: string, profileId: string,
+  /** WHOSE ACCOUNTS ARE THESE (15 Sep 2026): a link made "for" one of the
+   *  client's people tags every account NEW in this sync as theirs. An
+   *  account already on the row keeps whatever it had — the upsert merges. */
+  opts: { tagNewWith?: string | null } = {},
+): Promise<number> {
   const accounts = await getPublisher().listAccounts(profileId)
   if (accounts.length === 0) return 0
+  const before = new Set((await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })).map(r => r.provider_account_id))
 
   for (const a of accounts) {
+    const isNew = !before.has(a.providerAccountId)
     const row = await table<SocialAccount>('social_accounts').upsert({
       client_id: clientId,
       platform: a.platform,
       provider_account_id: a.providerAccountId,
+      ...(isNew && opts.tagNewWith ? { contact_id: opts.tagNewWith } : {}),
       name: a.name,
       username: a.username,
       avatar_url: a.avatarUrl,

@@ -1,6 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRow, useTable } from '@/lib/db-client'
+import type { Client, ClientContact } from '@/lib/db-types'
+import { accountSections } from '../../lib/account-owner-core'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,6 +20,8 @@ import PlatformIcon, { brandFor } from '../social/PlatformIcon'
 
 type Account = {
   id: string
+  /** whose account: null for the business, a contact's id for a person's own (15 Sep 2026) */
+  contact_id?: string | null
   platform: string
   provider_account_id: string
   name: string | null
@@ -35,6 +40,11 @@ export default function SocialChannels(
   { clientId, onChanged }: { clientId: string; onChanged?: () => void }
 ) {
   const [accounts, setAccounts] = useState<Account[]>([])
+  // THE BUSINESS, THEN EACH PERSON (the owner, 15 Sep 2026: "there is their
+  // business connection and the client"): the client's people, and its name
+  const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
+  const clientRow = useRow<Client>('clients', clientId).row
+  const clientName = clientRow?.name ?? 'The business'
   const [configured, setConfigured] = useState(true)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -263,8 +273,18 @@ export default function SocialChannels(
           </p>
         </div>
       ) : (
+        <div className="flex flex-col gap-3">
+        {accountSections(clientName, accounts, contacts).map(section => (
+        <section key={section.key} className="flex flex-col gap-1.5" aria-label={section.title}>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="text-[13px] font-semibold">{section.title}</span>
+            <span className="text-secondary-13 text-muted-foreground">{section.hint}</span>
+          </div>
+          {section.accounts.length === 0 && (
+            <p className="text-secondary-13 text-muted-foreground">No business account connected yet.</p>
+          )}
         <ul className="grid gap-2 sm:grid-cols-2">
-          {accounts.map(a => {
+          {section.accounts.map(a => {
             const brand = brandFor(a.platform)
             return (
               <li
@@ -311,6 +331,9 @@ export default function SocialChannels(
             )
           })}
         </ul>
+        </section>
+        ))}
+        </div>
       )}
 
       {/* Disconnecting revokes access at the platform — reconnecting means

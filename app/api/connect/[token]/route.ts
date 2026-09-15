@@ -4,7 +4,7 @@ import type { Client, SocialAccount } from '@/lib/db-types'
 import { connectLinkFor } from '@/app/lib/social-connect'
 import { syncSocialAccounts } from '@/app/lib/publish'
 import { refreshClientAccountsHealth } from '@/app/lib/account-health'
-import { connectLinkPath, isConnectable, isShareToken, parseNetworks, type ConnectedAccount } from '@/app/lib/connect-link-core'
+import { connectLinkPath, isConnectable, isShareToken, parseFor, parseNetworks, type ConnectedAccount } from '@/app/lib/connect-link-core'
 import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
 
 /**
@@ -22,6 +22,14 @@ import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
  */
 
 export const dynamic = 'force-dynamic'
+
+/** WHO THE LINK IS FOR (15 Sep 2026): the `for=` contact, only when that
+ *  person is on this client — anything else reads as the business. */
+async function contactOnClient(clientId: string, id: string | null): Promise<string | null> {
+  if (!id) return null
+  const c = await table<{ id: string; client_id: string }>('client_contacts').get(id).catch(() => null)
+  return c && c.client_id === clientId ? c.id : null
+}
 
 async function clientFor(token: string): Promise<Client | null> {
   if (!isShareToken(token)) return null
@@ -60,7 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const { token } = await ctx.params
     const client = await clientFor(token)
     if (!client) return NextResponse.json({ error: 'This link is not valid' }, { status: 404 })
-    const body = await req.json().catch(() => ({})) as { platform?: unknown; networks?: unknown }
+    const body = await req.json().catch(() => ({})) as { platform?: unknown; networks?: unknown; for?: unknown }
     if (!isConnectable(body.platform)) {
       return NextResponse.json({ error: 'That network cannot be connected here' }, { status: 400 })
     }
@@ -70,14 +78,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     if (!allowed.includes(body.platform)) {
       return NextResponse.json({ error: 'That network is not on this link' }, { status: 400 })
     }
-    const link = await connectLinkFor(client.id, body.platform, { path: connectLinkPath(token, allowed) })
+    // who the link is for comes back with them, so the sync can tag the new account
+    const forContact = await contactOnClient(client.id, parseFor(body.for))
+    const link = await connectLinkFor(client.id, body.platform, { path: connectLinkPath(token, allowed, forContact) })
     if ('error' in link) return NextResponse.json({ error: link.error }, { status: link.status })
     return NextResponse.json({ authUrl: link.authUrl })
   })
 }
 
 /** back from the network: re-read the provider's list into ours */
-export async function PUT(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ token: string }> }) {
   return withRequestCache(async () => {
     const { token } = await ctx.params
     const client = await clientFor(token)
@@ -85,7 +95,10 @@ export async function PUT(_req: Request, ctx: { params: Promise<{ token: string 
     if (!client.social_profile_id) return NextResponse.json({ synced: 0, connected: [] })
     let synced = 0
     try {
-      synced = await syncSocialAccounts(client.id, client.social_profile_id)
+      // a link made for one of the client's people: the accounts new in
+      // this sync are theirs (15 Sep 2026)
+      const forContact = await contactOnClient(client.id, parseFor(new URL(req.url).searchParams.get('for')))
+      synced = await syncSocialAccounts(client.id, client.social_profile_id, { tagNewWith: forContact })
       // a reconnect is a token that works again: read the provider's verdict
       // now rather than showing "expired" until tomorrow's 7 am check
       await refreshClientAccountsHealth(client.id)

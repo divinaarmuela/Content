@@ -10,7 +10,7 @@ const accountShape = (r: SocialAccount) => ({
   id: r.id, client_id: r.client_id, platform: r.platform,
   provider_account_id: r.provider_account_id, name: r.name,
   username: r.username, avatar_url: r.avatar_url, active: r.active,
-  connected_at: r.connected_at,
+  connected_at: r.connected_at, contact_id: r.contact_id ?? null,
 })
 
 /** Connected accounts, optionally for one client, plus whether publishing is

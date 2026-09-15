@@ -41,12 +41,27 @@ export function parseNetworks(param: string | null | undefined): Platform[] {
 }
 
 /** The link's path for a client token and the ticked networks. */
-export function connectLinkPath(token: string, networks: readonly Platform[]): string {
+/**
+ * WHO THE LINK IS FOR (the owner, 15 Sep 2026: "say it's for their business —
+ * we send them the link; the other option is the client's personal one").
+ * `for=<contact id>` on the link means the accounts connected from it are
+ * that person's own; no `for` means the client's official business accounts.
+ * The link cannot tell who pressed it, so the manager says so when making it.
+ */
+export function connectLinkPath(token: string, networks: readonly Platform[], forContact?: string | null): string {
   const picked = CONNECTABLE.filter(p => networks.includes(p))
-  const q = picked.length > 0 && picked.length < CONNECTABLE.length
-    ? `?networks=${picked.join(',')}`
-    : ''
-  return `/connect/${encodeURIComponent(token)}${q}`
+  const parts: string[] = []
+  if (picked.length > 0 && picked.length < CONNECTABLE.length) parts.push(`networks=${picked.join(',')}`)
+  const who = parseFor(forContact)
+  if (who) parts.push(`for=${encodeURIComponent(who)}`)
+  return `/connect/${encodeURIComponent(token)}${parts.length ? `?${parts.join('&')}` : ''}`
+}
+
+/** The `for=` on a link: one contact id, or null for the business. Only the
+ *  characters an id can hold, so nothing else rides in on it. */
+export function parseFor(raw: unknown): string | null {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  return s && s !== 'company' && /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : null
 }
 
 /** A share token as the portal accepts it — a UUID, nothing else. */
