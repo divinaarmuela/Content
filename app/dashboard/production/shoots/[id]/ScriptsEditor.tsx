@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,23 +26,38 @@ export default function ScriptsEditor({ scripts, onSave, disabled = false }: {
   disabled?: boolean
 }) {
   const [blocks, setBlocks] = useState<ScriptBlock[]>(() => sanitiseScripts(scripts))
-  // a live row arriving from elsewhere redraws the list — but only when its
-  // words differ, so a script just added and not yet typed into is not swept away
+  const box = useRef<HTMLDivElement>(null)
+  /** the last words this editor saved or adopted, so a server echo of our own
+   *  save is recognised and never treated as somebody else's change */
+  const known = useRef(JSON.stringify(sanitiseScripts(scripts)))
+  /* NEVER OVERWRITE WHAT IS BEING TYPED (the owner, 15 Sep 2026: "the script
+   * doesn't update properly — it shifts back to empty text"). Blurring the
+   * name saved it; the echo of that save arrived while the words were being
+   * typed, and the box was reset to what the server had. A row is adopted
+   * only when it differs from what we last saved or saw, and never while a
+   * box in here has the focus. */
   useEffect(() => {
-    const incoming = sanitiseScripts(scripts)
-    setBlocks(cur => JSON.stringify(incoming) === JSON.stringify(sanitiseScripts(cur)) ? cur : incoming)
+    const incoming = JSON.stringify(sanitiseScripts(scripts))
+    if (incoming === known.current) return
+    if (box.current && box.current.contains(document.activeElement)) return
+    known.current = incoming
+    setBlocks(sanitiseScripts(scripts))
   }, [scripts])
 
   const commit = (next: ScriptBlock[]) => {
     setBlocks(next)
-    onSave(sanitiseScripts(next))
+    const clean = sanitiseScripts(next)
+    const json = JSON.stringify(clean)
+    if (json === known.current) return          // nothing changed: no save, no echo
+    known.current = json
+    onSave(clean)
   }
   const blank = (): ScriptBlock => ({
     id: newScriptId(), title: '', presenter: '', voiceover: false, hook: '', prompts: [], visual: '', purpose: '', links: [], body: '',
   })
 
   return (
-    <div className="flex flex-col gap-3" data-scripts-editor>
+    <div ref={box} className="flex flex-col gap-3" data-scripts-editor>
       {blocks.map((b, i) => (
         <div key={b.id} className="flex flex-col gap-2 rounded-inner border border-border p-3">
           <div className="flex items-center gap-2">
