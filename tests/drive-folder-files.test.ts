@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  folderFilesWords, folderTilesOf, readableFolderId, subfolderCount, tileActionWords,
+  folderFilesWords, folderTilesOf, folderUnreadableWords, parsePublicFolderView, readableFolderId, subfolderCount, tileActionWords,
 } from '../app/lib/drive-folder-files-core'
 import type { DriveEntry } from '../app/lib/files-core'
 
@@ -81,5 +81,47 @@ describe('the route and the drawers (source pins)', () => {
     expect(c).toContain('<iframe key={showing.id} src={showing.preview} title={showing.name} allow="autoplay; fullscreen" allowFullScreen')
     expect(c).toContain('Open in Drive')
     expect(c).not.toContain('/api/drive/download')
+  })
+})
+
+describe('a folder the agency account was never shared on (the owner, 15 Sep 2026: "No files in the folder yet" over sixteen clips)', () => {
+  // Google's public folder view of the owner's real footage folder, saved on 15 Sep 2026
+  const html = readFileSync(join(process.cwd(), 'tests/fixtures/drive-public-folder-view.html'), 'utf8')
+  it('reads every entry off the public folder view: id, name, type, and Drive’s own picture at tile size', () => {
+    const entries = parsePublicFolderView(html)
+    expect(entries).toHaveLength(16)
+    const folder = entries.find(e => e.name === 'MXF')!
+    expect(folder.mimeType).toBe('application/vnd.google-apps.folder')
+    expect(folder.webViewLink).toBe('https://drive.google.com/drive/folders/1Umlc9vGp2RpI2Mf-RQUEL-mGzdFpyK52')
+    const clip = entries.find(e => e.name === '10.9.26.mp4')!
+    expect(clip.id).toBe('1_c2btM6QZ5DshW1dgK7P7CsAECnk1zTB')
+    expect(clip.mimeType).toBe('video/mp4')
+    expect(clip.hasThumbnail).toBe(true)
+    expect(clip.thumbUrl).toMatch(/^https:\/\/lh3\.googleusercontent\.com\/drive-storage\/.+=s400$/)
+    expect(clip.webViewLink).toBe('https://drive.google.com/file/d/1_c2btM6QZ5DshW1dgK7P7CsAECnk1zTB/view')
+  })
+  it('those entries make the same tiles — the public picture instead of our proxy, subfolders skipped', () => {
+    const tiles = folderTilesOf(parsePublicFolderView(html))
+    expect(tiles).toHaveLength(15)
+    expect(tiles.every(t => t.kind === 'video')).toBe(true)
+    expect(tiles[0].thumb).toMatch(/^https:\/\/lh3\.googleusercontent\.com\//)
+    expect(tiles[0].preview).toMatch(/^https:\/\/drive\.google\.com\/file\/d\/[\w-]+\/preview$/)
+  })
+  it('an empty page is an empty list, not a crash', () => {
+    expect(parsePublicFolderView('')).toEqual([])
+    expect(parsePublicFolderView('<html><body>Sign in</body></html>')).toEqual([])
+  })
+  it('when neither way can see the folder, the words say what to do', () => {
+    expect(folderUnreadableWords('tech@mdmmarketing.com.au')).toBe('The files could not be read — share it with tech@mdmmarketing.com.au, or set the folder to anyone with the link, and they show here.')
+    expect(folderUnreadableWords(null)).toContain('share it with the agency’s Drive account')
+  })
+  it('the route asks the account first, then the public view, and never writes (source pins)', () => {
+    const s = readFileSync(join(process.cwd(), 'app/api/drive/children/route.ts'), 'utf8')
+    expect(s).toContain('if (result.ok && result.entries.length > 0) {')
+    expect(s).toContain('const seen = await publicFolderEntries(id)')
+    expect(s).toContain('note: folderUnreadableWords(account?.account_email ?? null)')
+    expect(s).not.toMatch(/method: '(POST|PATCH|PUT|DELETE)'/)
+    const c = readFileSync(join(process.cwd(), 'app/dashboard/board/DriveFolderFiles.tsx'), 'utf8')
+    expect(c).toContain('{state.note ?? folderFilesWords(state.tiles.length, state.folders)}')
   })
 })

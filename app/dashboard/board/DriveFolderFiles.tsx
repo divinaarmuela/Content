@@ -24,7 +24,7 @@ export default function DriveFolderFiles({ url, wide = false }: {
   const [state, setState] = useState<
     | { at: 'idle' }
     | { at: 'looking' }
-    | { at: 'ready'; tiles: FolderTile[]; folders: number; more: boolean }
+    | { at: 'ready'; tiles: FolderTile[]; folders: number; more: boolean; note: string | null }
     | { at: 'failed'; words: string }
   >({ at: 'idle' })
   const [showing, setShowing] = useState<FolderTile | null>(null)
@@ -36,13 +36,13 @@ export default function DriveFolderFiles({ url, wide = false }: {
     setState({ at: 'looking' })
     fetch(`/api/drive/children?id=${encodeURIComponent(folderId)}`)
       .then(async res => {
-        const json = await res.json().catch(() => ({})) as { entries?: DriveEntry[]; more?: boolean; error?: string }
+        const json = await res.json().catch(() => ({})) as { entries?: DriveEntry[]; more?: boolean; note?: string | null; error?: string }
         if (!live) return
         if (!res.ok || !Array.isArray(json.entries)) {
           setState({ at: 'failed', words: json.error || 'Could not read the folder just now — open it in Drive.' })
           return
         }
-        setState({ at: 'ready', tiles: folderTilesOf(json.entries), folders: subfolderCount(json.entries), more: json.more === true })
+        setState({ at: 'ready', tiles: folderTilesOf(json.entries), folders: subfolderCount(json.entries), more: json.more === true, note: json.note ?? null })
       })
       .catch(() => { if (live) setState({ at: 'failed', words: 'Could not read the folder just now — open it in Drive.' }) })
     return () => { live = false }
@@ -57,7 +57,7 @@ export default function DriveFolderFiles({ url, wide = false }: {
       {state.at === 'ready' && (
         <>
           <p className="text-[13px] text-muted-foreground">
-            {folderFilesWords(state.tiles.length, state.folders)}{state.more ? ' — the first 60 are shown; open the folder for the rest' : ''}
+            {state.note ?? folderFilesWords(state.tiles.length, state.folders)}{state.more ? ' — the first 60 are shown; open the folder for the rest' : ''}
           </p>
 
           {showing && (
