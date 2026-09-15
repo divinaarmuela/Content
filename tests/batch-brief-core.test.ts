@@ -643,3 +643,21 @@ describe('bold words inside a note (the owner, 15 Sep 2026: "just make it bold w
     expect(bar).toContain('onMouseDown={e => e.preventDefault()}')
   })
 })
+
+describe('bold the words highlighted on the shown card (the owner, 15 Sep 2026: "not the whole card — it’s just the text")', () => {
+  it('wraps the first place the words appear, unwraps them when already bold, and says no when they are not there', async () => {
+    const { boldWordsIn } = await import('../app/lib/batch-brief-core')
+    expect(boldWordsIn('HOOK: The wealthiest people', 'HOOK:')).toBe('**HOOK:** The wealthiest people')
+    expect(boldWordsIn('**HOOK:** The wealthiest people', 'HOOK:')).toBe('HOOK: The wealthiest people')
+    expect(boldWordsIn('HOOK: The wealthiest people', '  wealthiest people ')).toBe('HOOK: The **wealthiest people**')
+    expect(boldWordsIn('HOOK: The wealthiest people', 'nowhere')).toBeNull()
+    expect(boldWordsIn('HOOK: The wealthiest people', '   ')).toBeNull()
+  })
+  it('the toolbar never bolds the whole card on a press (source pins)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const bar = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(bar).not.toContain('const next = { ...card, bold: textBoldOf(card) ? undefined : true }')
+    expect(bar).toContain("const picked = sel && !sel.isCollapsed ? sel.toString() : ''")
+    expect(bar).toContain("toast.message('Highlight the words to make bold, then press Bold')")
+  })
+})

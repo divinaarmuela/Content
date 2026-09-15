@@ -747,3 +747,24 @@ export function toggleBoldSelection(text: string, start: number, end: number): {
   const next = text.slice(0, a + lead) + '**' + core + '**' + text.slice(b - trail)
   return { text: next, start: a + lead, end: a + lead + core.length + 4 }
 }
+
+/**
+ * BOLD THE WORDS SOMEBODY HIGHLIGHTED ON THE SHOWN CARD (the owner, 15 Sep
+ * 2026: "not the whole card — it's just the text — make it dynamic"). The
+ * highlight comes from the page as plain words; this finds them in the
+ * card's text and wraps them in ** — or unwraps them when they already are.
+ * Null when the words are not in the text (a highlight across two cards).
+ */
+export function boldWordsIn(text: string, picked: string): string | null {
+  const words = String(picked ?? '').replace(/\s+$/, '').replace(/^\s+/, '')
+  if (!words) return null
+  const wrapped = `**${words}**`
+  const already = text.indexOf(wrapped)
+  if (already >= 0) return text.slice(0, already) + words + text.slice(already + wrapped.length)
+  const at = text.indexOf(words)
+  if (at < 0) return null
+  // inside a bold run already: leave it
+  const before = text.lastIndexOf('**', at)
+  if (before >= 0 && boldRuns(text).some(r => r.bold && r.text.includes(words))) return null
+  return text.slice(0, at) + wrapped + text.slice(at + words.length)
+}

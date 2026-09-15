@@ -21,7 +21,7 @@ import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
-  hasTextStyle, defaultAlignOf, textBoldOf, toggleBoldSelection } from '../../../../lib/batch-brief-core'
+  hasTextStyle, defaultAlignOf, textBoldOf, toggleBoldSelection, boldWordsIn } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -1100,7 +1100,25 @@ export default function BriefCanvas({
                   el.dispatchEvent(new Event('input', { bubbles: true }))
                   return
                 }
-                const next = { ...card, bold: textBoldOf(card) ? undefined : true }; upsertLocal(next); persist([next])
+                // THE HIGHLIGHT ON THE SHOWN CARD (the owner, 15 Sep 2026: "not the
+                // whole card — it's just the text"): the words highlighted on the
+                // note, a task or a heading as shown, found in the card's text
+                const sel = typeof window !== 'undefined' ? window.getSelection() : null
+                const picked = sel && !sel.isCollapsed ? sel.toString() : ''
+                if (picked.trim()) {
+                  if (card.kind === 'todo') {
+                    const items = card.items ?? []
+                    const hit = items.find(t => boldWordsIn(t.text, picked) !== null)
+                    if (hit) {
+                      const next = { ...card, items: items.map(t => t.id === hit.id ? { ...t, text: boldWordsIn(t.text, picked) ?? t.text } : t) }
+                      upsertLocal(next); persist([next]); sel?.removeAllRanges(); return
+                    }
+                  } else {
+                    const text = boldWordsIn(String(card.text ?? ''), picked)
+                    if (text !== null) { const next = { ...card, text }; upsertLocal(next); persist([next]); sel?.removeAllRanges(); return }
+                  }
+                }
+                toast.message('Highlight the words to make bold, then press Bold')
               }}
               className={`ml-0.5 flex h-7 w-7 items-center justify-center rounded-md [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
                 textBoldOf(card) ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
