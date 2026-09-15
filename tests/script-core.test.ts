@@ -244,7 +244,7 @@ describe('the sanitiser', () => {
       { id: 'empty' },
       'junk',
     ])
-    expect(out).toEqual([{ id: 'a', title: 'T', presenter: 'P', voiceover: false, hook: 'H', prompts: ['q1', '7', 'q2'], visual: 'V', purpose: 'W', links: ['https://x.test/a'] }])
+    expect(out).toEqual([{ id: 'a', title: 'T', presenter: 'P', voiceover: false, hook: 'H', prompts: ['q1', '7', 'q2'], visual: 'V', purpose: 'W', links: ['https://x.test/a'], body: '' }])
     expect(sanitiseScripts(null)).toEqual([])
     expect(sanitiseScripts(Array.from({ length: 40 }, (_, i) => ({ hook: `h${i}` })))).toHaveLength(30)
   })
@@ -256,9 +256,32 @@ describe('the sanitiser', () => {
 })
 
 describe('the words every reader prints', () => {
-  const b: ScriptBlock = { id: 'x', title: 'Hotel', presenter: 'Kareen', voiceover: true, hook: 'Hi', prompts: ['A?', 'B?'], visual: 'B-roll', purpose: 'Why', links: ['https://x.test/1'] }
+  const b: ScriptBlock = { id: 'x', title: 'Hotel', presenter: 'Kareen', voiceover: true, hook: 'Hi', prompts: ['A?', 'B?'], visual: 'B-roll', purpose: 'Why', links: ['https://x.test/1'], body: '' }
   it('one heading and the body lines, in reading order', () => {
     expect(scriptWords([b])).toEqual([{ n: 1, heading: 'Video 1 · Hotel · Kareen · voiceover concept', lines: ['Hook: Hi', 'Prompts:', '1. A?', '2. B?', 'Visual direction: B-roll', 'Purpose: Why', 'https://x.test/1'] }])
     expect(scriptsText([b])).toBe('Video 1 · Hotel · Kareen · voiceover concept\nHook: Hi\nPrompts:\n1. A?\n2. B?\nVisual direction: B-roll\nPurpose: Why\nhttps://x.test/1')
+  })
+})
+
+describe('a script written on the shoot page: a name and its words (the owner, 15 Sep 2026)', () => {
+  it('keeps the body, counts it as content, and prints it as its own section, paragraph by paragraph', () => {
+    const [s] = sanitiseScripts([{ id: 's1', title: 'The hotel project', body: '  Hi, I am Kareen.\r\nWe design every sign.\n\n\nSecond paragraph.  \n' }])
+    expect(s.body).toBe('Hi, I am Kareen.\nWe design every sign.\n\n\nSecond paragraph.')
+    expect(scriptsFilled([{ title: 'Named only' }])).toBe(false)
+    expect(scriptsFilled([{ body: 'Words' }])).toBe(true)
+    expect(scriptWords([s])).toEqual([{ n: 1, heading: 'Script 1 · The hotel project', lines: ['Hi, I am Kareen.', 'We design every sign.', '', 'Second paragraph.'] }])
+    expect(scriptsText([s])).toBe('Script 1 · The hotel project\nHi, I am Kareen.\nWe design every sign.\n\nSecond paragraph.')
+  })
+  it('an empty script is not kept; an unnamed one prints as Untitled; a body is clipped at 8000', () => {
+    expect(sanitiseScripts([{ id: 'e', title: '', body: '   ' }])).toEqual([])
+    expect(scriptWords(sanitiseScripts([{ body: 'Go.' }]))[0].heading).toBe('Script 1 · Untitled')
+    expect(sanitiseScripts([{ body: 'x'.repeat(9000) }])[0].body).toHaveLength(8000)
+  })
+  it('the shoot page has the editor, with Add another script (source pins)', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain("<ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} disabled={busy} />")
+    const ed = readFileSync('app/dashboard/production/shoots/[id]/ScriptsEditor.tsx', 'utf8')
+    expect(ed).toContain("{blocks.length === 0 ? 'Add a script' : 'Add another script'}")
+    expect(ed).toContain('placeholder="Script name — e.g. The hotel project"')
   })
 })

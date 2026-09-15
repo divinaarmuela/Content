@@ -25,11 +25,16 @@ export type ScriptBlock = {
   purpose: string
   /** https only */
   links: string[]
+  /** THE SCRIPT ITSELF, AS PARAGRAPHS (the owner, 15 Sep 2026: "a script
+   *  name, the body in it, then add another script") — the plain words, as
+   *  they will be said. The older fields (hook, prompts, visual, purpose)
+   *  stay for plans pasted from a doc; a script with a body prints its body. */
+  body: string
 }
 
 export const SCRIPT_LIMITS = {
   blocks: 30, title: 200, presenter: 80, hook: 600, prompt: 400, prompts: 25,
-  visual: 1000, purpose: 2000, link: 500, links: 8,
+  visual: 1000, purpose: 2000, link: 500, links: 8, body: 8000,
 } as const
 
 const clip = (v: unknown, n: number) => String(v ?? '').replace(/\r/g, '').trim().slice(0, n)
@@ -52,15 +57,16 @@ export function sanitiseScripts(raw: unknown): ScriptBlock[] {
       purpose: clip(r.purpose, SCRIPT_LIMITS.purpose),
       links: (Array.isArray(r.links) ? r.links : [])
         .map(l => clip(l, SCRIPT_LIMITS.link)).filter(l => /^https:\/\/\S+$/.test(l)).slice(0, SCRIPT_LIMITS.links),
+      body: String(r.body ?? '').replace(/\r/g, '').trim().slice(0, SCRIPT_LIMITS.body),
     }))
     // an empty block (nothing typed anywhere) is not kept
-    .filter(b => b.title || b.hook || b.prompts.length > 0 || b.visual || b.purpose || b.links.length > 0)
+    .filter(b => b.title || b.body || b.hook || b.prompts.length > 0 || b.visual || b.purpose || b.links.length > 0)
     .slice(0, SCRIPT_LIMITS.blocks)
 }
 
 /** A block with something worth calling a script: a hook, or prompts. */
-export function scriptHasContent(b: Pick<ScriptBlock, 'hook' | 'prompts'>): boolean {
-  return b.hook.trim().length > 0 || b.prompts.length > 0
+export function scriptHasContent(b: Pick<ScriptBlock, 'hook' | 'prompts'> & { body?: string }): boolean {
+  return (b.body ?? '').trim().length > 0 || b.hook.trim().length > 0 || b.prompts.length > 0
 }
 
 /** Does the plan's "Script or talking points" count as filled by the blocks? */
@@ -76,6 +82,13 @@ export type ScriptWords = { n: number; heading: string; lines: string[] }
  *  as plain lines, in the order the team reads them. */
 export function scriptWords(blocks: readonly ScriptBlock[]): ScriptWords[] {
   return blocks.map((b, i) => {
+    // a script written here: its name, then its words, paragraph by paragraph
+    if (b.body && b.body.trim()) {
+      const lines = b.body.replace(/\r/g, '').split('\n').map(l => l.trimEnd())
+      // one blank line between paragraphs, never a run of them
+      const tidy = lines.filter((l, j) => l !== '' || (j > 0 && lines[j - 1] !== ''))
+      return { n: i + 1, heading: `Script ${i + 1} · ${b.title || 'Untitled'}`, lines: tidy }
+    }
     const heading = [
       `Video ${i + 1}`,
       b.title || 'Untitled',

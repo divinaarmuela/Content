@@ -2,6 +2,7 @@
 
 import BulletArea from './BulletArea'
 import ShootFor from '../../ShootFor'
+import ScriptsEditor from './ScriptsEditor'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -258,6 +259,12 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                 points bullet points — currently the box is just a box") */}
             <BulletArea value={batch.script} placeholder="The script or the talking points, one point per line" rows={4}
               onSave={v => void onPatch('script', v || null)} />
+            {/* THE SCRIPTS, ONE PER VIDEO (the owner, 15 Sep 2026: "there will be
+                multiple scripts per brief — a script name, the body, then add
+                another"): each prints as its own section on the PDF and on
+                the editor's card */}
+            <p className="text-[12px] font-semibold">Scripts</p>
+            <ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} disabled={busy} />
           </div>
         ))}
 

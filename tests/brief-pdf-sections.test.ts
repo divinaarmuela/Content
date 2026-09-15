@@ -36,7 +36,7 @@ describe('the plan PDF sections', () => {
 })
 
 describe('the scripts on the PDF (13 Sep 2026)', () => {
-  const scripts = [{ id: 's1', title: 'The Adelaide hotel project', presenter: 'Kareen', voiceover: false, hook: 'We design every sign', prompts: ['Where did you start?'], visual: 'B-roll', purpose: 'Behind the scenes', links: ['https://www.instagram.com/reels/x/'] }]
+  const scripts = [{ id: 's1', title: 'The Adelaide hotel project', presenter: 'Kareen', voiceover: false, hook: 'We design every sign', prompts: ['Where did you start?'], visual: 'B-roll', purpose: 'Behind the scenes', links: ['https://www.instagram.com/reels/x/'], body: '' }]
   it('each video is its own section after the script, on both copies', () => {
     const team = briefPdfSections({ ...full, scripts, audience: 'team' }).map(s => s.title)
     const client = briefPdfSections({ ...full, scripts, audience: 'client' }).map(s => s.title)
