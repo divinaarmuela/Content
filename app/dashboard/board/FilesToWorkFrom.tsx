@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, Film, FolderOpen, Plus, X } from 'lucide-react'
+import { ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import SafeVideo from '../../components/media/SafeVideo'
+import VideoTile from '../../components/media/VideoTile'
 import { uploadFiles } from '../uploadQueue'
 import { linkKindOf } from '../../lib/card-link-core'
 import {
@@ -20,6 +22,13 @@ import {
  * versions and separate from them. A manager adds and removes; the editor
  * sees, opens and downloads. Stored as the card's raw assets, so the job
  * pack email and the Drive mirror already know the shape.
+ *
+ * SEE IT HERE (the owner, 15 Sep 2026: "display files as their thumbnail
+ * and play it from there"): every tile is a picture of the file — the image
+ * itself, or Cloudflare's still of the clip (VideoTile: a still, never a
+ * `<video>`, so ten tiles are not ten downloads) — and pressing it opens the
+ * file above the grid, where a clip plays (SafeVideo, mounted only on the
+ * press) and a still shows large. Open still downloads the file.
  */
 export default function FilesToWorkFrom({ item, isManager, frozen }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
@@ -36,6 +45,9 @@ export default function FilesToWorkFrom({ item, isManager, frozen }: {
   const input = useRef<HTMLInputElement | null>(null)
   const linkCheck = linkKindOf(link)
   const mayEdit = isManager && !frozen
+  /** the file open above the grid — a clip playing, or a still shown large */
+  const [showing, setShowing] = useState<RawAsset | null>(null)
+  useEffect(() => { setShowing(null) }, [item.id])
 
   const save = async (patch: Record<string, unknown>, said: string) => {
     const res = await fetch(`/api/production/items/${item.id}`, {
@@ -126,19 +138,54 @@ export default function FilesToWorkFrom({ item, isManager, frozen }: {
         </a>
       )}
 
+      {showing && (
+        <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-[13px] font-semibold" title={showing.name}>{showing.name}</span>
+            <button type="button" onClick={() => setShowing(null)} aria-label={`Close ${showing.name}`}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted">
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          {rawAssetKind(showing) === 'video' ? (
+            // the press WAS the play: no second poster to press
+            <SafeVideo key={showing.url} src={showing.url} autoStart ariaLabel={showing.name}
+              className="max-h-[60vh] w-full rounded-tile bg-zinc-950 object-contain" noticeClassName="w-full" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={showing.url} alt={showing.name} className="max-h-[60vh] w-full rounded-tile bg-foreground/[0.06] object-contain" />
+          )}
+        </div>
+      )}
+
       {files.length > 0 && (
         <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {files.map(f => {
             const kind = rawAssetKind(f)
+            const open = showing?.url === f.url
             return (
-              <li key={f.url} className="flex flex-col gap-1 rounded-inner border border-border p-2">
-                {kind === 'image' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={f.url} alt="" className="aspect-square w-full rounded-tile object-cover bg-foreground/[0.06]" />
-                ) : (
+              <li key={f.url} className={`flex flex-col gap-1 rounded-inner border p-2 ${open ? 'border-foreground' : 'border-border'}`}>
+                {kind === 'other' ? (
                   <span className="flex aspect-square w-full items-center justify-center rounded-tile bg-foreground/[0.06] text-muted-foreground">
                     <Film className="h-6 w-6" strokeWidth={1.6} aria-hidden />
                   </span>
+                ) : (
+                  // the tile is the button: press the picture to see it, or play it, above
+                  <button type="button" onClick={() => setShowing(open ? null : f)} aria-pressed={open}
+                    aria-label={`${kind === 'video' ? 'Play' : 'See'} ${f.name}`}
+                    className="relative block aspect-square w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-90">
+                    {kind === 'image'
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={f.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                      : <VideoTile url={f.url} className="h-full w-full" />}
+                    {kind === 'video' && (
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow">
+                          <Play className="ml-0.5 h-4 w-4" fill="currentColor" aria-hidden />
+                        </span>
+                      </span>
+                    )}
+                  </button>
                 )}
                 <span className="truncate text-[12px] font-semibold" title={f.name}>{f.name}</span>
                 <div className="flex items-center gap-1">

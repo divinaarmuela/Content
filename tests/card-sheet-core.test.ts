@@ -38,3 +38,26 @@ describe('swipe to shut', () => {
     expect(isDismissSwipe(100, 90)).toBe(false)
   })
 })
+
+describe('who gets the maker’s drawer (the owner, 15 Sep 2026: "I assigned it to myself")', () => {
+  it('an editor always; a general user when they hold the card; anyone who holds it while it is in Draft or back for changes', async () => {
+    const { usesMakerDrawer, HELD_WHILE_MAKING } = await import('../app/lib/card-sheet-core')
+    const card = (over: Record<string, unknown>) => ({ owner_id: 'sa', status: 'draft_uploaded', ...over })
+    expect(HELD_WHILE_MAKING).toEqual(['draft_uploaded', 'revision_required'])
+    expect(usesMakerDrawer({ id: 'ed', role: 'editor' }, card({ owner_id: 'x', status: 'quality_check' }))).toBe(true)
+    // a super admin who assigned the card to themselves: the link box and the submit
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({}))).toBe(true)
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({ status: 'revision_required' }))).toBe(true)
+    expect(usesMakerDrawer({ id: 'am', role: 'account_manager' }, card({ owner_id: 'am' }))).toBe(true)
+    // …but once it is out of their hands, they manage it
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({ status: 'quality_check' }))).toBe(false)
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({ status: 'client_changes_requested' }))).toBe(false)
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({ status: 'approved_for_scheduling' }))).toBe(false)
+    // someone else's card: the manager's card, whatever its status
+    expect(usesMakerDrawer({ id: 'sa', role: 'super_admin' }, card({ owner_id: 'ed' }))).toBe(false)
+    // a general user holding the card, at any status
+    expect(usesMakerDrawer({ id: 'g', role: 'general' }, card({ owner_id: 'g', status: 'quality_check' }))).toBe(true)
+    expect(usesMakerDrawer({ id: 'g', role: 'general' }, card({ owner_id: 'ed' }))).toBe(false)
+    expect(usesMakerDrawer(null, card({}))).toBe(false)
+  })
+})

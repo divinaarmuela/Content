@@ -8,7 +8,7 @@ import EditorCardDrawer from './EditorCardDrawer'
 import { useRow } from '@/lib/db-client'
 import { useRole } from '../useRole'
 import type { ContentItem } from '@/lib/db-types'
-import { isDismissSwipe, readCardParam, withCardParam } from '../../lib/card-sheet-core'
+import { isDismissSwipe, readCardParam, usesMakerDrawer, withCardParam } from '../../lib/card-sheet-core'
 
 /**
  * THE CARD, BESIDE THE BOARD.
@@ -50,8 +50,11 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
   // opened a card with no buttons.
   // …and a general user who HOLDS the card is its maker too (the owner, 14
   // Sep 2026: "general users use all three pages and create tasks for
-  // themselves"): their own card gets the link box and the submit
-  const maker = me?.role === 'editor' || (me?.role === 'general' && !!me?.id && opened?.owner_id === me.id)
+  // themselves"): their own card gets the link box and the submit.
+  // …and so is a manager who assigned the card to THEMSELVES, while it is
+  // in their hands (the owner, 15 Sep 2026: "I assigned it to myself… why
+  // can't I add the folder link then"): card-sheet-core.usesMakerDrawer
+  const maker = usesMakerDrawer(me, opened)
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0]
     start.current = { x: t.clientX, y: t.clientY }

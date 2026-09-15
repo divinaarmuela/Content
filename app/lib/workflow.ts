@@ -1243,14 +1243,18 @@ async function generalOwnerOf(item: { owner_id?: string | null }): Promise<TeamU
  * A CARD MADE BY THE PERSON DOING THE WORK (the owner, 14 Sep 2026: "when an
  * editor creates their own task, does it notify the AM? They should"). The
  * client's account managers hear — or the super admins, when the client has
- * none — with the card open on their own board. A manager making a card
- * tells nobody: it is their own client. After the response, like every
- * other email here.
+ * none — with the card open on their own board. The client's OWN managers
+ * making a card tell nobody: it is their client. Anyone else — an editor, a
+ * general user, a super admin who does not manage this client (the owner,
+ * 15 Sep 2026: "a super admin created a card in Editor and assigned it to
+ * themselves, but the AM was not notified") — tells the managers. After the
+ * response, like every other email here.
  */
 export function notifyCardMade(actor: TeamUser, item: ContentItem) {
-  if (actor.role === 'account_manager' || actor.role === 'super_admin') return
   afterResponse('card-made notification', async () => {
     const managers = await resolveAudience('account_managers', item)
+    // the maker manages this client: nobody to tell
+    if (managers.some(m => m.id === actor.id)) return
     const client = item.client_id
       ? await table<{ id: string; name?: string | null }>('clients').get(item.client_id).catch(() => null)
       : null

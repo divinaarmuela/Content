@@ -79,3 +79,33 @@ describe('notifyCardMade', () => {
     expect(emails).toHaveLength(0)
   })
 })
+
+describe('a super admin who does not manage the client (the owner, 15 Sep 2026)', () => {
+  const SA = { id: 'sa-9', name: 'Abby', email: 'abby@zz.invalid', role: 'super_admin', active_status: true }
+  it('making a card, assigned to themselves, tells the client’s managers — "the AM was not notified"', async () => {
+    fake.restore()
+    fake = seedDb({
+      clients: [{ id: 'c1', name: 'Park Noire' }] as unknown as Row[],
+      team_users: [AM, AM2, ED, SA] as unknown as Row[],
+      team_user_clients: [
+        { id: 'l1', team_user_id: AM.id, client_id: 'c1' },
+        { id: 'l2', team_user_id: AM2.id, client_id: 'c1' },
+      ] as unknown as Row[],
+    } as never)
+    notifyCardMade(SA as never, item({ owner_id: SA.id }))
+    await drain()
+    expect(emails.map(e => e.recipientEmail).sort()).toEqual([AM.email, AM2.email].sort())
+    expect(String(emails[0].subject)).toContain('Abby made a card for Park Noire')
+  })
+  it('…and tells nobody when the client has no manager: the super admins are only the fallback', async () => {
+    fake.restore()
+    fake = seedDb({
+      clients: [{ id: 'c1', name: 'Park Noire' }] as unknown as Row[],
+      team_users: [AM2, ED, SA] as unknown as Row[],
+      team_user_clients: [] as unknown as Row[],
+    } as never)
+    notifyCardMade(SA as never, item({ owner_id: SA.id }))
+    await drain()
+    expect(emails).toHaveLength(0)
+  })
+})

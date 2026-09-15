@@ -455,7 +455,9 @@ describe('delivery only is a switch on the shoot page (14 Sep 2026)', () => {
 describe('the maker’s drawer is the editor’s alone (14 Sep 2026)', () => {
   it('on the Editor page everyone but an editor gets the manager’s drawer, so an emailed manager has buttons', () => {
     const s = src('app/dashboard/board/CardSheet.tsx')
-    expect(s).toMatch(/const maker = me\?\.role === 'editor'/)
+    // …an editor, a general holder, or ANY holder while the card is in
+    // their hands (15 Sep 2026): card-sheet-core.usesMakerDrawer decides
+    expect(s).toContain('const maker = usesMakerDrawer(me, opened)')
     expect(s).toMatch(/editor && !adhoc && maker\s*\n\s*\? <EditorCardDrawer/)
     expect(s).not.toContain("me?.role === 'quality_checker'")
   })
@@ -488,7 +490,10 @@ describe('a client’s comment on a board card reaches the manager on the full-s
     expect(src('app/api/production/items/route.ts')).toContain('notifyCardMade(user, item')
     const wf = src('app/lib/workflow.ts')
     expect(wf).toContain('export function notifyCardMade(actor: TeamUser, item: ContentItem)')
-    expect(wf).toMatch(/if \(actor\.role === 'account_manager' \|\| actor\.role === 'super_admin'\) return\s*\n\s*afterResponse\('card-made notification'/)
+    // the client's OWN managers stay quiet; a super admin who does not manage
+    // the client tells them (15 Sep 2026: "the AM was not notified")
+    expect(wf).toContain("if (managers.some(m => m.id === actor.id)) return")
+    expect(wf).not.toContain("if (actor.role === 'account_manager' || actor.role === 'super_admin') return")
     expect(src('app/lib/comment-tags.ts')).toContain('name: tagNameOf(u)')
     expect(src('app/lib/card-people-core.ts')).toContain('name: tagNameOf(u)')
   })
