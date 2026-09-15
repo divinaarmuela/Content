@@ -345,12 +345,17 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       {/* ── 2. work from (§1) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-from">
         <p id="ed-from" className={H2}>Work from</p>
+        {/* on the card's page the files box stands on the left, said once (15 Sep 2026) */}
+        {hideFolderFiles ? (
+          <p className="text-[13px] text-muted-foreground">The footage folder and its files are on the left.</p>
+        ) : (
         <p className="text-[13px]">
           <span className="font-semibold">Footage folder: </span>
           {from.footage
             ? <a href={from.footage} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">Open the Dropbox or Drive folder <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
             : <span className="text-muted-foreground">Not given yet — ask Production.</span>}
         </p>
+        )}
         {/* THE FILES BEHIND THE LINK (the owner, 15 Sep 2026: "display files as
             their thumbnail and play it from there — the Drive link"): Drive's
             thumbnails, and Drive's player on a press. Read only. */}
@@ -358,7 +363,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         {/* a manager holding their own card may add the FOLDER LINK here — not
             files (the owner, 15 Sep 2026: "why can't I add the folder link then?
             I assigned it to myself"; "not files"); an editor sees, opens and plays */}
-        <FilesToWorkFrom item={item as never} isManager={isManager} frozen={frozen} linkOnly showFolderFiles={false} />
+        {!hideFolderFiles && <FilesToWorkFrom item={item as never} isManager={isManager} holder={holder} frozen={frozen} linkOnly showFolderFiles={false} />}
         <p className="text-[13px]">
           <span className="font-semibold">Finals go to: </span>
           {from.finalsFolder

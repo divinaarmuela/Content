@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow } from '@/lib/db-client'
 import type { Batch, Client, ContentItem } from '@/lib/db-types'
@@ -13,7 +13,6 @@ import PostApprovalDetail from '../../board/PostApprovalDetail'
 import { Button } from '@/components/ui/button'
 import { useCardActs } from '../../board/useCardActs'
 import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
-import DriveFolderFiles from '../../board/DriveFolderFiles'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
 import { workFrom } from '../../../lib/editor-sop-core'
@@ -112,18 +111,14 @@ export default function EditorCardPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,560px)]">
         {/* ── the files, wide: what there is to work from, seen and played here ── */}
-        <section className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-card p-4" aria-labelledby="ed-page-files">
-          <h2 id="ed-page-files" className="text-card-title">Files to work from</h2>
-          <p className="text-[13px]">
-            <span className="font-semibold">Footage folder: </span>
-            {from.footage
-              ? <a href={from.footage} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">Open the Dropbox or Drive folder <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
-              : <span className="text-muted-foreground">Not given yet — ask Production.</span>}
-          </p>
-          {/* Drive's thumbnails of everything behind the link; a press plays it here */}
-          <DriveFolderFiles url={from.footage} wide />
-          {/* …and the files somebody put straight on the card, if any */}
-          <FilesToWorkFrom item={item as never} isManager={!maker && !adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} frozen={frozen} linkOnly showFolderFiles={false} />
+        {/* ONE BLOCK, SAID ONCE (the owner, 15 Sep 2026: "why are there multiple
+            words of folder to work from"): the files box carries the heading,
+            the folder — the card's own, or the shoot's footage folder — the
+            Open button, a manager's Add a folder link, and Drive's thumbnails
+            of everything behind it, wide, each one playable here */}
+        <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
+          <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
+            fallbackFolder={from.footage} wideFiles />
         </section>
 
         {/* ── the card itself, beside the files ── */}

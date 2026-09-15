@@ -71,9 +71,12 @@ describe('the route and the drawers (source pins)', () => {
   it('the editor’s drawer draws the footage folder’s files under the Footage folder line; the files box draws them under Open the folder, not twice', () => {
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
     expect(drawer).toContain('<DriveFolderFiles url={from.footage} />')
-    expect(drawer).toContain('linkOnly showFolderFiles={false} />')
+    expect(drawer).toContain('holder={holder} frozen={frozen} linkOnly showFolderFiles={false} />}')
     const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
-    expect(box).toContain('{folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} />}')
+    expect(box).toContain('{folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} />}')
+    // the holder may change the folder link; only a manager adds files (15 Sep 2026)
+    expect(box).toContain('const mayEdit = (isManager || holder) && !frozen')
+    expect(box).toContain('const mayAddFiles = isManager && !linkOnly && !frozen')
   })
   it('a tile is a button; the press mounts Drive’s preview — nothing loads for a tile nobody opened', () => {
     const c = src('app/dashboard/board/DriveFolderFiles.tsx')

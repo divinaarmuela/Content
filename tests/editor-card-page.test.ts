@@ -25,7 +25,9 @@ describe('the Editor page opens a card as a page', () => {
 describe('the card’s page', () => {
   const page = src('app/dashboard/editor/[id]/page.tsx')
   it('draws the folder’s files wide, and the card beside them', () => {
-    expect(page).toContain('<DriveFolderFiles url={from.footage} wide />')
+    // one block, said once (15 Sep 2026): the files box carries the heading, the folder and the wide tiles
+    expect(page).toContain('fallbackFolder={from.footage} wideFiles />')
+    expect(page).not.toContain('Footage folder: ')
     expect(page).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(360px,560px)]')
     expect(page).toContain('<PageTitle')
     expect(page).toContain('href="/dashboard/editor"')

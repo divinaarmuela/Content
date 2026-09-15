@@ -31,7 +31,7 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
@@ -42,16 +42,26 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   /** the files behind a Drive folder link, as tiles (15 Sep 2026) — off where
    *  the drawer already draws them under its own Footage folder line */
   showFolderFiles?: boolean
+  /** the shoot's footage folder, shown when the card carries none of its own (15 Sep 2026) */
+  fallbackFolder?: string | null
+  /** the card's page: more tiles across */
+  wideFiles?: boolean
+  /** the person holding the card — they may change the folder link too (the
+   *  owner, 15 Sep 2026: "allow the editor, or anyone assigned to that card,
+   *  or a super admin or AM to replace the folder to work from") */
+  holder?: boolean
 }) {
   const files = readRawAssets(item.raw_assets)
-  const folder = item.raw_assets_url ?? null
+  const folder = item.raw_assets_url ?? fallbackFolder ?? null
   const [busy, setBusy] = useState<string | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [link, setLink] = useState(folder ?? '')
   useEffect(() => { setLink(folder ?? '') }, [folder])
   const input = useRef<HTMLInputElement | null>(null)
   const linkCheck = linkKindOf(link)
-  const mayEdit = isManager && !frozen
+  const mayEdit = (isManager || holder) && !frozen
+  // files are the manager's to add; the holder changes the folder link only
+  const mayAddFiles = isManager && !linkOnly && !frozen
   /** the file open above the grid — a clip playing, or a still shown large */
   const [showing, setShowing] = useState<RawAsset | null>(null)
   useEffect(() => { setShowing(null) }, [item.id])
@@ -106,7 +116,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{FILES_TO_WORK_FROM}</p>
         {mayEdit && (
           <div className="flex flex-wrap gap-2">
-            {!linkOnly && (
+            {mayAddFiles && (
               <Button variant="outline" className={button} disabled={busy !== null} onClick={() => input.current?.click()}>
                 <Plus className="h-4 w-4" aria-hidden /> Add files
               </Button>
@@ -146,7 +156,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           <span className="sr-only">, opens in a new tab</span>
         </a>
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>
