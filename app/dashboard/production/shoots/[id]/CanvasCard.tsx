@@ -490,8 +490,14 @@ function CanvasCardInner({
                 className="mt-[3px] h-3.5 w-3.5 shrink-0 accent-[var(--dbx-blue)]"
                 onChange={e => onUpdate?.({ ...card, items: items.map(x => x.id === t.id ? { ...x, done: e.target.checked } : x) })} />
               {onUpdate ? (
-                <input key={`${t.id}:${t.text}`} defaultValue={t.text} style={{ fontSize: px }}
-                  className={`min-w-0 flex-1 bg-transparent outline-none ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
+                // A TASK WRAPS (the owner, 15 Sep 2026: "when I add a list on the
+                // board and resize the box, it does not wrap onto a new line"): a
+                // one-line input never wraps, however narrow the box; this box
+                // wraps its words and grows to them, and Enter still finishes
+                <textarea key={`${t.id}:${t.text}`} defaultValue={t.text} rows={1} style={{ fontSize: px }}
+                  ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
+                  onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
+                  className={`min-w-0 flex-1 resize-none break-words bg-transparent leading-snug outline-none ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
                   onBlur={e => {
                     const v = e.target.value.trim()
                     if (v === t.text) return
@@ -499,7 +505,7 @@ function CanvasCardInner({
                       ? items.filter(x => x.id !== t.id)
                       : items.map(x => x.id === t.id ? { ...x, text: v } : x) })
                   }}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() } }} />
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() } }} />
               ) : (
                 <span className={`min-w-0 break-words text-[12px] ${t.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{t.text}</span>
               )}
