@@ -668,7 +668,11 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           ...(batchId ? { batch_id: batchId } : {}),
           ...(groupId ? { group_id: groupId } : {}),
           ...(rawAssets.length > 0 ? { raw_assets: rawAssets } : {}),
-          ...(folder.trim() ? { raw_assets_url: folder.trim() } : {}),
+          // a maker's pasted link is the folder to work from (the owner, 15 Sep
+          // 2026: "I added the drive link when making the card — it did not show
+          // it in the card"): it landed as the finished edit, under the wrong
+          // heading. The finished edit is added on the card, later, when it is done.
+          ...(folder.trim() ? { raw_assets_url: folder.trim() } : !isManager && !forPosting && link.trim() ? { raw_assets_url: link.trim() } : {}),
           ...(deliverOnlyCard ? { deliver_only: true } : {}),
           // a New post is a posting job: Post approval board only, never the Editor page
           ...(forPosting ? { adhoc_post: true } : {}),
@@ -684,7 +688,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       const id = Array.isArray(made) ? made[0]?.id : made.id
       // the card's link: the pasted link, or — for a post handed to a
       // scheduler — the folder, so the Schedule page shows "Folder to work from"
-      const cardLink = link.trim() || (forPosting ? folder.trim() : '')
+      const cardLink = forPosting ? (link.trim() || folder.trim()) : isManager ? link.trim() : ''
       if (id && cardLink) {
         // THE MAKER'S OWN LINK IS THEIR WORK (the owner, 14 Sep 2026: "I'm an
         // editor, I created a card, where is the option to add a link"): it
@@ -714,7 +718,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
             ? 'Say what needs doing, add the folder link, and hand it to a scheduler — they pick the files from it and upload them for approval.'
             : isManager
               ? 'One card for one client. Say what needs doing and attach the files to work from.'
-              : 'One card for one client. Say what needs doing and add your Drive or Dropbox link if you have one.'}</DialogDescription>
+              : 'One card for one client. Say what needs doing and add the Drive or Dropbox folder to work from if you have one.'}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -800,10 +804,10 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               link here — the same box the card shows under Your finished edit */}
           {!isManager && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="new-link">Your Drive or Dropbox link (optional)</Label>
+              <Label htmlFor="new-link">Drive or Dropbox folder to work from (optional)</Label>
               <Input id="new-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" className={field} />
               <p className="text-[13px] text-muted-foreground">{link.trim() === ''
-                ? 'Where your work is. You can add or change it on the card any time.'
+                ? 'The footage or files this is made from. The card lists what is in it; your finished edit is added on the card when it is done.'
                 : linkCheck.ok ? `This is a ${linkCheck.label} link.` : linkCheck.reason}</p>
             </div>
           )}

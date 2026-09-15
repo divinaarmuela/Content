@@ -279,7 +279,7 @@ describe('a script written on the shoot page: a name and its words (the owner, 1
   })
   it('the shoot page has the editor, with Add another script (source pins)', async () => {
     const { readFileSync } = await import('node:fs')
-    expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain("<ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} disabled={busy} />")
+    expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain("<ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} />")
     const ed = readFileSync('app/dashboard/production/shoots/[id]/ScriptsEditor.tsx', 'utf8')
     expect(ed).toContain("{blocks.length === 0 ? 'Add a script' : 'Add another script'}")
     expect(ed).toContain('placeholder="Script name — e.g. The hotel project"')

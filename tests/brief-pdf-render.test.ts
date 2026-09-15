@@ -36,7 +36,7 @@ const data: BriefPdfData = {
   callTime: '7:30 am', objective: 'Spring membership drive', script: 'Three talking points', talent: 'Sam presents',
   propsWardrobe: 'Club polos', clientAvailability: 'GM on site 8 to 10', editorPriorities: 'Hero reel first', editDeadline: '2026-09-25',
   editorName: 'Ed Itor', crewNames: ['Vik Camera'],
-  scripts: [{ id: 's1', title: 'Hotel project', presenter: 'Kareen', voiceover: true, hook: 'Every sign in Adelaide', prompts: ['Where did you start?'], visual: 'Process b-roll', purpose: 'Design thinking', links: ['https://www.instagram.com/reels/x/'] }],
+  scripts: [{ id: 's1', body: '', title: 'Hotel project', presenter: 'Kareen', voiceover: true, hook: 'Every sign in Adelaide', prompts: ['Where did you start?'], visual: 'Process b-roll', purpose: 'Design thinking', links: ['https://www.instagram.com/reels/x/'] }],
 }
 
 describe('the plan PDF, as bytes', () => {

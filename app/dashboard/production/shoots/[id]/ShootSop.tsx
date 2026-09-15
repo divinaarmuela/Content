@@ -264,7 +264,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
                 another"): each prints as its own section on the PDF and on
                 the editor's card */}
             <p className="text-[12px] font-semibold">Scripts</p>
-            <ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} disabled={busy} />
+            <ScriptsEditor scripts={batch.scripts} onSave={v => void onPatch('scripts', v)} />
           </div>
         ))}
 

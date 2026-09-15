@@ -159,7 +159,7 @@ export function parseScriptDoc(text: string): ScriptBlock[] {
       const marked = title.replace(/(?:^|\s+[-–—]\s+)voice\s*-?\s*over\s+concept(?=\s+[-–—]\s+|$)/i, '')
       if (marked !== title) { voiceover = true; title = marked.trim() }
       if (VOICEOVER.test(title)) voiceover = true
-      cur = { id: newScriptId(), title, presenter, voiceover, hook: '', prompts: [], visual: '', purpose: '', links: [] }
+      cur = { id: newScriptId(), title, presenter, voiceover, hook: '', prompts: [], visual: '', purpose: '', links: [], body: '' }
       continue
     }
     if (!cur) continue
