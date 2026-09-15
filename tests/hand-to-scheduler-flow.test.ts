@@ -69,9 +69,9 @@ const { finishedEditOf, folderOf } = await import('../app/lib/card-link-core')
 const { needsWorkFirst } = await import('../app/lib/board-view-core')
 const { itemPath } = await import('../app/lib/workflow-core')
 
-const hand = async (schedulerIds: string[]) => {
+const hand = async (schedulerIds: string[], approve = false) => {
   const res = await POST(
-    new Request(`https://x.test/api/production/items/${ITEM}/handoff`, { method: 'POST', body: JSON.stringify({ scheduler_ids: schedulerIds }) }),
+    new Request(`https://x.test/api/production/items/${ITEM}/handoff`, { method: 'POST', body: JSON.stringify({ scheduler_ids: schedulerIds, ...(approve ? { approve: true } : {}) }) }),
     { params: Promise.resolve({ id: ITEM }) },
   )
   return { status: res.status, json: await res.json() as { notified?: number; error?: string } }
@@ -96,6 +96,31 @@ const seed = (status = 'approved_for_scheduling') => seedDb({
 
 beforeEach(() => { h.user = AM; h.emails = [] })
 afterEach(() => fake.restore())
+
+describe('logging the client’s approval hands the card on in one move (the owner, 15 Sep 2026: "it should not go to Ready to post first")', () => {
+  it('a card with the client, approved and handed: straight into the scheduler’s Draft, the approval on its history, the scheduler told once', async () => {
+    fake = seed('client_review')
+    const r = await hand([SCHED.id], true)
+    expect(r.status).toBe(200)
+    expect(card().status).toBe('draft_uploaded')
+    expect(card().scheduler_ids).toEqual([SCHED.id])
+    // the approval happened — recorded, not skipped
+    const moves = fake.rows('workflow_activity').map(a => String((a as { action?: unknown }).action ?? ''))
+    expect(moves).toContain('status_change')
+    // the scheduler hears once — "yours to work on", never "needs a posting date"
+    const toCath = h.emails.filter(e => e.recipientEmail === SCHED.email)
+    expect(toCath).toHaveLength(1)
+    expect(toCath[0].subject).toBe('Spring reel is yours to work on')
+    expect(h.emails.filter(e => e.recipientEmail === SCHED2.email)).toHaveLength(0)
+    expect(h.emails.some(e => /posting date/.test(e.subject))).toBe(false)
+  })
+  it('without the approve flag a card with the client is still refused; an empty pick approves nothing', async () => {
+    fake = seed('client_review')
+    expect((await hand([SCHED.id])).status).toBe(400)
+    expect((await hand([], true)).status).toBe(400)
+    expect(card().status).toBe('client_review')
+  })
+})
 
 describe('a manager hands an approved edit to a scheduler', () => {
   it('the account manager hands it to one scheduler; only that scheduler sees it, on Post approval, with the edit to pick from', async () => {

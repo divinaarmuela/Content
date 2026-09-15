@@ -71,6 +71,14 @@ export function activeCommentId(comments: readonly ReviewComment[], now: number,
 }
 
 /** The clip's own page: the card, then the file. */
+/** THE CLIP'S MIME, FROM ITS NAME: Google's public download answers
+ *  `application/octet-stream` for everything, and a <video> given that has
+ *  to guess. The name the tile carried says what it is. */
+export function videoMimeOf(name: string | null | undefined): string | null {
+  const ext = /\.([a-z0-9]+)$/i.exec((name ?? '').trim())?.[1]?.toLowerCase() ?? ''
+  return ({ mov: 'video/quicktime', qt: 'video/quicktime', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mkv: 'video/x-matroska' } as Record<string, string>)[ext] ?? null
+}
+
 export function reviewPath(itemId: string, fileId: string, name?: string | null): string {
   const q = name ? `?name=${encodeURIComponent(name)}` : ''
   return `/dashboard/editor/${encodeURIComponent(itemId)}/video/${encodeURIComponent(fileId)}${q}`

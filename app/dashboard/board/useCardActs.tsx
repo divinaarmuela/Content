@@ -32,8 +32,9 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
   const [sendBackFor, setSendBackFor] = useState<T | null>(null)
   const [postChangesFor, setPostChangesFor] = useState<T | null>(null)
   const [postedFor, setPostedFor] = useState<T | null>(null)
-  /** the card just approved, waiting for the scheduler it goes to */
-  const [handFor, setHandFor] = useState<T | null>(null)
+  /** the card waiting for the scheduler it goes to — `approve`: it is not
+   *  approved yet; the hand-over approves it and lands it in their Draft */
+  const [handFor, setHandFor] = useState<{ card: T; approve: boolean } | null>(null)
 
   /** one move through the ordinary transition route */
   const transition = useCallback(async (card: T, to: string, label: string) => {
@@ -49,15 +50,6 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
       const column = BOARD_COLUMNS.find(c => c.key === columnOf(to as BoardViewCard['status']))
       toast.success(`${label} — now in ${column?.label ?? 'its new column'}`)
       onDone?.()
-      // APPROVED, THEN HANDED (the owner, 14 Sep 2026: "after we log the
-      // client's approval, don't go straight to Ready to post — ask which
-      // scheduler, with the notes and the approved Drive, so they work from
-      // it and send the files through Post approval"): the hand-over dialog
-      // opens on the spot for a manager. A card the client posts themselves
-      // (deliver only) has no scheduler to hand to.
-      if (to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true) {
-        setHandFor({ ...card, status: to } as T)
-      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not move it')
     } finally {
@@ -100,16 +92,28 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
         // "Posted" needs to know where it went out before the machine will
         // take the move — asked in a dialog, then moved (see BoardDialogs)
         if (action.to === 'published') { setPostedFor(card); return }
+        // APPROVED AND HANDED IN ONE MOVE (the owner, 14 Sep 2026: "after we
+        // log the client's approval, don't go straight to Ready to post — ask
+        // which scheduler, with the notes and the approved Drive"; 15 Sep:
+        // "it should not go to Ready to post on the approval page first"):
+        // for a manager the approve button opens the hand-over dialog on the
+        // card AS IT IS, and the hand-over route approves it and lands it in
+        // that scheduler's Draft in one write. Closed without a pick, nothing
+        // has moved. A card the client posts themselves (deliver only) has no
+        // scheduler to hand to, so it is approved outright.
+        if (action.to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true) {
+          setHandFor({ card, approve: true }); return
+        }
         void transition(card, action.to, action.label)
     }
-  }, [transition, approvePost])
+  }, [transition, approvePost, viewer.role])
 
   const dialogs = (
     <>
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} onSent={onDone} />
       <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
       <PostedElsewhereDialog card={postedFor} onClose={() => setPostedFor(null)} onPosted={onDone} />
-      <HandToDialog card={handFor} viewer={viewer} onClose={() => setHandFor(null)} onHanded={onDone} />
+      <HandToDialog card={handFor?.card ?? null} approve={handFor?.approve === true} viewer={viewer} onClose={() => setHandFor(null)} onHanded={onDone} />
     </>
   )
 

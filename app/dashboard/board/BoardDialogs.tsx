@@ -382,9 +382,13 @@ export function PostChangesDialog({ card, onClose }: {
  * telling the route this was a handover, so the receiver hears about it in
  * those words rather than getting the ordinary "assigned to you".
  */
-export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
+export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, approve = false }: {
   card: BoardViewCard | null
   viewer: BoardViewer
+  /** the card is not approved yet: this hand-over approves it and lands it
+   *  in the scheduler's Draft in one move — never through Ready to post
+   *  (the owner, 15 Sep 2026) */
+  approve?: boolean
   /** the person handing it over, as the note will sign it */
   viewerName?: string | null
   onClose: () => void
@@ -430,6 +434,16 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
         })
         if (!put.ok) throw new Error(await readError(put, 'Could not save the folder'))
       }
+      // APPROVE AND HAND, ONE ROUTE: the hand-over route performs the
+      // approval (its history, the client's decision recorded) and lands the
+      // card in this scheduler's Draft — it is never in Ready to post
+      if (approve) {
+        const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheduler_ids: [chosen.id], approve: true }),
+        })
+        if (!seat.ok) throw new Error(await readError(seat, 'Could not approve and hand it over'))
+      }
       const words = note.trim()
       const brief = briefAfterHandover(
         card.brief ?? null,
@@ -453,7 +467,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
       // the posting seat exists once the piece is approved (the handoff route
       // refuses any other stage); before that the owner move above is the
       // whole hand-over (review, 10 Sep 2026)
-      if ((card as { adhoc_post?: unknown }).adhoc_post === true
+      if (!approve && (card as { adhoc_post?: unknown }).adhoc_post === true
         && (card.status === 'approved_for_scheduling' || card.status === 'scheduled')) {
         const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -461,7 +475,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
         })
         if (!seat.ok) throw new Error(await readError(seat, 'Could not hand the posting over'))
       }
-      toast.success(`Handed to ${personLabel(chosen)}.`)
+      toast.success(approve ? `Approved and handed to ${personLabel(chosen)} — it is in their Draft.` : `Handed to ${personLabel(chosen)}.`)
       onHanded?.()
       onClose()
     } catch (e) {
@@ -475,9 +489,11 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
     <Dialog open={open} onOpenChange={o => { if (!o && !busy) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Hand this to someone</DialogTitle>
+          <DialogTitle>{approve ? 'Approve and hand it to a scheduler' : 'Hand this to someone'}</DialogTitle>
           <DialogDescription>
-            They become the person on it, and they are told — with whatever you write here.
+            {approve
+              ? 'The approval is logged and the card goes straight into their Draft — it never sits in Ready to post. Close this without picking anyone and nothing changes.'
+              : 'They become the person on it, and they are told — with whatever you write here.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -524,7 +540,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded }: {
         </div>
         <DialogFooter>
           <Button disabled={busy || !chosen} onClick={hand} className={primary}>
-            {busy ? 'Handing over…' : 'Hand it over'}
+            {busy ? (approve ? 'Approving…' : 'Handing over…') : (approve ? 'Approve and hand it over' : 'Hand it over')}
           </Button>
         </DialogFooter>
       </DialogContent>

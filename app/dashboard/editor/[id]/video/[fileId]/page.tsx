@@ -110,7 +110,7 @@ export default function VideoReviewPage() {
         {/* ── the clip, and the markers under it ── */}
         <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label="The clip">
           <video ref={video} controls playsInline preload="metadata"
-            src={`/api/drive/stream?id=${encodeURIComponent(fileId)}`}
+            src={`/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}
             className="max-h-[70vh] w-full rounded-tile bg-black"
             onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
             onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}

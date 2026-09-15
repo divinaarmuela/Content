@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  activeCommentId, commentsOnClip, formatStamp, markersFor, parseStamp, reviewPath,
+  activeCommentId, commentsOnClip, formatStamp, markersFor, parseStamp, reviewPath, videoMimeOf,
 } from '../app/lib/video-review-core'
 
 /**
@@ -51,6 +51,13 @@ describe('the comments on a clip', () => {
     expect(activeCommentId(rows, 13)).toBeNull()
     expect(activeCommentId(rows, 20.5)).toBe('b')
   })
+  it('the clip’s type comes from its name when Google will not say', () => {
+    expect(videoMimeOf('Script 8 - Melbourne.mov')).toBe('video/quicktime')
+    expect(videoMimeOf('reel.MP4')).toBe('video/mp4')
+    expect(videoMimeOf('clip.webm')).toBe('video/webm')
+    expect(videoMimeOf('notes.txt')).toBeNull()
+    expect(videoMimeOf(null)).toBeNull()
+  })
   it('the clip’s page address carries the card, the file and its name', () => {
     expect(reviewPath('item-1', 'abc', 'Script 3.mov')).toBe('/dashboard/editor/item-1/video/abc?name=Script%203.mov')
     expect(reviewPath('item-1', 'abc')).toBe('/dashboard/editor/item-1/video/abc')
@@ -64,8 +71,13 @@ describe('the page, the stream and the tiles (source pins)', () => {
     expect(s).toContain('export async function GET(')
     expect(s).not.toMatch(/export async function (POST|PATCH|PUT|DELETE)\(/)
     expect(s).toContain("const range = req.headers.get('range')")
-    expect(s).toContain("...(range ? { Range: range } : {})")
+    expect(s).toContain("const rangeHeader: Record<string, string> = range ? { Range: range } : {}")
     expect(s).toContain("headers.set(h, v)")
+    // a clip shared by link (15 Sep 2026): Google's public download, confirmed, when the API refuses our account
+    expect(s).toContain("const PUBLIC_DOWNLOAD = 'https://drive.usercontent.google.com/download'")
+    expect(s).toContain("new URLSearchParams({ id, export: 'download', confirm: 't' })")
+    expect(s).toContain("startsWith('text/html')")
+    expect(s).toContain("if (fromName && (!typed || typed.startsWith('application/octet-stream'))) headers.set('content-type', fromName)")
   })
   it('a press on a clip on the card page opens its review page; a comment says which clip it is on', () => {
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('reviewHref={t => reviewPath(id, t.id, t.name)}')
@@ -77,7 +89,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
   })
   it('the page draws the clip, the markers and the comments, and stamps the current second', () => {
     const p = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
-    expect(p).toContain('src={`/api/drive/stream?id=${encodeURIComponent(fileId)}`}')
+    expect(p).toContain('src={`/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}')
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
     expect(p).toContain("const at = stamp ? Math.floor(video.current?.currentTime ?? 0) : null")
     expect(p).toContain('<PageTitle')

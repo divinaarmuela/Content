@@ -522,8 +522,12 @@ describe('a New post on Post approval is handed to a scheduler (14 Sep 2026)', (
 describe('logging the client’s approval hands the card to a scheduler on the spot (14 Sep 2026)', () => {
   it('the approve move opens the Hand to dialog for a manager, prefilled with the approved Drive, and the folder never overwrites the finished edit', () => {
     const acts = src('app/dashboard/board/useCardActs.tsx')
-    expect(acts).toContain('<HandToDialog card={handFor}')
-    expect(acts).toMatch(/to === 'approved_for_scheduling' && \['account_manager', 'super_admin', 'general'\]\.includes\(viewer\.role\) && card\.deliver_only !== true/)
+    // 15 Sep 2026: the dialog opens BEFORE any move, and the hand-over
+    // approves — the card never rests in Ready to post
+    expect(acts).toContain('<HandToDialog card={handFor?.card ?? null} approve={handFor?.approve === true}')
+    expect(acts).toMatch(/action\.to === 'approved_for_scheduling' && \['account_manager', 'super_admin', 'general'\]\.includes\(viewer\.role\) && card\.deliver_only !== true/)
+    expect(acts).toContain('setHandFor({ card, approve: true }); return')
+    expect(acts).not.toContain("setHandFor({ ...card, status: to }")
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
     expect(dialogs).toContain("setPostFolder(card ? (folderOf(card as never)?.url ?? '') : '')")
     // the folder is saved as the folder to work from through the item PATCH, not as the card link

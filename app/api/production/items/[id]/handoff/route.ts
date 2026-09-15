@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { logActivity, notifyScheduleHandoff } from '../../../../../lib/workflow'
+import { logActivity, notifyScheduleHandoff, performTransition } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 
 /** Hand an approved item to specific schedulers — the follow-up to a client
@@ -19,16 +19,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       throw new AuthzError('Handing a card on is for managers and general users', 403)
     }
     const { id } = await params
-    const item = await loadItemForUser(user, id)
+    let item = await loadItemForUser(user, id)
+    const body = await req.json()
+    // APPROVED AND HANDED IN ONE MOVE (the owner, 15 Sep 2026: "it should not
+    // go to Ready to post on the approval page first"): with `approve`, the
+    // same edge the Approve button pressed is performed here — its history,
+    // the client's decision recorded, the managers told — and the card goes
+    // on into the scheduler's Draft below, never resting at Ready to post.
+    // The schedulers are NOT told "it needs a posting date": the one it is
+    // handed to is told, once, that it is theirs to work on. The pick is
+    // checked first, so an empty pick approves nothing.
+    const approve = body.approve === true && !['approved_for_scheduling', 'scheduled'].includes(item.status)
     // approved OR already scheduled: re-handing a scheduled item to someone
     // else to publish is a real need, not an edge case. A published one is done.
-    if (!['approved_for_scheduling', 'scheduled'].includes(item.status)) {
+    if (!approve && !['approved_for_scheduling', 'scheduled'].includes(item.status)) {
       return NextResponse.json(
         { error: 'Only an approved or scheduled item can be handed to someone' },
         { status: 400 },
       )
     }
-    const body = await req.json()
     const ids: string[] = Array.isArray(body.scheduler_ids)
       ? body.scheduler_ids.map((v: unknown) => String(v)).filter(Boolean)
       : []
@@ -48,6 +57,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'Pick at least one active team member' }, { status: 400 })
     }
 
+    if (approve) {
+      item = await performTransition(user, item as never, 'approved_for_scheduling', {
+        skipAudiences: ['assigned_schedulers', 'schedulers'],
+      }) as unknown as typeof item
+    }
     const toDraftMode = item.status === 'approved_for_scheduling'
     const sent = await notifyScheduleHandoff(user, item, valid, toDraftMode ? 'work' : 'schedule')
 
@@ -67,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       actor: user, clientId: item.client_id,
       entityType: 'content_item', entityId: id,
       action: 'schedule_handoff',
-      detail: `handed to ${valid.length} person${valid.length === 1 ? '' : 's'} (${sent} notified)`,
+      detail: `${approve ? 'approved and ' : ''}handed to ${valid.length} person${valid.length === 1 ? '' : 's'} (${sent} notified)`,
     })
     return NextResponse.json({ notified: sent })
   } catch (e) {

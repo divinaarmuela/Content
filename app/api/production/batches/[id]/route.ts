@@ -236,8 +236,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const byId = new Map(team.map(u => [u.id, u]))
       if ('editor_id' in body) {
         const eid = body.editor_id ? String(body.editor_id) : ''
-        if (eid && byId.get(eid)?.role !== 'editor') {
-          return NextResponse.json({ error: 'The editor on a shoot has to be one of the editors' }, { status: 422 })
+        // the same people the shoot page's picker offers: editors first, then
+        // the managers who also cut (the owner, 13 Sep 2026: "can an account
+        // manager / super admin get the editing feature?" — yes). The route
+        // only knew the first group, so picking a manager was refused with
+        // "has to be one of the editors" (the MD Media shoot, 15 Sep 2026).
+        if (eid && !['editor', 'account_manager', 'super_admin'].includes(byId.get(eid)?.role ?? '')) {
+          return NextResponse.json({ error: 'The editor on a shoot has to be one of the editors, or a manager who also cuts' }, { status: 422 })
         }
         patch.editor_id = eid || null
       }
