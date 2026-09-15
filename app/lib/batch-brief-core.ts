@@ -768,3 +768,24 @@ export function boldWordsIn(text: string, picked: string): string | null {
   if (before >= 0 && boldRuns(text).some(r => r.bold && r.text.includes(words))) return null
   return text.slice(0, at) + wrapped + text.slice(at + words.length)
 }
+
+/**
+ * BOLD AS A SWITCH WHILE TYPING (the owner, 15 Sep 2026: "when Bold is live at
+ * the top, then we start typing bold — and once we unclick, it's unbold").
+ * With nothing highlighted, pressing Bold opens a bold run at the caret
+ * (**|**) so the next words land inside it; pressing again with the caret
+ * at the closing marks steps out of the run, so typing is plain again. Says
+ * whether the switch is now on.
+ */
+export function boldModeToggle(text: string, caret: number): { text: string; caret: number; on: boolean } {
+  const at = Math.max(0, Math.min(text.length, caret))
+  if (text.slice(at, at + 2) === '**') return { text, caret: at + 2, on: false }
+  return { text: text.slice(0, at) + '****' + text.slice(at), caret: at + 2, on: true }
+}
+
+/** Is the caret inside an open bold run — the switch is on? */
+export function inBoldRun(text: string, caret: number): boolean {
+  const before = text.slice(0, Math.max(0, Math.min(text.length, caret)))
+  const opens = (before.match(/\*\*/g) ?? []).length
+  return opens % 2 === 1
+}

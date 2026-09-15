@@ -6,24 +6,14 @@ import {
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns, toggleBoldSelection } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
 /** A note's words with their bold runs (**like this**) drawn bold. */
 function BoldWords({ text }: { text: string }) {
   return <>{boldRuns(text).map((r, i) => r.bold ? <strong key={i} className="font-bold">{r.text}</strong> : <span key={i}>{r.text}</span>)}</>
 }
 
-/** Cmd/Ctrl+B in a note's box: bold the highlighted words (batch-brief-core.toggleBoldSelection). */
-function boldHotkey(e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>): boolean {
-  if (!((e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B'))) return false
-  e.preventDefault(); e.stopPropagation()
-  const el = e.currentTarget
-  const r = toggleBoldSelection(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
-  el.value = r.text
-  el.setSelectionRange(r.start, r.end)
-  el.dispatchEvent(new Event('input', { bubbles: true }))
-  return true
-}
+import { BoldableInput, BoldableTextarea } from './BoldBox'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
@@ -511,7 +501,7 @@ function CanvasCardInner({
                 // board and resize the box, it does not wrap onto a new line"): a
                 // one-line input never wraps, however narrow the box; this box
                 // wraps its words and grows to them, and Enter still finishes
-                <textarea key={`${t.id}:${t.text}`} defaultValue={t.text} rows={1} style={{ fontSize: px }}
+                <BoldableTextarea key={`${t.id}:${t.text}`} defaultValue={t.text} rows={1} style={{ fontSize: px }}
                   ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
                   onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
                   className={`min-w-0 flex-1 resize-none break-words bg-transparent leading-snug outline-none ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
@@ -522,7 +512,7 @@ function CanvasCardInner({
                       ? items.filter(x => x.id !== t.id)
                       : items.map(x => x.id === t.id ? { ...x, text: v } : x) })
                   }}
-                  onKeyDown={e => { if (boldHotkey(e)) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() } }} />
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() } }} />
               ) : (
                 <span className={`min-w-0 break-words text-[12px] ${t.done ? 'text-muted-foreground line-through' : 'text-foreground'}`}><BoldWords text={t.text} /></span>
               )}
@@ -547,7 +537,7 @@ function CanvasCardInner({
   if (card.kind === 'label') {
     if (editing) {
       return (
-        <input
+        <BoldableInput
           autoFocus
           defaultValue={card.text ?? ''}
           placeholder="SECTION TITLE"
@@ -556,7 +546,6 @@ function CanvasCardInner({
           className={`bg-transparent font-mono uppercase tracking-widest text-muted-foreground outline-none placeholder:text-muted-foreground dark:placeholder:text-muted-foreground ${ALIGN_CLASS[textAlignOf(card)]}`}
           onBlur={e => onCommitText(e.target.value)}
           onKeyDown={e => {
-            if (boldHotkey(e)) return
             if (e.key === 'Enter' || e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLInputElement).blur() }
           }}
           onPointerDown={e => e.stopPropagation()}
@@ -596,7 +585,7 @@ function CanvasCardInner({
           // lines is still eight lines the moment it is focused — never a
           // fixed three rows. A note with a height of its own fills that
           // height, as it did when shown.
-          <textarea
+          <BoldableTextarea
             autoFocus
             defaultValue={card.text ?? ''}
             rows={1}
@@ -607,7 +596,6 @@ function CanvasCardInner({
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
-              if (boldHotkey(e)) return
               if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() }
             }}
             onPointerDown={e => e.stopPropagation()}

@@ -21,7 +21,8 @@ import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
-  hasTextStyle, defaultAlignOf, textBoldOf, toggleBoldSelection, boldWordsIn } from '../../../../lib/batch-brief-core'
+  hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun } from '../../../../lib/batch-brief-core'
+import { applyBold } from './BoldBox'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -1086,18 +1087,19 @@ export default function BriefCanvas({
               })}
             </div>
             {/* BOLD (the owner, 15 Sep 2026: "add a Bold text feature on the board") */}
-            <button type="button" aria-label="Bold" title="Bold — the highlighted words, or the whole card" aria-pressed={textBoldOf(card)}
+            <button type="button" aria-label="Bold" title="Bold — the highlighted words; with nothing highlighted, a switch: on, what you type is bold; off, plain again"
+              aria-pressed={(() => { const el = document.activeElement; return (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) ? inBoldRun(el.value, el.selectionStart ?? 0) : textBoldOf(card) })()}
               // keep the note's box focused, so the highlight is still there on the press
               onMouseDown={e => e.preventDefault()}
               onClick={() => {
                 // HIGHLIGHTED WORDS FIRST (15 Sep 2026): with words highlighted in
                 // the note's box, only those go bold; otherwise the whole card
                 const el = document.activeElement
-                if ((el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) && (el.selectionStart ?? 0) !== (el.selectionEnd ?? 0)) {
-                  const r = toggleBoldSelection(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
-                  el.value = r.text
-                  el.setSelectionRange(r.start, r.end)
-                  el.dispatchEvent(new Event('input', { bubbles: true }))
+                if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+                  // in a box: bold the highlight, or — with none — the switch
+                  // (15 Sep 2026: "when Bold is live at the top we type bold;
+                  // once we unclick, it's unbold")
+                  applyBold(el)
                   return
                 }
                 // THE HIGHLIGHT ON THE SHOWN CARD (the owner, 15 Sep 2026: "not the
@@ -1500,7 +1502,9 @@ export default function BriefCanvas({
               {/* THE CARD'S TOOLBAR, just above it — following it as the
                   board pans, held at screen size as the board zooms. It
                   drops below the card when the card is at the top edge. */}
-              {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (() => {
+              {/* the toolbar stays while the words are being typed (the owner, 15 Sep 2026:
+                  "the toolbar disappears on a note when you highlight it") */}
+              {selected === card.id && !viewOnly && (!editing || editing === card.id) && card.kind !== 'arrow' && (() => {
                 const s = camRef.current.s
                 const nearTop = camRef.current.y + card.y * s < 72
                 return (

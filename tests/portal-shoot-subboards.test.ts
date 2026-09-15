@@ -107,7 +107,8 @@ describe('the portal page is read-only, by construction', () => {
     expect(canvas).toMatch(/\{!viewOnly && \(\s*<div[^]*?<BoardIcon[^]*?Board\s*<\/Button>/)
     // the card's own toolbar and its resize handles hang on the edit gate too
     expect(canvas).toMatch(/\{selectedCard && !viewOnly && !editing && selectedCard\.kind === 'arrow' && \(/)
-    expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\(\) => \{/)
+    // the text toolbar stays up while a card's words are typed (15 Sep 2026) — still behind viewOnly
+    expect(canvas).toMatch(/selected === card\.id && !viewOnly && \(!editing \|\| editing === card\.id\) && card\.kind !== 'arrow' && \(\(\) => \{/)
     expect(canvas).toMatch(/selected === card\.id && !viewOnly && !editing && card\.kind !== 'arrow' && \(\s*<>\s*\{\(\['w', 'e'\] as const\)/)
     // and the gate is the portal's, never the device's
     expect(canvas).toMatch(/const viewOnly = readOnly$/m)
