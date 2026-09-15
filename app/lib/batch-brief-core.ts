@@ -223,6 +223,11 @@ export type CanvasTextAlign = (typeof CANVAS_TEXT_ALIGNS)[number]
 export function defaultAlignOf(kind: string | null | undefined): CanvasTextAlign {
   return kind === 'board' ? 'center' : 'left'
 }
+/** Are the card's words bold? Only the kinds with words of their own. */
+export function textBoldOf(card: { bold?: boolean | null; kind?: string | null } | null | undefined): boolean {
+  return card?.bold === true && hasTextStyle(card?.kind)
+}
+
 export function textAlignOf(card: { align?: string | null; kind?: string | null } | null | undefined): CanvasTextAlign {
   const v = card?.align
   return (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(v)) ? (v as CanvasTextAlign) : defaultAlignOf(card?.kind)
@@ -271,6 +276,9 @@ export type CanvasCard = {
   text_color?: CanvasTextColor
   /** note / heading / to-do — left, centre or right; absent = left */
   align?: CanvasTextAlign
+  /** BOLD WORDS (the owner, 15 Sep 2026: "add a Bold text feature on the shoot
+   *  brief board") — a note, a heading, a to-do or a board's name, in bold */
+  bold?: boolean
   /** arrow endpoints — ids of the two cards it connects */
   from?: string
   to?: string
@@ -559,6 +567,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...(hasTextStyle(kind) && (CANVAS_TEXT_ALIGNS as readonly string[]).includes(String(r.align ?? ''))
         ? { align: String(r.align) as CanvasTextAlign }
         : {}),
+      ...(hasTextStyle(kind) && r.bold === true ? { bold: true } : {}),
       ...(kind === 'arrow' ? { from, to } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
       ...(kind === 'todo'

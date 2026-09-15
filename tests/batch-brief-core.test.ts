@@ -584,3 +584,29 @@ describe('where the words sit: left, middle or right (13 Sep 2026)', () => {
     expect(textAlignOf({})).toBe('left')
   })
 })
+
+describe('bold words on the board (the owner, 15 Sep 2026)', () => {
+  it('keeps bold on a note, heading or to-do, drops it elsewhere, and reads absent as not bold', async () => {
+    const { sanitiseCanvasCards, textBoldOf } = await import('../app/lib/batch-brief-core')
+    const rows = sanitiseCanvasCards([
+      { id: 'n', kind: 'note', x: 0, y: 0, bold: true },
+      { id: 'h', kind: 'label', x: 0, y: 0, text: 'A', bold: true },
+      { id: 'i', kind: 'image', x: 0, y: 0, url: 'https://x/y.png', bold: true },
+      { id: 'p', kind: 'note', x: 0, y: 0, bold: 'yes' },
+    ]) as { id: string; bold?: boolean }[]
+    expect(rows.find(r => r.id === 'n')?.bold).toBe(true)
+    expect(rows.find(r => r.id === 'h')?.bold).toBe(true)
+    expect(rows.find(r => r.id === 'i')?.bold).toBeUndefined()
+    expect(rows.find(r => r.id === 'p')?.bold).toBeUndefined()
+    expect(textBoldOf({ kind: 'note', bold: true })).toBe(true)
+    expect(textBoldOf({ kind: 'note' })).toBe(false)
+    expect(textBoldOf({ kind: 'image', bold: true })).toBe(false)
+  })
+  it('the toolbar has a Bold button and the card wears it (source pins)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const bar = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(bar).toContain('aria-label="Bold" title="Bold" aria-pressed={textBoldOf(card)}')
+    const card = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect((card.match(/textBoldOf\(card\) \? 'font-bold' : ''/g) ?? []).length).toBe(4)
+  })
+})

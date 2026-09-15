@@ -6,7 +6,7 @@ import {
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
 import { Link2 } from 'lucide-react'
-import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf } from '../../../../lib/batch-brief-core'
+import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf } from '../../../../lib/batch-brief-core'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
@@ -497,7 +497,7 @@ function CanvasCardInner({
                 <textarea key={`${t.id}:${t.text}`} defaultValue={t.text} rows={1} style={{ fontSize: px }}
                   ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
                   onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
-                  className={`min-w-0 flex-1 resize-none break-words bg-transparent leading-snug outline-none ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
+                  className={`min-w-0 flex-1 resize-none break-words bg-transparent leading-snug outline-none ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
                   onBlur={e => {
                     const v = e.target.value.trim()
                     if (v === t.text) return
@@ -552,7 +552,7 @@ function CanvasCardInner({
     // never inside a word: the resize floor is its widest word.
     return (
       <span
-        className={`block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest ${ALIGN_CLASS[textAlignOf(card)]} ${TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? 'text-muted-foreground'}`}
+        className={`block select-none whitespace-normal break-normal font-mono uppercase leading-snug tracking-widest ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${TEXT_COLOR_CLASS[textColorOf(card) ?? ''] ?? 'text-muted-foreground'}`}
         style={{ width: card.w, fontSize: LABEL_FONT_PX[textSizeOf(card)] }}
       >
         {card.text || (onUpdate ? 'Double-click to name this section' : '')}
@@ -585,7 +585,7 @@ function CanvasCardInner({
             ref={el => { if (el && !card.h) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
             onInput={e => { if (card.h) return; const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
             style={{ fontSize: noteFont, lineHeight: noteLine }}
-            className={`min-h-0 w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground ${card.h ? 'flex-1' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
+            className={`min-h-0 w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground ${card.h ? 'flex-1' : ''} ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
             placeholder="Write it down…"
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
@@ -596,7 +596,7 @@ function CanvasCardInner({
         ) : (
           // the words wrap and, in a box shorter than they are, scroll —
           // they never draw past the card's border
-          <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}>
+          <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}>
             {card.text || <span className="text-muted-foreground">Write it down…</span>}
           </p>
         )}

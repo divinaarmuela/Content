@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  AlignCenter, AlignLeft, AlignRight, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
@@ -21,7 +21,7 @@ import {
   CANVAS_NOTE_COLORS, TEXT_SIZE_LABEL, cardTakesHeight, minCardWidth, mockupPlatformFor, resizeCard,
   seedCardsFromReferences, stepTextSize, textSizeOf,
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
-  hasTextStyle, defaultAlignOf } from '../../../../lib/batch-brief-core'
+  hasTextStyle, defaultAlignOf, textBoldOf } from '../../../../lib/batch-brief-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -1085,6 +1085,14 @@ export default function BriefCanvas({
                 )
               })}
             </div>
+            {/* BOLD (the owner, 15 Sep 2026: "add a Bold text feature on the board") */}
+            <button type="button" aria-label="Bold" title="Bold" aria-pressed={textBoldOf(card)}
+              onClick={() => { const next = { ...card, bold: textBoldOf(card) ? undefined : true }; upsertLocal(next); persist([next]) }}
+              className={`ml-0.5 flex h-7 w-7 items-center justify-center rounded-md [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
+                textBoldOf(card) ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+              }`}>
+              <Bold className="h-3.5 w-3.5" />
+            </button>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             {/* a to-do names itself on this bar; a board renames in its dialog */}
             {card.kind !== 'todo' && card.kind !== 'board' && (
