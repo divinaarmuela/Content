@@ -103,7 +103,10 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
 describe('one drawer for every card', () => {
   it('Post approval and Editor open the same plain drawer, so a shoot card is not shown the old one', () => {
     expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple \/>/)
-    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
+    // the Editor page opens the card's own PAGE (15 Sep 2026: "not a slider
+    // anymore"), which chooses the same three cards the sheet did
+    expect(src(EDITOR)).toContain('onOpen={c => router.push(`/dashboard/editor/${c.id}`)}')
+    expect(src(EDITOR)).not.toContain('<CardSheet')
   })
   it('the plain drawer renames and sets the due date itself — no link out to the old card page', () => {
     expect(src(DRAWER)).toMatch(/Rename or set due date/)
@@ -123,7 +126,10 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   const EDITOR_DRAWER = 'app/dashboard/board/EditorCardDrawer.tsx'
   const CARD_SHEET = 'app/dashboard/board/CardSheet.tsx'
   it('the Editor page opens the editor\u2019s drawer for an editor, the manager\u2019s for a manager', () => {
-    expect(src(EDITOR)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple editor \/>/)
+    // …on the card's own page (15 Sep 2026)
+    const page = src('app/dashboard/editor/[id]/page.tsx')
+    expect(page).toContain('const maker = usesMakerDrawer(me, item)')
+    expect(page).toMatch(/maker\s*\? <EditorCardDrawer key=\{id\} id=\{id\} onClose=\{back\} hideFolderFiles \/>\s*: <CardDetail key=\{id\} id=\{id\} layout="sheet" onClose=\{back\} \/>/)
     // …and everyone but an editor — the quality checker, the managers — gets
     // the manager's drawer there (13 and 14 Sep 2026)
     expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && maker\s*\? <EditorCardDrawer/)

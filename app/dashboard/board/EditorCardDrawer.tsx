@@ -14,6 +14,7 @@ import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
+import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { linkKindOf } from '../../lib/card-link-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
@@ -60,7 +61,12 @@ const outlineBtn = 'inline-flex h-11 items-center gap-1.5 rounded-full border bo
 const ghostBtn = 'h-11 rounded-full px-4 text-[14px] font-semibold'
 const field = 'min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal'
 
-export default function EditorCardDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false }: {
+  id: string
+  onClose: () => void
+  /** the card's own page draws the folder's files itself, wide (15 Sep 2026) */
+  hideFolderFiles?: boolean
+}) {
   const { me } = useRole()
   const { row: item } = useRow<ContentItem>('content_items', id)
   const byItem = useMemo(() => ({ item_id: id }), [id])
@@ -343,10 +349,14 @@ export default function EditorCardDrawer({ id, onClose }: { id: string; onClose:
             ? <a href={from.footage} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4">Open the Dropbox or Drive folder <ExternalLink className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">, opens in a new tab</span></a>
             : <span className="text-muted-foreground">Not given yet — ask Production.</span>}
         </p>
-        {/* a manager holding their own card may add the folder link and the files
-            here (the owner, 15 Sep 2026: "why can't I add the folder link then? I
-            assigned it to myself"); an editor sees, opens and plays */}
-        <FilesToWorkFrom item={item as never} isManager={isManager} frozen={frozen} />
+        {/* THE FILES BEHIND THE LINK (the owner, 15 Sep 2026: "display files as
+            their thumbnail and play it from there — the Drive link"): Drive's
+            thumbnails, and Drive's player on a press. Read only. */}
+        {!hideFolderFiles && <DriveFolderFiles url={from.footage} />}
+        {/* a manager holding their own card may add the FOLDER LINK here — not
+            files (the owner, 15 Sep 2026: "why can't I add the folder link then?
+            I assigned it to myself"; "not files"); an editor sees, opens and plays */}
+        <FilesToWorkFrom item={item as never} isManager={isManager} frozen={frozen} linkOnly showFolderFiles={false} />
         <p className="text-[13px]">
           <span className="font-semibold">Finals go to: </span>
           {from.finalsFolder

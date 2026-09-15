@@ -6,6 +6,7 @@ import { ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import SafeVideo from '../../components/media/SafeVideo'
 import VideoTile from '../../components/media/VideoTile'
+import DriveFolderFiles from './DriveFolderFiles'
 import { uploadFiles } from '../uploadQueue'
 import { linkKindOf } from '../../lib/card-link-core'
 import {
@@ -30,11 +31,17 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
   frozen: boolean
+  /** the maker's drawer (the owner, 15 Sep 2026: "not files"): a manager
+   *  holding their own card adds the folder link, never files */
+  linkOnly?: boolean
+  /** the files behind a Drive folder link, as tiles (15 Sep 2026) — off where
+   *  the drawer already draws them under its own Footage folder line */
+  showFolderFiles?: boolean
 }) {
   const files = readRawAssets(item.raw_assets)
   const folder = item.raw_assets_url ?? null
@@ -99,9 +106,11 @@ export default function FilesToWorkFrom({ item, isManager, frozen }: {
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{FILES_TO_WORK_FROM}</p>
         {mayEdit && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className={button} disabled={busy !== null} onClick={() => input.current?.click()}>
-              <Plus className="h-4 w-4" aria-hidden /> Add files
-            </Button>
+            {!linkOnly && (
+              <Button variant="outline" className={button} disabled={busy !== null} onClick={() => input.current?.click()}>
+                <Plus className="h-4 w-4" aria-hidden /> Add files
+              </Button>
+            )}
             <Button variant="outline" className={button} disabled={busy !== null} onClick={() => setLinkOpen(o => !o)}>
               <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the folder link' : 'Add a folder link'}
             </Button>
@@ -137,6 +146,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen }: {
           <span className="sr-only">, opens in a new tab</span>
         </a>
       )}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>

@@ -642,6 +642,12 @@ export async function performTransition(
      *  — the only way past an `auto` edge. Two callers: the versions route,
      *  and the schedule composer's new-media path. */
     auto?: boolean
+    /** THE PERSON'S OWN POST, CLEARED BY THEMSELVES (the owner, 15 Sep 2026:
+     *  "I'm a super admin and an AM — when I upload content to post directly
+     *  on the Schedule page, it triggers 'now ready for quality check', which
+     *  is wrong"): the history records the move, nobody is emailed — not the
+     *  reviewers, not the schedulers, and no "passed in your place". */
+    quiet?: boolean
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -906,7 +912,7 @@ export async function performTransition(
     newValue: to,
     detail: system ? actor.label : standIns.length > 0 ? `${check.rule.label} · ${STAND_IN_MARK}` : check.rule.label,
   })
-  if (!system && standIns.length > 0) {
+  if (!system && standIns.length > 0 && !opts?.quiet) {
     afterResponse('stand-in pass notification', () => notifyStandInPass(actor, { ...item, status: to }, standIns, to))
   }
   if (selfPosts && to === 'approved_for_scheduling') {
@@ -991,7 +997,7 @@ export async function performTransition(
   // after-response.ts); the outbox dedupe makes retries safe
   const skip = new Set(opts?.skipAudiences ?? [])
   if (selfPosts) { skip.add('assigned_schedulers'); skip.add('schedulers') }
-  const audiences = (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
+  const audiences = opts?.quiet ? [] : (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)
   const schedulerIds = [...(opts?.schedulerIds ?? []).filter(x => typeof x === 'string'), ...defaults].slice(0, 20)
@@ -1137,6 +1143,8 @@ export async function performTransition(
         action: 'notified', newValue: to,
         detail: told.length > 0
           ? `Told: ${told.join(', ')}`
+          : opts?.quiet
+            ? 'Told nobody — their own post, cleared by themselves'
           : audiences.length === 0
             ? 'Told nobody — this move tells no one'
             : 'Told nobody — no active person matched (no quality checker, manager or holder on this card)',

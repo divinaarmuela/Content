@@ -320,6 +320,17 @@ export async function createPostFromFiles(
    */
   const throughGate = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, current)
   const passesQuality = throughGate.includes('quality_reviewer') || throughGate.includes('super_admin')
+  /**
+   * THEIR OWN POST, CLEARED BY THEMSELVES (the owner, 15 Sep 2026: "I'm a
+   * super admin and an AM — when I upload content to post directly on the
+   * Schedule page, it triggers 'now ready for quality check', which is
+   * wrong"). A manager who passes the quality check is not asking anyone: the
+   * quality-check hop and the approval that follows are recorded on the card
+   * and emailed to nobody — no reviewer, no "passed in your place", no
+   * "needs a posting date" to the schedulers. They are on the Schedule page
+   * booking it themselves. Asking a named person ('ask') is still a real ask.
+   */
+  const ownPost = passesQuality && decision !== 'ask'
   if (decision) {
     try {
       current = await performTransition(user, item as never, 'quality_check', {
@@ -329,6 +340,7 @@ export async function createPostFromFiles(
         // a reviewer answering it themselves in the next line does not need
         // the managers told twice
         skipAudiences: decision === 'ask' || !passesQuality ? undefined : ['account_managers'],
+        quiet: ownPost,
       }) as unknown as ContentItem
     } catch (e) {
       // the media is saved either way; a piece that stayed at draft is a piece
@@ -361,6 +373,7 @@ export async function createPostFromFiles(
         // the "ready for review" note went to the same people one line ago,
         // about a piece this person has just signed off themselves
         skipAudiences: ['account_managers'],
+        quiet: ownPost,
       }) as unknown as ContentItem
     } catch (e) {
       console.error('upload post — could not record the self-approval:', e)

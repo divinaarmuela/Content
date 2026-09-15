@@ -15,7 +15,8 @@ import { AccountUnavailable } from '../production/shoot-ui'
 import { useTeamMembers } from '../production/workHooks'
 import GettingStarted from '../GettingStarted'
 import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
-import { CardSheet, useCardSheet } from '../board/CardSheet'
+import { useRouter } from 'next/navigation'
+import { readCardParam } from '../../lib/card-sheet-core'
 import { BoardFilters } from '../board/BoardFilters'
 import { useBoardFilters } from '../board/useBoardFilters'
 import {
@@ -53,8 +54,16 @@ export default function EditorPage() {
   const canCreate = isManager || viewer?.role === 'general' || viewer?.role === 'editor'
   const team = useTeamMembers(isManager)
   const { column, show, clearShow } = useBoardParams()
-  // the card that is open beside the board, named in the address
-  const sheet = useCardSheet()
+  // A PRESS OPENS THE CARD'S OWN PAGE (the owner, 15 Sep 2026: "not a slider
+  // anymore"): /dashboard/editor/<id>. An email or bell link still says
+  // ?card=<id> — that lands here and goes on to the page.
+  const router = useRouter()
+  useEffect(() => {
+    try {
+      const id = readCardParam(window.location.search)
+      if (id) router.replace(`/dashboard/editor/${id}`)
+    } catch { /* no address to read */ }
+  }, [router])
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)
@@ -176,7 +185,7 @@ export default function EditorPage() {
           managersOf={managersOf}
           kinds={live.tables.workKinds.rows}
           today={today}
-          onOpen={c => sheet.open(c.id)}
+          onOpen={c => router.push(`/dashboard/editor/${c.id}`)}
           initialColumn={column}
           show={show}
           onClearShow={clearShow}
@@ -190,10 +199,6 @@ export default function EditorPage() {
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
       )}
-
-      {/* the card, beside the board — the board stays live behind it */}
-      {/* the editor's card for every role here; managers get their tools on Post approval */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} simple editor />
 
       {viewer && (
         <NewCardDialog

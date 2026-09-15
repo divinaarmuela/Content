@@ -460,3 +460,24 @@ describe('an upload that carries its decision', () => {
     expect(made.body.message).toContain('With client')
   })
 })
+
+describe('their own post, cleared by themselves, is nobody’s email (the owner, 15 Sep 2026)', () => {
+  it('a manager’s direct upload records the quality check and the approval on the card, and notifies nobody', async () => {
+    const { notify } = await import('../app/lib/mailer')
+    vi.mocked(notify).mockClear()
+    as(QA)
+    const made = await upload()
+    expect(made.status).toBe(200)
+    expect(items()[0].status).toBe('approved_for_scheduling')
+    await new Promise(r => setTimeout(r, 60))
+    // no "now Quality check", no "passed in your place", no "needs a posting date"
+    expect(vi.mocked(notify).mock.calls).toHaveLength(0)
+    const log = fake.rows('workflow_activity') as any[]
+    // the card's history still says so, honestly
+    const toldLines = log.filter(a => a.action === 'notified')
+    expect(toldLines.length).toBeGreaterThan(0)
+    expect(toldLines.every(a => a.detail === 'Told nobody — their own post, cleared by themselves')).toBe(true)
+    expect(log.map(a => a.new_value)).toContain('quality_check')
+    expect(log.map(a => a.new_value)).toContain('approved_for_scheduling')
+  })
+})

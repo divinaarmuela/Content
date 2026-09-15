@@ -76,7 +76,8 @@ describe('the plain drawer (9 Sep 2026)', () => {
     const sheet = readFileSync(join(process.cwd(), 'app/dashboard/board/CardSheet.tsx'), 'utf8')
     expect(sheet).toMatch(/adhoc \|\| simple/)
     const editor = readFileSync(join(process.cwd(), 'app/dashboard/editor/page.tsx'), 'utf8')
-    expect(editor).toMatch(/<CardSheet [^>]*simple/)
+    // the Editor page turns ?card= into the card's own page (15 Sep 2026)
+    expect(editor).toContain('router.replace(`/dashboard/editor/${id}`)')
     const detail = readFileSync(join(process.cwd(), 'app/dashboard/board/PostApprovalDetail.tsx'), 'utf8')
     // no way out to the Production card page
     expect(detail).not.toMatch(/dashboard\/production\//)

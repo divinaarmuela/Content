@@ -29,8 +29,9 @@ const SHEET = 'app/dashboard/board/CardSheet.tsx'
 const DETAIL = 'app/dashboard/production/[id]/CardDetail.tsx'
 // Shoots (production) opens a shoot's own page, not a card sheet — it holds
 // no cards any more (11 Sep 2026)
+// …and the Editor page opens a card on its OWN page, /dashboard/editor/<id>
+// (the owner, 15 Sep 2026: "not a slider anymore") — tests/editor-card-page
 const PAGES = [
-  'app/dashboard/editor/page.tsx',
   'app/dashboard/scheduler/page.tsx',
 ]
 
@@ -75,6 +76,12 @@ describe('the three boards host the sheet, and the address carries the card', ()
       expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\}( simple)?( editor)? \/>/)
     })
   }
+
+  it('the Editor page opens a card on its own page and draws no card sheet (15 Sep 2026)', () => {
+    const src = code(read('app/dashboard/editor/page.tsx'))
+    expect(src).not.toContain('<CardSheet')
+    expect(src).toContain('router.push(`/dashboard/editor/${c.id}`)')
+  })
 
   it('the Shoots page opens a shoot on its own page and draws no card sheet', () => {
     const src = code(read('app/dashboard/production/page.tsx'))
