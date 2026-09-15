@@ -14,7 +14,7 @@ import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
 import { HandToDialog } from './BoardDialogs'
 import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
-import { EDITING_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/workflow-core'
+import { EDITING_STATUSES, STATUS_LABELS, handedToScheduler, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
@@ -474,7 +474,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // the Drive or Dropbox link"): an edit is a link until it is approved and
   // handed to a scheduler, who uploads the files here. A post uploaded for
   // approval is files from the start.
-  const stillEditing = !!item && !adhoc && EDITING_STATUSES.includes(String(item.status))
+  // …until it is HANDED TO A SCHEDULER (15 Sep 2026): a Draft card with a
+  // scheduler named on it is theirs to upload the files on, for the check
+  const stillEditing = !!item && !adhoc && EDITING_STATUSES.includes(String(item.status)) && !handedToScheduler(item)
 
   return (
     <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">

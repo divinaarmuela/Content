@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { visibleItems } from '../app/lib/scope-client'
+import { handedToScheduler } from '../app/lib/workflow-core'
 
 /**
  * THE CLIENT'S YES IS STILL THE EDITING SIDE'S (the owner, 15 Sep 2026:
@@ -24,6 +25,24 @@ describe('an approved card nobody has been handed is not a scheduler’s', () =>
     expect(sees(card({ owner_id: 'u-sc' }))).toBe(1)
     // a booked or posted card is still theirs to see
     expect(sees(card({ status: 'scheduled', scheduler_ids: ['u-sc'] }))).toBe(1)
+  })
+})
+
+describe('once handed, the scheduler uploads the files on the card (the owner, 15 Sep 2026)', () => {
+  it('a Draft card with a scheduler named is the scheduler’s upload stage; before the hand-over, or on a post, it is not', () => {
+    expect(handedToScheduler({ status: 'draft_uploaded', scheduler_ids: ['u-sc'] })).toBe(true)
+    expect(handedToScheduler({ status: 'draft_uploaded', scheduler_ids: [] })).toBe(false)
+    expect(handedToScheduler({ status: 'draft_uploaded' })).toBe(false)
+    expect(handedToScheduler({ status: 'quality_check', scheduler_ids: ['u-sc'] })).toBe(false)
+    expect(handedToScheduler({ status: 'draft_uploaded', scheduler_ids: ['u-sc'], adhoc_post: true })).toBe(false)
+  })
+  it('the post approval drawer shows the folder to work from, the finished edit, and the Add files button on a handed card', () => {
+    const d = src('app/dashboard/board/PostApprovalDetail.tsx')
+    expect(d).toContain("const stillEditing = !!item && !adhoc && EDITING_STATUSES.includes(String(item.status)) && !handedToScheduler(item)")
+    expect(d).toContain('{!stillEditing && (')
+    expect(d).toMatch(/finished \? 'Add files' : 'Add the finished files'/)
+    expect(d).toContain('<FilesToWorkFrom')
+    expect(d).toContain('Open the finished edit')
   })
 })
 

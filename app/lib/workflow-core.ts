@@ -641,6 +641,14 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
  * `?card=` is what the card sheet on both boards reads (card-sheet-core).
  */
 export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review']
+/** HANDED TO A SCHEDULER (the owner, 15 Sep 2026: "when handed over make
+ *  sure the scheduler can download the files from the Drive themselves,
+ *  pick the files and upload them for post approval"): a card in Draft with
+ *  a scheduler named on it is the scheduler's upload stage, not the
+ *  editor's — the finished edit is the link, the files are what they add. */
+export function handedToScheduler(item: { status?: unknown; scheduler_ids?: unknown; adhoc_post?: unknown }): boolean {
+  return item.adhoc_post !== true && String(item.status ?? '') === 'draft_uploaded' && schedulerIdsOf(item).length > 0
+}
 export const EDITOR_BOARD_PATH = '/dashboard/editor'
 export const POST_APPROVAL_BOARD_PATH = '/dashboard/scheduler'
 
