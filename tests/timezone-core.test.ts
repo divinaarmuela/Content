@@ -317,3 +317,14 @@ describe('the greeting is about the VIEWER, so it is read off the viewer’s clo
     expect(greetingInZone('2026-08-24T11:02:00Z', 'nonsense/zone')).toBe('Working late')
   })
 })
+
+describe('Barcelona on the team picker (the owner, 15 Sep 2026)', () => {
+  it('Spain’s one zone is offered, reads as Barcelona, and abbreviates as CET or CEST', async () => {
+    const { COMMON_ZONES, ZONE_GROUPS, zoneLabel, zoneOption } = await import('../app/lib/timezone-core')
+    expect(COMMON_ZONES).toContain('Europe/Madrid')
+    expect(ZONE_GROUPS.find(g => g.label === 'Spain')?.zones).toEqual(['Europe/Madrid'])
+    expect(zoneLabel('Europe/Madrid')).toBe('Barcelona')
+    expect(zoneOption('Europe/Madrid', '2026-01-15T12:00:00Z')).toBe('Barcelona — CET')
+    expect(zoneOption('Europe/Madrid', '2026-07-15T12:00:00Z')).toBe('Barcelona — CEST')
+  })
+})

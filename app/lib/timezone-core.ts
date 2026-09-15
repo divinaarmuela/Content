@@ -190,6 +190,7 @@ export function fromZonedInput(local: string | null | undefined, tz: string): st
  * reads "PHT", not "GMT+8".
  */
 const ABBREV: Record<string, { std: string; dst?: string }> = {
+  'Europe/Madrid': { std: 'CET', dst: 'CEST' },
   'Asia/Manila': { std: 'PHT' },
   'Asia/Singapore': { std: 'SGT' },
   'Asia/Kuala_Lumpur': { std: 'MYT' },
@@ -241,7 +242,10 @@ export function zoneAbbrev(tz: string, iso?: string | number | Date | null): str
 
 /** "Melbourne", "Manila" — the city out of the IANA id, for a label. */
 export function zoneLabel(tz: string): string {
-  const last = safeZone(tz).split('/').pop() ?? ''
+  const zone = safeZone(tz)
+  // a zone named for a city the team is not in reads as the city they are in
+  if (zone === 'Europe/Madrid') return 'Barcelona'
+  const last = zone.split('/').pop() ?? ''
   return last.replace(/_/g, ' ')
 }
 
@@ -423,6 +427,10 @@ export const ZONE_GROUPS: { label: string; zones: string[] }[] = [
     ],
   },
   { label: 'United Kingdom', zones: ['Europe/London'] },
+  // BARCELONA (the owner, 15 Sep 2026: "add Barcelona as a time zone option
+  // for the team"): Spain keeps one zone, Europe/Madrid — the picker says
+  // Barcelona because that is where the person is
+  { label: 'Spain', zones: ['Europe/Madrid'] },
 ]
 
 /** Every zone the grouped picker offers, flat — for "is this one of ours?". */
