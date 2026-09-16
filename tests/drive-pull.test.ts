@@ -127,7 +127,10 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).toContain('if ((row as { cancelled_at?: string | null }).cancelled_at) return { done: true, cancelled: true }')
     expect(s).toContain('if (fresh?.cancelled_at) {')
     expect(s).toContain("if ((row as { cancelled_at?: string | null }).cancelled_at) return 'failed'")
-    expect(src('app/inngest/functions.ts')).toContain('if (r.cancelled) return { cancelled: true }')
+    expect(src('app/inngest/functions.ts')).toContain("if (r.cancelled) return 'cancelled'")
+    // three files copy side by side (16 Sep 2026)
+    expect(src('app/inngest/functions.ts')).toContain('const LANES = 3')
+    expect(src('app/inngest/functions.ts')).toContain('const outcomes = await Promise.all(ids.slice(i, i + LANES).map(copyOne))')
     // the three places a link is replaced
     expect(src('app/api/production/batches/[id]/route.ts')).toContain("if (footageReplaced) cancelReplacedPullSoon({ kind: 'batch', scopeId: data.id, oldUrl: oldFootage, newUrl: patch.footage_url ? String(patch.footage_url) : null })")
     expect(src('app/api/production/batches/[id]/route.ts')).toContain('try { await replaceFootageFolder(user as never, data, oldFootage) }')

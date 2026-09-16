@@ -896,16 +896,26 @@ export const drivePullFolder = inngest.createFunction(
       const row = await table('drive_pulls').get(id)
       return filesOf(row as never).filter(f => f.status !== 'done').map(f => f.id)
     })
-    for (const fileId of ids) {
+    // THREE FILES AT A TIME (the owner, 16 Sep 2026: "why does it take some
+    // time to pull the files?"): a folder of 35 clips was one clip after
+    // another; three side by side is three times quicker, and still gentle
+    // on Drive. Each file's slices stay in order within its own lane.
+    const LANES = 3
+    const copyOne = async (fileId: string): Promise<'done' | 'cancelled'> => {
       // a slice-group per step, until the file is complete
       for (let n = 0; n < 4000; n++) {
         const r = await step.run(`copy:${fileId}:${n}`, async () => {
           const { runPullSlices } = await import('../lib/drive-pull')
           return runPullSlices(id, fileId)
         })
-        if (r.cancelled) return { cancelled: true }
-        if (r.done) break
+        if (r.cancelled) return 'cancelled'
+        if (r.done) return 'done'
       }
+      return 'done'
+    }
+    for (let i = 0; i < ids.length; i += LANES) {
+      const outcomes = await Promise.all(ids.slice(i, i + LANES).map(copyOne))
+      if (outcomes.includes('cancelled')) return { cancelled: true }
     }
     return step.run('finish', async () => {
       const { finishPull } = await import('../lib/drive-pull')
