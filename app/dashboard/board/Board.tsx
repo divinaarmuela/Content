@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Compass, X } from 'lucide-react'
+import { Compass, LayoutGrid, List as ListIcon, X } from 'lucide-react'
+import { usePersistedChoice } from '../production/workHooks'
+import { BoardList } from './BoardList'
 import Tour, { useTourOnce } from '../social/schedule/Tour'
 import { EDITOR_TOUR, POST_APPROVAL_TOUR } from '../../lib/tour-core'
 import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
@@ -21,6 +23,10 @@ import { readInteractors, withFromThisPost } from '../../lib/followers-core'
 import { postPageHref } from '../../lib/post-page-core'
 import { LaneBoard, type Lane } from '../production/LaneBoard'
 import { BoardCard, CompactCard } from './BoardCard'
+
+/** COLUMNS OR A LIST (the owner, 16 Sep 2026: "is there a way to make a list
+ *  format?") — remembered per page, `?view=list` in the address */
+const BOARD_VIEWS = ['columns', 'list'] as const
 import {
   DeleteDialog, HandToDialog, KindDialog, LinkDialog, type KindRow,
 } from './BoardDialogs'
@@ -125,6 +131,7 @@ export function Board({
   /** the three answers a card can be given, and their two dialogs — shared
    *  with the Scheduler's "Waiting on you" list, so both press one route */
   const { busyId, act, dialogs } = useCardActs<BoardCardRow>(viewer)
+  const [view, setView] = usePersistedChoice(`board-view.${page}`, BOARD_VIEWS, 'columns', 'view')
   const [dragging, setDragging] = useState<BoardCardRow | null>(null)
   const [over, setOver] = useState<PageLaneKey | null>(null)
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
@@ -361,6 +368,16 @@ export function Board({
         {/* who is doing what: the client and the person, for the people
             whose job is to look across everyone (the owner, 11 Sep 2026) */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">{filters}</div>
+        <div className="flex items-center gap-2">
+        <div role="group" aria-label="Columns or a list" className="inline-flex h-11 items-center rounded-full border border-border bg-surface p-1">
+          {BOARD_VIEWS.map(v => (
+            <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold ${view === v ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+              {v === 'columns' ? <LayoutGrid className="h-4 w-4" aria-hidden /> : <ListIcon className="h-4 w-4" aria-hidden />}
+              {v === 'columns' ? 'Columns' : 'List'}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={tour.start}
@@ -370,6 +387,7 @@ export function Board({
           <Compass className="h-4 w-4" strokeWidth={1.8} aria-hidden />
           Show me the tour
         </button>
+        </div>
       </div>
 
       {filterNote && !show && (
@@ -387,6 +405,9 @@ export function Board({
         </div>
       )}
 
+      {view === 'list' ? (
+        <BoardList groups={grouped.map(g => ({ label: g.lane.label, cards: g.cards }))} viewer={viewer} names={names} managersOf={managersOf} today={today} onOpen={open} ariaLabel={ariaLabel} />
+      ) : (
       <div data-tour="board-lanes">
         <LaneBoard
           lanes={lanes}
@@ -394,6 +415,7 @@ export function Board({
           ariaLabel={ariaLabel}
         />
       </div>
+      )}
 
       {dialogs}
       <LinkDialog card={linkFor} onClose={() => setLinkFor(null)} />
