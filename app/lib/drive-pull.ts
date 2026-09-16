@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { DrivePull } from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import { listFolder } from './drive-folder-list'
-import { openDriveFile, totalFromContentRange } from './drive-stream'
+import { driveFileSize, openDriveFile } from './drive-stream'
 import { kindOf } from './files-core'
 import { abortMultipart, closeMultipart, openMultipart, putMultipartPart, r2Configured } from './storage'
 import {
@@ -113,14 +113,12 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
     return { files: 0, bytes: 0, note: 'unreadable' }
   }
 
-  // sizes the public view does not carry: one one-byte ask per file
+  // sizes the listing did not carry: Drive's metadata, never the bytes
   let probed = 0
   for (const f of seen) {
     if (f.size !== null) continue
     await pulls.update(id, { error: `Reading sizes: ${++probed} (${f.name})`, updated_at: new Date().toISOString() } as never)
-    const res = await openDriveFile(f.id, 'bytes=0-0')
-    f.size = res ? totalFromContentRange(res) : null
-    try { await res?.body?.cancel() } catch { /* fine */ }
+    f.size = await driveFileSize(f.id)
   }
 
   const before = filesOf(row)
@@ -162,9 +160,7 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
 
   try {
     if (file.size === null) {
-      const probe = await openDriveFile(file.id, 'bytes=0-0')
-      const size = probe ? totalFromContentRange(probe) : null
-      try { await probe?.body?.cancel() } catch { /* fine */ }
+      const size = await driveFileSize(file.id)
       if (size === null) throw new Error('Drive would not say how big the file is')
       await save({ size }, { total_bytes: files.reduce((n, f) => n + (f.size ?? 0), 0) })
     }
@@ -175,10 +171,17 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
     for (let i = 0; i < PARTS_PER_STEP; i++) {
       const slice = nextSlice(file)
       if (!slice) break
-      const res = await openDriveFile(file.id, `bytes=${slice.start}-${slice.end}`)
-      if (!res || !res.body) throw new Error('Drive stopped handing the file out')
-      const bytes = Buffer.from(await res.arrayBuffer())
-      if (bytes.length === 0) throw new Error('Drive sent an empty slice')
+      // one slice, one request, abandoned if it overruns — never the whole file
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 240_000)
+      let bytes: Buffer
+      try {
+        const res = await openDriveFile(file.id, `bytes=${slice.start}-${slice.end}`, ctrl.signal)
+        if (!res || !res.body) throw new Error('Drive stopped handing the file out')
+        bytes = Buffer.from(await res.arrayBuffer())
+      } finally { clearTimeout(timer) }
+      const want = slice.end - slice.start + 1
+      if (bytes.length !== want) throw new Error(`Drive sent ${bytes.length} bytes for a slice of ${want}`)
       const etag = await putMultipartPart(key, file.upload_id!, slice.n, bytes)
       await save({ done: file.done + bytes.length, parts: [...(file.parts ?? []), { n: slice.n, etag }] })
     }

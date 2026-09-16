@@ -87,7 +87,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
   it('the server half reads Drive and writes only to R2 — never a Drive write', () => {
     const s = src('app/lib/drive-pull.ts')
     expect(s).toContain("export const PULL_EVENT = 'drive/pull.folder'")
-    expect(s).toContain('await openDriveFile(file.id, `bytes=${slice.start}-${slice.end}`)')
+    expect(s).toContain("await openDriveFile(file.id, `bytes=${slice.start}-${slice.end}`, ctrl.signal)")
     expect(s).toContain('await putMultipartPart(key, file.upload_id!, slice.n, bytes)')
     expect(s).not.toMatch(/googleapis\.com\/upload|method: '(POST|PATCH|PUT|DELETE)'/)
     // a file already here with the same size stands; a new cut in the same folder is new files

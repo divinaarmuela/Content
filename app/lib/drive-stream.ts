@@ -31,26 +31,32 @@ const PASS = ['content-type', 'content-length', 'content-range', 'accept-ranges'
 /** Google's public download address — the one a "Download" on a shared file goes to */
 const PUBLIC_DOWNLOAD = 'https://drive.usercontent.google.com/download'
 
-/** The file's bytes from Drive — through our account, else as anyone with
- *  the link — for the given Range; null when neither can read it. */
-export async function openDriveFile(id: string, range: string | null): Promise<Response | null> {
+/**
+ * The file's bytes from Drive — through our account, else as anyone with
+ * the link — for the given Range; null when neither can read it. A Range
+ * asked for is a Range required: an answer that ignores it (a 200 with the
+ * whole file) is put down and the other way is tried, so a slice is never
+ * the wrong bytes and never the whole file in memory. An answer can be
+ * abandoned with `signal`.
+ */
+export async function openDriveFile(id: string, range: string | null, signal?: AbortSignal): Promise<Response | null> {
   const rangeHeader: Record<string, string> = range ? { Range: range } : {}
+  const usable = (res: Response) => res.ok && !!res.body && (!range || res.status === 206)
 
   // first through our account — a file in the agency's own Drive
-  let upstream: Response | null = null
   const auth = await accessToken()
   if (auth.ok) {
     const url = `${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ alt: 'media', ...ALL_DRIVES })
-    const own = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}`, ...rangeHeader } })
-    if (own.ok && own.body) upstream = own
+    const own = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}`, ...rangeHeader }, signal }).catch(() => null)
+    if (own && usable(own)) return own
+    if (own) void own.body?.cancel().catch(() => undefined)
   }
   // then as anyone with the link — a client's shared folder
-  if (!upstream) {
-    const pub = await fetch(`${PUBLIC_DOWNLOAD}?` + new URLSearchParams({ id, export: 'download', confirm: 't' }), { headers: rangeHeader })
-    // an HTML answer is Google's own page (not shared, or a sign-in), never the clip
-    if (pub.ok && pub.body && !(pub.headers.get('content-type') ?? '').startsWith('text/html')) upstream = pub
-  }
-  return upstream
+  const pub = await fetch(`${PUBLIC_DOWNLOAD}?` + new URLSearchParams({ id, export: 'download', confirm: 't' }), { headers: rangeHeader, signal }).catch(() => null)
+  // an HTML answer is Google's own page (not shared, or a sign-in), never the clip
+  if (pub && usable(pub) && !(pub.headers.get('content-type') ?? '').startsWith('text/html')) return pub
+  if (pub) void pub.body?.cancel().catch(() => undefined)
+  return null
 }
 
 /** the whole size of a file, read off the Content-Range of a one-byte ask */
@@ -59,6 +65,39 @@ export function totalFromContentRange(res: Response): number | null {
   if (m) return Number(m[1])
   const len = Number(res.headers.get('content-length'))
   return res.status === 200 && Number.isFinite(len) && len > 0 ? len : null
+}
+
+/**
+ * How big a file is, without touching its bytes: Drive's metadata through
+ * our account; else a one-byte ask as anyone with the link, abandoned the
+ * moment the headers are in. Null when nothing will say.
+ */
+export async function driveFileSize(id: string): Promise<number | null> {
+  const auth = await accessToken()
+  if (auth.ok) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 15_000)
+    try {
+      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'size', ...ALL_DRIVES }), {
+        headers: { Authorization: `Bearer ${auth.token}` }, signal: ctrl.signal,
+      })
+      if (res.ok) {
+        const meta = await res.json() as { size?: string | number }
+        const n = Number(meta.size)
+        if (Number.isFinite(n) && n > 0) return n
+      }
+    } catch { /* fall through to the public ask */ } finally { clearTimeout(timer) }
+  }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15_000)
+  try {
+    const res = await openDriveFile(id, 'bytes=0-0', ctrl.signal)
+    const size = res ? totalFromContentRange(res) : null
+    ctrl.abort()
+    return size
+  } catch {
+    return null
+  } finally { clearTimeout(timer) }
 }
 
 export async function streamDriveFile(id: string, range: string | null, name: string | null): Promise<Response> {
