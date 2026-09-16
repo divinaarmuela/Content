@@ -163,9 +163,11 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   <Check className="h-4 w-4" strokeWidth={3} aria-hidden /> Approved
                 </button>
               ) : (
-                <button type="button" onClick={() => void approve(false)} disabled={approving}
+                // signed, or not at all (16 Sep 2026): the name box on the right is the signature
+                <button type="button" onClick={() => void approve(false)} disabled={approving || !name.trim()}
+                  title={name.trim() ? undefined : 'Add your name in the comments box first'}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
-                  <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : 'Approve this clip'}
+                  <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : name.trim() ? 'Approve this clip' : 'Add your name to approve'}
                 </button>
               )}
             </div>

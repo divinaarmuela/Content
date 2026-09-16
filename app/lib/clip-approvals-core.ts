@@ -18,6 +18,18 @@ export type ClipApproval = {
   at: string
   /** who at the client, as they signed it; the client's name when nobody did */
   by: string
+  /** WHERE IT CAME FROM (the owner, 16 Sep 2026: "who clicked approve? can't
+   *  you track where it is from?" — an unsigned press could not be traced):
+   *  the address and the device the press came from, kept on the tick */
+  ip?: string | null
+  device?: string | null
+}
+
+/** the address a request came through, as the edge reports it */
+export function requestOrigin(headers: { get(name: string): string | null }): { ip: string | null; device: string | null } {
+  const ip = (headers.get('x-forwarded-for') ?? headers.get('x-real-ip') ?? '').split(',')[0].trim() || null
+  const device = (headers.get('user-agent') ?? '').trim().slice(0, 200) || null
+  return { ip, device }
 }
 
 export function clipApprovalsOf(item: { clip_approvals?: unknown } | null | undefined): ClipApproval[] {

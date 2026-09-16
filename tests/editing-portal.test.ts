@@ -61,6 +61,20 @@ describe('which cards get one, and where it lives', () => {
 
 describe('the client’s tick per clip (pure)', () => {
   const a = { file_id: 'v1', name: 'Script 1.mov', at: '2026-09-16T00:00:00Z', by: 'Karly' }
+  it('a tick is signed and traced: the name is required, and the address and device are kept with it (16 Sep 2026)', async () => {
+    const { requestOrigin } = await import('../app/lib/clip-approvals-core')
+    const h = (m: Record<string, string>) => ({ get: (k: string) => m[k.toLowerCase()] ?? null })
+    expect(requestOrigin(h({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1', 'user-agent': 'Mozilla/5.0 (iPhone)' }))).toEqual({ ip: '203.0.113.9', device: 'Mozilla/5.0 (iPhone)' })
+    expect(requestOrigin(h({}))).toEqual({ ip: null, device: null })
+    const route = src('app/api/portal/clip/route.ts')
+    expect(route).toContain("if (decision === 'approve' && !authorName) return NextResponse.json({ error: 'Add your name first, so the team knows who approved it' }, { status: 400 })")
+    expect(route).toContain('withClipApproved(current, { file_id: fileId, name, at, by, ip: from.ip, device: from.device })')
+    expect(route).toContain('approved by ${by} (${client.name}) from ${from.ip ?? ')
+    const portal = src('app/components/portal/EditingReview.tsx')
+    expect(portal).toContain('disabled={approving || !name.trim()}')
+    expect(portal).toContain("name.trim() ? 'Approve this clip' : 'Add your name to approve'")
+  })
+
   it('reads only well-formed ticks off the card; approving twice keeps one; taking it back removes it', () => {
     expect(clipApprovalsOf({ clip_approvals: [a, { file_id: '', at: 'x' }, null, 'junk'] })).toEqual([a])
     expect(clipApprovalsOf({ clip_approvals: null })).toEqual([])

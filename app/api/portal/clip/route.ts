@@ -6,7 +6,7 @@ import { announceItemChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 import { editingPortalItem } from '../../../lib/editing-portal'
 import { isDriveId } from '../../../lib/files-core'
-import { clipApprovalsOf, withClipApproved, withClipUnapproved } from '../../../lib/clip-approvals-core'
+import { clipApprovalsOf, requestOrigin, withClipApproved, withClipUnapproved } from '../../../lib/clip-approvals-core'
 import { reviewPath } from '../../../lib/video-review-core'
 
 /**
@@ -29,16 +29,21 @@ export async function POST(req: Request) {
     const decision = body.decision === 'undo' ? 'undo' : 'approve'
     const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
     if (!isDriveId(fileId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    // A TICK IS SIGNED (the owner, 16 Sep 2026: "who clicked approve?" — an
+    // unsigned press said only the client's name): the person's name is
+    // required to approve, and the address and device are kept with it
+    if (decision === 'approve' && !authorName) return NextResponse.json({ error: 'Add your name first, so the team knows who approved it' }, { status: 400 })
     const found = await editingPortalItem(token, itemId)
     if (!found) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     const { owner, item } = found
     const client = owner.client
     const by = authorName || client.name
     const at = new Date().toISOString()
+    const from = requestOrigin(req.headers)
 
     const current = clipApprovalsOf(item)
     const next = decision === 'approve'
-      ? withClipApproved(current, { file_id: fileId, name, at, by })
+      ? withClipApproved(current, { file_id: fileId, name, at, by, ip: from.ip, device: from.device })
       : withClipUnapproved(current, fileId)
     await table<ContentItem>('content_items').update(item.id, { clip_approvals: next, updated_at: at })
 
@@ -47,7 +52,7 @@ export async function POST(req: Request) {
       actor, clientId: client.id,
       entityType: 'content_item', entityId: item.id,
       action: decision === 'approve' ? 'clip_approved' : 'clip_unapproved',
-      detail: decision === 'approve' ? `${name || fileId} approved by ${by}` : `${name || fileId} — approval taken back by ${by}`,
+      detail: decision === 'approve' ? `${name || fileId} approved by ${by} (${client.name}) from ${from.ip ?? 'an unknown address'}` : `${name || fileId} — approval taken back by ${by} from ${from.ip ?? 'an unknown address'}`,
     })
     announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'updated' })
     if (decision === 'approve') {
