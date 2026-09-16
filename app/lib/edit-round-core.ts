@@ -70,7 +70,7 @@ export type VersionTab<F extends { version?: number | null } = { version?: numbe
 
 export function finishedVersionsOf<F extends { version?: number | null }>(
   rows: readonly { kind?: string | null; scope_id?: string | null; folder_id?: string | null; folder_url?: string | null; status?: string | null; purpose?: string | null; files?: unknown; started_at?: string | null }[],
-  opts: { itemId: string; finishedFolderId: string | null; filesOf: (row: { files?: unknown }) => F[] },
+  opts: { itemId: string; finishedFolderId: string | null; filesOf: (row: { files?: unknown }) => F[]; currentRound?: number | null },
 ): VersionTab<F>[] {
   const mine = rows
     .filter(r => r.kind === 'item' && r.scope_id === opts.itemId)
@@ -95,12 +95,16 @@ export function finishedVersionsOf<F extends { version?: number | null }>(
       if (!byRound.has(round)) byRound.set(round, { round, folderUrl: String(r.folder_url ?? ''), files: [], inFlight: true })
     }
   }
-  // a tab for the empty in-flight row takes the round after the newest known one
+  // a tab for the empty in-flight row is the card's OWN round — the hand-in
+  // being copied is the round the card is on, never a guessed "next" (the
+  // owner, 16 Sep 2026: "why is Version 2 already there while I'm uploading
+  // version 1?")
   const empty = byRound.get(0)
   if (empty) {
     byRound.delete(0)
-    const next = Math.max(0, ...byRound.keys()) + 1
-    if (!byRound.has(next)) byRound.set(next, { ...empty, round: next })
+    const own = typeof opts.currentRound === 'number' && opts.currentRound >= 1 ? opts.currentRound : Math.max(0, ...byRound.keys()) + 1
+    if (!byRound.has(own)) byRound.set(own, { ...empty, round: own })
+    else byRound.set(own, { ...byRound.get(own)!, inFlight: true })
   }
   return [...byRound.values()].sort((a, b) => b.round - a.round)
 }

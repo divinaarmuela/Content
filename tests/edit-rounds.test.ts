@@ -85,7 +85,11 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(finishedVersionsOf(old, { itemId: 'c1', finishedFolderId: 'ELSE', filesOf })).toEqual([])
     // a link still being read has its tab, empty, as the next round
     const reading = [...rows, { kind: 'item', scope_id: 'c1', folder_id: 'V3', folder_url: 'https://drive.google.com/drive/folders/V3', status: 'listing', purpose: 'finished', files: [], started_at: '2026-09-13' }]
-    expect(finishedVersionsOf(reading, { itemId: 'c1', finishedFolderId: 'V3', filesOf }).map(t => [t.round, t.inFlight])).toEqual([[3, true], [2, true], [1, false]])
+    expect(finishedVersionsOf(reading, { itemId: 'c1', finishedFolderId: 'V3', filesOf, currentRound: 3 }).map(t => [t.round, t.inFlight])).toEqual([[3, true], [2, true], [1, false]])
+    // …and it is the card's OWN round, never a guessed next: version 1 copying in is Version 1 (16 Sep 2026)
+    const firstCopy = [{ kind: 'item', scope_id: 'c1', folder_id: 'V1', folder_url: 'https://drive.google.com/drive/folders/V1', status: 'listing', purpose: 'finished', files: [], started_at: '2026-09-13' }]
+    expect(finishedVersionsOf(firstCopy, { itemId: 'c1', finishedFolderId: 'V1', filesOf, currentRound: 1 }).map(t => [t.round, t.inFlight])).toEqual([[1, true]])
+    expect(src('app/dashboard/board/FilesToWorkFrom.tsx')).toContain('currentRound: handInRound(item as never) })')
     const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
     expect(box).toContain("const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })")
     expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
@@ -110,6 +114,10 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''")
     expect(src('app/lib/workflow.ts')).toContain("const folderOnly = hasLink && linked.link_final !== true\n    && linked.link_url === (linked.raw_assets_url ?? null)")
     expect(src('app/lib/board-view-core.ts')).toContain('finishedEditOf(card as never) === null')
+    // a submit while the copy is still landing goes through, and says so
+    const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
+    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !finishedUrl}')
+    expect(drawer).toContain('Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.')
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {
     const portal = src('app/lib/editing-portal.ts')

@@ -12,7 +12,7 @@ import DrivePullBar from './DrivePullBar'
 import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
-import { finishedVersionsOf, roundLabel } from '../../lib/edit-round-core'
+import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
 import {
@@ -132,7 +132,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })
   const finished = finishedEditOf(item)
   const versionTabs = versions
-    ? finishedVersionsOf<PullFile>(pullRows as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r) })
+    ? finishedVersionsOf<PullFile>(pullRows as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r), currentRound: handInRound(item as never) })
     : []
   const [tab, setTab] = useState<'folder' | number | null>(null)
   useEffect(() => { setTab(null) }, [item.id])

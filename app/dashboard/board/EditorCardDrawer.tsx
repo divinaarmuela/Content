@@ -17,7 +17,9 @@ import FilesToWorkFrom from './FilesToWorkFrom'
 import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
-import { finishedEditOf, linkKindOf } from '../../lib/card-link-core'
+import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
+import { pullId, pullInFlight, pullProgress } from '../../lib/drive-pull-core'
+import type { DrivePull } from '@/lib/db-types'
 import { shootCardId } from '../../lib/deliverable-group-core'
 import { cardUsesPlan } from '../../lib/editor-sop-core'
 import { cardPeople } from '../../lib/card-people-core'
@@ -214,6 +216,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // the box holds the finished edit only — never the folder to work from, which
   // would read as version 1 the moment somebody pressed Save (16 Sep 2026)
   const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''
+  // STILL COPYING IN AT SUBMIT TIME (the owner, 16 Sep 2026: "what happens if
+  // you submit for quality check before it finished uploading?"): the submit
+  // goes through — the link is the hand-in — and the line under the button
+  // says the reviewer sees the files as they land
+  const finishedFolderId = driveTargetOf(finishedUrl)?.id ?? null
+  const { row: finishedPull } = useRow<DrivePull>('drive_pulls', finishedFolderId && item ? pullId(finishedFolderId, item.id) : null)
+  const copyingWords = finishedPull && pullInFlight(finishedPull as never) ? pullProgress(finishedPull as never, Date.now())?.words ?? null : null
   const [source, setSource] = useState(finishedUrl)
   useEffect(() => { setSource(finishedUrl) }, [finishedUrl])
   const sourceCheck = linkKindOf(source)
@@ -489,14 +498,17 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !item.link_url} onClick={() => void submit()}
-                title={!item.link_url ? 'Add your Drive or Dropbox link first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !finishedUrl} onClick={() => void submit()}
+                title={!finishedUrl ? 'Add the link to your finished edit first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
                 <Button variant="ghost" className={ghostBtn} disabled={busy} onClick={() => setRiskOpen(true)}>
                   <AlertTriangle className="h-4 w-4" aria-hidden /> Something looks wrong — flag it
                 </Button>
+              )}
+              {copyingWords && (
+                <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
             {!item.link_url && <p className="text-[12px] text-muted-foreground">Add your Drive or Dropbox link first.</p>}
