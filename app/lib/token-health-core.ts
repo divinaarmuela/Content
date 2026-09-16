@@ -108,7 +108,14 @@ export function tokenNotice(
     }
   }
 
-  if (s.needsRefresh === true) {
+  // "NEEDS REFRESH" BESIDE "AUTO-REFRESHES" IS THE PROVIDER RENEWING ITS OWN
+  // LOGIN, not a broken one (the owner, 16 Sep 2026: "why is it saying at the
+  // top that Jordan Wilson's TikTok is disconnected when we have just
+  // connected it?" — the live read was { valid: true, expiresIn:
+  // 'Auto-refreshes', needsRefresh: true }, the same wolf-cry
+  // social-access-core already refuses). Only a token the provider does NOT
+  // call self-renewing is stopped by this flag.
+  if (s.needsRefresh === true && !saysAutoRenews(s.expiresIn)) {
     return {
       level: 'act', autoRenews, daysLeft, needsReconnect: true,
       advice: 'The provider can no longer renew this on its own. Reconnect the account — until you do, posts scheduled for it will not go out.',

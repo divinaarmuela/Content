@@ -53,6 +53,13 @@ describe('an account that really does need a person', () => {
     expect(notice.advice).toMatch(/disconnected/i)
   })
 
+  it('a self-renewing token mid-renewal is fine — Jordan Wilson’s TikTok, 16 Sep 2026', () => {
+    const notice = tokenNotice({ valid: true, expiresAt: inDays(1), expiresIn: 'Auto-refreshes', needsRefresh: true }, NOW)!
+    expect(notice.level).toBe('ok')
+    expect(notice.needsReconnect).toBe(false)
+    expect(needsAttention([{ row: 'tiktok', status: { valid: true, expiresAt: inDays(1), expiresIn: 'Auto-refreshes', needsRefresh: true } }], NOW)).toEqual([])
+  })
+
   it('acts when the provider says it can no longer renew it', () => {
     const notice = tokenNotice(
       { valid: true, expiresAt: inDays(3), needsRefresh: true }, NOW)!
