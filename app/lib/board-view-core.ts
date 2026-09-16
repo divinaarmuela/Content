@@ -350,7 +350,17 @@ export function cardActions(
     a.kind === 'transition' && a.to === 'client_review' && card.status === 'quality_check' && round >= 2
       ? { ...a, label: `Passed quality check — resend version ${round} to the client` }
       : a
-  const push = (raw: CardAction) => { const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
+  // THE HAND-IN IS THE EDITOR'S OWN PRESS (the owner, 16 Sep 2026: "as quality
+  // reviewer how come I'm able to see a send-to-quality-check on an editor's
+  // card in In Progress?"): "Ready for quality check" from the editing
+  // stages belongs to whoever holds the card — it comes with their own
+  // checklist. A manager or super admin gets it only on a card nobody holds,
+  // or one they hold themselves; the manager's own "Send to the quality
+  // reviewer" from For Review is untouched.
+  const handInOf = (a: CardAction) => a.kind === 'transition' && a.to === 'quality_check'
+    && ['draft_uploaded', 'revision_required', 'revision_complete', 'client_changes_requested'].includes(card.status)
+    && !!card.owner_id && card.owner_id !== viewer.id
+  const push = (raw: CardAction) => { if (handInOf(raw)) return; const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
   // a post waiting on THIS person outranks any move: it is the one thing on
   // the card that somebody else is held up by
   const waiting = postApprovalOffer(card, viewer)

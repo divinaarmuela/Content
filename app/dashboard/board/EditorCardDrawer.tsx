@@ -16,6 +16,7 @@ import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
+import { reviewPath } from '../../lib/video-review-core'
 import { linkKindOf } from '../../lib/card-link-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
 import { cardUsesPlan } from '../../lib/editor-sop-core'
@@ -93,6 +94,25 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     })) as unknown as (ItemComment & { visibility: string; assigned_to: string | null; parent_id: string | null })[])
       .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
   }, [comments, me])
+  // COMMENTS ON A CLIP LIVE ON THE CLIP (the owner, 16 Sep 2026: "the main
+  // card's comments are confusing — we might have multiple comments per
+  // version and it gets clunky and full; make sure it links to them
+  // instead"): the card's thread keeps only what was said about the card;
+  // each clip that has comments is one line with a count and the link to
+  // its page, where the comments sit on the timeline
+  const clipThreads = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; count: number; last: string }>()
+    for (const c of thread) {
+      const fid = (c as { video_file_id?: string | null }).video_file_id
+      if (!fid) continue
+      const e = m.get(fid) ?? { id: fid, name: (c as { video_file_name?: string | null }).video_file_name || 'A clip', count: 0, last: String(c.created_at ?? '') }
+      e.count += 1
+      e.last = String(c.created_at ?? e.last)
+      m.set(fid, e)
+    }
+    return [...m.values()].sort((a, b) => b.last.localeCompare(a.last))
+  }, [thread])
+  const cardThread = useMemo(() => thread.filter(c => !(c as { video_file_id?: string | null }).video_file_id), [thread])
   const [note, setNote] = useState('')
   const [sendingNote, setSendingNote] = useState(false)
   const [toClient, setToClient] = useState(false)
@@ -566,10 +586,28 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       </section>
       )}
 
+      {/* ── 7a. what was said on each clip: one line per clip, the comments on the clip's page ── */}
+      {clipThreads.length > 0 ? (
+        <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-clip-threads">
+          <p id="ed-clip-threads" className={H2}>Comments on the clips</p>
+          <ul className="flex flex-col gap-1">
+            {clipThreads.map(t => (
+              <li key={t.id}>
+                <Link href={reviewPath(item.id, t.id, t.name)} className="flex min-h-11 items-center gap-2 rounded-inner border border-border px-3 text-[13px] hover:bg-muted">
+                  <span className="min-w-0 flex-1 truncate font-semibold" title={t.name}>{t.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{t.count} {t.count === 1 ? 'comment' : 'comments'} · last {formatInZone(t.last, zone, 'short') ?? ''}</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* ── 7. what was said — the same section the Post approval drawer draws ── */}
       <section className="border-b border-border" aria-label="What was said">
         <CardSaid
-          rows={thread as never}
+          rows={cardThread as never}
           nameOf={nameOf} roleOf={uid => team.find(u => u.id === uid)?.role ?? null} meId={me?.id}
           when={iso => formatInZone(iso, zone, 'short') ?? ''}
           isManager={isManager} clientName={client?.name} readsClient={canReadClientComments(me?.role ?? null)}

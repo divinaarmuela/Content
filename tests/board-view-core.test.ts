@@ -118,6 +118,18 @@ describe('the control on a card', () => {
     expect(more.some(a => a.to === 'approved_for_scheduling')).toBe(false)
   })
 
+  it('the hand-in to quality check is the holder’s own press — a manager or super admin gets it only on a card nobody holds, or their own (16 Sep 2026)', () => {
+    const sa = { id: 'u-sa', role: 'super_admin' as const, quality_reviewer: false }
+    const held = card({ status: 'draft_uploaded', owner_id: 'ed' })
+    const all = (c: BoardViewCard, v: BoardViewer) => { const a = cardActions(c, v); return [a.primary, ...a.more].filter(Boolean).map(x => x!.to) }
+    expect(all(held, sa)).not.toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: null }), sa)).toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: 'u-sa' }), sa)).toContain('quality_check')
+    expect(all(card({ status: 'revision_required', owner_id: 'ed' }), { id: 'am', role: 'account_manager' as const, quality_reviewer: false })).not.toContain('quality_check')
+    // the editor holding it keeps the press
+    expect(all(held, { id: 'ed', role: 'editor' as const, quality_reviewer: false })).toContain('quality_check')
+  })
+
   it('the quality reviewer passes a card to the client, or sends it back; a manager only pulls it back', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
     const { primary, more } = cardActions(card({ status: 'quality_check' }), joy)
