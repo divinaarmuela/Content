@@ -317,11 +317,11 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
       </>
       )}
       {selecting && (
-        <div className="sticky bottom-3 z-30 flex flex-wrap items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 shadow-lg" role="status" aria-live="polite" data-select-bar>
-          <span className="text-[13px] font-semibold">{picked.size === 0 ? 'Tick the files to see side by side — from any version' : `${picked.size} picked`}</span>
-          <span className="text-[12px] text-muted-foreground">{[...picked.values()].slice(0, 3).map(p => `${p.name} · ${p.round === 0 ? 'folder' : `v${p.round}`}`).join(', ')}{picked.size > 3 ? '…' : ''}</span>
-          <Button className="ml-auto h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background" disabled={picked.size === 0} onClick={openSideBySide}>
-            <Columns2 className="mr-1.5 h-4 w-4" aria-hidden /> Open side by side
+        {/* one small pill, never a growing list (the owner, 16 Sep 2026: "the bottom circle is becoming big") */}
+        <div className="sticky bottom-3 z-30 mx-auto flex w-fit max-w-full items-center gap-3 rounded-full border border-border bg-popover py-1.5 pl-4 pr-1.5 shadow-lg" role="status" aria-live="polite" data-select-bar>
+          <span className="whitespace-nowrap text-[13px] font-semibold">{picked.size === 0 ? 'Tick files, from any version' : `${picked.size} picked`}</span>
+          <Button className="h-9 rounded-full bg-foreground px-3.5 text-[13px] font-semibold text-background" disabled={picked.size === 0} onClick={openSideBySide}>
+            <Columns2 className="mr-1.5 h-4 w-4" aria-hidden /> Side by side
           </Button>
         </div>
       )}
