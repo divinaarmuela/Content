@@ -1,5 +1,8 @@
 import 'server-only'
-import { S3Client, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client, DeleteObjectCommand, PutObjectCommand,
+  CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
@@ -224,4 +227,42 @@ export async function deleteStoredObject(url: string): Promise<void> {
   } catch (e) {
     console.error('could not remove an unused upload:', (e as Error).message)
   }
+}
+
+/**
+ * A LARGE OBJECT, LANDED A SLICE AT A TIME (the Drive pull, 16 Sep 2026): a
+ * multipart upload — opened once, each slice put with its number, closed
+ * with the list of parts. Every step of the background job holds only the
+ * upload id and the parts landed so far, so a slice can be moved in one
+ * request and the next request carries on where it stopped.
+ */
+export async function openMultipart(key: string, contentType: string): Promise<string> {
+  if (!r2Configured()) throw new Error('File storage is not configured')
+  const res = await r2().send(new CreateMultipartUploadCommand({ Bucket: R2_BUCKET!, Key: key, ContentType: contentType }))
+  if (!res.UploadId) throw new Error('R2 opened no upload')
+  return res.UploadId
+}
+
+export async function putMultipartPart(
+  key: string, uploadId: string, partNumber: number, body: Buffer,
+): Promise<string> {
+  const res = await r2().send(new UploadPartCommand({
+    Bucket: R2_BUCKET!, Key: key, UploadId: uploadId, PartNumber: partNumber, Body: body, ContentLength: body.length,
+  }))
+  if (!res.ETag) throw new Error('R2 returned no ETag for the part')
+  return res.ETag
+}
+
+export async function closeMultipart(key: string, uploadId: string, parts: { n: number; etag: string }[]): Promise<string> {
+  await r2().send(new CompleteMultipartUploadCommand({
+    Bucket: R2_BUCKET!, Key: key, UploadId: uploadId,
+    MultipartUpload: { Parts: [...parts].sort((a, b) => a.n - b.n).map(p => ({ PartNumber: p.n, ETag: p.etag })) },
+  }))
+  return `${R2_PUBLIC_BASE!.replace(/\/$/, '')}/${key}`
+}
+
+export async function abortMultipart(key: string, uploadId: string): Promise<void> {
+  try {
+    await r2().send(new AbortMultipartUploadCommand({ Bucket: R2_BUCKET!, Key: key, UploadId: uploadId }))
+  } catch { /* an abort that fails leaves an orphan part set R2 expires on its own */ }
 }

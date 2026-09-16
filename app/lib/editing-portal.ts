@@ -1,13 +1,15 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { ContentItem, ItemComment } from '@/lib/db-types'
+import type { ContentItem, DrivePull, ItemComment } from '@/lib/db-types'
 import { portalOwnerByToken } from './portal-owner'
 import { belongsToPortal, portalName } from './portal-owner-core'
 import { accountManagerName } from './portal-data'
 import { listFolder } from './drive-folder-list'
 import { clipsOf, clipSignature, editingPortalFolder, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
+import { filesOf, pullId } from './drive-pull-core'
+import { kindOf } from './files-core'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import { clientStatusWord } from './portal-words'
 
@@ -64,15 +66,21 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   const found = await editingPortalItem(rawToken, itemId)
   if (!found) return null
   const { owner, item, folder } = found
-  const [listing, comments, amName] = await Promise.all([
+  const [listing, comments, amName, pull] = await Promise.all([
     listFolder(folder.folderId),
     table<ItemComment>('item_comments')
       .list({ by: { item_id: item.id }, where: r => r.visibility === 'client', orderBy: [['created_at', 'asc']], limit: 300 })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])),
     accountManagerName(owner.client.id),
+    table<DrivePull>('drive_pulls').get(pullId(folder.folderId)).catch(() => null),
   ])
   const status = item.status as ItemStatus
-  const clips = clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c) }))
+  // OUR COPIES FIRST (the pull, 16 Sep 2026): a clip already landed in our
+  // storage plays from there — fast, and whatever Drive's sharing says today
+  const pulled = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
+  const clips = pulled.length > 0
+    ? pulled.map(f => ({ id: f.id, name: f.name, thumb: null, src: f.url as string }))
+    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c) }))
   return {
     token: owner.token,
     client: { id: owner.client.id, name: owner.client.name },

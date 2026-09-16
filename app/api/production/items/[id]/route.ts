@@ -21,6 +21,7 @@ import {
   itemMirrorProgress, mirrorRawAssets, newRawAssets, type RawAsset,
 } from '../../../../lib/gdrive-mirror'
 import { previewVideos } from '../../../../lib/stream'
+import { startPullSoon } from '../../../../lib/drive-pull'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -334,6 +335,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // never awaited, never fatal, and the half-hourly sweep is the backstop.
     if (addedAssets.length > 0) previewVideos(addedAssets.map(a => a.url))
     announceItemChange({ item_id: id, client_id: data.client_id, status: data.status, kind: 'updated' })
+    // the source working folder is pulled into our storage the moment it is saved (16 Sep 2026)
+    if ('raw_assets_url' in patch && typeof patch.raw_assets_url === 'string' && patch.raw_assets_url) {
+      startPullSoon({ kind: 'item', scopeId: id, folderUrl: patch.raw_assets_url, version: Number(data.current_version_number) || null, by: user.id })
+    }
     return NextResponse.json(data)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

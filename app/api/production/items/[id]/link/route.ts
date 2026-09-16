@@ -7,6 +7,7 @@ import { logActivity } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { canEditItemFields } from '../../../../../lib/item-edit-core'
 import { linkKindOf, nextVersionAfterLink } from '../../../../../lib/card-link-core'
+import { startPullSoon } from '../../../../../lib/drive-pull'
 
 /**
  * THE LINK ON A CARD — set it, or replace it.
@@ -89,6 +90,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         ? `Link updated to version ${done.version}`
         : `Link added (${check.label}) — version ${done.version}`,
     })
+    // A DRIVE FOLDER IS PULLED INTO OUR STORAGE the moment it is saved (16 Sep
+    // 2026) — the same link with a new cut in it is pulled again, and the
+    // files it brings remember this version
+    if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: done.version, by: user.id })
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'updated' })
     return NextResponse.json({
       ok: true, version: done.version, kind: check.kind, label: check.label, url: check.url,

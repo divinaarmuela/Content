@@ -144,6 +144,31 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // drive_pulls — A DRIVE FOLDER PULLED INTO OUR OWN STORAGE (the owner, 16
+  //   Sep 2026: "I want a Drive link to be uploaded and it downloads it — a
+  //   proper loading feature so we know how long it would take"). One row per
+  //   folder (id = the folder id): the files it holds, how many bytes of each
+  //   have landed in R2, and where the copies are. A read of Drive and a
+  //   write to R2 only (trap 13). The page watches the row live for the bar.
+  drive_pulls: [
+    ['id', col('string', false)],
+    ['folder_id', col('string', false)],
+    ['folder_url', col('string', false)],
+    ['kind', col('string', false)],          // batch | item
+    ['scope_id', col('string', false)],
+    ['status', col('string', false)],        // queued | listing | copying | done | failed | unreadable
+    ['total_files', col('number', false)],
+    ['total_bytes', col('number', false)],
+    ['done_files', col('number', false)],
+    ['done_bytes', col('number', false)],
+    ['files', col('unknown', true, true)],
+    ['error', col('string', true)],
+    ['started_at', col('string', true)],
+    ['finished_at', col('string', true)],
+    ['requested_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
   // encode_jobs — one request to the encoder (services/encoder) for a
   //   publish-grade copy of one video, for one channel. It exists so that
   //   "is a clean copy of this file being made?" has ONE answer that survives
@@ -373,7 +398,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

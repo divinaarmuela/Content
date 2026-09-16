@@ -26,6 +26,7 @@ import { newLineId, planLines, plannedCount, shootCardId } from '../../../../lib
 import type { ShotRow } from '../../../../lib/batch-brief-core'
 import Chip from '../../../ui/Chip'
 import LocationSearch from './LocationSearch'
+import DrivePullBar from '../../../board/DrivePullBar'
 
 /**
  * THE SHOOT PAGE, AS THE SHOOT BRIEF SOP §3 READS (rebuilt 13 Sep 2026 —
@@ -527,6 +528,9 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
             />
           </label>
         )}
+        {/* THE PULL (16 Sep 2026): the footage copied into our storage, with the
+            bar and the time left while it lands, then every file with a Download */}
+        {folderShown && batch.footage_url && <DrivePullBar kind="batch" scopeId={batch.id} folderUrl={batch.footage_url} mayStart />}
 
         {/* THE CLIENT, IN ONE PLACE (the owner, 13 Sep 2026: "share button to
             client should be named differently, and there's another Client

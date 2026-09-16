@@ -19,6 +19,7 @@ import {
 } from '../../../../lib/batch-brief-core'
 import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
 import { portalToggles } from '../../../../lib/portal-owner-core'
+import { startPullSoon } from '../../../../lib/drive-pull'
 
 /**
  * Load a shoot the caller may WORK — the shoot page and every button on it
@@ -325,6 +326,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // a shoot folder is named by its MONTH, and a plan with no date yet was
     // filed under the month it was raised in — put it right the moment the
     // date exists
+    // THE FOOTAGE FOLDER IS PULLED INTO OUR STORAGE the moment it is pasted
+    // (the owner, 16 Sep 2026: "a proper loading feature for the shoot brief
+    // footage when added, so we know how long it would take")
+    if ('footage_url' in patch && patch.footage_url) startPullSoon({ kind: 'batch', scopeId: data.id, folderUrl: String(patch.footage_url), by: user.id })
     if ('shoot_date' in patch) onShootDateChanged(data)
     // THE EDITOR NAMED AFTER SHARING OR GO gets the card the moment they are
     // named — the same handover go does, so nothing waits for a press

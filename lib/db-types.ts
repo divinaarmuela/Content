@@ -39,6 +39,7 @@ export type TableName =
   | 'deliverable_groups'
   | 'drive_connection'
   | 'drive_files'
+  | 'drive_pulls'
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
@@ -668,6 +669,26 @@ export interface DriveFile {
   drive_url: string | null
   bytes: number | null
   created_at: string
+}
+
+export interface DrivePull {
+  id: string
+  folder_id: string
+  folder_url: string
+  kind: string
+  scope_id: string
+  status: string
+  total_files: number
+  total_bytes: number
+  done_files: number
+  done_bytes: number
+  files: unknown | null
+  error: string | null
+  started_at: string | null
+  finished_at: string | null
+  requested_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface DriveUpload {
@@ -1320,6 +1341,7 @@ export const TABLE_COLUMNS = {
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
+  drive_pulls: ['id', 'folder_id', 'folder_url', 'kind', 'scope_id', 'status', 'total_files', 'total_bytes', 'done_files', 'done_bytes', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'created_at', 'updated_at'],
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
@@ -1400,6 +1422,7 @@ export const NULLABLE_COLUMNS = {
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
+  drive_pulls: ['files', 'error', 'started_at', 'finished_at', 'requested_by'],
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
@@ -1487,6 +1510,7 @@ export const JSON_COLUMNS = {
   deliverable_groups: ['planned'],
   drive_connection: [],
   drive_files: [],
+  drive_pulls: ['files'],
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
@@ -1573,6 +1597,7 @@ export const JSON_ARRAY_COLUMNS = {
   deliverable_groups: [],
   drive_connection: [],
   drive_files: [],
+  drive_pulls: [],
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
@@ -1616,7 +1641,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

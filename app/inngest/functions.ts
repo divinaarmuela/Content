@@ -859,6 +859,58 @@ export const editorSopNudges = inngest.createFunction(
   })
 )
 
+
+/**
+ * A DRIVE FOLDER, PULLED INTO OUR OWN STORAGE (the owner, 16 Sep 2026: "I
+ * want a Drive link to be uploaded and it downloads it"; "have Inngest
+ * download it"). One step lists the folder; then, file by file, a step
+ * moves a few 128 MB slices from Drive into R2 and hands on — so a 20 GB
+ * camera file is many short steps, never one long request. The row the page
+ * watches is updated after every slice. One run per folder at a time.
+ *
+ * (CLAUDE.md trap 5b: a NEW Inngest function does nothing until the app is
+ * re-synced: `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`.)
+ */
+export const drivePullFolder = inngest.createFunction(
+  {
+    id: 'drive-pull-folder',
+    name: 'Pull a Drive folder into storage',
+    triggers: [{ event: 'drive/pull.folder' }],
+    retries: 2,
+    concurrency: { limit: 2, key: 'event.data.pull_id' },
+  },
+  async ({ event, step }) => withRequestCache(async () => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    const id = String(data.pull_id ?? '')
+    if (!id) return { skipped: 'no pull_id' }
+    const version = typeof data.version === 'number' ? data.version : null
+    const listed = await step.run('list', async () => {
+      const { runPullList } = await import('../lib/drive-pull')
+      return runPullList(id, version)
+    })
+    if (listed.note) return listed
+    const ids = await step.run('files', async () => {
+      const { filesOf } = await import('../lib/drive-pull-core')
+      const row = await table('drive_pulls').get(id)
+      return filesOf(row as never).filter(f => f.status !== 'done').map(f => f.id)
+    })
+    for (const fileId of ids) {
+      // a slice-group per step, until the file is complete
+      for (let n = 0; n < 4000; n++) {
+        const r = await step.run(`copy:${fileId}:${n}`, async () => {
+          const { runPullSlices } = await import('../lib/drive-pull')
+          return runPullSlices(id, fileId)
+        })
+        if (r.done) break
+      }
+    }
+    return step.run('finish', async () => {
+      const { finishPull } = await import('../lib/drive-pull')
+      return { status: await finishPull(id) }
+    })
+  })
+)
+
 export const functions = [
   dueReminders,
   shootBriefLate,
@@ -880,6 +932,7 @@ export const functions = [
   mediaEncodeFinished,
   encodeSweep,
   followersDaily,
+  drivePullFolder,
   followersSnapshot,
 ]
 
