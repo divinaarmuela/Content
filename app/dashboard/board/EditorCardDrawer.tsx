@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Pencil, X } from 'lucide-react'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import { managesClients, type Role } from '../../lib/identity-core'
@@ -160,6 +160,27 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     }
   }
   const flag = (body: Record<string, unknown>, said: string) => post(`/api/production/items/${id}/flag`, body, said)
+  // EDIT THE CARD (the owner, 16 Sep 2026: "my editor just added his cards and
+  // he wants to change the info on the card"): the title, the due date and
+  // what needs doing, for whoever holds the card or a manager — the PATCH
+  // route already lets exactly those people in
+  const [editing, setEditing] = useState(false)
+  const [eTitle, setETitle] = useState('')
+  const [eDue, setEDue] = useState('')
+  const [eBrief, setEBrief] = useState('')
+  const openEdit = () => {
+    if (!item) return
+    setETitle(String(item.title ?? ''))
+    setEDue(item.due_date ? String(item.due_date).slice(0, 10) : '')
+    setEBrief(String((item as { brief?: string | null }).brief ?? ''))
+    setEditing(true)
+  }
+  const saveEdit = async () => {
+    const title = eTitle.trim()
+    if (!title) { toast.error('Give the card a name'); return }
+    const ok = await post(`/api/production/items/${id}`, { title, due_date: eDue || null, brief: eBrief.trim() || null }, 'Card updated', 'Saving the card', 'PATCH')
+    if (ok) setEditing(false)
+  }
 
   /* ── NO FILES ON THE EDITOR'S CARD (the owner, 14 Sep 2026: "the editor
      card should not have the files — only a Drive or Dropbox link"): the
@@ -266,7 +287,29 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>
             <Chip tone="muted">{dueWords}</Chip>
             {flags.risk && <Chip tone="red">At risk: {flags.risk}</Chip>}
+            {(holder || isManager) && !frozen && !editing && (
+              <button type="button" onClick={openEdit} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
+                <Pencil className="h-3.5 w-3.5" aria-hidden /> Edit the card
+              </button>
+            )}
           </div>
+          {editing && (
+            <div className="mt-3 flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" data-edit-card>
+              <label className="flex flex-col gap-1 text-[12px] font-semibold">Name
+                <input value={eTitle} onChange={e => setETitle(e.target.value)} className={field} aria-label="The card’s name" />
+              </label>
+              <label className="flex flex-col gap-1 text-[12px] font-semibold">Due
+                <input type="date" value={eDue} onChange={e => setEDue(e.target.value)} className={`${field} max-w-[200px]`} aria-label="Due date" />
+              </label>
+              <label className="flex flex-col gap-1 text-[12px] font-semibold">What needs doing
+                <textarea rows={3} value={eBrief} onChange={e => setEBrief(e.target.value)} className={`${field} resize-none p-2.5`} aria-label="What needs doing" />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button className={primaryBtn} disabled={busy} onClick={() => void saveEdit()}>Save</Button>
+                <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setEditing(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
           <p className="mt-2 text-[13px] text-muted-foreground">
             {ackRow
               ? `Acknowledged ${formatInZone(String(ackRow.created_at), zone, 'short') ?? ''}`

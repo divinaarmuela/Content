@@ -142,6 +142,9 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // …and a manager gets the same brief, with their buttons above it (15 Sep 2026)
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
     expect(page).toContain('<ManagerActions item={item} client={client ?? null} viewer=')
+    // the holder or a manager can change the card's name, due date and brief (16 Sep 2026)
+    expect(src(EDITOR_DRAWER)).toContain('{(holder || isManager) && !frozen && !editing && (')
+    expect(src(EDITOR_DRAWER)).toContain("{ title, due_date: eDue || null, brief: eBrief.trim() || null }, 'Card updated', 'Saving the card', 'PATCH')")
     // …and everyone but an editor — the quality checker, the managers — gets
     // the manager's drawer there (13 and 14 Sep 2026)
     expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && maker\s*\? <EditorCardDrawer/)
