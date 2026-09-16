@@ -57,6 +57,9 @@ describe('§2 before you start', () => {
     expect(workFrom({ card: { client_id: 'c1', raw_assets_url: 'https://www.dropbox.com/x' } })).toEqual({ footage: 'https://www.dropbox.com/x', finalsFolder: null })
     expect(workFrom({ card: { client_id: 'c1' }, shoot: { footage_url: 'https://drive.google.com/f' }, driveFolderUrl: 'https://drive.google.com/drive/folders/1' }))
       .toEqual({ footage: 'https://drive.google.com/f', finalsFolder: 'https://drive.google.com/drive/folders/1' })
+    // a card made by hand that names a shoot works from its own folder, never the shoot's (16 Sep 2026)
+    expect(workFrom({ card: { client_id: 'c1', raw_assets_url: 'https://www.dropbox.com/own' }, shoot: { footage_url: 'https://drive.google.com/f' } }, false).footage).toBe('https://www.dropbox.com/own')
+    expect(workFrom({ card: { client_id: 'c1' }, shoot: { footage_url: 'https://drive.google.com/f' } }, false).footage).toBeNull()
   })
 })
 

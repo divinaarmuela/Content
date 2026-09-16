@@ -167,10 +167,16 @@ export function briefRowsFor(s: BriefSources, fromPlan: boolean): BriefRow[] {
     .map(r => (r.key === 'objective' ? { ...r, label: 'What needs doing' } : r))
 }
 
-/** §1 where the work comes from and where the finals go. */
-export function workFrom(s: BriefSources): { footage: string | null; finalsFolder: string | null } {
+/** §1 where the work comes from and where the finals go.
+ *
+ *  THE SHOOT'S FOOTAGE ONLY ON THE SHOOT'S OWN CARD (the owner, 16 Sep 2026:
+ *  "a card created manually from Editor that picked the shoot name from the
+ *  dropdown should not pull the board data"): a card the shoot made works
+ *  from the shoot's footage folder; a card somebody made by hand works from
+ *  its own folder and nothing else, whichever shoot it names. */
+export function workFrom(s: BriefSources, fromPlan = true): { footage: string | null; finalsFolder: string | null } {
   return {
-    footage: clean(s.shoot?.footage_url) ?? clean(s.card.raw_assets_url),
+    footage: fromPlan ? (clean(s.shoot?.footage_url) ?? clean(s.card.raw_assets_url)) : clean(s.card.raw_assets_url),
     finalsFolder: clean(s.driveFolderUrl),
   }
 }

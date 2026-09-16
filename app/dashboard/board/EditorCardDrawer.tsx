@@ -237,7 +237,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     card: item as never, shoot: shoot as never, specs,
     driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null,
   }, fromPlan)
-  const from = workFrom({ card: item as never, shoot: shoot as never, driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null })
+  const from = workFrom({ card: item as never, shoot: shoot as never, driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null }, fromPlan)
   const handover = handoverState(item as never)
   const planRead = planReadState(shoot, me?.id)
   const qcDone = qcDoneFor(item as never)
@@ -309,7 +309,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             {/* the plan and its board, read only for the editor — no comments,
                 nothing to move (the owner, 14 Sep 2026: "the editor card gets
                 the read-only view of the canvas board — they can click it") */}
-            {shoot && (
+            {/* …and the plan's board only on the card the shoot made (16 Sep 2026) */}
+            {fromPlan && shoot && (
               <Link href={`/dashboard/production/shoots/${shoot.id}`} data-plan-link
                 className="inline-flex min-h-11 items-center gap-1 text-[13px] font-semibold underline underline-offset-4">
                 Open the plan and board <ExternalLink className="h-3.5 w-3.5" aria-hidden />

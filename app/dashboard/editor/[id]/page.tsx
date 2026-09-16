@@ -16,6 +16,7 @@ import { useCardActs } from '../../board/useCardActs'
 import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
+import { shootCardId } from '../../../lib/deliverable-group-core'
 import { workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import { canTransferEditing } from '../../../lib/editor-transfer-core'
@@ -142,10 +143,12 @@ export default function EditorCardPage() {
   const adhoc = (item as { adhoc_post?: unknown }).adhoc_post === true
   const maker = usesMakerDrawer(me, item)
   const frozen = ['scheduled', 'published'].includes(String(item.status))
+  // the shoot's footage only on the card the shoot made (16 Sep 2026)
+  const fromPlan = !!item.batch_id && item.id === shootCardId(String(item.batch_id))
   const from = workFrom({
     card: item as never, shoot: shoot as never,
     driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null,
-  })
+  }, fromPlan)
 
   return (
     <div className="flex flex-col gap-4">
