@@ -6,6 +6,7 @@ import { canManageBatch, loadItemForUser } from '../../../lib/production-access'
 import { actingRoles } from '../../../lib/workflow-core'
 import { startPull } from '../../../lib/drive-pull'
 import { finishedEditOf } from '../../../lib/card-link-core'
+import { roundOf } from '../../../lib/edit-round-core'
 
 /**
  * PULL THE FILES IN, ON PURPOSE (the owner, 16 Sep 2026): the button under a
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
       const finished = body.which === 'finished' ? finishedEditOf(item as never) : null
       const url = finished?.url ?? (typeof item.raw_assets_url === 'string' ? item.raw_assets_url : '')
       if (!url) return NextResponse.json({ error: 'No folder on this card yet' }, { status: 400 })
-      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: Number(item.current_version_number) || null, by: user.id })
+      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: roundOf(item), by: user.id })
       return NextResponse.json(r, { status: r.started || r.reason === 'Already being pulled' ? 200 : 400 })
     }
     return NextResponse.json({ error: 'Which kind?' }, { status: 400 })

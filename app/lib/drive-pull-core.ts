@@ -22,6 +22,8 @@ export type PullFile = {
   /** the copy, once complete */
   url: string | null
   status: 'waiting' | 'copying' | 'done' | 'failed'
+  /** the card's round this file arrived with — version 1, 2, 3 (edit-round-core) */
+  version?: number | null
   /** R2's multipart upload in flight, and the parts landed so far */
   upload_id?: string | null
   parts?: { n: number; etag: string }[]

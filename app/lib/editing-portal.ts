@@ -9,6 +9,7 @@ import { listFolder } from './drive-folder-list'
 import { clipsOf, clipSignature, editingPortalFolder, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
+import { fileRound, roundOf, roundsOf } from './edit-round-core'
 import { kindOf } from './files-core'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import { clientStatusWord } from './portal-words'
@@ -37,7 +38,11 @@ export type EditingPortal = {
   am_name: string | null
   item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null }
   folder: { url: string; id: string }
-  clips: (PortalClip & { src: string })[]
+  clips: (PortalClip & { src: string; version: number })[]
+  /** the rounds the clips span, newest first — Version 2, Version 1 */
+  rounds: number[]
+  /** the card's current round */
+  round: number
   /** the folder could not be listed — the words for the page */
   folder_note: string | null
   comments: EditingPortalComment[]
@@ -78,9 +83,11 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   // OUR COPIES FIRST (the pull, 16 Sep 2026): a clip already landed in our
   // storage plays from there — fast, and whatever Drive's sharing says today
   const pulled = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
+  const round = roundOf(item)
   const clips = pulled.length > 0
-    ? pulled.map(f => ({ id: f.id, name: f.name, thumb: null, src: f.url as string }))
-    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c) }))
+    ? pulled.map(f => ({ id: f.id, name: f.name, thumb: null, src: f.url as string, version: fileRound(f) }))
+    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round }))
+  const rounds = roundsOf(clips)
   return {
     token: owner.token,
     client: { id: owner.client.id, name: owner.client.name },
@@ -93,6 +100,8 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
     },
     folder: { url: folder.url, id: folder.folderId },
     clips,
+    rounds,
+    round,
     folder_note: clips.length === 0
       ? (listing.entries.length > 0
           ? 'There are no videos in the finished edit yet.'

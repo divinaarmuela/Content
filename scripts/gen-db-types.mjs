@@ -478,6 +478,10 @@ const GHOST_COLUMNS = {
     //     client pressed Approved on (app/lib/clip-approvals-core.ts). A new
     //     round's clips are new files, so a second cut starts unapproved.
     ['clip_approvals', col('unknown', true, true)],
+    //   content_items.edit_round — VERSION 1, 2, 3 (16 Sep 2026): starts at 1,
+    //     goes up by one the moment the card is sent back; the Drive pull tags
+    //     each new file with it (app/lib/edit-round-core.ts).
+    ['edit_round', col('number', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

@@ -8,6 +8,7 @@ import SafeVideo from '../../components/media/SafeVideo'
 import VideoTile from '../../components/media/VideoTile'
 import DriveFolderFiles from './DriveFolderFiles'
 import DrivePullBar from './DrivePullBar'
+import type { PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { linkKindOf } from '../../lib/card-link-core'
 import {
@@ -116,7 +117,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   // THE PULL (16 Sep 2026): the folder's copies in our storage, with the bar
   // while they land; once they are all here they are the files box, and
   // Drive's own tiles step aside
-  const [pulled, setPulled] = useState(false)
+  const [pulled, setPulled] = useState<PullFile[]>([])
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }
   const button = 'inline-flex h-11 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50'
@@ -168,9 +169,9 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         </a>
       )}
       {folder && !linkOpen && (
-        <DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} onPulled={() => setPulled(true)} />
+        <DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} showFiles={false} onPulled={files => setPulled(files)} />
       )}
-      {folder && !linkOpen && showFolderFiles && !pulled && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>

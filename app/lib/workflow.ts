@@ -32,6 +32,7 @@ import {
   itemPath,
 } from './workflow-core'
 import { editingPortalFolder, editingPortalPath } from './editing-portal-core'
+import { SENT_BACK_STATUSES, nextRound } from './edit-round-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
@@ -890,6 +891,10 @@ export async function performTransition(
       ...(to === 'approved_for_scheduling' && !isBriefTask && !isInternal
         && (before as { deliver_only?: unknown }).deliver_only == null
         ? { deliver_only: selfPosts } : {}),
+      // VERSION 2 OPENS THE MOMENT IT IS SENT BACK (the owner, 16 Sep 2026):
+      // by the reviewer, the manager or the client — whatever the editor
+      // hands in next is the next round (edit-round-core)
+      ...(SENT_BACK_STATUSES.includes(to) && !isBriefTask && !isInternal ? { edit_round: nextRound(before as never) } : {}),
     })
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)

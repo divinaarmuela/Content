@@ -7,6 +7,7 @@ import type { EditingPortal, EditingPortalComment } from '../../lib/editing-port
 import type { ClipApproval } from '../../lib/clip-approvals-core'
 import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
 import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../lib/video-review-core'
+import { roundLabel } from '../../lib/edit-round-core'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -30,8 +31,13 @@ const input = 'w-full rounded-full border border-border bg-background px-4 text-
 
 export default function EditingReview({ data }: { data: EditingPortal }) {
   const router = useRouter()
-  const { token, item, clips } = data
+  const { token, item } = data
+  // VERSION 1, VERSION 2 (16 Sep 2026): the newest round opens; the pills
+  // switch to an earlier one, whose clips keep their own comments and ticks
+  const [round, setRound] = useState(data.rounds[0] ?? data.round)
+  const clips = useMemo(() => data.clips.filter(c => c.version === round), [data.clips, round])
   const [current, setCurrent] = useState(0)
+  useEffect(() => { setCurrent(0) }, [round])
   const clip = clips[current] ?? null
   const [comments, setComments] = useState<EditingPortalComment[]>(data.comments)
   const [approvals, setApprovals] = useState<ClipApproval[]>(data.approvals)
@@ -104,6 +110,16 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
       {/* ── the clip ── */}
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
+        {data.rounds.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions">
+            {data.rounds.map(r => (
+              <button key={r} type="button" role="tab" aria-selected={r === round} onClick={() => setRound(r)}
+                className={`inline-flex min-h-9 items-center rounded-full border px-4 text-[13px] font-semibold ${r === round ? 'border-foreground bg-foreground text-background' : 'border-border text-foreground hover:border-foreground/50'}`}>
+                {roundLabel(r)}{r === data.rounds[0] ? ' · latest' : ''}
+              </button>
+            ))}
+          </div>
+        )}
         {clip ? (
           <>
             <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">

@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
-import type { ContentItem, ItemComment, TeamUser } from '@/lib/db-types'
+import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
+import { driveFolderIdFromUrl } from '../../../../../lib/card-link-core'
+import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
 import { clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
@@ -37,6 +39,17 @@ export default function VideoReviewPage() {
   const search = useSearchParams()
   const name = search.get('name') ?? 'Clip'
   const { row: item, loading } = useRow<ContentItem>('content_items', id)
+  // OUR COPY FIRST (the Drive pull, 16 Sep 2026: "click the file, it opens
+  // the page as it is — quicker, because we downloaded it in the backend"):
+  // the clip plays from our storage when the folder it sits in has been
+  // pulled — the finished edit, the source working folder, or the shoot's
+  // footage folder — and through Drive otherwise
+  const { row: shootRow } = useRow<Batch>('batches', item?.batch_id ?? null)
+  const folderIds = [item?.link_url, item?.raw_assets_url, shootRow?.footage_url].map(u => driveFolderIdFromUrl(u))
+  const { row: pullA } = useRow<DrivePull>('drive_pulls', folderIds[0] ? pullId(folderIds[0]) : null)
+  const { row: pullB } = useRow<DrivePull>('drive_pulls', folderIds[1] ? pullId(folderIds[1]) : null)
+  const { row: pullC } = useRow<DrivePull>('drive_pulls', folderIds[2] ? pullId(folderIds[2]) : null)
+  const copyUrl = [pullA, pullB, pullC].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -115,7 +128,7 @@ export default function VideoReviewPage() {
         {/* ── the clip, and the markers under it ── */}
         <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label="The clip">
           <video ref={video} controls playsInline preload="metadata"
-            src={`/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}
+            src={copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}
             className="max-h-[70vh] w-full rounded-tile bg-black"
             onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
             onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}

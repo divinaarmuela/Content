@@ -9,6 +9,7 @@ import type { DrivePull } from '@/lib/db-types'
 import { driveFolderIdFromUrl } from '../../lib/card-link-core'
 import { canStartPull, filesOf, formatBytes, pullId, pullLooksStuck, pullProgress, type PullFile } from '../../lib/drive-pull-core'
 import { kindOf } from '../../lib/files-core'
+import { fileRound, roundLabel, roundsOf } from '../../lib/edit-round-core'
 import { friendlyError } from '../../lib/support-core'
 
 /**
@@ -20,7 +21,7 @@ import { friendlyError } from '../../lib/support-core'
  * words when the folder is private. "Pull the files in" starts it, and
  * "Check the folder again" after a new cut was dropped into the same link.
  */
-export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder', mayStart, onPulled }: {
+export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder', mayStart, onPulled, showFiles = true }: {
   kind: 'batch' | 'item'
   scopeId: string
   folderUrl: string | null | undefined
@@ -29,6 +30,8 @@ export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder
   mayStart: boolean
   /** told once the pull reports done, so the page can show the copies elsewhere */
   onPulled?: (files: PullFile[]) => void
+  /** the list of files under the bar — off where the page draws the copies as tiles */
+  showFiles?: boolean
 }) {
   const folderId = driveFolderIdFromUrl(folderUrl)
   const { row } = useRow<DrivePull>('drive_pulls', folderId ? pullId(folderId) : null)
@@ -42,6 +45,12 @@ export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder
   }, [row])
   const progress = pullProgress(row as never, now)
   const files = filesOf(row)
+  // VERSION 1, VERSION 2 (16 Sep 2026): the files of the round being looked
+  // at; the pills switch rounds, newest first
+  const rounds = roundsOf(files)
+  const [round, setRound] = useState<number | null>(null)
+  const shownRound = round ?? rounds[0] ?? 1
+  const shown = files.filter(f => fileRound(f) === shownRound)
   useEffect(() => { if (row?.status === 'done') onPulled?.(files) }, [row?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = async () => {
@@ -82,9 +91,19 @@ export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder
           <div className={`h-full rounded-full transition-[width] duration-700 ${progress.status === 'done' ? 'bg-accent-green' : 'bg-foreground'}`} style={{ width: `${progress.pct}%` }} />
         </div>
       )}
-      {files.length > 0 && (
+      {showFiles && rounds.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions">
+          {rounds.map(r => (
+            <button key={r} type="button" role="tab" aria-selected={r === shownRound} onClick={() => setRound(r)}
+              className={`inline-flex min-h-9 items-center rounded-full border px-3 text-[12px] font-semibold ${r === shownRound ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'}`}>
+              {roundLabel(r)}{r === rounds[0] ? ' · latest' : ''}
+            </button>
+          ))}
+        </div>
+      )}
+      {showFiles && shown.length > 0 && (
         <ul className="flex flex-col divide-y divide-border" aria-label="The files">
-          {files.map(f => {
+          {shown.map(f => {
             const k = kindOf(f.mime, f.name)
             const done = f.status === 'done' && !!f.url
             const open = showing?.id === f.id

@@ -8,6 +8,7 @@ import { announceItemChange } from '../../../../../lib/production-live'
 import { canEditItemFields } from '../../../../../lib/item-edit-core'
 import { linkKindOf, nextVersionAfterLink } from '../../../../../lib/card-link-core'
 import { startPullSoon } from '../../../../../lib/drive-pull'
+import { roundOf } from '../../../../../lib/edit-round-core'
 
 /**
  * THE LINK ON A CARD — set it, or replace it.
@@ -73,6 +74,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (!taken.claimed) {
       // the same link again is not a conflict — nothing to do
       if (taken.current && outcome && !(outcome as { changed: boolean }).changed) {
+        // THE SAME LINK AGAIN IS STILL A HAND-IN (the owner, 16 Sep 2026: "they
+        // upload the same Drive link but have to re-download for version 2"):
+        // the folder is read again and its new files are this round's
+        if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: roundOf(item), by: user.id })
         return NextResponse.json({ ok: true, already: true, version: (outcome as { version: number }).version, kind: check.kind, label: check.label })
       }
       return NextResponse.json(
@@ -93,7 +98,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // A DRIVE FOLDER IS PULLED INTO OUR STORAGE the moment it is saved (16 Sep
     // 2026) — the same link with a new cut in it is pulled again, and the
     // files it brings remember this version
-    if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: done.version, by: user.id })
+    if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: roundOf(item), by: user.id })
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'updated' })
     return NextResponse.json({
       ok: true, version: done.version, kind: check.kind, label: check.label, url: check.url,

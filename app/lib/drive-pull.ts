@@ -126,7 +126,7 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
     const had = before.find(b => b.id === f.id)
     // the same file, the same size: the copy stands
     if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }
-    return { id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: version ?? null } as PullFile & { version: number | null }
+    return { id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: version ?? null }
   })
   const total_bytes = files.reduce((n, f) => n + (f.size ?? 0), 0)
   const done_bytes = files.reduce((n, f) => n + (f.status === 'done' ? (f.size ?? 0) : 0), 0)

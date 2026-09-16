@@ -5,6 +5,9 @@ import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../..
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { performTransition } from '../../../../../lib/workflow'
 import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core'
+import { finishedEditOf } from '../../../../../lib/card-link-core'
+import { startPullSoon } from '../../../../../lib/drive-pull'
+import { SENT_BACK_STATUSES, roundOf } from '../../../../../lib/edit-round-core'
 
 /** Execute a status transition. Role legality, requirement evidence, and the
  *  optimistic-concurrency guard all live in performTransition. */
@@ -47,6 +50,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       schedulerIds,
       note: note || undefined,
     })
+    // REVISIONS DONE ON THE SAME LINK (16 Sep 2026): the finished edit's folder
+    // is read again as this round, so the new cut's files come in as version N
+    if (SENT_BACK_STATUSES.includes(String(item.status)) && to === 'quality_check') {
+      const finished = finishedEditOf(item as never)
+      if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: roundOf(item), by: user.id })
+    }
     // the note also lands in the item's own thread, tagged to the owner so
     // it stays visible in their narrowed view even when the requester isn't
     // their assignor — best-effort, never fails the transition
