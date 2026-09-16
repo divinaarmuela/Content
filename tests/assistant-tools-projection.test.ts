@@ -74,6 +74,31 @@ const out = async (fn: () => Promise<unknown>) => JSON.stringify(await fn())
 const run = (name: string, input: any) => (tools() as any)[name].execute(input, {} as never)
 
 describe('the assistant never sees a secret', () => {
+  it('search_cards finds cards by client, person, version and files, links each one, and carries no secret (16 Sep 2026)', async () => {
+    fake.restore()
+    fake = seedDb({
+      clients: [{ id: 'client-1', name: 'Capila Finance', status: 'active', share_token: SHARE_TOKEN }] as unknown as Row[],
+      team_users: [{ id: 'u-1', email: 'ryan@example.invalid', name: 'Ryan', role: 'editor', active_status: true, clerk_user_id: 'clerk_secret_id' }] as unknown as Row[],
+      work_kinds: [{ id: 'k-1', name: 'Video edit', slug: 'video_edit' }] as unknown as Row[],
+      content_items: [
+        { id: 'c-1', title: 'Shan Minor Edits', client_id: 'client-1', owner_id: 'u-1', status: 'client_review', work_kind_id: 'k-1', edit_round: 2, link_url: 'https://drive.google.com/drive/folders/A', link_final: true, due_date: '2026-09-10', updated_at: '2026-09-16T00:00:00.000Z' },
+        { id: 'c-2', title: 'Spring reel', client_id: 'client-1', owner_id: null, status: 'draft_uploaded', work_kind_id: 'k-1', updated_at: '2026-09-15T00:00:00.000Z' },
+        { id: 'c-3', title: 'Old post', client_id: 'client-1', owner_id: 'u-1', status: 'published', updated_at: '2026-09-01T00:00:00.000Z' },
+      ] as unknown as Row[],
+    })
+    const all = await run('search_cards', { query: '', client: 'capila', person: '', stage: '', version: 'any', files: 'any', overdue: false, include_done: false }) as { count: number; cards: { id: string; who: string; version: number; files: string; open: string; overdue: boolean }[] }
+    expect(all.cards.map(c => c.id)).toEqual(['c-1', 'c-2'])
+    expect(all.cards[0]).toMatchObject({ who: 'Ryan', version: 2, files: 'finished edit in', open: '/dashboard/editor/c-1', overdue: true })
+    expect(all.cards[1]).toMatchObject({ who: 'Nobody yet', version: 1, files: 'nothing yet' })
+    const v2 = await run('search_cards', { query: '', client: '', person: 'ryan', stage: '', version: '2', files: 'with', overdue: false, include_done: false }) as { cards: { id: string }[] }
+    expect(v2.cards.map(c => c.id)).toEqual(['c-1'])
+    const done = await run('search_cards', { query: '', client: '', person: '', stage: 'posted', version: 'any', files: 'any', overdue: false, include_done: true }) as { cards: { id: string }[] }
+    expect(done.cards.map(c => c.id)).toEqual(['c-3'])
+    const body = await out(() => run('search_cards', { query: '', client: '', person: '', stage: '', version: 'any', files: 'any', overdue: false, include_done: true }))
+    expect(body).not.toContain(SHARE_TOKEN)
+    expect(body).not.toContain('clerk_secret_id')
+  })
+
   it('search_clients returns only the summary columns', async () => {
     const body = await out(() => run('search_clients', { query: '', status: 'any' }))
     expect(body).not.toContain(SHARE_TOKEN)

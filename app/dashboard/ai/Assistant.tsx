@@ -198,6 +198,20 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
     pinned.current = true
     void sendMessage({ text: t })
   }
+  // THE TOP BAR'S QUESTION (the AI search, 16 Sep 2026): a fresh chat opened
+  // as /dashboard/ai?q=… asks it straight away, once, and drops it from the
+  // address so a refresh does not ask again
+  const askedFromUrl = useRef(false)
+  useEffect(() => {
+    if (askedFromUrl.current || initialMessages.length > 0) return
+    let q = ''
+    try { const url = new URL(window.location.href); q = url.searchParams.get('q') ?? ''; if (q) { url.searchParams.delete('q'); window.history.replaceState(null, '', url.toString()) } } catch { /* no address */ }
+    if (!q.trim()) return
+    askedFromUrl.current = true
+    pinned.current = true
+    void sendMessage({ text: q.trim() })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -210,7 +224,7 @@ function Conversation({ chatId, initialMessages, onResponseDone }: {
             <div>
               <h2 className="text-section-title">Ask about your agency</h2>
               <p className="mt-1 text-body-15 text-muted-foreground">
-                Clients, leads, intake forms, the schedule, the scanner, the team.
+                Cards and versions, clients, leads, intake forms, the schedule, the scanner, the team.
                 Edits always ask you first.
               </p>
             </div>

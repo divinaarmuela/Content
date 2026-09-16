@@ -5,8 +5,11 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   Client, ClientContact, EmailIngestLog, IntakeForm, Lead,
-  ScanMailbox, ScanRun, ScheduleEntry, TeamUser,
+  ContentItem, ScanMailbox, ScanRun, ScheduleEntry, TeamUser, WorkKind,
 } from '@/lib/db-types'
+import { STATUS_LABELS } from './workflow-core'
+import { roundOf } from './edit-round-core'
+import { finishedEditOf, folderOf } from './card-link-core'
 import { roleSatisfies, type Role } from './identity-core'
 import { asanaConfigured, tasksForAssignee } from './asana'
 
@@ -62,6 +65,66 @@ export function assistantTools(role: Role) {
           limit: 50,
         })
         return { clients: clients.map(clientSummary) }
+      },
+    }),
+
+    // THE AI SEARCH (the owner, 16 Sep 2026: "an AI search format"): the
+    // cards on the Editor and Post approval pages, found by plain words —
+    // "Capila cards on version 2 with nothing handed in", "what is Ryan
+    // holding", "overdue edits". A fixed, typed read, like every tool here:
+    // the model names the client, the person, the version and the files
+    // filter, and the code does the matching. Each hit carries the link to
+    // open it.
+    search_cards: tool({
+      description:
+        'Find the content cards (edits, posts, tasks) on the Editor and Post approval pages. Filter by words in the title, the client name, the person holding it, the stage, the version (the hand-in round), whether a finished edit has been handed in, and whether it is overdue. Every hit has an `open` link to give the person.',
+      inputSchema: z.object({
+        query: z.string().default('').describe('words in the card title'),
+        client: z.string().default('').describe('words in the client name'),
+        person: z.string().default('').describe('words in the name of the person holding the card'),
+        stage: z.string().default('').describe("words in the stage, e.g. 'quality check', 'with client', 'draft', 'published'"),
+        version: z.enum(['any', '1', '2', '3+']).default('any').describe('the hand-in round'),
+        files: z.enum(['any', 'with', 'without']).default('any').describe('with a finished edit handed in, or nothing handed in yet'),
+        overdue: z.boolean().default(false).describe('only cards past their due date and not yet out'),
+        include_done: z.boolean().default(false).describe('include booked-in and posted cards'),
+      }),
+      execute: async ({ query, client, person, stage, version, files, overdue, include_done }) => {
+        const lower = (v: unknown) => String(v ?? '').toLowerCase()
+        const has = (hay: unknown, needle: string) => !needle || lower(hay).includes(needle.toLowerCase())
+        const [items, clients, team, kinds] = await Promise.all([
+          table<ContentItem>('content_items').list({ limit: 1000 }),
+          table<Client>('clients').list({ limit: 500 }),
+          table<TeamUser>('team_users').list({ limit: 300 }),
+          table<WorkKind>('work_kinds').list({ limit: 100 }),
+        ])
+        const clientName = new Map(clients.map(c => [c.id, c.name]))
+        const personName = new Map(team.map(u => [u.id, u.name || u.email]))
+        const kindName = new Map(kinds.map(k => [k.id, k.name]))
+        const today = new Date().toISOString().slice(0, 10)
+        const out = items
+          .filter(i => include_done || !['scheduled', 'published'].includes(String(i.status)))
+          .map(i => {
+            const status = String(i.status)
+            const stageWords = (STATUS_LABELS as Record<string, string>)[status] ?? status
+            const who = i.owner_id ? (personName.get(i.owner_id) ?? 'Someone') : 'Nobody yet'
+            const handed = finishedEditOf(i as never) !== null
+            const due = i.due_date ? String(i.due_date).slice(0, 10) : null
+            const isOverdue = !!due && due < today && !['scheduled', 'published'].includes(status)
+            return {
+              id: i.id, title: i.title, client: clientName.get(String(i.client_id)) ?? 'A client',
+              kind: (i as { adhoc_post?: unknown }).adhoc_post === true ? 'Post' : (kindName.get(String(i.work_kind_id ?? '')) ?? null),
+              stage: stageWords, who, version: roundOf(i as never),
+              files: handed ? 'finished edit in' : folderOf(i as never) ? 'folder only' : 'nothing yet',
+              due, overdue: isOverdue, updated_at: i.updated_at,
+              open: `/dashboard/editor/${i.id}`,
+            }
+          })
+          .filter(r => has(r.title, query) && has(r.client, client) && has(r.who, person) && has(r.stage, stage)
+            && (version === 'any' || (version === '3+' ? r.version >= 3 : r.version === Number(version)))
+            && (files === 'any' || (files === 'with') === (r.files === 'finished edit in'))
+            && (!overdue || r.overdue))
+          .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+        return { count: out.length, cards: out.slice(0, 60) }
       },
     }),
 

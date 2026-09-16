@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState, type CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
@@ -318,16 +319,25 @@ function SidebarHeader() {
  * swallows what you type, it renders disabled and says so, and the first task
  * that ships a real search should replace this whole component.
  */
+/** THE AI SEARCH (the owner, 16 Sep 2026: "an AI search format"): a
+ *  question typed here opens the assistant on it — "Capila cards on version
+ *  2", "what is Ryan holding", "leads this week" — and the assistant
+ *  answers from the same tables the pages read, with links to open. */
 function SearchPill() {
+  const router = useRouter()
+  const [q, setQ] = useState('')
+  const ask = () => { const t = q.trim(); if (!t) return; setQ(''); router.push(`/dashboard/ai?q=${encodeURIComponent(t)}`) }
   return (
     <div className="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm">
       <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} />
       <input
         type="search"
-        disabled
-        aria-label="Search (not available yet)"
-        placeholder="Search — coming soon"
-        className="h-11 w-full cursor-not-allowed rounded-full border border-border bg-surface pl-11 pr-4 text-[15px] text-foreground placeholder:text-muted-foreground"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ask() } }}
+        aria-label="Ask the assistant"
+        placeholder="Ask anything — e.g. Capila cards on version 2"
+        className="h-11 w-full rounded-full border border-border bg-surface pl-11 pr-4 text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
       />
     </div>
   )
