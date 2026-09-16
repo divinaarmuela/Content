@@ -170,7 +170,8 @@ export default function EditorCardPage() {
         </section>
 
         {/* ── the card itself, beside the files ── */}
-        <aside className="min-w-0 overflow-hidden rounded-card border border-border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]" aria-label="The card">
+        {/* the card scrolls inside its own column on a wide screen, so "What happened" at its foot is reachable (the owner, 16 Sep 2026: "on phone I can see the logs but on larger screens I can’t") */}
+        <aside className="min-w-0 overflow-hidden rounded-card border border-border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto" aria-label="The card">
           {adhoc
             ? <PostApprovalDetail key={id} id={id} onClose={back} />
             : (

@@ -139,7 +139,7 @@ function statusLine(row: HistoryActivity, who: string): { text: string } | null 
   // (the owner, 11 Sep 2026: "yes super admin can pass quality check" —
   // allowed, and written down so the reviewer can see it)
   if (from === 'quality_check' && isStandIn(row.detail) && (to === 'client_review' || to === 'approved_for_scheduling')) {
-    return { text: `Passed by ${who} ${STAND_IN_MARK}${to === 'client_review' ? ' and sent to the client' : ' and approved'}` }
+    return { text: `Passed by ${who} ${STAND_IN_MARK}${to === 'client_review' ? ' — now with the client' : ' and approved'}` }
   }
   switch (to) {
     case 'internal_review':
@@ -147,7 +147,9 @@ function statusLine(row: HistoryActivity, who: string): { text: string } | null 
     case 'quality_check':
       return { text: `Sent for quality check by ${who}` }
     case 'client_review':
-      return { text: from === 'quality_check' ? `Passed quality check and sent to the client by ${who}` : `Sent for approval to the client by ${who}` }
+      // the pass is the reviewer's; the card being with the client is where it
+      // went, not something they sent (the owner, 16 Sep 2026)
+      return { text: from === 'quality_check' ? `Passed quality check by ${who} — now with the client` : `Sent for approval to the client by ${who}` }
     case 'revision_required':
     case 'client_changes_requested':
       return { text: `Changes asked for by ${to === 'client_changes_requested' ? `the client, logged by ${who}` : who}` }

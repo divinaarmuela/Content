@@ -108,7 +108,9 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
   quality_check: {
     // the gate itself: only the quality reviewer (or a super admin standing
     // in) passes work out of it; a manager may still pull it back for changes
-    client_review: { roles: ['quality_reviewer'], label: 'Passed — send to client' },
+    // THE PASS MOVES IT TO WITH CLIENT (the owner, 16 Sep 2026: "it should pass
+    // and move to the With client column — not 'Joy sent to client'")
+    client_review: { roles: ['quality_reviewer'], label: 'Passed quality check' },
     approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Passed — approve without client' },
     revision_required: { roles: ['quality_reviewer', 'account_manager'], label: 'Ask for changes' },
   },

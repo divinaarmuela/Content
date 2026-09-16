@@ -40,12 +40,12 @@ describe('one activity row in the card’s words', () => {
 
   it('says when a super admin passed the quality check in the reviewer’s place', () => {
     expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'client_review', detail: `Passed — send to client · ${STAND_IN_MARK}` }))
-      .toBe("Passed by Ana in the reviewer's place and sent to the client")
+      .toBe("Passed by Ana in the reviewer's place — now with the client")
     expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'approved_for_scheduling', detail: STAND_IN_MARK }))
       .toBe("Passed by Ana in the reviewer's place and approved")
     // the reviewer's own pass reads as before
     expect(say({ action: 'status_change', old_value: 'quality_check', new_value: 'client_review', detail: 'Passed — send to client' }))
-      .toBe('Passed quality check and sent to the client by Ana')
+      .toBe('Passed quality check by Ana — now with the client')
     expect(isStandIn(null)).toBe(false)
   })
 

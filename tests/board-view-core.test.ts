@@ -119,7 +119,7 @@ describe('the control on a card', () => {
   it('the quality reviewer passes a card to the client, or sends it back; a manager only pulls it back', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
     const { primary, more } = cardActions(card({ status: 'quality_check' }), joy)
-    expect(primary).toEqual({ kind: 'transition', to: 'client_review', label: 'Passed — send to client' })
+    expect(primary).toEqual({ kind: 'transition', to: 'client_review', label: 'Passed quality check' })
     expect(more.map(a => a.to)).toEqual(['revision_required'])
     // not the manager's turn, so no filled button — the pull-back sits in the dots
     const am = cardActions(card({ status: 'quality_check' }), manager)

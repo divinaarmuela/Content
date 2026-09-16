@@ -135,7 +135,7 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
       .toEqual({ ok: false, reason: 'Already in Quality check' })
     expect(canMoveTo({ status: 'internal_review' }, 'with_client', AM).ok).toBe(false)
     expect(canMoveTo({ status: 'quality_check' }, 'with_client', ['quality_reviewer']))
-      .toEqual({ ok: true, to: 'client_review', label: 'Passed — send to client' })
+      .toEqual({ ok: true, to: 'client_review', label: 'Passed quality check' })
     expect(canMoveTo({ status: 'quality_check' }, 'with_client', AM).ok).toBe(false)
   })
 

@@ -487,14 +487,14 @@ export const QUALITY_REVIEWER_STEP: TutorialStep = {
   see: [
     'Abby’s rule: every graphic, story, reel and caption passes you before it is scheduled. The flow is account manager or designer or editor, then you, then the scheduler.',
     'Every card waiting on you sits in the Quality check column on Post approval, for every client. The Overview’s "Quality check" tile counts them.',
-    'Your buttons there: "Passed — send to client" (or "Passed — approve without client" for a client who does not sign off), and "Ask for changes" with a note. Nobody else can pass a card out of Quality check except a super admin standing in for you.',
+    'Your buttons there: "Passed quality check" (or "Passed — approve without client" for a client who does not sign off), and "Ask for changes" with a note. Nobody else can pass a card out of Quality check except a super admin standing in for you.',
     'On your pass the card is handed to the client’s schedulers by itself. You are emailed each time a card reaches Quality check.',
     'Every submit comes straight to you — there is no manager’s check in front of yours. The Ops contact and the client’s account managers are copied when a card reaches you.',
   ],
   actions: [
     'Open Post approval and go to the Quality check column, or press the Quality check tile on the Overview.',
     'Open the card. Check spelling, dates, branding, image quality and platform specs.',
-    'Press "Passed — send to client", or "Ask for changes" and say what.',
+    'Press "Passed quality check", or "Ask for changes" and say what.',
   ],
   href: POST_APPROVAL,
   linkLabel: 'Open Post approval',
