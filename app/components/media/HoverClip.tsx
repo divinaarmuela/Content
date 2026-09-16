@@ -7,12 +7,19 @@ import { formatStamp } from '../../lib/video-review-core'
  * A CLIP TILE YOU CAN SCRUB (the owner, 16 Sep 2026: "we need a hover
  * effect since it's already downloaded — hover over the clip and it shows
  * the frames in the video; a vertical line so it indicates it nicely"). At
- * rest the tile is the clip a moment in. Move across it and the frame
- * follows the pointer, left edge to right edge being the whole clip, with a
- * thin vertical line under the pointer and the second it is at. Leave and it
- * settles back. Only ever given our own copy, which is seekable, so every
- * frame is a Range away.
+ * rest the tile is the clip a moment in. Hover and it plays, muted. Move
+ * across it and the clip jumps to where the pointer is, left edge to right
+ * edge being the whole clip, with a thin vertical line under the pointer
+ * and the second it is at, then keeps playing from there.
+ *
+ * A jump is asked for at most every few hundred milliseconds, to the
+ * nearest keyframe (`fastSeek`), never on every pixel of movement: a 4K
+ * master is many megabytes between keyframes, and a seek for every mouse
+ * event piled up until no frame ever showed (the first live try). Only ever
+ * given our own copy, which is seekable.
  */
+const SEEK_EVERY_MS = 220
+
 export default function HoverClip({ src, className = '', at = 0.5 }: {
   src: string
   className?: string
@@ -20,29 +27,47 @@ export default function HoverClip({ src, className = '', at = 0.5 }: {
   at?: number
 }) {
   const ref = useRef<HTMLVideoElement>(null)
-  const frame = useRef<number | null>(null)
+  const timer = useRef<number | null>(null)
+  const wanted = useRef<number | null>(null)
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null)
+
+  const jump = () => {
+    timer.current = null
+    const v = ref.current
+    const t = wanted.current
+    wanted.current = null
+    if (!v || t === null || v.seeking) { if (t !== null) { wanted.current = t; timer.current = window.setTimeout(jump, SEEK_EVERY_MS) } return }
+    if (typeof v.fastSeek === 'function') v.fastSeek(t)
+    else v.currentTime = t
+    void v.play().catch(() => undefined)
+  }
 
   const seekTo = (fraction: number) => {
     const v = ref.current
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return
     const t = Math.max(0, Math.min(v.duration - 0.05, fraction * v.duration))
     setHover({ x: fraction, t })
-    if (frame.current !== null) cancelAnimationFrame(frame.current)
-    frame.current = requestAnimationFrame(() => {
-      frame.current = null
-      v.currentTime = t
-    })
+    wanted.current = t
+    if (timer.current === null) timer.current = window.setTimeout(jump, SEEK_EVERY_MS)
   }
 
   return (
     <span className="relative block h-full w-full"
+      onMouseEnter={() => { void ref.current?.play().catch(() => undefined) }}
       onMouseMove={e => {
         const r = e.currentTarget.getBoundingClientRect()
         if (r.width > 0) seekTo((e.clientX - r.left) / r.width)
       }}
-      onMouseLeave={() => { const v = ref.current; setHover(null); if (!v) return; v.pause(); v.currentTime = at }}>
-      <video ref={ref} src={`${src}#t=${at}`} muted playsInline preload="metadata" aria-hidden tabIndex={-1}
+      onMouseLeave={() => {
+        const v = ref.current
+        setHover(null)
+        wanted.current = null
+        if (timer.current !== null) { clearTimeout(timer.current); timer.current = null }
+        if (!v) return
+        v.pause()
+        v.currentTime = at
+      }}>
+      <video ref={ref} src={`${src}#t=${at}`} muted playsInline loop preload="metadata" aria-hidden tabIndex={-1}
         className={`${className} pointer-events-none`} />
       {hover && (
         <>
