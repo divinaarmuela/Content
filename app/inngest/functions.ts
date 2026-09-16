@@ -877,7 +877,9 @@ export const drivePullFolder = inngest.createFunction(
     name: 'Pull a Drive folder into storage',
     triggers: [{ event: 'drive/pull.folder' }],
     retries: 2,
-    concurrency: { limit: 2, key: 'event.data.pull_id' },
+    // ONE RUN PER FOLDER: two runs on the same row would race each other's
+    // slices (seen on the first live pull, 16 Sep 2026)
+    concurrency: { limit: 1, key: 'event.data.pull_id' },
   },
   async ({ event, step }) => withRequestCache(async () => {
     const data = (event.data ?? {}) as Record<string, unknown>

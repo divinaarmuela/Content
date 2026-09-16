@@ -78,7 +78,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
     const s = src('app/inngest/functions.ts')
     expect(s).toContain("id: 'drive-pull-folder'")
     expect(s).toContain("triggers: [{ event: 'drive/pull.folder' }]")
-    expect(s).toContain("concurrency: { limit: 2, key: 'event.data.pull_id' }")
+    expect(s).toContain("concurrency: { limit: 1, key: 'event.data.pull_id' }")
     expect(s).toContain("await step.run('list', async () => {")
     expect(s).toContain('const r = await step.run(`copy:${fileId}:${n}`, async () => {')
     expect(s).toContain("return step.run('finish', async () => {")
