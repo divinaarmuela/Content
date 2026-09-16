@@ -42,8 +42,14 @@ export async function loadBrandProfile(clientId: string, seedBy: string): Promis
     // first read: the scan becomes the profile, once. Written only while the
     // column is still empty, so two first reads cannot both seed.
     profile = scanHasContent ? fromScan(scanProfile, lastScanAt) : emptyProfile()
-    profile.rev = 1
+    // REVISION 1 ONLY ONCE SOMETHING IS WRITTEN (the owner, 16 Sep 2026: "the
+    // notes field in Brand is not working" — Real Deal Property had no scan
+    // and no profile, the page was handed rev 1 over an empty column, and
+    // every save was refused as somebody else's change). With nothing to
+    // seed, the profile stays at rev 0: never saved, and the first save is
+    // the first write.
     if (scanHasContent) {
+      profile.rev = 1
       // one conditional write, applied only while the column is still empty:
       // two first reads cannot both seed
       await clients.claim(clientId, cur =>

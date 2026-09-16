@@ -155,6 +155,18 @@ describe('PATCH /api/clients/[id]/brand/profile', () => {
     expect(savedProfile()).toMatchObject({ rev: 4 })
   })
 
+  it('with no scan and nothing saved, the page reads rev 0 and its first note saves — never a 409 (Real Deal Property, 16 Sep 2026)', async () => {
+    start(false)
+    const first = await get()
+    expect(first.status).toBe(200)
+    expect((first.json.profile as { rev: number }).rev).toBe(0)
+    expect(savedProfile()).toBeNull()
+    const { status, json } = await patch({ profile: { ...(first.json.profile as object), notes: 'Warm light, no stock photos' } })
+    expect(status).toBe(200)
+    expect((json.profile as { rev: number; notes: string }).rev).toBe(1)
+    expect(savedProfile()).toMatchObject({ rev: 1, notes: 'Warm light, no stock photos' })
+  })
+
   it('writes the first profile when the row has never had one', async () => {
     start(false)
     const { status, json } = await patch({ profile: { rev: 0, colours: [] } })
