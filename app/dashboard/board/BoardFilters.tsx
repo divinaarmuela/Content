@@ -6,7 +6,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { roleLabel } from '../../lib/identity-core'
-import type { ClientRow, Filters, PersonRow } from '../../lib/people-filter-core'
+import { VERSION_FILTERS, type ClientRow, type Filters, type PersonRow } from '../../lib/people-filter-core'
 
 /**
  * THE TWO FILTERS ABOVE A BOARD: which client, and whose cards.
@@ -23,16 +23,21 @@ import type { ClientRow, Filters, PersonRow } from '../../lib/people-filter-core
 
 const ALL = 'all'
 const EVERYONE = 'everyone'
+const ANY = 'any'
 
-export function BoardFilters({ clients, people, value, onClient, onPerson, onClear }: {
+export function BoardFilters({ clients, people, value, onClient, onPerson, onClear, onFiles, onVersion }: {
   clients: readonly ClientRow[]
   people: readonly PersonRow[]
   value: Filters
   onClient: (id: string | null) => void
   onPerson: (id: string | null) => void
   onClear: () => void
+  /** THE WORK FILTERS (the Editor page, 16 Sep 2026): with a finished edit
+   *  or without, and which version — drawn only where they are given */
+  onFiles?: (v: string | null) => void
+  onVersion?: (v: string | null) => void
 }) {
-  const narrowed = value.client !== null || value.person !== null
+  const narrowed = value.client !== null || value.person !== null || !!value.files || !!value.version
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Narrow the board">
       <Select value={value.client ?? ALL} onValueChange={v => onClient(v === ALL ? null : v)}>
@@ -72,6 +77,27 @@ export function BoardFilters({ clients, people, value, onClient, onPerson, onCle
               </span>
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>}
+
+      {onFiles && <Select value={value.files ?? ANY} onValueChange={v => onFiles(v === ANY ? null : v)}>
+        <SelectTrigger className="h-11 w-52 rounded-full border-border bg-surface px-4 text-[13px] font-semibold" aria-label="With or without files">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANY} className="min-h-11">With or without files</SelectItem>
+          <SelectItem value="with" className="min-h-11">With a finished edit</SelectItem>
+          <SelectItem value="without" className="min-h-11">Nothing handed in yet</SelectItem>
+        </SelectContent>
+      </Select>}
+
+      {onVersion && <Select value={value.version ?? ANY} onValueChange={v => onVersion(v === ANY ? null : v)}>
+        <SelectTrigger className="h-11 w-40 rounded-full border-border bg-surface px-4 text-[13px] font-semibold" aria-label="Which version">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANY} className="min-h-11">Any version</SelectItem>
+          {VERSION_FILTERS.map(v => <SelectItem key={v} value={v} className="min-h-11">Version {v}</SelectItem>)}
         </SelectContent>
       </Select>}
 

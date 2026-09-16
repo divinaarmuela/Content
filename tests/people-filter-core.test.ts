@@ -73,6 +73,26 @@ describe('narrowing', () => {
     expect(hasFilters(NO_FILTERS)).toBe(false)
     expect(hasFilters({ client: 'acme', person: null })).toBe(true)
   })
+  it('narrows to cards with a finished edit or without, and to a version — the Editor page’s work filters (16 Sep 2026)', async () => {
+    const { cardHasFiles, cardOnVersion, filesChoice, versionChoice } = await import('../app/lib/people-filter-core')
+    const done = { id: 'w1', client_id: 'acme', link_url: 'https://drive.google.com/drive/folders/A', link_final: true, edit_round: 2 }
+    const folderOnly = { id: 'w2', client_id: 'acme', link_url: 'https://drive.google.com/drive/folders/B', raw_assets_url: 'https://drive.google.com/drive/folders/B' }
+    const nothing = { id: 'w3', client_id: 'acme', edit_round: 3 }
+    expect(cardHasFiles(done)).toBe(true)
+    expect(cardHasFiles(folderOnly)).toBe(false)
+    expect(cardHasFiles(nothing)).toBe(false)
+    expect(applyFilters([done, folderOnly, nothing], { client: null, person: null, files: 'with' }).map(c => c.id)).toEqual(['w1'])
+    expect(applyFilters([done, folderOnly, nothing], { client: null, person: null, files: 'without' }).map(c => c.id)).toEqual(['w2', 'w3'])
+    expect(applyFilters([done, folderOnly, nothing], { client: null, person: null, version: '1' }).map(c => c.id)).toEqual(['w2'])
+    expect(applyFilters([done, folderOnly, nothing], { client: null, person: null, version: '2' }).map(c => c.id)).toEqual(['w1'])
+    expect(applyFilters([done, folderOnly, nothing], { client: null, person: null, version: '3+' }).map(c => c.id)).toEqual(['w3'])
+    expect(cardOnVersion({ id: 'x', edit_round: 7 }, '3+')).toBe(true)
+    expect(hasFilters({ client: null, person: null, files: 'with' })).toBe(true)
+    expect(filesChoice('with')).toBe('with'); expect(filesChoice('nope')).toBeNull()
+    expect(versionChoice('3+')).toBe('3+'); expect(versionChoice('9')).toBeNull()
+    expect(filterWords({ client: null, person: null, files: 'with', version: '2' }, {}, 1, 3)).toBe('Showing every card with a finished edit on version 2 — 1 of 3')
+    expect(filteredEmpty('Quality check', { client: null, person: null, files: 'without' }, {})).toBe('No cards with nothing handed in in Quality check')
+  })
   it('says what is shown, and why a column is empty, in plain words', () => {
     expect(filterWords(NO_FILTERS, {}, 4, 4)).toBeNull()
     expect(filterWords({ client: null, person: 'ada' }, { person: 'Ada Lovelace' }, 3, 4))

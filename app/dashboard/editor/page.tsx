@@ -130,7 +130,10 @@ export default function EditorPage() {
   const chosen = useMemo(() => ({
     client: mayFilter ? validChoice(filter.client, clientRows) : null,
     person: mayFilter ? validChoice(filter.person, peopleRows) : null,
-  }), [mayFilter, filter.client, filter.person, clientRows, peopleRows])
+    // with files or without, and the version (16 Sep 2026)
+    files: mayFilter ? filter.files ?? null : null,
+    version: mayFilter ? filter.version ?? null : null,
+  }), [mayFilter, filter.client, filter.person, filter.files, filter.version, clientRows, peopleRows])
   const filterNames = {
     person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
     client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
@@ -193,7 +196,8 @@ export default function EditorPage() {
           onAcknowledge={acknowledge}
           filters={mayFilter ? (
             <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
-              onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear} />
+              onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear}
+              onFiles={filter.setFiles} onVersion={filter.setVersion} />
           ) : undefined}
           filterNote={filterWords(chosen, filterNames, cards.length, allCards.length)}
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}

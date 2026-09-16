@@ -1,4 +1,6 @@
 import { isQualityReviewer } from './identity-core'
+import { finishedEditOf } from './card-link-core'
+import { roundOf } from './edit-round-core'
 /**
  * WHO IS DOING WHAT — the Client and People filters on the three boards.
  *
@@ -26,11 +28,52 @@ export type FilterCard = {
   /** a shoot's editor and crew (`shoot-sop-core`) */
   editor_id?: string | null
   crew_ids?: unknown
+  /** the finished edit handed in, if any (`card-link-core.finishedEditOf`) */
+  link_url?: string | null
+  link_kind?: string | null
+  link_final?: boolean | null
+  raw_assets_url?: string | null
+  adhoc_post?: boolean | null
+  /** the hand-in round (`edit-round-core.roundOf`) */
+  edit_round?: unknown
 }
 
-export type Filters = { client: string | null; person: string | null }
+/**
+ * THE WORK FILTERS ON THE EDITOR PAGE (the owner, 16 Sep 2026: "add a filter
+ * for with files and with no files, and a version filter so we know which
+ * one"): a card either has a finished edit handed in or it does not, and it
+ * is on version 1, 2, or later. Both optional, so the other boards' choices
+ * are unchanged.
+ */
+export type FilesFilter = 'with' | 'without'
+export const VERSION_FILTERS = ['1', '2', '3+'] as const
+export type VersionFilter = typeof VERSION_FILTERS[number]
 
-export const NO_FILTERS: Filters = { client: null, person: null }
+export type Filters = { client: string | null; person: string | null; files?: FilesFilter | null; version?: VersionFilter | null }
+
+export const NO_FILTERS: Filters = { client: null, person: null, files: null, version: null }
+
+export function filesChoice(v: string | null | undefined): FilesFilter | null {
+  return v === 'with' || v === 'without' ? v : null
+}
+export function versionChoice(v: string | null | undefined): VersionFilter | null {
+  return (VERSION_FILTERS as readonly string[]).includes(String(v ?? '')) ? v as VersionFilter : null
+}
+
+/** does the card have a finished edit handed in? */
+export function cardHasFiles(c: FilterCard): boolean {
+  return finishedEditOf(c) !== null
+}
+
+export function cardOnVersion(c: FilterCard, v: VersionFilter): boolean {
+  const round = roundOf(c)
+  return v === '3+' ? round >= 3 : round === Number(v)
+}
+
+export const FILES_WORDS: Record<FilesFilter, string> = { with: 'with a finished edit', without: 'with nothing handed in' }
+export function versionWords(v: VersionFilter): string {
+  return v === '3+' ? 'on version 3 or later' : `on version ${v}`
+}
 
 export type PersonRow = {
   id: string
@@ -113,11 +156,18 @@ export function clientsOnCards(cards: readonly FilterCard[], names: ReadonlyMap<
 export function applyFilters<T extends FilterCard>(cards: readonly T[], f: Filters): T[] {
   return cards.filter(c =>
     (!f.client || String(c.client_id ?? '') === f.client)
-    && (!f.person || cardInvolves(c, f.person)))
+    && (!f.person || cardInvolves(c, f.person))
+    && (!f.files || cardHasFiles(c) === (f.files === 'with'))
+    && (!f.version || cardOnVersion(c, f.version)))
 }
 
 export function hasFilters(f: Filters): boolean {
-  return f.client !== null || f.person !== null
+  return f.client !== null || f.person !== null || !!f.files || !!f.version
+}
+
+/** " with a finished edit on version 2" — the work half of the words, or '' */
+function workWords(f: Filters): string {
+  return `${f.files ? ` ${FILES_WORDS[f.files]}` : ''}${f.version ? ` ${versionWords(f.version)}` : ''}`
 }
 
 /**
@@ -131,7 +181,7 @@ export function filterWords(
   if (!hasFilters(f)) return null
   const who = f.person ? `${names.person ?? 'Someone'}’s cards` : 'every card'
   const where = f.client ? ` for ${names.client ?? 'this client'}` : ''
-  return `Showing ${who}${where} — ${shown} of ${total}`
+  return `Showing ${who}${where}${workWords(f)} — ${shown} of ${total}`
 }
 
 /** An empty column under a filter says who and where, not "nothing being
@@ -142,7 +192,7 @@ export function filteredEmpty(
   if (!hasFilters(f)) return null
   const who = f.person ? ` for ${names.person ?? 'them'}` : ''
   const where = f.client ? ` at ${names.client ?? 'this client'}` : ''
-  return `No cards${who}${where} in ${laneLabel}`
+  return `No cards${who}${where}${workWords(f)} in ${laneLabel}`
 }
 
 /** A remembered or linked choice is only a guess: it must name one of the

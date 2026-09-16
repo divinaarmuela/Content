@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { NO_FILTERS, type Filters } from '../../lib/people-filter-core'
+import { NO_FILTERS, filesChoice, versionChoice, type Filters } from '../../lib/people-filter-core'
 
 /**
  * The Client and People choice on a board — remembered per page, and in the
@@ -15,6 +15,9 @@ import { NO_FILTERS, type Filters } from '../../lib/people-filter-core'
 export function useBoardFilters(pageKey: string): Filters & {
   setClient: (id: string | null) => void
   setPerson: (id: string | null) => void
+  /** the Editor page's work filters (16 Sep 2026): with files or without, and the version */
+  setFiles: (v: string | null) => void
+  setVersion: (v: string | null) => void
   clear: () => void
 } {
   const [value, setValue] = useState<Filters>(NO_FILTERS)
@@ -28,7 +31,7 @@ export function useBoardFilters(pageKey: string): Filters & {
       try { fromStorage = localStorage.getItem(storage(k)) } catch { /* blocked storage */ }
       return fromUrl || fromStorage || null
     }
-    setValue({ client: read('client'), person: read('person') })
+    setValue({ client: read('client'), person: read('person'), files: filesChoice(read('files')), version: versionChoice(read('version')) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageKey])
 
@@ -47,6 +50,8 @@ export function useBoardFilters(pageKey: string): Filters & {
     ...value,
     setClient: useCallback((id: string | null) => write('client', id), [write]),
     setPerson: useCallback((id: string | null) => write('person', id), [write]),
-    clear: useCallback(() => { write('client', null); write('person', null) }, [write]),
+    setFiles: useCallback((v: string | null) => write('files', filesChoice(v)), [write]),
+    setVersion: useCallback((v: string | null) => write('version', versionChoice(v)), [write]),
+    clear: useCallback(() => { write('client', null); write('person', null); write('files', null); write('version', null) }, [write]),
   }
 }
