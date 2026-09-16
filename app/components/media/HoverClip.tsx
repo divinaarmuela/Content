@@ -1,35 +1,57 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatStamp } from '../../lib/video-review-core'
 
 /**
  * A CLIP TILE YOU CAN SCRUB (the owner, 16 Sep 2026: "we need a hover
  * effect since it's already downloaded — hover over the clip and it shows
- * the frames in the video; a vertical line so it indicates it nicely"). At
- * rest the tile is the clip a moment in. Hover and it plays, muted. Move
- * across it and the clip jumps to where the pointer is, left edge to right
- * edge being the whole clip, with a thin vertical line under the pointer
- * and the second it is at, then keeps playing from there.
+ * the frames in the video; a vertical line so it indicates it nicely").
  *
- * A jump is asked for at most every few hundred milliseconds, to the
- * nearest keyframe (`fastSeek`), never on every pixel of movement: a 4K
- * master is many megabytes between keyframes, and a seek for every mouse
- * event piled up until no frame ever showed (the first live try). Only ever
- * given our own copy, which is seekable.
+ * TWO WAYS TO SHOW A FRAME. With `frames` — the preview copy's stills, one
+ * per second, from Cloudflare Stream — the tile is a still at rest and the
+ * still under the pointer as it moves: small pictures, instant, whatever
+ * the master is (a 4K master seeks in seconds, a still arrives in
+ * milliseconds — the first live try). Without `frames`, the tile is the
+ * copy itself: it plays on hover and jumps to the nearest keyframe a few
+ * times a second, never on every pixel of movement. Either way a thin
+ * vertical line sits under the pointer with the second it is at.
  */
 const SEEK_EVERY_MS = 220
+const FRAME_EVERY_MS = 90
 
-export default function HoverClip({ src, className = '', at = 0.5 }: {
+export default function HoverClip({ src, className = '', at = 0.5, poster, duration, frames }: {
   src: string
   className?: string
   /** the second shown at rest */
   at?: number
+  /** a still of the clip at rest, when a preview exists */
+  poster?: string | null
+  /** the clip's length, when the preview knows it */
+  duration?: number | null
+  /** the still at a second, when a preview exists */
+  frames?: ((second: number) => string) | null
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   const timer = useRef<number | null>(null)
   const wanted = useRef<number | null>(null)
   const [hover, setHover] = useState<{ x: number; t: number } | null>(null)
+  const [frame, setFrame] = useState<string | null>(null)
+  const frameTimer = useRef<number | null>(null)
+  const wantedFrame = useRef<string | null>(null)
+  useEffect(() => () => { if (frameTimer.current !== null) clearTimeout(frameTimer.current); if (timer.current !== null) clearTimeout(timer.current) }, [])
+
+  const stills = !!frames && !!poster && typeof duration === 'number' && duration > 0
+
+  const showFrame = () => {
+    frameTimer.current = null
+    const url = wantedFrame.current
+    if (!url) return
+    // swap only once the picture is here, so the tile never flashes empty
+    const img = new Image()
+    img.onload = () => { if (wantedFrame.current === url) setFrame(url) }
+    img.src = url
+  }
 
   const jump = () => {
     timer.current = null
@@ -42,7 +64,14 @@ export default function HoverClip({ src, className = '', at = 0.5 }: {
     void v.play().catch(() => undefined)
   }
 
-  const seekTo = (fraction: number) => {
+  const moveTo = (fraction: number) => {
+    if (stills) {
+      const t = Math.max(0, Math.min(duration - 0.05, fraction * duration))
+      setHover({ x: fraction, t })
+      wantedFrame.current = frames(Math.round(t))
+      if (frameTimer.current === null) frameTimer.current = window.setTimeout(showFrame, FRAME_EVERY_MS)
+      return
+    }
     const v = ref.current
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return
     const t = Math.max(0, Math.min(v.duration - 0.05, fraction * v.duration))
@@ -53,22 +82,28 @@ export default function HoverClip({ src, className = '', at = 0.5 }: {
 
   return (
     <span className="relative block h-full w-full"
-      onMouseEnter={() => { void ref.current?.play().catch(() => undefined) }}
+      onMouseEnter={() => { if (!stills) void ref.current?.play().catch(() => undefined) }}
       onMouseMove={e => {
         const r = e.currentTarget.getBoundingClientRect()
-        if (r.width > 0) seekTo((e.clientX - r.left) / r.width)
+        if (r.width > 0) moveTo((e.clientX - r.left) / r.width)
       }}
       onMouseLeave={() => {
-        const v = ref.current
         setHover(null)
         wanted.current = null
+        wantedFrame.current = null
+        setFrame(null)
         if (timer.current !== null) { clearTimeout(timer.current); timer.current = null }
+        if (frameTimer.current !== null) { clearTimeout(frameTimer.current); frameTimer.current = null }
+        const v = ref.current
         if (!v) return
         v.pause()
         v.currentTime = at
       }}>
-      <video ref={ref} src={`${src}#t=${at}`} muted playsInline loop preload="metadata" aria-hidden tabIndex={-1}
-        className={`${className} pointer-events-none`} />
+      {stills
+        // eslint-disable-next-line @next/next/no-img-element -- the preview's stills
+        ? <img src={frame ?? poster} alt="" draggable={false} className={`${className} pointer-events-none select-none`} />
+        : <video ref={ref} src={`${src}#t=${at}`} muted playsInline loop preload="metadata" aria-hidden tabIndex={-1}
+            className={`${className} pointer-events-none`} />}
       {hover && (
         <>
           {/* the line under the pointer, and the second it is at */}

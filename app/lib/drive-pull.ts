@@ -11,6 +11,8 @@ import {
 } from './drive-pull-core'
 import { driveTargetOf } from './card-link-core'
 import { afterResponse } from './after-response'
+import { previewVideos } from './stream'
+import { kindOf as fileKindOf } from './files-core'
 
 /**
  * A DRIVE FOLDER, PULLED INTO OUR OWN STORAGE — the server half (the owner,
@@ -33,6 +35,7 @@ import { afterResponse } from './after-response'
 export const PULL_EVENT = 'drive/pull.folder'
 const MAX_FILES = 400
 const MAX_DEPTH = 3
+const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
 
 type Kind = 'batch' | 'item'
 
@@ -216,6 +219,12 @@ export async function finishPull(id: string): Promise<'done' | 'failed'> {
   const files = filesOf(row)
   const failed = files.filter(f => f.status === 'failed')
   const status = failed.length === 0 ? 'done' : 'failed'
+  // A PREVIEW OF EVERY VIDEO COPY (16 Sep 2026: "hover over the clip and it
+  // shows the frames"): Cloudflare Stream's small copy gives the tile its
+  // still and its hover frames, whatever the master is — a 4K .mov included.
+  // Only clips a person will scrub: a camera master past 800 MB is left as
+  // the copy alone (Stream is billed by the minute stored).
+  previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))
   await pulls.update(id, {
     status, finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     error: failed.length ? `${failed.length} ${failed.length === 1 ? 'file' : 'files'} could not be copied (${failed[0].name}${failed[0].error ? `: ${failed[0].error}` : ''})` : null,

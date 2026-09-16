@@ -7,6 +7,8 @@ import { belongsToPortal, portalName } from './portal-owner-core'
 import { accountManagerName } from './portal-data'
 import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
+import { previewsFor } from './stream'
+import { streamBaseUrl } from './stream-core'
 import { clipsOf, clipSignature, editingPortalFolder, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
@@ -39,7 +41,7 @@ export type EditingPortal = {
   am_name: string | null
   item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null }
   folder: { url: string; id: string }
-  clips: (PortalClip & { src: string; version: number })[]
+  clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null })[]
   /** the rounds the clips span, newest first — Version 2, Version 1 */
   rounds: number[]
   /** the card's current round */
@@ -91,9 +93,15 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   // storage plays from there — fast, and whatever Drive's sharing says today
   const pulled = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
   const round = roundOf(item)
+  // the preview copies of the pulled clips, for the strip's stills and hover frames
+  const previews = pulled.length > 0 ? await previewsFor(pulled.map(f => f.url as string)).catch(() => new Map()) : new Map()
   const clips = pulled.length > 0
-    ? pulled.map(f => ({ id: f.id, name: f.name, thumb: null, src: f.url as string, version: fileRound(f) }))
-    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round }))
+    ? pulled.map(f => {
+        const p = previews.get(f.url as string)
+        const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
+        return { id: f.id, name: f.name, thumb: null, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
+      })
+    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round, stream: null }))
   const rounds = roundsOf(clips)
   return {
     token: owner.token,

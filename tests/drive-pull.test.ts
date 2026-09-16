@@ -92,6 +92,9 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).not.toMatch(/googleapis\.com\/upload|method: '(POST|PATCH|PUT|DELETE)'/)
     // a file already here with the same size stands; a new cut in the same folder is new files
     expect(s).toContain("if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }")
+    // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
+    expect(s).toContain("previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))")
+    expect(s).toContain('const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')
     expect(s).toContain('version: version ?? null')
     const st = src('app/lib/storage.ts')
     for (const fn of ['openMultipart', 'putMultipartPart', 'closeMultipart', 'abortMultipart']) expect(st).toContain(`export async function ${fn}(`)
@@ -115,6 +118,11 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(tiles).toContain('const tiles = fromCopies ? copyTiles : state.at === \'ready\' ? state.tiles : []')
     expect(tiles).toContain('<video key={showing.id} src={showing.preview} controls playsInline preload="metadata"')
     expect(tiles).toContain("{roundLabel(r)}{r === rounds[0] ? ' · latest' : ''}")
+    // the hover shows the preview's stills once it is ready; the copy itself before
+    expect(tiles).toContain('const previews = usePreviewRows(')
+    expect(tiles).toContain('frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null}')
+    const hover = src('app/components/media/HoverClip.tsx')
+    expect(hover).toContain("const stills = !!frames && !!poster && typeof duration === 'number' && duration > 0")
     const bar = src('app/dashboard/board/DrivePullBar.tsx')
     expect(bar).toContain("useRow<DrivePull>('drive_pulls', folderId ? pullId(folderId) : null)")
     expect(bar).toContain('role="progressbar"')
