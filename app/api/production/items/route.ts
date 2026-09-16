@@ -20,6 +20,7 @@ import {
 import { scopeContextOf, visibleItems, type ScopeViewer } from '../../../lib/scope-client'
 import { logActivity, notifyCardMade, notifyJobAssigned, sanitiseRawAssets } from '../../../lib/workflow'
 import { announceItemChange } from '../../../lib/production-live'
+import { startPullSoon } from '../../../lib/drive-pull'
 import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { takeClaimLock, releaseClaimLock, briefLockKey } from '../../../lib/claim-lock'
 import { CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
@@ -511,6 +512,10 @@ export async function POST(req: Request) {
       notifyJobAssigned(user, item as unknown as Parameters<typeof notifyJobAssigned>[1])
       // …and a card the maker made for themselves tells the client's managers
       notifyCardMade(user, item as unknown as Parameters<typeof notifyCardMade>[1])
+      // A FOLDER PASTED ON THE NEW CARD IS PULLED IN LIKE ONE SAVED LATER (the
+      // owner, 16 Sep 2026: "my editor just added files — what's happening
+      // here?": a card made with its folder sat at "not copied in yet")
+      if (item.raw_assets_url) startPullSoon({ kind: 'item', scopeId: item.id, folderUrl: String(item.raw_assets_url), version: 1, by: user.id, purpose: 'folder' })
     }
     // a folder per deliverable, and the master link prefilled from it — in
     // the background, so a slow Drive never delays a batch upload

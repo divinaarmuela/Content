@@ -128,6 +128,8 @@ describe('the job, the triggers and the pages (source pins)', () => {
   it('saving a folder anywhere starts its pull, after the response', () => {
     expect(src('app/api/production/batches/[id]/route.ts')).toContain("if ('footage_url' in patch && patch.footage_url) startPullSoon({ kind: 'batch', scopeId: data.id, folderUrl: String(patch.footage_url), by: user.id, purpose: 'folder' })")
     expect(src('app/api/production/items/[id]/route.ts')).toContain("startPullSoon({ kind: 'item', scopeId: id, folderUrl: patch.raw_assets_url, version: 1, by: user.id, purpose: 'folder' })")
+    // …and a folder pasted on the New card window, the moment the card is made (16 Sep 2026)
+    expect(src('app/api/production/items/route.ts')).toContain("if (item.raw_assets_url) startPullSoon({ kind: 'item', scopeId: item.id, folderUrl: String(item.raw_assets_url), version: 1, by: user.id, purpose: 'folder' })")
     expect(src('app/api/production/items/[id]/link/route.ts')).toContain("if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: final ? handInRound(item) : 1, by: user.id, purpose: final ? 'finished' : 'folder' })")
     const route = src('app/api/drive/pull/route.ts')
     expect(route).toContain("const user = await requireRole('scheduler')")

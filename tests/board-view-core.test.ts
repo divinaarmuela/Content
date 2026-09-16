@@ -123,6 +123,10 @@ describe('the control on a card', () => {
     const { primary, more } = cardActions(card({ status: 'quality_check' }), joy)
     expect(primary).toEqual({ kind: 'transition', to: 'client_review', label: 'Passed quality check' })
     expect(more.map(a => a.to)).toEqual(['revision_required'])
+    // a second version says so on the button — it is a resend (16 Sep 2026)
+    expect(cardActions(card({ status: 'quality_check', edit_round: 2 } as never), joy).primary)
+      .toEqual({ kind: 'transition', to: 'client_review', label: 'Passed quality check — resend version 2 to the client' })
+    expect(cardActions(card({ status: 'client_review', edit_round: 2 } as never), joy).primary?.label ?? '').not.toContain('resend version')
     // not the manager's turn, so no filled button — the pull-back sits in the dots
     const am = cardActions(card({ status: 'quality_check' }), manager)
     expect(am.primary).toBeNull()

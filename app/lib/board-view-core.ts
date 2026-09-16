@@ -341,7 +341,16 @@ export function cardActions(
     viewerHoldsTurn: turn.mine || (turn.unassigned && turn.may),
   })
   const all: CardAction[] = []
-  const push = (a: CardAction) => { if (!all.some(b => sameAction(a, b))) all.push(a) }
+  // A SECOND VERSION GOES BACK TO THE CLIENT AS A RESEND (the owner, 16 Sep
+  // 2026: "if they uploaded version 2, make sure the black button at the top
+  // says resend"): the pass on a card in its second round or later names
+  // the version it sends, so the reviewer knows this is not the first look
+  const round = roundOf(card)
+  const versioned = (a: CardAction): CardAction =>
+    a.kind === 'transition' && a.to === 'client_review' && card.status === 'quality_check' && round >= 2
+      ? { ...a, label: `Passed quality check — resend version ${round} to the client` }
+      : a
+  const push = (raw: CardAction) => { const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
   // a post waiting on THIS person outranks any move: it is the one thing on
   // the card that somebody else is held up by
   const waiting = postApprovalOffer(card, viewer)
