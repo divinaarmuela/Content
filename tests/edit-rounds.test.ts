@@ -55,8 +55,8 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(t).toContain("if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })")
     // a file already here keeps the round it arrived with; a new file gets the current one
     const p = src('app/lib/drive-pull.ts')
-    expect(p).toContain("if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }")
-    expect(p).toContain("status: 'waiting', upload_id: null, parts: [], version: version ?? null }")
+    expect(p).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(p).toContain("parts: [], version: round, modified: f.modified })")
   })
   it('the card page has a tab per finished edit handed in, beside the folder to work from — the newest open (16 Sep 2026)', async () => {
     const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
@@ -75,6 +75,10 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
       [2, 'https://drive.google.com/drive/folders/V2', ['c'], true],
       [1, 'https://drive.google.com/drive/folders/V1', ['a', 'b'], false],
     ])
+    // the folder to work from counts when that same link is the finished edit today (Yusuf's card, 16 Sep 2026)
+    const sameLink = [{ kind: 'item', scope_id: 'c1', folder_id: 'SRC', folder_url: 'https://drive.google.com/file/d/SRC/view', status: 'done', purpose: 'folder', files: [{ id: 's1', version: 1 }], started_at: '2026-09-10' }]
+    expect(finishedVersionsOf(sameLink, { itemId: 'c1', finishedFolderId: 'SRC', filesOf }).map(t => t.round)).toEqual([1])
+    expect(src('app/lib/drive-pull.ts')).toContain("if (opts.purpose === 'finished' && (claim.current as { purpose?: string | null } | null)?.purpose !== 'finished') {")
     // an older row that never said what it was counts only when it is the card’s finished link today
     const old = [{ kind: 'item', scope_id: 'c1', folder_id: 'OLD', folder_url: 'https://drive.google.com/drive/folders/OLD', status: 'done', files: [{ id: 'o', version: 1 }], started_at: '2026-09-09' }]
     expect(finishedVersionsOf(old, { itemId: 'c1', finishedFolderId: 'OLD', filesOf })).toHaveLength(1)

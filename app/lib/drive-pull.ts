@@ -11,6 +11,7 @@ import {
 } from './drive-pull-core'
 import { driveTargetOf } from './card-link-core'
 import { afterResponse } from './after-response'
+import { fileRound } from './edit-round-core'
 import { previewVideos } from './stream'
 import { kindOf as fileKindOf } from './files-core'
 
@@ -71,7 +72,16 @@ export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: 
       created_at: row?.created_at ?? now, updated_at: now,
     } as unknown as DrivePull
   })
-  if (!claim.claimed) return { id, started: false, reason: 'Already being pulled' }
+  if (!claim.claimed) {
+    // THE SAME LINK AS THE FOLDER TO WORK FROM, HANDED IN AS THE FINISHED EDIT
+    // while its first pull is still running (Yusuf's card, 16 Sep 2026: no
+    // Version 1 pill appeared): the copy in flight is the finished edit too,
+    // so the row is marked as one — the tabs read the mark, not the timing
+    if (opts.purpose === 'finished' && (claim.current as { purpose?: string | null } | null)?.purpose !== 'finished') {
+      await pulls.update(id, { purpose: 'finished', updated_at: new Date().toISOString() } as never).catch(() => undefined)
+    }
+    return { id, started: false, reason: 'Already being pulled' }
+  }
   await inngest.send({ name: PULL_EVENT, data: { pull_id: id, version: opts.version ?? null } })
   return { id, started: true }
 }
@@ -145,21 +155,21 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
   const id = row.id
   await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
 
-  const seen: { id: string; name: string; mime: string; size: number | null }[] = []
+  const seen: { id: string; name: string; mime: string; size: number | null; modified: string | null }[] = []
   const walk = async (folderId: string, prefix: string, depth: number) => {
     if (seen.length >= MAX_FILES || depth > MAX_DEPTH) return
     const listing = await listFolder(folderId)
     for (const e of listing.entries) {
       if (seen.length >= MAX_FILES) break
       if (kindOf(e.mimeType, e.name) === 'folder') { await walk(e.id, `${prefix}${e.name}/`, depth + 1); continue }
-      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null })
+      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null })
     }
   }
   const target = driveTargetOf(row.folder_url)
   if (target?.kind === 'file') {
     // one file: its name, type and size from Drive, nothing to walk
     const meta = await driveFileMeta(target.id)
-    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size })
+    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified })
   } else {
     await walk(row.folder_id, '', 0)
   }
@@ -182,13 +192,29 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
     f.size = await driveFileSize(f.id)
   }
 
+  // EVERY ROUND KEEPS ITS FILES (the owner, 16 Sep 2026: "he uploaded two files
+  // already — it should be version 2"). A file already copied stands when
+  // it is the same file (same size, same last-changed time); handed in
+  // again in a later round it is listed under that round too, one copy
+  // serving both. A file replaced in Drive under the same link is copied
+  // again for the new round, beside the old copy, so version 1 still plays.
   const before = filesOf(row)
-  const files: PullFile[] = seen.map(f => {
-    const had = before.find(b => b.id === f.id)
-    // the same file, the same size: the copy stands
-    if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }
-    return { id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: version ?? null }
-  })
+  const files: PullFile[] = []
+  for (const f of seen) {
+    const olds = before.filter(b => b.id === f.id && b.status === 'done' && !!b.url)
+    const latest = [...olds].sort((a, b) => fileRound(b) - fileRound(a))[0]
+    const round = version ?? null
+    const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)
+    // earlier rounds' copies stay as they are, one per round
+    const kept = new Map<number, PullFile>()
+    for (const o of olds) if (round === null || fileRound(o) !== round) kept.set(fileRound(o), o)
+    if (same && latest) {
+      if (round === null || fileRound(latest) === round) kept.set(fileRound(latest), { ...latest, name: f.name })
+      else kept.set(round, { ...latest, name: f.name, version: round })
+    }
+    files.push(...[...kept.values()].sort((a, b) => fileRound(a) - fileRound(b)))
+    if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })
+  }
   const total_bytes = files.reduce((n, f) => n + (f.size ?? 0), 0)
   const done_bytes = files.reduce((n, f) => n + (f.status === 'done' ? (f.size ?? 0) : 0), 0)
   const done_files = files.filter(f => f.status === 'done').length

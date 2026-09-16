@@ -25,6 +25,9 @@ describe('the slices, the keys and the words (pure)', () => {
   })
   it('a copy lands under the folder, named by the file, safe in a URL', () => {
     expect(pullObjectKey('1abc', { id: 'f1', name: 'Script 3 (final).mov' })).toBe('pulls/1abc/f1-Script_3__final_.mov')
+    // a later round's copy of a replaced file sits beside the first (16 Sep 2026)
+    expect(pullObjectKey('1abc', { id: 'f1', name: 'Script 3 (final).mov', version: 2 })).toBe('pulls/1abc/f1-v2-Script_3__final_.mov')
+    expect(pullObjectKey('1abc', { id: 'f1', name: 'x.mov', version: 1 })).toBe('pulls/1abc/f1-x.mov')
   })
   it('bytes and time, in a person’s words', () => {
     expect(formatBytes(0)).toBe('0 MB')
@@ -91,11 +94,14 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).toContain('await putMultipartPart(key, file.upload_id!, slice.n, bytes)')
     expect(s).not.toMatch(/googleapis\.com\/upload|method: '(POST|PATCH|PUT|DELETE)'/)
     // a file already here with the same size stands; a new cut in the same folder is new files
-    expect(s).toContain("if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }")
+    // the same file handed in again in a later round is listed under that round too; a replaced one is copied again beside the old copy (16 Sep 2026)
+    expect(s).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(s).toContain('else kept.set(round, { ...latest, name: f.name, version: round })')
+    expect(s).toContain("if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })")
     // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
     expect(s).toContain("previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))")
     expect(s).toContain('const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')
-    expect(s).toContain('version: version ?? null')
+    expect(s).toContain('const round = version ?? null')
     const st = src('app/lib/storage.ts')
     for (const fn of ['openMultipart', 'putMultipartPart', 'closeMultipart', 'abortMultipart']) expect(st).toContain(`export async function ${fn}(`)
   })

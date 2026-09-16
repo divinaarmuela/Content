@@ -74,7 +74,9 @@ export function finishedVersionsOf<F extends { version?: number | null }>(
 ): VersionTab<F>[] {
   const mine = rows
     .filter(r => r.kind === 'item' && r.scope_id === opts.itemId)
-    .filter(r => r.purpose === 'finished' || (!r.purpose && !!opts.finishedFolderId && r.folder_id === opts.finishedFolderId))
+    // a row pulled as the folder to work from counts too when that same link
+    // is the card's finished edit today (16 Sep 2026)
+    .filter(r => r.purpose === 'finished' || (!!opts.finishedFolderId && r.folder_id === opts.finishedFolderId))
     .sort((a, b) => String(a.started_at ?? '').localeCompare(String(b.started_at ?? '')))
   const byRound = new Map<number, VersionTab<F>>()
   for (const r of mine) {

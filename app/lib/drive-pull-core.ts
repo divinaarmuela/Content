@@ -24,6 +24,9 @@ export type PullFile = {
   status: 'waiting' | 'copying' | 'done' | 'failed'
   /** the card's round this file arrived with — version 1, 2, 3 (edit-round-core) */
   version?: number | null
+  /** Drive's last-changed time when the copy was made — a file replaced under
+   *  the same link is told apart from one merely handed in again */
+  modified?: string | null
   /** R2's multipart upload in flight, and the parts landed so far */
   upload_id?: string | null
   parts?: { n: number; etag: string }[]
@@ -75,9 +78,12 @@ export function filesOf(row: { files?: unknown } | null | undefined): PullFile[]
 }
 
 /** where a copy lands — readable, collision-proof, safe in a URL */
-export function pullObjectKey(folderId: string, file: { id: string; name: string }): string {
+export function pullObjectKey(folderId: string, file: { id: string; name: string; version?: number | null }): string {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)
-  return `pulls/${folderId}/${file.id}-${safe}`
+  // a later round's copy of a file replaced in Drive sits beside the first,
+  // never over it — version 1 stays playable (16 Sep 2026)
+  const round = typeof file.version === 'number' && file.version >= 2 ? `-v${file.version}` : ''
+  return `pulls/${folderId}/${file.id}${round}-${safe}`
 }
 
 /** the next slice of a file to move: [start, end] inclusive, or null when it is all there */

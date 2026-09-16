@@ -73,19 +73,19 @@ export function totalFromContentRange(res: Response): number | null {
  * ask as anyone with the link, abandoned the moment they are in. Null when
  * nothing will say.
  */
-export async function driveFileMeta(id: string): Promise<{ name: string; mime: string; size: number | null } | null> {
+export async function driveFileMeta(id: string): Promise<{ name: string; mime: string; size: number | null; modified: string | null } | null> {
   const auth = await accessToken()
   if (auth.ok) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 15_000)
     try {
-      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'name,mimeType,size', ...ALL_DRIVES }), {
+      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'name,mimeType,size,modifiedTime', ...ALL_DRIVES }), {
         headers: { Authorization: `Bearer ${auth.token}` }, signal: ctrl.signal,
       })
       if (res.ok) {
-        const meta = await res.json() as { name?: string; mimeType?: string; size?: string | number }
+        const meta = await res.json() as { name?: string; mimeType?: string; size?: string | number; modifiedTime?: string }
         const n = Number(meta.size)
-        return { name: String(meta.name || id), mime: String(meta.mimeType || 'application/octet-stream'), size: Number.isFinite(n) && n > 0 ? n : null }
+        return { name: String(meta.name || id), mime: String(meta.mimeType || 'application/octet-stream'), size: Number.isFinite(n) && n > 0 ? n : null, modified: meta.modifiedTime ? String(meta.modifiedTime) : null }
       }
     } catch { /* fall through to the public ask */ } finally { clearTimeout(timer) }
   }
@@ -100,7 +100,7 @@ export async function driveFileMeta(id: string): Promise<{ name: string; mime: s
     const name = named ? decodeURIComponent(named) : id
     const typed = res.headers.get('content-type') ?? ''
     ctrl.abort()
-    return { name, mime: typed && !typed.startsWith('application/octet-stream') && !typed.startsWith('application/binary') ? typed : (videoMimeOf(name) ?? 'application/octet-stream'), size }
+    return { name, mime: typed && !typed.startsWith('application/octet-stream') && !typed.startsWith('application/binary') ? typed : (videoMimeOf(name) ?? 'application/octet-stream'), size, modified: null }
   } catch {
     return null
   } finally { clearTimeout(timer) }
