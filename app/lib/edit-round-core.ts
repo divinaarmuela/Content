@@ -6,11 +6,13 @@
  * be there; or sometimes they upload a different Drive link — doesn't
  * matter").
  *
- * A round is counted on the card: it starts at 1 and goes up by one the
- * moment the card is sent back — by the quality reviewer, the manager or
- * the client. Everything the editor hands in after that is the new round:
- * the pull tags each new file with it, so the same folder holds version 1's
- * files and version 2's side by side, each with its own comments and ticks.
+ * A round is counted on the card by HAND-INS of the finished edit: the
+ * first finished link the editor sends is version 1; after a send-back (by
+ * the quality reviewer, the manager or the client) the next hand-in — the
+ * same link again, or a different one — is version 2, and so on. The pull
+ * tags each new file with the round it came in with, so the same folder
+ * holds version 1's files and version 2's side by side, each with its own
+ * comments and ticks.
  */
 export const SENT_BACK_STATUSES: readonly string[] = ['revision_required', 'client_changes_requested']
 
@@ -19,9 +21,15 @@ export function roundOf(item: { edit_round?: unknown } | null | undefined): numb
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
 }
 
-/** the round a send-back opens */
+/** the round the next hand-in opens */
 export function nextRound(item: { edit_round?: unknown }): number {
   return roundOf(item) + 1
+}
+
+/** the round a hand-in belongs to: the next one when the card was sent
+ *  back, the current one otherwise (a first hand-in is version 1) */
+export function handInRound(item: { edit_round?: unknown; status?: unknown }): number {
+  return SENT_BACK_STATUSES.includes(String(item.status ?? '')) ? nextRound(item) : roundOf(item)
 }
 
 export function roundLabel(n: number): string {

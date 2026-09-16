@@ -42,7 +42,8 @@ export async function POST(req: Request) {
       const finished = body.which === 'finished' ? finishedEditOf(item as never) : null
       const url = finished?.url ?? (typeof item.raw_assets_url === 'string' ? item.raw_assets_url : '')
       if (!url) return NextResponse.json({ error: 'No folder on this card yet' }, { status: 400 })
-      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: roundOf(item), by: user.id })
+      // the finished edit carries the card's round; a folder to work from is no version
+      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: finished ? roundOf(item) : 1, by: user.id })
       return NextResponse.json(r, { status: r.started || r.reason === 'Already being pulled' ? 200 : 400 })
     }
     return NextResponse.json({ error: 'Which kind?' }, { status: 400 })
