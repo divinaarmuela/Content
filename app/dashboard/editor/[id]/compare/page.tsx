@@ -40,13 +40,16 @@ export function parsePicks(f: string | null): { id: string; round: number | null
   return String(f ?? '').split(',').map(s => s.trim()).filter(Boolean).map(s => {
     const [id, r] = s.split('@')
     const round = Number(r)
-    return { id, round: Number.isFinite(round) && round >= 1 ? round : null }
+    // 0 is a pick from the folder to work from — shown as that, never as a version (16 Sep 2026)
+    return { id, round: r === '0' ? 0 : Number.isFinite(round) && round >= 1 ? round : null }
   })
 }
 
-function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one }: {
+function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one, fromFolder = false }: {
   itemId: string
   file: PullFile
+  /** picked from the folder to work from: the pill says so, not a version */
+  fromFolder?: boolean
   src: string | null
   streamBase: string | null
   comments: ItemComment[]
@@ -83,7 +86,7 @@ function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient
     <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label={file.name} data-clip-panel>
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={file.name}>{file.name}</span>
-        <span className="rounded-full border border-border px-2.5 py-0.5 text-[12px] font-semibold">{roundLabel(fileRound(file))}</span>
+        <span className="rounded-full border border-border px-2.5 py-0.5 text-[12px] font-semibold">{fromFolder ? 'Folder to work from' : roundLabel(fileRound(file))}</span>
         <Link href={reviewPath(itemId, file.id, file.name)} className="text-[12px] text-muted-foreground underline-offset-4 hover:underline">Open on its own</Link>
       </div>
       {isImage ? (
@@ -141,13 +144,16 @@ export default function ComparePage() {
   const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
-  const files = useMemo(() => [...cardPulls, footagePull].flatMap(p => filesOf(p)).filter(f => f.status === 'done' && !!f.url), [cardPulls, footagePull])
-  // each pick: the file at that round, or the newest copy of it
+  const files = useMemo(() => [...cardPulls, footagePull].flatMap(p => filesOf(p).map(f => ({ ...f, _folder: (p as { purpose?: string | null } | null)?.purpose !== 'finished' }))).filter(f => f.status === 'done' && !!f.url), [cardPulls, footagePull])
+  // each pick: the file at that round; a folder pick takes the folder's copy; else the newest copy of it
   const chosen = useMemo(() => picks.map(p => {
     const same = files.filter(f => f.id === p.id)
-    return (p.round !== null ? same.find(f => fileRound(f) === p.round) : null) ?? [...same].sort((a, b) => fileRound(b) - fileRound(a))[0] ?? null
-  }).filter((f): f is PullFile => f !== null), [picks, files])
-  const previews = usePreviewRows(chosen.map(f => f.url as string))
+    const file = p.round === 0
+      ? (same.find(f => f._folder) ?? same[0] ?? null)
+      : (p.round !== null ? same.find(f => fileRound(f) === p.round) : null) ?? [...same].sort((a, b) => fileRound(b) - fileRound(a))[0] ?? null
+    return file ? { file, fromFolder: p.round === 0 } : null
+  }).filter((x): x is { file: PullFile & { _folder: boolean }; fromFolder: boolean } => x !== null), [picks, files])
+  const previews = usePreviewRows(chosen.map(c => c.file.url as string))
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -170,10 +176,10 @@ export default function ComparePage() {
       </button>
       <PageTitle title={`${item.title} — side by side`} summary={chosen.length > 0 ? `${chosen.length} ${chosen.length === 1 ? 'file' : 'files'} from the card, each with its comments. Pick more from the card's Select mode.` : 'Nothing picked yet. Go back to the card, press Select, tick the files and press Open side by side.'} />
       <div className={`grid gap-4 ${one ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`} data-compare-grid>
-        {chosen.map(f => {
+        {chosen.map(({ file: f, fromFolder }) => {
           const p = previews.get(f.url as string)
           const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-          return <ClipPanel key={`${f.id}@${fileRound(f)}`} itemId={id} file={f} src={f.url} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} />
+          return <ClipPanel key={`${f.id}@${fromFolder ? 'folder' : fileRound(f)}`} itemId={id} file={f} src={f.url} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} fromFolder={fromFolder} />
         })}
       </div>
     </div>
