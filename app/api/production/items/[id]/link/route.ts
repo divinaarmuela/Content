@@ -7,7 +7,7 @@ import { logActivity } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { canEditItemFields } from '../../../../../lib/item-edit-core'
 import { linkKindOf, nextVersionAfterLink } from '../../../../../lib/card-link-core'
-import { startPullSoon } from '../../../../../lib/drive-pull'
+import { cancelReplacedPullSoon, startPullSoon } from '../../../../../lib/drive-pull'
 import { handInRound } from '../../../../../lib/edit-round-core'
 
 /**
@@ -77,7 +77,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         // THE SAME LINK AGAIN IS STILL A HAND-IN (the owner, 16 Sep 2026: "they
         // upload the same Drive link but have to re-download for version 2"):
         // the folder is read again and its new files are this round's
-        if (check.kind === 'drive' && final) startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: handInRound(item), by: user.id })
+        if (check.kind === 'drive' && final) startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: handInRound(item), by: user.id, purpose: 'finished' })
         return NextResponse.json({ ok: true, already: true, version: (outcome as { version: number }).version, kind: check.kind, label: check.label })
       }
       return NextResponse.json(
@@ -100,7 +100,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // files it brings remember this version
     // a finished edit handed in after a send-back is the next version; a
     // folder to work from is not a version at all
-    if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: final ? handInRound(item) : 1, by: user.id })
+    // a different link replacing one whose files were still coming calls that pull off (16 Sep 2026)
+    if (done.replaced) cancelReplacedPullSoon({ kind: 'item', scopeId: id, oldUrl: item.link_url ?? null, newUrl: check.url })
+    if (check.kind === 'drive') startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: final ? handInRound(item) : 1, by: user.id, purpose: final ? 'finished' : 'folder' })
     announceItemChange({ item_id: id, client_id: item.client_id, status: item.status, kind: 'updated' })
     return NextResponse.json({
       ok: true, version: done.version, kind: check.kind, label: check.label, url: check.url,

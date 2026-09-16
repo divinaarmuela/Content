@@ -270,7 +270,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p className="mt-2 text-[13px] text-muted-foreground">
             {ackRow
               ? `Acknowledged ${formatInZone(String(ackRow.created_at), zone, 'short') ?? ''}`
-              : item.owner_id ? 'Not acknowledged yet.' : 'Nobody holds this card yet.'}
+              : item.owner_id ? 'Not acknowledged yet.' : isManager ? 'Nobody is on this card yet — press Assign an editor.' : 'Nobody is on this card yet.'}
           </p>
           {/* GOT THE FOOTAGE (the owner, 14 Sep 2026): once the footage is
               handed over, the editor says they have it — one press, one line */}

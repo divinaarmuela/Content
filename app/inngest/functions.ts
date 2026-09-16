@@ -903,6 +903,7 @@ export const drivePullFolder = inngest.createFunction(
           const { runPullSlices } = await import('../lib/drive-pull')
           return runPullSlices(id, fileId)
         })
+        if (r.cancelled) return { cancelled: true }
         if (r.done) break
       }
     }

@@ -7,7 +7,7 @@ import { driveFileMeta, driveFileSize, openDriveFile } from './drive-stream'
 import { kindOf } from './files-core'
 import { abortMultipart, closeMultipart, openMultipart, putMultipartPart, r2Configured } from './storage'
 import {
-  PARTS_PER_STEP, canStartPull, filesOf, nextSlice, pullId, pullLooksStuck, pullObjectKey, type PullFile,
+  PARTS_PER_STEP, PULL_REPLACED_WORDS, canStartPull, filesOf, nextSlice, pullId, pullInFlight, pullLooksStuck, pullObjectKey, type PullFile,
 } from './drive-pull-core'
 import { driveTargetOf } from './card-link-core'
 import { afterResponse } from './after-response'
@@ -38,8 +38,10 @@ const MAX_DEPTH = 3
 const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
 
 type Kind = 'batch' | 'item'
+/** what the link is: a folder to work from, or an edit handed in (16 Sep 2026) */
+export type PullPurpose = 'folder' | 'finished'
 
-export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: string; version?: number | null; by?: string | null }): Promise<{ id: string; started: boolean; reason?: string }> {
+export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: string; version?: number | null; by?: string | null; purpose?: PullPurpose }): Promise<{ id: string; started: boolean; reason?: string }> {
   // a folder to list, or one file (16 Sep 2026: a single clip's link pasted as the folder)
   const target = driveTargetOf(opts.folderUrl)
   if (!target) return { id: '', started: false, reason: 'Not a Google Drive link' }
@@ -56,12 +58,15 @@ export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: 
       ...(row ?? {}),
       id, folder_id: folderId, folder_url: opts.folderUrl,
       kind: opts.kind, scope_id: opts.scopeId,
+      purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,
       status: 'queued',
       total_files: row?.total_files ?? 0, total_bytes: row?.total_bytes ?? 0,
       done_files: row?.done_files ?? 0, done_bytes: row?.done_bytes ?? 0,
       files: filesOf(row),
       error: null,
       started_at: now, finished_at: null,
+      // a fresh start is never a cancelled one
+      cancelled_at: null,
       requested_by: opts.by ?? null,
       created_at: row?.created_at ?? now, updated_at: now,
     } as unknown as DrivePull
@@ -76,11 +81,55 @@ export function startPullSoon(opts: Parameters<typeof startPull>[0]): void {
   afterResponse('drive pull start', () => startPull(opts))
 }
 
+/**
+ * THE LINK WAS REPLACED WHILE ITS FILES WERE STILL COMING (the owner, 16 Sep
+ * 2026: "when in the process I change the link, it cancels"): the old
+ * link's pull is called off — the row says so, every step of the job reads
+ * it and stops, and the open uploads to R2 are abandoned. Only the pull this
+ * shoot or card asked for: the same folder pulled for somebody else's card
+ * is left alone. The same folder under a differently spelled link is not a
+ * replacement at all.
+ */
+export async function cancelReplacedPull(opts: { kind: Kind; scopeId: string; oldUrl: string | null | undefined; newUrl: string | null | undefined }): Promise<boolean> {
+  const old = driveTargetOf(opts.oldUrl ?? '')
+  if (!old) return false
+  const next = driveTargetOf(opts.newUrl ?? '')
+  if (next && next.id === old.id) return false
+  const pulls = table<DrivePull>('drive_pulls')
+  const id = pullId(old.id)
+  const now = new Date().toISOString()
+  let open: PullFile[] = []
+  const claim = await pulls.claim(id, current => {
+    const row = current as unknown as (DrivePull & { kind?: string; scope_id?: string }) | null
+    if (!row || row.kind !== opts.kind || row.scope_id !== opts.scopeId || !pullInFlight(row as never)) return null
+    const files = filesOf(row)
+    open = files.filter(f => !!f.upload_id)
+    return {
+      ...row,
+      status: 'failed', error: PULL_REPLACED_WORDS, cancelled_at: now, finished_at: now, updated_at: now,
+      // the half-copied files start again if this folder is ever pulled again
+      files: files.map(f => f.status === 'done' ? f : { ...f, status: 'waiting' as const, done: 0, upload_id: null, parts: [] }),
+    } as unknown as DrivePull
+  })
+  if (!claim.claimed) return false
+  for (const f of open) {
+    if (f.upload_id) await abortMultipart(pullObjectKey(old.id, f), f.upload_id).catch(() => undefined)
+  }
+  return true
+}
+
+/** after the response, like the start */
+export function cancelReplacedPullSoon(opts: Parameters<typeof cancelReplacedPull>[0]): void {
+  afterResponse('drive pull cancel', () => cancelReplacedPull(opts))
+}
+
 /** step one: what is in the folder now, merged with what is already here */
 export async function runPullList(id: string, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
   const pulls = table<DrivePull>('drive_pulls')
   const row = await pulls.get(id)
   if (!row) return { files: 0, bytes: 0, note: 'no row' }
+  // called off before it began (the link was replaced) — nothing to read
+  if ((row as { cancelled_at?: string | null }).cancelled_at) return { files: 0, bytes: 0, note: 'cancelled' }
   // WHAT WENT WRONG, ON THE ROW (16 Sep 2026): a step that throws is retried
   // by Inngest, which keeps no words — the row keeps them, so the bar says why
   try {
@@ -153,10 +202,12 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
 }
 
 /** a few slices of one file — returns whether the file is complete */
-export async function runPullSlices(id: string, fileId: string): Promise<{ done: boolean; error?: string }> {
+export async function runPullSlices(id: string, fileId: string): Promise<{ done: boolean; error?: string; cancelled?: boolean }> {
   const pulls = table<DrivePull>('drive_pulls')
   const row = await pulls.get(id)
   if (!row) return { done: true, error: 'no row' }
+  // called off (the link was replaced): nothing more is moved, nothing written
+  if ((row as { cancelled_at?: string | null }).cancelled_at) return { done: true, cancelled: true }
   const files = filesOf(row)
   const file = files.find(f => f.id === fileId)
   if (!file) return { done: true, error: 'no such file' }
@@ -183,6 +234,15 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
     for (let i = 0; i < PARTS_PER_STEP; i++) {
       const slice = nextSlice(file)
       if (!slice) break
+      // the row, fresh, between slices: a replaced link stops the copy here,
+      // not 700 MB later (16 Sep 2026)
+      if (i > 0) {
+        const fresh = await pulls.get(id) as (DrivePull & { cancelled_at?: string | null }) | null
+        if (fresh?.cancelled_at) {
+          if (file.upload_id) await abortMultipart(key, file.upload_id).catch(() => undefined)
+          return { done: true, cancelled: true }
+        }
+      }
       // one slice, one request, abandoned if it overruns — never the whole file
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 240_000)
@@ -216,6 +276,8 @@ export async function finishPull(id: string): Promise<'done' | 'failed'> {
   const pulls = table<DrivePull>('drive_pulls')
   const row = await pulls.get(id)
   if (!row) return 'failed'
+  // a cancelled pull keeps its own words — never settled over
+  if ((row as { cancelled_at?: string | null }).cancelled_at) return 'failed'
   const files = filesOf(row)
   const failed = files.filter(f => f.status === 'failed')
   const status = failed.length === 0 ? 'done' : 'failed'

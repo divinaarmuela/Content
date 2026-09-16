@@ -1110,6 +1110,27 @@ export const FOOTAGE_ONLY_WORDS = 'No plan — footage only'
  * already pointed at a folder keeps theirs. Pure: which cards, from which
  * link. Idempotent by construction.
  */
+/**
+ * THE FOOTAGE FOLDER REPLACED AFTER THE HAND-OVER (the owner, 16 Sep 2026: "I
+ * submitted the wrong footage — let me submit again"): every card of the
+ * shoot still pointing at the old link points at the new one — the folder
+ * to work from, and the card's own link when it was the same. A card whose
+ * folder somebody chose by hand is not touched. A new link of null takes
+ * the folder off those cards.
+ */
+export function footageFolderReplace(
+  b: Pick<SopShoot, 'id' | 'footage_url'>,
+  oldUrl: string,
+  items: readonly { id: string; batch_id?: string | null; raw_assets_url?: string | null; link_url?: string | null; work_kinds?: { slug?: string } | null }[],
+): { id: string; raw_assets_url: string | null; link_url?: string | null }[] {
+  const was = text(oldUrl)
+  if (!was) return []
+  const url = text(b.footage_url) || null
+  return items
+    .filter(i => i.batch_id === b.id && i.work_kinds?.slug !== 'shoot_brief' && text(i.raw_assets_url) === was)
+    .map(i => ({ id: i.id, raw_assets_url: url, ...(text(i.link_url) === was ? { link_url: url } : {}) }))
+}
+
 export function footageFolderFill(
   b: Pick<SopShoot, 'id' | 'footage_url'>,
   items: readonly { id: string; batch_id?: string | null; raw_assets_url?: string | null; work_kinds?: { slug?: string } | null }[],

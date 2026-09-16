@@ -8,9 +8,12 @@ import SafeVideo from '../../components/media/SafeVideo'
 import VideoTile from '../../components/media/VideoTile'
 import DriveFolderFiles from './DriveFolderFiles'
 import DrivePullBar from './DrivePullBar'
-import type { PullFile } from '../../lib/drive-pull-core'
+import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
-import { linkKindOf } from '../../lib/card-link-core'
+import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
+import { finishedVersionsOf, roundLabel } from '../../lib/edit-round-core'
+import { useTable } from '@/lib/db-client'
+import type { DrivePull } from '@/lib/db-types'
 import {
   FILES_TO_WORK_FROM, filesToWorkFromWords, mergeRawAssets, rawAssetKind, readRawAssets, withoutRawAsset,
   type RawAsset,
@@ -33,8 +36,8 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds }: {
-  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false }: {
+  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
   frozen: boolean
@@ -56,6 +59,11 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
    *  owner, 15 Sep 2026: "allow the editor, or anyone assigned to that card,
    *  or a super admin or AM to replace the folder to work from") */
   holder?: boolean
+  /** THE VERSION TABS (the owner, 16 Sep 2026: "on the left there should
+   *  automatically be a Version 1 tab they can switch between — the folder to
+   *  work from and the submitted final edit"): the card's page draws a tab
+   *  per finished edit handed in beside the folder, newest first and open */
+  versions?: boolean
 }) {
   const files = readRawAssets(item.raw_assets)
   const folder = item.raw_assets_url ?? fallbackFolder ?? null
@@ -118,6 +126,16 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   // while they land; once they are all here they are the files box, and
   // Drive's own tiles step aside
   const [pulled, setPulled] = useState<PullFile[]>([])
+  // THE VERSIONS HANDED IN (16 Sep 2026): the card's pull rows, live, one tab
+  // per round; the newest opens first — that is what everyone came to see
+  const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })
+  const finished = finishedEditOf(item)
+  const versionTabs = versions
+    ? finishedVersionsOf<PullFile>(pullRows as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r) })
+    : []
+  const [tab, setTab] = useState<'folder' | number | null>(null)
+  useEffect(() => { setTab(null) }, [item.id])
+  const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }
   const button = 'inline-flex h-11 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50'
@@ -125,8 +143,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   return (
     <div className="flex flex-col gap-3 border-b border-border px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{FILES_TO_WORK_FROM}</p>
-        {mayEdit && (
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{shownVersion ? `${roundLabel(shownVersion.round)} — the finished edit` : FILES_TO_WORK_FROM}</p>
+        {mayEdit && !shownVersion && (
           <div className="flex flex-wrap gap-2">
             {mayAddFiles && (
               <Button variant="outline" className={button} disabled={busy !== null} onClick={() => input.current?.click()}>
@@ -142,6 +160,43 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           </div>
         )}
       </div>
+      {versionTabs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="The folder to work from, and each finished edit" data-version-tabs>
+          <button type="button" role="tab" aria-selected={!shownVersion} onClick={() => setTab('folder')}
+            className={`inline-flex min-h-10 items-center rounded-full border px-3.5 text-[13px] font-semibold ${!shownVersion ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'}`}>
+            Folder to work from
+          </button>
+          {versionTabs.map(v => (
+            <button key={v.round} type="button" role="tab" aria-selected={shownVersion?.round === v.round} onClick={() => setTab(v.round)}
+              className={`inline-flex min-h-10 items-center rounded-full border px-3.5 text-[13px] font-semibold ${shownVersion?.round === v.round ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'}`}>
+              {roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}
+            </button>
+          ))}
+        </div>
+      )}
+      {shownVersion ? (
+        <>
+          <p className="text-[13px] text-muted-foreground">
+            {shownVersion.files.length > 0
+              ? `${shownVersion.files.length} ${shownVersion.files.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}.`
+              : `${roundLabel(shownVersion.round)} is being copied in — its files show here as they land.`}
+          </p>
+          {shownVersion.folderUrl && (
+            <a href={shownVersion.folderUrl} target="_blank" rel="noreferrer noopener"
+              className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted">
+              <FolderOpen className="h-4 w-4" aria-hidden /> Open the finished edit
+              <span className="sr-only">, opens in a new tab</span>
+            </a>
+          )}
+          {shownVersion.folderUrl && (
+            <DrivePullBar kind="item" scopeId={item.id} folderUrl={shownVersion.folderUrl} which="finished" mayStart={mayEdit && shownVersion.folderUrl === (finished?.url ?? '')} showFiles={false} />
+          )}
+          {shownVersion.folderUrl && (
+            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} />
+          )}
+        </>
+      ) : (
+      <>
       <p className="text-[13px] text-muted-foreground">{filesToWorkFromWords(files.length, !!folder)}</p>
       {busy && <p role="status" className="text-[13px] text-muted-foreground">{busy}…</p>}
 
@@ -241,6 +296,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
             )
           })}
         </ul>
+      )}
+      </>
       )}
     </div>
   )

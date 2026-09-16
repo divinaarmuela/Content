@@ -44,19 +44,55 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(t).toContain("await table('content_items').update(id, { edit_round: round })")
   })
   it('every pull is tagged with the card’s round; the same link handed in again, and revisions done, pull again', () => {
-    expect(src('app/api/drive/pull/route.ts')).toContain('version: finished ? roundOf(item) : 1, by: user.id')
+    expect(src('app/api/drive/pull/route.ts')).toContain("version: finished ? roundOf(item) : 1, by: user.id, purpose: finished ? 'finished' : 'folder'")
     // a folder to work from is never a version
     expect(src('app/api/production/items/[id]/route.ts')).toContain('version: 1, by: user.id')
     const link = src('app/api/production/items/[id]/link/route.ts')
-    expect(link).toContain("if (check.kind === 'drive' && final) startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: handInRound(item), by: user.id })")
-    expect(link).toContain('version: final ? handInRound(item) : 1, by: user.id')
+    expect(link).toContain("if (check.kind === 'drive' && final) startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: handInRound(item), by: user.id, purpose: 'finished' })")
+    expect(link).toContain("version: final ? handInRound(item) : 1, by: user.id, purpose: final ? 'finished' : 'folder'")
     const t = src('app/api/production/items/[id]/transition/route.ts')
     expect(t).toContain("if (SENT_BACK_STATUSES.includes(String(item.status)) && to === 'quality_check') {")
-    expect(t).toContain("if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id })")
+    expect(t).toContain("if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })")
     // a file already here keeps the round it arrived with; a new file gets the current one
     const p = src('app/lib/drive-pull.ts')
     expect(p).toContain("if (had && had.status === 'done' && had.url && had.size === f.size) return { ...had, name: f.name }")
     expect(p).toContain("status: 'waiting', upload_id: null, parts: [], version: version ?? null }")
+  })
+  it('the card page has a tab per finished edit handed in, beside the folder to work from — the newest open (16 Sep 2026)', async () => {
+    const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
+    const filesOf = (r: { files?: unknown }) => (Array.isArray(r.files) ? r.files : []) as { id: string; version?: number | null }[]
+    const rows = [
+      // the folder to work from is never a version
+      { kind: 'item', scope_id: 'c1', folder_id: 'SRC', folder_url: 'https://drive.google.com/drive/folders/SRC', status: 'done', purpose: 'folder', files: [{ id: 's1', version: 1 }], started_at: '2026-09-10' },
+      // version 1, one link; version 2 handed in from a different link
+      { kind: 'item', scope_id: 'c1', folder_id: 'V1', folder_url: 'https://drive.google.com/drive/folders/V1', status: 'done', purpose: 'finished', files: [{ id: 'a', version: 1 }, { id: 'b', version: 1 }], started_at: '2026-09-11' },
+      { kind: 'item', scope_id: 'c1', folder_id: 'V2', folder_url: 'https://drive.google.com/drive/folders/V2', status: 'copying', purpose: 'finished', files: [{ id: 'c', version: 2 }], started_at: '2026-09-12' },
+      // somebody else's card
+      { kind: 'item', scope_id: 'c2', folder_id: 'X', folder_url: 'https://drive.google.com/drive/folders/X', status: 'done', purpose: 'finished', files: [{ id: 'x', version: 1 }], started_at: '2026-09-12' },
+    ]
+    const tabs = finishedVersionsOf(rows, { itemId: 'c1', finishedFolderId: 'V2', filesOf })
+    expect(tabs.map(t => [t.round, t.folderUrl, t.files.map(f => f.id), t.inFlight])).toEqual([
+      [2, 'https://drive.google.com/drive/folders/V2', ['c'], true],
+      [1, 'https://drive.google.com/drive/folders/V1', ['a', 'b'], false],
+    ])
+    // an older row that never said what it was counts only when it is the card’s finished link today
+    const old = [{ kind: 'item', scope_id: 'c1', folder_id: 'OLD', folder_url: 'https://drive.google.com/drive/folders/OLD', status: 'done', files: [{ id: 'o', version: 1 }], started_at: '2026-09-09' }]
+    expect(finishedVersionsOf(old, { itemId: 'c1', finishedFolderId: 'OLD', filesOf })).toHaveLength(1)
+    expect(finishedVersionsOf(old, { itemId: 'c1', finishedFolderId: 'ELSE', filesOf })).toEqual([])
+    // a link still being read has its tab, empty, as the next round
+    const reading = [...rows, { kind: 'item', scope_id: 'c1', folder_id: 'V3', folder_url: 'https://drive.google.com/drive/folders/V3', status: 'listing', purpose: 'finished', files: [], started_at: '2026-09-13' }]
+    expect(finishedVersionsOf(reading, { itemId: 'c1', finishedFolderId: 'V3', filesOf }).map(t => [t.round, t.inFlight])).toEqual([[3, true], [2, true], [1, false]])
+    const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
+    expect(box).toContain("const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })")
+    expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
+    expect(box).toContain('Folder to work from')
+    expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
+    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} />')
+    expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
+    // every pull says what it was: the row's purpose
+    expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")
+    expect(src('app/api/production/batches/[id]/route.ts')).toContain("by: user.id, purpose: 'folder' })")
+    expect(src('app/api/production/items/[id]/route.ts')).toContain("version: 1, by: user.id, purpose: 'folder' })")
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {
     const portal = src('app/lib/editing-portal.ts')

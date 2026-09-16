@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRightLeft, Link as LinkIcon } from 'lucide-react'
+import { ArrowLeft, ArrowRightLeft, Link as LinkIcon, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow } from '@/lib/db-client'
@@ -61,6 +61,11 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
   // on this client; the button is offered to both manager roles.
   const [transferOpen, setTransferOpen] = useState(false)
   const transferable = canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)
+  // NOBODY ON THE CARD (the owner, 16 Sep 2026: "sometimes we have yet to set
+  // the editor — make sure the super admin or the AM knows who's on it: no
+  // one, and can assign, not just 'not yet'"): the same route, the plain
+  // press — the first person on the card, not a transfer
+  const unassigned = transferable && !item.owner_id
   // CLIENT APPROVED, AWAITING THE HAND-OVER (the owner, 15 Sep 2026: "it's
   // the AM's or super admin's duty to hand it over to a scheduler"): the
   // approved card is still the editing side's; this is the press that gives
@@ -97,7 +102,13 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
         </Button>
       )}
       {awaitingHand && <HandToDialog card={handOpen ? card : null} viewer={viewer} onClose={() => setHandOpen(false)} />}
-      {transferable && (
+      {unassigned && (
+        <Button disabled={busy} onClick={() => setTransferOpen(true)}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
+          <UserPlus className="mr-1.5 h-4 w-4" aria-hidden /> Assign an editor
+        </Button>
+      )}
+      {transferable && !unassigned && (
         <Button variant="outline" disabled={busy} onClick={() => setTransferOpen(true)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
           <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> Transfer the editing job
@@ -169,7 +180,7 @@ export default function EditorCardPage() {
             of everything behind it, wide, each one playable here */}
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
           <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
-            fallbackFolder={from.footage} wideFiles
+            fallbackFolder={from.footage} wideFiles versions
             // the clips the client approved on their portal wear a tick (16 Sep 2026)
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}
             // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)

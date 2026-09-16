@@ -5,7 +5,7 @@ import {
   bookingPatch, clockWords, daysUntilShoot, goReady, handoverPlan, isOnShoot, lateNudgeTargets, peopleOnShoot, shootStage,
   stageHappened, stageMove, withAck, withoutAck, type SopShoot,
   briefItemSource, canvasSays, lateShareNudgeTargets, overrideWords, shareLeadDays, sharedLate, sharedLateWords,
-  STAGE_STRIP, canConfirmFootage, footageAfterWords, footageDueTargets, footageFolderFill, footageReadyToHand, footageReceiptTargets, handoverReady, nextStepWords, stampLines,
+  STAGE_STRIP, canConfirmFootage, footageAfterWords, footageDueTargets, footageFolderFill, footageFolderReplace, footageReadyToHand, footageReceiptTargets, handoverReady, nextStepWords, stampLines,
 } from '../app/lib/shoot-sop-core'
 import { planCardId, shootCardId } from '../app/lib/deliverable-group-core'
 
@@ -424,6 +424,23 @@ describe('the footage folder', () => {
     ]
     expect(footageFolderFill(b, items)).toEqual([{ id: 'k1', raw_assets_url: 'https://www.dropbox.com/scl/fo/golf' }])
     expect(footageFolderFill(complete(), items)).toEqual([])
+  })
+  it('a replaced folder is swapped on the cards that carried the old one — the card’s own link too when it was the same — and taken off when cleared (16 Sep 2026)', () => {
+    const old = 'https://drive.google.com/file/d/WRONG/view'
+    const b = complete({ footage_url: 'https://drive.google.com/drive/folders/RIGHT' })
+    const items = [
+      { id: 'k1', batch_id: b.id, raw_assets_url: old, link_url: old },
+      { id: 'k2', batch_id: b.id, raw_assets_url: old, link_url: 'https://www.dropbox.com/scl/fo/own' },
+      { id: 'k3', batch_id: b.id, raw_assets_url: 'https://www.dropbox.com/scl/fo/chosen' },
+      { id: 'k4', batch_id: 'other', raw_assets_url: old },
+      { id: 'plan', batch_id: b.id, raw_assets_url: old, work_kinds: { slug: 'shoot_brief' } },
+    ]
+    expect(footageFolderReplace(b, old, items)).toEqual([
+      { id: 'k1', raw_assets_url: 'https://drive.google.com/drive/folders/RIGHT', link_url: 'https://drive.google.com/drive/folders/RIGHT' },
+      { id: 'k2', raw_assets_url: 'https://drive.google.com/drive/folders/RIGHT' },
+    ])
+    expect(footageFolderReplace({ ...b, footage_url: null }, old, items).map(r => r.raw_assets_url)).toEqual([null, null])
+    expect(footageFolderReplace(b, '', items)).toEqual([])
   })
 })
 

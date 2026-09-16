@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const round = handInRound(item)
       await table('content_items').update(id, { edit_round: round })
       const finished = finishedEditOf(item as never)
-      if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id })
+      if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })
     }
     // the note also lands in the item's own thread, tagged to the owner so
     // it stays visible in their narrowed view even when the requester isn't

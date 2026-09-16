@@ -61,6 +61,16 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
     expect(sop).toMatch(/nameOf\(batch\.aligned_by\)/)
     expect(sop).toMatch(/Footage folder/)
     expect(sop).not.toMatch(/mayPasteFolder/)
+    // THE LINK IS CONFIRMED BEFORE IT IS USED, and a wrong one is replaced (16 Sep 2026)
+    expect(sop).not.toContain("onBlur={() => { const v = folder.trim(); if (v !== (batch.footage_url ?? '')) void onPatch('footage_url', v || null) }}")
+    expect(sop).toContain("const folderChanged = folder.trim() !== (batch.footage_url ?? '')")
+    expect(sop).toContain("{!folder.trim() ? 'Take the folder off' : batch.footage_url ? 'Replace the footage folder' : 'Use this footage folder'}")
+    expect(sop).toContain("const ok = await onPatch('footage_url', folder.trim() || null)")
+    expect(sop).toContain("{savingFolder ? 'Saving…' : !folder.trim() ? 'Yes, take it off' : 'Yes, use this link'}")
+    expect(sop).toContain('Anyone with the link')
+    // nobody on the card, said plainly, with where to put somebody on it
+    expect(sop).toContain('The card is made — nobody is on it yet')
+    expect(sop).toContain('Pick the editor under Who is on this shoot, or open the card and press Assign an editor.')
   })
   it('the editor’s card and the people: one line and "Open on Editor"; the crew read the plan on their card or from their email', () => {
     expect(sop).toMatch(/dashboard\/editor\?card=\$\{one\.id\}/)

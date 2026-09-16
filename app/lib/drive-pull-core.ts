@@ -46,7 +46,17 @@ export type PullRow = {
   started_at?: string | null
   finished_at?: string | null
   updated_at?: string | null
+  /** the link was replaced while this pull was running — the job stops (16 Sep 2026) */
+  cancelled_at?: string | null
 }
+
+/** still queued, listing or copying */
+export function pullInFlight(row: PullRow | null | undefined): boolean {
+  return !!row && ['queued', 'listing', 'copying'].includes(row.status)
+}
+
+/** the words on a pull that was called off because its link was replaced */
+export const PULL_REPLACED_WORDS = 'Stopped — the link was replaced'
 
 /** one row per folder: the same folder on a shoot and on its card is one pull */
 export function pullId(folderId: string): string {

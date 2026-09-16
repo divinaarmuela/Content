@@ -156,6 +156,12 @@ const GHOST_TABLES = {
     ['folder_url', col('string', false)],
     ['kind', col('string', false)],          // batch | item
     ['scope_id', col('string', false)],
+    //   purpose — WHAT THE LINK WAS: 'folder' (the footage or source working
+    //     folder) or 'finished' (an edit handed in). The card page's version
+    //     tabs are the 'finished' rows of the card (16 Sep 2026: "on the left
+    //     there should be a Version 1 tab they can switch between — the folder
+    //     to work from, and the submitted final edit"). Null on older rows.
+    ['purpose', col('string', true)],
     ['status', col('string', false)],        // queued | listing | copying | done | failed | unreadable
     ['total_files', col('number', false)],
     ['total_bytes', col('number', false)],
@@ -166,6 +172,11 @@ const GHOST_TABLES = {
     ['started_at', col('string', true)],
     ['finished_at', col('string', true)],
     ['requested_by', col('string', true)],
+    //   cancelled_at — THE LINK WAS REPLACED WHILE THE FILES WERE STILL COMING
+    //     (the owner, 16 Sep 2026: "when in the process I change the link, it
+    //     cancels"). Stamped by drive-pull.cancelReplacedPull; every step of the
+    //     job reads it and stops; cleared when the same folder is pulled again.
+    ['cancelled_at', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],

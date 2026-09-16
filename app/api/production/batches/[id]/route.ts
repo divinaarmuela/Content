@@ -11,7 +11,7 @@ import { logActivity } from '../../../../lib/workflow'
 import { announceBatchChange, announceItemChange } from '../../../../lib/production-live'
 import { onShootDateChanged } from '../../../../lib/gdrive-hooks'
 import { ensureShootCard } from '../../../../lib/plan-cards'
-import { fillFootageFolder, handOverAtGo, handOverFootageNow, melbourneToday } from '../../../../lib/shoot-handover'
+import { fillFootageFolder, handOverAtGo, handOverFootageNow, melbourneToday, replaceFootageFolder } from '../../../../lib/shoot-handover'
 import { linkKindOf } from '../../../../lib/card-link-core'
 import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
@@ -19,7 +19,7 @@ import {
 } from '../../../../lib/batch-brief-core'
 import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
 import { portalToggles } from '../../../../lib/portal-owner-core'
-import { startPullSoon } from '../../../../lib/drive-pull'
+import { cancelReplacedPullSoon, startPullSoon } from '../../../../lib/drive-pull'
 
 /**
  * Load a shoot the caller may WORK — the shoot page and every button on it
@@ -329,12 +329,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // THE FOOTAGE FOLDER IS PULLED INTO OUR STORAGE the moment it is pasted
     // (the owner, 16 Sep 2026: "a proper loading feature for the shoot brief
     // footage when added, so we know how long it would take")
-    if ('footage_url' in patch && patch.footage_url) startPullSoon({ kind: 'batch', scopeId: data.id, folderUrl: String(patch.footage_url), by: user.id })
+    // A DIFFERENT LINK (the owner, 16 Sep 2026: "I submitted the wrong footage
+    // — let me submit again; when in the process I change the link, it
+    // cancels"): the old link's pull is called off first, then the new one
+    // starts, and the cards that carried the old link get the new one below
+    const oldFootage = String(loaded.batch.footage_url ?? '').trim()
+    const footageReplaced = 'footage_url' in patch && String(patch.footage_url ?? '') !== oldFootage && !!oldFootage
+    if (footageReplaced) cancelReplacedPullSoon({ kind: 'batch', scopeId: data.id, oldUrl: oldFootage, newUrl: patch.footage_url ? String(patch.footage_url) : null })
+    if ('footage_url' in patch && patch.footage_url) startPullSoon({ kind: 'batch', scopeId: data.id, folderUrl: String(patch.footage_url), by: user.id, purpose: 'folder' })
     if ('shoot_date' in patch) onShootDateChanged(data)
     // THE EDITOR NAMED AFTER SHARING OR GO gets the card the moment they are
     // named — the same handover go does, so nothing waits for a press
     if ('editor_id' in patch && patch.editor_id && (data.go_at || data.brief_shared_at || data.status !== 'brief')) {
       try { await handOverAtGo(user, data) } catch (e) { console.error('handover after naming the editor:', e) }
+    }
+    // …and a footage folder REPLACED after the handover is swapped on the cards
+    // that carried the old one (16 Sep 2026)
+    if (footageReplaced && data.footage_handed_at) {
+      try { await replaceFootageFolder(user as never, data, oldFootage) } catch (e) { console.error('footage folder replaced after handover:', e) }
     }
     // a footage folder pasted AFTER the handover reaches the cards now
     if ('footage_url' in patch && patch.footage_url && data.footage_handed_at) {

@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       if (!batch) return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
       if (!(await canManageBatch(user, batch)) && batch.editor_id !== user.id) throw new AuthzError('This shoot is not yours to work', 403)
       if (!batch.footage_url) return NextResponse.json({ error: 'No footage folder on this shoot yet' }, { status: 400 })
-      const r = await startPull({ kind: 'batch', scopeId: batch.id, folderUrl: batch.footage_url, by: user.id })
+      const r = await startPull({ kind: 'batch', scopeId: batch.id, folderUrl: batch.footage_url, by: user.id, purpose: 'folder' })
       return NextResponse.json(r, { status: r.started || r.reason === 'Already being pulled' ? 200 : 400 })
     }
 
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       const url = finished?.url ?? (typeof item.raw_assets_url === 'string' ? item.raw_assets_url : '')
       if (!url) return NextResponse.json({ error: 'No folder on this card yet' }, { status: 400 })
       // the finished edit carries the card's round; a folder to work from is no version
-      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: finished ? roundOf(item) : 1, by: user.id })
+      const r = await startPull({ kind: 'item', scopeId: item.id, folderUrl: url, version: finished ? roundOf(item) : 1, by: user.id, purpose: finished ? 'finished' : 'folder' })
       return NextResponse.json(r, { status: r.started || r.reason === 'Already being pulled' ? 200 : 400 })
     }
     return NextResponse.json({ error: 'Which kind?' }, { status: 400 })

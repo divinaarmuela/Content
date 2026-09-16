@@ -343,6 +343,15 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
   const can = (to: ShootStage) => stageMove(batch, to, { role, today, checklist: { itemCount }, overrideReason: reason, planReview, reviewer: viewerIsReviewer === true }, 'now', viewerId)
   const askOverride = stage === 'shared' && role === 'super_admin' && goReady(batch, { itemCount, planReview }).needsOverride
   const [folder, setFolder] = useState(batch.footage_url ?? '')
+  // THE LINK IS CONFIRMED BEFORE IT IS USED (the owner, 16 Sep 2026: "I
+  // submitted the wrong footage — confirm with the user, let me resubmit a
+  // link"): typing changes nothing; a press shows the link back with what
+  // will happen, and a second press does it. A saved link can be replaced
+  // the same way, and the old link's copy in progress stops.
+  const [confirmFolder, setConfirmFolder] = useState(false)
+  const [savingFolder, setSavingFolder] = useState(false)
+  const folderChanged = folder.trim() !== (batch.footage_url ?? '')
+  const editorName = nameOf(batch.editor_id)
   // ONE next button: the stage's own move
   const next: { to: ShootStage; label: string } | null =
     // a gated plan's one action while drafting is the review row (Ask for a
@@ -514,19 +523,72 @@ export function WherePanel({ batch, role, viewerId, today, itemCount, busy, name
         {/* THE FOLDER BOX SITS UNDER THE BUTTON THAT NEEDS IT (the owner, 14 Sep
             2026: "footage link, why is it under there?") */}
         {folderShown && (
-          <label className="flex flex-col gap-1 text-[12px] font-semibold">
-            Footage folder
-            <Input
-              key={batch.footage_url ?? ''}
-              value={folder}
-              onChange={e => setFolder(e.target.value)}
-              onBlur={() => { const v = folder.trim(); if (v !== (batch.footage_url ?? '')) void onPatch('footage_url', v || null) }}
-              placeholder="https://www.dropbox.com/… or https://drive.google.com/…"
-              className="h-11 text-[15px] font-normal"
-              aria-label="Footage folder link"
-              inputMode="url"
-            />
-          </label>
+          <div className="flex flex-col gap-2" data-footage-folder>
+            <label className="flex flex-col gap-1 text-[12px] font-semibold">
+              Footage folder
+              <Input
+                value={folder}
+                onChange={e => { setFolder(e.target.value); setConfirmFolder(false) }}
+                onKeyDown={e => { if (e.key === 'Enter' && folderChanged) { e.preventDefault(); setConfirmFolder(true) } }}
+                placeholder="https://drive.google.com/… or https://www.dropbox.com/…"
+                className="h-11 text-[15px] font-normal"
+                aria-label="Footage folder link"
+                inputMode="url"
+              />
+            </label>
+            {/* SHARED WITH ANYONE WHO HAS THE LINK (the owner, 16 Sep 2026: "let the
+                user know to upload the Drive link as anyone with the link, so it's
+                easier") */}
+            <p className="text-[12px] text-muted-foreground">
+              In Drive, set the folder to <span className="font-semibold text-foreground">Anyone with the link</span> before pasting it — then the files copy in straight away, with nothing to share first.
+            </p>
+            {folderChanged && !confirmFolder && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button className="h-11 rounded-full px-4 text-[13px] font-semibold" onClick={() => setConfirmFolder(true)}>
+                  {!folder.trim() ? 'Take the folder off' : batch.footage_url ? 'Replace the footage folder' : 'Use this footage folder'}
+                </Button>
+                <Button variant="outline" className="h-11 rounded-full px-4 text-[13px] font-semibold" onClick={() => { setFolder(batch.footage_url ?? ''); setConfirmFolder(false) }}>
+                  Cancel
+                </Button>
+              </div>
+            )}
+            {folderChanged && confirmFolder && (
+              <div className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" role="group" aria-label="Confirm the footage folder">
+                <p className="text-[13px] font-semibold">
+                  {!folder.trim()
+                    ? 'Take the footage folder off this shoot?'
+                    : batch.footage_url
+                      ? 'Replace the footage folder with this link?'
+                      : 'Use this link as the footage folder?'}
+                </p>
+                {folder.trim() && <p className="break-all font-mono text-[12px] text-muted-foreground">{folder.trim()}</p>}
+                <p className="text-[13px] text-muted-foreground">
+                  {!folder.trim()
+                    ? 'It comes off the editor’s card too.'
+                    : batch.footage_url
+                      ? `The old link’s copy stops if it is still running, this one is copied in, and it is swapped onto the editor’s card${editorName ? ` — ${editorName} is told` : ''}.`
+                      : batch.footage_handed_at
+                        ? `The files are copied in and put on the editor’s card${editorName ? ` — ${editorName} is told` : ''}.`
+                        : `The files are copied in${editorName ? `, and ${editorName} is handed the footage and told` : ' and the footage is handed to the editor once one is named'}.`}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={savingFolder}
+                    onClick={async () => {
+                      setSavingFolder(true)
+                      try {
+                        const ok = await onPatch('footage_url', folder.trim() || null)
+                        if (ok) setConfirmFolder(false)
+                      } finally { setSavingFolder(false) }
+                    }}>
+                    {savingFolder ? 'Saving…' : !folder.trim() ? 'Yes, take it off' : 'Yes, use this link'}
+                  </Button>
+                  <Button variant="outline" className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={savingFolder} onClick={() => setConfirmFolder(false)}>
+                    Not this one
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {/* THE PULL (16 Sep 2026): the footage copied into our storage, with the
             bar and the time left while it lands, then every file with a Download */}
@@ -713,7 +775,10 @@ export function EditorCardPanel({ batch, items, editorName }: {
         {one ? (
           <>
             <p className="text-[14px]">
-              {editorName ? `${editorName} has the card` : 'The card is made — no editor named yet'}{batch.edit_deadline ? ` · due ${stampWords(batch.edit_deadline)}` : ''}{batch.footage_handed_at ? ' · footage in' : ' · footage after the shoot'}
+              {editorName ? `${editorName} has the card` : 'The card is made — nobody is on it yet'}{batch.edit_deadline ? ` · due ${stampWords(batch.edit_deadline)}` : ''}{batch.footage_handed_at ? ' · footage in' : ' · footage after the shoot'}
+              {/* NOBODY ON IT, SAID PLAINLY (the owner, 16 Sep 2026: "make sure the
+                  super admin or the AM knows who's on it — no one — and can assign") */}
+              {!editorName && <span className="block text-[13px] text-muted-foreground">Pick the editor under Who is on this shoot, or open the card and press Assign an editor.</span>}
             </p>
             <Button variant="outline" className={`${outlineBtn} w-fit`} asChild>
               <Link href={`/dashboard/editor?card=${one.id}`}>Open on Editor</Link>

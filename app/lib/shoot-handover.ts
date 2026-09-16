@@ -4,10 +4,10 @@ import { attachOne } from '@/lib/db-join'
 import type { Batch, ContentItem, TeamUser as TeamUserRow, TeamUserClient } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { ensureShootCard } from './plan-cards'
-import { logActivity } from './workflow'
+import { logActivity, notifyFilesToWorkFrom } from './workflow'
 import { announceBatchChange, announceItemChange } from './production-live'
 import { escapeHtml, notify, renderEmail } from './mailer'
-import { footageDueTargets, footageFolderFill, footageReceiptTargets, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
+import { footageDueTargets, footageFolderFill, footageFolderReplace, footageReceiptTargets, handoverPlan, handoverReady, type HandoverPlan } from './shoot-sop-core'
 import { shootCardId } from './deliverable-group-core'
 import { DASHBOARD_URL } from './app-url'
 
@@ -111,6 +111,34 @@ export async function fillFootageFolder(batch: Batch): Promise<number> {
     }
   }
   return filled
+}
+
+/**
+ * The footage folder replaced once the cards have it (16 Sep 2026): the old
+ * link is swapped for the new one on every card that carried it, and the
+ * editor is told there is a new folder to work from. Each write is a claim
+ * that re-checks the card still carries the old link.
+ */
+export async function replaceFootageFolder(actor: TeamUser | null, batch: Batch, oldUrl: string): Promise<number> {
+  const items = table<ContentItem>('content_items')
+  const rows = await attachOne(
+    await items.list({ by: { batch_id: batch.id }, limit: 200 }),
+    'work_kind_id', 'work_kinds', ['slug'],
+  )
+  let swapped = 0
+  const was = String(oldUrl ?? '').trim()
+  for (const f of footageFolderReplace(batch, was, rows as unknown as Parameters<typeof footageFolderReplace>[2])) {
+    const done = await items.claim(f.id, cur =>
+      cur && String(cur.raw_assets_url ?? '').trim() === was
+        ? { ...cur, raw_assets_url: f.raw_assets_url, ...('link_url' in f ? { link_url: f.link_url, ...(f.link_url ? {} : { link_kind: null }) } : {}), updated_at: new Date().toISOString() }
+        : null)
+    if (done.claimed) {
+      swapped++
+      announceItemChange({ item_id: f.id, client_id: batch.client_id, status: done.row.status, kind: 'updated' })
+      if (actor && f.raw_assets_url) notifyFilesToWorkFrom(actor, done.row as unknown as Parameters<typeof notifyFilesToWorkFrom>[1], [], f.raw_assets_url)
+    }
+  }
+  return swapped
 }
 
 async function editorOf(batch: Pick<Batch, 'editor_id'>): Promise<{ id: string; email: string; name: string } | null> {
