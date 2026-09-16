@@ -698,3 +698,13 @@ describe('the board never scrolls under its camera (Karly, 16 Sep 2026: "the tex
     expect(card.split('el.focus({ preventScroll: true })').length).toBe(4)
   })
 })
+
+describe('a note with a height of its own is filled by its text box while edited (Karly, 16 Sep 2026)', () => {
+  it('the bold wrapper is a flex column, so flex-1 on the box reaches through it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const box = readFileSync('app/dashboard/production/shoots/[id]/BoldBox.tsx', 'utf8')
+    expect(box).toContain('<span className="relative flex min-h-0 min-w-0 flex-1 flex-col">')
+    const card = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect(card).toContain("${card.h ? 'flex-1' : ''}")
+  })
+})

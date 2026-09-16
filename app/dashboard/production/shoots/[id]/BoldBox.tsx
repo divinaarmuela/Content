@@ -71,8 +71,11 @@ export const BoldableTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHT
   function BoldableTextarea({ onKeyDown, onSelect, onBlur, ...rest }, ref) {
     const { inner, keyDown, select, blur, pill } = useBoldable<HTMLTextAreaElement>(onKeyDown, onSelect, onBlur)
     useImperativeHandle(ref, () => inner.current as HTMLTextAreaElement)
+    // a flex column, so a box told to fill its note (flex-1) still does
+    // through this wrapper — inside a plain block it stayed one line tall
+    // and the note looked empty while edited (Karly, 16 Sep 2026)
     return (
-      <span className="relative block min-w-0 flex-1">
+      <span className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <textarea {...rest} ref={inner} onKeyDown={keyDown} onSelect={select} onBlur={blur} />
         {pill}
       </span>
