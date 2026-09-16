@@ -141,7 +141,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                       {t.thumb
                         // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
                         ? <img src={t.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                        : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
+                        : isCopy(t) && t.kind === 'video'
+                          // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
+                          // the tile is the clip a moment in, and no picture has to be made
+                          ? <video src={`${t.preview}#t=0.5`} muted playsInline preload="metadata" aria-hidden tabIndex={-1} className="pointer-events-none h-full w-full object-cover" />
+                          : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
                       {approvedIds?.includes(t.id) && (
                         <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
                           <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> Approved

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ExternalLink, Play, Send } from 'lucide-react'
+import { Check, ExternalLink, Send } from 'lucide-react'
 import type { EditingPortal, EditingPortalComment } from '../../lib/editing-portal'
 import type { ClipApproval } from '../../lib/clip-approvals-core'
 import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
@@ -189,7 +189,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                       {c.thumb
                         // eslint-disable-next-line @next/next/no-img-element -- Drive's own picture
                         ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                        : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Play className="h-5 w-5" aria-hidden /></span>}
+                        // the clip's own first frame, from our copy (16 Sep 2026)
+                        : <video src={`${c.src}#t=0.5`} muted playsInline preload="metadata" aria-hidden tabIndex={-1} className="pointer-events-none h-full w-full object-cover" />}
                       {tick && (
                         <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
                           <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
