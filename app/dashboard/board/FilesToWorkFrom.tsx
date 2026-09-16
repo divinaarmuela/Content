@@ -243,7 +243,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
       {folder && !linkOpen && (
         <DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} showFiles={false} onPulled={files => setPulled(files)} />
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} noRounds />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} noRounds pickRound={0} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>
@@ -319,7 +319,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
       {selecting && (
         <div className="sticky bottom-3 z-30 flex flex-wrap items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 shadow-lg" role="status" aria-live="polite" data-select-bar>
           <span className="text-[13px] font-semibold">{picked.size === 0 ? 'Tick the files to see side by side — from any version' : `${picked.size} picked`}</span>
-          <span className="text-[12px] text-muted-foreground">{[...picked.values()].slice(0, 3).map(p => `${p.name} · v${p.round}`).join(', ')}{picked.size > 3 ? '…' : ''}</span>
+          <span className="text-[12px] text-muted-foreground">{[...picked.values()].slice(0, 3).map(p => `${p.name} · ${p.round === 0 ? 'folder' : `v${p.round}`}`).join(', ')}{picked.size > 3 ? '…' : ''}</span>
           <Button className="ml-auto h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background" disabled={picked.size === 0} onClick={openSideBySide}>
             <Columns2 className="mr-1.5 h-4 w-4" aria-hidden /> Open side by side
           </Button>
