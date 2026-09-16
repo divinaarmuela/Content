@@ -164,7 +164,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                         </span>
                       )}
                       {t.kind === 'video' && (
-                        <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
                           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow">
                             <Play className="ml-0.5 h-4 w-4" fill="currentColor" aria-hidden />
                           </span>
