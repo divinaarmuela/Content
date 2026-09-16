@@ -603,6 +603,9 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   /** DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
    *  themselves — the card ends at their approval, no scheduler */
   const [deliverOnlyCard, setDeliverOnlyCard] = useState(false)
+  // INCLUDE THE SHOOT'S BRIEF, PLAN AND BOARD? (the owner, 16 Sep 2026) — asked
+  // the moment a real shoot is picked; off unless they say yes
+  const [includePlan, setIncludePlan] = useState(false)
   const workInput = useRef<HTMLInputElement | null>(null)
   /** WHOM THE POST IS FOR (the owner, 15 Sep 2026: "it's either Turnkey, or a
    *  client account that's been connected"): the business, or a person on
@@ -688,6 +691,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           // heading. The finished edit is added on the card, later, when it is done.
           ...(folder.trim() ? { raw_assets_url: folder.trim() } : !isManager && !forPosting && link.trim() ? { raw_assets_url: link.trim() } : {}),
           ...(deliverOnlyCard ? { deliver_only: true } : {}),
+          ...(batchId && includePlan ? { include_plan: true } : {}),
           // a New post is a posting job: Post approval board only, never the Editor page
           ...(forPosting ? { adhoc_post: true } : {}),
           ...(contactIdOf(postFor) ? { for_contact_id: contactIdOf(postFor) } : {}),
@@ -796,6 +800,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                 </Select>
                 {shootId === 'typed' && (
                   <Input value={shootText} onChange={e => setShootText(e.target.value)} placeholder="e.g. Clinic open day, 3 Sept" className={field} aria-label="The shoot’s name" />
+                )}
+                {shootId && shootId !== 'typed' && (
+                  <label className="flex min-h-11 cursor-pointer items-start gap-2 text-[14px]">
+                    <input type="checkbox" className="mt-1 h-4 w-4 accent-foreground" checked={includePlan} onChange={e => setIncludePlan(e.target.checked)} />
+                    <span>Include this shoot’s brief, plan and board on the card<span className="block text-[12px] text-muted-foreground">Yes: the objective, deliverables, shot list, scripts, footage folder and the board show on the card. No: the card keeps only what you write here.</span></span>
+                  </label>
                 )}
               </div>
               {!simple && groups.length > 0 && (

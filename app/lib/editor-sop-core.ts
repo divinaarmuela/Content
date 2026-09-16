@@ -167,6 +167,19 @@ export function briefRowsFor(s: BriefSources, fromPlan: boolean): BriefRow[] {
     .map(r => (r.key === 'objective' ? { ...r, label: 'What needs doing' } : r))
 }
 
+/**
+ * DOES THIS CARD CARRY THE SHOOT'S PLAN? The card the shoot made always does.
+ * A card somebody made by hand and pointed at a shoot does only when they
+ * said yes to "include this shoot's brief, plan and board" (the owner, 16
+ * Sep 2026) — the shoot's plan and board exist, so the choice is theirs.
+ */
+export function cardUsesPlan(item: { id?: string | null; batch_id?: string | null; include_plan?: unknown }, shootCardIdOf: (batchId: string) => string): boolean {
+  const batchId = String(item.batch_id ?? '')
+  if (!batchId) return false
+  if (item.id && item.id === shootCardIdOf(batchId)) return true
+  return item.include_plan === true
+}
+
 /** §1 where the work comes from and where the finals go.
  *
  *  THE SHOOT'S FOOTAGE ONLY ON THE SHOOT'S OWN CARD (the owner, 16 Sep 2026:

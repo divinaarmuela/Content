@@ -18,6 +18,7 @@ import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { linkKindOf } from '../../lib/card-link-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
+import { cardUsesPlan } from '../../lib/editor-sop-core'
 import { cardPeople } from '../../lib/card-people-core'
 import { channelSpecs, PLATFORM_MEDIA } from '../../lib/media-fit-core'
 import type { Platform } from '../../lib/publish-core'
@@ -231,8 +232,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
   const specs = channelSpecs({ platforms, types: ['video'] })
     .map(s => ({ platform: s.label, lines: s.groups.flatMap(g => g.lines) }))
-  // the plan's rows only on the card the shoot made (editor-sop-core.briefRowsFor)
-  const fromPlan = !!item.batch_id && item.id === shootCardId(String(item.batch_id))
+  // the plan's rows on the card the shoot made — and on a hand-made card whose
+  // maker asked for them (editor-sop-core.cardUsesPlan, 16 Sep 2026); the
+  // shoot's own presses (Got the footage, I've read the plan) only on the former
+  const shootsOwn = !!item.batch_id && item.id === shootCardId(String(item.batch_id))
+  const fromPlan = cardUsesPlan(item as never, shootCardId)
   const brief = briefRowsFor({
     card: item as never, shoot: shoot as never, specs,
     driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null,
@@ -273,7 +277,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           {/* …only on the card the shoot made (16 Sep 2026: a card made by hand
               that names a shoot is not the shoot's editor's card — no footage
               or plan press on it; the plan link stays) */}
-          {fromPlan && shoot?.footage_handed_at && holder && (
+          {shootsOwn && shoot?.footage_handed_at && holder && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {shoot.footage_received_at
                 ? <p className="text-[13px] text-muted-foreground">Footage received {formatInZone(String(shoot.footage_received_at), zone, 'short') ?? ''}</p>
@@ -290,7 +294,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 On a shoot's card, "I've read the plan" is the acknowledgement
                 — of the plan AND of the card. A card with no shoot behind it
                 keeps the plain "I am on it". */}
-            {fromPlan && planRead.on && shoot ? (planRead.read
+            {shootsOwn && planRead.on && shoot ? (planRead.read
               ? <p className="text-[13px] text-muted-foreground">You read the plan {formatInZone(planRead.at, zone, 'short') ?? ''}</p>
               : (
                 <Button className={primaryBtn} disabled={busy}
@@ -309,7 +313,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             {/* the plan and its board, read only for the editor — no comments,
                 nothing to move (the owner, 14 Sep 2026: "the editor card gets
                 the read-only view of the canvas board — they can click it") */}
-            {/* …and the plan's board only on the card the shoot made (16 Sep 2026) */}
+            {/* …and the plan's board when the card carries the plan (16 Sep 2026) */}
             {fromPlan && shoot && (
               <Link href={`/dashboard/production/shoots/${shoot.id}`} data-plan-link
                 className="inline-flex min-h-11 items-center gap-1 text-[13px] font-semibold underline underline-offset-4">

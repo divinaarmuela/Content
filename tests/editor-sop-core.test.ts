@@ -53,6 +53,14 @@ describe('§2 before you start', () => {
     expect(by.script).toBe('• Hello')
     expect(by.notes).toBe('Reel 1 first\nTighten the intro')
   })
+  it('a card carries the shoot’s plan when the shoot made it, or when its maker asked for it', async () => {
+    const { cardUsesPlan } = await import('../app/lib/editor-sop-core')
+    const shootCardIdOf = (b: string) => `card-of-${b}`
+    expect(cardUsesPlan({ id: 'card-of-b1', batch_id: 'b1' }, shootCardIdOf)).toBe(true)
+    expect(cardUsesPlan({ id: 'other', batch_id: 'b1' }, shootCardIdOf)).toBe(false)
+    expect(cardUsesPlan({ id: 'other', batch_id: 'b1', include_plan: true }, shootCardIdOf)).toBe(true)
+    expect(cardUsesPlan({ id: 'other', batch_id: null, include_plan: true }, shootCardIdOf)).toBe(false)
+  })
   it('§1 says where to work from and where the finals go', () => {
     expect(workFrom({ card: { client_id: 'c1', raw_assets_url: 'https://www.dropbox.com/x' } })).toEqual({ footage: 'https://www.dropbox.com/x', finalsFolder: null })
     expect(workFrom({ card: { client_id: 'c1' }, shoot: { footage_url: 'https://drive.google.com/f' }, driveFolderUrl: 'https://drive.google.com/drive/folders/1' }))

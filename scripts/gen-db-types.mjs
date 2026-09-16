@@ -482,6 +482,11 @@ const GHOST_COLUMNS = {
     //     goes up by one the moment the card is sent back; the Drive pull tags
     //     each new file with it (app/lib/edit-round-core.ts).
     ['edit_round', col('number', true)],
+    //   content_items.include_plan — THE SHOOT'S BRIEF, PLAN AND BOARD ON A CARD
+    //     MADE BY HAND (16 Sep 2026: "give the editor the option: would you like
+    //     to include the original brief, plan and the board? yes shows it on the
+    //     card, no leaves it out"). Null/false: the card keeps its own words.
+    ['include_plan', col('boolean', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],
