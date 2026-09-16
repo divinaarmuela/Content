@@ -190,10 +190,10 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       <aside className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]" aria-label="Your comments on this clip">
         <div className="border-b border-white/10 px-5 py-4">
           <p className="text-[11px] uppercase tracking-[0.18em] text-white/50" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>Your comments</p>
-          <p className="mt-1 text-[13px] text-white/60">Pause where you want to say something, write it, and the second is stamped on it. {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
+          <p className="mt-1 text-[13px] text-white/60">Pause the clip where you have something to say and write it here — the second is stamped on it. {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 lg:max-h-[52vh]">
-          {onClip.length === 0 && <p className="text-[14px] text-white/50">No comments on this clip yet.</p>}
+          {onClip.length === 0 && <p className="text-[14px] text-white/50">Nothing said on this clip yet.</p>}
           <ul className="flex flex-col gap-2">
             {onClip.map(c => (
               <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-white/10'}`}>
@@ -219,7 +219,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             <input type="checkbox" checked={stamp} onChange={e => setStamp(e.target.checked)} className="h-4 w-4 accent-amber-300" />
             Stamp the current second{stamp && duration > 0 ? `: ${formatStamp(now)}` : ''}
           </label>
-          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="What would you like changed here?"
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Your thoughts on this clip — a note at this second, or anything you’d like us to know"
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
             className="w-full rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-[14px] text-white outline-none placeholder:text-white/40 focus:border-white/50" />
           {error && <p role="alert" className="text-[13px] text-red-300">{error}</p>}
