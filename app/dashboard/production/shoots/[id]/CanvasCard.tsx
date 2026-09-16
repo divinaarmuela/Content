@@ -538,7 +538,7 @@ function CanvasCardInner({
     if (editing) {
       return (
         <BoldableInput
-          ref={el => { if (el && document.activeElement !== el) el.focus({ preventScroll: true }) }}
+          ref={el => { if (el && !el.dataset.focusedOnce) { el.dataset.focusedOnce = '1'; el.focus({ preventScroll: true }) } }}
           defaultValue={card.text ?? ''}
           placeholder="SECTION TITLE"
           // the box the words are typed into is the box they will sit in
@@ -590,7 +590,7 @@ function CanvasCardInner({
             rows={1}
             // focus without a scroll (16 Sep 2026): the board's camera, not the
             // browser, decides what is in view
-            ref={el => { if (el && !card.h) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } if (el && document.activeElement !== el) el.focus({ preventScroll: true }) }}
+            ref={el => { if (el && !card.h) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } if (el && !el.dataset.focusedOnce) { el.dataset.focusedOnce = '1'; el.focus({ preventScroll: true }) } }}
             onInput={e => { if (card.h) return; const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
             style={{ fontSize: noteFont, lineHeight: noteLine }}
             className={`min-h-0 w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground ${card.h ? 'flex-1' : ''} ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
@@ -677,7 +677,7 @@ function CanvasCardInner({
     )
     const caption = (card.text ?? '').trim()
     const captionEditor = (cls: string) => (
-      <textarea ref={el => { if (el && document.activeElement !== el) el.focus({ preventScroll: true }) }} defaultValue={card.text ?? ''} rows={2} placeholder="Write a caption…"
+      <textarea ref={el => { if (el && !el.dataset.focusedOnce) { el.dataset.focusedOnce = '1'; el.focus({ preventScroll: true }) } }} defaultValue={card.text ?? ''} rows={2} placeholder="Write a caption…"
         className={`w-full resize-none bg-transparent outline-none placeholder:opacity-50 ${cls}`}
         onBlur={e => onCommitText(e.target.value)}
         onKeyDown={e => {
