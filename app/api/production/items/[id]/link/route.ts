@@ -45,12 +45,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const check = linkKindOf(body?.url)
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
     const final = body?.final === true
-    // THE FOLDER TO WORK FROM IS NOT A HAND-IN (the owner, 16 Sep 2026: "the
-    // first link on a card is the files to work from, not version 1"): the
-    // finished edit is a different file or folder, or it is not finished
-    if (final && check.url === String(item.raw_assets_url ?? '').trim()) {
-      return NextResponse.json({ error: 'That is the folder to work from. Paste the link to the finished edit — a different file or folder.' }, { status: 400 })
-    }
+    // THE CARD'S FIRST LINK IS THE FILES TO WORK FROM, NEVER A VERSION ON ITS
+    // OWN (the owner, 16 Sep 2026). The finished edit is whatever is saved in
+    // the finished-edit box — the same link again is allowed ("it's okay to
+    // submit the same Drive link"): saved as final, it is Version 1.
 
     const items = table<ContentItem>('content_items')
     let outcome: { version: number; changed: boolean; replaced: boolean } | null = null

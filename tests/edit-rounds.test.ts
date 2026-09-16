@@ -110,7 +110,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(d).toContain('Replacing the link keeps this as {versionWord(roundOf(detail))}')
   })
   it('the folder to work from is never version 1: the same link is refused as a hand-in, the box never holds it, and the submit waits for a finished edit (16 Sep 2026)', () => {
-    expect(src('app/api/production/items/[id]/link/route.ts')).toContain("if (final && check.url === String(item.raw_assets_url ?? '').trim()) {")
+    expect(src('app/api/production/items/[id]/link/route.ts')).not.toContain("if (final && check.url === String(item.raw_assets_url ?? '').trim()) {")
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''")
     expect(src('app/lib/workflow.ts')).toContain("const folderOnly = hasLink && linked.link_final !== true\n    && linked.link_url === (linked.raw_assets_url ?? null)")
     expect(src('app/lib/board-view-core.ts')).toContain('finishedEditOf(card as never) === null')
