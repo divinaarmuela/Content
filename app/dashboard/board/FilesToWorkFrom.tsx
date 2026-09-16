@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
+import { Columns2, ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import SafeVideo from '../../components/media/SafeVideo'
 import VideoTile from '../../components/media/VideoTile'
@@ -135,6 +136,16 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
     : []
   const [tab, setTab] = useState<'folder' | number | null>(null)
   useEffect(() => { setTab(null) }, [item.id])
+  // SELECT MODE (the owner, 16 Sep 2026: "a select view where I can choose
+  // videos, as many as I want, and see them side by side with their
+  // comments across all the versions"): the picks survive a switch between
+  // the folder tab and the version tabs; Open side by side carries them
+  const router = useRouter()
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState<Map<string, { id: string; round: number; name: string }>>(() => new Map())
+  const pickedKeys = useMemo(() => new Set(picked.keys()), [picked])
+  const pick = (t: { id: string; name: string }, round: number, on: boolean) => setPicked(m => { const n = new Map(m); const k = `${t.id}@${round}`; if (on) n.set(k, { id: t.id, round, name: t.name }); else n.delete(k); return n })
+  const openSideBySide = () => { if (picked.size === 0) return; router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent([...picked.values()].map(p => `${p.id}@${p.round}`).join(','))}`) }
   const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }
@@ -144,6 +155,12 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
     <div className="flex flex-col gap-3 border-b border-border px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{shownVersion ? `${roundLabel(shownVersion.round)} — the finished edit` : FILES_TO_WORK_FROM}</p>
+        {versions && (
+          <Button variant="outline" className={`inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold ${selecting ? 'border-foreground bg-foreground text-background hover:bg-foreground/90' : 'border-border hover:bg-muted'}`}
+            aria-pressed={selecting} onClick={() => { setSelecting(s => !s); if (selecting) setPicked(new Map()) }}>
+            <Columns2 className="h-4 w-4" aria-hidden /> {selecting ? 'Done picking' : 'Select'}
+          </Button>
+        )}
         {mayEdit && !shownVersion && (
           <div className="flex flex-wrap gap-2">
             {mayAddFiles && (
@@ -192,7 +209,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
             <DrivePullBar kind="item" scopeId={item.id} folderUrl={shownVersion.folderUrl} which="finished" mayStart={mayEdit && shownVersion.folderUrl === (finished?.url ?? '')} showFiles={false} />
           )}
           {shownVersion.folderUrl && (
-            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} />
+            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (
@@ -226,7 +243,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
       {folder && !linkOpen && (
         <DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} showFiles={false} onPulled={files => setPulled(files)} />
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>
@@ -298,6 +315,15 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         </ul>
       )}
       </>
+      )}
+      {selecting && (
+        <div className="sticky bottom-3 z-30 flex flex-wrap items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 shadow-lg" role="status" aria-live="polite" data-select-bar>
+          <span className="text-[13px] font-semibold">{picked.size === 0 ? 'Tick the files to see side by side — from any version' : `${picked.size} picked`}</span>
+          <span className="text-[12px] text-muted-foreground">{[...picked.values()].slice(0, 3).map(p => `${p.name} · v${p.round}`).join(', ')}{picked.size > 3 ? '…' : ''}</span>
+          <Button className="ml-auto h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background" disabled={picked.size === 0} onClick={openSideBySide}>
+            <Columns2 className="mr-1.5 h-4 w-4" aria-hidden /> Open side by side
+          </Button>
+        </div>
       )}
     </div>
   )

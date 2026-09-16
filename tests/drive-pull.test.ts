@@ -147,7 +147,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
     const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
     expect(box).toContain('<DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} showFiles={false} onPulled={files => setPulled(files)} />')
     // the tiles open like before, from our copies, with a pill per version (16 Sep 2026)
-    expect(box).toContain('copies={pulled} />')
+    expect(box).toContain('copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
     const tiles = src('app/dashboard/board/DriveFolderFiles.tsx')
     expect(tiles).toContain('const tiles = fromCopies ? copyTiles : state.at === \'ready\' ? state.tiles : []')
     expect(tiles).toContain('<video key={showing.id} src={showing.preview} controls playsInline preload="metadata"')

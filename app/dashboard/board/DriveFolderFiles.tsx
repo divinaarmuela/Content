@@ -21,7 +21,10 @@ import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, copies }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, copies, selected, onSelect }: {
+  /** SELECT MODE (the side-by-side view, 16 Sep 2026): the ticked files, and the press that ticks one */
+  selected?: ReadonlySet<string>
+  onSelect?: (tile: FolderTile, round: number, on: boolean) => void
   url: string | null | undefined
   /** THE CLIP'S OWN PAGE (15 Sep 2026): where a press on a clip goes — the
    *  review page with the comments — instead of Drive's preview on the card */
@@ -145,8 +148,14 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                 const open = showing?.id === t.id
                 const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
                 return (
-                  <li key={t.id} className={`flex flex-col gap-1 rounded-inner border p-2 ${open ? 'border-foreground' : 'border-border'}`}>
-                    <button type="button" onClick={() => { if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
+                  <li key={t.id} className={`relative flex flex-col gap-1 rounded-inner border p-2 ${open || selected?.has(`${t.id}@${shownRound}`) ? 'border-foreground' : 'border-border'}`}>
+                    {onSelect && (t.kind === 'video' || t.kind === 'image') && (
+                      <label className="absolute right-3 top-3 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/90 shadow" title="Pick for side by side">
+                        <input type="checkbox" className="h-4 w-4 accent-foreground" checked={selected?.has(`${t.id}@${shownRound}`) ?? false}
+                          onChange={e => onSelect(t, shownRound, e.target.checked)} aria-label={`Pick ${t.name} for side by side`} />
+                      </label>
+                    )}
+                    <button type="button" onClick={() => { if (onSelect) { onSelect(t, shownRound, !(selected?.has(`${t.id}@${shownRound}`) ?? false)); return } if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
                       aria-label={`${tileActionWords(t.kind)} ${t.name}`}
                       className={`relative block w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-95 ${fromCopies ? 'aspect-[4/5]' : 'aspect-square'}`}>
                       {t.thumb

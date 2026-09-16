@@ -24,6 +24,21 @@ describe('the Editor page opens a card as a page', () => {
 
 describe('the card’s page', () => {
   const page = src('app/dashboard/editor/[id]/page.tsx')
+  it('Select mode ticks files across every tab and opens them side by side, two across, each with its comments (16 Sep 2026)', async () => {
+    const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
+    expect(box).toContain("{selecting ? 'Done picking' : 'Select'}")
+    expect(box).toContain('router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent([...picked.values()].map(p => `${p.id}@${p.round}`).join(\',\'))}`)')
+    expect(box).toContain('selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined}')
+    const tiles = src('app/dashboard/board/DriveFolderFiles.tsx')
+    expect(tiles).toContain('onChange={e => onSelect(t, shownRound, e.target.checked)}')
+    const { parsePicks } = await import('../app/dashboard/editor/[id]/compare/page')
+    expect(parsePicks('a@1,b@2, c ,d@x')).toEqual([{ id: 'a', round: 1 }, { id: 'b', round: 2 }, { id: 'c', round: null }, { id: 'd', round: null }])
+    const cmp = src('app/dashboard/editor/[id]/compare/page.tsx')
+    expect(cmp).toContain("grid gap-4 ${one ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}")
+    expect(cmp).toContain('commentsOnClip(visible as never, f.id)')
+    expect(cmp).toContain('<PageTitle title={`${item.title} — side by side`}')
+  })
+
   it('draws the folder’s files wide, and the card beside them', () => {
     // one block, said once (15 Sep 2026): the files box carries the heading, the folder and the wide tiles
     expect(page).toContain('fallbackFolder={from.footage} wideFiles')
