@@ -84,6 +84,7 @@ import {
 } from '../../../lib/board-view-core'
 import { BOARD_COLUMNS, columnOf } from '../../../lib/board-core'
 import { linkLabel, versionWord } from '../../../lib/card-link-core'
+import { roundOf } from '../../../lib/edit-round-core'
 import { HandToDialog, LinkDialog, SendBackDialog } from '../../board/BoardDialogs'
 import { KindDialog } from '../../board/BoardDialogs'
 import type { Role } from '../../../lib/identity-core'
@@ -155,6 +156,8 @@ type Detail = {
   content_type: string; status: ItemStatus; status_label?: string
   priority: string; due_date: string | null; caption: string | null
   client_approval_required: boolean; current_version_number: number
+  /** the hand-in round — the version a person means (edit-round-core) */
+  edit_round?: number | null
   owner_name?: string | null; managers?: { name: string; email: string }[]
   brief_url?: string | null
   /** where the work lives — the one link the board shows */
@@ -955,7 +958,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   const facts = [
     detail.client_name ?? '—',
     kindWord,
-    !isBrief ? versionWord(detail.current_version_number) : null,
+    !isBrief ? versionWord(roundOf(detail)) : null,
     detail.due_date ? `due ${shortDay(detail.due_date)}` : null,
     detail.priority && detail.priority !== 'normal' ? `${detail.priority} priority` : null,
   ].filter(Boolean)
@@ -1571,7 +1574,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                   onClick={() => setKindOpen(true)}>Change</Button>
               )}
             </>)}
-            {!isBrief && factRow('Version', <span>{versionWord(detail.current_version_number)}</span>)}
+            {!isBrief && factRow('Version', <span>{versionWord(roundOf(detail))}</span>)}
             {!isBrief && factRow('Link', detail.link_url ? (
               <>
                 <Chip tone="surface">{linkLabel(detail.link_kind)}</Chip>
@@ -1872,7 +1875,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
         <Card id="work" className="scroll-mt-4">
           <CardHeader className="flex-row items-center gap-2">
             <CardTitle>The link</CardTitle>
-            <span className="text-secondary-13 text-muted-foreground">{versionWord(detail.current_version_number)}</span>
+            <span className="text-secondary-13 text-muted-foreground">{versionWord(roundOf(detail))}</span>
             {canEditLink && (
               <Button size="sm" variant="outline" className="ml-auto min-h-11 md:min-h-8" disabled={busy !== null}
                 onClick={() => setLinkOpen(true)}>
@@ -1903,7 +1906,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             )}
             {canEditLink && detail.link_url && (
               <p className="text-secondary-13 text-muted-foreground">
-                Replacing the link makes a new version — {versionWord(detail.current_version_number + 1)}.
+                Replacing the link keeps this as {versionWord(roundOf(detail))} — the hand-in after a send-back is the next version.
               </p>
             )}
             {/* earlier versions, folded — the current one is above */}

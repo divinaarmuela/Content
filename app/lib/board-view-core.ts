@@ -23,6 +23,7 @@ import {
 import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey, cardColumn } from './board-core'
 import { cardLinkOf, folderOf, versionWord } from './card-link-core'
+import { roundOf } from './edit-round-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import {
@@ -55,6 +56,8 @@ export type BoardViewCard = {
   /** the playbook's delivery date: when the final first reached the client */
   delivered_at?: string | null
   current_version_number?: number | null
+  /** the hand-in round — version 1, 2, 3 (edit-round-core) */
+  edit_round?: unknown
   /** which of the card's files have gone out (`posted-slides-core`) */
   posted_slides?: unknown
   /** what the manager said needs changing, the last time it was sent back */
@@ -191,7 +194,11 @@ export function cardLines(
     assigneeId: card.owner_id ?? null,
     due,
     dueNow,
-    version: versionWord(card.current_version_number),
+    // THE VERSION IS THE HAND-IN ROUND (the owner, 16 Sep 2026: "the current
+    // Capila is version 1 — the first submission; why does it say version 2?"):
+    // a link saved twice is still the first version; the hand-in after a
+    // send-back is the next
+    version: versionWord(roundOf(card)),
     stage: STATUS_LABELS[card.status],
     changeNote: cameBack && card.change_note?.trim() ? card.change_note.trim() : null,
     // "With you to check" rather than your own name back at you

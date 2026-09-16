@@ -24,6 +24,7 @@ import TransferEditingDialog from '../../board/TransferEditingDialog'
 import { HandToDialog } from '../../board/BoardDialogs'
 import { editingPortalPath, editingPortalFolder } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
+import { deliverOnly } from '../../../lib/deliver-only-core'
 import { useState } from 'react'
 
 /**
@@ -47,7 +48,7 @@ const folderUrl = (folderId: string) => `https://drive.google.com/drive/folders/
 
 /** The manager's or checker's answers on the card, above the brief: the
  *  board's own buttons and dialogs, so a press here is a press on the board. */
-function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null }) {
+function ManagerActions({ item, viewer, portalLink, client }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null }) {
   const card = item as unknown as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
   const { primary, more } = cardActions(card, viewer)
@@ -66,6 +67,26 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
   // one, and can assign, not just 'not yet'"): the same route, the plain
   // press — the first person on the card, not a transfer
   const unassigned = transferable && !item.owner_id
+  // DELIVERY ONLY, ON THE EDITING CARD (the owner, 16 Sep 2026: "where is the
+  // option on the editing card to tick it as editing only, not handing to a
+  // scheduler?"): the same tick the post's card has — the card ends at the
+  // client's approval and no scheduler is ever handed it. A manager's tick,
+  // while the card is still on the editing side.
+  const isManager = viewer.role === 'account_manager' || viewer.role === 'super_admin'
+  const frozen = ['scheduled', 'published'].includes(String(item.status))
+  const [savingDeliver, setSavingDeliver] = useState(false)
+  const setDeliverOnly = async (on: boolean) => {
+    setSavingDeliver(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deliver_only: on }),
+      })
+      if (!res.ok) throw new Error('Could not change that')
+      toast.success(on ? 'Delivery only — the client posts this themselves; it ends at their approval' : 'We post this one — it is handed to a scheduler after approval')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change that')
+    } finally { setSavingDeliver(false) }
+  }
   // CLIENT APPROVED, AWAITING THE HAND-OVER (the owner, 15 Sep 2026: "it's
   // the AM's or super admin's duty to hand it over to a scheduler"): the
   // approved card is still the editing side's; this is the press that gives
@@ -73,7 +94,7 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
   const [handOpen, setHandOpen] = useState(false)
   const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true
     && ['account_manager', 'super_admin', 'general'].includes(viewer.role)
-  if (!primary && more.length === 0 && !withClient && !transferable && !awaitingHand) return null
+  if (!primary && more.length === 0 && !withClient && !transferable && !awaitingHand && !isManager) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3" aria-label="Your answers on this card">
       {primary && (
@@ -117,6 +138,15 @@ function ManagerActions({ item, viewer, portalLink }: { item: ContentItem; viewe
       {transferable && (
         <TransferEditingDialog open={transferOpen} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
           viewerId={viewer.id} onClose={() => setTransferOpen(false)} />
+      )}
+      {isManager && !frozen && (
+        <label className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-[13px]" data-deliver-only>
+          <input type="checkbox" className="h-4 w-4 accent-foreground" disabled={savingDeliver}
+            checked={deliverOnly(item as { deliver_only?: unknown }, client as { posts_own_content?: unknown } | null)}
+            onChange={e => void setDeliverOnly(e.target.checked)} />
+          <span>Delivery only — the client posts this themselves. It ends at their approval; nothing goes to a scheduler.</span>
+          {client?.posts_own_content === true && item.deliver_only == null && <span className="text-muted-foreground">(the client’s setting)</span>}
+        </label>
       )}
       {dialogs}
     </div>
@@ -195,7 +225,7 @@ export default function EditorCardPage() {
             : (
               <>
                 {!maker && me && me.role !== 'client' && (
-                  <ManagerActions item={item} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
+                  <ManagerActions item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
                     // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
                     // its clips and comments; an uploaded post keeps the board link
                     portalLink={client?.share_token

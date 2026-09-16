@@ -48,7 +48,9 @@ describe('the lines on a card', () => {
     expect(l.assignee).toBe('Jess M')
     expect(l.due).toBe('Due 12 Sep')
     expect(l.dueNow).toBe(false)
-    expect(l.version).toBe('version 3')
+    // the version is the hand-in round, never the count of link saves (16 Sep 2026)
+    expect(l.version).toBe('version 1')
+    expect(cardLines(card({ edit_round: 3 } as never), { today: TODAY }).version).toBe('version 3')
     expect(l.stage).toBe('Draft')
   })
 

@@ -141,7 +141,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(page).toContain('const maker = usesMakerDrawer(me, item)')
     // …and a manager gets the same brief, with their buttons above it (15 Sep 2026)
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
-    expect(page).toContain('<ManagerActions item={item} viewer=')
+    expect(page).toContain('<ManagerActions item={item} client={client ?? null} viewer=')
     // …and everyone but an editor — the quality checker, the managers — gets
     // the manager's drawer there (13 and 14 Sep 2026)
     expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && maker\s*\? <EditorCardDrawer/)

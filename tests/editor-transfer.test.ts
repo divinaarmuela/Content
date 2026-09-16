@@ -208,5 +208,8 @@ describe('the card page offers it (source pins)', () => {
     expect(dialog).toContain("<DialogTitle>{currentOwnerId ? 'Transfer the editing job' : 'Assign an editor'}</DialogTitle>")
     expect(dialog).toContain("currentOwnerId ? 'Transfer the editing' : 'Assign the editing'")
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("isManager ? 'Nobody is on this card yet — press Assign an editor.' : 'Nobody is on this card yet.'")
+    // the Delivery only tick on the editing card, for a manager (16 Sep 2026)
+    expect(page).toContain('Delivery only — the client posts this themselves. It ends at their approval; nothing goes to a scheduler.')
+    expect(page).toContain('body: JSON.stringify({ deliver_only: on }),')
   })
 })

@@ -94,6 +94,13 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(src('app/api/production/batches/[id]/route.ts')).toContain("by: user.id, purpose: 'folder' })")
     expect(src('app/api/production/items/[id]/route.ts')).toContain("version: 1, by: user.id, purpose: 'folder' })")
   })
+  it('the board card and the detail page say the hand-in round, never the count of link saves (16 Sep 2026)', () => {
+    expect(src('app/lib/board-view-core.ts')).toContain('version: versionWord(roundOf(card)),')
+    expect(src('app/lib/board-view-core.ts')).not.toContain('versionWord(card.current_version_number)')
+    const d = src('app/dashboard/production/[id]/CardDetail.tsx')
+    expect(d).not.toContain('versionWord(detail.current_version_number')
+    expect(d).toContain('Replacing the link keeps this as {versionWord(roundOf(detail))}')
+  })
   it('the editing portal and the card show the newest round with pills for the others', () => {
     const portal = src('app/lib/editing-portal.ts')
     expect(portal).toContain('const rounds = roundsOf(clips)')
