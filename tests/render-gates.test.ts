@@ -245,9 +245,9 @@ describe('leftovers the SOP never asked for are gone', () => {
     expect(src(SHOOT)).toMatch(/Notes for the team/)
   })
   it('the card link is the scheduler\u2019s Drive folder, in those words', () => {
-    expect(src(CARD)).toMatch(/'Change the folder link' : 'Add a folder link'/)
+    expect(src(CARD)).toMatch(/'Change the source working folder' : 'Add the source working folder'/)
     expect(src(CARD)).not.toMatch(/'Add a link'|'Replace the link'|Drive folder to post from/)
-    expect(src(DIALOGS)).toMatch(/'Change the folder link' : 'Folder to work from'/)
+    expect(src(DIALOGS)).toMatch(/'Change the source working folder' : 'Source working folder'/)
     expect(src(DIALOGS)).not.toMatch(/'Add the link'/)
   })
   it('the Editor\u2019s New card (simple) has no kind, deliverable or deliver-only picker', () => {
@@ -326,7 +326,7 @@ describe('Post approval is assets only (13 Sep 2026: "what is this video edit ta
     expect(CARD).not.toMatch(/lines\.kind && !editorFace/)
   })
   it('the folder link is named plainly, and the kind of work is not changed from this board', () => {
-    expect(CARD).toContain('Add a folder link')
+    expect(CARD).toContain('Add the source working folder')
     expect(CARD).toContain('No folder link yet')
     expect(CARD).not.toMatch(/>\s*Add link\s*</)
     expect(CARD).toMatch(/!settled && !adhocPost && !editorFace && !schedulerFace && \(/)

@@ -446,6 +446,13 @@ const GHOST_COLUMNS = {
     //     goes out on that person's own accounts. The Schedule window's channel
     //     picker opens on that person's channels.
     ['for_contact_id', col('string', true)],
+    //   content_items.clip_approvals — WHICH CLIPS THE CLIENT APPROVED (16 Sep
+    //     2026: "each video for the client portal gets an Approved button, so
+    //     the team sees which files in Drive to work from"). A list of
+    //     { file_id, name, at, by } — one per clip of the finished edit the
+    //     client pressed Approved on (app/lib/clip-approvals-core.ts). A new
+    //     round's clips are new files, so a second cut starts unapproved.
+    ['clip_approvals', col('unknown', true, true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

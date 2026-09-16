@@ -10,6 +10,8 @@ import type { ItemStatus } from '../../../lib/workflow-core'
 import { sanitiseCanvasCards } from '../../../lib/batch-brief-core'
 import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../lib/canvas-comments-core'
 import { clientByPortalToken } from '../../../lib/portal-owner'
+import { formatStamp, reviewPath } from '../../../lib/video-review-core'
+import { clipCommentWhere } from '../../../lib/editing-portal-core'
 
 /**
  * A comment from the portal — on a piece, on a shoot, or pinned to ONE card
@@ -48,9 +50,17 @@ export async function POST(req: Request) {
       if (!portalActions(item.status as ItemStatus).comment) {
         return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
       }
+      // ON ONE CLIP, AT ONE SECOND (the editing portal, 16 Sep 2026): the
+      // same three fields the team's review page writes, so the client's
+      // comment sits on the same timeline the team reads
+      const videoFile = typeof body.video_file_id === 'string' && /^[A-Za-z0-9_-]{10,}$/.test(body.video_file_id) ? body.video_file_id : null
+      const videoName = videoFile && typeof body.video_file_name === 'string' ? body.video_file_name.trim().slice(0, 200) || null : null
+      const ts = Number(body.video_timestamp_sec)
+      const videoTs = videoFile && Number.isFinite(ts) && ts >= 0 ? Math.floor(ts) : null
       await table('item_comments').insert({
         item_id: item.id, author_id: actor.id, visibility: 'client', body: signed,
         resolved: false,
+        ...(videoFile ? { video_file_id: videoFile, video_file_name: videoName, video_timestamp_sec: videoTs } : {}),
       })
       await logActivity({
         actor, clientId: client.id,
@@ -59,8 +69,11 @@ export async function POST(req: Request) {
       })
       announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'comment' })
       await notifyManagersOfComment({
-        clientId: client.id, speaker, subjectTitle: item.title, body: text,
-        dashboardPath: itemPath(item),
+        clientId: client.id, speaker,
+        subjectTitle: item.title + clipCommentWhere(videoName, videoTs === null ? null : formatStamp(videoTs)),
+        body: text,
+        // straight to the clip, at the comment, on the team's review page
+        dashboardPath: videoFile ? reviewPath(item.id, videoFile, videoName) : itemPath(item),
       }).catch(e => console.error('portal comment notify error:', e))
       return NextResponse.json({ ok: true })
     }

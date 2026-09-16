@@ -3,7 +3,8 @@ import { authzErrorResponse } from '../../../lib/authz'
 import { listEntries } from '../../../lib/gdrive-files'
 import { FILES_BLOCK_WORDS, blockFor, requireFilesAccess } from '../../../lib/drive-page'
 import { isDriveId } from '../../../lib/files-core'
-import { PUBLIC_FOLDER_VIEW, folderUnreadableWords, parsePublicFolderView } from '../../../lib/drive-folder-files-core'
+import { folderUnreadableWords } from '../../../lib/drive-folder-files-core'
+import { publicFolderEntries } from '../../../lib/drive-folder-list'
 import { table } from '@/lib/db'
 
 /**
@@ -60,19 +61,3 @@ export async function GET(req: Request) {
   }
 }
 
-async function publicFolderEntries(folderId: string) {
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 8000)
-    const res = await fetch(PUBLIC_FOLDER_VIEW(folderId), {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MD Media dashboard)' },
-      signal: ctrl.signal,
-      cache: 'no-store',
-    })
-    clearTimeout(timer)
-    if (!res.ok) return []
-    return parsePublicFolderView(await res.text())
-  } catch {
-    return []
-  }
-}

@@ -270,7 +270,7 @@ export function BoardCard({
           <Button variant="outline" disabled={busy}
             onClick={e => { e.preventDefault(); onLink(card) }}
             className="h-11 rounded-full border-dashed border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
-            Add a folder link
+            Add the source working folder
           </Button>
         ) : editorFace ? null : (
           <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-border px-3.5 text-[13px] font-semibold text-muted-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:text-cream/70">
@@ -364,7 +364,7 @@ export function BoardCard({
                       Editors SOP gives an editor no such thing) */}
                   {!adhocPost && !editorFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onLink(card)}>
-                      {lines.link ? 'Change the folder link' : 'Add a folder link'}
+                      {lines.link ? 'Change the source working folder' : 'Add the source working folder'}
                     </DropdownMenuItem>
                   )}
                   {/* a booked or posted card has nobody left to hand it to and

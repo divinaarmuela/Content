@@ -31,6 +31,7 @@ import {
   type Hat,
   itemPath,
 } from './workflow-core'
+import { editingPortalFolder, editingPortalPath } from './editing-portal-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
@@ -1132,7 +1133,9 @@ export async function performTransition(
             // account that does have a login.
             audience === 'client_users'
               ? (clientShareToken
-                  ? `${DASHBOARD_URL}/portal/${clientShareToken}`
+                  // an edit sent to the client opens on its clips and comments —
+                  // the editing portal (16 Sep 2026); everything else, their board
+                  ? `${DASHBOARD_URL}${to === 'client_review' && editingPortalFolder({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id) : `/portal/${clientShareToken}`}`
                   : `${DASHBOARD_URL}/client`)
               : `${DASHBOARD_URL}${itemPath({ ...item, status: to }, (person as { role?: string | null }).role)}`
           ),

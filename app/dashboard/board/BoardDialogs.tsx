@@ -102,7 +102,7 @@ export function LinkDialog({ card, onClose, onSaved }: {
     <Dialog open={card !== null} onOpenChange={o => { if (!o && !busy) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{card?.link_url ? 'Change the folder link' : 'Folder to work from'}</DialogTitle>
+          <DialogTitle>{card?.link_url ? 'Change the source working folder' : 'Source working folder'}</DialogTitle>
           <DialogDescription>
             Paste the Google Drive or Dropbox folder the scheduler posts from.
           </DialogDescription>
@@ -732,7 +732,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
             ? 'Say what needs doing, add the folder link, and hand it to a scheduler — they pick the files from it and upload them for approval.'
             : isManager
               ? 'One card for one client. Say what needs doing and attach the files to work from.'
-              : 'One card for one client. Say what needs doing and add the Drive or Dropbox folder to work from if you have one.'}</DialogDescription>
+              : 'One card for one client. Say what needs doing and add the source working folder (Drive or Dropbox) if you have one.'}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -818,7 +818,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               link here — the same box the card shows under Your finished edit */}
           {!isManager && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="new-link">Drive or Dropbox folder to work from (optional)</Label>
+              <Label htmlFor="new-link">Source working folder — Drive or Dropbox (optional)</Label>
               <Input id="new-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" className={field} />
               <p className="text-[13px] text-muted-foreground">{link.trim() === ''
                 ? 'The footage or files this is made from. The card lists what is in it; your finished edit is added on the card when it is done.'

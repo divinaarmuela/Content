@@ -21,6 +21,8 @@ import { reviewPath } from '../../../lib/video-review-core'
 import { canTransferEditing } from '../../../lib/editor-transfer-core'
 import TransferEditingDialog from '../../board/TransferEditingDialog'
 import { HandToDialog } from '../../board/BoardDialogs'
+import { editingPortalPath, editingPortalFolder } from '../../../lib/editing-portal-core'
+import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { useState } from 'react'
 
 /**
@@ -165,6 +167,8 @@ export default function EditorCardPage() {
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
           <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
             fallbackFolder={from.footage} wideFiles
+            // the clips the client approved on their portal wear a tick (16 Sep 2026)
+            approvedIds={clipApprovalsOf(item).map(a => a.file_id)}
             // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)
             reviewHref={t => reviewPath(id, t.id, t.name)} />
         </section>
@@ -178,7 +182,11 @@ export default function EditorCardPage() {
               <>
                 {!maker && me && me.role !== 'client' && (
                   <ManagerActions item={item} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
-                    portalLink={client?.share_token ? `${window.location.origin}/portal/${client.share_token}?card=${encodeURIComponent(id)}` : null} />
+                    // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
+                    // its clips and comments; an uploaded post keeps the board link
+                    portalLink={client?.share_token
+                      ? `${window.location.origin}${editingPortalFolder(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
+                      : null} />
                 )}
                 <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
               </>

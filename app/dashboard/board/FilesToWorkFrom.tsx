@@ -31,7 +31,7 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
@@ -48,6 +48,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   wideFiles?: boolean
   /** the card's page: a press on a clip opens its review page (15 Sep 2026) */
   reviewHref?: (tile: { id: string; name: string }) => string
+  /** the clips the client approved on their editing portal (16 Sep 2026) */
+  approvedIds?: string[]
   /** the person holding the card — they may change the folder link too (the
    *  owner, 15 Sep 2026: "allow the editor, or anyone assigned to that card,
    *  or a super admin or AM to replace the folder to work from") */
@@ -124,7 +126,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
               </Button>
             )}
             <Button variant="outline" className={button} disabled={busy !== null} onClick={() => setLinkOpen(o => !o)}>
-              <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the folder link' : 'Add a folder link'}
+              <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the source working folder' : 'Add the source working folder'}
             </Button>
             <input ref={input} type="file" multiple accept="image/*,video/*" className="hidden"
               aria-label="Files for the editor to work from"
@@ -158,7 +160,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           <span className="sr-only">, opens in a new tab</span>
         </a>
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>

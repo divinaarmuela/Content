@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
+import { Check, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
 import type { DriveEntry } from '../../lib/files-core'
 import {
   folderFilesWords, folderTilesOf, readableFolderId, subfolderCount, tileActionWords, type FolderTile,
@@ -15,11 +15,13 @@ import {
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds }: {
   url: string | null | undefined
   /** THE CLIP'S OWN PAGE (15 Sep 2026): where a press on a clip goes — the
    *  review page with the comments — instead of Drive's preview on the card */
   reviewHref?: (tile: FolderTile) => string
+  /** the clips the client approved on their editing portal — a tick on the tile (16 Sep 2026) */
+  approvedIds?: string[]
   /** the card's page: more tiles across, and a bigger player */
   wide?: boolean
 }) {
@@ -99,6 +101,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref }: {
                         // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
                         ? <img src={t.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                         : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
+                      {approvedIds?.includes(t.id) && (
+                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
+                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> Approved
+                        </span>
+                      )}
                       {t.kind === 'video' && (
                         <span className="absolute inset-0 flex items-center justify-center">
                           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow">

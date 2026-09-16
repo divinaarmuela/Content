@@ -11,6 +11,7 @@ import { useRow, useTable } from '@/lib/db-client'
 import type { ContentItem, ItemComment, TeamUser } from '@/lib/db-types'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
+import { clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
 import {
   activeCommentId, commentsOnClip, formatStamp, markersFor,
 } from '../../../../../lib/video-review-core'
@@ -43,6 +44,10 @@ export default function VideoReviewPage() {
     const u = team.find(t => t.id === uid)
     return u ? personLabel(u.name, u.email) : 'Someone'
   }
+  // THE CLIENT'S OWN WORDS (the editing portal, 16 Sep 2026): a comment the
+  // client left on their portal sits on the same timeline, marked as theirs
+  const fromClient = (uid: string | null | undefined) => team.find(t => t.id === uid)?.role === 'client'
+  const approved = item ? clipApproval(clipApprovalsOf(item), fileId) : null
 
   const video = useRef<HTMLVideoElement>(null)
   const [now, setNow] = useState(0)
@@ -104,7 +109,7 @@ export default function VideoReviewPage() {
         className="inline-flex min-h-11 w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> {item.title}
       </button>
-      <PageTitle title={name} summary={`A clip on ${item.title}. Press a circle under the clip to jump to that comment.`} />
+      <PageTitle title={name} summary={`A clip on ${item.title}. Press a circle under the clip to jump to that comment.${approved ? ` Approved by the client (${approved.by}).` : ''}`} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
         {/* ── the clip, and the markers under it ── */}
@@ -151,6 +156,7 @@ export default function VideoReviewPage() {
                       </button>
                     )}
                     <span className="text-[13px] font-semibold">{nameOf(c.author_id)}</span>
+                    {fromClient(c.author_id) && <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">Client</span>}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
                 </li>

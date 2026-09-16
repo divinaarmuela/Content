@@ -73,7 +73,7 @@ describe('the route and the drawers (source pins)', () => {
     expect(drawer).toContain('<DriveFolderFiles url={from.footage} />')
     expect(drawer).toContain('holder={holder} frozen={frozen} linkOnly showFolderFiles={false} />}')
     const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
-    expect(box).toContain('{folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} />}')
+    expect(box).toContain('{folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} />}')
     // the holder may change the folder link; only a manager adds files (15 Sep 2026)
     expect(box).toContain('const mayEdit = (isManager || holder) && !frozen')
     expect(box).toContain('const mayAddFiles = isManager && !linkOnly && !frozen')

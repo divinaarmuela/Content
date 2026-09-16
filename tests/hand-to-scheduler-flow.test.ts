@@ -184,13 +184,13 @@ describe('the maker adds their link while making the card (the owner, 14 Sep 202
     const s = readFileSync(join(process.cwd(), 'app/dashboard/board/BoardDialogs.tsx'), 'utf8')
     // the box, for the maker only (a manager has the Files to work from folder instead)
     expect(s).toContain('{!isManager && (')
-    expect(s).toContain('<Label htmlFor="new-link">Drive or Dropbox folder to work from (optional)</Label>')
+    expect(s).toContain('<Label htmlFor="new-link">Source working folder — Drive or Dropbox (optional)</Label>')
     expect(s).toContain('<Input id="new-link" value={link} onChange={e => setLink(e.target.value)}')
     // the same link the card\u2019s Your finished edit box saves: final, so it never reads as a footage folder
     // the maker's link is the folder to work from, on the card the moment it is made (15 Sep 2026)
     expect(s).toContain("...(folder.trim() ? { raw_assets_url: folder.trim() } : !isManager && !forPosting && link.trim() ? { raw_assets_url: link.trim() } : {}),")
     expect(s).toContain("const cardLink = forPosting ? (link.trim() || folder.trim()) : isManager ? link.trim() : ''")
     // the window says so in plain words
-    expect(s).toContain('Say what needs doing and add the Drive or Dropbox folder to work from if you have one.')
+    expect(s).toContain('Say what needs doing and add the source working folder (Drive or Dropbox) if you have one.')
   })
 })

@@ -67,10 +67,13 @@ describe('the comments on a clip', () => {
 describe('the page, the stream and the tiles (source pins)', () => {
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
   it('the clip streams through a read-only route that passes Range through, so it seeks', () => {
-    const s = src('app/api/drive/stream/route.ts')
-    expect(s).toContain('export async function GET(')
-    expect(s).not.toMatch(/export async function (POST|PATCH|PUT|DELETE)\(/)
-    expect(s).toContain("const range = req.headers.get('range')")
+    const r = src('app/api/drive/stream/route.ts')
+    expect(r).toContain('export async function GET(')
+    expect(r).not.toMatch(/export async function (POST|PATCH|PUT|DELETE)\(/)
+    expect(r).toContain('await requireFilesAccess()')
+    expect(r).toContain("const range = req.headers.get('range')")
+    expect(r).toContain("return await streamDriveFile(id, range, search.get('name'))")
+    const s = src('app/lib/drive-stream.ts')
     expect(s).toContain("const rangeHeader: Record<string, string> = range ? { Range: range } : {}")
     expect(s).toContain("headers.set(h, v)")
     // a clip shared by link (15 Sep 2026): Google's public download, confirmed, when the API refuses our account
