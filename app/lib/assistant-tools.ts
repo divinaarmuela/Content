@@ -5,7 +5,7 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   Client, ClientContact, EmailIngestLog, IntakeForm, Lead,
-  ContentItem, ScanMailbox, ScanRun, ScheduleEntry, TeamUser, WorkKind,
+  Batch, ContentItem, ScanMailbox, ScanRun, ScheduleEntry, TeamUser, WorkKind,
 } from '@/lib/db-types'
 import { STATUS_LABELS } from './workflow-core'
 import { roundOf } from './edit-round-core'
@@ -75,6 +75,43 @@ export function assistantTools(role: Role) {
     // the model names the client, the person, the version and the files
     // filter, and the code does the matching. Each hit carries the link to
     // open it.
+    // THE GLOBAL SEARCH (the owner, 16 Sep 2026: "the ask is a global search,
+    // so it affects other pages"): one set of words, looked for across the
+    // whole dashboard at once — clients, cards, shoots, leads and the team —
+    // each hit with the page to open. The top bar's box lands here first.
+    search_all: tool({
+      description:
+        'Search the whole dashboard at once for some words: clients, content cards (edits and posts), shoots, leads and team members. Use this first for any plain search. Every hit has an `open` link to give the person.',
+      inputSchema: z.object({ query: z.string().min(1).describe('the words to look for') }),
+      execute: async ({ query }) => {
+        const needle = query.trim().toLowerCase()
+        const words = needle.split(/\s+/).filter(Boolean)
+        const hit = (...fields: unknown[]) => { const hay = fields.map(f => String(f ?? '').toLowerCase()).join(' '); return words.every(w => hay.includes(w)) }
+        const [clients, items, shoots, leads, team] = await Promise.all([
+          table<Client>('clients').list({ limit: 500 }),
+          table<ContentItem>('content_items').list({ limit: 1000 }),
+          table<Batch>('batches').list({ limit: 500 }),
+          table<Lead>('leads').list({ limit: 1000 }),
+          table<TeamUser>('team_users').list({ where: u => u.active_status === true, limit: 300 }),
+        ])
+        const clientName = new Map(clients.map(c => [c.id, c.name]))
+        const personName = new Map(team.map(u => [u.id, u.name || u.email]))
+        const out = {
+          clients: clients.filter(c => hit(c.name, c.industry, c.contact_name, c.email)).slice(0, 10)
+            .map(c => ({ id: c.id, name: c.name, industry: c.industry, status: c.status, open: `/dashboard/clients/${c.id}` })),
+          cards: items.filter(i => hit(i.title, clientName.get(String(i.client_id)), personName.get(String(i.owner_id ?? '')), i.status)).slice(0, 15)
+            .map(i => ({ id: i.id, title: i.title, client: clientName.get(String(i.client_id)) ?? 'A client', stage: (STATUS_LABELS as Record<string, string>)[String(i.status)] ?? String(i.status), who: i.owner_id ? (personName.get(i.owner_id) ?? 'Someone') : 'Nobody yet', version: roundOf(i as never), open: `/dashboard/editor/${i.id}` })),
+          shoots: shoots.filter(b => hit(b.title, clientName.get(String(b.client_id)), b.location, b.concept, personName.get(String(b.editor_id ?? '')))).slice(0, 10)
+            .map(b => ({ id: b.id, title: b.title, client: clientName.get(String(b.client_id)) ?? 'A client', shoot_date: b.shoot_date, status: b.status, editor: b.editor_id ? (personName.get(b.editor_id) ?? 'Someone') : 'Not picked yet', footage_in: !!b.footage_handed_at, open: `/dashboard/production/shoots/${b.id}` })),
+          leads: leads.filter(l => hit(l.fname, l.lname, l.biz, l.email, l.need)).slice(0, 10)
+            .map(l => ({ id: l.id, name: `${l.fname ?? ''} ${l.lname ?? ''}`.trim(), business: l.biz, email: l.email, need: l.need, created_at: l.created_at, open: '/dashboard/leads' })),
+          team: team.filter(u => hit(u.name, u.email, u.role)).slice(0, 10)
+            .map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email, open: '/dashboard/team' })),
+        }
+        return { query, ...out, total: out.clients.length + out.cards.length + out.shoots.length + out.leads.length + out.team.length }
+      },
+    }),
+
     search_cards: tool({
       description:
         'Find the content cards (edits, posts, tasks) on the Editor and Post approval pages. Filter by words in the title, the client name, the person holding it, the stage, the version (the hand-in round), whether a finished edit has been handed in, and whether it is overdue. Every hit has an `open` link to give the person.',

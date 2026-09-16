@@ -336,7 +336,7 @@ function SearchPill() {
         onChange={e => setQ(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ask() } }}
         aria-label="Ask the assistant"
-        placeholder="Ask anything — e.g. Capila cards on version 2"
+        placeholder="Search anything — clients, cards, shoots, leads"
         className="h-11 w-full rounded-full border border-border bg-surface pl-11 pr-4 text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
       />
     </div>

@@ -74,6 +74,30 @@ const out = async (fn: () => Promise<unknown>) => JSON.stringify(await fn())
 const run = (name: string, input: any) => (tools() as any)[name].execute(input, {} as never)
 
 describe('the assistant never sees a secret', () => {
+  it('search_all looks across clients, cards, shoots, leads and the team at once, with a link per hit and no secret (16 Sep 2026)', async () => {
+    fake.restore()
+    fake = seedDb({
+      clients: [{ id: 'client-1', name: 'Capila Finance', status: 'active', industry: 'Finance', share_token: SHARE_TOKEN }] as unknown as Row[],
+      team_users: [{ id: 'u-1', email: 'ryan@example.invalid', name: 'Ryan', role: 'editor', active_status: true, clerk_user_id: 'clerk_secret_id' }] as unknown as Row[],
+      content_items: [{ id: 'c-1', title: 'Shan Minor Edits', client_id: 'client-1', owner_id: 'u-1', status: 'client_review', edit_round: 1 }] as unknown as Row[],
+      batches: [{ id: 'b-1', title: 'August Shoot', client_id: 'client-1', shoot_date: '2026-08-20', status: 'wrapped', editor_id: 'u-1', footage_handed_at: '2026-08-21T00:00:00.000Z', location: 'Docklands' }] as unknown as Row[],
+      leads: [{ id: 'lead-1', fname: 'Sam', lname: 'Lee', biz: 'Capila Partners', email: 'sam@example.invalid', need: 'reels', created_at: '2026-09-01T00:00:00.000Z' }] as unknown as Row[],
+    })
+    const r = await run('search_all', { query: 'capila' }) as { total: number; clients: { open: string }[]; cards: { open: string; who: string }[]; shoots: { open: string; editor: string; footage_in: boolean }[]; leads: { open: string }[]; team: unknown[] }
+    expect(r.total).toBe(4)
+    expect(r.clients[0].open).toBe('/dashboard/clients/client-1')
+    expect(r.cards[0]).toMatchObject({ open: '/dashboard/editor/c-1', who: 'Ryan' })
+    expect(r.shoots[0]).toMatchObject({ open: '/dashboard/production/shoots/b-1', editor: 'Ryan', footage_in: true })
+    expect(r.leads[0].open).toBe('/dashboard/leads')
+    const ryan = await run('search_all', { query: 'ryan' }) as { team: { name: string }[]; cards: unknown[]; shoots: unknown[] }
+    expect(ryan.team.map(t => t.name)).toEqual(['Ryan'])
+    expect(ryan.cards).toHaveLength(1)
+    expect(ryan.shoots).toHaveLength(1)
+    const body = await out(() => run('search_all', { query: 'a' }))
+    expect(body).not.toContain(SHARE_TOKEN)
+    expect(body).not.toContain('clerk_secret_id')
+  })
+
   it('search_cards finds cards by client, person, version and files, links each one, and carries no secret (16 Sep 2026)', async () => {
     fake.restore()
     fake = seedDb({

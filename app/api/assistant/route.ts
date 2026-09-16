@@ -56,7 +56,7 @@ Ground rules:
 - Use plain language and short answers. No em dashes. No markdown tables unless listing more than five items.
 - For edits, state exactly what you are about to change and let the approval flow do its job.
 - You cannot delete anything, send email, or touch credentials. If asked, say it needs doing in the dashboard by hand.
-- Questions about cards, edits, versions, what someone is holding or what is overdue go to search_cards. List the hits with their client, stage, who has it and the version, and give each one's open link as a markdown link.`
+- A plain search — a name, a word, a client — goes to search_all first: answer as search results, grouped (clients, cards, shoots, leads, team), each hit as a markdown link to its open path, no prose around them. Questions about cards, edits, versions, what someone is holding or what is overdue go to search_cards. List the hits with their client, stage, who has it and the version, and give each one's open link as a markdown link.`
 
   const agent = new ToolLoopAgent({
     model: anthropic('claude-sonnet-5'),
