@@ -178,7 +178,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
 
         {/* ── the other clips ── */}
         {clips.length > 1 && (
-          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5" aria-label="All the clips">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label="All the clips">
             {clips.map((c, i) => {
               const tick = clipApproval(approvals, c.id)
               const n = commentsOnClip(comments as never, c.id).length
