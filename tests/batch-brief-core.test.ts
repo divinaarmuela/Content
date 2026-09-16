@@ -687,3 +687,14 @@ describe('bold as a switch while typing (the owner, 15 Sep 2026: "when Bold is l
     expect(bar).toContain('applyBold(el)')
   })
 })
+
+describe('the board never scrolls under its camera (Karly, 16 Sep 2026: "the text is disappearing and the toolbar disappears when I click into the notes")', () => {
+  it('the viewport puts any browser scroll straight back, and every editing box takes focus without one', async () => {
+    const { readFileSync } = await import('node:fs')
+    const canvas = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(canvas).toContain('onScroll={e => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0 }}')
+    const card = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect(card).not.toContain('autoFocus')
+    expect(card.split('el.focus({ preventScroll: true })').length).toBe(4)
+  })
+})

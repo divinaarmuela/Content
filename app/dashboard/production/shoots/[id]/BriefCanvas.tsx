@@ -1297,6 +1297,14 @@ export default function BriefCanvas({
           backgroundImage: 'radial-gradient(circle, rgba(113,113,122,0.25) 1px, transparent 1px)',
           backgroundSize: '24px 24px',
         }}
+        // THE BROWSER MUST NOT SCROLL THIS BOX (Karly, 16 Sep 2026: "the text is
+        // disappearing and the toolbar disappears when I click into the notes
+        // to edit"): an overflow-hidden box still scrolls when a text box in
+        // it gains focus or its caret leaves the visible part, and the camera
+        // — a transform — knows nothing of it, so the whole board and its
+        // toolbar slid out of sight. Any scroll the browser sneaks in is put
+        // straight back.
+        onScroll={e => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0 }}
         // a click on bare canvas puts the player back to a still, so the board
         // never carries a running video somebody has walked away from
         onPointerDown={e => {
