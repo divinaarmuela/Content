@@ -48,12 +48,16 @@ export default function VideoReviewPage() {
   // the clip plays from our storage when the folder it sits in has been
   // pulled — the finished edit, the source working folder, or the shoot's
   // footage folder — and through Drive otherwise
+  // …EVERY pull this card ever asked for, not only the links it carries
+  // today (the owner, 16 Sep 2026: "this video is not getting played — this
+  // is version 1": the editor had since pointed the card at a new link, so
+  // version 1's copy was no longer looked for and the page fell back to a
+  // private Drive file)
   const { row: shootRow } = useRow<Batch>('batches', item?.batch_id ?? null)
-  const folderIds = [item?.link_url, item?.raw_assets_url, shootRow?.footage_url].map(u => driveTargetOf(u)?.id ?? null)
-  const { row: pullA } = useRow<DrivePull>('drive_pulls', folderIds[0] ? pullId(folderIds[0]) : null)
-  const { row: pullB } = useRow<DrivePull>('drive_pulls', folderIds[1] ? pullId(folderIds[1]) : null)
-  const { row: pullC } = useRow<DrivePull>('drive_pulls', folderIds[2] ? pullId(folderIds[2]) : null)
-  const copyUrl = [pullA, pullB, pullC].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
+  const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
+  const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
+  const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
+  const copyUrl = [...cardPulls, footagePull].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
