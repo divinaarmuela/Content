@@ -97,7 +97,8 @@ describe('the lines on a card', () => {
 
 describe('the control on a card', () => {
   it('an editor hands a draft on for the quality check, and that is the only button', () => {
-    const { primary, more } = cardActions(card(), editor)
+    // once a finished edit is handed in (16 Sep 2026)
+    const { primary, more } = cardActions(card({ link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never), editor)
     expect(primary).toEqual({ kind: 'transition', to: 'quality_check', label: 'Ready for quality check' })
     expect(READY_FOR_CHECK_LABEL).toBe('Ready for checking')
     expect(more).toEqual([])
@@ -120,14 +121,17 @@ describe('the control on a card', () => {
 
   it('the hand-in to quality check is the holder’s own press — a manager or super admin gets it only on a card nobody holds, or their own (16 Sep 2026)', () => {
     const sa = { id: 'u-sa', role: 'super_admin' as const, quality_reviewer: false }
-    const held = card({ status: 'draft_uploaded', owner_id: 'ed' })
+    const held = card({ status: 'draft_uploaded', owner_id: 'ed', link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never)
     const all = (c: BoardViewCard, v: BoardViewer) => { const a = cardActions(c, v); return [a.primary, ...a.more].filter(Boolean).map(x => x!.to) }
     expect(all(held, sa)).not.toContain('quality_check')
-    expect(all(card({ status: 'draft_uploaded', owner_id: null }), sa)).toContain('quality_check')
-    expect(all(card({ status: 'draft_uploaded', owner_id: 'u-sa' }), sa)).toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: null, link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never), sa)).toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: 'u-sa', link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never), sa)).toContain('quality_check')
     expect(all(card({ status: 'revision_required', owner_id: 'ed' }), { id: 'am', role: 'account_manager' as const, quality_reviewer: false })).not.toContain('quality_check')
-    // the editor holding it keeps the press
-    expect(all(held, { id: 'ed', role: 'editor' as const, quality_reviewer: false })).toContain('quality_check')
+    // the editor holding it keeps the press — once a finished edit is in; a folder to work from alone is not one
+    const ed = { id: 'ed', role: 'editor' as const, quality_reviewer: false }
+    expect(all(card({ status: 'draft_uploaded', owner_id: 'ed' }), ed)).not.toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: 'ed', link_url: 'https://drive.google.com/drive/folders/F', link_kind: 'drive', raw_assets_url: 'https://drive.google.com/drive/folders/F' }), ed)).not.toContain('quality_check')
+    expect(all(card({ status: 'draft_uploaded', owner_id: 'ed', link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never), ed)).toContain('quality_check')
   })
 
   it('the quality reviewer passes a card to the client, or sends it back; a manager only pulls it back', () => {

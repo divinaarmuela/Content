@@ -743,7 +743,10 @@ export async function performTransition(
   // files and chooses which one to schedule"). Such a card (`adhoc_post`,
   // the manager's New post on Post approval) whose only link is that folder
   // has nothing for the quality checker yet.
-  const folderOnly = linked.adhoc_post === true && hasLink && linked.link_final !== true
+  // …and the same is true of an edit (16 Sep 2026: "why is it showing Send
+  // to quality check when he hasn't uploaded the edited one?"): a link that
+  // is only the folder to work from is not a finished edit
+  const folderOnly = hasLink && linked.link_final !== true
     && linked.link_url === (linked.raw_assets_url ?? null)
   if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {

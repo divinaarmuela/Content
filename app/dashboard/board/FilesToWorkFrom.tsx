@@ -243,7 +243,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
       {folder && !linkOpen && (
         <DrivePullBar kind={pullScope.kind} scopeId={pullScope.id} folderUrl={folder} mayStart={mayEdit && !!pullScope.id} showFiles={false} onPulled={files => setPulled(files)} />
       )}
-      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />}
+      {folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} noRounds />}
 
       {showing && (
         <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-file-viewer>

@@ -21,10 +21,14 @@ import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, copies, selected, onSelect }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, copies, selected, onSelect, noRounds = false }: {
   /** SELECT MODE (the side-by-side view, 16 Sep 2026): the ticked files, and the press that ticks one */
   selected?: ReadonlySet<string>
   onSelect?: (tile: FolderTile, round: number, on: boolean) => void
+  /** THE FOLDER TO WORK FROM HAS NO VERSIONS (the owner, 16 Sep 2026: "what's
+   *  this version 1 and version 2 — that is the files to work from"): one
+   *  tile per file, whatever round the copy was tagged with, and no pills */
+  noRounds?: boolean
   url: string | null | undefined
   /** THE CLIP'S OWN PAGE (15 Sep 2026): where a press on a clip goes — the
    *  review page with the comments — instead of Drive's preview on the card */
@@ -50,8 +54,9 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
     | { at: 'failed'; words: string }
   >({ at: 'idle' })
   const [showing, setShowing] = useState<FolderTile | null>(null)
-  const done = (copies ?? []).filter(f => f.status === 'done' && !!f.url)
-  const rounds = roundsOf(done)
+  const doneAll = (copies ?? []).filter(f => f.status === 'done' && !!f.url)
+  const done = noRounds ? doneAll.filter((f, i, arr) => arr.findIndex(o => o.id === f.id) === i).map(f => ({ ...f, version: 1 })) : doneAll
+  const rounds = noRounds ? [] : roundsOf(done)
   const [round, setRound] = useState<number | null>(null)
   const shownRound = round ?? rounds[0] ?? 1
   const copyTiles: FolderTile[] = done

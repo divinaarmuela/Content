@@ -17,7 +17,7 @@ import FilesToWorkFrom from './FilesToWorkFrom'
 import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
-import { linkKindOf } from '../../lib/card-link-core'
+import { finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { shootCardId } from '../../lib/deliverable-group-core'
 import { cardUsesPlan } from '../../lib/editor-sop-core'
 import { cardPeople } from '../../lib/card-people-core'
@@ -211,8 +211,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // in a file, or their own Dropbox / Drive link — the Source files box below
 
   /* ── source files ── */
-  const [source, setSource] = useState(item?.link_url ?? '')
-  useEffect(() => { setSource(item?.link_url ?? '') }, [item?.link_url])
+  // the box holds the finished edit only — never the folder to work from, which
+  // would read as version 1 the moment somebody pressed Save (16 Sep 2026)
+  const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''
+  const [source, setSource] = useState(finishedUrl)
+  useEffect(() => { setSource(finishedUrl) }, [finishedUrl])
   const sourceCheck = linkKindOf(source)
   const saveSource = async () => {
     const url = source.trim()

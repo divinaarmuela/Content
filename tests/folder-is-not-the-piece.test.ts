@@ -125,12 +125,10 @@ describe('Submit for quality check on an editor’s card (not a posting job)', (
     expect(r.json.status).toBe('quality_check')
   })
 
-  it('goes through even when the pasted link is the folder the card was made with', async () => {
-    // the 14 Sep failure: the link route had copied the pasted link into
-    // raw_assets_url as well, so every editor's submit read as "folder only"
+  it('is refused while the only link is the folder the card was made with — that is the files to work from, not a finished edit (the owner, 16 Sep 2026)', async () => {
     fake = seed({ item: { adhoc_post: null } })
     const r = await move('quality_check')
-    expect(r.status).toBe(200)
+    expect(r.status).toBe(400)
   })
 
   it('after a revision was asked for, the same link goes back for the quality check (the owner, 14 Sep 2026)', async () => {
