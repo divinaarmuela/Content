@@ -80,7 +80,7 @@ describe('who gets a tutorial', () => {
       expect(tutorialFor(r, { qualityReviewer: false })).toBe(plain)
     }
     const words = [...QUALITY_REVIEWER_STEP.see, ...QUALITY_REVIEWER_STEP.actions].join('\n')
-    expect(words).toContain('Passed \u2014 send to client')
+    expect(words).toContain('Passed quality check')
     expect(words).toContain('Ask for changes')
     expect(words).not.toContain('Send for quality check')
   })
