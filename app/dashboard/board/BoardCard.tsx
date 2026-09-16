@@ -143,6 +143,14 @@ export function BoardCard({
   const askAck = !!onAcknowledge && card.owner_id === viewer.id && card.acknowledged === false
     && columnOf(card.status) === 'draft'
   const [briefOpen, setBriefOpen] = useState(false)
+  // THE BRIEF FOLDS TO TWO LINES AND OPENS SMOOTHLY (the owner, 16 Sep 2026:
+  // "cards are getting too long — by default make the cards expand when
+  // clicked, nice smooth animation"). It never folded before: `block` was
+  // emitted after `line-clamp-2` and won its display, so every card showed
+  // the whole brief. Now the clamp owns the display while folded; opening
+  // drops the clamp and grows the box; closing shrinks it, then clamps.
+  const [briefClamped, setBriefClamped] = useState(true)
+  const toggleBrief = () => { if (briefOpen) setBriefOpen(false); else { setBriefClamped(false); setBriefOpen(true) } }
   const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
   const { primary, more } = cardActions(card, viewer)
   /** a post built from this piece is waiting on somebody — said on the card,
@@ -221,8 +229,9 @@ export function BoardCard({
         )}
         {lines.brief && (
           <span
-            className={`mb-1 block whitespace-pre-line text-foreground [[data-tone=ink]_&]:text-cream ${briefOpen ? '' : 'line-clamp-2'}`}
+            className={`mb-1 overflow-hidden whitespace-pre-line text-foreground transition-[max-height] duration-500 ease-in-out motion-reduce:transition-none [[data-tone=ink]_&]:text-cream ${briefOpen ? 'block max-h-[200rem]' : 'max-h-[3em]'} ${briefClamped && !briefOpen ? 'line-clamp-2' : briefOpen ? '' : 'block'}`}
             title={briefOpen ? undefined : lines.brief}
+            onTransitionEnd={() => { if (!briefOpen) setBriefClamped(true) }}
           >
             {lines.brief}
           </span>
@@ -280,7 +289,7 @@ export function BoardCard({
 
         {briefFolds && (
           <Button variant="outline" aria-expanded={briefOpen}
-            onClick={e => { e.preventDefault(); setBriefOpen(o => !o) }}
+            onClick={e => { e.preventDefault(); toggleBrief() }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
             {briefOpen ? 'Less' : 'Read all'}
           </Button>
