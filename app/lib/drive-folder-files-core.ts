@@ -1,4 +1,4 @@
-import { driveFolderIdFromUrl } from './card-link-core'
+import { driveFolderIdFromUrl, driveTargetOf } from './card-link-core'
 import { kindOf, type DriveEntry, type FileKind } from './files-core'
 
 /**
@@ -61,6 +61,11 @@ export function folderFilesWords(files: number, folders: number): string {
  *  link or a Frame.io review cannot, and the card just offers to open it. */
 export function readableFolderId(url: string | null | undefined): string | null {
   return driveFolderIdFromUrl(url)
+}
+
+/** the id a Drive link points at — a folder's, or a single file's (16 Sep 2026) */
+export function readableDriveId(url: string | null | undefined): string | null {
+  return driveTargetOf(url)?.id ?? null
 }
 
 /** What a pressed tile says while Drive's preview loads. */

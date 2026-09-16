@@ -5,7 +5,8 @@ import type { ContentItem, DrivePull, ItemComment } from '@/lib/db-types'
 import { portalOwnerByToken } from './portal-owner'
 import { belongsToPortal, portalName } from './portal-owner-core'
 import { accountManagerName } from './portal-data'
-import { listFolder } from './drive-folder-list'
+import { listFolder, type FolderListing } from './drive-folder-list'
+import { driveFileMeta } from './drive-stream'
 import { clipsOf, clipSignature, editingPortalFolder, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
@@ -72,7 +73,13 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   if (!found) return null
   const { owner, item, folder } = found
   const [listing, comments, amName, pull] = await Promise.all([
-    listFolder(folder.folderId),
+    // a folder is listed; one file is asked for by name (16 Sep 2026)
+    folder.kind === 'file'
+      ? driveFileMeta(folder.folderId).then((m): FolderListing => ({
+          entries: m ? [{ id: folder.folderId, name: m.name, mimeType: m.mime, size: m.size, modified: null, ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null }] : [],
+          more: false, source: 'account', accountFailure: null,
+        }))
+      : listFolder(folder.folderId),
     table<ItemComment>('item_comments')
       .list({ by: { item_id: item.id }, where: r => r.visibility === 'client', orderBy: [['created_at', 'asc']], limit: 300 })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])),

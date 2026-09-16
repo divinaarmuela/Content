@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useRow } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
-import { driveFolderIdFromUrl } from '../../lib/card-link-core'
+import { driveTargetOf } from '../../lib/card-link-core'
 import { canStartPull, filesOf, formatBytes, pullId, pullLooksStuck, pullProgress, type PullFile } from '../../lib/drive-pull-core'
 import { kindOf } from '../../lib/files-core'
 import { fileRound, roundLabel, roundsOf } from '../../lib/edit-round-core'
@@ -33,7 +33,7 @@ export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder
   /** the list of files under the bar — off where the page draws the copies as tiles */
   showFiles?: boolean
 }) {
-  const folderId = driveFolderIdFromUrl(folderUrl)
+  const folderId = driveTargetOf(folderUrl)?.id ?? null
   const { row } = useRow<DrivePull>('drive_pulls', folderId ? pullId(folderId) : null)
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
-import { driveFolderIdFromUrl } from '../../../../../lib/card-link-core'
+import { driveTargetOf } from '../../../../../lib/card-link-core'
 import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
@@ -45,7 +45,7 @@ export default function VideoReviewPage() {
   // pulled — the finished edit, the source working folder, or the shoot's
   // footage folder — and through Drive otherwise
   const { row: shootRow } = useRow<Batch>('batches', item?.batch_id ?? null)
-  const folderIds = [item?.link_url, item?.raw_assets_url, shootRow?.footage_url].map(u => driveFolderIdFromUrl(u))
+  const folderIds = [item?.link_url, item?.raw_assets_url, shootRow?.footage_url].map(u => driveTargetOf(u)?.id ?? null)
   const { row: pullA } = useRow<DrivePull>('drive_pulls', folderIds[0] ? pullId(folderIds[0]) : null)
   const { row: pullB } = useRow<DrivePull>('drive_pulls', folderIds[1] ? pullId(folderIds[1]) : null)
   const { row: pullC } = useRow<DrivePull>('drive_pulls', folderIds[2] ? pullId(folderIds[2]) : null)

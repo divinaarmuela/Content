@@ -156,3 +156,16 @@ describe('finishedEditOf — the editor’s link is the work, never the folder (
     expect(finishedEditOf({})).toBeNull()
   })
 })
+
+describe('a single Drive file link (16 Sep 2026: "everything will be a Drive link")', () => {
+  it('reads the file id off a /file/d/ link, an open?id= link, and nothing off a folder or a stranger', async () => {
+    const { driveFileIdFromUrl, driveTargetOf } = await import('../app/lib/card-link-core')
+    expect(driveFileIdFromUrl('https://drive.google.com/file/d/1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj/view?usp=sharing')).toBe('1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj')
+    expect(driveFileIdFromUrl('https://drive.google.com/open?id=1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj')).toBe('1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj')
+    expect(driveFileIdFromUrl('https://drive.google.com/drive/folders/1OItqlh84b0qwO_7fe66v6r1CPecvjd_V')).toBeNull()
+    expect(driveFileIdFromUrl('https://www.dropbox.com/scl/fo/abc')).toBeNull()
+    expect(driveTargetOf('https://drive.google.com/drive/folders/1OItqlh84b0qwO_7fe66v6r1CPecvjd_V')).toEqual({ id: '1OItqlh84b0qwO_7fe66v6r1CPecvjd_V', kind: 'folder' })
+    expect(driveTargetOf('https://drive.google.com/file/d/1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj/view')).toEqual({ id: '1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj', kind: 'file' })
+    expect(driveTargetOf('https://example.com')).toBeNull()
+  })
+})

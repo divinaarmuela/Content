@@ -21,7 +21,9 @@ const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(
 describe('which cards get one, and where it lives', () => {
   const edit = { status: 'client_review', link_url: 'https://drive.google.com/drive/folders/1OItqlh84b0qwO_7fe66v6r1CPecvjd_V', link_kind: 'drive', link_final: true }
   it('an edit with the client whose finished edit is a Drive folder; never an uploaded post, a draft, or a Dropbox link', () => {
-    expect(editingPortalFolder(edit)).toEqual({ url: edit.link_url, folderId: '1OItqlh84b0qwO_7fe66v6r1CPecvjd_V' })
+    expect(editingPortalFolder(edit)).toEqual({ url: edit.link_url, folderId: '1OItqlh84b0qwO_7fe66v6r1CPecvjd_V', kind: 'folder' })
+    // one Drive file is a finished edit too (16 Sep 2026)
+    expect(editingPortalFolder({ ...edit, link_url: 'https://drive.google.com/file/d/1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj/view?usp=sharing' })).toEqual({ url: 'https://drive.google.com/file/d/1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj/view?usp=sharing', folderId: '1sM6wtEVG6wRpbTENrt1Tjz-Zn0ucGFDj', kind: 'file' })
     expect(editingPortalFolder({ ...edit, status: 'approved_for_scheduling' })).not.toBeNull()
     expect(editingPortalFolder({ ...edit, adhoc_post: true })).toBeNull()
     expect(editingPortalFolder({ ...edit, status: 'draft_uploaded' })).toBeNull()

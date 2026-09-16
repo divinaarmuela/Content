@@ -68,10 +68,45 @@ export function totalFromContentRange(res: Response): number | null {
 }
 
 /**
- * How big a file is, without touching its bytes: Drive's metadata through
- * our account; else a one-byte ask as anyone with the link, abandoned the
- * moment the headers are in. Null when nothing will say.
+ * What a file is, without touching its bytes: name, type and size from
+ * Drive's metadata through our account; else from the headers of a one-byte
+ * ask as anyone with the link, abandoned the moment they are in. Null when
+ * nothing will say.
  */
+export async function driveFileMeta(id: string): Promise<{ name: string; mime: string; size: number | null } | null> {
+  const auth = await accessToken()
+  if (auth.ok) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 15_000)
+    try {
+      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'name,mimeType,size', ...ALL_DRIVES }), {
+        headers: { Authorization: `Bearer ${auth.token}` }, signal: ctrl.signal,
+      })
+      if (res.ok) {
+        const meta = await res.json() as { name?: string; mimeType?: string; size?: string | number }
+        const n = Number(meta.size)
+        return { name: String(meta.name || id), mime: String(meta.mimeType || 'application/octet-stream'), size: Number.isFinite(n) && n > 0 ? n : null }
+      }
+    } catch { /* fall through to the public ask */ } finally { clearTimeout(timer) }
+  }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15_000)
+  try {
+    const res = await openDriveFile(id, 'bytes=0-0', ctrl.signal)
+    if (!res) return null
+    const size = totalFromContentRange(res)
+    const disposition = res.headers.get('content-disposition') ?? ''
+    const named = /filename\*=UTF-8''([^;]+)/.exec(disposition)?.[1] ?? /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? null
+    const name = named ? decodeURIComponent(named) : id
+    const typed = res.headers.get('content-type') ?? ''
+    ctrl.abort()
+    return { name, mime: typed && !typed.startsWith('application/octet-stream') && !typed.startsWith('application/binary') ? typed : (videoMimeOf(name) ?? 'application/octet-stream'), size }
+  } catch {
+    return null
+  } finally { clearTimeout(timer) }
+}
+
+/** just the size — the metadata's, or the one-byte ask's */
 export async function driveFileSize(id: string): Promise<number | null> {
   const auth = await accessToken()
   if (auth.ok) {

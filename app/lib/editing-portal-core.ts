@@ -9,7 +9,7 @@
  * (editing-portal.ts) reads the card and lists the folder.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { finishedEditOf, driveFolderIdFromUrl } from './card-link-core'
+import { finishedEditOf, driveTargetOf } from './card-link-core'
 import { isClientFacing } from './portal-core'
 import { kindOf, type DriveEntry } from './files-core'
 import type { ItemStatus } from './workflow-core'
@@ -20,17 +20,18 @@ export function editingPortalPath(token: string, itemId: string): string {
 }
 
 /** A card the editing portal is for: a piece of editing (not an uploaded
- *  post) that the client may see, whose finished edit is a Drive folder. */
+ *  post) that the client may see, whose finished edit is a Drive folder —
+ *  or one Drive file (16 Sep 2026). */
 export function editingPortalFolder(card: {
   status?: string | null; adhoc_post?: boolean | null
   link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null
-}): { url: string; folderId: string } | null {
+}): { url: string; folderId: string; kind: 'folder' | 'file' } | null {
   if (card.adhoc_post === true) return null
   if (!isClientFacing(String(card.status ?? '') as ItemStatus)) return null
   const finished = finishedEditOf(card)
   if (!finished) return null
-  const folderId = driveFolderIdFromUrl(finished.url)
-  return folderId ? { url: finished.url, folderId } : null
+  const target = driveTargetOf(finished.url)
+  return target ? { url: finished.url, folderId: target.id, kind: target.kind } : null
 }
 
 export type PortalClip = {

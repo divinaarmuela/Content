@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Check, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
 import type { DriveEntry } from '../../lib/files-core'
 import {
-  folderFilesWords, folderTilesOf, readableFolderId, subfolderCount, tileActionWords, type FolderTile,
+  folderFilesWords, folderTilesOf, readableDriveId, readableFolderId, subfolderCount, tileActionWords, type FolderTile,
 } from '../../lib/drive-folder-files-core'
 import { kindOf } from '../../lib/files-core'
 import type { PullFile } from '../../lib/drive-pull-core'
@@ -35,7 +35,9 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
   /** the card's page: more tiles across, and a bigger player */
   wide?: boolean
 }) {
+  // a folder to list, or one file whose copy we may hold (16 Sep 2026)
   const folderId = readableFolderId(url)
+  const driveId = readableDriveId(url)
   const [state, setState] = useState<
     | { at: 'idle' }
     | { at: 'looking' }
@@ -58,9 +60,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
 
   useEffect(() => {
     setShowing(null)
-    if (!folderId) { setState({ at: 'idle' }); return }
     // our copies are here: nothing to ask Drive for
     if (fromCopies) { setState({ at: 'ready', tiles: [], folders: 0, more: false, note: null }); return }
+    // one file, not yet copied in: one tile, Drive's own preview
+    if (!folderId && driveId) { setState({ at: 'ready', tiles: [{ id: driveId, name: 'The file', kind: 'video', thumb: null, preview: `https://drive.google.com/file/d/${encodeURIComponent(driveId)}/preview`, open: `https://drive.google.com/file/d/${encodeURIComponent(driveId)}/view` }], folders: 0, more: false, note: 'One file — it is copied in as you read this, and shows by name once it is here.' }); return }
+    if (!folderId) { setState({ at: 'idle' }); return }
     let live = true
     setState({ at: 'looking' })
     fetch(`/api/drive/children?id=${encodeURIComponent(folderId)}`)
@@ -75,9 +79,9 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
       })
       .catch(() => { if (live) setState({ at: 'failed', words: 'Could not read the folder just now — open it in Drive.' }) })
     return () => { live = false }
-  }, [folderId, fromCopies])
+  }, [folderId, driveId, fromCopies])
 
-  if (!folderId || state.at === 'idle') return null
+  if (!driveId || state.at === 'idle') return null
   const tiles = fromCopies ? copyTiles : state.at === 'ready' ? state.tiles : []
 
   return (

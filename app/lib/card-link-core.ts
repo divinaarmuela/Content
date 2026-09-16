@@ -44,6 +44,24 @@ export function driveFolderIdFromUrl(raw: string | null | undefined): string | n
   return m ? m[1] : null
 }
 
+/** ONE FILE, NOT A FOLDER (the owner, 16 Sep 2026: a single clip's Drive link
+ *  pasted as the source working folder — "the file is not showing"): the
+ *  id in a /file/d/<id>/view, an open?id=<id> or a uc?id=<id> link. */
+export function driveFileIdFromUrl(raw: string | null | undefined): string | null {
+  const text = String(raw ?? '').trim()
+  if (!/drive\.google\.com|docs\.google\.com/.test(text)) return null
+  const m = /\/file\/d\/([A-Za-z0-9_-]{10,})/.exec(text) ?? /[?&]id=([A-Za-z0-9_-]{10,})/.exec(text)
+  return m ? m[1] : null
+}
+
+/** what a Drive link points at — a folder to list, or one file — or null */
+export function driveTargetOf(raw: string | null | undefined): { id: string; kind: 'folder' | 'file' } | null {
+  const folder = driveFolderIdFromUrl(raw)
+  if (folder) return { id: folder, kind: 'folder' }
+  const file = driveFileIdFromUrl(raw)
+  return file ? { id: file, kind: 'file' } : null
+}
+
 export function linkKindOf(raw: string | null | undefined): LinkCheck {
   const text = String(raw ?? '').trim()
   if (!text) return { ok: false, reason: 'Paste a link first' }

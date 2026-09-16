@@ -3,13 +3,13 @@ import { table } from '@/lib/db'
 import type { DrivePull } from '@/lib/db-types'
 import { inngest } from '../inngest/client'
 import { listFolder } from './drive-folder-list'
-import { driveFileSize, openDriveFile } from './drive-stream'
+import { driveFileMeta, driveFileSize, openDriveFile } from './drive-stream'
 import { kindOf } from './files-core'
 import { abortMultipart, closeMultipart, openMultipart, putMultipartPart, r2Configured } from './storage'
 import {
   PARTS_PER_STEP, canStartPull, filesOf, nextSlice, pullId, pullLooksStuck, pullObjectKey, type PullFile,
 } from './drive-pull-core'
-import { driveFolderIdFromUrl } from './card-link-core'
+import { driveTargetOf } from './card-link-core'
 import { afterResponse } from './after-response'
 
 /**
@@ -37,8 +37,10 @@ const MAX_DEPTH = 3
 type Kind = 'batch' | 'item'
 
 export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: string; version?: number | null; by?: string | null }): Promise<{ id: string; started: boolean; reason?: string }> {
-  const folderId = driveFolderIdFromUrl(opts.folderUrl)
-  if (!folderId) return { id: '', started: false, reason: 'Not a Google Drive folder link' }
+  // a folder to list, or one file (16 Sep 2026: a single clip's link pasted as the folder)
+  const target = driveTargetOf(opts.folderUrl)
+  if (!target) return { id: '', started: false, reason: 'Not a Google Drive link' }
+  const folderId = target.id
   if (!r2Configured()) return { id: pullId(folderId), started: false, reason: 'File storage is not configured' }
   const id = pullId(folderId)
   const now = new Date().toISOString()
@@ -101,14 +103,21 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
       seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null })
     }
   }
-  await walk(row.folder_id, '', 0)
+  const target = driveTargetOf(row.folder_url)
+  if (target?.kind === 'file') {
+    // one file: its name, type and size from Drive, nothing to walk
+    const meta = await driveFileMeta(target.id)
+    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size })
+  } else {
+    await walk(row.folder_id, '', 0)
+  }
   // where the step has got to, on the row — so a stall says where it stalled
   await pulls.update(id, { total_files: seen.length, error: `Read the folder: ${seen.length} files`, updated_at: new Date().toISOString() } as never)
 
   if (seen.length === 0) {
     await pulls.update(id, {
       status: 'unreadable', finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      error: 'The folder could not be read — share it with the agency’s Drive account, or set it to anyone with the link, then pull again.',
+      error: `The ${target?.kind === 'file' ? 'file' : 'folder'} could not be read — share it with the agency’s Drive account, or set it to anyone with the link, then pull again.`,
     } as never)
     return { files: 0, bytes: 0, note: 'unreadable' }
   }
