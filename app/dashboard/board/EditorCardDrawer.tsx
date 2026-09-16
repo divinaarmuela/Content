@@ -270,7 +270,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           </p>
           {/* GOT THE FOOTAGE (the owner, 14 Sep 2026): once the footage is
               handed over, the editor says they have it — one press, one line */}
-          {shoot?.footage_handed_at && holder && (
+          {/* …only on the card the shoot made (16 Sep 2026: a card made by hand
+              that names a shoot is not the shoot's editor's card — no footage
+              or plan press on it; the plan link stays) */}
+          {fromPlan && shoot?.footage_handed_at && holder && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {shoot.footage_received_at
                 ? <p className="text-[13px] text-muted-foreground">Footage received {formatInZone(String(shoot.footage_received_at), zone, 'short') ?? ''}</p>
@@ -287,7 +290,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 On a shoot's card, "I've read the plan" is the acknowledgement
                 — of the plan AND of the card. A card with no shoot behind it
                 keeps the plain "I am on it". */}
-            {planRead.on && shoot ? (planRead.read
+            {fromPlan && planRead.on && shoot ? (planRead.read
               ? <p className="text-[13px] text-muted-foreground">You read the plan {formatInZone(planRead.at, zone, 'short') ?? ''}</p>
               : (
                 <Button className={primaryBtn} disabled={busy}

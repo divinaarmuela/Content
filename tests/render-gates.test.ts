@@ -549,6 +549,9 @@ describe('the editor’s card borrows the plan only when the shoot made it (14 S
   it('reads the rows through briefRowsFor with the shoot-card check', () => {
     const s = src('app/dashboard/board/EditorCardDrawer.tsx')
     expect(s).toContain('const fromPlan = !!item.batch_id && item.id === shootCardId(String(item.batch_id))')
+    // a card made by hand that names a shoot wears no footage or plan press (16 Sep 2026)
+    expect(s).toContain('{fromPlan && shoot?.footage_handed_at && holder && (')
+    expect(s).toContain('{fromPlan && planRead.on && shoot ? (planRead.read')
     expect(s).toContain('const brief = briefRowsFor({')
     expect(s).not.toMatch(/const brief = beforeYouStart\(/)
   })
