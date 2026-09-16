@@ -142,3 +142,17 @@ describe('the routes and the pages (source pins)', () => {
     expect(src('app/dashboard/board/BoardDialogs.tsx')).toContain("{card?.link_url ? 'Change the source working folder' : 'Source working folder'}")
   })
 })
+
+describe('the clip a phone can play (16 Sep 2026)', () => {
+  it('the portal and the review page hand the player the Stream preview when there is one, the copy otherwise', () => {
+    const hook = src('app/components/media/useHlsSource.ts')
+    expect(hook).toContain("return base ? `${base}/manifest/video.m3u8` : null")
+    expect(hook).toContain("if (el.canPlayType('application/vnd.apple.mpegurl')) {")
+    expect(hook).toContain("void import('hls.js')")
+    const portal = src('app/components/portal/EditingReview.tsx')
+    expect(portal).toContain('useHlsSource(video, clip ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)')
+    expect(portal).not.toContain('preload="metadata" src={clip.src}')
+    const review = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
+    expect(review).toContain('useHlsSource(video, streamBase ? hlsManifestUrl(streamBase) : (copyUrl ??')
+  })
+})

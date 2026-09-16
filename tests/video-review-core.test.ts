@@ -93,7 +93,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
   it('the page draws the clip, the markers and the comments, and stamps the current second', () => {
     const p = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     // our copy first (16 Sep 2026), Drive otherwise
-    expect(p).toContain('src={copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}')
+    expect(p).toContain("useHlsSource(video, streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
     expect(p).toContain("const copyUrl = [pullA, pullB, pullC].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null")
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
     expect(p).toContain("const at = stamp ? Math.floor(video.current?.currentTime ?? 0) : null")

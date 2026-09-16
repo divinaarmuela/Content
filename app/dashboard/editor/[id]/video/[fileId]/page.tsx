@@ -11,6 +11,9 @@ import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
 import { driveTargetOf } from '../../../../../lib/card-link-core'
 import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
+import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
+import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
+import { streamBaseUrl } from '../../../../../lib/stream-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
 import { clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
@@ -63,6 +66,11 @@ export default function VideoReviewPage() {
   const approved = item ? clipApproval(clipApprovalsOf(item), fileId) : null
 
   const video = useRef<HTMLVideoElement>(null)
+  // the Stream preview of our copy when there is one — a phone plays it; the master it will not (16 Sep 2026)
+  const previews = usePreviewRows(copyUrl ? [copyUrl] : [])
+  const preview = copyUrl ? previews.get(copyUrl) : null
+  const streamBase = preview && preview.state === 'ready' ? streamBaseUrl(preview) : null
+  useHlsSource(video, streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [text, setText] = useState('')
@@ -128,7 +136,6 @@ export default function VideoReviewPage() {
         {/* ── the clip, and the markers under it ── */}
         <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label="The clip">
           <video ref={video} controls playsInline preload="metadata"
-            src={copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`}
             className="max-h-[70vh] w-full rounded-tile bg-black"
             onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
             onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}

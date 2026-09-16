@@ -9,6 +9,7 @@ import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
 import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../lib/video-review-core'
 import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
+import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -46,6 +47,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   useEffect(() => { setApprovals(data.approvals) }, [data.approvals])
 
   const video = useRef<HTMLVideoElement>(null)
+  // the Stream preview when there is one — a phone plays it; the master it will not (16 Sep 2026)
+  useHlsSource(video, clip ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [name, setName] = useState('')
@@ -124,7 +127,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         {clip ? (
           <>
             <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
-              <video key={clip.id} ref={video} controls playsInline preload="metadata" src={clip.src}
+              <video key={clip.id} ref={video} controls playsInline preload="metadata"
                 className="mx-auto max-h-[68vh] w-full bg-black"
                 onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
                 onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
