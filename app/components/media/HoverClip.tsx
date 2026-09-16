@@ -39,6 +39,7 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
   const [frame, setFrame] = useState<string | null>(null)
   const frameTimer = useRef<number | null>(null)
   const wantedFrame = useRef<string | null>(null)
+  const warmed = useRef(false)
   useEffect(() => () => { if (frameTimer.current !== null) clearTimeout(frameTimer.current); if (timer.current !== null) clearTimeout(timer.current) }, [])
 
   const stills = !!frames && !!poster && typeof duration === 'number' && duration > 0
@@ -82,7 +83,12 @@ export default function HoverClip({ src, className = '', at = 0.5, poster, durat
 
   return (
     <span className="relative block h-full w-full"
-      onMouseEnter={() => { if (!stills) void ref.current?.play().catch(() => undefined) }}
+      onMouseEnter={() => {
+        if (!stills) { void ref.current?.play().catch(() => undefined); return }
+        // warm every still of this clip the moment the pointer arrives, so
+        // each swap after that is from the browser's cache — instant
+        if (!warmed.current) { warmed.current = true; for (let s = 0; s <= Math.ceil(duration); s++) { const img = new Image(); img.src = frames(s) } }
+      }}
       onMouseMove={e => {
         const r = e.currentTarget.getBoundingClientRect()
         if (r.width > 0) moveTo((e.clientX - r.left) / r.width)
