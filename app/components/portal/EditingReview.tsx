@@ -8,6 +8,7 @@ import type { ClipApproval } from '../../lib/clip-approvals-core'
 import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
 import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../lib/video-review-core'
 import { roundLabel } from '../../lib/edit-round-core'
+import HoverClip from '../media/HoverClip'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -185,12 +186,12 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 <li key={c.id}>
                   <button type="button" onClick={() => setCurrent(i)} aria-pressed={i === current} aria-label={`Play ${c.name}`}
                     className={`group flex w-full flex-col gap-1.5 rounded-xl border p-1.5 text-left transition ${i === current ? 'border-amber-300 bg-foreground/10' : 'border-border hover:border-foreground/40'}`}>
-                    <span className="relative block aspect-video w-full overflow-hidden rounded-lg bg-foreground/5">
+                    <span className="relative block aspect-[4/5] w-full overflow-hidden rounded-lg bg-foreground/5">
                       {c.thumb
                         // eslint-disable-next-line @next/next/no-img-element -- Drive's own picture
                         ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                         // the clip's own first frame, from our copy (16 Sep 2026)
-                        : <video src={`${c.src}#t=0.5`} muted playsInline preload="metadata" aria-hidden tabIndex={-1} className="pointer-events-none h-full w-full object-cover" />}
+                        : <HoverClip src={c.src} className="h-full w-full object-cover" />}
                       {tick && (
                         <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
                           <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />

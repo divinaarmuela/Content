@@ -9,6 +9,7 @@ import {
 import { kindOf } from '../../lib/files-core'
 import type { PullFile } from '../../lib/drive-pull-core'
 import { fileRound, roundLabel, roundsOf } from '../../lib/edit-round-core'
+import HoverClip from '../../components/media/HoverClip'
 
 /**
  * THE FILES BEHIND A CARD'S DRIVE LINK, AS TILES (the owner, 15 Sep 2026:
@@ -137,14 +138,14 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                   <li key={t.id} className={`flex flex-col gap-1 rounded-inner border p-2 ${open ? 'border-foreground' : 'border-border'}`}>
                     <button type="button" onClick={() => { if (reviewHref && t.kind === 'video') { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
                       aria-label={`${tileActionWords(t.kind)} ${t.name}`}
-                      className="relative block aspect-square w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-90">
+                      className={`relative block w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-95 ${fromCopies ? 'aspect-[4/5]' : 'aspect-square'}`}>
                       {t.thumb
                         // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
                         ? <img src={t.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                         : isCopy(t) && t.kind === 'video'
                           // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
                           // the tile is the clip a moment in, and no picture has to be made
-                          ? <video src={`${t.preview}#t=0.5`} muted playsInline preload="metadata" aria-hidden tabIndex={-1} className="pointer-events-none h-full w-full object-cover" />
+                          ? <HoverClip src={t.preview} className="h-full w-full object-cover" />
                           : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
                       {approvedIds?.includes(t.id) && (
                         <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
