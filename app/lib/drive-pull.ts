@@ -76,6 +76,19 @@ export async function runPullList(id: string, version: number | null): Promise<{
   const pulls = table<DrivePull>('drive_pulls')
   const row = await pulls.get(id)
   if (!row) return { files: 0, bytes: 0, note: 'no row' }
+  // WHAT WENT WRONG, ON THE ROW (16 Sep 2026): a step that throws is retried
+  // by Inngest, which keeps no words — the row keeps them, so the bar says why
+  try {
+    return await listInto(pulls, row, version)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await pulls.update(id, { status: 'failed', error: `Could not read the folder: ${message}`.slice(0, 500), finished_at: new Date().toISOString(), updated_at: new Date().toISOString() } as never).catch(() => undefined)
+    throw e
+  }
+}
+
+async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePull, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
+  const id = row.id
   await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
 
   const seen: { id: string; name: string; mime: string; size: number | null }[] = []
@@ -89,6 +102,8 @@ export async function runPullList(id: string, version: number | null): Promise<{
     }
   }
   await walk(row.folder_id, '', 0)
+  // where the step has got to, on the row — so a stall says where it stalled
+  await pulls.update(id, { total_files: seen.length, error: `Read the folder: ${seen.length} files`, updated_at: new Date().toISOString() } as never)
 
   if (seen.length === 0) {
     await pulls.update(id, {
@@ -99,8 +114,10 @@ export async function runPullList(id: string, version: number | null): Promise<{
   }
 
   // sizes the public view does not carry: one one-byte ask per file
+  let probed = 0
   for (const f of seen) {
     if (f.size !== null) continue
+    await pulls.update(id, { error: `Reading sizes: ${++probed} (${f.name})`, updated_at: new Date().toISOString() } as never)
     const res = await openDriveFile(f.id, 'bytes=0-0')
     f.size = res ? totalFromContentRange(res) : null
     try { await res?.body?.cancel() } catch { /* fine */ }
@@ -120,7 +137,7 @@ export async function runPullList(id: string, version: number | null): Promise<{
   await pulls.update(id, {
     status: allDone ? 'done' : 'copying', files, total_files: files.length, total_bytes, done_files, done_bytes,
     started_at: new Date().toISOString(), finished_at: allDone ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString(),
+    error: null, updated_at: new Date().toISOString(),
   } as never)
   return { files: files.length, bytes: total_bytes }
 }
