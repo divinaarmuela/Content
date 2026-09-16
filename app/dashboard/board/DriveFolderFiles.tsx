@@ -130,7 +130,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
           )}
 
           {tiles.length > 0 && (
-            <ul className={wide ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3'}>
+            {/* our copies scrub on hover, so their tiles are big enough to watch (16 Sep 2026) */}
+            <ul className={fromCopies ? 'grid grid-cols-2 gap-3 sm:grid-cols-3' : wide ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3'}>
               {tiles.map(t => {
                 const open = showing?.id === t.id
                 const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
