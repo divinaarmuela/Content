@@ -86,7 +86,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
       .list({ by: { item_id: item.id }, where: r => r.visibility === 'client', orderBy: [['created_at', 'asc']], limit: 300 })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])),
     accountManagerName(owner.client.id),
-    table<DrivePull>('drive_pulls').get(pullId(folder.folderId)).catch(() => null),
+    table<DrivePull>('drive_pulls').get(pullId(folder.folderId, item.id)).catch(() => null),
   ])
   const status = item.status as ItemStatus
   // OUR COPIES FIRST (the pull, 16 Sep 2026): a clip already landed in our

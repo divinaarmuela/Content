@@ -34,7 +34,8 @@ export default function DrivePullBar({ kind, scopeId, folderUrl, which = 'folder
   showFiles?: boolean
 }) {
   const folderId = driveTargetOf(folderUrl)?.id ?? null
-  const { row } = useRow<DrivePull>('drive_pulls', folderId ? pullId(folderId) : null)
+  // a card's pull is its own row; a shoot's footage folder is one row for the shoot and its card (16 Sep 2026)
+  const { row } = useRow<DrivePull>('drive_pulls', folderId ? pullId(folderId, kind === 'item' ? scopeId : null) : null)
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)
   const [showing, setShowing] = useState<PullFile | null>(null)

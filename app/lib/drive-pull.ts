@@ -47,8 +47,9 @@ export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: 
   const target = driveTargetOf(opts.folderUrl)
   if (!target) return { id: '', started: false, reason: 'Not a Google Drive link' }
   const folderId = target.id
-  if (!r2Configured()) return { id: pullId(folderId), started: false, reason: 'File storage is not configured' }
-  const id = pullId(folderId)
+  const scopeKey = opts.kind === 'item' ? opts.scopeId : null
+  if (!r2Configured()) return { id: pullId(folderId, scopeKey), started: false, reason: 'File storage is not configured' }
+  const id = pullId(folderId, scopeKey)
   const now = new Date().toISOString()
   const pulls = table<DrivePull>('drive_pulls')
   const claim = await pulls.claim(id, current => {
@@ -106,7 +107,7 @@ export async function cancelReplacedPull(opts: { kind: Kind; scopeId: string; ol
   const next = driveTargetOf(opts.newUrl ?? '')
   if (next && next.id === old.id) return false
   const pulls = table<DrivePull>('drive_pulls')
-  const id = pullId(old.id)
+  const id = pullId(old.id, opts.kind === 'item' ? opts.scopeId : null)
   const now = new Date().toISOString()
   let open: PullFile[] = []
   const claim = await pulls.claim(id, current => {

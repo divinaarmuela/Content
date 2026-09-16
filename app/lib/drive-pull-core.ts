@@ -61,9 +61,16 @@ export function pullInFlight(row: PullRow | null | undefined): boolean {
 /** the words on a pull that was called off because its link was replaced */
 export const PULL_REPLACED_WORDS = 'Stopped — the link was replaced'
 
-/** one row per folder: the same folder on a shoot and on its card is one pull */
-export function pullId(folderId: string): string {
-  return `folder-${folderId}`
+/**
+ * ONE ROW PER FOLDER PER CARD (the owner, 16 Sep 2026: "I created a new card,
+ * so it should show that as a new link — why does it have to take into
+ * account what another card does?"). A card's pull is its own: the same
+ * Drive link on two cards is two rows, each with its own versions and
+ * purpose, so nothing one card did shows on another. A shoot's footage
+ * folder stays one row, shared by the shoot and the card the shoot made.
+ */
+export function pullId(folderId: string, scopeId?: string | null): string {
+  return scopeId ? `folder-${folderId}@${scopeId}` : `folder-${folderId}`
 }
 
 /** a slice of one file moved in one go — small enough to stream well inside a request */
