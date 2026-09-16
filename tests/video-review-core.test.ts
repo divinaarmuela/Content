@@ -84,7 +84,12 @@ describe('the page, the stream and the tiles (source pins)', () => {
   })
   it('a press on a clip on the card page opens its review page; a comment says which clip it is on', () => {
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('reviewHref={t => reviewPath(id, t.id, t.name)}')
-    expect(src('app/dashboard/board/DriveFolderFiles.tsx')).toContain("if (reviewHref && t.kind === 'video') { window.location.assign(reviewHref(t)); return }")
+    // a picture opens the same page — the still, the comments, no timeline (16 Sep 2026)
+    expect(src('app/dashboard/board/DriveFolderFiles.tsx')).toContain("if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return }")
+    const rp = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
+    expect(rp).toContain("const isImage = kindOf('', name) === 'image'")
+    expect(rp).toContain('<img src={fileSrc} alt={name}')
+    expect(rp).toContain('const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null')
     const c = src('app/api/production/items/[id]/comments/route.ts')
     expect(c).toContain('video_file_id: videoFile,')
     expect(c).toContain('video_file_name: videoName,')
@@ -93,10 +98,10 @@ describe('the page, the stream and the tiles (source pins)', () => {
   it('the page draws the clip, the markers and the comments, and stamps the current second', () => {
     const p = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     // our copy first (16 Sep 2026), Drive otherwise
-    expect(p).toContain("useHlsSource(video, streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
+    expect(p).toContain("useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
     expect(p).toContain("const copyUrl = [pullA, pullB, pullC].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null")
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
-    expect(p).toContain("const at = stamp ? Math.floor(video.current?.currentTime ?? 0) : null")
+    expect(p).toContain("const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null")
     expect(p).toContain('<PageTitle')
   })
 })

@@ -146,7 +146,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                 const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
                 return (
                   <li key={t.id} className={`flex flex-col gap-1 rounded-inner border p-2 ${open ? 'border-foreground' : 'border-border'}`}>
-                    <button type="button" onClick={() => { if (reviewHref && t.kind === 'video') { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
+                    <button type="button" onClick={() => { if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
                       aria-label={`${tileActionWords(t.kind)} ${t.name}`}
                       className={`relative block w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-95 ${fromCopies ? 'aspect-[4/5]' : 'aspect-square'}`}>
                       {t.thumb

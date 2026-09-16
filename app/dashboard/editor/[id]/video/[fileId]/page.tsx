@@ -11,6 +11,7 @@ import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
 import { driveTargetOf } from '../../../../../lib/card-link-core'
 import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
+import { kindOf } from '../../../../../lib/files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { streamBaseUrl } from '../../../../../lib/stream-core'
@@ -66,11 +67,17 @@ export default function VideoReviewPage() {
   const approved = item ? clipApproval(clipApprovalsOf(item), fileId) : null
 
   const video = useRef<HTMLVideoElement>(null)
+  // A PICTURE HAS THE SAME PAGE (the owner, 16 Sep 2026: "this page is an
+  // image, but when opened it's not opening the page to put the comments,
+  // like the videos"): the still large on the left, the comments on the
+  // right, no timeline and no second to stamp
+  const isImage = kindOf('', name) === 'image'
+  const fileSrc = copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`
   // the Stream preview of our copy when there is one — a phone plays it; the master it will not (16 Sep 2026)
   const previews = usePreviewRows(copyUrl ? [copyUrl] : [])
   const preview = copyUrl ? previews.get(copyUrl) : null
   const streamBase = preview && preview.state === 'ready' ? streamBaseUrl(preview) : null
-  useHlsSource(video, streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
+  useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [text, setText] = useState('')
@@ -99,7 +106,7 @@ export default function VideoReviewPage() {
     if (!body) return
     setSending(true)
     try {
-      const at = stamp ? Math.floor(video.current?.currentTime ?? 0) : null
+      const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null
       const res = await fetch(`/api/production/items/${id}/comments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body, video_file_id: fileId, video_file_name: name, ...(at !== null ? { video_timestamp_sec: at } : {}) }),
@@ -130,17 +137,23 @@ export default function VideoReviewPage() {
         className="inline-flex min-h-11 w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> {item.title}
       </button>
-      <PageTitle title={name} summary={`A clip on ${item.title}. Press a circle under the clip to jump to that comment.${approved ? ` Approved by the client (${approved.by}).` : ''}`} />
+      <PageTitle title={name} summary={`${isImage ? `A picture on ${item.title}.` : `A clip on ${item.title}. Press a circle under the clip to jump to that comment.`}${approved ? ` Approved by the client (${approved.by}).` : ''}`} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
         {/* ── the clip, and the markers under it ── */}
-        <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label="The clip">
+        <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label={isImage ? 'The picture' : 'The clip'}>
+          {isImage ? (
+            // eslint-disable-next-line @next/next/no-img-element -- the file itself
+            <img src={fileSrc} alt={name} className="max-h-[70vh] w-full rounded-tile bg-foreground/[0.06] object-contain" />
+          ) : (
           <video ref={video} controls playsInline preload="metadata"
             className="max-h-[70vh] w-full rounded-tile bg-black"
             onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
             onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
             onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
+          )}
           {/* THE MARKERS: one circle per stamped comment, lit as the playhead reaches it */}
+          {!isImage && (
           <div className="relative mx-3 mt-1 h-8" role="group" aria-label="Comments on the timeline">
             <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 rounded bg-foreground/15" />
             {duration > 0 && (
@@ -157,13 +170,14 @@ export default function VideoReviewPage() {
               </button>
             ))}
           </div>
-          <p className="text-[12px] text-muted-foreground">{duration > 0 ? `${formatStamp(now)} / ${formatStamp(duration)}` : 'Loading the clip…'}{markers.length > 0 ? ` · ${markers.length} ${markers.length === 1 ? 'comment' : 'comments'} on the timeline` : ''}</p>
+          )}
+          <p className="text-[12px] text-muted-foreground">{isImage ? `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} on this picture` : duration > 0 ? `${formatStamp(now)} / ${formatStamp(duration)}` : 'Loading the clip…'}{!isImage && markers.length > 0 ? ` · ${markers.length} ${markers.length === 1 ? 'comment' : 'comments'} on the timeline` : ''}</p>
         </section>
 
         {/* ── the comments, in time order ── */}
         <aside className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Comments on this clip">
           <div className="flex-1 overflow-y-auto p-3 lg:max-h-[60vh]">
-            {comments.length === 0 && <p className="text-[13px] text-muted-foreground">No comments on this clip yet. Pause where you want to say something and write it below — the second is stamped on it.</p>}
+            {comments.length === 0 && <p className="text-[13px] text-muted-foreground">{isImage ? 'No comments on this picture yet. Write what needs changing below.' : 'No comments on this clip yet. Pause where you want to say something and write it below — the second is stamped on it.'}</p>}
             <ul className="flex flex-col gap-2">
               {comments.map(c => (
                 <li key={c.id} id={`clip-comment-${c.id}`}
@@ -184,10 +198,12 @@ export default function VideoReviewPage() {
             </ul>
           </div>
           <div className="flex flex-col gap-2 border-t border-border p-3">
+            {!isImage && (
             <label className="flex items-center gap-2 text-[13px]">
               <input type="checkbox" className="h-4 w-4 accent-foreground" checked={stamp} onChange={e => setStamp(e.target.checked)} />
               Stamp the current second{stamp && duration > 0 ? `: ${formatStamp(now)}` : ''}
             </label>
+            )}
             <textarea value={text} onChange={e => setText(e.target.value)} rows={3}
               placeholder="What needs changing here?"
               onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
