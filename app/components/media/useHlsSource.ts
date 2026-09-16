@@ -23,19 +23,23 @@ export function useHlsSource(video: RefObject<HTMLVideoElement | null>, src: str
       if (el.getAttribute('src') !== src) el.src = src
       return
     }
-    if (el.canPlayType('application/vnd.apple.mpegurl')) {
-      el.src = src
-      return
-    }
+    // hls.js FIRST, the browser's own HLS second (16 Sep 2026): Chrome
+    // answers "maybe" to canPlayType for HLS and then never fetches the
+    // manifest — the first live try sat at "Loading the clip…" for good.
+    // Only a browser with no MediaSource (an iPhone's Safari) is handed the
+    // manifest directly, and it plays it natively.
     let live = true
     let player: { destroy(): void } | null = null
     void import('hls.js').then(({ default: Hls }) => {
       if (!live) return
-      if (!Hls.isSupported()) { el.src = src; return }
-      const h = new Hls({ maxBufferLength: 30 })
-      h.loadSource(src)
-      h.attachMedia(el)
-      player = h
+      if (Hls.isSupported()) {
+        const h = new Hls({ maxBufferLength: 30 })
+        h.loadSource(src)
+        h.attachMedia(el)
+        player = h
+        return
+      }
+      if (el.canPlayType('application/vnd.apple.mpegurl')) el.src = src
     })
     return () => { live = false; player?.destroy() }
   }, [video, src])

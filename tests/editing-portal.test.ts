@@ -161,8 +161,11 @@ describe('the clip a phone can play (16 Sep 2026)', () => {
   it('the portal and the review page hand the player the Stream preview when there is one, the copy otherwise', () => {
     const hook = src('app/components/media/useHlsSource.ts')
     expect(hook).toContain("return base ? `${base}/manifest/video.m3u8` : null")
-    expect(hook).toContain("if (el.canPlayType('application/vnd.apple.mpegurl')) {")
+    // hls.js first — Chrome says "maybe" to native HLS and then plays nothing (16 Sep 2026)
     expect(hook).toContain("void import('hls.js')")
+    expect(hook).toContain('if (Hls.isSupported()) {')
+    expect(hook).toContain("if (el.canPlayType('application/vnd.apple.mpegurl')) el.src = src")
+    expect(hook.indexOf('Hls.isSupported()')).toBeLessThan(hook.indexOf("canPlayType('application/vnd.apple.mpegurl')"))
     const portal = src('app/components/portal/EditingReview.tsx')
     expect(portal).toContain('useHlsSource(video, clip ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)')
     expect(portal).not.toContain('preload="metadata" src={clip.src}')
