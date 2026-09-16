@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+
 import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
 import { ExternalLink } from 'lucide-react'
@@ -31,8 +31,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
       style={{ fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif', ['--p-mono-font' as string]: 'var(--font-sometype), monospace' }}>
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0a0a0a]/85 backdrop-blur">
         <div className="mx-auto flex min-h-14 w-full max-w-[1500px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 sm:px-8">
-          <Link href={`/portal/${encodeURIComponent(token)}`} className="inline-flex min-h-11 items-center text-[13px] font-semibold text-white/70 hover:text-white">← Your board</Link>
-          <span className="text-[11px] uppercase tracking-[0.2em] text-white/40" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>Editing review · {data.portal_name}</span>
+          <span className="text-[11px] uppercase tracking-[0.2em] text-white/40" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>MD Media · Editing review · {data.portal_name}</span>
           <a href={data.folder.url} target="_blank" rel="noreferrer noopener"
             className="ml-auto inline-flex min-h-11 items-center gap-2 text-[13px] font-semibold text-white/70 hover:text-white">
             <ExternalLink className="h-4 w-4" aria-hidden /> Open in Drive
