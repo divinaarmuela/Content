@@ -19,9 +19,14 @@ import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../
  * THIS clip in time order, a box that stamps the second, and one Approved
  * button per clip. Approving is a tick the team sees on the card, never a
  * move — the account manager logs the approval or sends it back.
+ *
+ * Painted from the portal's tokens, so the light/dark toggle on the shell
+ * moves the whole page; the player itself stays black in both.
  */
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+
+const input = 'w-full rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50'
 
 export default function EditingReview({ data }: { data: EditingPortal }) {
   const router = useRouter()
@@ -101,13 +106,13 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
         {clip ? (
           <>
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)]">
+            <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
               <video key={clip.id} ref={video} controls playsInline preload="metadata" src={clip.src}
                 className="mx-auto max-h-[68vh] w-full bg-black"
                 onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
                 onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
                 onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
-              {/* the markers: one circle per comment, lit as the playhead reaches it */}
+              {/* the markers: one circle per comment, lit as the playhead reaches it — on the player, so always on black */}
               <div className="relative mx-5 my-4 h-8" role="group" aria-label="Your comments on the timeline">
                 <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 rounded bg-white/15" />
                 {duration > 0 && (
@@ -125,8 +130,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-white" title={clip.name}>{clip.name}</p>
-                <p className="text-[12px] text-white/50" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
+                <p className="truncate text-[15px] font-semibold text-foreground" title={clip.name}>{clip.name}</p>
+                <p className="text-[12px] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
                   {current + 1} / {clips.length}{duration > 0 ? ` · ${formatStamp(now)} / ${formatStamp(duration)}` : ''}
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
@@ -139,16 +144,16 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 </button>
               ) : (
                 <button type="button" onClick={() => void approve(false)} disabled={approving}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-5 text-[14px] font-semibold text-white hover:border-white hover:bg-white/10 disabled:opacity-60">
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
                   <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : 'Approve this clip'}
                 </button>
               )}
             </div>
           </>
         ) : (
-          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/60 p-8 text-center text-white/70">
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
             <p>{data.folder_note ?? 'Nothing to play yet.'}</p>
-            <a href={data.folder.url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-5 text-[14px] font-semibold text-white hover:bg-white/10">
+            <a href={data.folder.url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:bg-foreground/10">
               <ExternalLink className="h-4 w-4" aria-hidden /> Open in Drive
             </a>
           </div>
@@ -163,68 +168,67 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
               return (
                 <li key={c.id}>
                   <button type="button" onClick={() => setCurrent(i)} aria-pressed={i === current} aria-label={`Play ${c.name}`}
-                    className={`group flex w-full flex-col gap-1.5 rounded-xl border p-1.5 text-left transition ${i === current ? 'border-amber-300 bg-white/10' : 'border-white/10 hover:border-white/40'}`}>
-                    <span className="relative block aspect-video w-full overflow-hidden rounded-lg bg-white/5">
+                    className={`group flex w-full flex-col gap-1.5 rounded-xl border p-1.5 text-left transition ${i === current ? 'border-amber-300 bg-foreground/10' : 'border-border hover:border-foreground/40'}`}>
+                    <span className="relative block aspect-video w-full overflow-hidden rounded-lg bg-foreground/5">
                       {c.thumb
                         // eslint-disable-next-line @next/next/no-img-element -- Drive's own picture
                         ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                        : <span className="flex h-full w-full items-center justify-center text-white/40"><Play className="h-5 w-5" aria-hidden /></span>}
+                        : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Play className="h-5 w-5" aria-hidden /></span>}
                       {tick && (
                         <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
                           <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
                         </span>
                       )}
-                      {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-white">{n}</span>}
+                      {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">{n}</span>}
                     </span>
-                    <span className="truncate px-0.5 text-[12px] text-white/80" title={c.name}>{c.name}</span>
+                    <span className="truncate px-0.5 text-[12px] text-foreground/80" title={c.name}>{c.name}</span>
                   </button>
                 </li>
               )
             })}
           </ul>
         )}
-        {approvedWords && <p className="text-[13px] text-emerald-300">{approvedWords}</p>}
+        {approvedWords && <p className="text-[13px] text-emerald-600 dark:text-emerald-300">{approvedWords}</p>}
       </section>
 
       {/* ── the comments on this clip ── */}
-      <aside className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]" aria-label="Your comments on this clip">
-        <div className="border-b border-white/10 px-5 py-4">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/50" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>Your comments</p>
-          <p className="mt-1 text-[13px] text-white/60">Pause the clip where you have something to say and write it here — the second is stamped on it. {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
+      <aside className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card" aria-label="Your comments on this clip">
+        <div className="border-b border-border px-5 py-4">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>Your comments</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">Pause the clip where you have something to say and write it here — the second is stamped on it. {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 lg:max-h-[52vh]">
-          {onClip.length === 0 && <p className="text-[14px] text-white/50">Nothing said on this clip yet.</p>}
+          {onClip.length === 0 && <p className="text-[14px] text-muted-foreground">Nothing said on this clip yet.</p>}
           <ul className="flex flex-col gap-2">
             {onClip.map(c => (
-              <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-white/10'}`}>
+              <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-border'}`}>
                 <div className="flex flex-wrap items-baseline gap-2">
                   {typeof c.video_timestamp_sec === 'number' && (
                     <button type="button" onClick={() => seek(c.video_timestamp_sec as number)}
-                      className="rounded-full bg-white px-2 py-0.5 text-[12px] font-semibold text-black" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
+                      className="rounded-full bg-foreground px-2 py-0.5 text-[12px] font-semibold text-background" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
                       {formatStamp(c.video_timestamp_sec)}
                     </button>
                   )}
-                  <span className="text-[13px] font-semibold text-white">{c.author_name}</span>
-                  <span className="text-[12px] text-white/40">{when(c.created_at)}</span>
+                  <span className="text-[13px] font-semibold text-foreground">{c.author_name}</span>
+                  <span className="text-[12px] text-muted-foreground">{when(c.created_at)}</span>
                 </div>
-                <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-white/90">{c.body}</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90">{c.body}</p>
               </li>
             ))}
           </ul>
         </div>
-        <div className="flex flex-col gap-2 border-t border-white/10 px-5 py-4">
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name"
-            className="h-11 w-full rounded-full border border-white/15 bg-black/40 px-4 text-[14px] text-white outline-none placeholder:text-white/40 focus:border-white/50" />
-          <label className="flex items-center gap-2 text-[13px] text-white/70">
+        <div className="flex flex-col gap-2 border-t border-border px-5 py-4">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name" className={`h-11 ${input}`} />
+          <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <input type="checkbox" checked={stamp} onChange={e => setStamp(e.target.checked)} className="h-4 w-4 accent-amber-300" />
             Stamp the current second{stamp && duration > 0 ? `: ${formatStamp(now)}` : ''}
           </label>
           <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Your thoughts on this clip — a note at this second, or anything you’d like us to know"
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
-            className="w-full rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-[14px] text-white outline-none placeholder:text-white/40 focus:border-white/50" />
-          {error && <p role="alert" className="text-[13px] text-red-300">{error}</p>}
+            className={`${input} rounded-2xl py-3`} />
+          {error && <p role="alert" className="text-[13px] text-red-500 dark:text-red-300">{error}</p>}
           <button type="button" onClick={() => void send()} disabled={!clip || sending || !draft.trim()}
-            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-white px-5 text-[14px] font-semibold text-black hover:bg-white/90 disabled:opacity-50">
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
             <Send className="h-4 w-4" aria-hidden /> {sending ? 'Sending…' : 'Add the comment'}
           </button>
         </div>

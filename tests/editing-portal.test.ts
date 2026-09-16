@@ -107,6 +107,9 @@ describe('the routes and the pages (source pins)', () => {
   it('the editing portal page: clips left, comments right, an Approved button per clip, no status buttons; the client sees only their own comments', () => {
     const page = src('app/portal/[token]/edit/[id]/page.tsx')
     expect(page).toContain('<EditingReview data={data} />')
+    // the same light/dark toggle as every portal page; no way back to the board (16 Sep 2026)
+    expect(page).toContain('<PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>')
+    expect(page).not.toContain('Your board')
     expect(page).not.toContain('PortalCardView')
     expect(page).not.toContain('/api/portal/act')
     const c = src('app/components/portal/EditingReview.tsx')
