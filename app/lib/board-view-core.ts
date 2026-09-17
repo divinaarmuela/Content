@@ -687,6 +687,21 @@ export function laneOf(page: BoardPage, column: BoardColumnKey): PageLaneKey {
   return pageLanes(page).find(l => l.columns.includes(column))!.key
 }
 
+/** HANDED TO A SCHEDULER: the card is their posting job now — its status is
+ *  Draft again for that job, but the EDIT is finished (the owner, 17 Sep 2026:
+ *  "once completed and handed over, which column should I look at?"). On a
+ *  board with a Done lane (the Editor and Designer pages) it sits there. */
+export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown }): boolean {
+  return card.adhoc_post !== true && Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
+}
+
+/** the chip: who it went to, when the names are known */
+export function handedToWords(card: { scheduler_ids?: unknown }, names: ReadonlyMap<string, string>): string {
+  const ids = Array.isArray(card.scheduler_ids) ? card.scheduler_ids.map(String) : []
+  const known = ids.map(id => names.get(id)).filter((n): n is string => !!n)
+  return known.length > 0 ? `Handed to ${known.join(', ')}` : 'Handed to a scheduler'
+}
+
 /** Group cards by lane, every lane present (empty arrays included), in
  *  board order. Input order within a lane is preserved. */
 export function groupByLane<T extends { status: ItemStatus; deliver_only?: unknown; clients?: { posts_own_content?: unknown } | null }>(
@@ -696,7 +711,8 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
   const laneByColumn = new Map<BoardColumnKey, PageLaneKey>(
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
-    const key = laneByColumn.get(cardColumn(card))
+    // the editor's road ends at the hand-over: the scheduler's Draft is not the editor's In Progress
+    const key = handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))

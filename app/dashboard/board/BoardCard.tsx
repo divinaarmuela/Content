@@ -12,7 +12,7 @@ import {
 import { statusesIn, columnOf } from '../../lib/board-core'
 import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
-  type BoardViewCard, type BoardViewer, type CardAction, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
+  type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
@@ -182,6 +182,8 @@ export function BoardCard({
   // than skipping the checks
   const faceOpensCard = editorFace && primary?.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review' || primary.to === 'revision_complete')
   const finals = editorFace ? (card as { finals_in?: string | null }).finals_in ?? null : null
+  // handed to a scheduler: the edit is done, the card says where it went (17 Sep 2026)
+  const handed = editorFace && handedOver(card as never) ? handedToWords(card as never, names) : null
   const tone = cardTone({
     status: card.status,
     due: card.due_date,
@@ -208,6 +210,7 @@ export function BoardCard({
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {!folded && review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
         {!folded && finals && <Chip tone="green">{finals}</Chip>}
+        {handed && <Chip tone="green">{handed}</Chip>}
         {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}

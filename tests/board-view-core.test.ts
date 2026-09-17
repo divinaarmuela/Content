@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   BOOKED_LABEL, NEEDS_CLIENT_REASON, POSTED_LABEL, READY_FOR_CHECK_LABEL, SEND_BACK_LABEL, SHOW_FILTERS, SHOW_LABELS,
   COLUMN_EMPTY, LANE_EMPTY, OLDER_POSTS_NOTE, POSTED_DAYS,
-  applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, initialsOf, isAssignedTo, needsWorkFirst, UPLOAD_FIRST,
+  applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, handedOver, handedToWords, initialsOf, isAssignedTo, needsWorkFirst, UPLOAD_FIRST,
   laneOf, moveTargets, overviewTiles, pageCards, pageLanes, reachableLanes, recentlyPosted, shortDate,
   postApprovalOffer, postWaitingLine,
   POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE, POST_WAITING_MANAGER,
@@ -783,5 +783,25 @@ describe('the quality reviewer’s "Ask for changes" asks for the words (14 Sep 
     expect(actionFor('revision_required', 'Ask for changes', ['account_manager'])).toEqual({ kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL })
     // the editor's own move keeps its short face label
     expect(actionFor('quality_check', 'Revisions done — ready for quality check', ['editor'])).toEqual({ kind: 'transition', to: 'quality_check', label: 'Revisions done' })
+  })
+})
+
+describe('handed to a scheduler — the editor\u2019s road ends in Done (17 Sep 2026)', () => {
+  it('a card with schedulers sits in Done on the Editor page whatever its status, and stays put on pages without a Done lane', () => {
+    const rows = [
+      { id: 'h', status: 'draft_uploaded', scheduler_ids: ['s1'] },
+      { id: 'e', status: 'draft_uploaded' },
+      { id: 'p', status: 'draft_uploaded', scheduler_ids: ['s1'], adhoc_post: true },
+    ] as never[]
+    const editor = groupByLane(pageLanes('editor'), rows)
+    expect(editor.find(x => x.lane.key === 'done')!.cards.map(c => (c as { id: string }).id)).toEqual(['h'])
+    expect(editor.find(x => x.lane.key === 'in_progress')!.cards.map(c => (c as { id: string }).id)).toEqual(['e', 'p'])
+    const scheduler = groupByLane(pageLanes('scheduler'), rows)
+    expect(scheduler.find(x => x.lane.key === 'draft')!.cards.length).toBe(3)
+    expect(handedOver({ scheduler_ids: ['s1'] })).toBe(true)
+    expect(handedOver({ scheduler_ids: [] })).toBe(false)
+    expect(handedOver({ scheduler_ids: ['s1'], adhoc_post: true })).toBe(false)
+    expect(handedToWords({ scheduler_ids: ['s1', 's2'] }, new Map([['s1', 'Cath']]))).toBe('Handed to Cath')
+    expect(handedToWords({ scheduler_ids: ['s9'] }, new Map())).toBe('Handed to a scheduler')
   })
 })

@@ -893,7 +893,7 @@ export async function performTransition(
       // ACCEPTED: the round that went through, stamped here because the
       // hand-over to a scheduler moves the status back to Draft for the
       // posting job (share-link-core, 17 Sep 2026)
-      ...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as { edit_round?: unknown }) } : {}),
+      ...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as never) } : {}),
       // PINNED AT APPROVAL: the client's "posts their own content" setting
       // is read once, here, and written onto the card — so flipping the
       // setting later never moves a card that was already approved between

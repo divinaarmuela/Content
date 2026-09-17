@@ -19,7 +19,7 @@ describe('share-link-core — the public link for the accepted version (17 Sep 2
     expect(maySharePublicly({ status: 'draft_uploaded', accepted_at: '', accepted_round: 1 })).toBe(false)
     // the transition writes the stamp beside the status
     const workflow = readFileSync('app/lib/workflow.ts', 'utf8')
-    expect(workflow).toContain("...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as { edit_round?: unknown }) } : {}),")
+    expect(workflow).toContain("...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as never) } : {}),")
   })
 
   it('shares the current round only: uploaded files and finished copies, never the folder to work from, never an older version', () => {
