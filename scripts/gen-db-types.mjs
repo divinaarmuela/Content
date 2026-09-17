@@ -440,6 +440,35 @@ for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'drive_p
 //     the post. Because the file is unchanged, the client's approval stands.
 const GHOST_COLUMNS = {
   notification_log: [['claimed_at', { type: 'string', nullable: true }]],
+  //   leads.* — THE ACQUISITION PIPELINE (the doc of 17 Sep 2026): the seven
+  //     stages on the lead itself, with who owns it, when it entered the stage,
+  //     the qualifiers, the dated milestones the exit rules and the scoreboard
+  //     read, the objection, the six follow-up touches, and the not-now list.
+  //     Rules in app/lib/pipeline-core.ts.
+  leads: [
+    ['stage', { type: 'string', nullable: true }],
+    ['stage_entered_at', { type: 'string', nullable: true }],
+    ['owner_id', { type: 'string', nullable: true }],
+    ['tier', { type: 'number', nullable: true }],
+    ['source_tag', { type: 'string', nullable: true }],
+    ['partner', { type: 'string', nullable: true }],
+    ['next_action', { type: 'string', nullable: true }],
+    ['next_action_at', { type: 'string', nullable: true }],
+    ['qualifiers', { type: 'unknown', nullable: true }],
+    ['exit_ticks', { type: 'unknown', nullable: true }],
+    ['call_at', { type: 'string', nullable: true }],
+    ['proposal_sent_at', { type: 'string', nullable: true }],
+    ['walkthrough_at', { type: 'string', nullable: true }],
+    ['signed_at', { type: 'string', nullable: true }],
+    ['deposit_at', { type: 'string', nullable: true }],
+    ['vs_delivered_at', { type: 'string', nullable: true }],
+    ['objection', { type: 'string', nullable: true }],
+    ['deal_value', { type: 'number', nullable: true }],
+    ['not_now_at', { type: 'string', nullable: true }],
+    ['reopen_at', { type: 'string', nullable: true }],
+    ['touches', { type: 'unknown', nullable: true }],
+    ['pipeline_notes', { type: 'string', nullable: true }],
+  ],
   //   post_analytics.interactors — WHO liked and commented on the live post,
   //     by handle (app/lib/followers-core.ts, `Interactors`), read once a day
   //     for the post's first week, and the cross with the account's new

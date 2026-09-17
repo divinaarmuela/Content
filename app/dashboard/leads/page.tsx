@@ -31,6 +31,12 @@ import ScanPanel from './ScanPanel'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
 import PageTitle from '../ui/PageTitle'
+import Pipeline from './Pipeline'
+import { usePersistedChoice } from '../production/workHooks'
+
+/** THE PIPELINE OR THE LIST (the acquisition doc, 17 Sep 2026): the seven
+ *  stages are the page; the list is still there for the export and the raw rows */
+const LEAD_VIEWS = ['pipeline', 'list'] as const
 
 interface Lead {
   id: string
@@ -66,7 +72,8 @@ const COLS: { key: keyof Lead; label: string; mono?: boolean }[] = [
 type TodayLead = { id: string; created_at: string; name: string; biz: string | null; source: string; reason: string }
 
 export default function LeadsPage() {
-  const { can } = useRole()
+  const { can, me } = useRole()
+  const [view, setView] = usePersistedChoice('leads-view', LEAD_VIEWS, 'pipeline', 'view')
   const canScan = can('account_manager')
   const [today, setToday] = useState<TodayLead[]>([])
   const [search, setSearch]   = useState('')
@@ -254,9 +261,17 @@ export default function LeadsPage() {
       )}
       <PageTitle
         title="Leads"
-        summary="Contact form submissions from mdmmarketing.com.au"
+        summary={view === 'pipeline' ? 'One pipeline, seven stages, one owner per stage. A deal moves right only when its exit rule is met.' : 'Contact form submissions from mdmmarketing.com.au'}
         actions={<>
           <div className="flex items-center gap-2">
+            <div role="group" aria-label="Pipeline or list" className="inline-flex h-9 items-center rounded-full border border-border bg-surface p-0.5">
+              {LEAD_VIEWS.map(v => (
+                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
+                  className={`inline-flex h-8 items-center rounded-full px-3 text-[13px] font-semibold ${view === v ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {v === 'pipeline' ? 'Pipeline' : 'List'}
+                </button>
+              ))}
+            </div>
             {/* the table is live, so this refreshes the one thing that is not:
                 today's leads and the reason each of them exists */}
             <Button variant="outline" size="sm" onClick={() => loadToday()}>
@@ -297,6 +312,8 @@ export default function LeadsPage() {
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
           </CardContent>
         </Card>
+      ) : view === 'pipeline' && !error ? (
+        <Pipeline leads={filtered as never} viewerId={me?.id ?? null} />
       ) : error ? (
         <LoadFailed what="your leads" detail={error} onRetry={() => window.location.reload()} />
       ) : (

@@ -910,6 +910,28 @@ export interface Lead {
   need: string | null
   budget: string | null
   timeline: string | null
+  stage: string | null
+  stage_entered_at: string | null
+  owner_id: string | null
+  tier: number | null
+  source_tag: string | null
+  partner: string | null
+  next_action: string | null
+  next_action_at: string | null
+  qualifiers: unknown | null
+  exit_ticks: unknown | null
+  call_at: string | null
+  proposal_sent_at: string | null
+  walkthrough_at: string | null
+  signed_at: string | null
+  deposit_at: string | null
+  vs_delivered_at: string | null
+  objection: string | null
+  deal_value: number | null
+  not_now_at: string | null
+  reopen_at: string | null
+  touches: unknown | null
+  pipeline_notes: string | null
 }
 
 export interface MonthlyCommitment {
@@ -1359,7 +1381,7 @@ export const TABLE_COLUMNS = {
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
   item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
-  leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline'],
+  leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   monthly_commitments: ['video_quota', 'id', 'created_at', 'client_id', 'month', 'year', 'reel_quota', 'carousel_quota', 'story_quota', 'static_quota', 'other_quota', 'notes'],
   monthly_updates: ['id', 'created_at', 'client_id', 'month', 'year', 'definition', 'token', 'status', 'answers', 'notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'title', 'created_by'],
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
@@ -1440,7 +1462,7 @@ export const NULLABLE_COLUMNS = {
   intake_templates: ['updated_by'],
   item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
-  leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline'],
+  leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   monthly_commitments: ['video_quota', 'notes'],
   monthly_updates: ['notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by'],
   newsletter_subscribers: [],
