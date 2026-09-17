@@ -8,6 +8,7 @@ import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core
 import { finishedEditOf } from '../../../../../lib/card-link-core'
 import { startPullSoon } from '../../../../../lib/drive-pull'
 import { SENT_BACK_STATUSES, handInRound } from '../../../../../lib/edit-round-core'
+import { splitApprovedClips } from '../../../../../lib/split-approved'
 
 /** Execute a status transition. Role legality, requirement evidence, and the
  *  optimistic-concurrency guard all live in performTransition. */
@@ -50,6 +51,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       schedulerIds,
       note: note || undefined,
     })
+    // THE APPROVED CLIPS LEAVE WITH THEIR OWN CARD (split-approved, 17 Sep
+    // 2026): sent back from the client's stage with some clips approved and
+    // some not, the approved ones move to a handover card. Best-effort.
+    if (['client_review', 'client_changes_requested'].includes(String(item.status)) && SENT_BACK_STATUSES.includes(to)) {
+      try { await splitApprovedClips(user, updated as never) } catch (e) { console.error('[transition] split of the approved clips failed:', e) }
+    }
     // REVISIONS DONE IS THE NEXT VERSION'S HAND-IN (the owner, 16 Sep 2026:
     // "version 1 is the first time they send the finished link; sent back,
     // they make changes and send again — that's version 2"): the round goes

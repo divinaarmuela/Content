@@ -25,21 +25,41 @@ export function approvedIdSet(approvals: readonly { file_id: string }[]): Set<st
   return new Set(approvals.map(a => a.file_id))
 }
 
+/** THE CLIPS THAT LEFT (the owner, 17 Sep 2026: "approved assets don't get
+ *  sent back to editors — approved goes into handover with the same card
+ *  data"): the ids a send-back moved onto a handover card. They are out of
+ *  the editor's version from then on — not carried, not shown, not shared. */
+export function movedIdSet(item: { split_out?: unknown } | null | undefined): Set<string> {
+  const raw = item?.split_out
+  return new Set(Array.isArray(raw) ? raw.map(String) : [])
+}
+
 /** the approved files from earlier rounds that this round shows as already
- *  good — each once, from its latest round, never one this round hands in itself */
-export function carriedInto<F extends Versioned>(all: readonly F[], round: number, approved: ReadonlySet<string>): (F & { carried_from: number })[] {
+ *  good — each once, from its latest round, never one this round hands in itself,
+ *  never one that left on a handover card */
+export function carriedInto<F extends Versioned>(all: readonly F[], round: number, approved: ReadonlySet<string>, moved: ReadonlySet<string> = new Set()): (F & { carried_from: number })[] {
   const own = new Set(all.filter(f => fileRound(f) === round).map(f => f.id))
   const seen = new Set<string>()
   return all
-    .filter(f => fileRound(f) < round && approved.has(f.id) && !own.has(f.id))
+    .filter(f => fileRound(f) < round && approved.has(f.id) && !own.has(f.id) && !moved.has(f.id))
     .sort((a, b) => fileRound(b) - fileRound(a))
     .filter(f => { if (seen.has(f.id)) return false; seen.add(f.id); return true })
     .map(f => ({ ...f, carried_from: fileRound(f) }))
 }
 
-/** the version's whole set: what it hands in, plus what it carries */
-export function versionSet<F extends Versioned>(all: readonly F[], round: number, approved: ReadonlySet<string>): (F & { carried_from?: number })[] {
-  return [...carriedInto(all, round, approved), ...all.filter(f => fileRound(f) === round)]
+/** the version's whole set: what it hands in, plus what it carries — minus what left */
+export function versionSet<F extends Versioned>(all: readonly F[], round: number, approved: ReadonlySet<string>, moved: ReadonlySet<string> = new Set()): (F & { carried_from?: number })[] {
+  return [...carriedInto(all, round, approved, moved), ...all.filter(f => fileRound(f) === round && !moved.has(f.id))]
+}
+
+/** THE SPLIT AT SEND-BACK: the approved clips go to handover, the rest stay */
+export function splitApproved<F extends { id: string }>(version: readonly F[], approved: ReadonlySet<string>): { handoff: F[]; remaining: F[] } {
+  return { handoff: version.filter(f => approved.has(f.id)), remaining: version.filter(f => !approved.has(f.id)) }
+}
+
+/** the handover card's title: the same card, said to be the approved part */
+export function handoffTitle(title: string, round: number): string {
+  return `${String(title ?? '').trim() || 'Untitled'} — approved from Version ${round}`
 }
 
 export type VersionProgress = { approved: number; total: number; carried: number; allApproved: boolean; words: string | null }

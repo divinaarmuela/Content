@@ -14,7 +14,7 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
-import { approvedIdSet, carriedInto, versionProgress } from '../../lib/version-approval-core'
+import { approvedIdSet, carriedInto, movedIdSet, versionProgress } from '../../lib/version-approval-core'
 import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
@@ -159,8 +159,10 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   // with their tick, and the version's progress is counted over the whole set
   const approvedSet = useMemo(() => approvedIdSet((approvedIds ?? []).map(id => ({ file_id: id }))), [approvedIds])
   const allFinished = useMemo(() => [...pullRows.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)), ...finalFilesAsPulls(item)].filter(f => f.status === 'done' && !!f.url), [pullRows, item])
-  const carried = shownVersion ? carriedInto(allFinished, shownVersion.round, approvedSet).map(f => ({ ...f, version: shownVersion.round })) : []
-  const versionFiles = shownVersion ? [...carried, ...shownVersion.files] : []
+  const movedSet = useMemo(() => movedIdSet(item as never), [item])
+  const carried = shownVersion ? carriedInto(allFinished, shownVersion.round, approvedSet, movedSet).map(f => ({ ...f, version: shownVersion.round })) : []
+  // …and a clip that left on a handover card is out of the editor's newest version
+  const versionFiles = shownVersion ? [...carried, ...shownVersion.files.filter(f => shownVersion !== versionTabs[0] || !movedSet.has(f.id))] : []
   const progress = versionProgress(versionFiles, approvedSet)
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }

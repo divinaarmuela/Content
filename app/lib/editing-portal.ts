@@ -12,7 +12,7 @@ import { streamBaseUrl } from './stream-core'
 import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { finalFilesOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
-import { approvedIdSet, carriedInto } from './version-approval-core'
+import { approvedIdSet, carriedInto, movedIdSet } from './version-approval-core'
 import { filesOf, pullId } from './drive-pull-core'
 import { fileRound, roundOf, roundsOf } from './edit-round-core'
 import { kindOf } from './files-core'
@@ -120,8 +120,10 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   type ShownClip = { id: string; name: string; thumb: string | null; kind: 'video' | 'image'; src: string; version: number; stream: { base: string; duration: number } | null; carried_from?: number | null }
   const list = clips as unknown as ShownClip[]
   const latest = roundsOf(list)[0] ?? round
-  const carried = carriedInto(list, latest, approvedIdSet(clipApprovalsOf(item))).map(c => ({ ...c, version: latest }))
-  const shown: ShownClip[] = [...carried, ...list]
+  const moved = movedIdSet(item as never)
+  const carried = carriedInto(list, latest, approvedIdSet(clipApprovalsOf(item)), moved).map(c => ({ ...c, version: latest }))
+  // a clip that left on a handover card is not in the latest version any more
+  const shown: ShownClip[] = [...carried, ...list.filter(c => c.version !== latest || !moved.has(c.id))]
   const rounds = roundsOf(shown)
   return {
     token: owner.token,

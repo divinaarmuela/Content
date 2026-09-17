@@ -560,6 +560,11 @@ const GHOST_COLUMNS = {
     //     alone cannot say "accepted". share-link-core reads these.
     ['accepted_at', col('string', true)],
     ['accepted_round', col('number', true)],
+    //   content_items.split_out / split_from — THE APPROVED CLIPS THAT LEFT on
+    //     a handover card at a send-back, and the card they came from
+    //     (17 Sep 2026). Rules in app/lib/version-approval-core.ts.
+    ['split_out', col('unknown', true, true)],
+    ['split_from', col('string', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],
