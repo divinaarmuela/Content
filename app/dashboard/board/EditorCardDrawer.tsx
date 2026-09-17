@@ -265,7 +265,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         ? await fetch(`/api/production/items/${id}/link`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, final: true }) })
         : await fetch(`/api/production/items/${id}/link`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save the link')
-      toast.success(url ? 'Source files link saved' : 'Source files link removed')
+      toast.success(url ? `Saved as ${roundLabel(handInRound(item as never))}` : 'Finished edit link removed')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save the link')
     } finally {
@@ -492,7 +492,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           or Dropbox link"): one box for the link, nothing else ── */}
       <section className="flex flex-col gap-3 border-b border-border px-5 py-4" aria-labelledby="ed-versions">
         <div className="flex items-center justify-between">
-          <p id="ed-versions" className={H2}>Your finished edit</p>
+          <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(handInRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
         {filesCard ? (
