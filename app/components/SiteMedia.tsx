@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isVideoUrl } from '../lib/media-core'
 import { useHlsSource } from './media/useHlsSource'
+import { siteStream } from '../lib/site-stream-core'
 
 /**
  * Renders a CMS media URL as a muted looping video or a plain image.
@@ -62,7 +63,12 @@ export default function SiteMedia({
   fallbackRatio?: number
 }) {
   const ref = useRef<HTMLVideoElement>(null)
-  useHlsSource(ref, hls ?? null)
+  // every clip the site knows on Stream plays from there, whichever page
+  // draws it (17 Sep 2026: the work page too) — unless the caller said otherwise
+  const known = hls === undefined && isVideoUrl(src) ? siteStream(src) : null
+  const stream = hls ?? known?.hls ?? null
+  const still = poster ?? known?.poster
+  useHlsSource(ref, stream)
   const [ratio, setRatio] = useState<number | null>(null)
   const style = adapt ? { aspectRatio: String(ratio ?? fallbackRatio) } : undefined
 
@@ -89,8 +95,8 @@ export default function SiteMedia({
     return (
       <video
         ref={ref}
-        src={hls ? undefined : src}
-        poster={poster}
+        src={stream ? undefined : src}
+        poster={still}
         preload="metadata"
         loop
         muted

@@ -4,20 +4,6 @@ import SiteMedia from '../SiteMedia'
 import { Scramble } from './Scramble'
 import { media } from '../../lib/asset'
 
-/** THE CLIPS ON CLOUDFLARE STREAM (17 Sep 2026): each file's adaptive copy,
- *  so a phone gets a small stream from the edge instead of a 10 MB mp4 from
- *  the throttled bucket address. Made once with /api/stream/preview. */
-const STREAM_BASE = 'https://customer-g32uhnka70ibwlas.cloudflarestream.com'
-const STREAM_UID: Record<string, string> = {
-  'strategy-waterside.mp4': '63820c9b0df42df294ddc8e0f3da2ba0',
-  'Senorita.mp4': 'ad5dfdfc8af7210dcd96e82eaed17e1b',
-  'website-landscape.mp4': '0f41bd1aea1f0ec48c8fab933904c055',
-  'cecconis.mp4': 'a0552dc54cd4c9da54af62947e5fd4d9',
-  'Automodellista.mp4': 'b256a53e8154d76f221787871212338f',
-}
-const fileOf = (url: string) => decodeURIComponent(url.split('/').pop() ?? '')
-const streamOf = (file: string) => STREAM_UID[file] ? { hls: `${STREAM_BASE}/${STREAM_UID[file]}/manifest/video.m3u8`, poster: `${STREAM_BASE}/${STREAM_UID[file]}/thumbnails/thumbnail.jpg?time=1s&height=720` } : null
-
 // The static-pack SERVICES section: kicker + two-line heading + intro,
 // then five alternating rows (text | media, media side flipping each row)
 // separated by scroll-scrubbed rules. Text block: numbered title, dim
@@ -120,8 +106,6 @@ export default function LamaServices() {
               <div className="relative">
                 <SiteMedia
                   src={s.media}
-                  hls={streamOf(fileOf(s.media))?.hls ?? null}
-                  poster={streamOf(fileOf(s.media))?.poster}
                   alt={s.title}
                   autoPlay
                   className="block aspect-[4/3] w-full rounded-[14px] object-cover bg-ink"
