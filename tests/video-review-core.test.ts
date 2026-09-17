@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  activeCommentId, commentsOnClip, formatStamp, markersFor, parseStamp, reviewPath, videoMimeOf,
+  activeCommentId, commentsOnClip, formatStamp, markersFor, parseStamp, reviewPath, videoMimeOf, clipPlace, clipPlaceWords,
 } from '../app/lib/video-review-core'
 
 /**
@@ -106,5 +106,46 @@ describe('the page, the stream and the tiles (source pins)', () => {
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
     expect(p).toContain("const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null")
     expect(p).toContain('<PageTitle')
+  })
+})
+
+describe('the clip\u2019s place in its version, and the arrows (17 Sep 2026)', () => {
+  it('finds the version, the place and the neighbours; a folder file has no version and walks the folder', () => {
+    const files = [
+      { id: 'a', name: 'a.mov', version: 1, finished: true },
+      { id: 'b', name: 'b.mov', version: 2, finished: true },
+      { id: 'c', name: 'c.mov', version: 2, finished: true },
+      { id: 'd', name: 'd.mov', version: 2, finished: true },
+      { id: 'c', name: 'c.mov', version: 2, finished: true },   // the same file listed twice counts once
+      { id: 'raw1', name: 'raw1.mov', version: null, finished: false },
+      { id: 'raw2', name: 'raw2.mov', version: null, finished: false },
+    ]
+    expect(clipPlace(files, 'c')).toEqual({ round: 2, index: 1, count: 3, prev: { id: 'b', name: 'b.mov' }, next: { id: 'd', name: 'd.mov' } })
+    expect(clipPlace(files, 'a')).toEqual({ round: 1, index: 0, count: 1, prev: null, next: null })
+    expect(clipPlace(files, 'raw2')).toEqual({ round: null, index: 1, count: 2, prev: { id: 'raw1', name: 'raw1.mov' }, next: null })
+    expect(clipPlace(files, 'zzz')).toBeNull()
+    expect(clipPlaceWords(clipPlace(files, 'c'))).toBe('Version 2 · 2 of 3')
+    expect(clipPlaceWords(clipPlace(files, 'a'))).toBe('Version 1')
+    expect(clipPlaceWords(clipPlace(files, 'raw1'))).toBe('Folder to work from · 1 of 2')
+    expect(clipPlaceWords(null)).toBeNull()
+  })
+  it('the page draws the chip and the arrows, and the arrow keys walk the version unless somebody is typing', () => {
+    const p = readFileSync(join(process.cwd(), 'app/dashboard/editor/[id]/video/[fileId]/page.tsx'), 'utf8')
+    expect(p).toContain('<Chip tone="ink">{clipPlaceWords(place)}</Chip>')
+    expect(p).toContain('onClick={() => go(place.prev)}')
+    expect(p).toContain('onClick={() => go(place.next)}')
+    expect(p).toContain("if (e.key === 'ArrowRight') go(place?.next ?? null)")
+    expect(p).toContain("if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return")
+    expect(p).toContain("useEffect(() => { setNow(0); setDuration(0); setText('') }, [fileId])")
+  })
+})
+
+describe('when each comment was said (17 Sep 2026)', () => {
+  it('the clip page dates every comment, the client\u2019s included, in the agency\u2019s time', () => {
+    const p = readFileSync(join(process.cwd(), 'app/dashboard/editor/[id]/video/[fileId]/page.tsx'), 'utf8')
+    expect(p).toContain("{c.created_at && <span className=\"text-[12px] text-muted-foreground\">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}")
+    // the Client badge and the date sit on the same line, so a client's comment is dated too
+    const row = p.slice(p.indexOf('fromClient(c.author_id) && <span'), p.indexOf('</div>', p.indexOf('fromClient(c.author_id) && <span')))
+    expect(row).toContain('formatInZone(String(c.created_at)')
   })
 })

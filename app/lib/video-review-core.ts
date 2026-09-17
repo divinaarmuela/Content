@@ -83,3 +83,44 @@ export function reviewPath(itemId: string, fileId: string, name?: string | null)
   const q = name ? `?name=${encodeURIComponent(name)}` : ''
   return `/dashboard/editor/${encodeURIComponent(itemId)}/video/${encodeURIComponent(fileId)}${q}`
 }
+
+/**
+ * WHERE THE CLIP SITS IN ITS VERSION (the owner, 17 Sep 2026: "on the page
+ * itself show the version number, and arrows near the asset so I can quickly
+ * click left and right through that version — the comments on the right
+ * update with the next one"). Given every file the card carries — each with
+ * the round it arrived in and whether it is finished work — and the clip on
+ * screen, this says which version the clip belongs to, its place in that
+ * version, and the clips either side of it. A file from the folder to work
+ * from has no version: its neighbours are the folder's other files.
+ */
+export type ClipPlace = {
+  /** the version, or null for a file from the folder to work from */
+  round: number | null
+  index: number
+  count: number
+  prev: { id: string; name: string } | null
+  next: { id: string; name: string } | null
+}
+
+export function clipPlace(
+  files: readonly { id: string; name: string; version?: number | null; finished: boolean }[],
+  fileId: string,
+): ClipPlace | null {
+  const seen = new Set<string>()
+  const unique = files.filter(f => { if (seen.has(f.id)) return false; seen.add(f.id); return true })
+  const me = unique.find(f => f.id === fileId)
+  if (!me) return null
+  const round = me.finished ? (typeof me.version === 'number' && me.version >= 1 ? me.version : 1) : null
+  const set = unique.filter(f => f.finished === me.finished && (!me.finished || (typeof f.version === 'number' && f.version >= 1 ? f.version : 1) === round))
+  const index = set.findIndex(f => f.id === fileId)
+  const at = (i: number) => (i >= 0 && i < set.length ? { id: set[i].id, name: set[i].name } : null)
+  return { round, index, count: set.length, prev: at(index - 1), next: at(index + 1) }
+}
+
+/** the words beside the arrows */
+export function clipPlaceWords(place: ClipPlace | null): string | null {
+  if (!place) return null
+  const where = place.round === null ? 'Folder to work from' : `Version ${place.round}`
+  return place.count > 1 ? `${where} · ${place.index + 1} of ${place.count}` : where
+}

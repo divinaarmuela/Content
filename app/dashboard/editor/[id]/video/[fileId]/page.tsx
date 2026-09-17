@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,12 +16,14 @@ import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { streamBaseUrl } from '../../../../../lib/stream-core'
+import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
 import { clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
 import {
-  activeCommentId, commentsOnClip, formatStamp, markersFor,
+  activeCommentId, clipPlace, clipPlaceWords, commentsOnClip, formatStamp, markersFor, reviewPath,
 } from '../../../../../lib/video-review-core'
+import Chip from '../../../../ui/Chip'
 
 /**
  * A CLIP'S OWN REVIEW PAGE (the owner, 15 Sep 2026: "once a video is clicked
@@ -59,6 +61,29 @@ export default function VideoReviewPage() {
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
   const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
+  // WHICH VERSION, AND THE CLIPS EITHER SIDE (17 Sep 2026): the finished
+  // files of the card, each with its round, and the folder's files without one
+  const place = useMemo(() => {
+    const finished = [...cardPulls.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})]
+      .filter(f => f.status === 'done' && !!f.url).map(f => ({ id: f.id, name: f.name, version: f.version ?? null, finished: true }))
+    const folder = [...cardPulls.filter(p => p.purpose !== 'finished'), footagePull].flatMap(p => filesOf(p))
+      .map(f => ({ id: f.id, name: f.name, version: null, finished: false }))
+    return clipPlace([...finished, ...folder], fileId)
+  }, [cardPulls, footagePull, item, fileId])
+  const go = (to: { id: string; name: string } | null) => { if (to) router.push(reviewPath(id, to.id, to.name)) }
+  // a fresh clip: the playhead, the timing and the half-typed comment start again
+  useEffect(() => { setNow(0); setDuration(0); setText('') }, [fileId])
+  // the arrow keys step through the version, unless somebody is typing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'ArrowRight') go(place?.next ?? null)
+      if (e.key === 'ArrowLeft') go(place?.prev ?? null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [place]) // eslint-disable-line react-hooks/exhaustive-deps -- go reads only the router and the id
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
@@ -143,6 +168,23 @@ export default function VideoReviewPage() {
         <ArrowLeft className="h-4 w-4" aria-hidden /> {item.title}
       </button>
       <PageTitle title={name} summary={`${isImage ? `A picture on ${item.title}.` : `A clip on ${item.title}. Press a circle under the clip to jump to that comment.`}${approved ? ` Approved by the client (${approved.by}).` : ''}`} />
+      {/* THE VERSION AND THE ARROWS (17 Sep 2026): which version this is, where it sits, and the clip either side — the comments on the right follow */}
+      {place && (
+        <div className="flex flex-wrap items-center gap-2" data-clip-place>
+          <Chip tone="ink">{clipPlaceWords(place)}</Chip>
+          {place.count > 1 && (
+            <div className="inline-flex items-center gap-1">
+              <Button variant="outline" className="h-10 w-10 rounded-full p-0" disabled={!place.prev} onClick={() => go(place.prev)} aria-label={place.prev ? `Previous: ${place.prev.name}` : 'This is the first'}>
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </Button>
+              <Button variant="outline" className="h-10 w-10 rounded-full p-0" disabled={!place.next} onClick={() => go(place.next)} aria-label={place.next ? `Next: ${place.next.name}` : 'This is the last'}>
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Button>
+              <span className="ml-1 text-[12px] text-muted-foreground">← → on the keyboard too</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
         {/* ── the clip, and the markers under it ── */}
@@ -196,6 +238,8 @@ export default function VideoReviewPage() {
                     )}
                     <span className="text-[13px] font-semibold">{nameOf(c.author_id)}</span>
                     {fromClient(c.author_id) && <span className="rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white">Client</span>}
+                    {/* WHEN IT WAS SAID (the owner, 17 Sep 2026: "add the date alongside the timestamped comments") — the team's and the client's alike */}
+                    {c.created_at && <span className="text-[12px] text-muted-foreground">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
                 </li>
