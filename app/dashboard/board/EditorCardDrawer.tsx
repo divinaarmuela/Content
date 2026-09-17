@@ -284,7 +284,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
   const submit = async () => {
     if (!submitting) return
-    if (!item?.link_url) { toast.error('Add your Drive or Dropbox link first'); return }
+    // a designer hands in files, an editor a link — either counts as finished work
+    if (!item || !hasFinishedWork(item as never)) { toast.error(filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -568,7 +569,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
-            {!item.link_url && <p className="text-[12px] text-muted-foreground">Add your Drive or Dropbox link first.</p>}
+            {!hasFinishedWork(item as never) && <p className="text-[12px] text-muted-foreground">{filesCard ? 'Upload the finished files first.' : 'Add the link to your finished edit first.'}</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">
