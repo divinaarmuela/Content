@@ -709,3 +709,15 @@ describe('a note with a height of its own is filled by its text box while edited
     expect(card).toContain("${card.h ? 'flex-1' : ''}")
   })
 })
+
+describe('pictures dropped onto the brief board (17 Sep 2026)', () => {
+  it('the board takes a drag of files, adds each picture as a card, and says so while the drag is over it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const s = readFileSync('app/dashboard/production/shoots/[id]/BriefCanvas.tsx', 'utf8')
+    expect(s).toContain('const addImages = async (files: FileList | File[]) => {')
+    expect(s).toContain("const pictures = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))")
+    expect(s).toContain('void addImages(pictures)')
+    expect(s).toContain('Drop the pictures here — each one becomes a card')
+    expect(s).toContain('if (viewOnly || !dragHasFiles(e)) return')
+  })
+})

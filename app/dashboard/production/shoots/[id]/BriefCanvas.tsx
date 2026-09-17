@@ -83,6 +83,12 @@ export default function BriefCanvas({
   /** The board tile that is open; null is the shoot's own board. Cards are
    *  ONE array to any depth — this only decides which of them are shown. */
   const [board, setBoard] = useState<string | null>(null)
+  /** DRAG AND DROP PICTURES ONTO THE BOARD (the owner, 17 Sep 2026: "on the
+   *  shoot brief allow drag-drop image"): a drag carrying files lights the
+   *  board up; dropping adds each picture as an image card, the same road the
+   *  toolbar's Image button takes. */
+  const [dropping, setDropping] = useState(false)
+  const dragHasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
   const visible = useMemo(() => childrenOf(cards, board), [cards, board])
   const trail = useMemo(() => boardTrail(cards, board), [cards, board])
   /** the new-board / rename dialog: the tile it is for, or null for a new one */
@@ -787,7 +793,7 @@ export default function BriefCanvas({
     } catch { /* a preview is a bonus; its failure is not the user's problem */ }
   }
 
-  const addImages = async (files: FileList) => {
+  const addImages = async (files: FileList | File[]) => {
     // an upload aimed at a mockup frame fills THAT frame, not the canvas
     const target = mockupTargetRef.current
     mockupTargetRef.current = null
@@ -1305,6 +1311,17 @@ export default function BriefCanvas({
         // toolbar slid out of sight. Any scroll the browser sneaks in is put
         // straight back.
         onScroll={e => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0 }}
+        onDragEnter={e => { if (!viewOnly && dragHasFiles(e)) { e.preventDefault(); setDropping(true) } }}
+        onDragOver={e => { if (!viewOnly && dragHasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (!dropping) setDropping(true) } }}
+        onDragLeave={e => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false) }}
+        onDrop={e => {
+          if (viewOnly || !dragHasFiles(e)) return
+          e.preventDefault(); setDropping(false)
+          const pictures = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))
+          if (pictures.length === 0) { toast.error('Drop pictures — other files are not put on the board'); return }
+          mockupTargetRef.current = null
+          void addImages(pictures)
+        }}
         // a click on bare canvas puts the player back to a still, so the board
         // never carries a running video somebody has walked away from
         onPointerDown={e => {
@@ -1329,6 +1346,11 @@ export default function BriefCanvas({
           upsertLocal(card); persist([card]); setSelected(card.id); setEditing(card.id)
         }}
       >
+        {dropping && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-card border-2 border-dashed border-foreground/40 bg-background/70" role="status">
+            <span className="rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">Drop the pictures here — each one becomes a card</span>
+          </div>
+        )}
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: '0 0' }}>
           {/* maxWidth must be inline: the preflight's svg{max-width:100%} against this
               0-width parent collapses the svg to 0px, and Chrome skips painting
