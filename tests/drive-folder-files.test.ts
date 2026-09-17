@@ -76,7 +76,7 @@ describe('the route and the drawers (source pins)', () => {
     expect(box).toContain('{folder && !linkOpen && showFolderFiles && <DriveFolderFiles url={folder} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={pulled} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} noRounds pickRound={0} />}')
     // the holder may change the folder link; only a manager adds files (15 Sep 2026)
     expect(box).toContain('const mayEdit = (isManager || holder) && !frozen')
-    expect(box).toContain('const mayAddFiles = isManager && !linkOnly && !frozen')
+    expect(box).toContain('const mayAddFiles = filesOnly ? (isManager || holder) && !frozen : isManager && !linkOnly && !frozen')
   })
   it('a tile is a button; the press mounts Drive’s preview — nothing loads for a tile nobody opened', () => {
     const c = src('app/dashboard/board/DriveFolderFiles.tsx')

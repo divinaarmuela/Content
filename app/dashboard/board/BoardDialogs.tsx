@@ -553,9 +553,12 @@ export type PersonChoice = { id: string; name: string; email: string; role?: str
  * A new card: one deliverable, one client, one link. Kind is free text.
  * Managers can hand it to somebody; everyone else makes it their own.
  */
-export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false, forPosting = false, defaultKind }: {
+export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false, forPosting = false, defaultKind, filesOnly = false }: {
   /** the Designer page (17 Sep 2026): every card it makes is this kind */
   defaultKind?: string
+  /** the Designer page (17 Sep 2026): the files to work from go on with the
+   *  card, whoever makes it, and there is no Drive folder line */
+  filesOnly?: boolean
   open: boolean
   /** Post approval's New post for a manager (13 Sep 2026): no shoot
    *  question, "Hand to" instead of "Who", and the folder becomes the card's
@@ -828,7 +831,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               a card, where is the option to add a link"): an editor or a
               general user making their own card pastes the Drive or Dropbox
               link here — the same box the card shows under Your finished edit */}
-          {!isManager && (
+          {!isManager && !filesOnly && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-link">Source working folder — Drive or Dropbox (optional)</Label>
               <Input id="new-link" value={link} onChange={e => setLink(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" className={field} />
@@ -837,7 +840,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                 : linkCheck.ok ? `This is a ${linkCheck.label} link.` : linkCheck.reason}</p>
             </div>
           )}
-          {isManager && (
+          {(isManager || filesOnly) && (
             <div className="flex flex-col gap-2 rounded-[20px] border border-border p-3">
               <Label htmlFor="new-work-files">{forPosting ? 'The files to post (optional)' : 'Files to work from (optional)'}</Label>
               <p className="text-[13px] text-muted-foreground">{forPosting
@@ -865,10 +868,14 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   ))}
                 </ul>
               )}
-              <Label htmlFor="new-folder">{forPosting ? 'Or the folder they are in — the scheduler picks from it' : 'Or the folder they live in'}</Label>
-              <Input id="new-folder" value={folder} onChange={e => setFolder(e.target.value)} placeholder="https://drive.google.com/… or Dropbox" className={field} />
-              {folder.trim() !== '' && (
-                <p className="text-[13px] text-muted-foreground">{folderCheck.ok ? `This is a ${folderCheck.label} link.` : folderCheck.reason}</p>
+              {!filesOnly && (
+                <>
+                  <Label htmlFor="new-folder">{forPosting ? 'Or the folder they are in — the scheduler picks from it' : 'Or the folder they live in'}</Label>
+                  <Input id="new-folder" value={folder} onChange={e => setFolder(e.target.value)} placeholder="https://drive.google.com/… or Dropbox" className={field} />
+                  {folder.trim() !== '' && (
+                    <p className="text-[13px] text-muted-foreground">{folderCheck.ok ? `This is a ${folderCheck.label} link.` : folderCheck.reason}</p>
+                  )}
+                </>
               )}
             </div>
           )}

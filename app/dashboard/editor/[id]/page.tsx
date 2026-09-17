@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowRightLeft, Link as LinkIcon, UserPlus } from 'lucide-re
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRow } from '@/lib/db-client'
-import type { Batch, Client, ContentItem } from '@/lib/db-types'
+import type { Batch, Client, ContentItem, WorkKind } from '@/lib/db-types'
 import { useRole } from '../../useRole'
 import PageTitle from '../../ui/PageTitle'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
@@ -25,6 +25,7 @@ import { HandToDialog } from '../../board/BoardDialogs'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
+import { handsInFiles } from '../../../lib/final-files-core'
 import { useState } from 'react'
 
 /**
@@ -160,6 +161,9 @@ export default function EditorCardPage() {
   const { row: item, loading } = useRow<ContentItem>('content_items', id)
   const { row: shoot } = useRow<Batch>('batches', item?.batch_id ?? null)
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
+  // a designer's card (17 Sep 2026): files both ways, never a Drive link
+  const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
+  const filesOnly = !!item && handsInFiles({ ...item, work_kinds: kind } as never)
   const back = () => router.push('/dashboard/editor')
 
   if (loading) {
@@ -209,7 +213,7 @@ export default function EditorCardPage() {
             Open button, a manager's Add a folder link, and Drive's thumbnails
             of everything behind it, wide, each one playable here */}
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
-          <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
+          <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly}
             fallbackFolder={from.footage} wideFiles versions
             // the clips the client approved on their portal wear a tick (16 Sep 2026)
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}

@@ -38,7 +38,7 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
@@ -46,6 +46,10 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   /** the maker's drawer (the owner, 15 Sep 2026: "not files"): a manager
    *  holding their own card adds the folder link, never files */
   linkOnly?: boolean
+  /** A DESIGNER'S CARD (the owner, 17 Sep 2026: "for designers it's files, not
+   *  Drive links — when they create a card, files to work from"): the files
+   *  are added by whoever holds or manages the card, and there is no folder link */
+  filesOnly?: boolean
   /** the files behind a Drive folder link, as tiles (15 Sep 2026) — off where
    *  the drawer already draws them under its own Footage folder line */
   showFolderFiles?: boolean
@@ -77,7 +81,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const linkCheck = linkKindOf(link)
   const mayEdit = (isManager || holder) && !frozen
   // files are the manager's to add; the holder changes the folder link only
-  const mayAddFiles = isManager && !linkOnly && !frozen
+  const mayAddFiles = filesOnly ? (isManager || holder) && !frozen : isManager && !linkOnly && !frozen
   /** the file open above the grid — a clip playing, or a still shown large */
   const [showing, setShowing] = useState<RawAsset | null>(null)
   useEffect(() => { setShowing(null) }, [item.id])
@@ -169,9 +173,11 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
                 <Plus className="h-4 w-4" aria-hidden /> Add files
               </Button>
             )}
-            <Button variant="outline" className={button} disabled={busy !== null} onClick={() => setLinkOpen(o => !o)}>
-              <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the source working folder' : 'Add the source working folder'}
-            </Button>
+            {!filesOnly && (
+              <Button variant="outline" className={button} disabled={busy !== null} onClick={() => setLinkOpen(o => !o)}>
+                <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the source working folder' : 'Add the source working folder'}
+              </Button>
+            )}
             <input ref={input} type="file" multiple accept="image/*,video/*" className="hidden"
               aria-label="Files for the editor to work from"
               onChange={e => { void add(Array.from(e.target.files ?? [])); }} />

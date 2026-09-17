@@ -183,7 +183,7 @@ describe('the maker adds their link while making the card (the owner, 14 Sep 202
   it('the New card window draws a Drive or Dropbox link box for an editor, saved as their finished-edit link', () => {
     const s = readFileSync(join(process.cwd(), 'app/dashboard/board/BoardDialogs.tsx'), 'utf8')
     // the box, for the maker only (a manager has the Files to work from folder instead)
-    expect(s).toContain('{!isManager && (')
+    expect(s).toContain('{!isManager && !filesOnly && (')
     expect(s).toContain('<Label htmlFor="new-link">Source working folder — Drive or Dropbox (optional)</Label>')
     expect(s).toContain('<Input id="new-link" value={link} onChange={e => setLink(e.target.value)}')
     // the same link the card\u2019s Your finished edit box saves: final, so it never reads as a footage folder

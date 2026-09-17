@@ -190,6 +190,7 @@ export default function DesignerPage() {
           viewer={{ ...viewer, name: me?.name }}
           simple
           defaultKind="Graphics"
+          filesOnly
         />
       )}
     </div>
