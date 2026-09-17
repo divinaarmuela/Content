@@ -11,9 +11,9 @@ import { maySharePublicly, sharePath } from '../../lib/share-link-core'
  * one press mints the public link and copies it; the link is then shown with
  * a Stop sharing. Offered to whoever on the team is looking at the card.
  */
-export default function ShareAcceptedLink({ item }: { item: { id: string; status?: unknown; share_token?: unknown } }) {
+export default function ShareAcceptedLink({ item }: { item: { id: string; status?: unknown; share_token?: unknown; accepted_at?: unknown; accepted_round?: unknown; edit_round?: unknown } }) {
   const [busy, setBusy] = useState(false)
-  if (!maySharePublicly(item.status)) return null
+  if (!maySharePublicly(item)) return null
   const token = typeof item.share_token === 'string' && /^[a-f0-9]{32}$/.test(item.share_token) ? item.share_token : null
   const url = token && typeof window !== 'undefined' ? `${window.location.origin}${sharePath(token)}` : null
 

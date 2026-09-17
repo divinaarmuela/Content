@@ -23,7 +23,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     const user = await requireSignedIn()
     const { id } = await ctx.params
     const item = await loadItemForUser(user, id)
-    if (!maySharePublicly(item.status)) {
+    if (!maySharePublicly(item)) {
       return NextResponse.json({ error: 'The card is not accepted yet — the link is for the accepted version.' }, { status: 409 })
     }
     let token = String((item as { share_token?: unknown }).share_token ?? '')

@@ -21,8 +21,15 @@ import { filesOf } from './drive-pull-core'
  */
 export const SHAREABLE_STATUSES = ['approved_for_scheduling', 'scheduled', 'published'] as const
 
-export function maySharePublicly(status: unknown): boolean {
-  return (SHAREABLE_STATUSES as readonly string[]).includes(String(status ?? ''))
+/** Accepted, and still on the accepted round: the stamp says so (whatever the
+ *  status became after the hand-over), or — for a card accepted before the stamp
+ *  existed — the status itself. A send-back opens a new round, so the stamp no
+ *  longer matches and the link goes dark until the next acceptance. */
+export function maySharePublicly(card: { status?: unknown; accepted_at?: unknown; accepted_round?: unknown; edit_round?: unknown } | null | undefined): boolean {
+  if (!card) return false
+  const stamped = typeof card.accepted_at === 'string' && card.accepted_at.trim() !== ''
+  if (stamped && Number(card.accepted_round) === roundOf(card)) return true
+  return (SHAREABLE_STATUSES as readonly string[]).includes(String(card.status ?? ''))
 }
 
 export type SharedFile = { id: string; name: string; url: string; mime: string | null; size: number | null }

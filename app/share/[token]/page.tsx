@@ -26,7 +26,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   const item = isShareToken(token)
     ? (await table<ContentItem>('content_items').list({ where: r => (r as { share_token?: unknown }).share_token === token, limit: 1 }))[0] ?? null
     : null
-  const live = !!item && maySharePublicly(item.status)
+  const live = !!item && maySharePublicly(item)
   const [client, pulls] = live
     ? await Promise.all([
       item.client_id ? table<Client>('clients').get(String(item.client_id)) : Promise.resolve(null),

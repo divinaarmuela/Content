@@ -534,6 +534,12 @@ const GHOST_COLUMNS = {
     //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
     //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
     ['share_token', col('string', true)],
+    //   content_items.accepted_at / accepted_round — WHEN THE CARD WAS ACCEPTED
+    //     and which round it was (17 Sep 2026): the hand-over to a scheduler
+    //     sets the status back to Draft for the posting job, so the status
+    //     alone cannot say "accepted". share-link-core reads these.
+    ['accepted_at', col('string', true)],
+    ['accepted_round', col('number', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

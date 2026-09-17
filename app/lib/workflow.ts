@@ -33,7 +33,7 @@ import {
 } from './workflow-core'
 import { editingPortalPath, portalHasWork } from './editing-portal-core'
 import { finalFilesForRound } from './final-files-core'
-import { handInRound } from './edit-round-core'
+import { handInRound, roundOf } from './edit-round-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
@@ -890,6 +890,10 @@ export async function performTransition(
       ...asked,
       ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
       ...(defaults.length > 0 ? { scheduler_ids: defaults } : {}),
+      // ACCEPTED: the round that went through, stamped here because the
+      // hand-over to a scheduler moves the status back to Draft for the
+      // posting job (share-link-core, 17 Sep 2026)
+      ...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as { edit_round?: unknown }) } : {}),
       // PINNED AT APPROVAL: the client's "posts their own content" setting
       // is read once, here, and written onto the card — so flipping the
       // setting later never moves a card that was already approved between

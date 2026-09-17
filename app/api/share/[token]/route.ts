@@ -17,7 +17,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const { token } = await ctx.params
   if (!isShareToken(token)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const item = (await table<ContentItem>('content_items').list({ where: r => (r as { share_token?: unknown }).share_token === token, limit: 1 }))[0]
-  if (!item || !maySharePublicly(item.status)) return NextResponse.json({ error: 'This link has been switched off' }, { status: 404 })
+  if (!item || !maySharePublicly(item)) return NextResponse.json({ error: 'This link has been switched off' }, { status: 404 })
   const [client, pulls] = await Promise.all([
     item.client_id ? table<Client>('clients').get(String(item.client_id)) : Promise.resolve(null),
     table<DrivePull>('drive_pulls').list({ by: { scope_id: item.id } as never }),

@@ -5,8 +5,21 @@ import { isShareToken, maySharePublicly, sharedFilesOf, sharePath, shareWords, S
 describe('share-link-core — the public link for the accepted version (17 Sep 2026)', () => {
   it('opens once the client has accepted, and not before', () => {
     expect(SHAREABLE_STATUSES).toEqual(['approved_for_scheduling', 'scheduled', 'published'])
-    for (const s of SHAREABLE_STATUSES) expect(maySharePublicly(s)).toBe(true)
-    for (const s of ['draft_uploaded', 'quality_check', 'client_review', 'client_changes_requested', 'revision_required', '', null]) expect(maySharePublicly(s)).toBe(false)
+    for (const s of SHAREABLE_STATUSES) expect(maySharePublicly({ status: s })).toBe(true)
+    for (const s of ['draft_uploaded', 'quality_check', 'client_review', 'client_changes_requested', 'revision_required', '', null]) expect(maySharePublicly({ status: s })).toBe(false)
+    expect(maySharePublicly(null)).toBe(false)
+  })
+
+  it('the acceptance stamp outlives the hand-over to a scheduler, and a send-back switches it off', () => {
+    // handed to a scheduler: the status is Draft again for the posting job, the stamp says accepted
+    expect(maySharePublicly({ status: 'draft_uploaded', accepted_at: '2026-09-17T05:37:00.000Z', accepted_round: 1 })).toBe(true)
+    expect(maySharePublicly({ status: 'draft_uploaded', accepted_at: '2026-09-17T05:37:00.000Z', accepted_round: 2, edit_round: 2 })).toBe(true)
+    // sent back after acceptance: round 2 opened, round 1 was the accepted one
+    expect(maySharePublicly({ status: 'revision_required', accepted_at: '2026-09-17T05:37:00.000Z', accepted_round: 1, edit_round: 2 })).toBe(false)
+    expect(maySharePublicly({ status: 'draft_uploaded', accepted_at: '', accepted_round: 1 })).toBe(false)
+    // the transition writes the stamp beside the status
+    const workflow = readFileSync('app/lib/workflow.ts', 'utf8')
+    expect(workflow).toContain("...(to === 'approved_for_scheduling' ? { accepted_at: new Date().toISOString(), accepted_round: roundOf(item as { edit_round?: unknown }) } : {}),")
   })
 
   it('shares the current round only: uploaded files and finished copies, never the folder to work from, never an older version', () => {
@@ -42,12 +55,12 @@ describe('share-link-core — the public link for the accepted version (17 Sep 2
 
   it('the routes and the page: one token per card, a public GET, sign-in nowhere on the page', () => {
     const mint = readFileSync('app/api/production/items/[id]/share/route.ts', 'utf8')
-    expect(mint).toContain('if (!maySharePublicly(item.status)) {')
+    expect(mint).toContain('if (!maySharePublicly(item)) {')
     expect(mint).toContain("token = randomBytes(16).toString('hex')")
     expect(mint).toContain('export async function DELETE')
     const pub = readFileSync('app/api/share/[token]/route.ts', 'utf8')
     expect(pub).not.toContain('requireSignedIn')
-    expect(pub).toContain('if (!item || !maySharePublicly(item.status))')
+    expect(pub).toContain('if (!item || !maySharePublicly(item))')
     const page = readFileSync('app/share/[token]/page.tsx', 'utf8')
     expect(page).not.toContain('requireSignedIn')
     expect(page).toContain('robots: { index: false, follow: false }')
