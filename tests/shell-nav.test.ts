@@ -96,6 +96,7 @@ describe('resolveNav by role', () => {
       '/dashboard/notifications',
       '/dashboard/settings',
       '/dashboard/start',
+      '/dashboard/todos', // everyone's own list (17 Sep 2026)
     ].sort())
   })
 
@@ -110,6 +111,7 @@ describe('resolveNav by role', () => {
       '/dashboard/scheduler',
       '/dashboard/settings',
       '/dashboard/start',
+      '/dashboard/todos',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
     // Schedule and Posts, and nothing else of Social (the owner, 11 Sep

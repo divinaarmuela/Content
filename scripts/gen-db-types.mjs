@@ -112,6 +112,26 @@ const GHOST_TABLES = {
     ['approval_mode', col('string', true)],
     ['note', col('string', true)],
   ],
+  // todos — one thing for one person to do (17 Sep 2026, the owner: "a to-dos
+  //   page for every role"). Who sees which row is decided in
+  //   app/lib/todo-core.ts: a super admin all, everyone else what they hold
+  //   (owner_id) or wrote (created_by). `files` is a list of {url, name,
+  //   mime, size} in our own storage.
+  todos: [
+    ['id', col('string', false)],
+    ['title', col('string', false)],
+    ['note', col('string', true)],
+    ['status', col('string', false)],
+    ['due_date', col('string', true)],
+    ['owner_id', col('string', true)],
+    ['created_by', col('string', true)],
+    ['client_id', col('string', true)],
+    ['files', col('unknown', true, true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+    ['done_at', col('string', true)],
+    ['done_by', col('string', true)],
+  ],
   schedule_notes: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
@@ -409,7 +429,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

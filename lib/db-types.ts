@@ -75,6 +75,7 @@ export type TableName =
   | 'team_invites'
   | 'team_user_clients'
   | 'team_users'
+  | 'todos'
   | 'user_page_access'
   | 'video_previews'
   | 'webhook_deliveries'
@@ -1272,6 +1273,22 @@ export interface TeamUser {
   ops_contact: boolean | null
 }
 
+export interface Todo {
+  id: string
+  title: string
+  note: string | null
+  status: string
+  due_date: string | null
+  owner_id: string | null
+  created_by: string | null
+  client_id: string | null
+  files: unknown | null
+  created_at: string
+  updated_at: string
+  done_at: string | null
+  done_by: string | null
+}
+
 export interface UserPageAccess {
   team_user_id: string
   href: string
@@ -1407,6 +1424,7 @@ export const TABLE_COLUMNS = {
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact'],
+  todos: ['id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
   webhook_deliveries: ['id', 'provider', 'event', 'provider_event_id', 'received_at', 'handled', 'note'],
@@ -1488,6 +1506,7 @@ export const NULLABLE_COLUMNS = {
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact'],
+  todos: ['note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by'],
   user_page_access: ['granted_by'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
   webhook_deliveries: ['note'],
@@ -1576,6 +1595,7 @@ export const JSON_COLUMNS = {
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages', 'notification_prefs'],
+  todos: ['files'],
   user_page_access: [],
   video_previews: [],
   webhook_deliveries: [],
@@ -1663,6 +1683,7 @@ export const JSON_ARRAY_COLUMNS = {
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages'],
+  todos: [],
   user_page_access: [],
   video_previews: [],
   webhook_deliveries: [],
@@ -1671,7 +1692,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todos'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

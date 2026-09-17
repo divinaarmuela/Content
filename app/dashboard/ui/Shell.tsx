@@ -8,8 +8,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, CalendarDays, Search, GraduationCap,
-} from 'lucide-react'
+  CalendarClock, CalendarDays, Search, GraduationCap, ListChecks } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { ActAsButton, ActingBar, useActAs } from './ActAs'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -87,6 +86,8 @@ export const NAV_TOOLS: NavItem[] = [
   // the directory says who exists; this says what each of them is holding
   { href: '/dashboard/team/activity', label: 'Team activity', icon: Activity },
   { href: '/dashboard/ai',            label: 'AI Assistant',  icon: Sparkles },
+  // everyone's own list — what they hold and what they wrote (todo-core, 17 Sep 2026)
+  { href: '/dashboard/todos',         label: 'To-dos',        icon: ListChecks },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   // the first-day tutorial, kept in the sidebar so it can be reopened
   { href: '/dashboard/start',         label: 'How this works', icon: GraduationCap },
@@ -103,7 +104,7 @@ export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
   { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
-  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications', '/dashboard/start'] },
+  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/todos', '/dashboard/notifications', '/dashboard/start'] },
 ]
 export const PINNED_BOTTOM = '/dashboard/settings'
 
@@ -137,6 +138,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/team':          'Team',
   '/dashboard/team/activity': 'Team activity',
   '/dashboard/ai':            'AI Assistant',
+  '/dashboard/todos':         'To-dos',
   '/dashboard/notifications': 'Notifications',
   '/dashboard/settings':      'Settings',
 }
