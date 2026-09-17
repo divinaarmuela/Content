@@ -19,7 +19,7 @@ import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
 import { footageAfterWords } from '../../lib/shoot-sop-core'
 import { isInternalKind } from '../../lib/task-kind-core'
-import { blockedChip, reviewWords } from '../../lib/editor-sop-core'
+import { reviewWords } from '../../lib/editor-sop-core'
 
 /**
  * ONE CARD ON THE BOARD.
@@ -181,7 +181,6 @@ export function BoardCard({
   // open card (the Video Editors SOP §4); the face opens the card rather
   // than skipping the checks
   const faceOpensCard = editorFace && primary?.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review' || primary.to === 'revision_complete')
-  const blockedLine = editorFace ? blockedChip(card as never) : null
   const finals = editorFace ? (card as { finals_in?: string | null }).finals_in ?? null : null
   const tone = cardTone({
     status: card.status,
@@ -209,7 +208,6 @@ export function BoardCard({
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
         {!folded && review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
         {!folded && finals && <Chip tone="green">{finals}</Chip>}
-        {blockedLine && <Chip tone="red">{blockedLine}</Chip>}
         {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}

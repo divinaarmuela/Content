@@ -33,8 +33,8 @@ import { historyLines, type HistoryJob, HISTORY_PREVIEW, NO_HISTORY } from '../.
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
 import {
-  BLOCKER_LADDER, BLOCKER_NEEDS, EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
-  briefRowsFor, blockerWords, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
+  EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
+  briefRowsFor, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
 
@@ -50,7 +50,6 @@ import { columnOf } from '../../lib/board-core'
  *                             nothing else (the owner, 14 Sep 2026)
  *   4. Quality check      §4  the seven checks, then submit
  *   5. Handover           §5  three ticks once approved
- *   6. I'm blocked        §7  the 24-hour rule, with the SOP's who-to-ask
  *   7. What happened          the card's own history
  *
  * Every section is drawn always; an empty one says so in a line rather than
@@ -292,15 +291,6 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     if (moved) setTicks([])
   }
 
-  /* ── blocked ── */
-  const [blockOpen, setBlockOpen] = useState(false)
-  const [need, setNeed] = useState<string>('')
-  const [fromId, setFromId] = useState<string>('')
-  const [blockNote, setBlockNote] = useState('')
-  const sendBlocked = async () => {
-    const json = await flag({ kind: 'blocked', need, from_id: fromId || undefined, note: blockNote }, 'They have been told')
-    if (json) { setBlockOpen(false); setNeed(''); setFromId(''); setBlockNote('') }
-  }
 
   if (!item) {
     return (
@@ -330,7 +320,6 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const handover = handoverState(item as never)
   const planRead = planReadState(shoot, me?.id)
   const qcDone = qcDoneFor(item as never)
-  const blocked = blockerWords(item as never, nameOf, when)
   const history = historyLines({
     activity: activity.map(r => ({ ...r, actor_name: nameOf(r.actor_id) })),
     jobs: [] as HistoryJob[],
@@ -428,7 +417,6 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </Link>
             )}
           </div>
-          {blocked && <p role="status" className="mt-2 text-[13px] font-semibold text-accent-red-deep">{blocked}</p>}
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted">
           <X className="h-[18px] w-[18px]" aria-hidden />
@@ -616,45 +604,6 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </li>
             ))}
           </ul>
-        )}
-      </section>
-      )}
-
-      {/* ── 6. blocked (§7) — only the holder's button, or the block itself ── */}
-      {(blocked || (holder && !frozen)) && (
-      <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-blocked">
-        <p id="ed-blocked" className={H2}>Blocked?</p>
-        {blocked ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[14px]">{blocked}</p>
-            {holder && <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => void flag({ kind: 'unblocked' }, 'Unblocked')}>Unblocked</Button>}
-          </div>
-        ) : !blockOpen ? (
-          holder && !frozen
-            ? <Button variant="outline" className={`${outlineBtn} w-fit`} disabled={busy} onClick={() => setBlockOpen(true)}>I’m blocked</Button>
-            : null
-        ) : (
-          <div className="flex flex-col gap-2 rounded-inner border border-border p-3">
-            <ol className="list-decimal pl-5 text-[12px] text-muted-foreground">
-              {BLOCKER_LADDER.map(l => <li key={l}>{l}</li>)}
-            </ol>
-            <label htmlFor="ed-need" className="text-[13px] font-semibold">What do you need?</label>
-            <select id="ed-need" value={need} onChange={e => setNeed(e.target.value)} className={`${field} h-11`}>
-              <option value="">Pick one</option>
-              {BLOCKER_NEEDS.map(n => <option key={n.key} value={n.key}>{n.label} — go to {n.who.toLowerCase()}</option>)}
-            </select>
-            <label htmlFor="ed-from" className="text-[13px] font-semibold">Who are you asking? <span className="font-normal text-muted-foreground">(optional)</span></label>
-            <select id="ed-from" value={fromId} onChange={e => setFromId(e.target.value)} className={`${field} h-11`}>
-              <option value="">Whoever usually handles it</option>
-              {team.filter(u => u.active_status !== false && u.role !== 'client' && u.id !== me?.id).map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-            </select>
-            <label htmlFor="ed-block-note" className="text-[13px] font-semibold">What is blocked? One line.</label>
-            <textarea id="ed-block-note" rows={2} value={blockNote} onChange={e => setBlockNote(e.target.value)} className={`${field} resize-none p-2.5`} placeholder="Scene 3 footage is missing from the folder" />
-            <div className="flex items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !need || !blockNote.trim()} onClick={() => void sendBlocked()}>Tell them</Button>
-              <Button variant="ghost" className={ghostBtn} onClick={() => setBlockOpen(false)}>Cancel</Button>
-            </div>
-          </div>
         )}
       </section>
       )}

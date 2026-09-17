@@ -177,7 +177,8 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   })
   it('the seven sections are not gated on having data', () => {
     const s = src(EDITOR_DRAWER)
-    for (const id of ['ed-before', 'ed-from', 'ed-versions', 'ed-qc', 'ed-hand', 'ed-blocked', 'ed-history']) {
+    // (no 'ed-blocked': the owner had the I'm blocked feature removed, 17 Sep 2026)
+    for (const id of ['ed-before', 'ed-from', 'ed-versions', 'ed-qc', 'ed-hand', 'ed-history']) {
       expect(s, id).toContain(`aria-labelledby="${id}"`)
     }
     // no section is wrapped in a length/data gate
@@ -193,7 +194,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(s).not.toMatch(/Not blocked\./)
     expect(s).not.toMatch(/Shown once the card is approved\./)
     expect(s).toMatch(/\{showsHandover\(status\) && \(/)
-    expect(s).toMatch(/\{\(blocked \|\| \(holder && !frozen\)\) && \(/)
+    expect(s).not.toMatch(/I’m blocked/)
     // "Before you start" says Not given rather than hiding a row
     expect(s).toMatch(/row\.value \?\? NOT_GIVEN/)
   })

@@ -263,7 +263,6 @@ const EDITOR: Tutorial = {
         'Watch your email: you are told when it moves on, or when it comes back.',
         'If it comes back, read "What to change", upload the new version, tick the checks, submit again.',
         'If a date is at risk or something looks wrong, flag it in one line.',
-        'If you are stuck, press "I’m blocked" — do not let it sit quietly.',
       ],
       href: EDITOR_PAGE,
       linkLabel: 'Open my board',
