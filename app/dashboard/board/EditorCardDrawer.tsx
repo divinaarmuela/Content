@@ -8,7 +8,7 @@ import CardSaid from './CardSaid'
 import { managesClients, type Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
-import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkflowActivity } from '@/lib/db-types'
+import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkKind, WorkflowActivity } from '@/lib/db-types'
 import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
@@ -77,6 +77,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
 }) {
   const { me } = useRole()
   const { row: item } = useRow<ContentItem>('content_items', id)
+  // the card's kind of work — the raw row carries only the id, and the
+  // Designer's upload hangs off the graphics kind (17 Sep 2026)
+  const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const byEntity = useMemo(() => ({ entity_id: id }), [id])
   const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
@@ -222,7 +225,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''
   // FINISHED FILES (the Designer page, 17 Sep 2026): a graphics card hands in
   // files, not a link — uploaded onto the card, stamped with the round
-  const filesCard = item ? handsInFiles(item as never) : false
+  const filesCard = item ? handsInFiles({ ...item, work_kinds: (item as { work_kinds?: { slug?: string } | null }).work_kinds ?? kind } as never) : false
   const uploadInput = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const addFinalFiles = async (picked: File[]) => {
