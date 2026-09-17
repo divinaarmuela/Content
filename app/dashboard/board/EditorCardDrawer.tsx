@@ -78,7 +78,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const { row: item } = useRow<ContentItem>('content_items', id)
   // the card's kind of work — the raw row carries only the id, and the
   // Designer's upload hangs off the graphics kind (17 Sep 2026)
-  const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
+  const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const byEntity = useMemo(() => ({ entity_id: id }), [id])
   const { rows: activity } = useTable<WorkflowActivity>('workflow_activity', { by: byEntity })
@@ -350,7 +350,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           </div>
           {/* THE NEXT STEP, at the top where it is seen (17 Sep 2026): the hand-in
               sits low in the card, so the one thing to do next is also here */}
-          {holder && submitting && !frozen && (
+          {holder && submitting && !frozen && !kindLoading && (
             <div className="mt-3" data-next-step>
               {!hasFinishedWork(item as never) ? (
                 <Button className={primaryBtn} disabled={busy}

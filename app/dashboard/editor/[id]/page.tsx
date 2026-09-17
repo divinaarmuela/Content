@@ -162,7 +162,7 @@ export default function EditorCardPage() {
   const { row: shoot } = useRow<Batch>('batches', item?.batch_id ?? null)
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   // a designer's card (17 Sep 2026): files both ways, never a Drive link
-  const { row: kind } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
+  const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   const filesOnly = !!item && handsInFiles({ ...item, work_kinds: kind } as never)
   const back = () => router.push('/dashboard/editor')
 
@@ -213,12 +213,14 @@ export default function EditorCardPage() {
             Open button, a manager's Add a folder link, and Drive's thumbnails
             of everything behind it, wide, each one playable here */}
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
-          <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly}
+          {/* drawn once the kind is known, so a designer's card never flashes the folder-link button */}
+          {kindLoading && <Skeleton className="m-4 h-40 rounded-inner" />}
+          {!kindLoading && <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly}
             fallbackFolder={from.footage} wideFiles versions
             // the clips the client approved on their portal wear a tick (16 Sep 2026)
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}
             // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)
-            reviewHref={t => reviewPath(id, t.id, t.name)} />
+            reviewHref={t => reviewPath(id, t.id, t.name)} />}
         </section>
 
         {/* ── the card itself, beside the files ── */}
