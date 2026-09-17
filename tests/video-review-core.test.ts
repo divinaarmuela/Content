@@ -91,7 +91,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
     // the copy is looked for in every pull the card ever asked for, so an older version still plays (16 Sep 2026)
     expect(rp).toContain("const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })")
     expect(rp).toContain("const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null")
-    expect(rp).toContain('<img src={fileSrc} alt={name}')
+    expect(rp).toContain('<img key={fileId} src={fileSrc} alt={name}')
     expect(rp).toContain('const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null')
     const c = src('app/api/production/items/[id]/comments/route.ts')
     expect(c).toContain('video_file_id: videoFile,')
@@ -147,5 +147,16 @@ describe('when each comment was said (17 Sep 2026)', () => {
     // the Client badge and the date sit on the same line, so a client's comment is dated too
     const row = p.slice(p.indexOf('fromClient(c.author_id) && <span'), p.indexOf('</div>', p.indexOf('fromClient(c.author_id) && <span')))
     expect(row).toContain('formatInZone(String(c.created_at)')
+  })
+})
+
+describe('a clean switch between clips (17 Sep 2026)', () => {
+  it('the stage keeps one size, the next clip\u2019s still stands in, and the clip fades in once it can show a frame', () => {
+    const p = readFileSync(join(process.cwd(), 'app/dashboard/editor/[id]/video/[fileId]/page.tsx'), 'utf8')
+    expect(p).toContain("style={{ aspectRatio: '16 / 9', maxHeight: '70vh' }} data-clip-stage")
+    expect(p).toContain('{poster && !ready && (')
+    expect(p).toContain('<video key={fileId} ref={video} controls playsInline preload="metadata" poster={poster ?? undefined}')
+    expect(p).toContain("transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}")
+    expect(p).toContain('const t = window.setTimeout(() => setReady(true), 2500)')
   })
 })

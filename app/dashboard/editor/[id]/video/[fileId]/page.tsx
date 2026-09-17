@@ -15,7 +15,7 @@ import { kindOf } from '../../../../../lib/files-core'
 import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
-import { streamBaseUrl } from '../../../../../lib/stream-core'
+import { pickPoster, streamBaseUrl } from '../../../../../lib/stream-core'
 import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
@@ -113,6 +113,20 @@ export default function VideoReviewPage() {
   const [text, setText] = useState('')
   const [stamp, setStamp] = useState(true)
   const [sending, setSending] = useState(false)
+  // A CLEAN SWITCH BETWEEN CLIPS (the owner, 17 Sep 2026: "the animation from
+  // one asset to another is not clean — the asset loads weirdly"): the stage
+  // keeps one size whatever is in it, the next clip's own still stands in
+  // while it loads, and the clip fades in once it can show a frame. Nothing
+  // jumps, nothing flashes white.
+  const [ready, setReady] = useState(false)
+  const poster = pickPoster(preview, null)
+  useEffect(() => {
+    setReady(false)
+    // a master the browser only reads the header of never says "loaded" until
+    // it plays — after a moment the clip is shown as it is
+    const t = window.setTimeout(() => setReady(true), 2500)
+    return () => window.clearTimeout(t)
+  }, [fileId])
 
   const comments = useMemo(() => commentsOnClip(allComments as never, fileId), [allComments, fileId])
   const markers = useMemo(() => markersFor(comments as never, duration), [comments, duration])
@@ -189,16 +203,27 @@ export default function VideoReviewPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,440px)]">
         {/* ── the clip, and the markers under it ── */}
         <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label={isImage ? 'The picture' : 'The clip'}>
-          {isImage ? (
-            // eslint-disable-next-line @next/next/no-img-element -- the file itself
-            <img src={fileSrc} alt={name} className="max-h-[70vh] w-full rounded-tile bg-foreground/[0.06] object-contain" />
-          ) : (
-          <video ref={video} controls playsInline preload="metadata"
-            className="max-h-[70vh] w-full rounded-tile bg-black"
-            onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
-            onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
-            onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
-          )}
+          {/* THE STAGE: one size, the next clip's still while it loads, a fade in (17 Sep 2026) */}
+          <div className="relative w-full overflow-hidden rounded-tile bg-black" style={{ aspectRatio: '16 / 9', maxHeight: '70vh' }} data-clip-stage>
+            {poster && !ready && (
+              // eslint-disable-next-line @next/next/no-img-element -- the clip's own still, from Stream
+              <img src={poster} alt="" aria-hidden className="absolute inset-0 h-full w-full object-contain opacity-70" />
+            )}
+            {!ready && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60 px-3 py-1 text-[12px] font-semibold text-white" role="status">Loading…</span>}
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element -- the file itself
+              <img key={fileId} src={fileSrc} alt={name} onLoad={() => setReady(true)}
+                className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}`} />
+            ) : (
+              <video key={fileId} ref={video} controls playsInline preload="metadata" poster={poster ?? undefined}
+                className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0'}`}
+                onLoadedData={() => setReady(true)}
+                onCanPlay={() => setReady(true)}
+                onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
+                onLoadedMetadata={e => { setDuration(e.currentTarget.duration || 0); setReady(true) }}
+                onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
+            )}
+          </div>
           {/* THE MARKERS: one circle per stamped comment, lit as the playhead reaches it */}
           {!isImage && (
           <div className="relative mx-3 mt-1 h-8" role="group" aria-label="Comments on the timeline">
