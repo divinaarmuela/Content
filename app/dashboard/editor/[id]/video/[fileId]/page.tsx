@@ -54,7 +54,18 @@ export default function VideoReviewPage() {
   // again whenever the router reports it changed.
   const [fileId, setFileId] = useState(params.fileId)
   const [name, setName] = useState(search.get('name') ?? 'Clip')
-  useEffect(() => { setFileId(params.fileId); setName(search.get('name') ?? 'Clip') }, [params.fileId, search])
+  // back and forward: the address is the truth (the router's own params lag
+  // behind a history push and would put the OLD clip back — the live walk of
+  // 17 Sep 2026 showed Script 8's title over Script 7's comments)
+  useEffect(() => {
+    const onPop = () => {
+      const m = window.location.pathname.match(/\/video\/([^/?#]+)/)
+      if (m) setFileId(decodeURIComponent(m[1]))
+      setName(new URLSearchParams(window.location.search).get('name') ?? 'Clip')
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   const { row: item, loading } = useRow<ContentItem>('content_items', id)
   // OUR COPY FIRST (the Drive pull, 16 Sep 2026: "click the file, it opens
   // the page as it is — quicker, because we downloaded it in the backend"):

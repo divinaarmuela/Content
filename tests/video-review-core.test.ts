@@ -166,7 +166,10 @@ describe('the arrows change the clip without remounting the page (17 Sep 2026)',
     const p = readFileSync(join(process.cwd(), 'app/dashboard/editor/[id]/video/[fileId]/page.tsx'), 'utf8')
     expect(p).toContain('const [fileId, setFileId] = useState(params.fileId)')
     expect(p).toContain("window.history.pushState(null, '', reviewPath(id, to.id, to.name))")
-    expect(p).toContain("useEffect(() => { setFileId(params.fileId); setName(search.get('name') ?? 'Clip') }, [params.fileId, search])")
+    expect(p).toContain("window.addEventListener('popstate', onPop)")
+    expect(p).toContain('if (m) setFileId(decodeURIComponent(m[1]))')
+    // never from the router's params after the first render: they lag a history push and would put the old clip back
+    expect(p).not.toContain('setFileId(params.fileId)')
     expect(p).not.toContain('router.push(reviewPath(')
   })
 })
