@@ -348,6 +348,28 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </button>
             )}
           </div>
+          {/* THE NEXT STEP, at the top where it is seen (17 Sep 2026): the hand-in
+              sits low in the card, so the one thing to do next is also here */}
+          {holder && submitting && !frozen && (
+            <div className="mt-3" data-next-step>
+              {!hasFinishedWork(item as never) ? (
+                <Button className={primaryBtn} disabled={busy}
+                  onClick={() => {
+                    if (filesCard) { uploadInput.current?.click(); return }
+                    const box = document.getElementById('ed-source')
+                    box?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    box?.focus()
+                  }}>
+                  <Upload className="h-4 w-4" aria-hidden /> {filesCard ? `Upload ${roundLabel(handInRound(item as never))}` : `Add the ${roundLabel(handInRound(item as never))} link`}
+                </Button>
+              ) : (
+                <Button className={primaryBtn} disabled={busy}
+                  onClick={() => document.getElementById('ed-qc')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                  <Check className="h-4 w-4" aria-hidden /> {roundLabel(handInRound(item as never))} is on the card — tick the checks and submit
+                </Button>
+              )}
+            </div>
+          )}
           {editing && (
             <div className="mt-3 flex flex-col gap-2 rounded-inner border border-border bg-surface p-3" data-edit-card>
               <label className="flex flex-col gap-1 text-[12px] font-semibold">Name

@@ -51,3 +51,13 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     expect(src('app/dashboard/designer/page.tsx')).toContain("(c.work_kinds?.slug ?? '') === 'graphics'")
   })
 })
+
+describe('the next step at the top of the card (17 Sep 2026)', () => {
+  it('the drawer puts the hand-in, or the road to submit, under the title', () => {
+    const s = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(s).toContain('data-next-step')
+    expect(s).toContain('{holder && submitting && !frozen && (')
+    expect(s).toContain("{filesCard ? `Upload ${roundLabel(handInRound(item as never))}` : `Add the ${roundLabel(handInRound(item as never))} link`}")
+    expect(s).toContain('is on the card — tick the checks and submit')
+  })
+})
