@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isVideoUrl } from '../lib/media-core'
+import { useHlsSource } from './media/useHlsSource'
 
 /**
  * Renders a CMS media URL as a muted looping video or a plain image.
@@ -41,9 +42,14 @@ function shouldPlayVideo(): boolean {
 }
 
 export default function SiteMedia({
-  src, alt, className, poster, autoPlay = true, adapt = false, fallbackRatio = 16 / 9,
+  src, alt, className, poster, autoPlay = true, adapt = false, fallbackRatio = 16 / 9, hls,
 }: {
   src: string
+  /** THE PHONE-SIZED STREAM (the owner, 17 Sep 2026: "on the phone the site
+   *  takes a long time to play video"): the clip's adaptive copy on
+   *  Cloudflare Stream, served from the edge in the size the screen needs.
+   *  The mp4 stays as the fallback for a browser that plays neither. */
+  hls?: string | null
   alt: string
   className?: string
   /** Still shown before playback. Without one the first frame is used. */
@@ -56,6 +62,7 @@ export default function SiteMedia({
   fallbackRatio?: number
 }) {
   const ref = useRef<HTMLVideoElement>(null)
+  useHlsSource(ref, hls ?? null)
   const [ratio, setRatio] = useState<number | null>(null)
   const style = adapt ? { aspectRatio: String(ratio ?? fallbackRatio) } : undefined
 
@@ -82,7 +89,7 @@ export default function SiteMedia({
     return (
       <video
         ref={ref}
-        src={src}
+        src={hls ? undefined : src}
         poster={poster}
         preload="metadata"
         loop
