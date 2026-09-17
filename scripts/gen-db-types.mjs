@@ -531,6 +531,9 @@ const GHOST_COLUMNS = {
     //     2026, the Designer page): the files uploaded onto the card, each with
     //     the round it arrived in. Rules in app/lib/final-files-core.ts.
     ['final_files', col('unknown', true, true)],
+    //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
+    //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
+    ['share_token', col('string', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

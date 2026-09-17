@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Columns2, ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
+import { Columns2, Download, ExternalLink, Film, FolderOpen, Play, Plus, X } from 'lucide-react'
+import { downloadHref } from '../../lib/download-core'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import SafeVideo from '../../components/media/SafeVideo'
@@ -303,10 +304,16 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
                 )}
                 <span className="truncate text-[12px] font-semibold" title={f.name}>{f.name}</span>
                 <div className="flex items-center gap-1">
-                  <a href={f.url} target="_blank" rel="noreferrer noopener" download
-                    className="inline-flex min-h-11 flex-1 items-center gap-1 text-[12px] underline-offset-4 hover:underline">
+                  <a href={f.url} target="_blank" rel="noreferrer noopener"
+                    className="inline-flex min-h-11 items-center gap-1 text-[12px] underline-offset-4 hover:underline">
                     <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Open
                     <span className="sr-only">{f.name}, opens in a new tab</span>
+                  </a>
+                  {/* a real download — same origin, attachment (download-core, 17 Sep 2026) */}
+                  <a href={downloadHref(f) ?? f.url} download={f.name}
+                    className="inline-flex min-h-11 flex-1 items-center gap-1 text-[12px] underline-offset-4 hover:underline">
+                    <Download className="h-3.5 w-3.5" aria-hidden /> Download
+                    <span className="sr-only">{f.name}</span>
                   </a>
                   {mayEdit && (
                     <button type="button" disabled={busy !== null} onClick={() => void remove(f.url)}

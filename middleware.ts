@@ -107,6 +107,7 @@ export const config = {
     // clerkMiddleware()", 10 Sep 2026)
     '/api/act-as/:path*',
     '/api/asana/:path*',
+    '/api/assets/:path*',
     '/api/audience/:path*',
     '/api/boards/:path*',
     // the ADMIN half of bookings only: it calls auth() through requireRole,

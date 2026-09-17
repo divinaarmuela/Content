@@ -34,6 +34,8 @@ describe('the files box shows thumbnails and plays a clip on the card', () => {
   })
 
   it('the file the tile stands for is still downloadable from the row', () => {
-    expect(s).toContain('<a href={f.url} target="_blank" rel="noreferrer noopener" download')
+    expect(s).toContain('<a href={f.url} target="_blank" rel="noreferrer noopener"')
+    // …and a real download beside it (download-core, 17 Sep 2026)
+    expect(s).toContain('<a href={downloadHref(f) ?? f.url} download={f.name}')
   })
 })

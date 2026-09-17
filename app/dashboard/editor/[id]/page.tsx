@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { useCardActs } from '../../board/useCardActs'
 import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
+import ShareAcceptedLink from '../../board/ShareAcceptedLink'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
 import { shootCardId } from '../../../lib/deliverable-group-core'
 import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
@@ -221,6 +222,8 @@ export default function EditorCardPage() {
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}
             // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)
             reviewHref={t => reviewPath(id, t.id, t.name)} />}
+          {/* THE PUBLIC LINK FOR THE ACCEPTED VERSION (share-link-core, 17 Sep 2026) — anyone on the team, once the card is accepted */}
+          <ShareAcceptedLink item={item as never} />
         </section>
 
         {/* ── the card itself, beside the files ── */}

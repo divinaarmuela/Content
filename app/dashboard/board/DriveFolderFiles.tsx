@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
+import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
+import { downloadHref } from '../../lib/download-core'
 import type { DriveEntry } from '../../lib/files-core'
 import {
   folderFilesWords, folderTilesOf, readableDriveId, readableFolderId, subfolderCount, tileActionWords, type FolderTile,
@@ -157,6 +158,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
               {tiles.map(t => {
                 const open = showing?.id === t.id
                 const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
+                // a real download on every tile (download-core, 17 Sep 2026): our copy through our route, a Drive original through the Files page's
+                const dl = downloadHref(isCopy(t) ? { url: t.open, name: t.name } : { id: t.id, name: t.name })
                 return (
                   <li key={t.id} className={`relative flex flex-col gap-1 rounded-inner border p-2 ${open || selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ? 'border-foreground' : 'border-border'}`}>
                     {onSelect && (t.kind === 'video' || t.kind === 'image') && (
@@ -191,6 +194,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                       )}
                     </button>
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
+                    {dl && (
+                      <a href={dl} download={t.name} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
+                        <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>
+                      </a>
+                    )}
                   </li>
                 )
               })}
