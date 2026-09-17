@@ -41,10 +41,20 @@ import Chip from '../../../../ui/Chip'
  * comment sends is sent for these too.
  */
 export default function VideoReviewPage() {
-  const { id, fileId } = useParams<{ id: string; fileId: string }>()
+  const params = useParams<{ id: string; fileId: string }>()
+  const id = params.id
   const router = useRouter()
   const search = useSearchParams()
-  const name = search.get('name') ?? 'Clip'
+  // THE PAGE STAYS PUT WHILE THE CLIP CHANGES (the owner, 17 Sep 2026: "the
+  // animation from one asset to another is not clean"): a route change
+  // remounts the whole page — a grey skeleton, then everything again. So the
+  // arrows change the clip in STATE and write the address with the history
+  // API; the page keeps its comments column, its chip and its stage, and
+  // only the clip fades. Back and forward still work: the address is read
+  // again whenever the router reports it changed.
+  const [fileId, setFileId] = useState(params.fileId)
+  const [name, setName] = useState(search.get('name') ?? 'Clip')
+  useEffect(() => { setFileId(params.fileId); setName(search.get('name') ?? 'Clip') }, [params.fileId, search])
   const { row: item, loading } = useRow<ContentItem>('content_items', id)
   // OUR COPY FIRST (the Drive pull, 16 Sep 2026: "click the file, it opens
   // the page as it is — quicker, because we downloaded it in the backend"):
@@ -70,7 +80,11 @@ export default function VideoReviewPage() {
       .map(f => ({ id: f.id, name: f.name, version: null, finished: false }))
     return clipPlace([...finished, ...folder], fileId)
   }, [cardPulls, footagePull, item, fileId])
-  const go = (to: { id: string; name: string } | null) => { if (to) router.push(reviewPath(id, to.id, to.name)) }
+  const go = (to: { id: string; name: string } | null) => {
+    if (!to) return
+    setFileId(to.id); setName(to.name)
+    window.history.pushState(null, '', reviewPath(id, to.id, to.name))
+  }
   // a fresh clip: the playhead, the timing and the half-typed comment start again
   useEffect(() => { setNow(0); setDuration(0); setText('') }, [fileId])
   // the arrow keys step through the version, unless somebody is typing

@@ -160,3 +160,13 @@ describe('a clean switch between clips (17 Sep 2026)', () => {
     expect(p).toContain('const t = window.setTimeout(() => setReady(true), 2500)')
   })
 })
+
+describe('the arrows change the clip without remounting the page (17 Sep 2026)', () => {
+  it('the clip is state, the address is written with the history API, and back/forward re-read it', () => {
+    const p = readFileSync(join(process.cwd(), 'app/dashboard/editor/[id]/video/[fileId]/page.tsx'), 'utf8')
+    expect(p).toContain('const [fileId, setFileId] = useState(params.fileId)')
+    expect(p).toContain("window.history.pushState(null, '', reviewPath(id, to.id, to.name))")
+    expect(p).toContain("useEffect(() => { setFileId(params.fileId); setName(search.get('name') ?? 'Clip') }, [params.fileId, search])")
+    expect(p).not.toContain('router.push(reviewPath(')
+  })
+})
