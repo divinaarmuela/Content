@@ -5,7 +5,7 @@ import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 import {
   briefAfterHandover, handToGroups, handoverDate, handoverLine, handoverSubject,
-  handoverWords, personLabel, tidyNote,
+  handoverWords, personLabel, tidyNote, whoMakesIt,
 } from '../app/lib/hand-over-core'
 import { eventWords } from '../app/lib/notification-words'
 import { pageCards } from '../app/lib/board-view-core'
@@ -408,5 +408,19 @@ describe('PATCH /api/production/items/[id] — handed over', () => {
     const r = await handOff('nobody-at-all', 'do this', null)
     expect(r.status).toBe(400)
     expect(item().owner_id).toBe(ED.id)
+  })
+})
+
+describe('whoMakesIt — the New card window’s Who list (17 Sep 2026)', () => {
+  it('puts the editors and designers first, by name, then everyone else, never a client', () => {
+    const team = [
+      { id: 'am', name: 'Anna', email: 'a@x', role: 'account_manager' },
+      { id: 'ed2', name: 'Zed', email: 'z@x', role: 'editor' },
+      { id: 'cl', name: 'Client', email: 'c@x', role: 'client' },
+      { id: 'ed1', name: 'Bea', email: 'b@x', role: 'editor' },
+      { id: 'sc', name: 'Sam', email: 's@x', role: 'scheduler' },
+      { id: '', name: 'Ghost', email: 'g@x', role: 'editor' },
+    ]
+    expect(whoMakesIt(team as never).map(p => p.id)).toEqual(['ed1', 'ed2', 'am', 'sc'])
   })
 })

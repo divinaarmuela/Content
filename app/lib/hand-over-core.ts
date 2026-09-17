@@ -115,6 +115,21 @@ export type HandToGroup = { role: string; label: string; people: HandTo[] }
  * Roles we do not know about are kept, at the end, under their own name:
  * a person missing from the picker is worse than a heading nobody expected.
  */
+/**
+ * WHO MAKES IT — the New card window's list on the Editor and Designer pages
+ * (the owner, 17 Sep 2026: "make sure Who on Editor and Designer shows the
+ * editor/designer people at the top of the dropdown"). The editor role IS
+ * the designer role here (identity-core labels it "Editor or designer"), so
+ * those people come first, by name; everyone else follows, by name. Clients
+ * and people without an id are never in it.
+ */
+export function whoMakesIt(people: readonly HandTo[]): HandTo[] {
+  const name = (p: HandTo) => (p.name || p.email || '').toLowerCase()
+  const makers = people.filter(p => !!p?.id && p.role === 'editor').sort((a, b) => name(a).localeCompare(name(b)))
+  const rest = people.filter(p => !!p?.id && p.role !== 'editor' && p.role !== 'client').sort((a, b) => name(a).localeCompare(name(b)))
+  return [...makers, ...rest]
+}
+
 export function handToGroups(people: readonly HandTo[]): HandToGroup[] {
   const groups = new Map<string, HandTo[]>()
   for (const p of people) {

@@ -21,7 +21,7 @@ import {
 import { useTable } from '@/lib/db-client'
 import type { TeamUser } from '@/lib/db-types'
 import {
-  briefAfterHandover, handToGroups, personLabel, type HandTo,
+  briefAfterHandover, handToGroups, personLabel, whoMakesIt, type HandTo,
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
 import { folderOf, linkKindOf } from '../../lib/card-link-core'
@@ -581,7 +581,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   // A POST IS HANDED TO A SCHEDULER (the owner, 14 Sep 2026: "the option
   // should be the scheduler users"): they pick the files from the folder
   // and upload them for approval. A card for editing can go to anyone.
-  const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : team
+  // the editors and designers first, then everyone else (17 Sep 2026)
+  const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : whoMakesIt(team as HandTo[])
   const [clientId, setClientId] = useState(defaultClientId ?? '')
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState('')

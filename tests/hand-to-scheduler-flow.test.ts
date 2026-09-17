@@ -170,7 +170,7 @@ describe('a manager hands an approved edit to a scheduler', () => {
   it('the pickers offer scheduler users: Hand to on a card, and Hand to on a New post', () => {
     const s = readFileSync(join(process.cwd(), 'app/dashboard/board/BoardDialogs.tsx'), 'utf8')
     expect(s).toContain(".filter(u => u.active_status !== false && u.role === 'scheduler')")
-    expect(s).toContain("const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : team")
+    expect(s).toContain("const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : whoMakesIt(team as HandTo[])")
     // the scheduler's drawer: the finished edit above the folder, and files
     // added on top of it for the approval
     const d = readFileSync(join(process.cwd(), 'app/dashboard/board/PostApprovalDetail.tsx'), 'utf8')
