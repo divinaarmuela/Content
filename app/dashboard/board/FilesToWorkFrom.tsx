@@ -14,6 +14,7 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
+import { approvedIdSet, carriedInto, versionProgress } from '../../lib/version-approval-core'
 import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
@@ -153,6 +154,14 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const pick = (t: { id: string; name: string }, round: number, on: boolean) => setPicked(m => { const n = new Map(m); const k = `${t.id}@${round}`; if (on) n.set(k, { id: t.id, round, name: t.name }); else n.delete(k); return n })
   const openSideBySide = () => { if (picked.size === 0) return; router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent([...picked.values()].map(p => `${p.id}@${p.round}`).join(','))}`) }
   const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null
+  // APPROVED CLIPS CARRY FORWARD (version-approval-core, 17 Sep 2026): the
+  // clips the client approved in an earlier version sit in this one too,
+  // with their tick, and the version's progress is counted over the whole set
+  const approvedSet = useMemo(() => approvedIdSet((approvedIds ?? []).map(id => ({ file_id: id }))), [approvedIds])
+  const allFinished = useMemo(() => [...pullRows.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)), ...finalFilesAsPulls(item)].filter(f => f.status === 'done' && !!f.url), [pullRows, item])
+  const carried = shownVersion ? carriedInto(allFinished, shownVersion.round, approvedSet).map(f => ({ ...f, version: shownVersion.round })) : []
+  const versionFiles = shownVersion ? [...carried, ...shownVersion.files] : []
+  const progress = versionProgress(versionFiles, approvedSet)
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }
   const button = 'inline-flex h-11 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50'
@@ -203,7 +212,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <>
           <p className="text-[13px] text-muted-foreground">
             {shownVersion.files.length > 0
-              ? `${shownVersion.files.length} ${shownVersion.files.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}.`
+              ? `${shownVersion.files.length} ${shownVersion.files.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}${carried.length > 0 ? ` · ${carried.length} carried over, approved in an earlier version` : ''}.`
               : `${roundLabel(shownVersion.round)} is being copied in — its files show here as they land.`}
           </p>
           {shownVersion.folderUrl && (
@@ -213,11 +222,14 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
               <span className="sr-only">, opens in a new tab</span>
             </a>
           )}
+          {progress.words && (
+            <p role="status" className={`text-[13px] font-semibold ${progress.allApproved ? 'text-accent-green-deep' : 'text-muted-foreground'}`} data-version-progress>{progress.words}</p>
+          )}
           {shownVersion.folderUrl && (
             <DrivePullBar kind="item" scopeId={item.id} folderUrl={shownVersion.folderUrl} which="finished" mayStart={mayEdit && shownVersion.folderUrl === (finished?.url ?? '')} showFiles={false} />
           )}
           {shownVersion.folderUrl && (
-            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (

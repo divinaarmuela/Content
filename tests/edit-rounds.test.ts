@@ -95,7 +95,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
     expect(box).toContain('Folder to work from')
     expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
-    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
+    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
     // every pull says what it was: the row's purpose
     expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")
@@ -121,7 +121,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {
     const portal = src('app/lib/editing-portal.ts')
-    expect(portal).toContain('const rounds = roundsOf(clips)')
+    expect(portal).toContain('const rounds = roundsOf(shown)') // …the version's own clips and the approved ones carried in (17 Sep 2026)
     expect(portal).toContain('version: fileRound(f), stream:')
     const c = src('app/components/portal/EditingReview.tsx')
     expect(c).toContain('const [round, setRound] = useState(data.rounds[0] ?? data.round)')

@@ -12,6 +12,7 @@ import { streamBaseUrl } from './stream-core'
 import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip } from './editing-portal-core'
 import { finalFilesOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
+import { approvedIdSet, carriedInto } from './version-approval-core'
 import { filesOf, pullId } from './drive-pull-core'
 import { fileRound, roundOf, roundsOf } from './edit-round-core'
 import { kindOf } from './files-core'
@@ -113,7 +114,15 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
         return { id: f.id, name: f.name, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
     : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round, stream: null }))
-  const rounds = roundsOf(clips)
+  // APPROVED CLIPS CARRY FORWARD (version-approval-core, 17 Sep 2026): a clip
+  // the client approved in an earlier version sits in the latest one too,
+  // with its tick, so they review only what changed
+  type ShownClip = { id: string; name: string; thumb: string | null; kind: 'video' | 'image'; src: string; version: number; stream: { base: string; duration: number } | null; carried_from?: number | null }
+  const list = clips as unknown as ShownClip[]
+  const latest = roundsOf(list)[0] ?? round
+  const carried = carriedInto(list, latest, approvedIdSet(clipApprovalsOf(item))).map(c => ({ ...c, version: latest }))
+  const shown: ShownClip[] = [...carried, ...list]
+  const rounds = roundsOf(shown)
   return {
     token: owner.token,
     client: { id: owner.client.id, name: owner.client.name },
@@ -125,7 +134,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
       content_type: item.content_type ?? null,
     },
     folder: { url: folder.url, id: folder.folderId },
-    clips,
+    clips: shown,
     rounds,
     round,
     folder_note: clips.length === 0

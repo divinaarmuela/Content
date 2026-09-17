@@ -41,6 +41,8 @@ export type PortalClip = {
   thumb: string | null
   /** a picture handed in as a file is shown, not played (17 Sep 2026) */
   kind?: 'video' | 'image'
+  /** approved in an earlier version and carried into this one (version-approval-core, 17 Sep 2026) */
+  carried_from?: number | null
 }
 
 /** DOES THE PORTAL HAVE WORK TO SHOW? A finished Drive link, or files uploaded

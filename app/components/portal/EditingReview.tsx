@@ -6,6 +6,7 @@ import { Check, ExternalLink, Send } from 'lucide-react'
 import type { EditingPortal, EditingPortalComment } from '../../lib/editing-portal'
 import type { ClipApproval } from '../../lib/clip-approvals-core'
 import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
+import { carriedWords } from '../../lib/version-approval-core'
 import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../lib/video-review-core'
 import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
@@ -161,6 +162,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   {current + 1} / {clips.length}{duration > 0 ? ` · ${formatStamp(now)} / ${formatStamp(duration)}` : ''}
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
+                {carriedWords(clip.carried_from) && <p className="text-[12px] font-semibold text-emerald-400">{carriedWords(clip.carried_from)}</p>}
               </div>
               {approved ? (
                 <button type="button" onClick={() => void approve(true)} disabled={approving}

@@ -1,6 +1,8 @@
-import { finalFilesForRound } from './final-files-core'
+import { finalFilesOf } from './final-files-core'
 import { fileRound, roundOf } from './edit-round-core'
 import { filesOf } from './drive-pull-core'
+import { clipApprovalsOf } from './clip-approvals-core'
+import { approvedIdSet, versionSet } from './version-approval-core'
 
 /**
  * THE PUBLIC SHARE LINK FOR THE ACCEPTED VERSION (the owner, 17 Sep 2026:
@@ -36,19 +38,22 @@ export type SharedFile = { id: string; name: string; url: string; mime: string |
 
 /** The accepted version's files: the card's current round, uploaded or copied in. */
 export function sharedFilesOf(
-  item: { id: string; final_files?: unknown; edit_round?: unknown },
+  item: { id: string; final_files?: unknown; edit_round?: unknown; clip_approvals?: unknown },
   pulls: readonly { scope_id?: string | null; purpose?: string | null; files?: unknown }[],
 ): SharedFile[] {
   const round = roundOf(item)
-  const uploaded: SharedFile[] = finalFilesForRound(item, round)
-    .map(f => ({ id: f.id, name: f.name, url: f.url, mime: f.mime ?? null, size: f.size ?? null }))
-  const copied: SharedFile[] = pulls
+  type Shared = SharedFile & { version?: number | null }
+  const uploaded: Shared[] = finalFilesOf(item)
+    .map(f => ({ id: f.id, name: f.name, url: f.url, mime: f.mime ?? null, size: f.size ?? null, version: f.version }))
+  const copied: Shared[] = pulls
     .filter(p => p.scope_id === item.id && p.purpose === 'finished')
     .flatMap(p => filesOf(p))
-    .filter(f => f.status === 'done' && !!f.url && fileRound(f) === round)
-    .map(f => ({ id: f.id, name: f.name, url: f.url as string, mime: f.mime ?? null, size: f.size ?? null }))
+    .filter(f => f.status === 'done' && !!f.url)
+    .map(f => ({ id: f.id, name: f.name, url: f.url as string, mime: f.mime ?? null, size: f.size ?? null, version: fileRound(f) }))
+  // the accepted version is what it hands in AND what it carries — the clips
+  // approved in an earlier version (version-approval-core, 17 Sep 2026)
   const seen = new Set<string>()
-  return [...uploaded, ...copied].filter(f => {
+  return versionSet([...uploaded, ...copied], round, approvedIdSet(clipApprovalsOf(item))).map(({ id, name, url, mime, size }) => ({ id, name, url, mime, size })).filter(f => {
     if (seen.has(f.url)) return false
     seen.add(f.url)
     return true
