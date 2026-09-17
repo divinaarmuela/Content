@@ -88,9 +88,10 @@ describe('resolveNav by role', () => {
     }
   })
 
-  it('gives an editor the Editor page and nothing beside it', () => {
+  it('gives an editor the Editor page and the Designer page beside it (17 Sep 2026), nothing else', () => {
     expect(seen('editor').sort()).toEqual([
       '/dashboard',
+      '/dashboard/designer',
       '/dashboard/editor',
       '/dashboard/notifications',
       '/dashboard/settings',
