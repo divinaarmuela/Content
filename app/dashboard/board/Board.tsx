@@ -295,7 +295,7 @@ export function Board({
           >
             {lane.folded ? (
               // compact: title, client, stage — open the card to act on it
-              <CompactCard card={c} today={today} onOpen={open} />
+              <CompactCard card={c} today={today} onOpen={open} names={names} />
             ) : (
               <BoardCard
                 card={c}

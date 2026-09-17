@@ -805,3 +805,11 @@ describe('handed to a scheduler — the editor\u2019s road ends in Done (17 Sep 
     expect(handedToWords({ scheduler_ids: ['s9'] }, new Map())).toBe('Handed to a scheduler')
   })
 })
+
+describe('the Done lane\u2019s compact row names the scheduler (17 Sep 2026)', () => {
+  it('a handed-over card reads "Handed to …" instead of its Draft stage', () => {
+    const s = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
+    expect(s).toContain("{handedOver(card as never) ? handedToWords(card as never, names ?? new Map()) : lines.stage}")
+    expect(readFileSync('app/dashboard/board/Board.tsx', 'utf8')).toContain('<CompactCard card={c} today={today} onOpen={open} names={names} />')
+  })
+})

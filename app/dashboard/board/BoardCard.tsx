@@ -48,7 +48,9 @@ const BRIEF_FOLD = 110
  * always holds more than one stage. Same tint as the full card, so a card
  * that needs attention is still obvious at a glance.
  */
-export function CompactCard({ card, today, onOpen }: {
+export function CompactCard({ card, today, onOpen, names }: {
+  /** the team's names, for "Handed to …" on a card a scheduler now holds (17 Sep 2026) */
+  names?: ReadonlyMap<string, string>
   card: BoardViewCard
   today: string
   onOpen: (card: BoardViewCard) => void
@@ -80,7 +82,8 @@ export function CompactCard({ card, today, onOpen }: {
           {lines.client}
         </span>
       </span>
-      <Chip tone={tone ? 'surface' : 'muted'} className="shrink-0">{lines.stage}</Chip>
+      {/* a card handed to a scheduler says so, not "Draft" — the Draft is the scheduler's posting job, the edit is done (17 Sep 2026) */}
+      <Chip tone={handedOver(card as never) ? 'green' : tone ? 'surface' : 'muted'} className="shrink-0">{handedOver(card as never) ? handedToWords(card as never, names ?? new Map()) : lines.stage}</Chip>
     </button>
   )
 }
