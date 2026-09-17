@@ -984,6 +984,8 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
  * before the press instead of after (the tutorial walk of 11 Sep 2026).
  */
 export const UPLOAD_FIRST = 'Upload the final first'
-export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url' | 'link_kind' | 'raw_assets_url'>): boolean {
+export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url' | 'link_kind' | 'raw_assets_url'> & { final_files?: unknown }): boolean {
+  // a designer's uploaded files are finished work too (17 Sep 2026)
+  if (Array.isArray(card.final_files) && card.final_files.length > 0) return false
   return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim() && !folderOf(card)
 }
