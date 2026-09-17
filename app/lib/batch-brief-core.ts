@@ -118,7 +118,12 @@ export function canCreateItemsUnder(
     // shoot instead of joining the one already there.
     return batchStatus === null || batchStatus !== 'wrapped'
   }
-  if (batchStatus === 'locked' || batchStatus === 'shot' || batchStatus === 'wrapped') return true
+  // A NAMED SHOOT IN ANY STATE IS OPEN (the owner, 17 Sep 2026: "why does it say
+  // items need a booked shoot? doesn't matter — I should be able to create it,
+  // override it — same for the Editor page"). The booked-shoot gate used to
+  // refuse a card under a shoot still being planned; the card names its shoot,
+  // which is the recorded answer to "where is this from?", and that is enough.
+  if (batchStatus !== null) return true
   if (batchStatus === null) {
     // Editors too, not just managers: plenty of work arrives with no shoot
     // behind it at all — the client sends phone footage, or an old shoot

@@ -34,7 +34,7 @@ import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
 import {
   EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
-  briefRowsFor, handoverState, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
+  briefRowsFor, handoverState, planMissingWords, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
 
@@ -316,6 +316,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     card: item as never, shoot: shoot as never, specs,
     driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null,
   }, fromPlan)
+  // the plan was asked for and the shoot has none: say so, once the shoot row is here
+  const planMissing = fromPlan && shoot ? planMissingWords(shoot as never) : null
   const from = workFrom({ card: item as never, shoot: shoot as never, driveFolderUrl: client?.drive_folder_id ? folderUrl(String(client.drive_folder_id)) : null }, fromPlan)
   const handover = handoverState(item as never)
   const planRead = planReadState(shoot, me?.id)
@@ -426,6 +428,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       {/* ── 1. before you start (§2) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-before">
         <p id="ed-before" className={H2}>Before you start</p>
+        {planMissing && <p role="status" className="text-[13px] font-semibold text-accent-red-deep">{planMissing}</p>}
         <dl className="flex flex-col gap-2">
           {brief.map(row => (
             <div key={row.key} className="flex flex-col gap-0.5">

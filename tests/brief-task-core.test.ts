@@ -172,7 +172,7 @@ describe('canCreateItemsUnder with the shoot_brief kind', () => {
 
   it('other kinds keep the original gate exactly', () => {
     expect(canCreateItemsUnder('locked', 'editor')).toBe(true)
-    expect(canCreateItemsUnder('brief', 'editor')).toBe(false)
+    expect(canCreateItemsUnder('brief', 'editor')).toBe(true) // the owner overrode the booked-shoot gate (17 Sep 2026)
     expect(canCreateItemsUnder(null, 'account_manager', { reason: 'urgent' })).toBe(true)
     expect(canCreateItemsUnder(null, 'account_manager')).toBe(false)
   })

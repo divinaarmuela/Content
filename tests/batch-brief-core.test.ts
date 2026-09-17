@@ -65,11 +65,12 @@ describe('canCreateItemsUnder — the production gate', () => {
     expect(canCreateItemsUnder('wrapped', 'account_manager')).toBe(true)
   })
 
-  it('keeps a shoot still being planned closed to everyone', () => {
+  it('opens a shoot still being planned too — the owner overrode the booked-shoot gate (17 Sep 2026)', () => {
     for (const status of ['brief'] as const) {
       for (const role of roles) {
-        expect(canCreateItemsUnder(status, role)).toBe(false)
+        expect(canCreateItemsUnder(status, role)).toBe(true)
       }
+      expect(canCreateItemsUnder(status, 'client')).toBe(false)
     }
   })
 

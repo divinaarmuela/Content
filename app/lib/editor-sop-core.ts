@@ -124,6 +124,23 @@ export function shotListWords(raw: unknown): string | null {
 }
 
 /**
+ * THE PLAN WAS ASKED FOR BUT THE SHOOT HAS NONE (the owner, 17 Sep 2026: "if
+ * they tick the shoot brief or the board to be included, then say in the card:
+ * no brief or board found, ask your AM"). Read the same fields the Before you
+ * start rows read; when every one is empty, the card says so instead of
+ * drawing a column of Not given.
+ */
+export const PLAN_MISSING = 'No brief or board found for this shoot — ask your account manager.'
+export function planMissingWords(shoot: {
+  objective?: unknown; planned_deliverables?: unknown; shot_list?: unknown; script?: unknown; scripts?: unknown; editor_priorities?: unknown
+} | null | undefined): string | null {
+  if (!shoot) return PLAN_MISSING
+  const has = !!clean(shoot.objective) || !!deliverablesWords(shoot.planned_deliverables) || !!shotListWords(shoot.shot_list)
+    || !!bulletText(shoot.script as string | null | undefined) || scriptWords(sanitiseScripts(shoot.scripts)).length > 0 || !!clean(shoot.editor_priorities)
+  return has ? null : PLAN_MISSING
+}
+
+/**
  * The SOP's "confirm the brief" list, one row each, drawn always: a row with
  * nothing behind it says "Not given" rather than vanishing, so the editor
  * knows to ask before cutting ("if the brief doesn't say, ask before cutting,

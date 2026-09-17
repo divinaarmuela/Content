@@ -31,6 +31,7 @@ import { canReadClientComments } from '../../lib/comment-access-core'
 import { friendlyError } from '../../lib/support-core'
 import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
 import { uploadFiles } from '../uploadQueue'
+import { UploadRows, useUploadGroup } from '../UploadRows'
 
 /**
  * THE FEW THINGS A CARD ASKS FOR.
@@ -604,6 +605,11 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
    *  there"): a manager hands the editor the footage, stills or references
    *  with the card, and/or the folder they live in */
   const [workFiles, setWorkFiles] = useState<File[]>([])
+  /** the upload in flight, so its rows — bytes, speed, time left — sit in this
+   *  window where the person making the card is looking (17 Sep 2026) */
+  const [uploadGroup, setUploadGroup] = useState<string | null>(null)
+  const uploading = useUploadGroup(uploadGroup)
+  const stillUploading = uploading.some(u => !u.url && !u.error)
   const [folder, setFolder] = useState('')
   /** DELIVER ONLY (the playbook, 11 Sep 2026): the client posts this
    *  themselves — the card ends at their approval, no scheduler */
@@ -644,7 +650,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     openedRef.current = true
     setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(forPosting ? '' : viewer.id)
-    setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setFolder('')
+    setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setUploadGroup(null); setFolder('')
   }, [open, defaultClientId, clients, viewer.id, forPosting])
   // a late clients load still seeds the picker, without clobbering a choice
   useEffect(() => {
@@ -669,9 +675,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       const kindRow = defaultKind ? await adoptKind(defaultKind, kinds) : simple && derived ? { id: derived } : await adoptKind(simple ? 'Video edit' : kind, kinds)
       // the files go up first, so the card is made with them on it and the
       // editor's "yours to make" email lists them
-      const rawAssets = workFiles.length > 0
-        ? (await uploadFiles(workFiles, { purpose: 'social' }).done).map(({ file, url }) => ({ url, name: file.name }))
-        : []
+      let rawAssets: { url: string; name: string }[] = []
+      if (workFiles.length > 0) {
+        const up = uploadFiles(workFiles, { purpose: 'social' })
+        setUploadGroup(up.group)
+        rawAssets = (await up.done).map(({ file, url }) => ({ url, name: file.name }))
+      }
       // A CARD NEVER MAKES A SHOOT (the owner, 13 Sep 2026: "why does just
       // an editing card end up creating a card on the Shoots page? It
       // shouldn't do that, at all"): a card is from one of the client's
@@ -857,7 +866,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   <span className="text-[13px] text-muted-foreground">{workFiles.length} {workFiles.length === 1 ? 'file' : 'files'} chosen</span>
                 )}
               </div>
-              {workFiles.length > 0 && (
+              {uploading.length > 0 && <UploadRows uploads={uploading} compact />}
+              {workFiles.length > 0 && uploading.length === 0 && (
                 <ul className="flex flex-col gap-1">
                   {workFiles.map((f, i) => (
                     <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 text-[13px]">
@@ -908,7 +918,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         </div>
         <DialogFooter>
           <Button disabled={busy || !canSave} onClick={save} className={primary}>
-            {busy ? 'Making…' : 'Make the card'}
+            {busy ? (stillUploading ? 'Uploading the files…' : 'Making…') : 'Make the card'}
           </Button>
         </DialogFooter>
       </DialogContent>

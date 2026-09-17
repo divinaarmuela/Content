@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   EDITOR_LANES, EDITOR_LANE_WORDS, QC_CHECKLIST, HANDOVER_ITEMS, BLOCKER_NEEDS, NOT_GIVEN,
-  ackNudgeDue, assignedAtOf, beforeYouStart, blockedChip, blockerNudgeDue, blockerWords,
+  ackNudgeDue, assignedAtOf, beforeYouStart, blockedChip, blockerNudgeDue, blockerWords, planMissingWords, PLAN_MISSING,
   handoverState, qcComplete, qcDetail, qcDoneFor, reviewWords, showsHandover, workFrom, HOUR,
 } from '../app/lib/editor-sop-core'
 import { flagCheck } from '../app/lib/card-flag-core'
@@ -192,5 +192,17 @@ describe('the plan’s rows belong to the plan’s card (the owner, 14 Sep 2026)
     expect(rows.every(r => r.value !== null)).toBe(true)
     // nothing to say: only where previous edits are
     expect(briefRowsFor({ card: { client_id: 'c1' } } as never, false).map(r => r.key)).toEqual(['previous'])
+  })
+})
+
+describe('planMissingWords — the plan was asked for, the shoot has none (17 Sep 2026)', () => {
+  it('says so when every plan field is empty, and stays quiet once any is filled', () => {
+    expect(planMissingWords(null)).toBe(PLAN_MISSING)
+    expect(planMissingWords({})).toBe(PLAN_MISSING)
+    expect(planMissingWords({ objective: '  ' })).toBe(PLAN_MISSING)
+    expect(planMissingWords({ objective: 'Three reels for spring' })).toBeNull()
+    expect(planMissingWords({ shot_list: ['Wide of the shopfront'] })).toBeNull()
+    expect(planMissingWords({ editor_priorities: 'Keep the logo up' })).toBeNull()
+    expect(PLAN_MISSING).toBe('No brief or board found for this shoot — ask your account manager.')
   })
 })
