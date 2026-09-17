@@ -13,6 +13,7 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
+import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
 import {
@@ -38,7 +39,7 @@ import {
  * press) and a still shows large. Open still downloads the file.
  */
 export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false }: {
-  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null }
+  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown }
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
   frozen: boolean
@@ -132,7 +133,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })
   const finished = finishedEditOf(item)
   const versionTabs = versions
-    ? finishedVersionsOf<PullFile>(pullRows as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r), currentRound: handInRound(item as never) })
+    ? finishedVersionsOf<PullFile>([...pullRows, { id: 'uploads', kind: 'item', scope_id: item.id, folder_id: 'uploads', folder_url: '', status: 'done', purpose: 'finished', files: finalFilesAsPulls(item), started_at: '' }] as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r), currentRound: handInRound(item as never) })
     : []
   const [tab, setTab] = useState<'folder' | number | null>(null)
   useEffect(() => { setTab(null) }, [item.id])

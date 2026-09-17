@@ -553,7 +553,9 @@ export type PersonChoice = { id: string; name: string; email: string; role?: str
  * A new card: one deliverable, one client, one link. Kind is free text.
  * Managers can hand it to somebody; everyone else makes it their own.
  */
-export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false, forPosting = false }: {
+export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer, defaultClientId, onCreated, simple = false, forPosting = false, defaultKind }: {
+  /** the Designer page (17 Sep 2026): every card it makes is this kind */
+  defaultKind?: string
   open: boolean
   /** Post approval's New post for a manager (13 Sep 2026): no shoot
    *  question, "Hand to" instead of "Who", and the folder becomes the card's
@@ -661,7 +663,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
       const derived = simple
         ? kindIdForContentType(kinds as never, workFiles.length > 0 && workFiles.every(f => f.type.startsWith('image/')) ? 'static' : 'video')
         : null
-      const kindRow = simple && derived ? { id: derived } : await adoptKind(simple ? 'Video edit' : kind, kinds)
+      const kindRow = defaultKind ? await adoptKind(defaultKind, kinds) : simple && derived ? { id: derived } : await adoptKind(simple ? 'Video edit' : kind, kinds)
       // the files go up first, so the card is made with them on it and the
       // editor's "yours to make" email lists them
       const rawAssets = workFiles.length > 0

@@ -41,6 +41,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/website', label: 'Website' },
   { href: '/dashboard/production', label: 'Shoots' },
   { href: '/dashboard/editor', label: 'Editor' },
+  { href: '/dashboard/designer', label: 'Designer' },
   { href: '/dashboard/bookings', label: 'Bookings' },
   { href: '/dashboard/scheduler', label: 'Post approval' },
   { href: '/dashboard/calendar', label: 'Calendar' },
@@ -125,7 +126,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
   // falls back to the parent), so hiding Social hides all of it in one move
   if (socialParentOf(href)) return (role === 'scheduler' || role === 'general') && SCHEDULER_SOCIAL_PAGES.includes(href)
   if (role === 'editor') {
-    return [...PERSONAL_PAGES, '/dashboard/editor'].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/editor', '/dashboard/designer'].includes(href)
   }
   if (role === 'quality_checker') {
     // the owner, 13 Sep 2026: "quality check is a role" — the Quality check
@@ -133,7 +134,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     // cards as the editor sees them
     // …and Shoots, since the plan review happens on the shoot page (13 Sep
     // 2026, "why can the quality checker only see Editor and Post approval")
-    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/scheduler', '/dashboard/editor'].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/scheduler', '/dashboard/editor', '/dashboard/designer'].includes(href)
   }
   if (role === 'scheduler') {
     // all three: the Scheduler board is their own five columns ("where is
@@ -146,7 +147,7 @@ export function defaultAllows(role: Role | null, href: string): boolean {
     // approval and Schedule" — the whole making-and-posting run, none of the
     // managing. The client subpages ride on Clients, except credentials.
     if (href === '/dashboard/clients' || (href.startsWith('/dashboard/clients/:id/') && href !== '/dashboard/clients/:id/credentials')) return true
-    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
+    return [...PERSONAL_PAGES, '/dashboard/production', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', ...SCHEDULER_SOCIAL_PAGES].includes(href)
   }
   // account managers run client delivery, not business development — the lead
   // funnel and the audience lists stay out of their default world (grantable

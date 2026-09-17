@@ -149,7 +149,7 @@ describe('the routes and the pages (source pins)', () => {
     expect(tiles).toContain('{approvedIds?.includes(t.id) && (')
     // the client's "ready for you" email opens the editing portal for an edit
     const w = src('app/lib/workflow.ts')
-    expect(w).toContain("editingPortalFolder({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id)")
+    expect(w).toContain("portalHasWork({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id)")
   })
   it('the source working folder is called that, everywhere a person changes it', () => {
     expect(src('app/dashboard/board/FilesToWorkFrom.tsx')).toContain("{folder ? 'Change the source working folder' : 'Add the source working folder'}")
@@ -167,7 +167,7 @@ describe('the clip a phone can play (16 Sep 2026)', () => {
     expect(hook).toContain("if (el.canPlayType('application/vnd.apple.mpegurl')) el.src = src")
     expect(hook.indexOf('Hls.isSupported()')).toBeLessThan(hook.indexOf("canPlayType('application/vnd.apple.mpegurl')"))
     const portal = src('app/components/portal/EditingReview.tsx')
-    expect(portal).toContain('useHlsSource(video, clip ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)')
+    expect(portal).toContain('useHlsSource(video, clip && !isImage ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)')
     expect(portal).not.toContain('preload="metadata" src={clip.src}')
     const review = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     expect(review).toContain('useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ??')

@@ -22,7 +22,7 @@ import { reviewPath } from '../../../lib/video-review-core'
 import { canTransferEditing } from '../../../lib/editor-transfer-core'
 import TransferEditingDialog from '../../board/TransferEditingDialog'
 import { HandToDialog } from '../../board/BoardDialogs'
-import { editingPortalPath, editingPortalFolder } from '../../../lib/editing-portal-core'
+import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
 import { useState } from 'react'
@@ -229,7 +229,7 @@ export default function EditorCardPage() {
                     // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
                     // its clips and comments; an uploaded post keeps the board link
                     portalLink={client?.share_token
-                      ? `${window.location.origin}${editingPortalFolder(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
+                      ? `${window.location.origin}${portalHasWork(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
                       : null} />
                 )}
                 <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />

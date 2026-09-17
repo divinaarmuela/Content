@@ -99,7 +99,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
     return () => { live = false }
   }, [folderId, driveId, fromCopies])
 
-  if (!driveId || state.at === 'idle') return null
+  // uploads have no Drive behind them: our copies are the whole story (17 Sep 2026)
+  if (!fromCopies && (!driveId || state.at === 'idle')) return null
   const tiles = fromCopies ? copyTiles : state.at === 'ready' ? state.tiles : []
 
   return (

@@ -12,6 +12,7 @@ import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib
 import { driveTargetOf } from '../../../../../lib/card-link-core'
 import { filesOf, pullId } from '../../../../../lib/drive-pull-core'
 import { kindOf } from '../../../../../lib/files-core'
+import { finalFilesAsPulls } from '../../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../../components/media/useHlsSource'
 import { streamBaseUrl } from '../../../../../lib/stream-core'
@@ -57,7 +58,7 @@ export default function VideoReviewPage() {
   const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
-  const copyUrl = [...cardPulls, footagePull].flatMap(p => filesOf(p)).find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
+  const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')

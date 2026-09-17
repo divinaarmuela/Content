@@ -9,7 +9,8 @@ import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
 import { previewsFor } from './stream'
 import { streamBaseUrl } from './stream-core'
-import { clipsOf, clipSignature, editingPortalFolder, portalStreamPath, type PortalClip } from './editing-portal-core'
+import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip } from './editing-portal-core'
+import { finalFilesOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
 import { fileRound, roundOf, roundsOf } from './edit-round-core'
@@ -65,8 +66,9 @@ export async function editingPortalItem(rawToken: string, itemId: string) {
   const item = await table<ContentItem>('content_items').get(itemId)
   if (!item || item.client_id !== owner.client.id) return null
   if (!belongsToPortal(item, owner.scope)) return null
-  const folder = editingPortalFolder(item)
-  if (!folder) return null
+  if (!portalHasWork(item as never)) return null
+  // a card handed in as files has no folder — its uploads are the work (17 Sep 2026)
+  const folder = editingPortalFolder(item) ?? { url: '', folderId: 'uploads', kind: 'folder' as const }
   return { owner, item, folder }
 }
 
@@ -76,7 +78,9 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   const { owner, item, folder } = found
   const [listing, comments, amName, pull] = await Promise.all([
     // a folder is listed; one file is asked for by name (16 Sep 2026)
-    folder.kind === 'file'
+    folder.folderId === 'uploads'
+      ? Promise.resolve<FolderListing>({ entries: [], more: false, source: 'account', accountFailure: null })
+      : folder.kind === 'file'
       ? driveFileMeta(folder.folderId).then((m): FolderListing => ({
           entries: m ? [{ id: folder.folderId, name: m.name, mimeType: m.mime, size: m.size, modified: null, ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null }] : [],
           more: false, source: 'account', accountFailure: null,
@@ -86,20 +90,27 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
       .list({ by: { item_id: item.id }, where: r => r.visibility === 'client', orderBy: [['created_at', 'asc']], limit: 300 })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])),
     accountManagerName(owner.client.id),
-    table<DrivePull>('drive_pulls').get(pullId(folder.folderId, item.id)).catch(() => null),
+    folder.folderId === 'uploads' ? Promise.resolve(null) : table<DrivePull>('drive_pulls').get(pullId(folder.folderId, item.id)).catch(() => null),
   ])
   const status = item.status as ItemStatus
   // OUR COPIES FIRST (the pull, 16 Sep 2026): a clip already landed in our
   // storage plays from there — fast, and whatever Drive's sharing says today
-  const pulled = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
+  // FILES UPLOADED ONTO THE CARD come first (the Designer page, 17 Sep 2026):
+  // pictures shown, clips played, each under the round it was handed in
+  const uploaded = finalFilesOf(item)
+  const pulled = uploaded.length > 0
+    ? uploaded.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const, version: f.version }))
+    : filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
   const round = roundOf(item)
   // the preview copies of the pulled clips, for the strip's stills and hover frames
-  const previews = pulled.length > 0 ? await previewsFor(pulled.map(f => f.url as string)).catch(() => new Map()) : new Map()
+  const videos = pulled.filter(f => kindOf(f.mime, f.name) === 'video')
+  const previews = videos.length > 0 ? await previewsFor(videos.map(f => f.url as string)).catch(() => new Map()) : new Map()
   const clips = pulled.length > 0
     ? pulled.map(f => {
+        const kind = kindOf(f.mime, f.name) === 'image' ? 'image' as const : 'video' as const
         const p = previews.get(f.url as string)
         const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-        return { id: f.id, name: f.name, thumb: null, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
+        return { id: f.id, name: f.name, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
     : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round, stream: null }))
   const rounds = roundsOf(clips)
@@ -118,7 +129,9 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
     rounds,
     round,
     folder_note: clips.length === 0
-      ? (listing.entries.length > 0
+      ? (folder.folderId === 'uploads'
+          ? 'Nothing handed in for this version yet.'
+          : listing.entries.length > 0
           ? 'There are no videos in the finished edit yet.'
           : 'The finished edit could not be listed here yet — open it in Drive above.')
       : null,

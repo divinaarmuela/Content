@@ -24,6 +24,7 @@ import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey, cardColumn } from './board-core'
 import { cardLinkOf, finishedEditOf, folderOf, versionWord } from './card-link-core'
 import { roundOf } from './edit-round-core'
+import { hasFinishedWork } from './final-files-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import {
@@ -362,7 +363,7 @@ export function cardActions(
   // showing Send to quality check when he hasn't uploaded the edited one?");
   // a shoot-plan task is judged on its brief instead
   const isBriefTask = card.work_kinds?.slug === 'shoot_brief'
-  const nothingHandedIn = !isBriefTask && (card as { adhoc_post?: unknown }).adhoc_post !== true && finishedEditOf(card as never) === null
+  const nothingHandedIn = !isBriefTask && (card as { adhoc_post?: unknown }).adhoc_post !== true && !hasFinishedWork(card as never)
   const handInOf = (a: CardAction) => a.kind === 'transition' && a.to === 'quality_check' && editingStage
     && ((!!card.owner_id && card.owner_id !== viewer.id) || nothingHandedIn)
   const push = (raw: CardAction) => { if (handInOf(raw)) return; const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }

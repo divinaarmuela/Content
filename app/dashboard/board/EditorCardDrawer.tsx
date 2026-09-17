@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, Pencil, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Pencil, Upload, X } from 'lucide-react'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import { managesClients, type Role } from '../../lib/identity-core'
@@ -18,6 +18,10 @@ import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
+import { finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, withFinalFiles, withoutFinalFile } from '../../lib/final-files-core'
+import { handInRound, roundLabel } from '../../lib/edit-round-core'
+import { uploadFiles } from '../uploadQueue'
+import { kindOf } from '../../lib/files-core'
 import { pullId, pullInFlight, pullProgress } from '../../lib/drive-pull-core'
 import type { DrivePull } from '@/lib/db-types'
 import { shootCardId } from '../../lib/deliverable-group-core'
@@ -216,6 +220,30 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // the box holds the finished edit only — never the folder to work from, which
   // would read as version 1 the moment somebody pressed Save (16 Sep 2026)
   const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''
+  // FINISHED FILES (the Designer page, 17 Sep 2026): a graphics card hands in
+  // files, not a link — uploaded onto the card, stamped with the round
+  const filesCard = item ? handsInFiles(item as never) : false
+  const uploadInput = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState<string | null>(null)
+  const addFinalFiles = async (picked: File[]) => {
+    if (!item || picked.length === 0) return
+    setUploading(`Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'}`)
+    try {
+      const landed = await uploadFiles(picked, { purpose: 'social' }).done
+      const next = withFinalFiles(finalFilesOf(item as never), landed.map(({ file, url }) => ({ name: file.name, url, mime: file.type, size: file.size })), handInRound(item as never), me?.id ?? null, new Date().toISOString())
+      const ok = await post(`/api/production/items/${id}`, { final_files: next }, `${landed.length} ${landed.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(handInRound(item as never))}`, 'Saving the files', 'PATCH')
+      if (!ok) throw new Error('Could not save the files')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(null)
+      if (uploadInput.current) uploadInput.current.value = ''
+    }
+  }
+  const removeFinalFile = async (fid: string) => {
+    if (!item) return
+    await post(`/api/production/items/${id}`, { final_files: withoutFinalFile(finalFilesOf(item as never), fid) }, 'Taken off', 'Removing the file', 'PATCH')
+  }
   // STILL COPYING IN AT SUBMIT TIME (the owner, 16 Sep 2026: "what happens if
   // you submit for quality check before it finished uploading?"): the submit
   // goes through — the link is the hand-in — and the line under the button
@@ -463,7 +491,33 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p id="ed-versions" className={H2}>Your finished edit</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
-        {holder && !frozen ? (
+        {filesCard ? (
+          <div className="flex flex-col gap-2" data-final-files>
+            {holder && !frozen && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => uploadInput.current?.click()}>
+                  <Upload className="h-4 w-4" aria-hidden /> {uploading ?? `Upload the finished files — ${roundLabel(handInRound(item as never))}`}
+                </Button>
+                <input ref={uploadInput} type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" aria-label="The finished files"
+                  onChange={e => { void addFinalFiles(Array.from(e.target.files ?? [])) }} />
+                <span className="text-[12px] text-muted-foreground">Pictures, PDFs or clips. After a send-back, the next upload is the next version.</span>
+              </div>
+            )}
+            {finalFilesForRound(item as never, handInRound(item as never)).length === 0
+              ? <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing handed in for ${roundLabel(handInRound(item as never))} yet.`}</p>
+              : (
+                <ul className="flex flex-col divide-y divide-border" aria-label="The finished files">
+                  {finalFilesForRound(item as never, handInRound(item as never)).map(f => (
+                    <li key={f.id} className="flex min-h-11 items-center gap-2 text-[13px]">
+                      <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
+                      <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
+                      {holder && !frozen && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
+        ) : holder && !frozen ? (
           <div className="flex flex-wrap items-center gap-2">
             <input id="ed-source" value={source} onChange={e => setSource(e.target.value)} placeholder="https://drive.google.com/… or https://www.dropbox.com/…" aria-label="Drive or Dropbox link to the finished edit" className={`${field} min-w-0 flex-1`} />
             <Button variant="outline" className={outlineBtn} disabled={busy || (source.trim() !== '' && !sourceCheck.ok) || source.trim() === (item.link_url ?? '')} onClick={() => void saveSource()}>Save</Button>
@@ -473,7 +527,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         ) : (
           <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : 'Nothing handed in yet.'}</p>
         )}
-        {holder && !frozen && item.link_url && (
+        {!filesCard && holder && !frozen && item.link_url && (
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
         )}
         {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
@@ -498,8 +552,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !finishedUrl} onClick={() => void submit()}
-                title={!finishedUrl ? 'Add the link to your finished edit first' : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)} onClick={() => void submit()}
+                title={!hasFinishedWork(item as never) ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (

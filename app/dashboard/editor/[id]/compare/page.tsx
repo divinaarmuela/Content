@@ -13,6 +13,7 @@ import { driveTargetOf } from '../../../../lib/card-link-core'
 import { filesOf, pullId, type PullFile } from '../../../../lib/drive-pull-core'
 import { fileRound, roundLabel } from '../../../../lib/edit-round-core'
 import { kindOf } from '../../../../lib/files-core'
+import { finalFilesAsPulls } from '../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../components/media/usePreviewRows'
 import { hlsManifestUrl, useHlsSource } from '../../../../components/media/useHlsSource'
 import { streamBaseUrl } from '../../../../lib/stream-core'
@@ -144,7 +145,7 @@ export default function ComparePage() {
   const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
-  const files = useMemo(() => [...cardPulls, footagePull].flatMap(p => filesOf(p).map(f => ({ ...f, _folder: (p as { purpose?: string | null } | null)?.purpose !== 'finished' }))).filter(f => f.status === 'done' && !!f.url), [cardPulls, footagePull])
+  const files = useMemo(() => [...[...cardPulls, footagePull].flatMap(p => filesOf(p).map(f => ({ ...f, _folder: (p as { purpose?: string | null } | null)?.purpose !== 'finished' }))), ...finalFilesAsPulls(item ?? {}).map(f => ({ ...f, _folder: false }))].filter(f => f.status === 'done' && !!f.url), [cardPulls, footagePull, item])
   // each pick: the file at that round; a folder pick takes the folder's copy; else the newest copy of it
   const chosen = useMemo(() => picks.map(p => {
     const same = files.filter(f => f.id === p.id)

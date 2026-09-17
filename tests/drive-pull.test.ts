@@ -170,6 +170,6 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(bar).toContain('role="progressbar"')
     expect(bar).toContain("fetch('/api/drive/pull'")
     const portal = src('app/lib/editing-portal.ts')
-    expect(portal).toContain("const pulled = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')")
+    expect(portal).toContain("const uploaded = finalFilesOf(item)")
   })
 })

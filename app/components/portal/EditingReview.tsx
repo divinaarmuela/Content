@@ -48,7 +48,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
 
   const video = useRef<HTMLVideoElement>(null)
   // the Stream preview when there is one — a phone plays it; the master it will not (16 Sep 2026)
-  useHlsSource(video, clip ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)
+  const isImage = clip?.kind === 'image'
+  useHlsSource(video, clip && !isImage ? (clip.stream ? hlsManifestUrl(clip.stream.base) : clip.src) : null)
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [name, setName] = useState('')
@@ -127,11 +128,16 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         {clip ? (
           <>
             <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
+              {isImage ? (
+                // eslint-disable-next-line @next/next/no-img-element -- the picture handed in
+                <img key={clip.id} src={clip.src} alt={clip.name} className="mx-auto max-h-[68vh] w-full bg-black object-contain" />
+              ) : (
               <video key={clip.id} ref={video} controls playsInline preload="metadata"
                 className="mx-auto max-h-[68vh] w-full bg-black"
                 onTimeUpdate={e => setNow(e.currentTarget.currentTime)}
                 onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
                 onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
+              )}
               {/* the markers: one circle per comment, lit as the playhead reaches it — on the player, so always on black */}
               <div className="relative mx-5 my-4 h-8" role="group" aria-label="Your comments on the timeline">
                 <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 rounded bg-white/15" />

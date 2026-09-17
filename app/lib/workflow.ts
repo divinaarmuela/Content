@@ -31,7 +31,9 @@ import {
   type Hat,
   itemPath,
 } from './workflow-core'
-import { editingPortalFolder, editingPortalPath } from './editing-portal-core'
+import { editingPortalPath, portalHasWork } from './editing-portal-core'
+import { finalFilesForRound } from './final-files-core'
+import { handInRound } from './edit-round-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
@@ -738,6 +740,8 @@ export async function performTransition(
   // post is still waiting.
   const linked = item as { link_url?: string | null; raw_assets_url?: string | null; adhoc_post?: unknown; link_final?: boolean | null }
   const hasLink = typeof linked.link_url === 'string' && linked.link_url.trim() !== ''
+  // …or files uploaded onto the card for this round (the Designer page, 17 Sep 2026)
+  const hasFiles = finalFilesForRound(item as never, handInRound(item as never)).length > 0
   // A POSTING JOB'S FOLDER IS NOT THE PIECE (the owner, 13 Sep 2026: an AM
   // makes the card with a Drive folder for the scheduler, who "uploads the
   // files and chooses which one to schedule"). Such a card (`adhoc_post`,
@@ -752,7 +756,7 @@ export async function performTransition(
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
-    } else if (hasLink && !folderOnly) {
+    } else if (hasFiles || (hasLink && !folderOnly)) {
       // A CARD WITH A LINK IS EVIDENCE ENOUGH — the link is the work.
       //
       // Since the board reset a card is one deliverable with one pasted link —
@@ -1138,7 +1142,7 @@ export async function performTransition(
               ? (clientShareToken
                   // an edit sent to the client opens on its clips and comments —
                   // the editing portal (16 Sep 2026); everything else, their board
-                  ? `${DASHBOARD_URL}${to === 'client_review' && editingPortalFolder({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id) : `/portal/${clientShareToken}`}`
+                  ? `${DASHBOARD_URL}${to === 'client_review' && portalHasWork({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id) : `/portal/${clientShareToken}`}`
                   : `${DASHBOARD_URL}/client`)
               : `${DASHBOARD_URL}${itemPath({ ...item, status: to }, (person as { role?: string | null }).role)}`
           ),

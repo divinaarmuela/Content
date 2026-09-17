@@ -1,5 +1,5 @@
 import { isQualityReviewer } from './identity-core'
-import { finishedEditOf } from './card-link-core'
+import { hasFinishedWork } from './final-files-core'
 import { roundOf } from './edit-round-core'
 /**
  * WHO IS DOING WHAT — the Client and People filters on the three boards.
@@ -62,7 +62,7 @@ export function versionChoice(v: string | null | undefined): VersionFilter | nul
 
 /** does the card have a finished edit handed in? */
 export function cardHasFiles(c: FilterCard): boolean {
-  return finishedEditOf(c) !== null
+  return hasFinishedWork(c as never)
 }
 
 export function cardOnVersion(c: FilterCard, v: VersionFilter): boolean {

@@ -22,6 +22,7 @@ import {
 } from '../../../../lib/gdrive-mirror'
 import { previewVideos } from '../../../../lib/stream'
 import { cancelReplacedPullSoon, startPullSoon } from '../../../../lib/drive-pull'
+import { sanitiseFinalFiles } from '../../../../lib/final-files-core'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -199,7 +200,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const handOver = body?.hand_over === true || typeof body?.hand_over === 'string'
     const handNote = typeof body?.hand_over === 'string' ? body.hand_over : ''
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     // WHERE THE REVIEWER SHOULD LOOK (Abby, 11 Sep 2026: "the task must have
@@ -217,6 +218,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.review_note = raw ? raw.slice(0, 200) : null
     }
     if ('raw_assets' in patch) patch.raw_assets = sanitiseRawAssets(patch.raw_assets)
+    // THE FINISHED FILES (the Designer page, 17 Sep 2026): cleaned here, a new
+    // one stamped with the round the card is on
+    if ('final_files' in patch) {
+      const cleaned = sanitiseFinalFiles(patch.final_files, current as never, user.id, new Date().toISOString())
+      if (!cleaned.ok) return NextResponse.json({ error: cleaned.error }, { status: 400 })
+      patch.final_files = cleaned.files
+    }
     // ONE FOLDER: the open card's "Files to work from" folder is the same
     // folder the card face, the Schedule rail and the Overview show
     // (card-link-core.folderOf, 13 Sep 2026). A pasted non-folder link on

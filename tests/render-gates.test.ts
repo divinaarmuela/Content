@@ -206,7 +206,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   it('submit is behind the seven checks and a file', () => {
     const s = src(EDITOR_DRAWER)
     // the link is the work: no files gate the submit (14 Sep 2026)
-    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| !finishedUrl\}/)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| !hasFinishedWork\(item as never\)\}/)
     expect(s).not.toMatch(/asset_versions|slidesOf|<Thumb /)
     // the submit goes straight to the quality reviewer (Abby's rule), never to a manager's check
     expect(s).toMatch(/\{ to: 'quality_check' \}/)
@@ -216,8 +216,11 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     const s = src(EDITOR_DRAWER)
     expect(s).not.toMatch(/Review link|ed-review-link|Pick the final from Google Drive|Source files \(Dropbox\)/)
     // the owner: "why is there an add files feature in the editor card — it's just supposed to be a link"
-    expect(s).not.toMatch(/Or upload files|uploadFiles\(|type="file"/)
-    expect(s).toContain("'Add your Drive or Dropbox link first'")
+    // …and a DESIGNER's card hands in files (17 Sep 2026): the upload sits behind the graphics kind, never on an editor's card
+    expect(s).not.toMatch(/Or upload files/)
+    expect(s).toContain('{filesCard ? (')
+    expect(s).toContain('const filesCard = item ? handsInFiles(item as never) : false')
+    expect(s).toContain("'Add the link to your finished edit first'")
   })
   it('the card face for the maker opens the card ("Quality check, then submit"); the link controls are the manager’s', () => {
     const s = src('app/dashboard/board/BoardCard.tsx')

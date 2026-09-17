@@ -113,10 +113,10 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(src('app/api/production/items/[id]/link/route.ts')).not.toContain("if (final && check.url === String(item.raw_assets_url ?? '').trim()) {")
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("const finishedUrl = item ? (finishedEditOf(item as never)?.url ?? '') : ''")
     expect(src('app/lib/workflow.ts')).toContain("const folderOnly = hasLink && linked.link_final !== true\n    && linked.link_url === (linked.raw_assets_url ?? null)")
-    expect(src('app/lib/board-view-core.ts')).toContain('finishedEditOf(card as never) === null')
+    expect(src('app/lib/board-view-core.ts')).toContain('!hasFinishedWork(card as never)')
     // a submit while the copy is still landing goes through, and says so
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
-    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !finishedUrl}')
+    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)}')
     expect(drawer).toContain('Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.')
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {

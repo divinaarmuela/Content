@@ -51,6 +51,7 @@ export const NAV_MAIN: NavItem[] = [
   // am I planning, what is mine to edit, what is mine to post
   { href: '/dashboard/production', label: 'Shoots',           icon: Camera },
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
+  { href: '/dashboard/designer',   label: 'Designer',         icon: Kanban },
   // THE SCHEDULER PAGE IS THE MANAGER'S APPROVAL BOARD: what schedulers have
   // sent, waiting on a yes. It is on a manager's sidebar and NOT on a
   // scheduler's — theirs is Schedule, where they upload and send, and Posts,
@@ -100,7 +101,7 @@ export const NAV_TOOLS: NavItem[] = [
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
-  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
+  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
   { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/notifications', '/dashboard/start'] },
 ]
@@ -123,6 +124,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/website':       'Website',
   '/dashboard/production':    'Shoots',
   '/dashboard/editor':        'Editor',
+  '/dashboard/designer':      'Designer',
   '/dashboard/bookings':      'Bookings',
   '/dashboard/production/availability': 'Availability',
   '/dashboard/production/proposals': 'Proposals',

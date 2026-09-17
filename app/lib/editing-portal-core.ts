@@ -39,6 +39,17 @@ export type PortalClip = {
   name: string
   /** a public picture of the clip, when Drive shows one to the link; else null */
   thumb: string | null
+  /** a picture handed in as a file is shown, not played (17 Sep 2026) */
+  kind?: 'video' | 'image'
+}
+
+/** DOES THE PORTAL HAVE WORK TO SHOW? A finished Drive link, or files uploaded
+ *  onto the card (the Designer page, 17 Sep 2026) — at a client-facing stage */
+export function portalHasWork(card: Parameters<typeof editingPortalFolder>[0] & { final_files?: unknown }): boolean {
+  if (editingPortalFolder(card)) return true
+  if (card.adhoc_post === true) return false
+  if (!isClientFacing(String(card.status ?? '') as ItemStatus)) return false
+  return Array.isArray(card.final_files) && card.final_files.length > 0
 }
 
 /** the clips on the finished edit: the videos, in name order, nothing else */

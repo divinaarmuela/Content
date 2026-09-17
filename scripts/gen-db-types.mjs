@@ -527,6 +527,10 @@ const GHOST_COLUMNS = {
     //     to include the original brief, plan and the board? yes shows it on the
     //     card, no leaves it out"). Null/false: the card keeps its own words.
     ['include_plan', col('boolean', true)],
+    //   content_items.final_files — FINISHED WORK HANDED IN AS FILES (17 Sep
+    //     2026, the Designer page): the files uploaded onto the card, each with
+    //     the round it arrived in. Rules in app/lib/final-files-core.ts.
+    ['final_files', col('unknown', true, true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],
