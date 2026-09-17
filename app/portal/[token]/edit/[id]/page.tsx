@@ -45,7 +45,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">{data.item.title}</h1>
             <p className="pb-1 text-[13px] text-muted-foreground">
-              {data.clips.length > 0 ? `${data.clips.length} ${data.clips.length === 1 ? 'clip' : 'clips'} · ` : ''}{data.item.status_label}
+              {(() => { const n = data.clips.filter(c => c.version === (data.rounds[0] ?? data.round)).length; return n > 0 ? `${n} ${n === 1 ? 'clip' : 'clips'} · ` : '' })()}{data.item.status_label}
             </p>
           </div>
           <EditingReview data={data} />

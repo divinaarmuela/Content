@@ -57,3 +57,10 @@ describe('version-approval-core — approved clips carry forward (17 Sep 2026)',
     expect(share).toContain('return versionSet([...uploaded, ...copied], round, approvedIdSet(clipApprovalsOf(item)))')
   })
 })
+
+describe('the portal header counts the latest version (17 Sep 2026)', () => {
+  it('says how many clips are in the version being reviewed, not across every version', () => {
+    const page = readFileSync('app/portal/[token]/edit/[id]/page.tsx', 'utf8')
+    expect(page).toContain("const n = data.clips.filter(c => c.version === (data.rounds[0] ?? data.round)).length")
+  })
+})
