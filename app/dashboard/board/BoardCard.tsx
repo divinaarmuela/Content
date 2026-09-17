@@ -3,7 +3,7 @@
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -143,6 +143,11 @@ export function BoardCard({
   const askAck = !!onAcknowledge && card.owner_id === viewer.id && card.acknowledged === false
     && columnOf(card.status) === 'draft'
   const [briefOpen, setBriefOpen] = useState(false)
+  // JUST THE TITLE (the owner, 17 Sep 2026: "condense the card to just titles"
+  // on the Editor page): folded, a card is its client, its title, the stage
+  // and anything red — the brief, the manager, the folder and the rest open
+  // on Details. The button to act stays; the person opens the card as before.
+  const [folded, setFolded] = useState(page === 'editor')
   // THE BRIEF FOLDS TO TWO LINES AND OPENS SMOOTHLY (the owner, 16 Sep 2026:
   // "cards are getting too long — by default make the cards expand when
   // clicked, nice smooth animation"). It never folded before: `block` was
@@ -200,22 +205,22 @@ export function BoardCard({
       tone={tone}
       people={people}
       chips={<>
-        {kindChip && <Chip tone={kindTone(card.work_kinds?.color)}>{kindChip}</Chip>}
+        {!folded && kindChip && <Chip tone={kindTone(card.work_kinds?.color)}>{kindChip}</Chip>}
         {showStage && <Chip tone={tone ? 'surface' : 'muted'}>{lines.stage}</Chip>}
-        {review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
-        {finals && <Chip tone="green">{finals}</Chip>}
+        {!folded && review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
+        {!folded && finals && <Chip tone="green">{finals}</Chip>}
         {blockedLine && <Chip tone="red">{blockedLine}</Chip>}
-        {lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
-        {lines.posted && <Chip tone="green">{lines.posted}</Chip>}
-        {lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
-        {lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
+        {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
+        {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
+        {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
+        {!folded && lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
         {/* somebody wrote to you on this card and it is not done (13 Sep 2026) */}
         {(card as { my_open_task?: boolean }).my_open_task === true && (
           <Chip tone="amber" className="gap-1"><MessageCircle className="h-3.5 w-3.5" aria-hidden /> New for you</Chip>
         )}
       </>}
-      note={<>
+      note={folded ? null : (<>
         {card.shoot_title && (
           <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">From the shoot: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{card.shoot_title}</span>{card.shoot_date && footageAfterWords({ shoot_date: card.shoot_date }, today) ? ` · ${footageAfterWords({ shoot_date: card.shoot_date }, today)}` : ''}</span>
         )}
@@ -263,9 +268,15 @@ export function BoardCard({
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>
         )}
-      </>}
+      </>)}
       actions={<>
-        {lines.link ? (
+        {page === 'editor' && (
+          <Button variant="ghost" aria-expanded={!folded} onClick={e => { e.preventDefault(); setFolded(f => !f) }}
+            className="h-9 rounded-full px-2.5 text-[12px] font-semibold text-muted-foreground hover:text-foreground [[data-tone=ink]_&]:text-cream/80">
+            {folded ? <ChevronDown className="mr-1 h-3.5 w-3.5" aria-hidden /> : <ChevronUp className="mr-1 h-3.5 w-3.5" aria-hidden />}{folded ? 'Details' : 'Less'}
+          </Button>
+        )}
+        {!folded && (lines.link ? (
           <a
             href={lines.link.url}
             target="_blank"
@@ -285,9 +296,9 @@ export function BoardCard({
           <span className="inline-flex min-h-11 items-center rounded-full border border-dashed border-border px-3.5 text-[13px] font-semibold text-muted-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:text-cream/70">
             No folder link yet
           </span>
-        )}
+        ))}
 
-        {briefFolds && (
+        {!folded && briefFolds && (
           <Button variant="outline" aria-expanded={briefOpen}
             onClick={e => { e.preventDefault(); toggleBrief() }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">

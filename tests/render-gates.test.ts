@@ -155,6 +155,10 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     const list = src('app/dashboard/board/BoardList.tsx')
     expect(list).toContain('cardLines(card, { names, today, viewerId: viewer.id })')
     expect(list).toContain("{handedIn ? 'Finished edit in' : lines.link ? 'Folder only' : 'Nothing yet'}")
+    // the Editor page's card is just the title until Details is pressed (17 Sep 2026)
+    expect(src('app/dashboard/board/BoardCard.tsx')).toContain("const [folded, setFolded] = useState(page === 'editor')")
+    expect(src('app/dashboard/board/BoardCard.tsx')).toContain('note={folded ? null : (<>')
+    expect(src('app/dashboard/board/BoardCard.tsx')).toContain("{folded ? 'Details' : 'Less'}")
     // the board card's brief folds to two lines and opens smoothly — never `block` beside `line-clamp-2` (16 Sep 2026)
     const boardCard = src('app/dashboard/board/BoardCard.tsx')
     expect(boardCard).not.toContain("mb-1 block whitespace-pre-line text-foreground [[data-tone=ink]_&]:text-cream ${briefOpen ? '' : 'line-clamp-2'}")
@@ -357,7 +361,7 @@ describe('Post approval is assets only (13 Sep 2026: "what is this video edit ta
   const CARD = src('app/dashboard/board/BoardCard.tsx')
   it('the kind-of-work chip is not drawn on a Post approval card unless it is an internal task', () => {
     expect(CARD).toMatch(/const kindChip = editorFace \? null : schedulerFace \? \(internalTask \? 'Task' : null\) : lines\.kind/)
-    expect(CARD).toMatch(/\{kindChip && <Chip/)
+    expect(CARD).toMatch(/\{!folded && kindChip && <Chip/)
     expect(CARD).not.toMatch(/lines\.kind && !editorFace/)
   })
   it('the folder link is named plainly, and the kind of work is not changed from this board', () => {
