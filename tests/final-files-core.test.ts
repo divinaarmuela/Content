@@ -61,3 +61,10 @@ describe('the next step at the top of the card (17 Sep 2026)', () => {
     expect(s).toContain('is on the card — tick the checks and submit')
   })
 })
+
+describe('a designer’s second version passes the re-submit gate (17 Sep 2026)', () => {
+  it('files handed in for the round opened by the send-back count as the new version', () => {
+    const s = readFileSync('app/lib/workflow.ts', 'utf8')
+    expect(s).toContain("if (!system && !isBriefTask && !hasLink && !hasFiles && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {")
+  })
+})

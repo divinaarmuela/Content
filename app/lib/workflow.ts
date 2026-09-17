@@ -808,7 +808,9 @@ export async function performTransition(
   // drive link is fine — currently if I submit the same one after revision it
   // doesn't allow me"): the editor fixes the files behind the same Drive or
   // Dropbox link, so there is no new version to ask for
-  if (!system && !isBriefTask && !hasLink && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
+  // …or FILES handed in on the card for this round (the Designer page, 17 Sep
+  // 2026): the new version IS the files of the round opened by the send-back
+  if (!system && !isBriefTask && !hasLink && !hasFiles && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would
     // block the move forever with a message about a version nobody asked for
