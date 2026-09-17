@@ -39,6 +39,10 @@ describe('the approved clips leave with their own card (17 Sep 2026)', () => {
     const route = readFileSync('app/api/production/items/[id]/transition/route.ts', 'utf8')
     expect(route).toContain("if (['client_review', 'client_changes_requested'].includes(String(item.status)) && SENT_BACK_STATUSES.includes(to)) {")
     expect(route).toContain('try { await splitApprovedClips(user, updated as never) } catch (e) {')
+    // …and the Send back button's own route, which is the one the card actually uses
+    const sendBack = readFileSync('app/api/production/items/[id]/send-back/route.ts', 'utf8')
+    expect(sendBack).toContain("if (['client_review', 'client_changes_requested'].includes(String(item.status))) {")
+    expect(sendBack).toContain('try { await splitApprovedClips(user, { ...item, ...current, status: current.status } as never) } catch (e) {')
     const split = readFileSync('app/lib/split-approved.ts', 'utf8')
     expect(split).toContain("status: 'approved_for_scheduling',")
     expect(split).toContain('accepted_at: now,')

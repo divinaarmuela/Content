@@ -13,6 +13,7 @@ import { actingRoles, itemPath, STATUS_LABELS, type ItemStatus } from '../../../
 import { canMoveTo, columnOf } from '../../../../../lib/board-core'
 import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
+import { splitApprovedClips } from '../../../../../lib/split-approved'
 
 
 /**
@@ -93,6 +94,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     // revision_required already: the card is being revised — the words are
     // added to it and the assignee told again, no move needed
+
+    // THE APPROVED CLIPS LEAVE WITH THEIR OWN CARD (split-approved, 17 Sep
+    // 2026): sent back from the client's stage with some clips approved and
+    // some not, the approved ones move to a handover card. Best-effort.
+    if (['client_review', 'client_changes_requested'].includes(String(item.status))) {
+      try { await splitApprovedClips(user, { ...item, ...current, status: current.status } as never) } catch (e) { console.error('[send-back] split of the approved clips failed:', e) }
+    }
 
     const now = new Date().toISOString()
     await table<ContentItem>('content_items').update(id, {
