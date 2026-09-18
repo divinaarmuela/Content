@@ -63,3 +63,12 @@ describe('the hand-over carries the files to the scheduler (17 Sep 2026)', () =>
     expect(detail).toMatch(/frozen=\{frozenCard\}\s*(\/\/[^\n]*\n\s*)*versions\s/)
   })
 })
+
+describe('the split reads in the card’s history (17 Sep 2026)', () => {
+  it('both cards say what happened', async () => {
+    const { describeCardActivity } = await import('../app/lib/card-history-core')
+    const row = (action: string, detail: string) => ({ action, detail, actor_name: 'Akmal', created_at: 'x' }) as never
+    expect(describeCardActivity(row('approved_clips_split', '1 approved clip moved'))?.text).toContain('Approved clips moved to a handover card by Akmal')
+    expect(describeCardActivity(row('card_made_from_approved_clips', 'split from “X” at Version 2'))?.text).toContain('Made from the approved clips by Akmal')
+  })
+})

@@ -89,6 +89,11 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       return { text: `Deadline risk flagged by ${who}${quote(row.detail)}` }
     case 'sent_back':
       return { text: `Sent back for changes by ${who}${quote(row.detail)}` }
+    // THE APPROVED CLIPS LEFT WITH THEIR OWN CARD (split-approved, 17 Sep 2026)
+    case 'approved_clips_split':
+      return { text: `Approved clips moved to a handover card by ${who}${quote(row.detail)}` }
+    case 'card_made_from_approved_clips':
+      return { text: `Made from the approved clips by ${who}${quote(row.detail)}` }
     case 'posted_by_hand': {
       const which = String(row.new_value ?? '').trim()
       const hand = handDetail(row.detail)
