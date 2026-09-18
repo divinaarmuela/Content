@@ -71,3 +71,19 @@ describe('a replaced file is a new clip, and the clip page approves too (18 Sep 
     expect(p).toContain("approvalBadge(approved)}.")
   })
 })
+
+describe('the clips that need changing wear a badge after a send-back (18 Sep 2026)', () => {
+  it('on a sent-back card every unapproved clip of the version is marked; nothing is marked otherwise', async () => {
+    const { needsChangingIds, NEEDS_CHANGING } = await import('../app/lib/version-approval-core')
+    const version = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+    expect([...needsChangingIds({ status: 'revision_required' }, version, new Set(['a']))]).toEqual(['b', 'c'])
+    expect([...needsChangingIds({ status: 'client_changes_requested' }, version, new Set())]).toEqual(['a', 'b', 'c'])
+    expect([...needsChangingIds({ status: 'client_review' }, version, new Set())]).toEqual([])
+    expect(NEEDS_CHANGING).toBe('Needs changing')
+    const box = readFileSync('app/dashboard/board/FilesToWorkFrom.tsx', 'utf8')
+    expect(box).toContain('needsChangeIds={[...needsChange]}')
+    expect(box).toContain('data-needs-changing')
+    const tiles = readFileSync('app/dashboard/board/DriveFolderFiles.tsx', 'utf8')
+    expect(tiles).toContain('{needsChangeIds?.includes(t.id) && !clipApproval(approvals ?? [], t.id) && (')
+  })
+})

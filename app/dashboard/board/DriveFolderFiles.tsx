@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, MessageSquareText, Play, X } from 'lucide-react'
 import { approvalBadge, clipApproval, type ClipApproval } from '../../lib/clip-approvals-core'
+import { NEEDS_CHANGING } from '../../lib/version-approval-core'
 import { downloadHref } from '../../lib/download-core'
 import type { DriveEntry } from '../../lib/files-core'
 import {
@@ -23,9 +24,11 @@ import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, approvals, captions, mayApprove = false, onApprove, mayCaption = false, onCaption, copies, selected, onSelect, noRounds = false, pickRound }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, approvals, needsChangeIds, captions, mayApprove = false, onApprove, mayCaption = false, onCaption, copies, selected, onSelect, noRounds = false, pickRound }: {
   /** the ticks themselves — whose they were (client or team) draws the badge's words (18 Sep 2026) */
   approvals?: readonly ClipApproval[]
+  /** the clips a send-back asks to change — an amber badge (18 Sep 2026) */
+  needsChangeIds?: string[]
   /** optional caption per file id (18 Sep 2026) */
   captions?: Record<string, string>
   /** a manager may tick a clip for the client, or take a tick back */
@@ -195,6 +198,9 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                         <span className="absolute left-1.5 top-1.5 z-10 inline-flex max-w-[calc(100%-12px)] items-center gap-1 truncate rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title={approvalBadge(clipApproval(approvals ?? [], t.id)) ?? 'Approved by the client'}>
                           <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden /> <span className="truncate">{approvalBadge(clipApproval(approvals ?? [], t.id)) ?? 'Approved'}</span>
                         </span>
+                      )}
+                      {needsChangeIds?.includes(t.id) && !clipApproval(approvals ?? [], t.id) && (
+                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-amber px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Sent back — this one needs changing">{NEEDS_CHANGING}</span>
                       )}
                       {t.kind === 'video' && (
                         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">

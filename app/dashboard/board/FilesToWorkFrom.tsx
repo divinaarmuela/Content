@@ -14,7 +14,7 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
-import { approvedIdSet, carriedInto, movedIdSet, versionProgress } from '../../lib/version-approval-core'
+import { approvedIdSet, carriedInto, movedIdSet, needsChangingIds, versionProgress } from '../../lib/version-approval-core'
 import { captionsOf, clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
@@ -42,7 +42,7 @@ import {
  * press) and a still shows large. Open still downloads the file.
  */
 export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption }: {
-  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown }
+  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown; status?: unknown }
   /** a manager ticks a clip for the client (18 Sep 2026); defaults to the manager */
   mayApprove?: boolean
   /** whoever holds or manages the card captions an asset (18 Sep 2026); defaults to either */
@@ -190,6 +190,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   // …and a clip that left on a handover card is out of the editor's newest version
   const versionFiles = shownVersion ? [...carried, ...shownVersion.files.filter(f => shownVersion !== versionTabs[0] || !movedSet.has(f.id))] : []
   const progress = versionProgress(versionFiles, approvedSet)
+  // AFTER A SEND-BACK the clips that did not come back approved are the work (18 Sep 2026)
+  const needsChange = shownVersion && shownVersion === versionTabs[0] ? needsChangingIds(item as { status?: unknown }, versionFiles, approvedSet) : new Set<string>()
   const ownFolder = folder === String((item as { raw_assets_url?: string | null }).raw_assets_url ?? '').trim()
   const pullScope = ownFolder ? { kind: 'item' as const, id: item.id } : { kind: 'batch' as const, id: String((item as { batch_id?: string | null }).batch_id ?? '') }
   const button = 'inline-flex h-11 items-center gap-1.5 rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted disabled:opacity-50'
@@ -250,6 +252,9 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
               <span className="sr-only">, opens in a new tab</span>
             </a>
           )}
+          {needsChange.size > 0 && (
+            <p role="status" className="text-[13px] font-semibold text-foreground" data-needs-changing>{needsChange.size} {needsChange.size === 1 ? 'clip needs' : 'clips need'} changing — the ones marked below. Upload or link the new cut as {roundLabel(handInRound(item as never))}.</p>
+          )}
           {progress.words && (
             <p role="status" className={`text-[13px] font-semibold ${progress.allApproved ? 'text-accent-green-deep' : 'text-muted-foreground'}`} data-version-progress>{progress.words}</p>
           )}
@@ -258,7 +263,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           )}
           {/* THE TILES — from the folder, or from the files on the card alone (the handover card and a designer's card carry no folder; the owner, 18 Sep 2026: "4 clips approved but below does not show the actual assets") */}
           {(shownVersion.folderUrl || versionFiles.length > 0) && (
-            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} captions={captions} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={captions} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (

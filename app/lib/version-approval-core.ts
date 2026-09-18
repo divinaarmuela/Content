@@ -83,3 +83,19 @@ export function versionProgress(files: readonly { id: string; carried_from?: num
 export function carriedWords(from: number | null | undefined): string | null {
   return typeof from === 'number' ? `Approved in Version ${from} — carried over` : null
 }
+
+/** THE CLIPS THAT NEED CHANGING (the owner, 18 Sep 2026: "if it's sent back,
+ *  a badge for the person editing that it needs changing, so they know"): on
+ *  a card sent back, every clip of the version that went to the client and
+ *  did not come back approved. Approved ones left for handover or wear their
+ *  tick; the rest are the work. */
+export const SENT_BACK = ['revision_required', 'client_changes_requested'] as const
+export function needsChangingIds(
+  card: { status?: unknown },
+  version: readonly { id: string }[],
+  approved: ReadonlySet<string>,
+): Set<string> {
+  if (!(SENT_BACK as readonly string[]).includes(String(card.status ?? ''))) return new Set()
+  return new Set(version.filter(f => !approved.has(f.id)).map(f => f.id))
+}
+export const NEEDS_CHANGING = 'Needs changing'
