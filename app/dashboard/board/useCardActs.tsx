@@ -100,8 +100,10 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
         // card AS IT IS, and the hand-over route approves it and lands it in
         // that scheduler's Draft in one write. Closed without a pick, nothing
         // has moved. A card the client posts themselves (deliver only) has no
-        // scheduler to hand to, so it is approved outright.
-        if (action.to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true) {
+        // scheduler to hand to, so it is approved outright. So is an uploaded
+        // post (New post): its maker books it on the Schedule page themselves,
+        // there is nobody to hand it to (the live walk of 18 Sep 2026).
+        if (action.to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true && card.adhoc_post !== true) {
           setHandFor({ card, approve: true }); return
         }
         void transition(card, action.to, action.label)

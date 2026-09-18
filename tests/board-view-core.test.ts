@@ -815,3 +815,10 @@ describe('the Done lane\u2019s compact row names the scheduler (17 Sep 2026)', (
     expect(readFileSync('app/dashboard/board/Board.tsx', 'utf8')).toContain('<CompactCard card={c} today={today} onOpen={open} names={names} />')
   })
 })
+
+describe('an uploaded post is approved outright (18 Sep 2026)', () => {
+  it('the pass does not ask a manager to hand a New post to a scheduler — its maker books it on the Schedule page', () => {
+    const src = readFileSync('app/dashboard/board/useCardActs.tsx', 'utf8')
+    expect(src).toContain("if (action.to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true && card.adhoc_post !== true) {")
+  })
+})
