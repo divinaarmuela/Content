@@ -32,7 +32,7 @@ import {
   itemPath,
 } from './workflow-core'
 import { editingPortalPath, portalHasWork } from './editing-portal-core'
-import { finalFilesForRound } from './final-files-core'
+import { finalFilesForRound, finalFilesOf } from './final-files-core'
 import { handInRound, roundOf } from './edit-round-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
@@ -345,8 +345,14 @@ export function notifyJobAssigned(actor: TeamUser, item: ContentItem) {
 /** "Post from this folder: <link>" — the Drive or Dropbox folder a card
  *  carries, for the person handed it (the owner, 11 Sep 2026: "we might
  *  assign the scheduler by giving them the drive link"). */
-function folderLine(item: { link_url?: string | null; link_kind?: string | null }): string {
+function folderLine(item: { link_url?: string | null; link_kind?: string | null; final_files?: unknown }): string {
   const url = String(item.link_url ?? '').trim()
+  // A CARD OF FILES (the Designer page and the handover card split from the
+  // approved clips, 17 Sep 2026): the files are on the card itself
+  const files = finalFilesOf(item as { final_files?: unknown })
+  if (!url && files.length > 0) {
+    return `<p><strong>The files are on the card:</strong> ${files.length} ${files.length === 1 ? 'file' : 'files'} — ${files.slice(0, 6).map(f => escapeHtml(f.name)).join(', ')}${files.length > 6 ? ', …' : ''}. Open the card to see and download them.</p>`
+  }
   if (!url || !(item.link_kind === 'drive' || item.link_kind === 'dropbox')) return ''
   const word = item.link_kind === 'drive' ? 'Google Drive' : 'Dropbox'
   return `<p><strong>Post from this folder:</strong> <a href="${escapeHtml(url)}">${escapeHtml(word)} folder</a></p>`
@@ -483,7 +489,7 @@ export async function notifyScheduleHandoff(
     bodyHtml: renderEmail(
       mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
       (mode === 'work'
-        ? `<p>${escapeHtml(actor.name || actor.email)} handed you <strong>${escapeHtml(item.title)}</strong> to work on. The folder below is what you work from — make the post, then send it for the quality check.</p>`
+        ? `<p>${escapeHtml(actor.name || actor.email)} handed you <strong>${escapeHtml(item.title)}</strong> to work on. ${finalFilesOf(item as { final_files?: unknown }).length > 0 && !String((item as { link_url?: string | null }).link_url ?? '').trim() ? 'The files on the card are what you post from' : 'The folder below is what you work from'} — make the post, then send it for the quality check.</p>`
         : `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>`) +
       folderLine(item as { link_url?: string | null; link_kind?: string | null }) +
       `<p><strong>What happens next:</strong> ${escapeHtml(whatHappensNext(mode === 'work' ? 'draft_uploaded' : 'approved_for_scheduling'))}</p>` +

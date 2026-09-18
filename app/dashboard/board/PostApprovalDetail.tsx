@@ -34,6 +34,7 @@ import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
 import FilesToWorkFrom from './FilesToWorkFrom'
+import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { finishedEditOf } from '../../lib/card-link-core'
 import { cardPeople } from '../../lib/card-people-core'
 
@@ -633,6 +634,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           item={item as unknown as { id: string; raw_assets?: unknown; raw_assets_url?: string | null }}
           isManager={isManager}
           frozen={frozenCard}
+          // the versions handed in, with the client's ticks — on a handover card
+          // made from the approved clips they ARE the job (17 Sep 2026)
+          versions
+          approvedIds={clipApprovalsOf(item as never).map(a => a.file_id)}
         />
       )}
 

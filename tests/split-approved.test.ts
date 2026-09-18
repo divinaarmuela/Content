@@ -52,3 +52,14 @@ describe('the approved clips leave with their own card (17 Sep 2026)', () => {
     expect(split).toContain("split_out: [...moved, ...handoff.map(f => f.id)],")
   })
 })
+
+describe('the hand-over carries the files to the scheduler (17 Sep 2026)', () => {
+  it('the email names the files on a card of files, and the scheduler\u2019s view draws the versions with the client\u2019s ticks', () => {
+    const workflow = readFileSync('app/lib/workflow.ts', 'utf8')
+    expect(workflow).toContain('<p><strong>The files are on the card:</strong> ')
+    expect(workflow).toContain("'The files on the card are what you post from' : 'The folder below is what you work from'")
+    const detail = readFileSync('app/dashboard/board/PostApprovalDetail.tsx', 'utf8')
+    expect(detail).toContain('approvedIds={clipApprovalsOf(item as never).map(a => a.file_id)}')
+    expect(detail).toMatch(/frozen=\{frozenCard\}\s*(\/\/[^\n]*\n\s*)*versions\s/)
+  })
+})
