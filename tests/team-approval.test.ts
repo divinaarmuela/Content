@@ -48,3 +48,12 @@ describe('team approvals, captions, and settling at once (18 Sep 2026)', () => {
     expect(detail).toContain('mayCaption={isManager || (!!me?.id && (item.owner_id === me.id ||')
   })
 })
+
+describe('the reader keeps whose tick it was (18 Sep 2026)', () => {
+  it('a team tick reads back as the team’s, with where it came from', async () => {
+    const { clipApprovalsOf } = await import('../app/lib/clip-approvals-core')
+    expect(clipApprovalsOf({ clip_approvals: [{ file_id: 'a', name: 'a', at: 'x', by: 'Akmal', team: true, ip: '1.2.3.4', device: 'phone' }] }))
+      .toEqual([{ file_id: 'a', name: 'a', at: 'x', by: 'Akmal', team: true, ip: '1.2.3.4', device: 'phone' }])
+    expect(clipApprovalsOf({ clip_approvals: [{ file_id: 'a', name: 'a', at: 'x', by: 'Jerry' }] })).toEqual([{ file_id: 'a', name: 'a', at: 'x', by: 'Jerry' }])
+  })
+})

@@ -78,7 +78,13 @@ export function clipApprovalsOf(item: { clip_approvals?: unknown } | null | unde
     !!r && typeof r === 'object'
     && typeof (r as ClipApproval).file_id === 'string' && (r as ClipApproval).file_id.length > 0
     && typeof (r as ClipApproval).at === 'string')
-    .map(r => ({ file_id: r.file_id, name: String(r.name ?? ''), at: r.at, by: String(r.by ?? '') }))
+    .map(r => ({
+      file_id: r.file_id, name: String(r.name ?? ''), at: r.at, by: String(r.by ?? ''),
+      // whose tick it was, and where it came from — kept when the row has them (18 Sep 2026)
+      ...(r.team === true ? { team: true } : {}),
+      ...(typeof r.ip === 'string' ? { ip: r.ip } : {}),
+      ...(typeof r.device === 'string' ? { device: r.device } : {}),
+    }))
 }
 
 /** the list with this clip approved — a second press replaces the first, never doubles it */
