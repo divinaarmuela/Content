@@ -13,7 +13,7 @@ import EditorCardDrawer from '../../board/EditorCardDrawer'
 import PostApprovalDetail from '../../board/PostApprovalDetail'
 import { Button } from '@/components/ui/button'
 import { useCardActs } from '../../board/useCardActs'
-import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
+import { cardActions, mergedAway, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import ShareAcceptedLink from '../../board/ShareAcceptedLink'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
@@ -107,7 +107,7 @@ function ManagerActions({ item, viewer, portalLink, client }: { item: ContentIte
   // approved card is still the editing side's; this is the press that gives
   // it to a scheduler, into their Draft
   const [handOpen, setHandOpen] = useState(false)
-  const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true
+  const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true && !mergedAway(item as never)
     && ['account_manager', 'super_admin', 'general'].includes(viewer.role)
   if (!primary && more.length === 0 && !withClient && !transferable && !awaitingHand && !isManager) return null
   return (

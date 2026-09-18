@@ -68,7 +68,7 @@ describe('nobody with the scheduler hat hears until handed (source pins)', () =>
   })
   it('the card page gives a manager Hand to… on the approved card, and the hand-over lands it in their Draft whatever kind of card', () => {
     const page = src('app/dashboard/editor/[id]/page.tsx')
-    expect(page).toContain("const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true")
+    expect(page).toContain("const awaitingHand = String(item.status) === 'approved_for_scheduling' && item.deliver_only !== true && !mergedAway(item as never)")
     expect(page).toContain('Hand to…')
     expect(page).toContain('<HandToDialog card={handOpen ? card : null} viewer={viewer} onClose={() => setHandOpen(false)} />')
     const d = src('app/dashboard/board/BoardDialogs.tsx')

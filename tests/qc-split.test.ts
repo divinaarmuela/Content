@@ -115,3 +115,11 @@ describe('a closed card offers nothing (18 Sep 2026)', () => {
     expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain("{typeof (item as { merged_into?: unknown }).merged_into !== 'string' && <ShareAcceptedLink item={item as never} />}")
   })
 })
+
+describe('a closed card is not handed to anyone (18 Sep 2026)', () => {
+  it('the three "Hand to…" controls are gated on it', () => {
+    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain("&& item.deliver_only !== true && !mergedAway(item as never)")
+    expect(readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')).toContain("card.status === 'published' || mergedAway(card as never)")
+    expect(readFileSync('app/dashboard/board/PostApprovalDetail.tsx', 'utf8')).toContain("item?.status === 'scheduled') && !mergedAway(item ?? {})")
+  })
+})

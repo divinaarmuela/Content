@@ -197,7 +197,8 @@ export function BoardCard({
     ? [{ id: card.owner_id, initials: initialsOf(names.get(card.owner_id) ?? (lines.assignee === 'You' ? 'You' : '')), name: names.get(card.owner_id) ?? lines.assignee }]
     : []
   const mayDelete = Boolean(canDelete && onDelete)
-  const settled = card.status === 'scheduled' || card.status === 'published'
+  // a closed card — all its clips moved on — has nothing to hand over either (18 Sep 2026)
+  const settled = card.status === 'scheduled' || card.status === 'published' || mergedAway(card as never)
   const adhocPost = (card as { adhoc_post?: unknown }).adhoc_post === true
   const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete
 

@@ -13,7 +13,7 @@ import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import { useCardActs } from './useCardActs'
 import { HandToDialog } from './BoardDialogs'
-import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
+import { cardActions, mergedAway, type BoardViewCard } from '../../lib/board-view-core'
 import { EDITING_STATUSES, STATUS_LABELS, handedToScheduler, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
@@ -407,7 +407,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // "Hand to…" is the handover to the scheduler: it exists once the piece is
   // Ready to post (the handoff route takes nothing earlier), and reads
   // "With X · change" once booked in
-  const mayHandOn = isManager && (item?.status === 'approved_for_scheduling' || item?.status === 'scheduled')
+  const mayHandOn = isManager && (item?.status === 'approved_for_scheduling' || item?.status === 'scheduled') && !mergedAway(item ?? {})
   const markPosted = async () => {
     if (!item || handOn === null) return
     const s = slides[handOn]
