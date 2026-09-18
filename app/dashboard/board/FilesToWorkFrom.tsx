@@ -240,7 +240,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <>
           <p className="text-[13px] text-muted-foreground">
             {shownVersion.files.length > 0
-              ? `${shownVersion.files.length} ${shownVersion.files.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}${carried.length > 0 ? ` · ${carried.length} carried over, approved in an earlier version` : ''}.`
+              ? `${versionFiles.length - carried.length} ${versionFiles.length - carried.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}${carried.length > 0 ? ` · ${carried.length} carried over, approved in an earlier version` : ''}${shownVersion === versionTabs[0] && shownVersion.files.filter(f => movedSet.has(f.id)).length > 0 ? ` · ${shownVersion.files.filter(f => movedSet.has(f.id)).length} approved and moved to the handover card` : ''}.`
               : `${roundLabel(shownVersion.round)} is being copied in — its files show here as they land.`}
           </p>
           {shownVersion.folderUrl && (
