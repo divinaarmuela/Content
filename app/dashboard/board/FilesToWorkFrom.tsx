@@ -41,12 +41,19 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption }: {
-  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown; status?: unknown }
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption, showCaptions = false, noWorkFrom = false }: {
+  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown; status?: unknown; split_from?: unknown }
   /** a manager ticks a clip for the client (18 Sep 2026); defaults to the manager */
   mayApprove?: boolean
   /** whoever holds or manages the card captions an asset (18 Sep 2026); defaults to either */
   mayCaption?: boolean
+  /** CAPTIONS ARE POST APPROVAL'S (the owner, 18 Sep 2026: "the caption is for
+   *  post approval"): only that page shows or edits them */
+  showCaptions?: boolean
+  /** A HANDOVER CARD HAS NO FOLDER TO WORK FROM (the owner, 18 Sep 2026: "why is
+   *  there an add source working folder button when the assets are there
+   *  already?"): nothing to add on the folder tab */
+  noWorkFrom?: boolean
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
   frozen: boolean
@@ -88,7 +95,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const linkCheck = linkKindOf(link)
   const mayEdit = (isManager || holder) && !frozen
   // files are the manager's to add; the holder changes the folder link only
-  const mayAddFiles = filesOnly ? (isManager || holder) && !frozen : isManager && !linkOnly && !frozen
+  const mayAddFiles = noWorkFrom ? false : filesOnly ? (isManager || holder) && !frozen : isManager && !linkOnly && !frozen
   /** the file open above the grid — a clip playing, or a still shown large */
   const [showing, setShowing] = useState<RawAsset | null>(null)
   useEffect(() => { setShowing(null) }, [item.id])
@@ -169,7 +176,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const approvals = useMemo(() => clipApprovalsOf(item as never), [item])
   const captions = useMemo(() => captionsOf(item as never), [item])
   const canApprove = mayApprove ?? isManager
-  const canCaption = mayCaption ?? (isManager || holder)
+  const canCaption = showCaptions && (mayCaption ?? (isManager || holder))
   const approveClip = async (t: { id: string; name: string }, on: boolean) => {
     try {
       const res = await fetch(`/api/production/items/${item.id}/approve-clip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: t.id, name: t.name, on }) })
@@ -213,7 +220,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
                 <Plus className="h-4 w-4" aria-hidden /> Add files
               </Button>
             )}
-            {!filesOnly && (
+            {!filesOnly && !noWorkFrom && (
               <Button variant="outline" className={button} disabled={busy !== null} onClick={() => setLinkOpen(o => !o)}>
                 <FolderOpen className="h-4 w-4" aria-hidden /> {folder ? 'Change the source working folder' : 'Add the source working folder'}
               </Button>
@@ -263,12 +270,12 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           )}
           {/* THE TILES — from the folder, or from the files on the card alone (the handover card and a designer's card carry no folder; the owner, 18 Sep 2026: "4 clips approved but below does not show the actual assets") */}
           {(shownVersion.folderUrl || versionFiles.length > 0) && (
-            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={captions} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (
       <>
-      <p className="text-[13px] text-muted-foreground">{filesToWorkFromWords(files.length, !!folder)}</p>
+      <p className="text-[13px] text-muted-foreground">{noWorkFrom && files.length === 0 && !folder ? 'Nothing to work from here — this card was made from the approved files, under the version tab.' : filesToWorkFromWords(files.length, !!folder)}</p>
       {busy && <p role="status" className="text-[13px] text-muted-foreground">{busy}…</p>}
 
       {linkOpen && mayEdit && (

@@ -25,6 +25,7 @@ import {
 import { cardLinkOf, finishedEditOf, folderOf, versionWord } from './card-link-core'
 import { roundOf } from './edit-round-core'
 import { hasFinishedWork } from './final-files-core'
+import { newVersionPending, newVersionWords } from './version-approval-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import {
@@ -1000,7 +1001,13 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
  * before the press instead of after (the tutorial walk of 11 Sep 2026).
  */
 export const UPLOAD_FIRST = 'Upload the final first'
-export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url' | 'link_kind' | 'raw_assets_url'> & { final_files?: unknown }): boolean {
+/** the greyed button's words: which version, and how (18 Sep 2026) */
+export function workFirstWords(card: Parameters<typeof needsWorkFirst>[0]): string {
+  return newVersionPending(card) ? newVersionWords(card) : UPLOAD_FIRST
+}
+export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number' | 'link_url' | 'link_kind' | 'raw_assets_url'> & { final_files?: unknown; status?: unknown; edit_round?: unknown; link_saved_at?: unknown; change_note_at?: unknown; work_kinds?: { slug?: string | null } | null }): boolean {
+  // SENT BACK: the next version has to be in first (version-approval-core, 18 Sep 2026)
+  if (newVersionPending(card)) return true
   // a designer's uploaded files are finished work too (17 Sep 2026)
   if (Array.isArray(card.final_files) && card.final_files.length > 0) return false
   return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim() && !folderOf(card)

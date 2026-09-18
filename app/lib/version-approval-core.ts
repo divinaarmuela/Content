@@ -1,4 +1,5 @@
-import { fileRound } from './edit-round-core'
+import { fileRound, handInRound } from './edit-round-core'
+import { finalFilesForRound, finalFilesOf } from './final-files-core'
 
 /**
  * APPROVED CLIPS CARRY FORWARD (the owner, 17 Sep 2026: "sometimes all
@@ -99,3 +100,34 @@ export function needsChangingIds(
   return new Set(version.filter(f => !approved.has(f.id)).map(f => f.id))
 }
 export const NEEDS_CHANGING = 'Needs changing'
+
+/**
+ * THE NEXT VERSION IS NOT IN YET (the owner, 18 Sep 2026: "when it's sent back,
+ * on the main view there is a submit for quality check button like they have
+ * yet to upload it — why is there a button there?"). On a sent-back card the
+ * submit waits until the new version is on the card: files for the round the
+ * send-back opened, or — on a link card — the finished-edit link saved again
+ * since the send-back (the same link is fine; saving it is the hand-in that
+ * pulls the new cut). Not sent back → nothing pending.
+ */
+export function newVersionPending(card: {
+  status?: unknown; edit_round?: unknown; final_files?: unknown; link_url?: unknown
+  link_saved_at?: unknown; change_note_at?: unknown; work_kinds?: { slug?: string | null } | null
+}): boolean {
+  if (!(SENT_BACK as readonly string[]).includes(String(card.status ?? ''))) return false
+  const round = handInRound(card as never)
+  if (finalFilesForRound(card as never, round).length > 0) return false
+  const filesCard = finalFilesOf(card as never).length > 0 || card.work_kinds?.slug === 'graphics'
+  if (filesCard) return true
+  if (!String(card.link_url ?? '').trim()) return true
+  const saved = typeof card.link_saved_at === 'string' ? card.link_saved_at : ''
+  const asked = typeof card.change_note_at === 'string' ? card.change_note_at : ''
+  return !saved || (!!asked && saved < asked)
+}
+
+/** the words on the greyed button and under it */
+export function newVersionWords(card: Parameters<typeof newVersionPending>[0]): string {
+  const round = handInRound(card as never)
+  const filesCard = finalFilesOf(card as never).length > 0 || card.work_kinds?.slug === 'graphics'
+  return filesCard ? `Upload Version ${round} first` : `Save the Version ${round} link first — the same link is fine`
+}

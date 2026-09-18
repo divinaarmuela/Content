@@ -95,7 +95,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
     expect(box).toContain('Folder to work from')
     expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
-    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={captions} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
+    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
     // every pull says what it was: the row's purpose
     expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")
@@ -116,7 +116,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(src('app/lib/board-view-core.ts')).toContain('!hasFinishedWork(card as never)')
     // a submit while the copy is still landing goes through, and says so
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
-    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)}')
+    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never) || newVersionPending({ ...item, work_kinds: kind } as never)}')
     expect(drawer).toContain('Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.')
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {

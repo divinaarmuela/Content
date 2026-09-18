@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { NETWORK_LABEL } from '../../lib/publish-core'
 import BrandCard from '../production/BrandCard'
 import { toast } from 'sonner'
@@ -19,7 +19,12 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useTable } from '@/lib/db-client'
-import type { TeamUser } from '@/lib/db-types'
+import type { DrivePull, TeamUser } from '@/lib/db-types'
+import { filesOf } from '../../lib/drive-pull-core'
+import { fileRound, roundOf } from '../../lib/edit-round-core'
+import { finalFilesOf } from '../../lib/final-files-core'
+import { clipApprovalsOf } from '../../lib/clip-approvals-core'
+import { approvedIdSet, movedIdSet, splitApproved, versionSet } from '../../lib/version-approval-core'
 import {
   briefAfterHandover, handToGroups, personLabel, whoMakesIt, type HandTo,
 } from '../../lib/hand-over-core'
@@ -232,6 +237,23 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
   const [note, setNote] = useState('')
   const [clientWords, setClientWords] = useState<ClientComment[]>([])
   const [busy, setBusy] = useState(false)
+  // HOW MANY GO BACK, HOW MANY GO TO HANDOVER (the owner, 18 Sep 2026: "make sure
+  // sent back for changes mentions clearly how many assets get sent back"):
+  // the version's clips, live, split by the approvals on the card
+  const sendBackScope = useMemo(() => ({ scope_id: card?.id ?? '' }), [card?.id])
+  const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: sendBackScope as never, enabled: !!card })
+  const counts = useMemo(() => {
+    if (!card) return { back: 0, handoff: 0, total: 0 }
+    const round = roundOf(card as never)
+    const all = [
+      ...finalFilesOf(card as never).map(f => ({ id: f.id, version: f.version })),
+      ...pullRows.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)).filter(f => f.status === 'done' && !!f.url).map(f => ({ id: f.id, version: fileRound(f) })),
+    ]
+    const approved = approvedIdSet(clipApprovalsOf(card as never))
+    const version = versionSet(all, round, approved, movedIdSet(card as never))
+    const { handoff, remaining } = splitApproved(version, approved)
+    return { back: remaining.length, handoff: handoff.length, total: version.length }
+  }, [card, pullRows])
 
   useEffect(() => {
     setNote('')
@@ -278,6 +300,13 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
           <DialogTitle>Send back for changes</DialogTitle>
           <DialogDescription>
             Say what needs changing. The person on this card is told, in your words.
+            {counts.total > 0 && (
+              <span className="mt-2 block font-semibold text-foreground" data-send-back-counts>
+                {counts.back} of {counts.total} {counts.total === 1 ? 'clip goes' : 'clips go'} back for changes
+                {counts.handoff > 0 ? ` · ${counts.handoff} approved ${counts.handoff === 1 ? 'clip goes' : 'clips go'} to a handover card` : ''}
+                {counts.back === 0 ? ' — every clip is approved; accept the card instead' : ''}
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
         {clientWords.length > 0 && (
@@ -295,7 +324,7 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
         </div>
         <DialogFooter>
           <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
-            {busy ? 'Sending…' : 'Send back'}
+            {busy ? 'Sending…' : counts.back > 0 ? `Send back ${counts.back} ${counts.back === 1 ? 'clip' : 'clips'}` : 'Send back'}
           </Button>
         </DialogFooter>
       </DialogContent>

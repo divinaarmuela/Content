@@ -216,7 +216,7 @@ export default function EditorCardPage() {
         <section className="flex min-w-0 flex-col rounded-card border border-border bg-card" aria-label="Files to work from">
           {/* drawn once the kind is known, so a designer's card never flashes the folder-link button */}
           {kindLoading && <Skeleton className="m-4 h-40 rounded-inner" />}
-          {!kindLoading && <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly}
+          {!kindLoading && <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly} noWorkFrom={!!(item as { split_from?: unknown }).split_from}
             fallbackFolder={from.footage} wideFiles versions
             // the clips the client approved on their portal wear a tick (16 Sep 2026)
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}

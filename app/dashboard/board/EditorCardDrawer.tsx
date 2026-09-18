@@ -32,6 +32,7 @@ import type { Platform } from '../../lib/publish-core'
 import { historyLines, type HistoryJob, HISTORY_PREVIEW, NO_HISTORY } from '../../lib/card-history-core'
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
+import { newVersionPending, newVersionWords } from '../../lib/version-approval-core'
 import {
   EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
   briefRowsFor, handoverState, planMissingWords, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
@@ -285,6 +286,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     if (!submitting) return
     // a designer hands in files, an editor a link — either counts as finished work
     if (!item || !hasFinishedWork(item as never)) { toast.error(filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first'); return }
+    if (newVersionPending({ ...item, work_kinds: kind } as never)) { toast.error(newVersionWords({ ...item, work_kinds: kind } as never)); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -569,8 +571,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)} onClick={() => void submit()}
-                title={!hasFinishedWork(item as never) ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never) || newVersionPending({ ...item, work_kinds: kind } as never)} onClick={() => void submit()}
+                title={!hasFinishedWork(item as never) ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : newVersionPending({ ...item, work_kinds: kind } as never) ? newVersionWords({ ...item, work_kinds: kind } as never) : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (

@@ -568,6 +568,9 @@ const GHOST_COLUMNS = {
     //   content_items.asset_captions — OPTIONAL CAPTIONS, one per asset, file id
     //     → words (18 Sep 2026). clip-approvals-core.captionsOf reads it.
     ['asset_captions', col('unknown', true, true)],
+    //   content_items.link_saved_at — when the finished-edit link was last saved
+    //     (18 Sep 2026): version-approval-core.newVersionPending reads it.
+    ['link_saved_at', col('string', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

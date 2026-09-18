@@ -12,7 +12,7 @@ import {
 import { statusesIn, columnOf } from '../../lib/board-core'
 import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
-  type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
+  type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, workFirstWords } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
@@ -321,7 +321,7 @@ export function BoardCard({
           <Button disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onOpen(card) }}
             className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
-            {needsWorkFirst(card) ? UPLOAD_FIRST : 'Quality check, then submit'}
+            {needsWorkFirst(card) ? workFirstWords(card) : 'Quality check, then submit'}
           </Button>
         )}
         {primary && !faceOpensCard && (() => {
@@ -330,13 +330,13 @@ export function BoardCard({
           const blocked = primary.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review') && needsWorkFirst(card)
           return (
             <Button disabled={busy || blocked} data-tour={tour ? 'board-card-action' : undefined}
-              title={blocked ? UPLOAD_FIRST : undefined}
-              aria-label={blocked ? `${primary.label} — ${UPLOAD_FIRST}` : undefined}
+              title={blocked ? workFirstWords(card) : undefined}
+              aria-label={blocked ? `${primary.label} — ${workFirstWords(card)}` : undefined}
               onClick={e => { e.preventDefault(); if (!blocked) onAction(card, primary) }}
               // a long label wraps inside the card instead of running out of it
               // (the owner's screenshot, 14 Sep 2026)
               className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60 [[data-tone=ink]_&]:bg-cream [[data-tone=ink]_&]:text-ink">
-              {busy ? 'Saving…' : blocked ? UPLOAD_FIRST : primary.label}
+              {busy ? 'Saving…' : blocked ? workFirstWords(card) : primary.label}
             </Button>
           )
         })()}

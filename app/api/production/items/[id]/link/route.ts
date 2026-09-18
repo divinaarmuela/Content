@@ -65,6 +65,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           link_kind: check.kind,
           // the mark card-link-core.finishedEditOf reads: the finished edit, or a folder
           link_final: final,
+          // when the finished-edit link was last saved — after a send-back, saving it again is the hand-in (18 Sep 2026)
+          ...(final ? { link_saved_at: new Date().toISOString() } : {}),
           // a folder is the card's folder everywhere (card-link-core.folderOf)
           // — unless this link is the finished edit, which is not the folder
           ...(check.kind !== 'other' && !final ? { raw_assets_url: check.url } : {}),
@@ -82,6 +84,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         // upload the same Drive link but have to re-download for version 2"):
         // the folder is read again and its new files are this round's
         if (check.kind === 'drive' && final) startPullSoon({ kind: 'item', scopeId: id, folderUrl: check.url, version: handInRound(item), by: user.id, purpose: 'finished' })
+        // …and it counts as the hand-in after a send-back (version-approval-core.newVersionPending, 18 Sep 2026)
+        if (final) await items.update(id, { link_saved_at: new Date().toISOString() } as never)
         return NextResponse.json({ ok: true, already: true, version: (outcome as { version: number }).version, kind: check.kind, label: check.label })
       }
       return NextResponse.json(
