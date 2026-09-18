@@ -574,6 +574,12 @@ const GHOST_COLUMNS = {
     //   content_items.qc_approvals — THE QUALITY CHECK, one clip at a time
     //     (18 Sep 2026): the reviewer's passes, same shape as clip_approvals.
     ['qc_approvals', col('unknown', true, true)],
+    //   content_items.merged_into — ALL ITS CLIPS MOVED ON (18 Sep 2026): the
+    //     card closed when its last clip was approved and joined the edit's
+    //     one handover card; this is that card. split_round: the round of the
+    //     edit a child card was cut from.
+    ['merged_into', col('string', true)],
+    ['split_round', col('number', true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

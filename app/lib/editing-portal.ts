@@ -41,7 +41,7 @@ export type EditingPortal = {
   /** the name the portal wears — the business, or the person */
   portal_name: string
   am_name: string | null
-  item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null }
+  item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null; merged_into: string | null }
   folder: { url: string; id: string }
   clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null })[]
   /** the rounds the clips span, newest first — Version 2, Version 1 */
@@ -132,6 +132,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
     am_name: amName,
     item: {
       id: item.id, title: item.title, status,
+      merged_into: typeof (item as { merged_into?: unknown }).merged_into === 'string' ? (item as { merged_into: string }).merged_into : null,
       status_label: clientStatusWord(status, CLIENT_LABELS[status]),
       content_type: item.content_type ?? null,
     },

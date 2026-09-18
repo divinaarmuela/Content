@@ -1,6 +1,6 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { ContentItem, DrivePull } from '@/lib/db-types'
+import type { ContentItem, DrivePull, ItemComment } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { filesOf } from './drive-pull-core'
 import { fileRound, roundOf } from './edit-round-core'
@@ -64,10 +64,26 @@ const OPEN_AT: Record<Stage, readonly string[]> = {
   handover: ['approved_for_scheduling'],
 }
 
-/** the card's open child at that stage — made by an earlier pass or approval, not yet moved on */
+/** THE EDIT'S ROOT CARD (18 Sep 2026): a child's passes and approvals join
+ *  the ROOT's children, so an edit has one to-the-client card and one
+ *  handover card open at a time, however many rounds it takes. */
+async function rootOf(item: ContentItem): Promise<ContentItem> {
+  let cur = item
+  for (let hop = 0; hop < 5; hop++) {
+    const from = (cur as { split_from?: unknown }).split_from
+    if (typeof from !== 'string' || !from) return cur
+    const up = await table<ContentItem>('content_items').get(from)
+    if (!up) return cur
+    cur = up
+  }
+  return cur
+}
+
+/** the card's open child at that stage — made by an earlier pass or approval, not yet moved on, not closed */
 async function openChildOf(item: ContentItem, stage: Stage): Promise<ContentItem | null> {
   const rows = await table<ContentItem>('content_items').list({
     where: r => (r as { split_from?: unknown }).split_from === item.id && OPEN_AT[stage].includes(String(r.status))
+      && typeof (r as { merged_into?: unknown }).merged_into !== 'string'
       && (stage === 'client' || !(Array.isArray((r as { scheduler_ids?: unknown }).scheduler_ids) && ((r as { scheduler_ids?: unknown[] }).scheduler_ids as unknown[]).length > 0)),
     limit: 1,
   })
@@ -83,12 +99,10 @@ async function moveToStage(actor: TeamUser | null, item: ContentItem, moved: Ver
   const movedCaptions = Object.fromEntries(moved.filter(f => captions[f.id]).map(f => [f.id, captions[f.id]]))
   const files = moved.map(f => ({ id: f.id, name: f.name, url: f.url, mime: f.mime ?? 'application/octet-stream', size: f.size ?? null, version: 1, uploaded_at: now, by: actor?.id ?? null }))
   const src = item as ContentItem & Record<string, unknown>
-  // ONE HANDOVER CARD PER EDIT (the owner, 18 Sep 2026: "make sure no
-  // duplicates"): a to-the-client card is itself a child of the edit, so its
-  // approvals join the edit's own handover card, not a second one
-  const anchor = stage === 'handover' && typeof src.split_from === 'string' && src.split_from
-    ? (await table<ContentItem>('content_items').get(src.split_from)) ?? item
-    : item
+  // ONE CARD PER EDIT PER STAGE (the owner, 18 Sep 2026: "make sure no
+  // duplicates"): a child card's passes and approvals join the ROOT edit's
+  // to-the-client card and handover card, never a second one
+  const anchor = await rootOf(item)
   const existing = await openChildOf(anchor, stage)
   let card: ContentItem
   if (existing) {
@@ -103,7 +117,7 @@ async function moveToStage(actor: TeamUser | null, item: ContentItem, moved: Ver
   } else {
     card = await table<ContentItem>('content_items').insert({
       client_id: item.client_id,
-      title: stage === 'handover' ? handoffTitle(anchor.title, round) : toClientTitle(item.title, round),
+      title: stage === 'handover' ? handoffTitle(anchor.title, round) : toClientTitle(anchor.title, round),
       content_type: item.content_type ?? 'reel',
       platform_targets: Array.isArray(src.platform_targets) ? src.platform_targets : [],
       owner_id: item.owner_id ?? null,
@@ -129,6 +143,7 @@ async function moveToStage(actor: TeamUser | null, item: ContentItem, moved: Ver
       asset_captions: movedCaptions,
       ...(stage === 'handover' ? { accepted_at: now, accepted_round: 1 } : {}),
       split_from: anchor.id,
+      split_round: round,
       created_at: now,
       updated_at: now,
     } as never)
@@ -143,8 +158,20 @@ async function moveToStage(actor: TeamUser | null, item: ContentItem, moved: Ver
     updated_at: now,
   } as never)
 
+  // THE COMMENTS FOLLOW THE CLIP (18 Sep 2026): what was said on a moved clip
+  // — and the replies under it — is read on the card it moved to
+  try {
+    const said = await table<ItemComment>('item_comments').list({ by: { item_id: item.id } as never })
+    const onMoved = said.filter(c => ids.has(String((c as { video_file_id?: unknown }).video_file_id ?? '')))
+    const movedIds = new Set(onMoved.map(c => c.id))
+    const replies = said.filter(c => !movedIds.has(c.id) && typeof c.parent_id === 'string' && movedIds.has(c.parent_id))
+    await Promise.all([...onMoved, ...replies].map(c => table<ItemComment>('item_comments').update(c.id, { item_id: card.id } as never)))
+  } catch (e) {
+    console.error('[split-approved] the comments could not follow the clips:', e)
+  }
+
   const where = stage === 'handover' ? 'for handover' : 'to the client'
-  const words = `${moved.length} ${stage === 'handover' ? 'approved' : 'passed'} ${moved.length === 1 ? 'clip' : 'clips'} moved to “${card.title}” ${where}; ${remaining} ${remaining === 1 ? 'clip stays' : 'clips stay'} with the editor`
+  const words = `${moved.length} ${stage === 'handover' ? 'approved' : 'passed'} ${moved.length === 1 ? 'clip' : 'clips'} moved to “${card.title}” ${where}; ${remaining === 0 ? 'nothing stays behind' : `${remaining} ${remaining === 1 ? 'clip stays' : 'clips stay'} with the editor`}`
   await logActivity({ entityType: 'content_item', entityId: item.id, action: stage === 'handover' ? 'approved_clips_split' : 'passed_clips_split', actor, detail: words })
   await logActivity({ entityType: 'content_item', entityId: card.id, action: stage === 'handover' ? 'card_made_from_approved_clips' : 'card_made_from_passed_clips', actor, detail: existing ? `${moved.length} more from “${item.title}” at Version ${round}` : `split from “${item.title}” at Version ${round}` })
   announceItemChange({ item_id: card.id, client_id: item.client_id, status: String(card.status), kind: existing ? 'updated' : 'created' })
@@ -165,7 +192,7 @@ async function moveToStage(actor: TeamUser | null, item: ContentItem, moved: Ver
         bodyHtml: renderEmail(
           subject,
           `<p>${moved.length} ${moved.length === 1 ? 'clip' : 'clips'} on <strong>${escapeHtml(item.title)}</strong> ${moved.length === 1 ? 'is' : 'are'} approved and ${existing ? 'joined' : 'now on'} <strong>${escapeHtml(card.title)}</strong> in For Handoff — hand it to a scheduler when you are ready.</p>`
-          + `<p>${remaining} ${remaining === 1 ? 'clip stays' : 'clips stay'} with the editor for changes.</p>`,
+          + (remaining === 0 ? '<p>Nothing stays behind — every clip is approved.</p>' : `<p>${remaining} ${remaining === 1 ? 'clip stays' : 'clips stay'} with the editor for changes.</p>`),
           'Open the handover card',
           `${DASHBOARD_URL}${itemPath(card, (m as { role?: string | null }).role)}`,
         ),
@@ -189,10 +216,32 @@ export async function settleApprovals(actor: TeamUser | null, item: ContentItem)
   const { handoff, remaining } = splitApproved(version, approved)
   if (handoff.length === 0) return null
   if (remaining.length === 0) {
-    // EVERYTHING APPROVED — the card itself is accepted (the client's approval logged)
     if (!actor) return null
+    // EVERYTHING APPROVED. ONE HANDOVER CARD PER EDIT (the owner, 18 Sep 2026:
+    // "make sure no duplicates"): when the edit already has an open handover
+    // card — made by the earlier approvals — the last clips join it and this
+    // card closes, pointing at it. Otherwise this card is accepted whole and
+    // IS the edit's handover card.
+    const root = await rootOf(item)
+    const existing = await openChildOf(root, 'handover')
+    if (existing && existing.id !== item.id) {
+      const done = await moveToStage(actor, item, handoff, 0, round, 'handover')
+      try {
+        await performTransition(actor, item as never, 'approved_for_scheduling', { note: `Every clip approved — all of them are on “${existing.title}”` })
+        await table<ContentItem>('content_items').update(item.id, { merged_into: existing.id, updated_at: new Date().toISOString() } as never)
+        announceItemChange({ item_id: item.id, client_id: item.client_id, status: 'approved_for_scheduling', kind: 'updated' })
+      } catch (e) {
+        console.error('[split-approved] could not close the card whose clips all moved on:', e)
+      }
+      return { moved: done.moved, accepted: true }
+    }
     try {
       await performTransition(actor, item as never, 'approved_for_scheduling', { note: 'Every clip approved' })
+      // a to-the-client card accepted whole is the edit's handover card now, and is titled as one
+      if (root.id !== item.id) {
+        const src = item as ContentItem & Record<string, unknown>
+        await table<ContentItem>('content_items').update(item.id, { title: handoffTitle(root.title, typeof src.split_round === 'number' ? src.split_round : round), updated_at: new Date().toISOString() } as never)
+      }
       return { accepted: true }
     } catch (e) {
       console.error('[split-approved] could not accept the fully approved card:', e)

@@ -12,7 +12,7 @@ import {
 import { statusesIn, columnOf } from '../../lib/board-core'
 import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
-  type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, workFirstWords } from '../../lib/board-view-core'
+  type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, mergedAway, MERGED_WORDS, needsWorkFirst, workFirstWords } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
@@ -83,7 +83,7 @@ export function CompactCard({ card, today, onOpen, names }: {
         </span>
       </span>
       {/* a card handed to a scheduler says so, not "Draft" — the Draft is the scheduler's posting job, the edit is done (17 Sep 2026) */}
-      <Chip tone={handedOver(card as never) ? 'green' : tone ? 'surface' : 'muted'} className="shrink-0">{handedOver(card as never) ? handedToWords(card as never, names ?? new Map()) : lines.stage}</Chip>
+      <Chip tone={handedOver(card as never) || mergedAway(card as never) ? 'green' : tone ? 'surface' : 'muted'} className="shrink-0">{handedOver(card as never) ? handedToWords(card as never, names ?? new Map()) : mergedAway(card as never) ? MERGED_WORDS : lines.stage}</Chip>
     </button>
   )
 }
@@ -186,7 +186,7 @@ export function BoardCard({
   const faceOpensCard = editorFace && primary?.kind === 'transition' && (primary.to === 'quality_check' || primary.to === 'internal_review' || primary.to === 'revision_complete')
   const finals = editorFace ? (card as { finals_in?: string | null }).finals_in ?? null : null
   // handed to a scheduler: the edit is done, the card says where it went (17 Sep 2026)
-  const handed = editorFace && handedOver(card as never) ? handedToWords(card as never, names) : null
+  const handed = editorFace && handedOver(card as never) ? handedToWords(card as never, names) : editorFace && mergedAway(card as never) ? MERGED_WORDS : null
   const tone = cardTone({
     status: card.status,
     due: card.due_date,

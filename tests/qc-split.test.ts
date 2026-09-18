@@ -54,11 +54,52 @@ describe('the stage buttons act on the rest, and say so (18 Sep 2026)', () => {
   })
   it('one handover card per edit: a to-the-client card\u2019s approvals join the root\u2019s handover card', () => {
     const split = readFileSync('app/lib/split-approved.ts', 'utf8')
-    expect(split).toContain("const anchor = stage === 'handover' && typeof src.split_from === 'string' && src.split_from")
+    expect(split).toContain('const anchor = await rootOf(item)')
+    expect(split).toContain('async function rootOf(item: ContentItem): Promise<ContentItem> {')
+    expect(split).toContain("&& typeof (r as { merged_into?: unknown }).merged_into !== 'string'")
+    // the last approval joins the open handover card and closes this one, pointing at it
+    expect(split).toContain("const existing = await openChildOf(root, 'handover')")
+    expect(split).toContain("const done = await moveToStage(actor, item, handoff, 0, round, 'handover')")
+    expect(split).toContain("await table<ContentItem>('content_items').update(item.id, { merged_into: existing.id, updated_at: new Date().toISOString() } as never)")
+    // a to-the-client card accepted whole is titled as the handover card
+    expect(split).toContain('title: handoffTitle(root.title, typeof src.split_round === \'number\' ? src.split_round : round)')
+    // the comments follow the clip
+    expect(split).toContain("const said = await table<ItemComment>('item_comments').list({ by: { item_id: item.id } as never })")
+    expect(split).toContain('const replies = said.filter(c => !movedIds.has(c.id) && typeof c.parent_id === \'string\' && movedIds.has(c.parent_id))')
     expect(split).toContain('const existing = await openChildOf(anchor, stage)')
     expect(split).toContain('split_from: anchor.id,')
     const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
     expect(page).toContain("{busy ? 'Saving…' : said(primary.label)}")
     expect(page).toContain('const said = (label: string) => withRestWords(label, counts)')
+  })
+})
+
+describe('a closed card — all its clips moved on (18 Sep 2026)', () => {
+  it('is done on every board and never in a working lane, and says so', async () => {
+    const { mergedAway, MERGED_WORDS, groupByLane, pageLanes } = await import('../app/lib/board-view-core')
+    expect(mergedAway({ merged_into: 'h1' })).toBe(true)
+    expect(mergedAway({})).toBe(false)
+    expect(MERGED_WORDS).toBe('All clips on the handover card')
+    const card = { id: 'a', status: 'approved_for_scheduling', merged_into: 'h1' } as never
+    const editor = groupByLane(pageLanes('editor'), [card])
+    expect(editor.find(g => g.lane.key === 'done')!.cards).toHaveLength(1)
+    expect(editor.filter(g => g.lane.key !== 'done').every(g => g.cards.length === 0)).toBe(true)
+    const tiles = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
+    expect(tiles).toContain('mergedAway(card as never) ? MERGED_WORDS : lines.stage')
+    const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    expect(page).toContain('Every clip on this card was approved and is on the handover card.')
+    const portal = readFileSync('app/portal/[token]/edit/[id]/page.tsx', 'utf8')
+    expect(portal).toContain('if (data.item.merged_into) redirect(editingPortalPath(raw, data.item.merged_into))')
+  })
+  it('a version counts a file once, the good copy winning over a stale failed pull', async () => {
+    const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
+    const rows = [
+      { kind: 'item', scope_id: 'i', purpose: 'finished', status: 'failed', started_at: '1', folder_url: 'https://d/1', files: [{ id: 'a', name: 'a.mov', status: 'failed', version: 1 }] },
+      { kind: 'item', scope_id: 'i', purpose: 'finished', status: 'done', started_at: '2', folder_url: 'https://d/2', files: [{ id: 'a', name: 'a.mov', status: 'done', url: 'https://x/a', version: 1 }, { id: 'b', name: 'b.mov', status: 'done', url: 'https://x/b', version: 1 }] },
+    ]
+    const tabs = finishedVersionsOf(rows as never, { itemId: 'i', finishedFolderId: null, filesOf: r => (r as { files: { id: string; status: string; url?: string; version: number }[] }).files })
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0].files.map(f => f.id)).toEqual(['a', 'b'])
+    expect(tabs[0].files[0].status).toBe('done')
   })
 })

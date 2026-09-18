@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { editingPortalPath } from '../../../../lib/editing-portal-core'
 import { Toaster } from 'sonner'
 import { ExternalLink } from 'lucide-react'
 import { getEditingPortal } from '../../../../lib/editing-portal'
@@ -26,6 +27,8 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
   const { token: raw, id } = await params
   const data = await getEditingPortal(raw, id)
   if (!data) notFound()
+  // ALL ITS CLIPS MOVED ON (18 Sep 2026): the client lands on the card they are on now
+  if (data.item.merged_into) redirect(editingPortalPath(raw, data.item.merged_into))
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>

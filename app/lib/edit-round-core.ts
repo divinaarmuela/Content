@@ -95,6 +95,19 @@ export function finishedVersionsOf<F extends { version?: number | null }>(
       if (!byRound.has(round)) byRound.set(round, { round, folderUrl: String(r.folder_url ?? ''), files: [], inFlight: true })
     }
   }
+  // THE SAME FILE ONCE (18 Sep 2026): a stale failed pull and the good one
+  // both carry the file — the version counts it once, the good copy wins
+  for (const tab of byRound.values()) {
+    const good = (f: F) => String((f as { status?: unknown }).status ?? '') === 'done' && !!(f as { url?: unknown }).url
+    const best = new Map<string, F>()
+    for (const f of tab.files) {
+      const id = String((f as { id?: unknown }).id ?? '')
+      if (!id) continue
+      const prev = best.get(id)
+      if (!prev || (!good(prev) && good(f))) best.set(id, f)
+    }
+    tab.files = tab.files.filter(f => { const id = String((f as { id?: unknown }).id ?? ''); return !id || best.get(id) === f })
+  }
   // a tab for the empty in-flight row is the card's OWN round — the hand-in
   // being copied is the round the card is on, never a guessed "next" (the
   // owner, 16 Sep 2026: "why is Version 2 already there while I'm uploading

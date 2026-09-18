@@ -696,6 +696,13 @@ export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown
   return card.adhoc_post !== true && Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
 }
 
+/** ALL ITS CLIPS MOVED ON (18 Sep 2026): the card closed when its last clip
+ *  was approved and joined the edit's one handover card */
+export function mergedAway(card: { merged_into?: unknown }): boolean {
+  return typeof card.merged_into === 'string' && card.merged_into.length > 0
+}
+export const MERGED_WORDS = 'All clips on the handover card'
+
 /** the chip: who it went to, when the names are known */
 export function handedToWords(card: { scheduler_ids?: unknown }, names: ReadonlyMap<string, string>): string {
   const ids = Array.isArray(card.scheduler_ids) ? card.scheduler_ids.map(String) : []
@@ -713,7 +720,9 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
     // the editor's road ends at the hand-over: the scheduler's Draft is not the editor's In Progress
-    const key = handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
+    // a card whose every clip moved on is done too — and never in a working lane (18 Sep 2026)
+    const key = mergedAway(card as never) ? (buckets.has('done') ? 'done' : undefined)
+      : handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))

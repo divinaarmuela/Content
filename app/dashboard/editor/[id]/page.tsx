@@ -239,6 +239,13 @@ export default function EditorCardPage() {
             reviewHref={t => reviewPath(id, t.id, t.name)} />}
           {/* THE PUBLIC LINK FOR THE ACCEPTED VERSION (share-link-core, 17 Sep 2026) — anyone on the team, once the card is accepted */}
           <ShareAcceptedLink item={item as never} />
+          {/* ALL ITS CLIPS MOVED ON (18 Sep 2026): the last approval joined the edit's one handover card */}
+          {typeof (item as { merged_into?: unknown }).merged_into === 'string' && (
+            <p className="rounded-card border border-border bg-card px-4 py-3 text-[13px] text-muted-foreground">
+              Every clip on this card was approved and is on the handover card.{' '}
+              <Link href={`/dashboard/editor/${(item as { merged_into?: string }).merged_into}`} className="font-semibold text-foreground underline underline-offset-2">Open it</Link>
+            </p>
+          )}
         </section>
 
         {/* ── the card itself, beside the files ── */}
