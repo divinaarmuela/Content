@@ -181,6 +181,10 @@ describe('notifications say something, and go somewhere', () => {
     expect(notificationHref('content_item', `${id}#v2`, 'editor')).toBe(`/dashboard/editor?card=${id}`)
     expect(notificationHref('content_item', `${id}#v2`, 'scheduler')).toBe(`/dashboard/scheduler?card=${id}`)
     expect(notificationHref('content_item', `${id}#v2`)).not.toContain('/dashboard/production/')
+    // a note on a clip opens the clip page, except for a scheduler, whose pages have no Editor (18 Sep 2026)
+    expect(notificationHref('content_item', `${id}#c1#holder#clip:1AbCdEfGhIjK`)).toBe(`/dashboard/editor/${id}/video/1AbCdEfGhIjK`)
+    expect(notificationHref('content_item', `${id}#c1#holder#clip:1AbCdEfGhIjK`, 'account_manager')).toBe(`/dashboard/editor/${id}/video/1AbCdEfGhIjK`)
+    expect(notificationHref('content_item', `${id}#c1#holder#clip:1AbCdEfGhIjK`, 'scheduler')).toBe(`/dashboard/scheduler?card=${id}`)
   })
 })
 

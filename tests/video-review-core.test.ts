@@ -90,7 +90,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
     expect(rp).toContain("const isImage = kindOf('', name) === 'image'")
     // the copy is looked for in every pull the card ever asked for, so an older version still plays (16 Sep 2026)
     expect(rp).toContain("const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })")
-    expect(rp).toContain("const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null")
+    expect(rp).toContain("const copy = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url) ?? null")
     expect(rp).toContain('<img key={fileId} src={fileSrc} alt={name}')
     expect(rp).toContain('const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null')
     const c = src('app/api/production/items/[id]/comments/route.ts')
@@ -102,7 +102,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
     const p = src('app/dashboard/editor/[id]/video/[fileId]/page.tsx')
     // our copy first (16 Sep 2026), Drive otherwise
     expect(p).toContain("useHlsSource(video, isImage ? null : streamBase ? hlsManifestUrl(streamBase) : (copyUrl ?? `/api/drive/stream?id=${encodeURIComponent(fileId)}&name=${encodeURIComponent(name)}`))")
-    expect(p).toContain("const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null")
+    expect(p).toContain("const copy = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url) ?? null")
     expect(p).toContain('aria-label={`Comment at ${m.stamp}`}')
     expect(p).toContain("const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null")
     expect(p).toContain('<PageTitle')

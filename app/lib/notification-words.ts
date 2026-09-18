@@ -87,7 +87,13 @@ export function notificationHref(entityType: string, entityId: string, role?: st
     // the reader's own board with the card open (workflow-core.itemPath):
     // the bell knows no status, so everyone but a scheduler lands on the
     // Editor page, where the sheet opens any card by id
-    case 'content_item': return isUuid ? `${role === 'scheduler' ? '/dashboard/scheduler' : '/dashboard/editor'}?card=${id}` : null
+    case 'content_item': {
+      if (!isUuid) return null
+      // a note on a clip opens the clip page — the clip left, the comments right (18 Sep 2026)
+      const clip = (entityId ?? '').split('#').find(p => p.startsWith('clip:'))?.slice(5) ?? ''
+      if (clip && /^[A-Za-z0-9_-]{10,}$/.test(clip) && role !== 'scheduler') return `/dashboard/editor/${id}/video/${encodeURIComponent(clip)}`
+      return `${role === 'scheduler' ? '/dashboard/scheduler' : '/dashboard/editor'}?card=${id}`
+    }
     // a calendar note: the id is "<client id>#<note id>", the bell opens that
     // client's week (9 Sep 2026)
     case 'schedule_note': return isUuid ? `/dashboard/social/schedule?client=${id}` : null

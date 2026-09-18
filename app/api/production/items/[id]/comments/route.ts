@@ -11,7 +11,7 @@ import { announceItemChange } from '../../../../../lib/production-live'
 import {
   notifyTagged, resolveTags, settleTagNotifications, taggableTeam,
 } from '../../../../../lib/comment-tags'
-import { cardPathForRole, noteAudience, noteSubject } from '../../../../../lib/card-comment-core'
+import { commentEntityId, commentPathForRole, noteAudience, noteSubject } from '../../../../../lib/card-comment-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
 
 
@@ -111,7 +111,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           actorClerkId: user.clerk_user_id,
           eventType: 'client_comment',
           entityType: 'content_item',
-          entityId: `${id}#${comment.id}`,
+          entityId: commentEntityId(id, comment.id, null, videoFile),
           recipientId: r.id,
           recipientEmail: r.email,
           subject: `The client commented on ${item.title}`,
@@ -121,7 +121,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
             `<p><strong>What happens next:</strong> read it and, if changes are needed, tag the editor in a comment on the item — nobody else has been told yet.</p>`,
             'Open the card',
-            `${DASHBOARD_URL}${cardPathForRole(r.role, id)}`
+            `${DASHBOARD_URL}${commentPathForRole(r.role, id, { id: videoFile, name: videoName })}`
           ),
         })
       }
@@ -177,7 +177,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             actorName: user.name, actorEmail: user.email, actorClerkId: user.clerk_user_id,
             eventType: 'item_comment',
             entityType: 'content_item',
-            entityId: `${id}#${comment.id}#holder`,
+            entityId: commentEntityId(id, comment.id, 'holder', videoFile),
             recipientId: p.id, recipientEmail: p.email,
             subject: noteSubject(who, String(item.title ?? 'a card'), text),
             bodyHtml: renderEmail(
@@ -188,7 +188,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               'Open the card',
               // the board this person has, with the card open — never the
               // retired full-card page
-              `${DASHBOARD_URL}${cardPathForRole(p.role, id)}`,
+              `${DASHBOARD_URL}${commentPathForRole(p.role, id, { id: videoFile, name: videoName })}`,
             ),
           })
         }

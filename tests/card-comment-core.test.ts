@@ -83,3 +83,19 @@ describe('the editor drawer and the board card carry the thread (source pins)', 
     expect(src).toMatch(/New for you/)
   })
 })
+
+describe('a note on a clip links to the clip page (18 Sep 2026)', () => {
+  it('everyone with the Editor page lands on the clip; a scheduler on their board; no clip, the card as before', async () => {
+    const { commentPathForRole, commentEntityId } = await import('../app/lib/card-comment-core')
+    expect(commentPathForRole('account_manager', 'c1', { id: '1AbCdEfGhIjK', name: 'Reel 1.mov' })).toBe('/dashboard/editor/c1/video/1AbCdEfGhIjK?name=Reel%201.mov')
+    expect(commentPathForRole('editor', 'c1', { id: '1AbCdEfGhIjK' })).toBe('/dashboard/editor/c1/video/1AbCdEfGhIjK')
+    expect(commentPathForRole('scheduler', 'c1', { id: '1AbCdEfGhIjK' })).toBe('/dashboard/scheduler?card=c1')
+    expect(commentPathForRole('account_manager', 'c1', { id: null })).toBe('/dashboard/scheduler?card=c1')
+    expect(commentEntityId('c1', 'm1', 'holder', '1AbCdEfGhIjK')).toBe('c1#m1#holder#clip:1AbCdEfGhIjK')
+    expect(commentEntityId('c1', 'm1', null, null)).toBe('c1#m1')
+    const route = readFileSync('app/api/production/items/[id]/comments/route.ts', 'utf8')
+    expect(route).toContain("entityId: commentEntityId(id, comment.id, 'holder', videoFile),")
+    expect(route).toContain('${DASHBOARD_URL}${commentPathForRole(p.role, id, { id: videoFile, name: videoName })}')
+    expect(route).toContain('${DASHBOARD_URL}${commentPathForRole(r.role, id, { id: videoFile, name: videoName })}')
+  })
+})

@@ -3,7 +3,8 @@
  * Pure: no I/O. The old link opened the retired full-card page; every
  * role now opens the card ON THE BOARD they have, with `?card=` as the
  * boards read it (useCardSheet).
- */
+ */import { reviewPath } from './video-review-core'
+
 
 export type CommentRole = 'super_admin' | 'account_manager' | 'general' | 'editor' | 'scheduler' | 'quality_checker' | 'client' | string
 
@@ -12,6 +13,23 @@ export function cardPathForRole(role: CommentRole | null | undefined, itemId: st
   if (role === 'editor') return `/dashboard/editor?card=${itemId}`
   // schedulers, quality checkers, managers, general: the Post approval board
   return `/dashboard/scheduler?card=${itemId}`
+}
+
+/**
+ * A NOTE ON A CLIP LINKS TO THE CLIP (the owner, 18 Sep 2026: "the link in the
+ * email takes them to the card, make sure it takes them to that page"): the
+ * clip page — the clip on the left, its comments on the right — for everyone
+ * whose pages include the Editor page. A scheduler's do not, so they land on
+ * their board with the card open, as before.
+ */
+export function commentPathForRole(role: CommentRole | null | undefined, itemId: string, clip?: { id: string | null; name?: string | null } | null): string {
+  if (clip?.id && role !== 'scheduler') return reviewPath(itemId, clip.id, clip.name ?? null)
+  return cardPathForRole(role, itemId)
+}
+
+/** the bell carries the clip in the entity id: "<card>#<comment>#holder#clip:<file>" */
+export function commentEntityId(itemId: string, commentId: string, suffix: string | null, clipId: string | null): string {
+  return `${itemId}#${commentId}${suffix ? `#${suffix}` : ''}${clipId ? `#clip:${clipId}` : ''}`
 }
 
 /**

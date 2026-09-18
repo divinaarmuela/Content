@@ -81,7 +81,10 @@ export default function VideoReviewPage() {
   const { rows: cardPulls } = useTable<DrivePull>('drive_pulls', { by: { scope_id: id } as never })
   const footageId = driveTargetOf(shootRow?.footage_url)?.id ?? null
   const { row: footagePull } = useRow<DrivePull>('drive_pulls', footageId ? pullId(footageId) : null)
-  const copyUrl = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url)?.url ?? null
+  const copy = [...[...cardPulls, footagePull].flatMap(p => filesOf(p)), ...finalFilesAsPulls(item ?? {})].find(f => f.id === fileId && f.status === 'done' && f.url) ?? null
+  const copyUrl = copy?.url ?? null
+  // a link from the bell carries no name — the card's own copy of the file does (18 Sep 2026)
+  useEffect(() => { if (name === 'Clip' && copy?.name) setName(copy.name) }, [name, copy?.name])
   // WHICH VERSION, AND THE CLIPS EITHER SIDE (17 Sep 2026): the finished
   // files of the card, each with its round, and the folder's files without one
   const place = useMemo(() => {
