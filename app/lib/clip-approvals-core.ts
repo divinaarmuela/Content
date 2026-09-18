@@ -107,3 +107,15 @@ export function approvedClipsWords(approved: number, total: number): string | nu
   if (approved >= total) return `All ${total} ${total === 1 ? 'clip' : 'clips'} approved by the client`
   return `${approved} of ${total} clips approved by the client`
 }
+
+/** THE QUALITY CHECK, ONE CLIP AT A TIME (the owner, 18 Sep 2026): the
+ *  reviewer's passes, kept apart from the client's approvals. */
+export function qcApprovalsOf(item: { qc_approvals?: unknown } | null | undefined): ClipApproval[] {
+  return clipApprovalsOf({ clip_approvals: item?.qc_approvals })
+}
+/** the words on the reviewer's badge */
+export function qcBadge(a: ClipApproval | null | undefined): string | null {
+  if (!a) return null
+  const who = String(a.by ?? '').trim()
+  return `Passed quality check${who ? ` · ${who}` : ''}`
+}

@@ -21,6 +21,7 @@ import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
 import { approvalBadge, clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
 import { useRole } from '../../../../useRole'
+import { mayApproveForClient } from '../../../../../lib/version-approval-core'
 import {
   activeCommentId, clipPlace, clipPlaceWords, commentsOnClip, formatStamp, markersFor, reviewPath,
 } from '../../../../../lib/video-review-core'
@@ -124,7 +125,7 @@ export default function VideoReviewPage() {
   // A MANAGER APPROVES FOR THE CLIENT HERE TOO (the owner, 18 Sep 2026: "they
   // can also click it on the individual page, video left, comments right")
   const { me } = useRole()
-  const mayApprove = me?.role === 'account_manager' || me?.role === 'super_admin'
+  const mayApprove = (me?.role === 'account_manager' || me?.role === 'super_admin') && mayApproveForClient(item ?? {})
   const [approving, setApproving] = useState(false)
   const approveForClient = async (on: boolean) => {
     setApproving(true)

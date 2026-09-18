@@ -5,8 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRightLeft, Link as LinkIcon, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useRow } from '@/lib/db-client'
-import type { Batch, Client, ContentItem, WorkKind } from '@/lib/db-types'
+import { useRow, useTable } from '@/lib/db-client'
+import type { Batch, Client, ContentItem, DrivePull, WorkKind } from '@/lib/db-types'
 import { useRole } from '../../useRole'
 import PageTitle from '../../ui/PageTitle'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
@@ -25,9 +25,13 @@ import TransferEditingDialog from '../../board/TransferEditingDialog'
 import { HandToDialog } from '../../board/BoardDialogs'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
+import { versionRest, withRestWords } from '../../../lib/version-approval-core'
+import { filesOf } from '../../../lib/drive-pull-core'
+import { fileRound } from '../../../lib/edit-round-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
-import { handsInFiles } from '../../../lib/final-files-core'
-import { useState } from 'react'
+import { finalFilesOf, handsInFiles } from '../../../lib/final-files-core'
+import { isQualityReviewer } from '../../../lib/identity-core'
+import { useMemo, useState } from 'react'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -54,6 +58,15 @@ function ManagerActions({ item, viewer, portalLink, client }: { item: ContentIte
   const card = item as unknown as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
   const { primary, more } = cardActions(card, viewer)
+  // WHAT THE STAGE BUTTONS ACT ON (version-approval-core.versionRest, 18 Sep 2026):
+  // once assets moved on one by one, the buttons act on the rest and say so
+  const pullScope = useMemo(() => ({ scope_id: item.id }), [item.id])
+  const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: pullScope as never })
+  const counts = useMemo(() => versionRest(item as never, [
+    ...finalFilesOf(item as never).map(f => ({ id: f.id, version: f.version })),
+    ...pullRows.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)).filter(f => f.status === 'done' && !!f.url).map(f => ({ id: f.id, version: fileRound(f) })),
+  ]), [item, pullRows])
+  const said = (label: string) => withRestWords(label, counts)
   const busy = busyId === card.id
   // WITH THE CLIENT: the portal link, to copy and send (the owner, 15 Sep 2026:
   // "there is one card with the client but no client portal button on the card")
@@ -102,13 +115,13 @@ function ManagerActions({ item, viewer, portalLink, client }: { item: ContentIte
       {primary && (
         <Button disabled={busy} onClick={() => act(card, primary)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
-          {busy ? 'Saving…' : primary.label}
+          {busy ? 'Saving…' : said(primary.label)}
         </Button>
       )}
       {more.map(a => (
         <Button key={`${a.kind}-${a.to}`} variant="outline" disabled={busy} onClick={() => act(card, a)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
-          {a.label}
+          {said(a.label)}
         </Button>
       ))}
       {withClient && (
@@ -217,6 +230,8 @@ export default function EditorCardPage() {
           {/* drawn once the kind is known, so a designer's card never flashes the folder-link button */}
           {kindLoading && <Skeleton className="m-4 h-40 rounded-inner" />}
           {!kindLoading && <FilesToWorkFrom item={item as never} isManager={!adhoc && (me?.role === 'account_manager' || me?.role === 'super_admin')} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly filesOnly={filesOnly} noWorkFrom={!!(item as { split_from?: unknown }).split_from}
+            // the quality check, one clip at a time — the reviewer's or a super admin's (18 Sep 2026)
+            mayQcPass={!!me && (isQualityReviewer(me) || me.role === 'super_admin')}
             fallbackFolder={from.footage} wideFiles versions
             // the clips the client approved on their portal wear a tick (16 Sep 2026)
             approvedIds={clipApprovalsOf(item).map(a => a.file_id)}

@@ -7,6 +7,7 @@ import { logActivity } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { clipApprovalsOf, withClipApproved, withClipUnapproved } from '../../../../../lib/clip-approvals-core'
 import { settleApprovals } from '../../../../../lib/split-approved'
+import { mayApproveForClient } from '../../../../../lib/version-approval-core'
 
 /**
  * A TEAM APPROVAL ON ONE CLIP (the owner, 18 Sep 2026: "make sure the AM or
@@ -23,6 +24,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const user = await requireRole('account_manager')   // an account manager or a super admin
     const { id } = await ctx.params
     const item = await loadItemForUser(user, id)
+    if (!mayApproveForClient(item)) return NextResponse.json({ error: 'A clip is approved for the client while the card is with the client — it is not there yet' }, { status: 409 })
     const body = await req.json().catch(() => ({})) as { file_id?: unknown; name?: unknown; on?: unknown }
     const fileId = String(body.file_id ?? '').trim()
     if (!fileId) return NextResponse.json({ error: 'Which clip?' }, { status: 400 })

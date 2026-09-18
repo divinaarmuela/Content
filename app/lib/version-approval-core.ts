@@ -1,4 +1,5 @@
-import { fileRound, handInRound } from './edit-round-core'
+import { fileRound, handInRound, roundOf } from './edit-round-core'
+import { clipApprovalsOf, qcApprovalsOf } from './clip-approvals-core'
 import { finalFilesForRound, finalFilesOf } from './final-files-core'
 
 /**
@@ -56,6 +57,11 @@ export function versionSet<F extends Versioned>(all: readonly F[], round: number
 /** THE SPLIT AT SEND-BACK: the approved clips go to handover, the rest stay */
 export function splitApproved<F extends { id: string }>(version: readonly F[], approved: ReadonlySet<string>): { handoff: F[]; remaining: F[] } {
   return { handoff: version.filter(f => approved.has(f.id)), remaining: version.filter(f => !approved.has(f.id)) }
+}
+
+/** the to-the-client card's title: the part that passed the quality check */
+export function toClientTitle(title: string, round: number): string {
+  return `${String(title ?? '').trim() || 'Untitled'} — passed quality check, Version ${round}`
 }
 
 /** the handover card's title: the same card, said to be the approved part */
@@ -130,4 +136,44 @@ export function newVersionWords(card: Parameters<typeof newVersionPending>[0]): 
   const round = handInRound(card as never)
   const filesCard = finalFilesOf(card as never).length > 0 || card.work_kinds?.slug === 'graphics'
   return filesCard ? `Upload Version ${round} first` : `Save the Version ${round} link first — the same link is fine`
+}
+
+/** A TEAM APPROVAL IS FOR THE CLIENT'S STAGE ONLY (the owner, 18 Sep 2026:
+ *  "why can the AM click approve in quality check?"): the manager ticks a clip
+ *  for the client when the client told them in person — so only while the
+ *  card is with the client. Before that the quality check is the road. */
+export const WITH_CLIENT = ['client_review', 'client_changes_requested'] as const
+export function mayApproveForClient(card: { status?: unknown }): boolean {
+  return (WITH_CLIENT as readonly string[]).includes(String(card.status ?? ''))
+}
+
+/**
+ * WHAT THE STAGE BUTTONS ACT ON (the owner, 18 Sep 2026: "what if some assets
+ * passed the quality review and some need sending back — what will the pass
+ * button do?"). Once assets have moved on one by one, the card-level buttons
+ * act on THE REST: "Passed quality check" passes the rest to the client, "Log
+ * the client's approval" accepts the rest, "Send back" sends the rest back.
+ * The buttons say so, with the count, whenever something already moved on.
+ */
+export function versionRest(
+  card: { status?: unknown; edit_round?: unknown; clip_approvals?: unknown; qc_approvals?: unknown; split_out?: unknown },
+  all: readonly Versioned[],
+): { total: number; movedOn: number; rest: number } {
+  const round = fileRound({ version: roundOf(card as never) })
+  const moved = movedIdSet(card)
+  const approved = approvedIdSet(clipApprovalsOf(card as never))
+  const here = versionSet(all, round, approved, moved)
+  const movedOn = all.filter(f => fileRound(f) === round && moved.has(f.id)).length
+  const status = String(card.status ?? '')
+  const done = status === 'quality_check'
+    ? approvedIdSet(qcApprovalsOf(card as never))
+    : (WITH_CLIENT as readonly string[]).includes(status) ? approved : new Set<string>()
+  const rest = here.filter(f => !done.has(f.id)).length
+  return { total: here.length + movedOn, movedOn, rest }
+}
+
+/** the button's words once something moved on: "…— the 2 clips left" */
+export function withRestWords(label: string, counts: { movedOn: number; rest: number }): string {
+  if (counts.movedOn === 0 || counts.rest === 0) return label
+  return `${label} — the ${counts.rest} ${counts.rest === 1 ? 'clip' : 'clips'} left`
 }

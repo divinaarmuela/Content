@@ -94,6 +94,12 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       return { text: `Approved clips moved to a handover card by ${who}${quote(row.detail)}` }
     case 'card_made_from_approved_clips':
       return { text: `Made from the approved clips by ${who}${quote(row.detail)}` }
+    case 'passed_clips_split':
+      return { text: `Passed clips moved to a card for the client by ${who}${quote(row.detail)}` }
+    case 'card_made_from_passed_clips':
+      return { text: `Made from the clips that passed the quality check, by ${who}${quote(row.detail)}` }
+    case 'clip_passed_qc':
+      return { text: `Clip passed the quality check by ${who}${quote(row.detail)}` }
     case 'posted_by_hand': {
       const which = String(row.new_value ?? '').trim()
       const hand = handDetail(row.detail)

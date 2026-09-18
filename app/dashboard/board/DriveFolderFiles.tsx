@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, MessageSquareText, Play, X } from 'lucide-react'
-import { approvalBadge, clipApproval, type ClipApproval } from '../../lib/clip-approvals-core'
+import { approvalBadge, clipApproval, qcBadge, type ClipApproval } from '../../lib/clip-approvals-core'
 import { NEEDS_CHANGING } from '../../lib/version-approval-core'
 import { downloadHref } from '../../lib/download-core'
 import type { DriveEntry } from '../../lib/files-core'
@@ -24,11 +24,15 @@ import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, approvals, needsChangeIds, captions, mayApprove = false, onApprove, mayCaption = false, onCaption, copies, selected, onSelect, noRounds = false, pickRound }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, approvals, needsChangeIds, qcApprovals, mayQcPass = false, onQcPass, captions, mayApprove = false, onApprove, mayCaption = false, onCaption, copies, selected, onSelect, noRounds = false, pickRound }: {
   /** the ticks themselves — whose they were (client or team) draws the badge's words (18 Sep 2026) */
   approvals?: readonly ClipApproval[]
   /** the clips a send-back asks to change — an amber badge (18 Sep 2026) */
   needsChangeIds?: string[]
+  /** THE QUALITY CHECK, ONE CLIP AT A TIME (18 Sep 2026): the reviewer's passes, and their Pass */
+  qcApprovals?: readonly ClipApproval[]
+  mayQcPass?: boolean
+  onQcPass?: (tile: { id: string; name: string }, on: boolean) => void
   /** optional caption per file id (18 Sep 2026) */
   captions?: Record<string, string>
   /** a manager may tick a clip for the client, or take a tick back */
@@ -199,6 +203,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                           <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden /> <span className="truncate">{approvalBadge(clipApproval(approvals ?? [], t.id)) ?? 'Approved'}</span>
                         </span>
                       )}
+                      {!clipApproval(approvals ?? [], t.id) && clipApproval(qcApprovals ?? [], t.id) && (
+                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex max-w-[calc(100%-12px)] items-center gap-1 truncate rounded-full bg-accent-blue px-2 py-0.5 text-[11px] font-semibold text-white shadow" title={qcBadge(clipApproval(qcApprovals ?? [], t.id)) ?? ''}>
+                          <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden /> <span className="truncate">{qcBadge(clipApproval(qcApprovals ?? [], t.id))}</span>
+                        </span>
+                      )}
                       {needsChangeIds?.includes(t.id) && !clipApproval(approvals ?? [], t.id) && (
                         <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-amber px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Sent back — this one needs changing">{NEEDS_CHANGING}</span>
                       )}
@@ -212,7 +221,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                     </button>
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
                     {/* THE CAPTION and the team's tick (18 Sep 2026) */}
-                    <TileExtras tile={t} caption={captions?.[t.id] ?? ''} approved={!!clipApproval(approvals ?? [], t.id)} mayApprove={mayApprove} onApprove={onApprove} mayCaption={mayCaption} onCaption={onCaption} />
+                    <TileExtras tile={t} caption={captions?.[t.id] ?? ''} approved={!!clipApproval(approvals ?? [], t.id)} mayApprove={mayApprove} onApprove={onApprove} mayCaption={mayCaption} onCaption={onCaption}
+                      passed={!!clipApproval(qcApprovals ?? [], t.id)} mayQcPass={mayQcPass} onQcPass={onQcPass} />
                     {dl && (
                       <a href={dl} download={t.name} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
                         <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>
@@ -230,8 +240,11 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
 }
 
 /** under a tile: the caption (or a way to add one), and a manager's tick for the client (18 Sep 2026) */
-function TileExtras({ tile, caption, approved, mayApprove, onApprove, mayCaption, onCaption }: {
+function TileExtras({ tile, caption, approved, mayApprove, onApprove, mayCaption, onCaption, passed = false, mayQcPass = false, onQcPass }: {
   tile: { id: string; name: string }
+  passed?: boolean
+  mayQcPass?: boolean
+  onQcPass?: (tile: { id: string; name: string }, on: boolean) => void
   caption: string
   approved: boolean
   mayApprove: boolean
@@ -259,6 +272,13 @@ function TileExtras({ tile, caption, approved, mayApprove, onApprove, mayCaption
           {mayCaption && onCaption && (
             <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-9 items-center gap-1 text-[12px] text-muted-foreground underline-offset-4 hover:underline">
               <MessageSquareText className="h-3.5 w-3.5" aria-hidden /> {caption ? 'Edit the caption' : 'Add a caption'}
+            </button>
+          )}
+          {mayQcPass && onQcPass && (
+            <button type="button" onClick={() => onQcPass(tile, !passed)}
+              className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[12px] font-semibold ${passed ? 'border-border text-muted-foreground hover:bg-muted' : 'border-foreground hover:bg-foreground hover:text-background'}`}
+              title={passed ? 'Take the pass back' : 'Passes the quality check — it goes to the client now'}>
+              <Check className="h-3.5 w-3.5" aria-hidden /> {passed ? 'Take back' : 'Pass — to the client'}
             </button>
           )}
           {mayApprove && onApprove && (

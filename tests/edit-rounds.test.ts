@@ -95,7 +95,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
     expect(box).toContain('Folder to work from')
     expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
-    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
+    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} qcApprovals={qcApprovals} mayQcPass={canQcPass && !frozen} onQcPass={passClip} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
     // every pull says what it was: the row's purpose
     expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")

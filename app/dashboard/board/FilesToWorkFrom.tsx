@@ -14,8 +14,8 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
-import { approvedIdSet, carriedInto, movedIdSet, needsChangingIds, versionProgress } from '../../lib/version-approval-core'
-import { captionsOf, clipApprovalsOf } from '../../lib/clip-approvals-core'
+import { approvedIdSet, carriedInto, mayApproveForClient, movedIdSet, needsChangingIds, versionProgress } from '../../lib/version-approval-core'
+import { captionsOf, clipApprovalsOf, qcApprovalsOf } from '../../lib/clip-approvals-core'
 import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
@@ -41,12 +41,14 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption, showCaptions = false, noWorkFrom = false }: {
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption, showCaptions = false, noWorkFrom = false, mayQcPass = false }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown; status?: unknown; split_from?: unknown }
   /** a manager ticks a clip for the client (18 Sep 2026); defaults to the manager */
   mayApprove?: boolean
   /** whoever holds or manages the card captions an asset (18 Sep 2026); defaults to either */
   mayCaption?: boolean
+  /** THE QUALITY CHECK, ONE CLIP AT A TIME (18 Sep 2026): the reviewer or a super admin passes clips here */
+  mayQcPass?: boolean
   /** CAPTIONS ARE POST APPROVAL'S (the owner, 18 Sep 2026: "the caption is for
    *  post approval"): only that page shows or edits them */
   showCaptions?: boolean
@@ -175,7 +177,19 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   // THE TICKS AND THE CAPTIONS on the tiles (18 Sep 2026)
   const approvals = useMemo(() => clipApprovalsOf(item as never), [item])
   const captions = useMemo(() => captionsOf(item as never), [item])
-  const canApprove = mayApprove ?? isManager
+  const canApprove = (mayApprove ?? isManager) && mayApproveForClient(item as { status?: unknown })
+  const qcApprovals = useMemo(() => qcApprovalsOf(item as never), [item])
+  const canQcPass = mayQcPass && String((item as { status?: unknown }).status ?? '') === 'quality_check'
+  const passClip = async (t: { id: string; name: string }, on: boolean) => {
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/qc-pass-clip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: t.id, name: t.name, on }) })
+      const json = await res.json().catch(() => ({})) as { error?: string; settled?: { moved?: number; sent?: boolean } | null }
+      if (!res.ok) throw new Error(json.error ?? 'Could not save the pass')
+      toast.success(on
+        ? (json.settled?.sent ? 'Passed — every clip passed, the card is with the client' : json.settled?.moved ? 'Passed — it is with the client now, on its own card' : 'Passed')
+        : 'Pass taken back')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the pass') }
+  }
   const canCaption = showCaptions && (mayCaption ?? (isManager || holder))
   const approveClip = async (t: { id: string; name: string }, on: boolean) => {
     try {
@@ -249,7 +263,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <>
           <p className="text-[13px] text-muted-foreground">
             {shownVersion.files.length > 0
-              ? `${versionFiles.length - carried.length} ${versionFiles.length - carried.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}${carried.length > 0 ? ` · ${carried.length} carried over, approved in an earlier version` : ''}${shownVersion === versionTabs[0] && shownVersion.files.filter(f => movedSet.has(f.id)).length > 0 ? ` · ${shownVersion.files.filter(f => movedSet.has(f.id)).length} approved and moved to the handover card` : ''}.`
+              ? `${versionFiles.length - carried.length} ${versionFiles.length - carried.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}${carried.length > 0 ? ` · ${carried.length} carried over, approved in an earlier version` : ''}${shownVersion === versionTabs[0] && shownVersion.files.filter(f => movedSet.has(f.id)).length > 0 ? ` · ${shownVersion.files.filter(f => movedSet.has(f.id)).length} moved on — to the client or to handover` : ''}.`
               : `${roundLabel(shownVersion.round)} is being copied in — its files show here as they land.`}
           </p>
           {shownVersion.folderUrl && (
@@ -270,7 +284,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           )}
           {/* THE TILES — from the folder, or from the files on the card alone (the handover card and a designer's card carry no folder; the owner, 18 Sep 2026: "4 clips approved but below does not show the actual assets") */}
           {(shownVersion.folderUrl || versionFiles.length > 0) && (
-            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} needsChangeIds={[...needsChange]} qcApprovals={qcApprovals} mayQcPass={canQcPass && !frozen} onQcPass={passClip} captions={showCaptions ? captions : undefined} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (

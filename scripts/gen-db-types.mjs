@@ -571,6 +571,9 @@ const GHOST_COLUMNS = {
     //   content_items.link_saved_at — when the finished-edit link was last saved
     //     (18 Sep 2026): version-approval-core.newVersionPending reads it.
     ['link_saved_at', col('string', true)],
+    //   content_items.qc_approvals — THE QUALITY CHECK, one clip at a time
+    //     (18 Sep 2026): the reviewer's passes, same shape as clip_approvals.
+    ['qc_approvals', col('unknown', true, true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],
