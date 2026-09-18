@@ -434,6 +434,11 @@ describe('presentTransitions — one obvious button, or none', () => {
       availableTransitionsAs(['quality_reviewer'], 'quality_check'), { clientApprovalRequired: true })
     expect(strictQc.primary?.to).toBe('client_review')
     expect(strictQc.secondary.map(t => t.to)).not.toContain('approved_for_scheduling')
+    // …and when the turn is somebody else's (a post asked of a named reviewer), the smaller buttons lead with the same pass
+    const notMyTurn = presentTransitions(['super_admin'], 'quality_check',
+      availableTransitionsAs(['super_admin'], 'quality_check'), { clientApprovalRequired: false, viewerHoldsTurn: false })
+    expect(notMyTurn.primary).toBeNull()
+    expect(notMyTurn.secondary.map(t => `${t.label} -> ${t.to}`)).toEqual(['Passed quality check -> approved_for_scheduling', 'Send to the client anyway -> client_review', 'Ask for changes -> revision_required'])
     const relaxedAm = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false })
     expect(relaxedAm.secondary.map(t => t.to)).not.toContain('approved_for_scheduling')
   })

@@ -467,11 +467,16 @@ export function presentTransitions(
   // client's approval switched off still went to With client, "a pointless
   // extra stop"): the reviewer's pass goes straight to Ready to post, and
   // sending it to the client anyway is the smaller button
-  if (from === 'quality_check' && !ctx.clientApprovalRequired && primary?.to === 'client_review') {
+  // — whether or not the viewer holds the turn (the live walk of 18 Sep 2026:
+  // a post asked of a named reviewer is THEIR turn, so a super admin saw the
+  // smaller buttons, and the first of those still went to the client)
+  if (from === 'quality_check' && !ctx.clientApprovalRequired) {
     const straight = visible.find(t => t.to === 'approved_for_scheduling')
     if (straight) {
-      const pass = { ...straight, label: 'Passed quality check' }
-      return { primary: pass, secondary: visible.filter(t => t !== straight).map(t => t.to === 'client_review' ? { ...t, label: 'Send to the client anyway' } : t) }
+      const relabel = (t: Presented): Presented => t === straight ? { ...t, label: 'Passed quality check' } : t.to === 'client_review' ? { ...t, label: 'Send to the client anyway' } : t
+      const ordered = [straight, ...visible.filter(t => t !== straight)].map(relabel)
+      const pass = primary ? ordered[0] : null
+      return { primary: pass, secondary: ordered.filter(t => t !== pass) }
     }
   }
 
