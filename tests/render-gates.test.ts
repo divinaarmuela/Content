@@ -154,7 +154,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(board).toContain("{view === 'list' ? (")
     const list = src('app/dashboard/board/BoardList.tsx')
     expect(list).toContain('cardLines(card, { names, today, viewerId: viewer.id })')
-    expect(list).toContain("{handedIn ? 'Finished edit in' : lines.link ? 'Folder only' : 'Nothing yet'}")
+    expect(list).toContain("on the card` : 'Finished edit in') : lines.link ? 'Folder only' : 'Nothing yet'}")
     // the Editor page's card is just the title until Details is pressed (17 Sep 2026)
     expect(src('app/dashboard/board/BoardCard.tsx')).toContain("const [folded, setFolded] = useState(page === 'editor')")
     expect(src('app/dashboard/board/BoardCard.tsx')).toContain('note={folded ? null : (<>')

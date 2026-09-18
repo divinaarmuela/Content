@@ -68,3 +68,11 @@ describe('a designer’s second version passes the re-submit gate (17 Sep 2026)'
     expect(s).toContain("if (!system && !isBriefTask && !hasLink && !hasFiles && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {")
   })
 })
+
+describe('the list view counts files on the card (17 Sep 2026)', () => {
+  it('a card of files reads "N files on the card", not "Nothing yet"', () => {
+    const s = readFileSync('app/dashboard/board/BoardList.tsx', 'utf8')
+    expect(s).toContain('const handedIn = hasFinishedWork(card as never)')
+    expect(s).toContain("on the card` : 'Finished edit in') : lines.link ? 'Folder only' : 'Nothing yet'")
+  })
+})

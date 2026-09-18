@@ -1,6 +1,7 @@
 'use client'
 
 import { cardLines, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
+import { finalFilesOf, hasFinishedWork } from '../../lib/final-files-core'
 import { finishedEditOf } from '../../lib/card-link-core'
 
 /**
@@ -47,7 +48,8 @@ export function BoardList<T extends BoardViewCard>({ groups, viewer, names, mana
             <tr><td colSpan={9} className={`${td} text-muted-foreground`}>No cards here.</td></tr>
           )}
           {rows.map(({ card, lane, lines }) => {
-            const handedIn = finishedEditOf(card as never) !== null
+            // a link, or files handed in on the card (the Designer page and the handover card, 17 Sep 2026)
+            const handedIn = hasFinishedWork(card as never)
             const managers = managersOf?.(card.client_id) ?? []
             return (
               <tr key={card.id} tabIndex={0} role="button" aria-label={`Open ${lines.title}`}
@@ -60,7 +62,7 @@ export function BoardList<T extends BoardViewCard>({ groups, viewer, names, mana
                 <td className={`${td} whitespace-nowrap`}>{lines.stage}{lines.asked ? <span className="block text-[12px] text-muted-foreground">{lines.asked}</span> : null}</td>
                 <td className={`${td} whitespace-nowrap`}>{lines.assignee}</td>
                 <td className={`${td} whitespace-nowrap`}>{lines.version}</td>
-                <td className={`${td} whitespace-nowrap`}>{handedIn ? 'Finished edit in' : lines.link ? 'Folder only' : 'Nothing yet'}</td>
+                <td className={`${td} whitespace-nowrap`}>{handedIn ? (finalFilesOf(card as never).length > 0 && !finishedEditOf(card as never) ? `${finalFilesOf(card as never).length} ${finalFilesOf(card as never).length === 1 ? 'file' : 'files'} on the card` : 'Finished edit in') : lines.link ? 'Folder only' : 'Nothing yet'}</td>
                 <td className={`${td} whitespace-nowrap ${lines.dueNow ? 'font-semibold text-accent-red-deep' : ''}`}>{lines.due ?? '—'}</td>
                 <td className={`${td} whitespace-nowrap text-muted-foreground`}>{managers.length > 0 ? managers.join(', ') : '—'}</td>
               </tr>
