@@ -238,7 +238,7 @@ export default function EditorCardPage() {
             // a press on a clip opens its review page: the clip, the comments, the markers (15 Sep 2026)
             reviewHref={t => reviewPath(id, t.id, t.name)} />}
           {/* THE PUBLIC LINK FOR THE ACCEPTED VERSION (share-link-core, 17 Sep 2026) — anyone on the team, once the card is accepted */}
-          <ShareAcceptedLink item={item as never} />
+          {typeof (item as { merged_into?: unknown }).merged_into !== 'string' && <ShareAcceptedLink item={item as never} />}
           {/* ALL ITS CLIPS MOVED ON (18 Sep 2026): the last approval joined the edit's one handover card */}
           {typeof (item as { merged_into?: unknown }).merged_into === 'string' && (
             <p className="rounded-card border border-border bg-card px-4 py-3 text-[13px] text-muted-foreground">

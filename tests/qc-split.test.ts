@@ -103,3 +103,15 @@ describe('a closed card — all its clips moved on (18 Sep 2026)', () => {
     expect(tabs[0].files[0].status).toBe('done')
   })
 })
+
+describe('a closed card offers nothing (18 Sep 2026)', () => {
+  it('no stage buttons, no public link — its clips are on the handover card', async () => {
+    const { cardActions } = await import('../app/lib/board-view-core')
+    const { maySharePublicly } = await import('../app/lib/share-link-core')
+    const closed = { id: 'a', status: 'approved_for_scheduling', merged_into: 'h1', accepted_at: '2026-09-18T00:00:00Z', accepted_round: 1, edit_round: 1 }
+    expect(cardActions(closed as never, { id: 'u', role: 'super_admin' } as never)).toEqual({ primary: null, more: [] })
+    expect(maySharePublicly(closed)).toBe(false)
+    expect(maySharePublicly({ ...closed, merged_into: null })).toBe(true)
+    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain("{typeof (item as { merged_into?: unknown }).merged_into !== 'string' && <ShareAcceptedLink item={item as never} />}")
+  })
+})

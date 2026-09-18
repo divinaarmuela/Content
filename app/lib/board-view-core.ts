@@ -333,6 +333,8 @@ const sameAction = (a: CardAction, b: CardAction) => a.kind === b.kind && a.to =
 export function cardActions(
   card: BoardViewCard, viewer: BoardViewer,
 ): { primary: CardAction | null; more: CardAction[] } {
+  // a closed card — all its clips moved on — has nothing to send back or hand over (18 Sep 2026)
+  if (mergedAway(card as never)) return { primary: null, more: [] }
   const hats = actingRoles(viewer, card)
   const offered = availableTransitionsAs(hats, card.status)
   const turn = whoseTurn(card.status, card, viewer)
