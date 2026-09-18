@@ -565,6 +565,9 @@ const GHOST_COLUMNS = {
     //     (17 Sep 2026). Rules in app/lib/version-approval-core.ts.
     ['split_out', col('unknown', true, true)],
     ['split_from', col('string', true)],
+    //   content_items.asset_captions — OPTIONAL CAPTIONS, one per asset, file id
+    //     → words (18 Sep 2026). clip-approvals-core.captionsOf reads it.
+    ['asset_captions', col('unknown', true, true)],
     ['link_url', col('string', true)],
     ['link_kind', col('string', true)],
     ['change_note', col('string', true)],

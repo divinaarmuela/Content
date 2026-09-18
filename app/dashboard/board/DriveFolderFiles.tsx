@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
+import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, MessageSquareText, Play, X } from 'lucide-react'
+import { approvalBadge, clipApproval, type ClipApproval } from '../../lib/clip-approvals-core'
 import { downloadHref } from '../../lib/download-core'
 import type { DriveEntry } from '../../lib/files-core'
 import {
@@ -22,7 +23,17 @@ import { pickPoster, streamThumbnailUrl } from '../../lib/stream-core'
  * clip, nothing is downloaded here. A Dropbox link, or a link to one file,
  * draws nothing: the card's "Open the folder" link is for those.
  */
-export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, copies, selected, onSelect, noRounds = false, pickRound }: {
+export default function DriveFolderFiles({ url, wide = false, reviewHref, approvedIds, approvals, captions, mayApprove = false, onApprove, mayCaption = false, onCaption, copies, selected, onSelect, noRounds = false, pickRound }: {
+  /** the ticks themselves — whose they were (client or team) draws the badge's words (18 Sep 2026) */
+  approvals?: readonly ClipApproval[]
+  /** optional caption per file id (18 Sep 2026) */
+  captions?: Record<string, string>
+  /** a manager may tick a clip for the client, or take a tick back */
+  mayApprove?: boolean
+  onApprove?: (tile: { id: string; name: string }, on: boolean) => void
+  /** whoever holds or manages the card may caption an asset */
+  mayCaption?: boolean
+  onCaption?: (tile: { id: string; name: string }, words: string) => void
   /** SELECT MODE (the side-by-side view, 16 Sep 2026): the ticked files, and the press that ticks one */
   selected?: ReadonlySet<string>
   onSelect?: (tile: FolderTile, round: number, on: boolean) => void
@@ -180,9 +191,9 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                           ? <HoverClip src={t.preview} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
                               frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null} />
                           : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
-                      {approvedIds?.includes(t.id) && (
-                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
-                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> Approved
+                      {(approvedIds?.includes(t.id) || clipApproval(approvals ?? [], t.id)) && (
+                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex max-w-[calc(100%-12px)] items-center gap-1 truncate rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title={approvalBadge(clipApproval(approvals ?? [], t.id)) ?? 'Approved by the client'}>
+                          <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden /> <span className="truncate">{approvalBadge(clipApproval(approvals ?? [], t.id)) ?? 'Approved'}</span>
                         </span>
                       )}
                       {t.kind === 'video' && (
@@ -194,6 +205,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                       )}
                     </button>
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
+                    {/* THE CAPTION and the team's tick (18 Sep 2026) */}
+                    <TileExtras tile={t} caption={captions?.[t.id] ?? ''} approved={!!clipApproval(approvals ?? [], t.id)} mayApprove={mayApprove} onApprove={onApprove} mayCaption={mayCaption} onCaption={onCaption} />
                     {dl && (
                       <a href={dl} download={t.name} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
                         <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>
@@ -205,6 +218,51 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
             </ul>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+/** under a tile: the caption (or a way to add one), and a manager's tick for the client (18 Sep 2026) */
+function TileExtras({ tile, caption, approved, mayApprove, onApprove, mayCaption, onCaption }: {
+  tile: { id: string; name: string }
+  caption: string
+  approved: boolean
+  mayApprove: boolean
+  onApprove?: (tile: { id: string; name: string }, on: boolean) => void
+  mayCaption: boolean
+  onCaption?: (tile: { id: string; name: string }, words: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [words, setWords] = useState(caption)
+  useEffect(() => { setWords(caption) }, [caption])
+  return (
+    <div className="flex flex-col gap-1">
+      {caption && !editing && <p className="whitespace-pre-wrap text-[12px] text-muted-foreground" data-caption>{caption}</p>}
+      {editing ? (
+        <div className="flex flex-col gap-1">
+          <textarea value={words} onChange={e => setWords(e.target.value)} rows={2} placeholder="A caption for this one (optional)"
+            className="w-full rounded-inner border border-border bg-surface p-2 text-[12px]" aria-label={`Caption for ${tile.name}`} />
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => { onCaption?.(tile, words.trim()); setEditing(false) }} className="inline-flex min-h-9 items-center rounded-full bg-foreground px-3 text-[12px] font-semibold text-background">Save</button>
+            <button type="button" onClick={() => { setWords(caption); setEditing(false) }} className="inline-flex min-h-9 items-center px-2 text-[12px] text-muted-foreground underline-offset-4 hover:underline">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1">
+          {mayCaption && onCaption && (
+            <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-9 items-center gap-1 text-[12px] text-muted-foreground underline-offset-4 hover:underline">
+              <MessageSquareText className="h-3.5 w-3.5" aria-hidden /> {caption ? 'Edit the caption' : 'Add a caption'}
+            </button>
+          )}
+          {mayApprove && onApprove && (
+            <button type="button" onClick={() => onApprove(tile, !approved)}
+              className={`inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[12px] font-semibold ${approved ? 'border-border text-muted-foreground hover:bg-muted' : 'border-foreground hover:bg-foreground hover:text-background'}`}
+              title={approved ? 'Take the approval back' : 'Approve this one for the client — when they told you in person'}>
+              <Check className="h-3.5 w-3.5" aria-hidden /> {approved ? 'Take back' : 'Approve'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

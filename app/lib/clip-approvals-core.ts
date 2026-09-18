@@ -23,6 +23,45 @@ export type ClipApproval = {
    *  the address and the device the press came from, kept on the tick */
   ip?: string | null
   device?: string | null
+  /** A TEAM TICK (the owner, 18 Sep 2026: "sometimes the client will call us"):
+   *  an account manager or super admin approved it for the client; `by` is theirs */
+  team?: boolean
+}
+
+/** the words on the green badge: whose approval it was */
+export function approvalBadge(a: ClipApproval | null | undefined): string | null {
+  if (!a) return null
+  const who = String(a.by ?? '').trim()
+  return a.team ? `Approved by ${who || 'the team'}` : `Approved by client${who ? ` · ${who}` : ''}`
+}
+
+/** OPTIONAL CAPTIONS, ONE PER ASSET (the owner, 18 Sep 2026: "add optional
+ *  captions for each asset, for post approval once handed over"): a map of
+ *  file id → words, kept on the card and carried to the handover card. */
+export function captionsOf(item: { asset_captions?: unknown } | null | undefined): Record<string, string> {
+  const raw = item?.asset_captions
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const words = typeof v === 'string' ? v.trim() : ''
+    if (k && words) out[k] = words.slice(0, 2000)
+  }
+  return out
+}
+
+export function sanitiseCaptions(raw: unknown): { ok: true; captions: Record<string, string> } | { ok: false; error: string } {
+  if (raw === null || raw === undefined) return { ok: true, captions: {} }
+  if (typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'Captions are a map of file to words' }
+  const entries = Object.entries(raw as Record<string, unknown>)
+  if (entries.length > 200) return { ok: false, error: 'Too many captions' }
+  const captions: Record<string, string> = {}
+  for (const [k, v] of entries) {
+    if (!/^[A-Za-z0-9_.@-]{1,120}$/.test(k)) return { ok: false, error: 'That is not a file on the card' }
+    if (typeof v !== 'string') return { ok: false, error: 'A caption is words' }
+    const words = v.trim()
+    if (words) captions[k] = words.slice(0, 2000)
+  }
+  return { ok: true, captions }
 }
 
 /** the address a request came through, as the edge reports it */

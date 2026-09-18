@@ -15,6 +15,7 @@ import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
 import { approvedIdSet, carriedInto, movedIdSet, versionProgress } from '../../lib/version-approval-core'
+import { captionsOf, clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { finalFilesAsPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
@@ -40,8 +41,12 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
-export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false }: {
-  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown }
+export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false, mayApprove, mayCaption }: {
+  item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; clip_approvals?: unknown; asset_captions?: unknown }
+  /** a manager ticks a clip for the client (18 Sep 2026); defaults to the manager */
+  mayApprove?: boolean
+  /** whoever holds or manages the card captions an asset (18 Sep 2026); defaults to either */
+  mayCaption?: boolean
   isManager: boolean
   /** booked in or posted: the work is done, nothing more is added */
   frozen: boolean
@@ -160,6 +165,27 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const approvedSet = useMemo(() => approvedIdSet((approvedIds ?? []).map(id => ({ file_id: id }))), [approvedIds])
   const allFinished = useMemo(() => [...pullRows.filter(p => p.purpose === 'finished').flatMap(p => filesOf(p)), ...finalFilesAsPulls(item)].filter(f => f.status === 'done' && !!f.url), [pullRows, item])
   const movedSet = useMemo(() => movedIdSet(item as never), [item])
+  // THE TICKS AND THE CAPTIONS on the tiles (18 Sep 2026)
+  const approvals = useMemo(() => clipApprovalsOf(item as never), [item])
+  const captions = useMemo(() => captionsOf(item as never), [item])
+  const canApprove = mayApprove ?? isManager
+  const canCaption = mayCaption ?? (isManager || holder)
+  const approveClip = async (t: { id: string; name: string }, on: boolean) => {
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/approve-clip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: t.id, name: t.name, on }) })
+      const json = await res.json().catch(() => ({})) as { error?: string; settled?: { moved?: number; accepted?: boolean } | null }
+      if (!res.ok) throw new Error(json.error ?? 'Could not save the approval')
+      toast.success(on
+        ? (json.settled?.accepted ? 'Approved — every clip is approved, the card is accepted' : json.settled?.moved ? `Approved — moved to the handover card` : 'Approved for the client')
+        : 'Approval taken back')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the approval') }
+  }
+  const captionClip = async (t: { id: string; name: string }, words: string) => {
+    const next = { ...captions }
+    if (words) next[t.id] = words; else delete next[t.id]
+    try { await save({ asset_captions: next }, words ? 'Caption saved' : 'Caption removed') }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the caption') }
+  }
   const carried = shownVersion ? carriedInto(allFinished, shownVersion.round, approvedSet, movedSet).map(f => ({ ...f, version: shownVersion.round })) : []
   // …and a clip that left on a handover card is out of the editor's newest version
   const versionFiles = shownVersion ? [...carried, ...shownVersion.files.filter(f => shownVersion !== versionTabs[0] || !movedSet.has(f.id))] : []
@@ -232,7 +258,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           )}
           {/* THE TILES — from the folder, or from the files on the card alone (the handover card and a designer's card carry no folder; the owner, 18 Sep 2026: "4 clips approved but below does not show the actual assets") */}
           {(shownVersion.folderUrl || versionFiles.length > 0) && (
-            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} approvals={approvals} captions={captions} mayApprove={canApprove && !frozen} onApprove={approveClip} mayCaption={canCaption && !frozen} onCaption={captionClip} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (

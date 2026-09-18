@@ -49,7 +49,7 @@ describe('the approved clips leave with their own card (17 Sep 2026)', () => {
     expect(split).toContain('split_from: item.id,')
     expect(split).toContain('if (handoff.length === 0 || remaining.length === 0) return null')
     expect(split).toContain("eventType: 'approved_clips_split'")
-    expect(split).toContain("split_out: [...moved, ...handoff.map(f => f.id)],")
+    expect(split).toContain("split_out: [...movedIdSet(item as never), ...handoff.map(f => f.id)],")
   })
 })
 

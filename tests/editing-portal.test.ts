@@ -146,7 +146,7 @@ describe('the routes and the pages (source pins)', () => {
     expect(page).toContain('approvedIds={clipApprovalsOf(item).map(a => a.file_id)}')
     expect(page).toContain('editingPortalPath(client.share_token, id)')
     const tiles = src('app/dashboard/board/DriveFolderFiles.tsx')
-    expect(tiles).toContain('{approvedIds?.includes(t.id) && (')
+    expect(tiles).toContain('{(approvedIds?.includes(t.id) || clipApproval(approvals ?? [], t.id)) && (')
     // the client's "ready for you" email opens the editing portal for an edit
     const w = src('app/lib/workflow.ts')
     expect(w).toContain("portalHasWork({ ...item, status: to } as never) ? editingPortalPath(clientShareToken, item.id)")

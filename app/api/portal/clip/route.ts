@@ -7,6 +7,7 @@ import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 import { editingPortalItem } from '../../../lib/editing-portal'
 import { isDriveId } from '../../../lib/files-core'
 import { clipApprovalsOf, requestOrigin, withClipApproved, withClipUnapproved } from '../../../lib/clip-approvals-core'
+import { settleApprovals } from '../../../lib/split-approved'
 import { reviewPath } from '../../../lib/video-review-core'
 
 /**
@@ -55,6 +56,11 @@ export async function POST(req: Request) {
       detail: decision === 'approve' ? `${name || fileId} approved by ${by} (${client.name}) from ${from.ip ?? 'an unknown address'}` : `${name || fileId} — approval taken back by ${by} from ${from.ip ?? 'an unknown address'}`,
     })
     announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'updated' })
+    // ANYTHING APPROVED GOES TO HANDOVER AT ONCE (split-approved, 18 Sep 2026)
+    if (decision === 'approve') {
+      try { await settleApprovals(actor as never, { ...item, clip_approvals: next } as never) }
+      catch (e) { console.error('[portal clip] settling the approvals failed:', e) }
+    }
     if (decision === 'approve') {
       await notifyManagersOfComment({
         clientId: client.id,

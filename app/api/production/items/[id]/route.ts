@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { sanitiseCaptions } from '../../../../lib/clip-approvals-core'
 import { table, withRequestCache } from '@/lib/db'
 import { finishedEditOf, linkKindOf } from '../../../../lib/card-link-core'
 import { attachOne } from '@/lib/db-join'
@@ -200,7 +201,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const handOver = body?.hand_over === true || typeof body?.hand_over === 'string'
     const handNote = typeof body?.hand_over === 'string' ? body.hand_over : ''
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files', 'asset_captions'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     // WHERE THE REVIEWER SHOULD LOOK (Abby, 11 Sep 2026: "the task must have
@@ -224,6 +225,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const cleaned = sanitiseFinalFiles(patch.final_files, current as never, user.id, new Date().toISOString())
       if (!cleaned.ok) return NextResponse.json({ error: cleaned.error }, { status: 400 })
       patch.final_files = cleaned.files
+    }
+    // OPTIONAL CAPTIONS, one per asset (clip-approvals-core, 18 Sep 2026)
+    if ('asset_captions' in patch) {
+      const cleaned = sanitiseCaptions(patch.asset_captions)
+      if (!cleaned.ok) return NextResponse.json({ error: cleaned.error }, { status: 400 })
+      patch.asset_captions = cleaned.captions
     }
     // ONE FOLDER: the open card's "Files to work from" folder is the same
     // folder the card face, the Schedule rail and the Overview show

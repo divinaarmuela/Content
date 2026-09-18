@@ -638,6 +638,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           // made from the approved clips they ARE the job (17 Sep 2026)
           versions
           approvedIds={clipApprovalsOf(item as never).map(a => a.file_id)}
+          // the scheduler holding the card captions the assets they post (18 Sep 2026)
+          mayCaption={isManager || (!!me?.id && (item.owner_id === me.id || (Array.isArray((item as { scheduler_ids?: unknown }).scheduler_ids) && ((item as { scheduler_ids?: string[] }).scheduler_ids as string[]).includes(me.id))))}
         />
       )}
 
