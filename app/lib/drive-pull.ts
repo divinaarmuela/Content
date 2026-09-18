@@ -7,8 +7,7 @@ import { driveFileMeta, driveFileSize, openDriveFile } from './drive-stream'
 import { kindOf } from './files-core'
 import { abortMultipart, closeMultipart, openMultipart, putMultipartPart, r2Configured } from './storage'
 import {
-  PARTS_PER_STEP, PULL_REPLACED_WORDS, canStartPull, filesOf, nextSlice, pullId, pullInFlight, pullLooksStuck, pullObjectKey, type PullFile,
-} from './drive-pull-core'
+  PARTS_PER_STEP, PULL_REPLACED_WORDS, canStartPull, filesOf, nextSlice, pullId, pullInFlight, pullLooksStuck, pullObjectKey, type PullFile, copiesFor, sameBytes } from './drive-pull-core'
 import { driveTargetOf } from './card-link-core'
 import { afterResponse } from './after-response'
 import { fileRound } from './edit-round-core'
@@ -156,21 +155,21 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
   const id = row.id
   await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
 
-  const seen: { id: string; name: string; mime: string; size: number | null; modified: string | null }[] = []
+  const seen: { id: string; name: string; mime: string; size: number | null; modified: string | null; md5: string | null }[] = []
   const walk = async (folderId: string, prefix: string, depth: number) => {
     if (seen.length >= MAX_FILES || depth > MAX_DEPTH) return
     const listing = await listFolder(folderId)
     for (const e of listing.entries) {
       if (seen.length >= MAX_FILES) break
       if (kindOf(e.mimeType, e.name) === 'folder') { await walk(e.id, `${prefix}${e.name}/`, depth + 1); continue }
-      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null })
+      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null, md5: (e as { md5?: string | null }).md5 ?? null })
     }
   }
   const target = driveTargetOf(row.folder_url)
   if (target?.kind === 'file') {
     // one file: its name, type and size from Drive, nothing to walk
     const meta = await driveFileMeta(target.id)
-    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified })
+    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified, md5: meta.md5 ?? null })
   } else {
     await walk(row.folder_id, '', 0)
   }
@@ -202,10 +201,13 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
   const before = filesOf(row)
   const files: PullFile[] = []
   for (const f of seen) {
-    const olds = before.filter(b => b.id === f.id && b.status === 'done' && !!b.url)
+    // THE SAME BYTES ARE THE SAME CLIP (drive-pull-core.sameBytes, 18 Sep 2026):
+    // by id, or by checksum for a file re-uploaded under a new id — the copy,
+    // its approval and its comments carry across, under the copy's own id
+    const olds = copiesFor(f, before)
     const latest = [...olds].sort((a, b) => fileRound(b) - fileRound(a))[0]
     const round = version ?? null
-    const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)
+    const same = !!latest && sameBytes(f, latest)
     // earlier rounds' copies stay as they are, one per round
     const kept = new Map<number, PullFile>()
     for (const o of olds) if (round === null || fileRound(o) !== round) kept.set(fileRound(o), o)
@@ -219,7 +221,7 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
     // whichever needs changing"): it is copied again under its own id for the
     // new round, so the earlier cut's approval, comments and handover stay with
     // the earlier cut, and the new one is reviewed on its own
-    if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })
+    if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified, md5: f.md5 })
   }
   const total_bytes = files.reduce((n, f) => n + (f.size ?? 0), 0)
   const done_bytes = files.reduce((n, f) => n + (f.status === 'done' ? (f.size ?? 0) : 0), 0)

@@ -98,7 +98,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).not.toMatch(/googleapis\.com\/upload|method: '(POST|PATCH|PUT|DELETE)'/)
     // a file already here with the same size stands; a new cut in the same folder is new files
     // the same file handed in again in a later round is listed under that round too; a replaced one is copied again beside the old copy (16 Sep 2026)
-    expect(s).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(s).toContain('const same = !!latest && sameBytes(f, latest)')
     expect(s).toContain('else kept.set(round, { ...latest, name: f.name, version: round })')
     expect(s).toContain("if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })")
     // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
@@ -171,5 +171,35 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(bar).toContain("fetch('/api/drive/pull'")
     const portal = src('app/lib/editing-portal.ts')
     expect(portal).toContain("const uploaded = finalFilesOf(item)")
+  })
+})
+
+describe('the same bytes are the same clip (18 Sep 2026)', () => {
+  it('a checksum decides alone; without one the size and date stand in', async () => {
+    const { sameBytes, copiesFor } = await import('../app/lib/drive-pull-core')
+    expect(sameBytes({ md5: 'abc', size: 1, modified: 'x' }, { md5: 'abc', size: 2, modified: 'y' })).toBe(true)
+    expect(sameBytes({ md5: 'abc', size: 1, modified: 'x' }, { md5: 'zzz', size: 1, modified: 'x' })).toBe(false)
+    expect(sameBytes({ md5: null, size: 1, modified: 'x' }, { md5: 'abc', size: 1, modified: 'x' })).toBe(true)
+    expect(sameBytes({ size: 1, modified: 'x' }, { size: 1, modified: 'y' })).toBe(false)
+    expect(sameBytes({ size: 1, modified: null }, { size: 1, modified: 'y' })).toBe(true)
+    const before = [
+      { id: 'old', md5: 'abc', status: 'done', url: 'https://m/old.mp4' },
+      { id: 'gone', md5: 'abc', status: 'copying', url: null },
+      { id: 'other', md5: 'def', status: 'done', url: 'https://m/other.mp4' },
+    ]
+    // the same file by id
+    expect(copiesFor({ id: 'old', md5: 'abc' }, before).map(c => c.id)).toEqual(['old'])
+    // re-uploaded under a new id: found by its bytes, the old copy serves
+    expect(copiesFor({ id: 'new', md5: 'abc' }, before).map(c => c.id)).toEqual(['old'])
+    // a new id with new bytes, or no checksum at all, is new
+    expect(copiesFor({ id: 'new', md5: 'qqq' }, before)).toEqual([])
+    expect(copiesFor({ id: 'new', md5: null }, before)).toEqual([])
+  })
+  it('the listing asks Drive for the checksum and the pull keeps it on the copy', () => {
+    expect(readFileSync('app/lib/gdrive-files.ts', 'utf8')).toContain("'id,name,mimeType,size,modifiedTime,md5Checksum,webViewLink,hasThumbnail,owners(displayName,emailAddress)'")
+    const pull = readFileSync('app/lib/drive-pull.ts', 'utf8')
+    expect(pull).toContain('const olds = copiesFor(f, before)')
+    expect(pull).toContain('const same = !!latest && sameBytes(f, latest)')
+    expect(pull).toContain('version: round, modified: f.modified, md5: f.md5 })')
   })
 })

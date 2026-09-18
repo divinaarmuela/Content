@@ -27,6 +27,8 @@ export type PullFile = {
   /** Drive's last-changed time when the copy was made — a file replaced under
    *  the same link is told apart from one merely handed in again */
   modified?: string | null
+  /** Drive's MD5 of the bytes when the copy was made (18 Sep 2026) */
+  md5?: string | null
   /** R2's multipart upload in flight, and the parts landed so far */
   upload_id?: string | null
   parts?: { n: number; etag: string }[]
@@ -169,4 +171,35 @@ export function pullLooksStuck(row: PullRow | null | undefined, nowMs: number): 
   if (!row || !['queued', 'listing', 'copying'].includes(row.status)) return false
   const at = row.updated_at ? Date.parse(row.updated_at) : NaN
   return Number.isFinite(at) && nowMs - at > 20 * 60 * 1000
+}
+
+/**
+ * THE SAME BYTES ARE THE SAME CLIP (the owner, 18 Sep 2026: "how does our
+ * system know that is the same video — they might just re-upload the same
+ * Drive"). Drive keeps an MD5 of every uploaded file's bytes. When both sides
+ * carry one, that alone decides: the same checksum is the same video whatever
+ * its id, name or date; a different checksum is a replacement. Without a
+ * checksum (a Google-native file, an old copy from before we kept them) the
+ * size and the last-changed time stand in.
+ */
+export function sameBytes(
+  a: { md5?: string | null; size: number | null; modified?: string | null },
+  b: { md5?: string | null; size: number | null; modified?: string | null },
+): boolean {
+  if (a.md5 && b.md5) return a.md5 === b.md5
+  return a.size === b.size && (!a.modified || !b.modified || a.modified === b.modified)
+}
+
+/** the finished copies already held for a listed file: by Drive id — or, for a
+ *  file re-uploaded under a NEW id, by the checksum of its bytes, so the copy,
+ *  its approval and its comments carry across the re-upload */
+export function copiesFor<F extends { id: string; md5?: string | null; status: string; url: string | null }>(
+  seen: { id: string; md5?: string | null },
+  before: readonly F[],
+): F[] {
+  const done = before.filter(b => b.status === 'done' && !!b.url)
+  const byId = done.filter(b => b.id === seen.id)
+  if (byId.length > 0) return byId
+  if (!seen.md5) return []
+  return done.filter(b => !!b.md5 && b.md5 === seen.md5)
 }

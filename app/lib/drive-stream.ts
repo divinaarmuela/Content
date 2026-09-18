@@ -73,19 +73,19 @@ export function totalFromContentRange(res: Response): number | null {
  * ask as anyone with the link, abandoned the moment they are in. Null when
  * nothing will say.
  */
-export async function driveFileMeta(id: string): Promise<{ name: string; mime: string; size: number | null; modified: string | null } | null> {
+export async function driveFileMeta(id: string): Promise<{ name: string; mime: string; size: number | null; modified: string | null; md5?: string | null } | null> {
   const auth = await accessToken()
   if (auth.ok) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 15_000)
     try {
-      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'name,mimeType,size,modifiedTime', ...ALL_DRIVES }), {
+      const res = await fetch(`${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ fields: 'name,mimeType,size,modifiedTime,md5Checksum', ...ALL_DRIVES }), {
         headers: { Authorization: `Bearer ${auth.token}` }, signal: ctrl.signal,
       })
       if (res.ok) {
-        const meta = await res.json() as { name?: string; mimeType?: string; size?: string | number; modifiedTime?: string }
+        const meta = await res.json() as { name?: string; mimeType?: string; size?: string | number; modifiedTime?: string; md5Checksum?: string }
         const n = Number(meta.size)
-        return { name: String(meta.name || id), mime: String(meta.mimeType || 'application/octet-stream'), size: Number.isFinite(n) && n > 0 ? n : null, modified: meta.modifiedTime ? String(meta.modifiedTime) : null }
+        return { name: String(meta.name || id), mime: String(meta.mimeType || 'application/octet-stream'), size: Number.isFinite(n) && n > 0 ? n : null, modified: meta.modifiedTime ? String(meta.modifiedTime) : null, md5: meta.md5Checksum ? String(meta.md5Checksum) : null }
       }
     } catch { /* fall through to the public ask */ } finally { clearTimeout(timer) }
   }

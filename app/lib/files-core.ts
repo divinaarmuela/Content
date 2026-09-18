@@ -158,6 +158,8 @@ export type DriveEntry = {
   /** bytes, or null for a Google Doc — Google's own formats have no size */
   size: number | null
   modified: string | null
+  /** Drive's MD5 of the bytes — the same bytes under any id, any name, any date (18 Sep 2026) */
+  md5?: string | null
   ownerName: string | null
   ownerEmail: string | null
   hasThumbnail: boolean

@@ -55,7 +55,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(t).toContain("if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })")
     // a file already here keeps the round it arrived with; a new file gets the current one
     const p = src('app/lib/drive-pull.ts')
-    expect(p).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(p).toContain('const same = !!latest && sameBytes(f, latest)')
     expect(p).toContain("parts: [], version: round, modified: f.modified })")
   })
   it('the card page has a tab per finished edit handed in, beside the folder to work from — the newest open (16 Sep 2026)', async () => {
