@@ -100,7 +100,7 @@ describe('the job, the triggers and the pages (source pins)', () => {
     // the same file handed in again in a later round is listed under that round too; a replaced one is copied again beside the old copy (16 Sep 2026)
     expect(s).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
     expect(s).toContain('else kept.set(round, { ...latest, name: f.name, version: round })')
-    expect(s).toContain("if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })")
+    expect(s).toContain("if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })")
     // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
     expect(s).toContain("previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))")
     expect(s).toContain('const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')

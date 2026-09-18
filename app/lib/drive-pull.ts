@@ -214,7 +214,12 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
       else kept.set(round, { ...latest, name: f.name, version: round })
     }
     files.push(...[...kept.values()].sort((a, b) => fileRound(a) - fileRound(b)))
-    if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })
+    // A FILE REPLACED UNDER THE SAME LINK IS A NEW CLIP (the owner, 18 Sep 2026:
+    // "if they upload the same Drive with the updated videos it only fetches
+    // whichever needs changing"): it is copied again under its own id for the
+    // new round, so the earlier cut's approval, comments and handover stay with
+    // the earlier cut, and the new one is reviewed on its own
+    if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })
   }
   const total_bytes = files.reduce((n, f) => n + (f.size ?? 0), 0)
   const done_bytes = files.reduce((n, f) => n + (f.status === 'done' ? (f.size ?? 0) : 0), 0)

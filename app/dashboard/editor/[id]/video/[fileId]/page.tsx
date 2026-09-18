@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, Send } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,7 +19,8 @@ import { pickPoster, streamBaseUrl } from '../../../../../lib/stream-core'
 import { DEFAULT_TZ, formatInZone } from '../../../../../lib/timezone-core'
 import PageTitle from '../../../../ui/PageTitle'
 import { personLabel } from '../../../../../lib/identity-core'
-import { clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
+import { approvalBadge, clipApproval, clipApprovalsOf } from '../../../../../lib/clip-approvals-core'
+import { useRole } from '../../../../useRole'
 import {
   activeCommentId, clipPlace, clipPlaceWords, commentsOnClip, formatStamp, markersFor, reviewPath,
 } from '../../../../../lib/video-review-core'
@@ -120,6 +121,21 @@ export default function VideoReviewPage() {
   // client left on their portal sits on the same timeline, marked as theirs
   const fromClient = (uid: string | null | undefined) => team.find(t => t.id === uid)?.role === 'client'
   const approved = item ? clipApproval(clipApprovalsOf(item), fileId) : null
+  // A MANAGER APPROVES FOR THE CLIENT HERE TOO (the owner, 18 Sep 2026: "they
+  // can also click it on the individual page, video left, comments right")
+  const { me } = useRole()
+  const mayApprove = me?.role === 'account_manager' || me?.role === 'super_admin'
+  const [approving, setApproving] = useState(false)
+  const approveForClient = async (on: boolean) => {
+    setApproving(true)
+    try {
+      const res = await fetch(`/api/production/items/${id}/approve-clip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId, name, on }) })
+      const json = await res.json().catch(() => ({})) as { error?: string; settled?: { moved?: number; accepted?: boolean } | null }
+      if (!res.ok) throw new Error(json.error ?? 'Could not save the approval')
+      toast.success(on ? (json.settled?.accepted ? 'Approved — every clip is approved, the card is accepted' : json.settled?.moved ? 'Approved — moved to the handover card' : 'Approved for the client') : 'Approval taken back')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the approval') }
+    finally { setApproving(false) }
+  }
 
   const video = useRef<HTMLVideoElement>(null)
   // A PICTURE HAS THE SAME PAGE (the owner, 16 Sep 2026: "this page is an
@@ -206,7 +222,14 @@ export default function VideoReviewPage() {
         className="inline-flex min-h-11 w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> {item.title}
       </button>
-      <PageTitle title={name} summary={`${isImage ? `A picture on ${item.title}.` : `A clip on ${item.title}. Press a circle under the clip to jump to that comment.`}${approved ? ` Approved by the client (${approved.by}).` : ''}`} />
+      <PageTitle title={name} summary={`${isImage ? `A picture on ${item.title}.` : `A clip on ${item.title}. Press a circle under the clip to jump to that comment.`}${approved ? ` ${approvalBadge(approved)}.` : ''}`}
+        actions={mayApprove && (
+          <Button variant={approved ? 'outline' : 'default'} disabled={approving} onClick={() => void approveForClient(!approved)}
+            className={`h-11 rounded-full px-5 text-[14px] font-semibold ${approved ? '' : 'bg-accent-green text-ink hover:bg-accent-green/90'}`}
+            title={approved ? 'Take the approval back' : 'Approve this one for the client — when they told you in person'} data-approve-for-client>
+            <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : approved ? `${approvalBadge(approved)} — take back` : 'Approve for the client'}
+          </Button>
+        )} />
       {/* THE VERSION AND THE ARROWS (17 Sep 2026): which version this is, where it sits, and the clip either side — the comments on the right follow */}
       {place && (
         <div className="flex flex-wrap items-center gap-2" data-clip-place>

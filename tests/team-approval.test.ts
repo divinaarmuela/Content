@@ -57,3 +57,17 @@ describe('the reader keeps whose tick it was (18 Sep 2026)', () => {
     expect(clipApprovalsOf({ clip_approvals: [{ file_id: 'a', name: 'a', at: 'x', by: 'Jerry' }] })).toEqual([{ file_id: 'a', name: 'a', at: 'x', by: 'Jerry' }])
   })
 })
+
+describe('a replaced file is a new clip, and the clip page approves too (18 Sep 2026)', () => {
+  it('a file changed in Drive under the same link is copied under its own id for the new round', () => {
+    const s = readFileSync('app/lib/drive-pull.ts', 'utf8')
+    expect(s).toContain("if (!same) files.push({ id: olds.length > 0 && round !== null ? `${f.id}-v${round}` : f.id,")
+  })
+  it('the clip page carries the manager\u2019s Approve for the client, and names whose approval it shows', () => {
+    const p = readFileSync('app/dashboard/editor/[id]/video/[fileId]/page.tsx', 'utf8')
+    expect(p).toContain("const mayApprove = me?.role === 'account_manager' || me?.role === 'super_admin'")
+    expect(p).toContain('data-approve-for-client')
+    expect(p).toContain("fetch(`/api/production/items/${id}/approve-clip`")
+    expect(p).toContain("approvalBadge(approved)}.")
+  })
+})
