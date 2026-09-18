@@ -230,8 +230,9 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           {shownVersion.folderUrl && (
             <DrivePullBar kind="item" scopeId={item.id} folderUrl={shownVersion.folderUrl} which="finished" mayStart={mayEdit && shownVersion.folderUrl === (finished?.url ?? '')} showFiles={false} />
           )}
-          {shownVersion.folderUrl && (
-            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+          {/* THE TILES — from the folder, or from the files on the card alone (the handover card and a designer's card carry no folder; the owner, 18 Sep 2026: "4 clips approved but below does not show the actual assets") */}
+          {(shownVersion.folderUrl || versionFiles.length > 0) && (
+            <DriveFolderFiles url={shownVersion.folderUrl || null} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={versionFiles} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
       ) : (
