@@ -56,7 +56,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     // a file already here keeps the round it arrived with; a new file gets the current one
     const p = src('app/lib/drive-pull.ts')
     expect(p).toContain('const same = !!latest && sameBytes(f, latest)')
-    expect(p).toContain("parts: [], version: round, modified: f.modified })")
+    expect(p).toContain("parts: [], version: round, modified: f.modified, md5: f.md5 })")
   })
   it('the card page has a tab per finished edit handed in, beside the folder to work from — the newest open (16 Sep 2026)', async () => {
     const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
