@@ -151,8 +151,10 @@ describe('the control on a card', () => {
 
   it('offers "Approve without client" only to the quality reviewer, and only when the card does not need the client', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
-    const { more } = cardActions(card({ status: 'quality_check', client_approval_required: false }), joy)
-    expect(more.some(a => a.kind === 'transition' && a.to === 'approved_for_scheduling')).toBe(true)
+    // …and with the client's approval switched off, it IS the pass — the filled button (18 Sep 2026)
+    const { primary, more } = cardActions(card({ status: 'quality_check', client_approval_required: false }), joy)
+    expect(primary).toEqual({ kind: 'transition', to: 'approved_for_scheduling', label: 'Passed quality check' })
+    expect(more.some(a => a.kind === 'transition' && a.to === 'client_review' && a.label === 'Send to the client anyway')).toBe(true)
     const strict = cardActions(card({ status: 'quality_check' }), joy)
     expect(strict.more.some(a => a.to === 'approved_for_scheduling')).toBe(false)
   })

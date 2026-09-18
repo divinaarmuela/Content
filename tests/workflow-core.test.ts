@@ -425,7 +425,15 @@ describe('presentTransitions — one obvious button, or none', () => {
     // …and only the quality reviewer holds it at all
     const relaxed = presentTransitions(['quality_reviewer'], 'quality_check',
       availableTransitionsAs(['quality_reviewer'], 'quality_check'), { clientApprovalRequired: false })
-    expect(relaxed.secondary.map(t => t.to)).toContain('approved_for_scheduling')
+    // …and with the client's approval switched off it is the PASS itself: straight to Ready to post (18 Sep 2026)
+    expect(relaxed.primary?.to).toBe('approved_for_scheduling')
+    expect(relaxed.primary?.label).toBe('Passed quality check')
+    expect(relaxed.secondary.find(t => t.to === 'client_review')?.label).toBe('Send to the client anyway')
+    // with the client's approval on, the pass still goes to the client
+    const strictQc = presentTransitions(['quality_reviewer'], 'quality_check',
+      availableTransitionsAs(['quality_reviewer'], 'quality_check'), { clientApprovalRequired: true })
+    expect(strictQc.primary?.to).toBe('client_review')
+    expect(strictQc.secondary.map(t => t.to)).not.toContain('approved_for_scheduling')
     const relaxedAm = present('account_manager', { owner_id: THEM }, 'internal_review', { clientApprovalRequired: false })
     expect(relaxedAm.secondary.map(t => t.to)).not.toContain('approved_for_scheduling')
   })

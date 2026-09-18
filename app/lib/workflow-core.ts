@@ -463,6 +463,18 @@ export function presentTransitions(
     ? (skipsGate ? visible.find(t => t.to === 'client_review') ?? visible.find(t => t.to === wanted) : visible.find(t => t.to === wanted)) ?? null
     : null
 
+  // NO CLIENT APPROVAL NEEDED (the owner, 18 Sep 2026: a New post with the
+  // client's approval switched off still went to With client, "a pointless
+  // extra stop"): the reviewer's pass goes straight to Ready to post, and
+  // sending it to the client anyway is the smaller button
+  if (from === 'quality_check' && !ctx.clientApprovalRequired && primary?.to === 'client_review') {
+    const straight = visible.find(t => t.to === 'approved_for_scheduling')
+    if (straight) {
+      const pass = { ...straight, label: 'Passed quality check' }
+      return { primary: pass, secondary: visible.filter(t => t !== straight).map(t => t.to === 'client_review' ? { ...t, label: 'Send to the client anyway' } : t) }
+    }
+  }
+
   return { primary, secondary: visible.filter(t => t !== primary) }
 }
 
