@@ -410,6 +410,16 @@ const GHOST_TABLES = {
   //   the person can be opened by. Written only from what a request had
   //   already fetched for its own reasons — nothing here fetches. Id is
   //   `<provider account id>:<encodeKey(handle lower-case)>`.
+  // card_views — WHEN A PERSON LAST OPENED A CARD (the owner, 21 Sep 2026:
+  //   "add a filter in the list as last edited and last viewed"). One row per
+  //   person per card, id `<user id>__<card id>`, stamped when the card sheet
+  //   or the card page opens. Read by the board's "Last viewed" order.
+  card_views: [
+    ['id', col('string', false)],
+    ['user_id', col('string', false)],
+    ['item_id', col('string', false)],
+    ['viewed_at', col('string', false)],
+  ],
   inbox_touches: [
     ['id', col('string', false)],
     ['account_id', col('string', false)],       // the provider's account id

@@ -26,6 +26,7 @@ export type TableName =
   | 'booking_services'
   | 'bookings'
   | 'calendar_accounts'
+  | 'card_views'
   | 'claim_locks'
   | 'client_agreements'
   | 'client_brand'
@@ -435,6 +436,13 @@ export interface CalendarAccount {
   connected_by: string | null
   created_at: string
   id: string
+}
+
+export interface CardView {
+  id: string
+  user_id: string
+  item_id: string
+  viewed_at: string
 }
 
 export interface ClaimLock {
@@ -1375,6 +1383,7 @@ export const TABLE_COLUMNS = {
   booking_services: ['id', 'created_at', 'name', 'slug', 'description', 'duration_min', 'price_cents', 'currency', 'active', 'sort_order', 'policy_text', 'resource_id', 'lead_time_min', 'horizon_days', 'requires_payment', 'image_url', 'location', 'category', 'capacity'],
   bookings: ['id', 'created_at', 'service_id', 'resource_id', 'start_at', 'end_at', 'customer_name', 'customer_email', 'customer_phone', 'notes', 'status', 'payment_status', 'payment_ref', 'amount_cents', 'policy_agreed_at', 'checkout_ref', 'public_ref', 'seat_no', 'space_id'],
   calendar_accounts: ['email', 'refresh_token_encrypted', 'enabled', 'connected_at', 'connected_by', 'created_at', 'id'],
+  card_views: ['id', 'user_id', 'item_id', 'viewed_at'],
   claim_locks: ['id'],
   client_agreements: ['id', 'created_at', 'updated_at', 'client_id', 'deliverable_lines', 'services', 'notes', 'updated_by', 'start_date'],
   client_brand: ['client_id', 'updated_at', 'updated_by', 'profile', 'docs', 'scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at', 'id'],
@@ -1457,6 +1466,7 @@ export const NULLABLE_COLUMNS = {
   booking_services: ['description', 'policy_text', 'resource_id', 'lead_time_min', 'horizon_days', 'requires_payment', 'image_url', 'location', 'category', 'capacity'],
   bookings: ['service_id', 'customer_phone', 'notes', 'payment_ref', 'policy_agreed_at', 'checkout_ref', 'public_ref', 'seat_no', 'space_id'],
   calendar_accounts: ['refresh_token_encrypted', 'connected_at', 'connected_by'],
+  card_views: [],
   claim_locks: [],
   client_agreements: ['notes', 'updated_by', 'start_date'],
   client_brand: ['scan_status', 'scan_done', 'scan_total', 'scan_message', 'scan_started_at'],
@@ -1546,6 +1556,7 @@ export const JSON_COLUMNS = {
   booking_services: [],
   bookings: [],
   calendar_accounts: [],
+  card_views: [],
   claim_locks: [],
   client_agreements: ['deliverable_lines', 'services'],
   client_brand: ['profile', 'docs'],
@@ -1634,6 +1645,7 @@ export const JSON_ARRAY_COLUMNS = {
   booking_services: [],
   bookings: [],
   calendar_accounts: [],
+  card_views: [],
   claim_locks: [],
   client_agreements: ['deliverable_lines', 'services'],
   client_brand: ['docs'],

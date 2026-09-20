@@ -847,3 +847,28 @@ describe('who may delete a card (21 Sep 2026)', () => {
     expect(route).toContain("if (!mayDeleteCard(user, item)) throw new AuthzError('Only a manager, or the editor who holds this card, can delete it', 403)")
   })
 })
+
+describe('the order of a board (21 Sep 2026)', () => {
+  it('board order keeps the lane; last edited newest first; last viewed by this person, never-opened last', async () => {
+    const { sortCards, BOARD_SORTS, SORT_LABELS, isBoardSort } = await import('../app/lib/board-view-core')
+    const cards = [{ id: 'a', updated_at: '2026-09-01' }, { id: 'b', updated_at: '2026-09-03' }, { id: 'c', updated_at: '2026-09-02' }]
+    const viewed = new Map([['c', '2026-09-20T10:00'], ['a', '2026-09-21T09:00']])
+    expect(sortCards(cards, 'board', viewed).map(c => c.id)).toEqual(['a', 'b', 'c'])
+    expect(sortCards(cards, 'edited', viewed).map(c => c.id)).toEqual(['b', 'c', 'a'])
+    expect(sortCards(cards, 'viewed', viewed).map(c => c.id)).toEqual(['a', 'c', 'b'])
+    expect(BOARD_SORTS).toEqual(['board', 'edited', 'viewed'])
+    expect(SORT_LABELS.viewed).toBe('Last viewed')
+    expect(isBoardSort('edited')).toBe(true)
+    expect(isBoardSort('x')).toBe(false)
+    // the board reads it for both views, and the sheet and the card page stamp a view
+    const board = readFileSync('app/dashboard/board/Board.tsx', 'utf8')
+    expect(board).toContain("usePersistedChoice(`board-sort.${page}`, BOARD_SORTS, 'board', 'sort')")
+    expect(board).toContain('cards: sortCards(g.cards, sort, viewedAt)')
+    expect(readFileSync('app/dashboard/board/CardSheet.tsx', 'utf8')).toContain('void fetch(`/api/production/items/${cardId}/viewed`, { method: \'POST\' })')
+    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('void fetch(`/api/production/items/${id}/viewed`, { method: \'POST\' })')
+    const route = readFileSync('app/api/production/items/[id]/viewed/route.ts', 'utf8')
+    expect(route).toContain('const user = await requireSignedIn()')
+    expect(route).toContain('await loadItemForUser(user, id)')
+    expect(route).toContain("await table<CardView>('card_views').upsert({ id: `${user.id}__${id}`, user_id: user.id, item_id: id, viewed_at })")
+  })
+})

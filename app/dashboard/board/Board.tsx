@@ -11,11 +11,11 @@ import { EDITOR_TOUR, POST_APPROVAL_TOUR } from '../../lib/tour-core'
 import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
 import {
   COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
-  laneOf, mayDeleteCard, pageLanes, reachableLanes,
+  laneOf, mayDeleteCard, pageLanes, reachableLanes, BOARD_SORTS, SORT_LABELS, sortCards,
   type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
 import { useTable } from '@/lib/db-client'
-import type { PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
+import type { CardView, PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
 import { cardBookingLine, type OutcomeJob } from '../../lib/post-outcome-core'
 import { readPostedSlides } from '../../lib/posted-slides-core'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
@@ -132,6 +132,11 @@ export function Board({
    *  with the Scheduler's "Waiting on you" list, so both press one route */
   const { busyId, act, dialogs } = useCardActs<BoardCardRow>(viewer)
   const [view, setView] = usePersistedChoice(`board-view.${page}`, BOARD_VIEWS, 'columns', 'view')
+  // THE ORDER OF THE BOARD (board-view-core.sortCards, 21 Sep 2026): board order, last edited, or last viewed by this person
+  const [sort, setSort] = usePersistedChoice(`board-sort.${page}`, BOARD_SORTS, 'board', 'sort')
+  const viewBy = useMemo(() => ({ user_id: viewer.id }), [viewer.id])
+  const { rows: viewRows } = useTable<CardView>('card_views', { by: viewBy as never, enabled: sort === 'viewed' })
+  const viewedAt = useMemo(() => new Map(viewRows.map(v => [v.item_id, String(v.viewed_at ?? '')])), [viewRows])
   const [dragging, setDragging] = useState<BoardCardRow | null>(null)
   const [over, setOver] = useState<PageLaneKey | null>(null)
   const [linkFor, setLinkFor] = useState<BoardCardRow | null>(null)
@@ -207,8 +212,8 @@ export function Board({
   // the Delivered column is drawn only when a card is in it — a team with no
   // client who posts their own never sees an eighth column
   const grouped = useMemo(
-    () => groupByLane(laneLayout, shown).filter(g => g.lane.key !== 'delivered' || g.cards.length > 0),
-    [laneLayout, shown])
+    () => groupByLane(laneLayout, shown).filter(g => g.lane.key !== 'delivered' || g.cards.length > 0).map(g => ({ ...g, cards: sortCards(g.cards, sort, viewedAt) })),
+    [laneLayout, shown, sort, viewedAt])
 
   /** the lanes a drag may land on right now */
   const reachable = useMemo(
@@ -369,6 +374,14 @@ export function Board({
             whose job is to look across everyone (the owner, 11 Sep 2026) */}
         <div className="flex min-w-0 flex-wrap items-center gap-2">{filters}</div>
         <div className="flex items-center gap-2">
+        {/* the order: board order, last edited, last viewed (21 Sep 2026) */}
+        <label className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted-foreground">
+          <span className="sr-only">Order</span>
+          <select aria-label="Order the cards" value={sort} onChange={e => setSort(e.target.value as typeof sort)}
+            className="h-9 bg-transparent text-[13px] font-semibold text-foreground outline-none">
+            {BOARD_SORTS.map(s => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
+          </select>
+        </label>
         <div role="group" aria-label="Columns or a list" className="inline-flex h-11 items-center rounded-full border border-border bg-surface p-1">
           {BOARD_VIEWS.map(v => (
             <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}

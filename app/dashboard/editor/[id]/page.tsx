@@ -27,7 +27,7 @@ import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-co
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
 import { handsInFiles } from '../../../lib/final-files-core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -157,6 +157,11 @@ function ManagerActions({ item, viewer, portalLink, client }: { item: ContentIte
 
 export default function EditorCardPage() {
   const { id } = useParams<{ id: string }>()
+  // WHEN A PERSON LAST OPENED A CARD (21 Sep 2026): stamped for the board's "Last viewed" order, fire and forget
+  useEffect(() => {
+    if (!id) return
+    void fetch(`/api/production/items/${id}/viewed`, { method: 'POST' }).catch(() => { /* the order is a convenience */ })
+  }, [id])
   const router = useRouter()
   const { me } = useRole()
   const { row: item, loading } = useRow<ContentItem>('content_items', id)

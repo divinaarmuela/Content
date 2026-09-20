@@ -1025,3 +1025,22 @@ export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number
   if (Array.isArray(card.final_files) && card.final_files.length > 0) return false
   return !(Number(card.current_version_number ?? 0) > 0) && !String(card.link_url ?? '').trim() && !folderOf(card)
 }
+
+/**
+ * THE ORDER OF A BOARD (the owner, 21 Sep 2026: "add a filter in the list
+ * as last edited and last viewed"). Board order is the lane's own; Last
+ * edited puts the most recently changed card first; Last viewed puts the
+ * card this person opened most recently first, and the ones they have never
+ * opened last. Columns and the list read the same order.
+ */
+export type BoardSort = 'board' | 'edited' | 'viewed'
+export const BOARD_SORTS: readonly BoardSort[] = ['board', 'edited', 'viewed']
+export const SORT_LABELS: Record<BoardSort, string> = { board: 'Board order', edited: 'Last edited', viewed: 'Last viewed' }
+export function isBoardSort(v: unknown): v is BoardSort {
+  return typeof v === 'string' && (BOARD_SORTS as readonly string[]).includes(v)
+}
+export function sortCards<T extends { id: string; updated_at?: unknown }>(cards: readonly T[], sort: BoardSort, viewedAt: ReadonlyMap<string, string>): T[] {
+  if (sort === 'board') return [...cards]
+  const key = (c: T) => (sort === 'edited' ? String(c.updated_at ?? '') : (viewedAt.get(c.id) ?? ''))
+  return [...cards].sort((a, b) => key(b).localeCompare(key(a)))
+}

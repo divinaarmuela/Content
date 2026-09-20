@@ -124,6 +124,12 @@ export function useCardSheet(): { cardId: string | null; open: (id: string) => v
       window.history.replaceState(window.history.state, '', withCardParam(window.location.href, id))
     } catch { /* the sheet still opens */ }
   }, [])
+  // WHEN A PERSON LAST OPENED A CARD (21 Sep 2026): stamped for the board's "Last viewed" order, fire and forget
+  useEffect(() => {
+    if (!cardId) return
+    void fetch(`/api/production/items/${cardId}/viewed`, { method: 'POST' }).catch(() => { /* the order is a convenience */ })
+  }, [cardId])
+
   const open = useCallback((id: string) => { setCardId(id); write(id) }, [write])
   const close = useCallback(() => { setCardId(null); write(null) }, [write])
 
