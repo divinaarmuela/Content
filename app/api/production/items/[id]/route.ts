@@ -7,6 +7,7 @@ import type {
   WorkflowActivity,
 } from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse, AuthzError } from '../../../../lib/authz'
+import { mayDeleteCard } from '../../../../lib/board-view-core'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyFilesToWorkFrom, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
@@ -364,9 +365,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const user = await requireRole('account_manager')
+    const user = await requireSignedIn()
     const { id } = await params
     const item = await loadItemForUser(user, id)
+    // a manager, or the editor whose card it still is (board-view-core.mayDeleteCard, 21 Sep 2026)
+    if (!mayDeleteCard(user, item)) throw new AuthzError('Only a manager, or the editor who holds this card, can delete it', 403)
     // a post the channel is holding, or has published, is not deleted from
     // here: the post would stay live and the app would lose every record of
     // it (the audit of 10 Sep 2026)

@@ -822,3 +822,28 @@ describe('an uploaded post is approved outright (18 Sep 2026)', () => {
     expect(src).toContain("if (action.to === 'approved_for_scheduling' && ['account_manager', 'super_admin', 'general'].includes(viewer.role) && card.deliver_only !== true && card.adhoc_post !== true) {")
   })
 })
+
+describe('who may delete a card (21 Sep 2026)', () => {
+  it('a manager any unposted card; an editor their own, while it is still theirs; nobody else', async () => {
+    const { mayDeleteCard } = await import('../app/lib/board-view-core')
+    const am = { id: 'am', role: 'account_manager' }, sa = { id: 'sa', role: 'super_admin' }, ed = { id: 'ed', role: 'editor' }, sch = { id: 'sc', role: 'scheduler' }, gen = { id: 'g', role: 'general' }
+    expect(mayDeleteCard(am, { status: 'client_review', owner_id: 'x' })).toBe(true)
+    expect(mayDeleteCard(sa, { status: 'scheduled', owner_id: 'x' })).toBe(true)
+    expect(mayDeleteCard(am, { status: 'published', owner_id: 'x' })).toBe(false)
+    // the editor's own card — held or made — at any editing stage
+    expect(mayDeleteCard(ed, { status: 'draft_uploaded', owner_id: 'ed' })).toBe(true)
+    expect(mayDeleteCard(ed, { status: 'quality_check', owner_id: 'x', assigned_by: 'ed' })).toBe(true)
+    expect(mayDeleteCard(ed, { status: 'client_review', owner_id: 'ed' })).toBe(true)
+    // not somebody else's, not once handed to a scheduler, booked in or posted
+    expect(mayDeleteCard(ed, { status: 'draft_uploaded', owner_id: 'x' })).toBe(false)
+    expect(mayDeleteCard(ed, { status: 'approved_for_scheduling', owner_id: 'ed', scheduler_ids: ['sc'] })).toBe(false)
+    expect(mayDeleteCard(ed, { status: 'scheduled', owner_id: 'ed' })).toBe(false)
+    expect(mayDeleteCard(ed, { status: 'published', owner_id: 'ed' })).toBe(false)
+    expect(mayDeleteCard(sch, { status: 'draft_uploaded', owner_id: 'sc' })).toBe(false)
+    expect(mayDeleteCard(gen, { status: 'draft_uploaded', owner_id: 'g' })).toBe(false)
+    // the board and the server read the same rule
+    expect(readFileSync('app/dashboard/board/Board.tsx', 'utf8')).toContain('canDelete={mayDeleteCard(viewer, c as never)}')
+    const route = readFileSync('app/api/production/items/[id]/route.ts', 'utf8')
+    expect(route).toContain("if (!mayDeleteCard(user, item)) throw new AuthzError('Only a manager, or the editor who holds this card, can delete it', 403)")
+  })
+})

@@ -695,6 +695,26 @@ export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown
   return card.adhoc_post !== true && Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
 }
 
+/**
+ * WHO MAY DELETE A CARD (the owner, 21 Sep 2026: "as an editor or designer I
+ * should be able to delete a card"). A manager: any card not yet posted. An
+ * editor (a designer is an editor on a graphics card): a card they hold or
+ * made, while it is still theirs — not once it is handed to a scheduler,
+ * booked in or posted. The server reads this same rule, so nobody sees a
+ * button the server would refuse.
+ */
+export function mayDeleteCard(
+  viewer: { id: string; role: string },
+  card: { status?: unknown; owner_id?: unknown; assigned_by?: unknown; scheduler_ids?: unknown },
+): boolean {
+  const status = String(card.status ?? '')
+  if (viewer.role === 'account_manager' || viewer.role === 'super_admin') return status !== 'published'
+  if (viewer.role !== 'editor') return false
+  const mine = card.owner_id === viewer.id || card.assigned_by === viewer.id
+  const handed = Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
+  return mine && !handed && !['scheduled', 'published'].includes(status)
+}
+
 /** the chip: who it went to, when the names are known */
 export function handedToWords(card: { scheduler_ids?: unknown }, names: ReadonlyMap<string, string>): string {
   const ids = Array.isArray(card.scheduler_ids) ? card.scheduler_ids.map(String) : []

@@ -132,3 +132,17 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(bar).toContain("{roundLabel(r)}{r === rounds[0] ? ' · latest' : ''}")
   })
 })
+
+describe('a version counts a file once (18 Sep 2026)', () => {
+  it('a stale failed pull and the good one both carry the file — the good copy wins, counted once', async () => {
+    const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
+    const rows = [
+      { kind: 'item', scope_id: 'i', purpose: 'finished', status: 'failed', started_at: '1', folder_url: 'https://d/1', files: [{ id: 'a', name: 'a.mov', status: 'failed', version: 1 }] },
+      { kind: 'item', scope_id: 'i', purpose: 'finished', status: 'done', started_at: '2', folder_url: 'https://d/2', files: [{ id: 'a', name: 'a.mov', status: 'done', url: 'https://x/a', version: 1 }, { id: 'b', name: 'b.mov', status: 'done', url: 'https://x/b', version: 1 }] },
+    ]
+    const tabs = finishedVersionsOf(rows as never, { itemId: 'i', finishedFolderId: null, filesOf: r => (r as { files: { id: string; status: string; url?: string; version: number }[] }).files })
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0].files.map(f => f.id)).toEqual(['a', 'b'])
+    expect(tabs[0].files[0].status).toBe('done')
+  })
+})

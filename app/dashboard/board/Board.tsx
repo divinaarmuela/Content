@@ -11,7 +11,7 @@ import { EDITOR_TOUR, POST_APPROVAL_TOUR } from '../../lib/tour-core'
 import { BOARD_COLUMNS, type BoardColumnKey } from '../../lib/board-core'
 import {
   COLUMN_EMPTY, OLDER_POSTS_NOTE, SHOW_LABELS, applyShow, dropOnLane, groupByLane, isAssignedTo, isShowFilter,
-  laneOf, pageLanes, reachableLanes,
+  laneOf, mayDeleteCard, pageLanes, reachableLanes,
   type BoardPage, type BoardViewCard, type BoardViewer, type CardAction, type PageLaneKey, type ShowFilter,
 } from '../../lib/board-view-core'
 import { useTable } from '@/lib/db-client'
@@ -321,7 +321,7 @@ export function Board({
                 // the DELETE route is manager-only, so the menu entry is too —
                 // a person never sees a button the server would refuse
                 // …and never on a card the channel holds or has published
-                canDelete={isManager && c.status !== 'published'}
+                canDelete={mayDeleteCard(viewer, c as never)}
                 onDelete={setDeleteFor}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
