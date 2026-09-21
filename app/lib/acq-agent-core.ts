@@ -205,6 +205,7 @@ export type Research = {
 export const RESEARCH_SYSTEM =
   'You research a business for MD Media, a Melbourne marketing agency (content production, social media management, branding, paid ads, personal brands), before anyone contacts them. ' +
   'Use web search to find the business: its website, what it sells, where it is, who runs it, and the state of its website and social presence. Search the name, the Instagram handle, and the name with "Melbourne" or "Australia". ' +
+  'WHEN ALL YOU HAVE IS AN INSTAGRAM HANDLE: search for the profile address itself (instagram.com/<handle>) and for the handle in quotes — a search engine\'s result for an Instagram profile usually shows the display name, the bio and the link in the bio, which Instagram itself will not show a server. Follow that link: it is their site, or a link page that points to it. Then search the display name. A site GUESSED from the handle is given to you marked as a guess: use it only if its own text ties it to this account (the same name, the handle, a link back to the Instagram). ' +
   'Be strict about identity: many businesses share a name. Only report facts from pages that are clearly THIS business (the same handle, the same location, a link between them). If you cannot tell which one it is, say so and set found to false. ' +
   'Never invent a website, a person or a number. What you could not find, leave empty. ' +
   'Then say, for a marketing agency: what is weak or missing in how they present themselves (each a short phrase, only what you actually saw), and one audit angle — the single most useful thing to show them in a short audit video. ' +
@@ -238,6 +239,17 @@ export function researchPatch(p: { tier?: number | null; industry?: string | nul
   const tags = r.weaknesses.map(w => String(w).trim().slice(0, 60)).filter(Boolean).slice(0, 6)
   if (had.length === 0 && tags.length > 0) out.weakness_tags = tags
   return out
+}
+
+/**
+ * ONLY A HANDLE (the owner, 21 Sep 2026: "what if it's just the account handle"). A business's handle is very
+ * often its domain: @crestlineconsultants → crestlineconsultants.com.au. These are tried — a real page that
+ * answers is handed to the model AS A GUESS, to be used only if the page itself ties back to the account.
+ */
+export function sitesGuessedFromHandle(handle: string): string[] {
+  const h = handle.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (h.length < 4) return []
+  return [`https://${h}.com.au/`, `https://${h}.com/`, `https://www.${h}.com.au/`]
 }
 
 /** "1 Followers, 0 Following, 0 Posts - … from Crestline Consultants (@crestlineconsultants)" out of the page's preview tags */

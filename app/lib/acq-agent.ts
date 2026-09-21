@@ -12,7 +12,7 @@ import { encodeKey } from '@/lib/db'
 import { acqStageByKey, cleanHandle, replyPoints, type AcqEvent, type AcqEventKind, type Prospect } from './acquisition-core'
 import { logAcqEvent, recordCallBooked, recordReply } from './acquisition'
 import {
-  AGENT_SYSTEM, RESEARCH_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, pageTextFrom, publicMetaFrom, researchNote, researchPatch, researchPrompt, safePublicUrl, strangerIsLead, strangerLockKey, strangerPrompt,
+  AGENT_SYSTEM, RESEARCH_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, pageTextFrom, publicMetaFrom, researchNote, researchPatch, researchPrompt, safePublicUrl, sitesGuessedFromHandle, strangerIsLead, strangerLockKey, strangerPrompt,
   type AgentFinding, type Evidence, type Research, type StrangerVerdict,
 } from './acq-agent-core'
 import { peopleNamed, tellPeople } from './acquisition'
@@ -340,7 +340,16 @@ export async function researchProspect(p: P): Promise<ResearchRun> {
     const handle = (cleanHandle(String(p.instagram ?? '')) ?? '')
     const ig = handle ? await instagramPublicMeta(handle) : null
     const given = p.website ? await siteText(String(p.website)) : null
-    const brief = [researchPrompt(p), ig ? `INSTAGRAM SAYS (public page): ${ig}` : handle ? 'INSTAGRAM: the public page could not be read' : null, given ? `THEIR WEBSITE, READ JUST NOW (${p.website}):\n${given}` : null].filter(Boolean).join('\n')
+    // only a handle: its likeliest domains are tried, and what answers is handed over marked as a guess
+    let guessed: { url: string; text: string } | null = null
+    if (!p.website && handle) {
+      for (const url of sitesGuessedFromHandle(handle)) {
+        const text = await siteText(url)
+        if (text && text.length > 200) { guessed = { url, text }; break }
+      }
+    }
+    const brief = [researchPrompt(p), ig ? `INSTAGRAM SAYS (public page): ${ig}` : handle ? 'INSTAGRAM: the public page could not be read' : null, given ? `THEIR WEBSITE, READ JUST NOW (${p.website}):\n${given}` : null,
+      guessed ? `A SITE GUESSED FROM THE HANDLE — NOT CONFIRMED TO BE THEIRS (${guessed.url}). Use it only if its own text ties it to this Instagram account:\n${guessed.text}` : null].filter(Boolean).join('\n')
     // 1. LOOK IT UP — the model searches the web itself (Anthropic's server-side web search)
     let findings = ''
     try {

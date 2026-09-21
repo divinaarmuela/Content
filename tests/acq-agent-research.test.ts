@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { pageTextFrom, publicMetaFrom, researchNote, researchPatch, safePublicUrl, type Research } from '../app/lib/acq-agent-core'
+import { RESEARCH_SYSTEM, sitesGuessedFromHandle, pageTextFrom, publicMetaFrom, researchNote, researchPatch, safePublicUrl, type Research } from '../app/lib/acq-agent-core'
 
 const r = (over: Partial<Research> = {}): Research => ({
   found: true, summary: 'A Melbourne mortgage broker.', what_they_do: 'Home loans', industry: 'Finance', tier: 1, website: 'kodefinance.com.au',
@@ -47,5 +47,12 @@ describe('the agent researches the business (21 Sep 2026)', () => {
     expect(src).toContain("await inngest.send({ name: 'app/acquisition.research.requested', data: { prospect_id: made.id } })")
     expect(readFileSync('app/api/leads/acquisition/route.ts', 'utf8')).toContain("name: 'app/acquisition.research.requested', data: { prospect_id: prospect.id }")
     expect(readFileSync('app/inngest/functions.ts', 'utf8')).toContain("triggers: [{ event: 'app/acquisition.research.requested' }],")
+  })
+
+  it('only a handle: the profile address is searched for its bio and link, and the handle’s likeliest domains are tried as a GUESS', () => {
+    expect(sitesGuessedFromHandle('crestline.consultants_')).toEqual(['https://crestlineconsultants.com.au/', 'https://crestlineconsultants.com/', 'https://www.crestlineconsultants.com.au/'])
+    expect(sitesGuessedFromHandle('ab')).toEqual([])
+    expect(RESEARCH_SYSTEM).toContain('instagram.com/<handle>')
+    expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).toContain('A SITE GUESSED FROM THE HANDLE — NOT CONFIRMED TO BE THEIRS')
   })
 })
