@@ -306,9 +306,13 @@ function NavLinks({ nav, onNavigate, part }: {
           )
         }
         if (items.length === 0) return null
+        // the acquisition views held WITHOUT Leads (an account manager, the quality checker) are drawn
+        // under their own heading — a page someone may open has to be somewhere they can find it
+        const looseAcquisition = group.label === 'General' && !allowed.get('/dashboard/leads') && leadsChildren.length > 0
         return (
           <div key={group.label} className="contents">
             {groupLabel(group.label)}
+            {looseAcquisition && <div className="contents" data-nav="acquisition">{leadsChildren.map(c => link({ ...c, label: `Acquisition · ${c.label}` }))}</div>}
             {items.map(item => (
               <div key={item.href} className="contents">
                 {link(item)}

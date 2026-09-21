@@ -169,6 +169,11 @@ export default function TodosPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[14px] font-semibold ${done ? 'line-through' : ''}`}>{t.title}</span>
                           {t.client_id && clientNames.get(t.client_id) && <Chip tone="muted">{clientNames.get(t.client_id)}</Chip>}
+                          {/* an acquisition reminder opens the prospect it is about (21 Sep 2026) */}
+                          {(t as { prospect_id?: string | null }).prospect_id && (
+                            <a href={`/dashboard/leads/acquisition?prospect=${encodeURIComponent(String((t as { prospect_id?: string | null }).prospect_id))}`}
+                              className="inline-flex min-h-11 items-center text-[13px] font-semibold text-accent-blue-deep underline underline-offset-4">Open the prospect</a>
+                          )}
                           {due && !done && <Chip tone={g.key === 'overdue' ? 'red' : g.key === 'today' ? 'amber' : 'muted'}>{due}</Chip>}
                           {t.owner_id && (
                             <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground" title={names.get(t.owner_id) ?? ''}>

@@ -91,6 +91,73 @@ export async function onContentReady(actor: Actor, p: ProspectRow): Promise<void
   })
 }
 
+/** whose job the next thing is: the prospect's owner, else the named person, else whoever pressed */
+async function ownerOr(p: ProspectRow, firstName: string | null, actor: Actor): Promise<string> {
+  const own = (p as { owner_id?: string | null }).owner_id
+  if (own) return own
+  const named = firstName ? (await peopleNamed([firstName]))[0] : null
+  return named?.id ?? actor.id
+}
+const dayOf = (iso: string | number) => new Date(iso).toISOString().slice(0, 10)
+
+/**
+ * A CALL IS BOOKED (§12: "Update stage to Qualified / Call Booked. Create call
+ * reminder workflow and internal prep task"). One place, for a person's press,
+ * the app's own booking page and later any scanner: the line on the timeline
+ * (the blueprint's +30), the call's time, the stage — anything before
+ * Qualified moves there inside a claim, nothing is ever moved back — the
+ * no-response reminders stopped, a prep task for the day before and a
+ * reminder for the day itself.
+ */
+export async function recordCallBooked(actor: Actor, p: ProspectRow, when: string | null, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner' } = {}): Promise<ProspectEvent> {
+  const now = new Date().toISOString()
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'call_booked', by: opts.by ?? null, source: opts.source ?? 'person', detail })
+  const prospects = table<ProspectRow>('prospects')
+  let movedFrom: string | null = null
+  await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
+    const row = cur as (ProspectRow & Prospect) | null
+    if (!row) return null
+    const early = acqStageByKey(row.stage).n < acqStageByKey('qualified').n
+    movedFrom = early ? acqStageByKey(row.stage).label : null
+    return { ...row, call_at: when ?? row.call_at ?? null, replied_at: row.replied_at ?? now, ...(early ? { stage: 'qualified', stage_entered_at: now } : {}), updated_at: now }
+  }) as (c: ProspectRow | null) => ProspectRow | null)
+  if (movedFrom) await logAcqEvent({ prospectId: p.id, kind: 'stage', by: opts.by ?? null, source: 'system', detail: 'Moved to Qualified / Call booked — they booked the discovery call' })
+  try {
+    await onReply(actor, p, detail)
+    const owner = await ownerOr(p, 'Joy', actor)
+    const callDay = when && !Number.isNaN(Date.parse(when)) ? dayOf(when) : null
+    await makeTask(owner, actor.id, p, { title: `Prepare for the discovery call — ${p.business}`, note: 'Read the audit and what they have said so far. Know the business issue, the service they are likely to want and the questions that qualify them.', due_date: callDay ? dayOf(Date.parse(callDay) - 86_400_000) : dayOf(Date.now()) })
+    if (callDay) await makeTask(owner, actor.id, p, { title: `Discovery call today — ${p.business}`, note: `The call is booked for ${when}. When it is done, move the prospect to Discovery held and write what was said.`, due_date: callDay })
+  } catch (e) { console.error('[acquisition] the booked call’s prompts failed:', e) }
+  return event
+}
+
+/** THE CALL HAPPENED → "Request call summary. Prompt owner to select outcome: proposal, nurture, not fit or closed lost" (§12) */
+export async function onDiscoveryHeld(actor: Actor, p: ProspectRow): Promise<void> {
+  await makeTask(await ownerOr(p, null, actor), actor.id, p, { title: `Call summary and outcome — ${p.business}`, note: 'Write the call notes on the prospect (service fit, budget fit, next step), then choose the outcome: send a proposal, keep nurturing (Not now), not a fit or closed lost (Dormant).', due_date: dayOf(Date.now() + 86_400_000) })
+}
+
+/** PROPOSAL SENT → "Create proposal follow-up task. Track proposal link and due date" (§12) */
+export async function onProposalSent(actor: Actor, p: ProspectRow): Promise<void> {
+  await makeTask(await ownerOr(p, null, actor), actor.id, p, { title: `Follow up the proposal — ${p.business}`, note: `${(p as { proposal_url?: string | null }).proposal_url ? `The proposal: ${(p as { proposal_url?: string | null }).proposal_url}. ` : ''}Check they have read it and answer what they ask. You write it; this is only the reminder.`, due_date: dayOf(Date.now() + 3 * 86_400_000) })
+}
+
+/** DEPOSIT INVOICE SENT → "Track payment status" (§12): a person checks until the scanner can */
+export async function onDepositSent(actor: Actor, p: ProspectRow): Promise<void> {
+  await makeTask(await ownerOr(p, null, actor), actor.id, p, { title: `Has the deposit been paid? — ${p.business}`, note: `${(p as { invoice_ref?: string | null }).invoice_ref ? `Invoice ${(p as { invoice_ref?: string | null }).invoice_ref}. ` : ''}When the payment is confirmed, move the prospect to Deposit paid.`, due_date: dayOf(Date.now() + 7 * 86_400_000) })
+}
+
+/** CONTRACT SIGNED → HANDOFF: "Create delivery onboarding task and link to delivery dashboard" (§12) */
+export async function onHandoff(actor: Actor, p: ProspectRow, clientId: string | null): Promise<void> {
+  const owner = await ownerOr(p, null, actor)
+  await makeTask(owner, actor.id, p, { title: `Onboard the new client — ${p.business}`, note: `${clientId ? `The client: ${DASHBOARD_URL}/dashboard/clients/${clientId}. ` : ''}Name the account manager, send the intake form, set the service package and plan the first shoot brief.`, due_date: dayOf(Date.now() + 2 * 86_400_000) })
+  const managers = await table<TeamUser>('team_users').list({ where: u => u.active_status !== false && u.role === 'super_admin' })
+  await tellPeople(managers, actor, p, {
+    event: 'acq_handoff', subject: `New client signed: ${p.business}`, button: 'Open the prospect',
+    html: `<p><strong>${escapeHtml(p.business)}</strong> signed and is now a client in the dashboard.</p><p><strong>What happens next:</strong> name the account manager, send the intake form and plan the first shoot brief.</p>`,
+  })
+}
+
 /** OUTREACH SENT → the Day 1, 3, 5, 7, 14 and 21 reminders (§8, §12) */
 export async function onOutreachSent(actor: Actor, p: ProspectRow): Promise<void> {
   const row = p as ProspectRow & { outreach_at?: string | null; owner_id?: string | null; outreach_by?: string | null }
@@ -105,9 +172,9 @@ export async function onOutreachSent(actor: Actor, p: ProspectRow): Promise<void
  * booked"). The surest source is the app's own booking page: a booking whose
  * customer email is a prospect's is that prospect's discovery call — no
  * reading of subject lines, no guess. It goes on the timeline as the
- * blueprint's +30, the call's time is kept if none was, the no-response
- * reminders stop (a booking IS a response), and the owner is told. The stage
- * is left for a person: the scanner never moves a prospect past Engaged.
+ * blueprint's +30 and everything §12 asks of a booked call (recordCallBooked):
+ * the stage moves to Qualified / Call booked, the reminders stop, the prep
+ * task and the call-day reminder are made.
  * One booking is one line — locked on the booking's id. Never throws: a
  * booking must not fail because the acquisition board could not be told.
  */
@@ -122,17 +189,9 @@ export async function onBookingMade(booking: { id: string; customer_email?: stri
     const lock = await takeClaimLock(`acq_booking__${booking.id}`, p.id)
     if (!lock.ok) return
     const when = booking.start_at ?? null
-    await logAcqEvent({
-      prospectId: p.id, kind: 'call_booked', source: 'scanner',
-      detail: `Booked through the booking page by ${booking.customer_name || email}${when ? ` for ${when}` : ''}${known.by === 'domain' ? ' (matched on the business’s domain)' : ''}`,
-    })
-    const now = new Date().toISOString()
-    await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
-      const row = cur as (ProspectRow & Prospect) | null
-      if (!row) return null
-      return { ...row, call_at: row.call_at ?? when, replied_at: row.replied_at ?? now, updated_at: now }
-    }) as (c: ProspectRow | null) => ProspectRow | null)
-    await onReply({ id: 'scanner', name: 'Booking page' }, p, `They booked a call${when ? ` for ${when}` : ''}.`)
+    await recordCallBooked({ id: 'scanner', name: 'Booking page' }, p,
+      when, `Booked through the booking page by ${booking.customer_name || email}${when ? ` for ${when}` : ''}${known.by === 'domain' ? ' (matched on the business’s domain)' : ''}`,
+      { source: 'scanner' })
   } catch (e) {
     console.error('[acquisition] a booking could not be put on the prospect:', e)
   }

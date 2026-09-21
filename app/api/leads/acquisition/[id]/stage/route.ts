@@ -6,7 +6,7 @@ import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import {
   acqMoveRefusal, acqMoveStamps, acqStageByKey, eventForMove, nextAcqStage, previousAcqStage, type AcqStageKey, type Prospect,
 } from '../../../../../lib/acquisition-core'
-import { logAcqEvent, onOutreachSent, onReadyForContent } from '../../../../../lib/acquisition'
+import { logAcqEvent, onDepositSent, onDiscoveryHeld, onHandoff, onOutreachSent, onProposalSent, onReadyForContent } from '../../../../../lib/acquisition'
 
 /**
  * A PROSPECT MOVES (the acquisition blueprint, 21 Sep 2026). Forward one
@@ -83,6 +83,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         try {
           if (action === 'move' && moved === 'content') await onReadyForContent(user, row)
           if (action === 'move' && moved === 'outreach') await onOutreachSent(user, row)
+          if (action === 'move' && moved === 'discovery') await onDiscoveryHeld(user, row)
+          if (action === 'move' && moved === 'proposal') await onProposalSent(user, row)
+          if (action === 'move' && moved === 'deposit_sent') await onDepositSent(user, row)
+          if (action === 'move' && moved === 'handoff') await onHandoff(user, row, (row as { client_id?: string | null }).client_id ?? null)
         } catch (e) { console.error('[acquisition] the move’s prompts failed:', e) }
       }
       return NextResponse.json({ prospect: row })

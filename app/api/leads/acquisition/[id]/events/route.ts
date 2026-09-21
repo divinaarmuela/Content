@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Prospect as ProspectRow } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
 import { LOGGABLE_KINDS, isAcqEventKind, type Prospect } from '../../../../../lib/acquisition-core'
-import { logAcqEvent, onContentReady, onReply, recordReply } from '../../../../../lib/acquisition'
+import { logAcqEvent, onContentReady, onReply, recordCallBooked, recordReply } from '../../../../../lib/acquisition'
 
 /**
  * SOMETHING HAPPENED (the acquisition blueprint, 21 Sep 2026): a person logs
@@ -37,6 +37,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // a reply is recorded in one place (acquisition.ts), the scanner's the same as a person's
       const event = kind === 'reply'
         ? await recordReply(user, p, detail, { by: user.id })
+        : kind === 'call_booked'
+        ? await recordCallBooked(user, p, (p as { call_at?: string | null }).call_at ?? null, detail, { by: user.id })
         : await logAcqEvent({ prospectId: id, kind, by: user.id, detail })
 
       if (kind === 'content_ready') {

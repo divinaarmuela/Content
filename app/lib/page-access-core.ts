@@ -119,11 +119,18 @@ const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/todos', '/
  * workflow-core, and the item page opens for any team member who is sent a
  * link to it.
  */
+export const isAcquisitionPage = (href: string): boolean => href === '/dashboard/leads/acquisition' || href.startsWith('/dashboard/leads/acquisition/')
+
 export function defaultAllows(role: Role | null, href: string): boolean {
   if (role === null) return false             // unknown identity — show nothing yet
   if (role === 'client') return false
   // a grant-only page is never default, however senior the role
   if (GRANT_ONLY_PAGES.has(href)) return false
+  // THE ACQUISITION VIEWS ARE THEIR WORKERS' OWN (21 Sep 2026). They sit under Leads in the sidebar, but
+  // the blueprint's four are Manal (an account manager), Joy (the quality checker), Divina and Martin — and
+  // the first two do not hold Leads, so step 1 and step 3 had nobody who could open them. Acquisition work
+  // is not the inbound leads inbox: these roles get the four views, and still not Leads itself.
+  if (isAcquisitionPage(href)) return ['super_admin', 'account_manager', 'quality_checker'].includes(role)
   // a Social child is nobody's default but the scheduler's Schedule and
   // Posts: everyone else reaches the children THROUGH Social (canSeePage
   // falls back to the parent), so hiding Social hides all of it in one move

@@ -12,14 +12,14 @@ import { Lock, RefreshCw } from 'lucide-react'
 import { useRole } from './useRole'
 import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
-import Shell, { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS } from './ui/Shell'
+import Shell, { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_LEADS_CHILDREN, NAV_TOOLS } from './ui/Shell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
 import { shouldOpenTutorial } from '@/app/lib/tutorial-core'
 
 // the shell's markup lives in ./ui/Shell; the nav data and the active-entry
 // rule live there with it, and are re-exported here for anything that used to
 // import them from the layout
-export { activeNavHref, NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS, PAGE_TITLES } from './ui/Shell'
+export { activeNavHref, NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_LEADS_CHILDREN, NAV_TOOLS, PAGE_TITLES } from './ui/Shell'
 
 /** Dashboard-scoped dark mode: toggles .dark on <html> so Radix portals get
  *  the dark tokens too, persists to localStorage, and cleans up on unmount so
@@ -151,7 +151,8 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     // Social's permission for any of them, and a scheduler holds Schedule
     // on its own without holding Social — so the check has to be asked
     // about the child, not its parent.
-    const all = [...NAV_MAIN, ...NAV_SOCIAL_CHILDREN, ...NAV_TOOLS]
+    // …and so do the acquisition views: an account manager holds them without holding Leads (21 Sep 2026)
+    const all = [...NAV_MAIN, ...NAV_SOCIAL_CHILDREN, ...NAV_LEADS_CHILDREN, ...NAV_TOOLS]
     const exact = all.find(i => i.href === path)
     if (exact) return exact.href
     const nested = all

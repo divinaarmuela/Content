@@ -142,13 +142,36 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
     expect(readFileSync('app/lib/pipeline-core.ts', 'utf8')).toContain("| 'walkthrough'  // 5. Walkthrough held")
   })
 
-  it('a booking on the app’s own booking page by a prospect is their discovery call: one line per booking, the stage left to a person', () => {
+  it('a booking on the app’s own booking page by a prospect is their discovery call: one line per booking, moved to Qualified / Call booked as §12 asks', () => {
     const src = readFileSync('app/lib/acquisition.ts', 'utf8')
     expect(src).toContain('const lock = await takeClaimLock(`acq_booking__${booking.id}`, p.id)')
-    expect(src).toContain("prospectId: p.id, kind: 'call_booked', source: 'scanner',")
-    expect(src).toContain('call_at: row.call_at ?? when')
+    expect(src).toContain("await recordCallBooked({ id: 'scanner', name: 'Booking page' }, p,")
+    expect(src).toContain("...(early ? { stage: 'qualified', stage_entered_at: now } : {})")
     // the booking is written first and never fails because of the board
     const booking = readFileSync('app/lib/booking.ts', 'utf8')
     expect(booking).toContain("await import('./acquisition').then(m => m.onBookingMade(made)).catch(() => {})")
+  })
+
+  it('the people the blueprint names can open it: Manal (account manager) and Joy (quality checker) hold the four views without holding Leads', () => {
+    for (const href of ['/dashboard/leads/acquisition', '/dashboard/leads/acquisition/targets', '/dashboard/leads/acquisition/contacts', '/dashboard/leads/acquisition/reporting']) {
+      expect(canSeePage('account_manager', href, [])).toBe(true)
+      expect(canSeePage('quality_checker', href, [])).toBe(true)
+      expect(canSeePage('editor', href, [])).toBe(false)
+      expect(canSeePage('client', href, [])).toBe(false)
+    }
+    expect(canSeePage('account_manager', '/dashboard/leads', [])).toBe(false)
+    expect(canSeePage('quality_checker', '/dashboard/leads', [])).toBe(false)
+    // the door asks about the acquisition page itself, not Leads; the sidebar draws the views on their own when Leads is not held
+    expect(readFileSync('app/dashboard/layout.tsx', 'utf8')).toContain('const all = [...NAV_MAIN, ...NAV_SOCIAL_CHILDREN, ...NAV_LEADS_CHILDREN, ...NAV_TOOLS]')
+    expect(readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')).toContain("const looseAcquisition = group.label === 'General' && !allowed.get('/dashboard/leads') && leadsChildren.length > 0")
+  })
+
+  it('every row of the blueprint’s §12 has its prompt: the booked call, the held call, the proposal, the deposit, the handoff', () => {
+    const stage = readFileSync('app/api/leads/acquisition/[id]/stage/route.ts', 'utf8')
+    for (const [to, fn] of [['discovery', 'onDiscoveryHeld'], ['proposal', 'onProposalSent'], ['deposit_sent', 'onDepositSent']]) expect(stage).toContain(`if (action === 'move' && moved === '${to}') await ${fn}(user, row)`)
+    expect(stage).toContain("if (action === 'move' && moved === 'handoff') await onHandoff(user, row,")
+    expect(readFileSync('app/api/leads/acquisition/[id]/events/route.ts', 'utf8')).toContain("? await recordCallBooked(user, p, (p as { call_at?: string | null }).call_at ?? null, detail, { by: user.id })")
+    // a reminder on To-dos opens the prospect it is about
+    expect(readFileSync('app/dashboard/todos/page.tsx', 'utf8')).toContain('/dashboard/leads/acquisition?prospect=')
   })
 })
