@@ -168,10 +168,7 @@ export default function BriefCanvas({
   const paint = useCallback(() => {
     const { x, y, s } = camRef.current
     if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`
-    if (viewportRef.current) {
-      viewportRef.current.style.backgroundPosition = `${x}px ${y}px`
-      viewportRef.current.style.backgroundSize = `${24 * s}px ${24 * s}px`
-    }
+    // no dot grid behind the cards (the owner, 21 Sep 2026: "remove the dots") — a plain surface
   }, [])
 
   const commitCamera = useCallback(() => {
@@ -1300,8 +1297,6 @@ export default function BriefCanvas({
         style={{
           touchAction: 'none',
           overscrollBehavior: 'contain',
-          backgroundImage: 'radial-gradient(circle, rgba(113,113,122,0.25) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
         }}
         // THE BROWSER MUST NOT SCROLL THIS BOX (Karly, 16 Sep 2026: "the text is
         // disappearing and the toolbar disappears when I click into the notes
