@@ -676,6 +676,9 @@ const GHOST_COLUMNS = {
     //     2026, the Designer page): the files uploaded onto the card, each with
     //     the round it arrived in. Rules in app/lib/final-files-core.ts.
     ['final_files', col('unknown', true, true)],
+    //   content_items.change_assets — WHICH ASSETS THE LAST SEND-BACK ASKED TO HAVE CHANGED (22 Sep 2026;
+    //   final-files-core.ts): asset ids. Empty = the whole card. Written by every send-back.
+    ['change_assets', col('unknown', true, true)],
     //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
     //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
     ['share_token', col('string', true)],

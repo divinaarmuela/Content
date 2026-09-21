@@ -19,7 +19,9 @@ import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
-import { finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, withFinalFiles, withoutFinalFile } from '../../lib/final-files-core'
+import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, stillToReplace, withFinalFiles, withReplacement, withoutFinalFile } from '../../lib/final-files-core'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { handInRound, roundLabel } from '../../lib/edit-round-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
@@ -249,6 +251,30 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       if (uploadInput.current) uploadInput.current.value = ''
     }
   }
+  // THE UPLOAD POPUP (the owner, 22 Sep 2026: "when uploading version 1, a popup — upload the file instead of
+  // a Drive link"): pick, see what was picked, upload. The files land on the card, each one its own asset.
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [queued, setQueued] = useState<File[]>([])
+  const [linkMode, setLinkMode] = useState(false)
+  // ONE ASSET REPLACED IN PLACE: the new file takes the asset's slot as the next version; the rest are untouched
+  const replaceInput = useRef<HTMLInputElement | null>(null)
+  const [replacing, setReplacing] = useState<string | null>(null)
+  const replaceAsset = async (assetId: string, file: File | undefined) => {
+    if (!item || !file) return
+    setUploading(`Uploading the new ${file.name}`)
+    try {
+      const [landed] = await uploadFiles([file], { purpose: 'social' }).done
+      if (!landed) throw new Error('The upload did not finish')
+      const next = withReplacement(finalFilesOf(item as never), assetId, { name: file.name, url: landed.url, mime: file.type, size: file.size }, handInRound(item as never), me?.id ?? null, new Date().toISOString())
+      const ok = await post(`/api/production/items/${id}`, { final_files: next }, `Replaced — ${roundLabel(handInRound(item as never))} of ${file.name}`, 'Saving the new version', 'PATCH')
+      if (!ok) throw new Error('Could not save the new version')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(null); setReplacing(null)
+      if (replaceInput.current) replaceInput.current.value = ''
+    }
+  }
   const removeFinalFile = async (fid: string) => {
     if (!item) return
     await post(`/api/production/items/${id}`, { final_files: withoutFinalFile(finalFilesOf(item as never), fid) }, 'Taken off', 'Removing the file', 'PATCH')
@@ -363,7 +389,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               {!hasFinishedWork(item as never) ? (
                 <Button className={primaryBtn} disabled={busy}
                   onClick={() => {
-                    if (filesCard) { uploadInput.current?.click(); return }
+                    if (filesCard) { setUploadOpen(true); return }
                     const box = document.getElementById('ed-source')
                     box?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     box?.focus()
@@ -538,31 +564,57 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(handInRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
-        {filesCard ? (
+        {filesCard && !linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
             {holder && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => uploadInput.current?.click()}>
-                  <Upload className="h-4 w-4" aria-hidden /> {uploading ?? `Upload the finished files — ${roundLabel(handInRound(item as never))}`}
+                <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)}>
+                  <Upload className="h-4 w-4" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload the finished files — ${roundLabel(handInRound(item as never))}` : 'Add another file')}
                 </Button>
-                <input ref={uploadInput} type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" aria-label="The finished files"
-                  onChange={e => { void addFinalFiles(Array.from(e.target.files ?? [])) }} />
-                <span className="text-[12px] text-muted-foreground">Pictures, PDFs or clips. After a send-back, the next upload is the next version.</span>
+                {currentFiles(item as never).length === 0 && !finishedUrl && (
+                  <button type="button" onClick={() => setLinkMode(true)} className="min-h-11 text-[12px] text-muted-foreground underline underline-offset-4">A file over 5GB? Hand in a Drive link instead</button>
+                )}
               </div>
             )}
-            {finalFilesForRound(item as never, handInRound(item as never)).length === 0
+            {stillToReplace(item as never).length > 0 && (
+              <p role="status" className="rounded-inner bg-tint-amber p-2.5 text-[13px] font-semibold">
+                {stillToReplace(item as never).length} {stillToReplace(item as never).length === 1 ? 'file needs' : 'files need'} a new version before this can go back. The others stay as they are.
+              </p>
+            )}
+            {currentFiles(item as never).length === 0
               ? <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing handed in for ${roundLabel(handInRound(item as never))} yet.`}</p>
               : (
                 <ul className="flex flex-col divide-y divide-border" aria-label="The finished files">
-                  {finalFilesForRound(item as never, handInRound(item as never)).map(f => (
-                    <li key={f.id} className="flex min-h-11 items-center gap-2 text-[13px]">
-                      <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
-                      <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
-                      {holder && !frozen && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
-                    </li>
-                  ))}
+                  {currentFiles(item as never).map(f => {
+                    const a = assetIdOf(f)
+                    const waiting = stillToReplace(item as never).includes(a)
+                    const okByClient = clipApprovalsOf(item as never).some(x => x.file_id === f.id)
+                    const earlier = assetHistory(item as never, a).filter(x => x.id !== f.id)
+                    return (
+                      <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a}>
+                        <div className="flex min-h-11 flex-wrap items-center gap-2">
+                          <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
+                          <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
+                          <span className="shrink-0 text-[12px] text-muted-foreground">{roundLabel(f.version)}</span>
+                          {waiting && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
+                          {okByClient && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold">Approved by the client</span>}
+                          {holder && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (
+                            <Button variant="outline" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }} className="h-9 rounded-full px-3 text-[12px] font-semibold">
+                              {f.version === handInRound(item as never) ? 'Replace again' : `Replace — ${roundLabel(handInRound(item as never))}`}
+                            </Button>
+                          )}
+                          {holder && !frozen && earlier.length === 0 && f.version === handInRound(item as never) && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
+                        </div>
+                        {earlier.length > 0 && (
+                          <p className="pl-1 text-[12px] text-muted-foreground">Earlier: {earlier.map(x => <a key={x.id} href={x.url} target="_blank" rel="noreferrer noopener" className="mr-2 underline underline-offset-4">{roundLabel(x.version)} — {x.name}</a>)}</p>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
+            <input ref={replaceInput} type="file" accept="image/*,video/*,application/pdf" className="hidden" aria-label="The new version of this file"
+              onChange={e => { if (replacing) void replaceAsset(replacing, e.target.files?.[0]) }} />
           </div>
         ) : holder && !frozen ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -718,6 +770,43 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         )}
       </section>
       </div>
+
+      <Dialog open={uploadOpen} onOpenChange={o => { if (!o && uploading === null) { setUploadOpen(false); setQueued([]) } }}>
+        <DialogContent className="bg-popover sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload the finished files — {item ? roundLabel(handInRound(item as never)) : ''}</DialogTitle>
+            <DialogDescription>
+              The clips, pictures or PDFs themselves, not a link. Each file is its own piece: if one needs changing later, only that one is replaced and the rest stay as they are. Up to 5GB a file.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-inner border border-dashed border-border bg-surface p-4 text-center text-[14px] hover:bg-muted"
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); setQueued(q => [...q, ...Array.from(e.dataTransfer.files ?? [])]) }}>
+            <Upload className="h-5 w-5" aria-hidden />
+            <span className="font-semibold">Choose files, or drop them here</span>
+            <input ref={uploadInput} type="file" multiple accept="image/*,video/*,application/pdf" className="sr-only" aria-label="The finished files"
+              onChange={e => { const picked = Array.from(e.target.files ?? []); setQueued(q => [...q, ...picked]) }} />
+          </label>
+          {queued.length > 0 && (
+            <ul className="flex max-h-48 flex-col divide-y divide-border overflow-y-auto text-[13px]" aria-label="Files to upload">
+              {queued.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex min-h-11 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate" title={f.name}>{f.name}</span>
+                  <span className="shrink-0 text-[12px] text-muted-foreground">{(f.size / 1_048_576).toFixed(f.size > 104_857_600 ? 0 : 1)} MB</span>
+                  <button type="button" disabled={uploading !== null} onClick={() => setQueued(q => q.filter((_, k) => k !== i))} aria-label={`Take ${f.name} out`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={uploading !== null} onClick={() => { setUploadOpen(false); setQueued([]) }} className={outlineBtn}>Cancel</Button>
+            <Button disabled={queued.length === 0 || uploading !== null} className={primaryBtn}
+              onClick={async () => { await addFinalFiles(queued); setQueued([]); setUploadOpen(false) }}>
+              {uploading ?? `Upload ${queued.length || ''} ${queued.length === 1 ? 'file' : 'files'}`.replace('  ', ' ')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

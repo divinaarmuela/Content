@@ -26,7 +26,6 @@ import { HandToDialog } from '../../board/BoardDialogs'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
-import { handsInFiles } from '../../../lib/final-files-core'
 import { useEffect, useState } from 'react'
 
 /**
@@ -191,7 +190,8 @@ export default function EditorCardPage() {
   const { row: client } = useRow<Client>('clients', item?.client_id ?? null)
   // a designer's card (17 Sep 2026): files both ways, never a Drive link
   const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
-  const filesOnly = !!item && handsInFiles({ ...item, work_kinds: kind } as never)
+  // files are everybody's hand-in now (22 Sep 2026), so this asks the narrower thing: is it a designer's card
+  const filesOnly = !!item && (kind as { slug?: string } | null)?.slug === 'graphics'
   const back = () => router.push('/dashboard/editor')
 
   if (loading) {

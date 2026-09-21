@@ -39,7 +39,11 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     expect(sanitiseFinalFiles('nope', {}, null, 'now')).toMatchObject({ ok: false })
     expect(handsInFiles({ work_kinds: { slug: 'graphics' } })).toBe(true)
     expect(handsInFiles({ work_kinds: { slug: 'edit' }, final_files: [a] })).toBe(true)
-    expect(handsInFiles({ work_kinds: { slug: 'edit' } })).toBe(false)
+    // FILES ARE EVERYBODY'S HAND-IN NOW (the owner, 22 Sep 2026): a video card with nothing on it uploads files;
+    // only a card ALREADY handed in by link, and not sent back, stays on its link for that round
+    expect(handsInFiles({ work_kinds: { slug: 'edit' } })).toBe(true)
+    expect(handsInFiles({ work_kinds: { slug: 'edit' }, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true, status: 'quality_check' })).toBe(false)
+    expect(handsInFiles({ work_kinds: { slug: 'edit' }, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true, status: 'revision_required' })).toBe(true)
   })
   it('every place that asks “is there a finished edit?” asks about files too', () => {
     expect(src('app/lib/board-view-core.ts')).toContain('!hasFinishedWork(card as never)')

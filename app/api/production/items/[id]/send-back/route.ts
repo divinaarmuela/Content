@@ -13,6 +13,7 @@ import { actingRoles, itemPath, STATUS_LABELS, type ItemStatus } from '../../../
 import { canMoveTo, columnOf } from '../../../../../lib/board-core'
 import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
+import { assetIdOf, currentFiles, sanitiseChangeAssets } from '../../../../../lib/final-files-core'
 
 
 /**
@@ -51,7 +52,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const item = await loadItemForUser(user, id)
     const body = await req.json().catch(() => ({}))
-    const note = String(body?.note ?? '').replace(/\r\n/g, '\n').trim().slice(0, 4000)
+    // WHICH ASSETS (22 Sep 2026; final-files-core.ts): "2 get approved, 1 needs changing, so 1 gets sent back".
+    // Each named asset may carry its own words; together they are the note when no general one was typed.
+    const asked = (Array.isArray(body?.assets) ? body.assets : []) as { asset_id?: unknown; note?: unknown }[]
+    const named = sanitiseChangeAssets(asked.map(a => a?.asset_id), item as never)
+    const files = new Map(currentFiles(item as never).map(f => [assetIdOf(f), f]))
+    const perAsset = named.map(a => ({ asset: a, file: files.get(a)!, words: String(asked.find(x => x?.asset_id === a)?.note ?? '').replace(/\r\n/g, '\n').trim().slice(0, 2000) }))
+    const typed = String(body?.note ?? '').replace(/\r\n/g, '\n').trim().slice(0, 4000)
+    const note = (typed || perAsset.filter(a => a.words).map(a => `${a.file.name}: ${a.words}`).join('\n') || (named.length ? `Change ${perAsset.map(a => a.file.name).join(', ')}` : '')).slice(0, 4000)
     if (!note) return NextResponse.json({ error: 'Say what needs changing first' }, { status: 400 })
 
     const hats = actingRoles({ id: user.id, role: user.role }, item)
@@ -97,6 +105,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const now = new Date().toISOString()
     await table<ContentItem>('content_items').update(id, {
       change_note: note, change_note_by: user.id, change_note_at: now,
+      // always written, so a later whole-card send-back clears an earlier one's names
+      change_assets: named,
       // whoever was asked to look at this has been answered — by this send
       // back. It leaves their Overviews in the same write as the words
       // landing on the card, not in a second round trip that could fail.
@@ -113,6 +123,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
     } catch (e) {
       console.error('send-back: could not write the note to the thread', e instanceof Error ? e.message : e)
+    }
+    // …and each asset's words ON THAT ASSET, where the editor opens the clip and reads them beside it
+    for (const a of perAsset.filter(x => x.words)) {
+      try {
+        await table('item_comments').insert({
+          item_id: id, author_id: user.id, visibility: 'internal', body: a.words,
+          assigned_to: ownerId, resolved: false, video_file_id: a.file.id, video_file_name: a.file.name,
+        })
+      } catch (e) { console.error('send-back: could not write an asset note', e instanceof Error ? e.message : e) }
     }
     await logActivity({
       actor: user, clientId: item.client_id,

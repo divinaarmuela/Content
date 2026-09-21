@@ -14,7 +14,7 @@
  * version tabs already draw, so no page learns a second kind of file.
  */
 import { finishedEditOf } from './card-link-core'
-import { fileRound, handInRound } from './edit-round-core'
+import { fileRound, handInRound, roundOf } from './edit-round-core'
 import { kindOf } from './files-core'
 
 export type FinalFile = {
@@ -27,6 +27,12 @@ export type FinalFile = {
   version: number
   uploaded_at: string
   by?: string | null
+  /** THE ASSET THIS FILE IS A VERSION OF (22 Sep 2026). The first upload of a piece IS its asset (no
+   *  asset_id: the file's own id stands). A replacement carries the asset's id, so "Clip 3, v1 → v2" is
+   *  a fact and not a guess from file names. */
+  asset_id?: string
+  /** the file this one took the place of */
+  replaces?: string | null
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -47,9 +53,16 @@ export function finalFilesForRound(item: { final_files?: unknown }, round: numbe
  * in for the round the card is on — after a send-back, that is the next
  * round, so last round's files do not count as this round's hand-in.
  */
-export function hasFinishedWork(item: { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; edit_round?: unknown; status?: unknown }): boolean {
-  if (finishedEditOf(item) !== null) return true
-  return finalFilesForRound(item, handInRound(item)).length > 0
+export function hasFinishedWork(item: { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; edit_round?: unknown; status?: unknown; change_assets?: unknown }): boolean {
+  const round = handInRound(item)
+  const sentBack = round !== roundOf(item)
+  // not sent back: a finished link, or any file handed in, is a finished piece
+  if (!sentBack) return finishedEditOf(item) !== null || currentFiles(item).length > 0
+  // SENT BACK: the next version is files. Named assets → every one of them replaced. None named (the
+  // whole card) → at least one new file for the round.
+  const named = changeAssetsOf(item)
+  if (named.length > 0 && currentFiles(item).length > 0) return stillToReplace(item).length === 0
+  return finalFilesForRound(item, round).length > 0
 }
 
 /** the id a fresh upload gets — stable, safe in a URL and a key */
@@ -96,12 +109,87 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       name, url, mime: String(x.mime ?? '').slice(0, 100) || (kindOf('', name) === 'image' ? 'image/*' : kindOf('', name) === 'video' ? 'video/*' : ''),
       size: typeof x.size === 'number' && x.size >= 0 ? x.size : null,
       version, uploaded_at: typeof x.uploaded_at === 'string' ? x.uploaded_at : now, by: typeof x.by === 'string' ? x.by : by,
+      ...(typeof x.asset_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.asset_id) ? { asset_id: x.asset_id } : {}),
+      ...(typeof x.replaces === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.replaces) ? { replaces: x.replaces } : {}),
     })
   }
   return { ok: true, files: out }
 }
 
-/** the kind of work whose hand-in is files: graphics */
-export function handsInFiles(item: { work_kinds?: { slug?: string | null } | null; final_files?: unknown }): boolean {
-  return item.work_kinds?.slug === 'graphics' || finalFilesOf(item).length > 0
+/**
+ * WHOSE HAND-IN IS FILES: everybody's now (the owner, 22 Sep 2026: "when uploading version 1, a popup —
+ * upload the file instead of a Drive link — and for new versions"). Files are what let one asset be
+ * replaced and the rest carried forward; a folder link is one lump. The one card that stays on its link
+ * is a card ALREADY handed in by link and not sent back: its round is a link round and nothing is taken
+ * from under it. Its next version, after a send-back, is files.
+ */
+export function handsInFiles(item: { work_kinds?: { slug?: string | null } | null; final_files?: unknown; link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; edit_round?: unknown; status?: unknown }): boolean {
+  if (item.work_kinds?.slug === 'graphics' || finalFilesOf(item).length > 0) return true
+  const onALinkRound = finishedEditOf(item) !== null && handInRound(item) === roundOf(item)
+  return !onALinkRound
+}
+
+/* ── ONE ASSET, ITS VERSIONS (22 Sep 2026) ─────────────────────────────────
+ * The owner: "lets say 2 get approved, 1 needs changing, so 1 gets sent back …
+ * we know which file was replaced, and on the client portal the old version
+ * with their comments and the new version near it." A card's files are a set
+ * of ASSETS; each asset is a line of versions. Replacing one asset leaves the
+ * others exactly as they were — their files, their comments, their approvals.
+ */
+export function assetIdOf(f: Pick<FinalFile, 'id' | 'asset_id'>): string {
+  return f.asset_id || f.id
+}
+
+/** the card as it stands: the newest file of every asset, in the order the assets first appeared */
+export function currentFiles(item: { final_files?: unknown }): FinalFile[] {
+  const latest = new Map<string, FinalFile>()
+  for (const f of finalFilesOf(item)) {
+    const a = assetIdOf(f), have = latest.get(a)
+    if (!have || f.version > have.version || (f.version === have.version && f.uploaded_at > have.uploaded_at)) latest.set(a, f)
+  }
+  const order = [...new Set(finalFilesOf(item).map(assetIdOf))]
+  return order.map(a => latest.get(a)!).filter(Boolean)
+}
+
+/** one asset's versions, oldest first */
+export function assetHistory(item: { final_files?: unknown }, assetId: string): FinalFile[] {
+  return finalFilesOf(item).filter(f => assetIdOf(f) === assetId).sort((a, b) => a.version - b.version || a.uploaded_at.localeCompare(b.uploaded_at))
+}
+
+/** which assets the last send-back asked to have changed; empty = the whole card */
+export function changeAssetsOf(item: { change_assets?: unknown }): string[] {
+  return Array.isArray(item.change_assets) ? item.change_assets.filter((x): x is string => typeof x === 'string' && x.length > 0) : []
+}
+
+/** the named assets still waiting for their new version */
+export function stillToReplace(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }): string[] {
+  const round = handInRound(item)
+  const current = new Map(currentFiles(item).map(f => [assetIdOf(f), f]))
+  return changeAssetsOf(item).filter(a => current.has(a) && current.get(a)!.version < round)
+}
+
+/** may this asset be replaced now: the card was sent back, and this asset was named (or none was) */
+export function mayReplaceAsset(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }, assetId: string): boolean {
+  if (handInRound(item) === roundOf(item)) return false
+  const named = changeAssetsOf(item)
+  return named.length === 0 || named.includes(assetId)
+}
+
+/**
+ * A NEW VERSION OF ONE ASSET. The new file carries the asset's id and points at the file it replaced.
+ * Replaced twice in the same round (the wrong export, then the right one): the round's file is swapped,
+ * not stacked — a version is a hand-in, not an attempt.
+ */
+export function withReplacement(list: readonly FinalFile[], assetId: string, added: { name: string; url: string; mime: string; size: number | null }, round: number, by: string | null, now: string): FinalFile[] {
+  const line = list.filter(f => assetIdOf(f) === assetId).sort((a, b) => a.version - b.version)
+  const latest = line[line.length - 1]
+  if (!latest) return [...list]
+  const fresh: FinalFile = { id: finalFileId(), name: added.name, url: added.url, mime: added.mime, size: added.size, version: round, uploaded_at: now, by, asset_id: assetId, replaces: latest.version === round ? latest.replaces ?? null : latest.id }
+  return latest.version === round ? list.map(f => (f.id === latest.id ? fresh : f)) : [...list, fresh]
+}
+
+/** what a send-back may name: asset ids that exist on the card, each once */
+export function sanitiseChangeAssets(raw: unknown, item: { final_files?: unknown }): string[] {
+  const known = new Set(currentFiles(item).map(assetIdOf))
+  return Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === 'string' && known.has(x)))] : []
 }

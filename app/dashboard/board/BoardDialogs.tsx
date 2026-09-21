@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { NETWORK_LABEL } from '../../lib/publish-core'
 import BrandCard from '../production/BrandCard'
 import { toast } from 'sonner'
@@ -33,6 +33,8 @@ import { friendlyError } from '../../lib/support-core'
 import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
 import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
+import { assetIdOf, currentFiles } from '../../lib/final-files-core'
+import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 
 /**
  * THE FEW THINGS A CARD ASKS FOR.
@@ -253,12 +255,25 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
     return () => { cancelled = true }
   }, [card, viewer.role])
 
+  // WHICH ASSETS NEED CHANGING (22 Sep 2026; final-files-core.ts). The card's files as they stand; the ones
+  // the client approved are shown approved and start unticked, the rest start ticked when anything was approved
+  const assets = useMemo(() => (card ? currentFiles(card as never) : []), [card])
+  const approved = useMemo(() => new Set(card ? clipApprovalsOf(card as never).map(a => a.file_id) : []), [card])
+  const [picked, setPicked] = useState<Record<string, string | undefined>>({})
+  useEffect(() => {
+    const someApproved = assets.some(f => approved.has(f.id))
+    setPicked(Object.fromEntries(assets.filter(f => someApproved && !approved.has(f.id)).map(f => [assetIdOf(f), ''])))
+  }, [assets, approved])
+  const named = Object.keys(picked).filter(k => picked[k] !== undefined)
+  const canSend = note.trim() !== '' || named.length > 0
+
   const send = async () => {
-    if (!card || !note.trim()) return
+    if (!card || !canSend) return
     setBusy(true)
     try {
       const res = await fetch(`/api/production/items/${card.id}/send-back`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note, assets: named.map(a => ({ asset_id: a, note: picked[a] ?? '' })) }),
       })
       if (!res.ok) throw new Error(await readError(res, 'Could not send it back'))
       const json = await res.json() as { notified?: { name: string } | null }
@@ -289,14 +304,35 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
             ))}
           </div>
         )}
+        {assets.length > 0 && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">Which ones need changing</legend>
+            <p className="text-[13px] text-muted-foreground">Only the ones you tick go back. The rest stay exactly as they are — their files, comments and approvals.</p>
+            <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+              {assets.map(f => {
+                const a = assetIdOf(f); const on = picked[a] !== undefined
+                return (
+                  <li key={a} className="flex flex-col gap-1.5 rounded-inner border border-border p-2.5">
+                    <label className="flex min-h-11 items-center gap-2.5 text-[14px]">
+                      <input type="checkbox" checked={on} className="h-5 w-5" onChange={e => setPicked(p => ({ ...p, [a]: e.target.checked ? '' : undefined }))} />
+                      <span className="min-w-0 flex-1 truncate font-semibold" title={f.name}>{f.name}</span>
+                      <span className="shrink-0 text-[12px] text-muted-foreground">Version {f.version}{approved.has(f.id) ? ' · approved by the client' : ''}</span>
+                    </label>
+                    {on && <Textarea value={picked[a] ?? ''} onChange={e => setPicked(p => ({ ...p, [a]: e.target.value }))} rows={2} placeholder={`What to change in ${f.name}`} aria-label={`What to change in ${f.name}`} className="rounded-inner border-border bg-surface" />}
+                  </li>
+                )
+              })}
+            </ul>
+          </fieldset>
+        )}
         <div className="flex flex-col gap-2">
-          <Label htmlFor="send-back-note">What needs changing</Label>
+          <Label htmlFor="send-back-note">{assets.length > 0 ? 'Anything about the whole piece (optional when you ticked some)' : 'What needs changing'}</Label>
           <Textarea id="send-back-note" value={note} onChange={e => setNote(e.target.value)}
             rows={4} autoFocus className="rounded-inner border-border bg-surface" />
         </div>
         <DialogFooter>
-          <Button disabled={busy || !note.trim()} onClick={send} className={primary}>
-            {busy ? 'Sending…' : 'Send back'}
+          <Button disabled={busy || !canSend} onClick={send} className={primary}>
+            {busy ? 'Sending…' : named.length > 0 ? `Send back ${named.length} of ${assets.length}` : 'Send back'}
           </Button>
         </DialogFooter>
       </DialogContent>

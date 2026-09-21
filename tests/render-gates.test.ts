@@ -219,7 +219,10 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // the owner: "why is there an add files feature in the editor card — it's just supposed to be a link"
     // …and a DESIGNER's card hands in files (17 Sep 2026): the upload sits behind the graphics kind, never on an editor's card
     expect(s).not.toMatch(/Or upload files/)
-    expect(s).toContain('{filesCard ? (')
+    // …and on 22 Sep 2026 the owner reversed the link-only card: "when uploading version 1, a popup — upload the
+    // file instead of a Drive link". The link is now the fallback for a file over 5GB, behind linkMode.
+    expect(s).toContain('{filesCard && !linkMode ? (')
+    expect(s).toContain('<Dialog open={uploadOpen}')
     expect(s).toContain("const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)")
     expect(s).toContain('const filesCard = item ? handsInFiles({ ...item, work_kinds: (item as { work_kinds?: { slug?: string } | null }).work_kinds ?? kind } as never) : false')
     expect(s).toContain("'Add the link to your finished edit first'")
