@@ -49,4 +49,13 @@ describe('the acquisition agent decides (21 Sep 2026)', () => {
     expect(answer).toContain('if (!cur || cur.prospect_id !== id || !isOpenFinding(cur)) return null')
     expect(readFileSync('app/inngest/functions.ts', 'utf8')).toContain("triggers: [{ cron: 'TZ=Australia/Melbourne */30 6-22 * * *' }, { event: 'app/acquisition.agent.requested' }],")
   })
+
+  it('NOTHING THE AGENT WRITES EVER REACHES A PROSPECT (the owner, 21 Sep 2026: "nothing should reply as an AI to the inboxes"): it reads, it never sends', () => {
+    for (const file of ['app/lib/acq-agent.ts', 'app/lib/acq-agent-core.ts']) {
+      const src = readFileSync(file, 'utf8')
+      for (const sender of ['sendConversationMessage', 'replyToComment', 'privateReply', 'sendMail', 'smtp', '/messages/send', 'gmail.send']) expect(src).not.toContain(sender)
+    }
+    // the only DM and comment senders in the app take a person's typed message from a request
+    expect(readFileSync('app/api/social/messages/route.ts', 'utf8')).toContain("const message = String(body.message ?? '').trim()")
+  })
 })
