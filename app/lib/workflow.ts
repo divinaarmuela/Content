@@ -925,6 +925,8 @@ export async function performTransition(
       status: to,
       ...asked,
       ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
+      // the version the client is being given now — the newest their link will ever show (editing-portal-core.ts)
+      ...(to === 'client_review' ? { client_round: roundOf(item as never) } : {}),
       ...(defaults.length > 0 ? { scheduler_ids: defaults } : {}),
       // ACCEPTED: the round that went through, stamped here because the
       // hand-over to a scheduler moves the status back to Draft for the

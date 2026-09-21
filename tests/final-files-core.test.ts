@@ -51,7 +51,7 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     expect(src('app/lib/workflow.ts')).toContain('const hasFiles = finalFilesForRound(item as never, handInRound(item as never)).length > 0')
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)}")
     expect(src('app/dashboard/board/FilesToWorkFrom.tsx')).toContain("purpose: 'finished', files: finalFilesAsPulls(item)")
-    expect(src('app/lib/editing-portal.ts')).toContain('const uploaded = finalFilesOf(item)')
+    expect(src('app/lib/editing-portal.ts')).toContain('const uploadedAll = finalFilesOf(item).filter(f => f.version <= seen)')
     expect(src('app/dashboard/designer/page.tsx')).toContain("(c.work_kinds?.slug ?? '') === 'graphics'")
   })
 })

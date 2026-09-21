@@ -679,6 +679,9 @@ const GHOST_COLUMNS = {
     //   content_items.change_assets — WHICH ASSETS THE LAST SEND-BACK ASKED TO HAVE CHANGED (22 Sep 2026;
     //   final-files-core.ts): asset ids. Empty = the whole card. Written by every send-back.
     ['change_assets', col('unknown', true, true)],
+    //   content_items.client_round — THE VERSION THE CLIENT WAS LAST GIVEN (22 Sep 2026): stamped each time
+    //   the card goes to With client. The portal never shows a newer one: a version still with the team.
+    ['client_round', col('number', true)],
     //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
     //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
     ['share_token', col('string', true)],

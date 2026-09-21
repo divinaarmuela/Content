@@ -125,7 +125,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(portal).toContain('version: fileRound(f), stream:')
     const c = src('app/components/portal/EditingReview.tsx')
     expect(c).toContain('const [round, setRound] = useState(data.rounds[0] ?? data.round)')
-    expect(c).toContain('const clips = useMemo(() => data.clips.filter(c => c.version === round), [data.clips, round])')
+    expect(c).toContain('const clips = useMemo(() => clipsAtRound(data.clips, round), [data.clips, round])')
     expect(c).toContain("{roundLabel(r)}{r === data.rounds[0] ? ' · latest' : ''}")
     const bar = src('app/dashboard/board/DrivePullBar.tsx')
     expect(bar).toContain('const shown = files.filter(f => fileRound(f) === shownRound)')

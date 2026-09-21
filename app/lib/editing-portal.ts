@@ -9,8 +9,8 @@ import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
 import { previewsFor } from './stream'
 import { streamBaseUrl } from './stream-core'
-import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip } from './editing-portal-core'
-import { finalFilesOf } from './final-files-core'
+import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound } from './editing-portal-core'
+import { finalFilesOf, assetIdOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
 import { fileRound, roundOf, roundsOf } from './edit-round-core'
@@ -42,7 +42,9 @@ export type EditingPortal = {
   am_name: string | null
   item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null }
   folder: { url: string; id: string }
-  clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null })[]
+  clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null; asset_id: string | null; carries: boolean })[]
+  /** the card is with the client now: they may approve. False while it is being revised — they may still comment */
+  can_approve: boolean
   /** the rounds the clips span, newest first — Version 2, Version 1 */
   rounds: number[]
   /** the card's current round */
@@ -97,10 +99,15 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   // storage plays from there — fast, and whatever Drive's sharing says today
   // FILES UPLOADED ONTO THE CARD come first (the Designer page, 17 Sep 2026):
   // pictures shown, clips played, each under the round it was handed in
-  const uploaded = finalFilesOf(item)
-  const pulled = uploaded.length > 0
-    ? uploaded.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const, version: f.version }))
-    : filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video')
+  // NEVER MORE THAN THE CLIENT WAS GIVEN (editing-portal-core.ts): a version still with the team is not theirs yet
+  const seen = clientSeenRound(item as never)
+  const uploadedAll = finalFilesOf(item).filter(f => f.version <= seen)
+  const assetOf = new Map(uploadedAll.map(f => [f.id, assetIdOf(f)]))
+  const upRounds = new Set(uploadedAll.map(f => f.version))
+  const uploaded = uploadedAll.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const, version: f.version }))
+  // A CARD THAT BEGAN AS A LINK AND WENT ON AS FILES keeps its link rounds: Version 1 from the folder, Version 2 uploaded
+  const fromLink = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video' && fileRound(f) <= seen && !upRounds.has(fileRound(f)))
+  const pulled = [...fromLink, ...uploaded]
   const round = roundOf(item)
   // the preview copies of the pulled clips, for the strip's stills and hover frames
   const videos = pulled.filter(f => kindOf(f.mime, f.name) === 'video')
@@ -110,9 +117,9 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
         const kind = kindOf(f.mime, f.name) === 'image' ? 'image' as const : 'video' as const
         const p = previews.get(f.url as string)
         const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-        return { id: f.id, name: f.name, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
+        return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
-    : clipsOf(listing.entries).map(c => ({ ...c, src: signedClipStream(owner.token, item.id, c), version: round, stream: null }))
+    : clipsOf(listing.entries).map(c => ({ ...c, asset_id: null, carries: false, src: signedClipStream(owner.token, item.id, c), version: Math.min(round, seen), stream: null }))
   const rounds = roundsOf(clips)
   return {
     token: owner.token,
@@ -126,6 +133,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
     },
     folder: { url: folder.url, id: folder.folderId },
     clips,
+    can_approve: clientMayApprove(item as never),
     rounds,
     round,
     folder_note: clips.length === 0

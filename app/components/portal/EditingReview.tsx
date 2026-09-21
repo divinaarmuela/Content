@@ -10,6 +10,7 @@ import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../
 import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
 import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
+import { assetLine, clipsAtRound } from '../../lib/editing-portal-core'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -37,10 +38,19 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   // VERSION 1, VERSION 2 (16 Sep 2026): the newest round opens; the pills
   // switch to an earlier one, whose clips keep their own comments and ticks
   const [round, setRound] = useState(data.rounds[0] ?? data.round)
-  const clips = useMemo(() => data.clips.filter(c => c.version === round), [data.clips, round])
+  // THE CARD AS IT STOOD AT THAT VERSION (22 Sep 2026; editing-portal-core.ts): the ones that were fine carried
+  // forward, the one that was replaced in its new version
+  const clips = useMemo(() => clipsAtRound(data.clips, round), [data.clips, round])
   const [current, setCurrent] = useState(0)
   useEffect(() => { setCurrent(0) }, [round])
-  const clip = clips[current] ?? null
+  const newest = clips[current] ?? null
+  // THE OLD VERSION, WITH ITS COMMENTS, BESIDE THE NEW ONE: a replaced piece has tabs; the comments shown are the
+  // ones written on the version being looked at, at the moments they were written about
+  const line = useMemo(() => (newest ? assetLine(data.clips, newest).filter(c => c.version <= round) : []), [data.clips, newest, round])
+  const [olderId, setOlderId] = useState<string | null>(null)
+  useEffect(() => { setOlderId(null) }, [current, round])
+  const clip = (olderId ? line.find(c => c.id === olderId) : null) ?? newest
+  const lookingBack = !!clip && !!newest && clip.id !== newest.id
   const [comments, setComments] = useState<EditingPortalComment[]>(data.comments)
   const [approvals, setApprovals] = useState<ClipApproval[]>(data.approvals)
   useEffect(() => { setComments(data.comments) }, [data.comments])
@@ -125,6 +135,25 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             ))}
           </div>
         )}
+        {!data.can_approve && (
+          <p role="status" className="rounded-xl border border-border bg-card p-3 text-[14px]">
+            <span className="font-semibold">The team is making changes. </span>
+            This is the version you were sent, with everything you said on it. You can still leave comments; the new version will appear here, on this same link, when it is ready for you.
+          </p>
+        )}
+        {line.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions of this piece">
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This piece</span>
+            {line.map(v => (
+              <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
+                {roundLabel(v.version)}{v.id === newest?.id ? ' · new' : ''}
+                {commentsOnClip(comments as never, v.id).length > 0 && <span className="rounded-full bg-black/15 px-1.5 text-[11px]">{commentsOnClip(comments as never, v.id).length}</span>}
+              </button>
+            ))}
+            {lookingBack && <span className="text-[12px] text-muted-foreground">The earlier version, with what was said on it. It was replaced by {roundLabel(newest!.version)}.</span>}
+          </div>
+        )}
         {clip ? (
           <>
             <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
@@ -162,7 +191,9 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
               </div>
-              {approved ? (
+              {lookingBack || !data.can_approve ? (
+                <span className="text-[13px] text-muted-foreground">{lookingBack ? 'An earlier version — approve the new one' : approved ? 'You approved this one' : 'Approve once the new version is with you'}</span>
+              ) : approved ? (
                 <button type="button" onClick={() => void approve(true)} disabled={approving}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-[14px] font-semibold text-black hover:bg-emerald-300 disabled:opacity-60"
                   title={`Approved by ${approved.by}, ${when(approved.at)} — press to take it back`}>

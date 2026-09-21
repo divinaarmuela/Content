@@ -8,6 +8,7 @@ import { editingPortalItem } from '../../../lib/editing-portal'
 import { isDriveId } from '../../../lib/files-core'
 import { clipApprovalsOf, requestOrigin, withClipApproved, withClipUnapproved } from '../../../lib/clip-approvals-core'
 import { reviewPath } from '../../../lib/video-review-core'
+import { clientMayApprove } from '../../../lib/editing-portal-core'
 
 /**
  * THE CLIENT APPROVES ONE CLIP (the owner, 16 Sep 2026: "each video for the
@@ -36,6 +37,9 @@ export async function POST(req: Request) {
     const found = await editingPortalItem(token, itemId)
     if (!found) return NextResponse.json({ error: 'Invalid link' }, { status: 401 })
     const { owner, item } = found
+    // THE LINK STAYS OPEN WHILE THE CARD IS BEING REVISED (22 Sep 2026) — to read and to comment. A tick is an
+    // answer to work that is WITH the client; while the team has it back there is nothing to approve yet.
+    if (decision === 'approve' && !clientMayApprove(item as never)) return NextResponse.json({ error: 'The team is making changes — you can approve once the new version is with you' }, { status: 409 })
     const client = owner.client
     const by = authorName || client.name
     const at = new Date().toISOString()
