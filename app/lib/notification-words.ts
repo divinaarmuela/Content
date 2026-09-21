@@ -104,8 +104,7 @@ export function notificationHref(entityType: string, entityId: string, role?: st
     case 'shoot_proposal': return '/dashboard/production/proposals'
     case 'client': return isUuid ? `/dashboard/clients/${id}` : '/dashboard/clients'
     case 'intake': return isUuid ? `/dashboard/clients/${id}/intake` : '/dashboard/clients'
-    case 'lead':
-    case 'prospect': return '/dashboard/leads'
+    case 'lead': return '/dashboard/leads'
     case 'booking': return '/dashboard/bookings'
     // a "reconnect" note opens the Schedule page, where the icon is (9 Sep 2026)
     case 'social_account': return String(entityId ?? '').includes('#health') ? '/dashboard/social/schedule' : (isUuid ? `/dashboard/social/${id}` : '/dashboard/social')

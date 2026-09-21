@@ -2,8 +2,8 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { DbError, table } from '@/lib/db'
-import type { Client, EmailIngestLog, Lead, ScanRun } from '@/lib/db-types'
+import { DbError, encodeKey, table } from '@/lib/db'
+import type { Client, EmailIngestLog, Lead, Prospect as ProspectRow, ScanRun } from '@/lib/db-types'
 import { announceAfter } from '@/lib/live'
 import { autoIngestLead } from './lead-enrichment'
 import { prefilterSkipReason } from './gmail-core'
@@ -17,6 +17,9 @@ import {
   FatalScanError, fatalApiReason, gmailQuery, blockedReason, type ScanSettings,
 } from './scan-core'
 import { getScanSettings, enabledMailboxEmails, listSelfConnectedMailboxes } from './scan-settings'
+import { prospectForSender, replyPoints } from './acquisition-core'
+import { recordReply } from './acquisition'
+import { takeClaimLock } from './claim-lock'
 
 export { FatalScanError, fatalApiReason }
 
@@ -86,6 +89,7 @@ export type ScanResult = {
 export type MessageOutcome =
   | 'already_processed'
   | 'existing_client'
+  | 'prospect_reply'
   | 'prefiltered'
   | 'not_a_lead'
   | 'duplicate_sender'
@@ -236,6 +240,8 @@ async function scanOneMailbox(
   // round-trips to answer the same question.
   const clientRows = await table<Client>('clients').list()
   const clientNames = clientRows.map(c => c.name).filter(Boolean)
+  // the acquisition system's prospects, once per scan for the same reason
+  const prospectRows = await table<ProspectRow>('prospects').list().catch(() => [] as ProspectRow[])
 
   const ids = await listRecentMessageIds(box, gmailQuery(settings), settings.max_messages)
   result.scanned += ids.length
@@ -286,6 +292,28 @@ async function scanOneMailbox(
           type: 'message', email: mailbox, outcome: 'prefiltered',
           subject: msg.subject, from: msg.fromEmail, reason: stop,
         })
+        continue
+      }
+
+      // 2b. A PROSPECT ANSWERED (21 Sep 2026). Mail from a business on the
+      //     acquisition board is a reply to outreach, whether this mailbox
+      //     was written to or only copied. It goes on the prospect's timeline
+      //     and never to the classifier: it is not a stranger's enquiry. One
+      //     email copied to two scanned mailboxes is one reply — the lock is
+      //     on the Message-ID, which every copy shares.
+      const known = prospectForSender(prospectRows, msg.fromEmail)
+      if (known) {
+        const p = known.prospect
+        const lock = await takeClaimLock(`acq_reply__${encodeKey(msg.messageId || id)}`, `${mailbox}:${id}`)
+        if (lock.ok) {
+          const said = `${msg.subject ? `“${msg.subject.slice(0, 160)}” — ` : ''}${msg.body.replace(/\s+/g, ' ').trim().slice(0, 400)}`
+          await recordReply({ id: 'scanner', name: 'Inbox scanner' }, p, `Email to ${mailbox} from ${msg.fromEmail}${known.by === 'domain' ? ' (matched on the business’s domain)' : ''}: ${said}`, {
+            source: 'scanner', points: replyPoints(p as { replied_at?: string | null }), at: msg.receivedAt ?? undefined,
+          })
+        }
+        await ingest.update(claimed.id, { status: 'skipped', reasoning: `Reply from ${p.business}, a prospect — on its acquisition timeline${lock.ok ? '' : ' (already recorded from another mailbox)'}` })
+        result.skipped++
+        emit({ type: 'message', email: mailbox, outcome: 'prospect_reply', subject: msg.subject, from: msg.fromEmail, reason: `${p.business} replied` })
         continue
       }
 

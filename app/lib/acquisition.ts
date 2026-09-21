@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
-import { ACQ_EVENT_KINDS, followUpTasks, type AcqEventKind, type Prospect } from './acquisition-core'
+import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, type AcqEventKind, type Prospect } from './acquisition-core'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 
@@ -97,6 +97,30 @@ export async function onOutreachSent(actor: Actor, p: ProspectRow): Promise<void
   for (const t of followUpTasks(p.business, String(row.outreach_at ?? new Date().toISOString()))) {
     await makeTask(owner, actor.id, p, { title: t.title, note: t.note, due_date: t.due_date })
   }
+}
+
+/**
+ * A REPLY, RECORDED — by a person's button or by the inbox scanner, the same
+ * way: the line on the timeline, the reply stamped once, an outreach-stage
+ * target moved into New lead / Engaged inside a claim (two reporters of one
+ * reply move it once), and the no-response reminders paused.
+ */
+export async function recordReply(actor: Actor, p: ProspectRow, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner'; points?: number; at?: string } = {}): Promise<ProspectEvent> {
+  const now = new Date().toISOString()
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'reply', by: opts.by ?? null, source: opts.source ?? 'person', detail, points: opts.points, at: opts.at })
+  const prospects = table<ProspectRow>('prospects')
+  const wasAtOutreach = acqStageByKey((p as ProspectRow & Prospect).stage).key === 'outreach'
+  const moved = await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
+    const row = cur as (ProspectRow & Prospect) | null
+    if (!row) return null
+    const atOutreach = acqStageByKey(row.stage).key === 'outreach'
+    return { ...row, replied_at: row.replied_at ?? opts.at ?? now, ...(atOutreach ? { stage: 'engaged', stage_entered_at: now } : {}), updated_at: now }
+  }) as (c: ProspectRow | null) => ProspectRow | null)
+  if (moved.claimed && wasAtOutreach) {
+    await logAcqEvent({ prospectId: p.id, kind: 'stage', by: opts.by ?? null, source: 'system', detail: 'Moved to New lead / Engaged — they replied' })
+  }
+  try { await onReply(actor, p, detail) } catch (e) { console.error('[acquisition] pausing the follow-ups failed:', e) }
+  return event
 }
 
 /** A REPLY → the no-response reminders stop (§12: "pause no-response follow-up tasks"), and the owner is told */

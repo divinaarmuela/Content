@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Prospect as ProspectRow } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../../lib/authz'
-import { LOGGABLE_KINDS, acqStageByKey, isAcqEventKind, type Prospect } from '../../../../../lib/acquisition-core'
-import { logAcqEvent, onContentReady, onReply } from '../../../../../lib/acquisition'
+import { LOGGABLE_KINDS, isAcqEventKind, type Prospect } from '../../../../../lib/acquisition-core'
+import { logAcqEvent, onContentReady, onReply, recordReply } from '../../../../../lib/acquisition'
 
 /**
  * SOMETHING HAPPENED (the acquisition blueprint, 21 Sep 2026): a person logs
@@ -34,23 +34,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!p) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 })
 
       const now = new Date().toISOString()
-      const event = await logAcqEvent({ prospectId: id, kind, by: user.id, detail })
+      // a reply is recorded in one place (acquisition.ts), the scanner's the same as a person's
+      const event = kind === 'reply'
+        ? await recordReply(user, p, detail, { by: user.id })
+        : await logAcqEvent({ prospectId: id, kind, by: user.id, detail })
 
       if (kind === 'content_ready') {
         try { await onContentReady(user, p) } catch (e) { console.error('[acquisition] telling Joy failed:', e) }
-      }
-      if (kind === 'reply') {
-        // a target that answers IS a lead: claimed, so two people logging the same reply move it once
-        const moved = await prospects.claim(id, ((cur: ProspectRow | null): unknown => {
-          const row = cur as (ProspectRow & Prospect) | null
-          if (!row) return null
-          const atOutreach = acqStageByKey(row.stage).key === 'outreach'
-          return { ...row, replied_at: row.replied_at ?? now, ...(atOutreach ? { stage: 'engaged', stage_entered_at: now } : {}), updated_at: now }
-        }) as (c: ProspectRow | null) => ProspectRow | null)
-        if (moved.claimed && acqStageByKey(p.stage).key === 'outreach') {
-          await logAcqEvent({ prospectId: id, kind: 'stage', by: user.id, source: 'system', detail: 'Moved to New lead / Engaged — they replied' })
-        }
-        try { await onReply(user, p, detail) } catch (e) { console.error('[acquisition] pausing the follow-ups failed:', e) }
       }
       if (kind === 'not_interested') {
         await prospects.update(id, { dormant_at: now, next_action: null, updated_at: now } as never)

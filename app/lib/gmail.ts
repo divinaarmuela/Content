@@ -177,6 +177,10 @@ export type InboxMessage = {
   body: string
   listUnsubscribe: string
   autoSubmitted: string
+  /** the RFC Message-ID — the same in every mailbox a copy landed in, unlike Gmail's own id */
+  messageId: string
+  /** everyone it was sent or copied to, lowercased addresses */
+  recipients: string[]
 }
 
 /** IDs of recent inbox messages for one mailbox (newest first). */
@@ -190,6 +194,11 @@ export async function listRecentMessageIds(
     `messages?q=${encodeURIComponent(query)}&maxResults=${max}`
   )
   return (json.messages ?? []).map(m => m.id)
+}
+
+/** every address in a To/Cc header, lowercased, once each */
+export function addressesIn(headerValue: string): string[] {
+  return [...new Set(headerValue.toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? [])]
 }
 
 /** Full message from one mailbox, parsed to the fields the classifier needs. */
@@ -211,6 +220,8 @@ export async function fetchMessage(mailbox: Mailbox, id: string): Promise<InboxM
     body: json.payload ? extractBody(json.payload).slice(0, 8000) : '',
     listUnsubscribe: header(headers, 'List-Unsubscribe'),
     autoSubmitted: header(headers, 'Auto-Submitted'),
+    messageId: header(headers, 'Message-ID'),
+    recipients: addressesIn(`${header(headers, 'To')},${header(headers, 'Cc')}`),
   }
 }
 

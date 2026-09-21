@@ -15,7 +15,7 @@ import {
 /* ── shapes mirrored from app/lib/email-lead.ts ────────────────────────── */
 
 type Outcome =
-  | 'already_processed' | 'prefiltered' | 'not_a_lead'
+  | 'already_processed' | 'prefiltered' | 'not_a_lead' | 'prospect_reply'
   | 'duplicate_sender' | 'lead_created' | 'needs_review' | 'error'
 
 type ScanEvent =
@@ -60,6 +60,7 @@ type Conn = {
 const OUTCOME: Record<Outcome, { label: string; tone: string; Icon: typeof Inbox }> = {
   lead_created:      { label: 'Lead created',   tone: 'text-foreground', Icon: UserPlus },
   not_a_lead:        { label: 'Not an enquiry', tone: 'text-muted-foreground',       Icon: MinusCircle },
+  prospect_reply:    { label: 'A prospect replied', tone: 'text-foreground', Icon: MailCheck },
   prefiltered:       { label: 'Not worth reading', tone: 'text-foreground',     Icon: Filter },
   duplicate_sender:  { label: 'Already a lead', tone: 'text-accent-blue-deep',         Icon: MailCheck },
   already_processed: { label: 'Seen before',    tone: 'text-muted-foreground',       Icon: CheckCircle2 },

@@ -425,3 +425,36 @@ export function medianDays(prospects: readonly Prospect[], from: keyof Prospect,
   const m = spans.length % 2 ? spans[mid] : (spans[mid - 1] + spans[mid]) / 2
   return Math.round(m * 10) / 10
 }
+
+/* ── THE INBOX KNOWS A PROSPECT (21 Sep 2026) ──────────────────────────────
+ * The scanner already reads hello@, contact@ and tech@ — including mail they
+ * are only copied on. A message FROM a prospect is a reply: matched on the
+ * prospect's own address first, then on its website's domain when that domain
+ * is the business's own (never gmail.com and its kind) and names one prospect
+ * only. Two prospects on one domain is a question for a person, not a guess.
+ */
+const FREE_MAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'live.com.au', 'yahoo.com', 'yahoo.com.au', 'icloud.com', 'me.com', 'bigpond.com', 'bigpond.net.au', 'optusnet.com.au', 'proton.me', 'protonmail.com', 'aol.com'])
+
+function hostOf(url: string | null | undefined): string {
+  try { return new URL(String(url ?? '')).hostname.toLowerCase().replace(/^www\./, '') } catch { return '' }
+}
+
+export function prospectForSender<P extends { id: string; stage?: string | null; email?: string | null; website?: string | null }>(
+  prospects: readonly P[], fromEmail: string,
+): { prospect: P; by: 'address' | 'domain' } | null {
+  const from = fromEmail.trim().toLowerCase()
+  const domain = from.split('@')[1] ?? ''
+  if (!from || !domain) return null
+  // a handed-over prospect is a client: its mail is client mail, not a reply to outreach
+  const open = prospects.filter(p => acqStageByKey(p.stage).key !== 'handoff')
+  const exact = open.find(p => String(p.email ?? '').trim().toLowerCase() === from)
+  if (exact) return { prospect: exact, by: 'address' }
+  if (FREE_MAIL.has(domain)) return null
+  const same = open.filter(p => { const h = hostOf(p.website); return h !== '' && (h === domain || domain.endsWith('.' + h)) })
+  return same.length === 1 ? { prospect: same[0], by: 'domain' } : null
+}
+
+/** the FIRST reply is the +20; a second email in the same conversation is on the timeline, worth nothing more */
+export function replyPoints(p: { replied_at?: string | null }): number {
+  return p.replied_at ? 0 : ACQ_EVENT_KINDS.reply.points
+}

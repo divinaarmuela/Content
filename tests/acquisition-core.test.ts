@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   ACQ_STAGES, PIPELINE_STAGES, TARGET_STAGES, acqByTier, acqDaysOver, acqFunnel, acqLimitWords, acqMoveRefusal, acqMoveStamps,
-  captureState, cleanHandle, eventForMove, followUpPlan, followUpTasks, isClosedLost, isLeadStage, medianDays, nextAcqStage,
+  captureState, cleanHandle, eventForMove, prospectForSender, replyPoints, followUpPlan, followUpTasks, isClosedLost, isLeadStage, medianDays, nextAcqStage,
   sanitiseProspectPatch, scoreBand, scoreOf, type AcqEvent, type Prospect,
 } from '../app/lib/acquisition-core'
 import { canSeePage } from '../app/lib/page-access-core'
@@ -101,6 +101,30 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
     expect(medianDays(ps, 'call_at', 'signed_at')).toBeNull()
   })
 
+  it('the inbox knows a prospect: its own address first, then its own domain when only one prospect has it; never a free-mail domain', () => {
+    const ps = [
+      { id: 'a', stage: 'outreach', email: 'Sam@Kode.com.au', website: 'https://www.kodefinance.com.au/' },
+      { id: 'b', stage: 'engaged', email: 'jo@gmail.com', website: null },
+      { id: 'c', stage: 'handoff', email: 'old@client.com', website: 'https://client.com' },
+      { id: 'd', stage: 'target', email: null, website: 'https://twins.com.au' },
+      { id: 'e', stage: 'target', email: null, website: 'https://twins.com.au/about' },
+    ]
+    expect(prospectForSender(ps, ' sam@kode.com.au ')).toEqual({ prospect: ps[0], by: 'address' })
+    expect(prospectForSender(ps, 'accounts@kodefinance.com.au')).toEqual({ prospect: ps[0], by: 'domain' })
+    expect(prospectForSender(ps, 'x@mail.kodefinance.com.au')?.by).toBe('domain')
+    expect(prospectForSender(ps, 'jo@gmail.com')?.prospect.id).toBe('b')
+    expect(prospectForSender(ps, 'someone.else@gmail.com')).toBeNull()
+    expect(prospectForSender(ps, 'old@client.com')).toBeNull()      // handed over: client mail, not a reply
+    expect(prospectForSender(ps, 'hi@twins.com.au')).toBeNull()     // two prospects on one domain: a person's call
+    expect(replyPoints({})).toBe(20)
+    expect(replyPoints({ replied_at: '2026-09-20T00:00:00Z' })).toBe(0)
+    // one reply is recorded in one place, by the button and the scanner alike; a copy in two mailboxes is one reply
+    const scan = readFileSync('app/lib/email-lead.ts', 'utf8')
+    expect(scan).toContain("const lock = await takeClaimLock(`acq_reply__${encodeKey(msg.messageId || id)}`, `${mailbox}:${id}`)")
+    expect(scan.indexOf('const known = prospectForSender(prospectRows, msg.fromEmail)')).toBeLessThan(scan.indexOf('c = await classify(msg)'))
+    expect(readFileSync('app/api/leads/acquisition/[id]/events/route.ts', 'utf8')).toContain('? await recordReply(user, p, detail, { by: user.id })')
+  })
+
   it('sits under Leads as sub-links on Leads’ own permission, and leaves the live Leads page alone', () => {
     expect(canSeePage('super_admin', '/dashboard/leads/acquisition/targets', [])).toBe(canSeePage('super_admin', '/dashboard/leads', []))
     expect(canSeePage('editor', '/dashboard/leads/acquisition', [])).toBe(false)
@@ -112,7 +136,7 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
     const stage = readFileSync('app/api/leads/acquisition/[id]/stage/route.ts', 'utf8')
     expect(stage).toContain('const result = await prospects.claim(id, ((cur: ProspectRow | null): unknown => {')
     expect(stage).toContain('if (!next || acqMoveRefusal(p)) return null')
-    const events = readFileSync('app/api/leads/acquisition/[id]/events/route.ts', 'utf8')
+    const events = readFileSync('app/lib/acquisition.ts', 'utf8')
     expect(events).toContain("...(atOutreach ? { stage: 'engaged', stage_entered_at: now } : {})")
     // the old pipeline's rules are untouched by this build
     expect(readFileSync('app/lib/pipeline-core.ts', 'utf8')).toContain("| 'walkthrough'  // 5. Walkthrough held")
