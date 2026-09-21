@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { RESEARCH_SYSTEM, sitesGuessedFromHandle, pageTextFrom, publicMetaFrom, researchNote, researchPatch, safePublicUrl, type Research } from '../app/lib/acq-agent-core'
+import { contactPatch, profileFromScrape, profileWords, RESEARCH_SYSTEM, sitesGuessedFromHandle, pageTextFrom, publicMetaFrom, researchNote, researchPatch, safePublicUrl, type Research } from '../app/lib/acq-agent-core'
 
 const r = (over: Partial<Research> = {}): Research => ({
   found: true, summary: 'A Melbourne mortgage broker.', what_they_do: 'Home loans', industry: 'Finance', tier: 1, website: 'kodefinance.com.au',
@@ -54,5 +54,17 @@ describe('the agent researches the business (21 Sep 2026)', () => {
     expect(sitesGuessedFromHandle('ab')).toEqual([])
     expect(RESEARCH_SYSTEM).toContain('instagram.com/<handle>')
     expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).toContain('A SITE GUESSED FROM THE HANDLE — NOT CONFIRMED TO BE THEIRS')
+  })
+
+  it('with ScrapeCreators the whole public profile is read: the bio, the link in bio, the public contact, the captions', () => {
+    const p = profileFromScrape({ data: { user: { username: 'kode', full_name: 'Kode Finance', biography: 'Home loans, Melbourne', external_url: 'https://kodefinance.com.au', bio_links: [{ url: 'https://kodefinance.com.au' }, { url: 'https://linktr.ee/kode' }], category_name: 'Mortgage Brokers', is_business_account: true, business_email: 'Hello@Kode.com.au', business_phone_number: '+61 400 000 000', edge_followed_by: { count: 812 }, edge_owner_to_timeline_media: { count: 40, edges: [{ node: { edge_media_to_caption: { edges: [{ node: { text: 'Rates  are\nmoving' } }] } } }] } } } })!
+    expect(p).toMatchObject({ name: 'Kode Finance', bio: 'Home loans, Melbourne', link: 'https://kodefinance.com.au', category: 'Mortgage Brokers', business: true, followers: 812, posts: 40, captions: ['Rates are moving'] })
+    expect(profileWords('kode', p)).toContain('link in bio: https://kodefinance.com.au · also https://linktr.ee/kode')
+    expect(contactPatch({}, p)).toEqual({ email: 'hello@kode.com.au', phone: '+61 400 000 000' })
+    expect(contactPatch({ email: 'sam@kode.com.au', phone: '03 9000 0000' }, p)).toEqual({})     // a person’s entry stands
+    expect(profileFromScrape({ error: 'not found' })).toBeNull()
+    const src = readFileSync('app/lib/acq-agent.ts', 'utf8')
+    expect(src).toContain("const key = process.env.SCRAPECREATORS_API_KEY?.trim()")
+    expect(src).toContain('const profile = handle ? await instagramProfile(handle) : null')
   })
 })

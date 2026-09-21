@@ -298,3 +298,60 @@ export function researchNote(r: Research): string {
   ]
   return lines.filter(Boolean).join('\n').slice(0, 1900)
 }
+
+/* ── THE INSTAGRAM PROFILE, READ PROPERLY (21 Sep 2026) ────────────────────
+ * The owner: "I thought we can use ScrapeCreators?" — yes. Instagram shows a
+ * server the name and three counts and nothing else (checked live the same
+ * day); ScrapeCreators' profile call returns the whole public profile: the
+ * bio, the link in the bio, the category, whether it is a business account,
+ * the public business email and phone, the counts and the recent captions.
+ * GET https://api.scrapecreators.com/v1/instagram/profile?handle=…, header
+ * x-api-key, one credit a call (docs.scrapecreators.com, read 21 Sep 2026).
+ * With SCRAPECREATORS_API_KEY set the research starts from this; without it
+ * the research runs as before, from the public counts and the web search.
+ */
+export type IgProfile = {
+  name: string; bio: string; link: string; links: string[]; category: string; business: boolean; private: boolean
+  email: string; phone: string; followers: number | null; posts: number | null; captions: string[]
+}
+
+export function profileFromScrape(json: unknown): IgProfile | null {
+  const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {})
+  const s = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const root = rec(json)
+  const u = rec(rec(root.data).user ?? root.user)
+  if (!s(u.username) && !s(u.full_name) && !s(u.biography)) return null
+  const n = (v: unknown) => { const c = Number(rec(v).count); return Number.isFinite(c) ? c : null }
+  const edges = rec(u.edge_owner_to_timeline_media).edges
+  const captions = (Array.isArray(edges) ? edges : []).map(e => {
+    const cap = rec(rec(rec(e).node).edge_media_to_caption).edges
+    return s(rec(rec(Array.isArray(cap) ? cap[0] : null).node).text).replace(/\s+/g, ' ').slice(0, 220)
+  }).filter(Boolean).slice(0, 6)
+  const links = (Array.isArray(u.bio_links) ? u.bio_links : []).map(l => s(rec(l).url)).filter(Boolean)
+  return {
+    name: s(u.full_name), bio: s(u.biography), link: s(u.external_url) || links[0] || '', links, category: s(u.category_name),
+    business: u.is_business_account === true, private: u.is_private === true, email: s(u.business_email), phone: s(u.business_phone_number),
+    followers: n(u.edge_followed_by), posts: n(u.edge_owner_to_timeline_media), captions,
+  }
+}
+
+export function profileWords(handle: string, p: IgProfile): string {
+  return [
+    `INSTAGRAM PROFILE OF @${handle}, READ JUST NOW`,
+    `name: ${p.name || '—'} · category: ${p.category || '—'} · ${p.business ? 'a business account' : 'not marked as a business account'}${p.private ? ' · PRIVATE' : ''}`,
+    `followers: ${p.followers ?? '?'} · posts: ${p.posts ?? '?'}`,
+    `bio: ${p.bio || '(empty)'}`,
+    `link in bio: ${p.link || '(none)'}${p.links.length > 1 ? ` · also ${p.links.slice(1, 4).join(' ')}` : ''}`,
+    p.email || p.phone ? `public contact: ${[p.email, p.phone].filter(Boolean).join(' · ')}` : '',
+    p.captions.length ? `recent captions:\n${p.captions.map(c => `- ${c}`).join('\n')}` : 'recent captions: none',
+  ].filter(Boolean).join('\n')
+}
+
+/** the public business contact on the profile fills an empty email or phone — never over a person's entry */
+export function contactPatch(p: { email?: string | null; phone?: string | null }, ig: IgProfile | null): Record<string, unknown> {
+  if (!ig) return {}
+  const out: Record<string, unknown> = {}
+  if (!String(p.email ?? '').trim() && /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(ig.email)) out.email = ig.email.toLowerCase()
+  if (!String(p.phone ?? '').trim() && ig.phone.replace(/\D/g, '').length >= 8) out.phone = ig.phone.slice(0, 40)
+  return out
+}

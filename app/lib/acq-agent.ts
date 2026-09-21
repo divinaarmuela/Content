@@ -12,8 +12,8 @@ import { encodeKey } from '@/lib/db'
 import { acqStageByKey, cleanHandle, replyPoints, type AcqEvent, type AcqEventKind, type Prospect } from './acquisition-core'
 import { logAcqEvent, recordCallBooked, recordReply } from './acquisition'
 import {
-  AGENT_SYSTEM, RESEARCH_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, pageTextFrom, publicMetaFrom, researchNote, researchPatch, researchPrompt, safePublicUrl, sitesGuessedFromHandle, strangerIsLead, strangerLockKey, strangerPrompt,
-  type AgentFinding, type Evidence, type Research, type StrangerVerdict,
+  AGENT_SYSTEM, RESEARCH_SYSTEM, STRANGER_SYSTEM, agentPrompt, contactPatch, profileFromScrape, profileWords, decideFinding, findingKey, newEvidence, pageTextFrom, publicMetaFrom, researchNote, researchPatch, researchPrompt, safePublicUrl, sitesGuessedFromHandle, strangerIsLead, strangerLockKey, strangerPrompt,
+  type AgentFinding, type Evidence, type IgProfile, type Research, type StrangerVerdict,
 } from './acq-agent-core'
 import { peopleNamed, tellPeople } from './acquisition'
 import { escapeHtml } from './mailer'
@@ -301,7 +301,7 @@ const ResearchShape = z.object({
   fit: z.enum(['strong', 'possible', 'poor', 'unknown']), confidence: z.number().min(0).max(1), sources: z.array(z.string()),
 })
 
-const FILLED_WORDS: Record<string, string> = { tier: 'tier', industry: 'industry', website: 'website', audit_angle: 'audit angle', contact_name: 'contact name', weakness_tags: 'what looks weak' }
+const FILLED_WORDS: Record<string, string> = { email: 'email', phone: 'phone', tier: 'tier', industry: 'industry', website: 'website', audit_angle: 'audit angle', contact_name: 'contact name', weakness_tags: 'what looks weak' }
 
 export type ResearchRun = { prospect_id: string; found: boolean; filled: string[]; proposed: string[]; searched: boolean; error?: string }
 
@@ -323,6 +323,17 @@ export async function instagramPublicMeta(handle: string): Promise<string | null
   } catch { return null }
 }
 
+/** the whole public profile, through ScrapeCreators (acq-agent-core.ts) — null without a key, or when it has no answer */
+export async function instagramProfile(handle: string): Promise<IgProfile | null> {
+  const key = process.env.SCRAPECREATORS_API_KEY?.trim()
+  if (!key) return null
+  try {
+    const res = await fetch(`https://api.scrapecreators.com/v1/instagram/profile?handle=${encodeURIComponent(handle)}`, { headers: { 'x-api-key': key }, signal: AbortSignal.timeout(25_000) })
+    if (!res.ok) { console.error('[acq-agent] ScrapeCreators answered', res.status, 'for', handle); return null }
+    return profileFromScrape(await res.json())
+  } catch (e) { console.error('[acq-agent] ScrapeCreators could not be reached:', e); return null }
+}
+
 /** the business's own site, as text: what a visitor reads first, and how to reach them */
 export async function siteText(url: string): Promise<string | null> {
   const safe = safePublicUrl(url)
@@ -338,17 +349,20 @@ export async function researchProspect(p: P): Promise<ResearchRun> {
   const run: ResearchRun = { prospect_id: p.id, found: false, filled: [], proposed: [], searched: false }
   try {
     const handle = (cleanHandle(String(p.instagram ?? '')) ?? '')
-    const ig = handle ? await instagramPublicMeta(handle) : null
-    const given = p.website ? await siteText(String(p.website)) : null
+    const profile = handle ? await instagramProfile(handle) : null
+    const ig = profile ? profileWords(handle, profile) : handle ? await instagramPublicMeta(handle) : null
+    // the link in their bio is their site (or a link page that points to it): read it as the site they gave
+    const site = p.website ? String(p.website) : profile?.link || ''
+    const given = site ? await siteText(site) : null
     // only a handle: its likeliest domains are tried, and what answers is handed over marked as a guess
     let guessed: { url: string; text: string } | null = null
-    if (!p.website && handle) {
+    if (!site && handle) {
       for (const url of sitesGuessedFromHandle(handle)) {
         const text = await siteText(url)
         if (text && text.length > 200) { guessed = { url, text }; break }
       }
     }
-    const brief = [researchPrompt(p), ig ? `INSTAGRAM SAYS (public page): ${ig}` : handle ? 'INSTAGRAM: the public page could not be read' : null, given ? `THEIR WEBSITE, READ JUST NOW (${p.website}):\n${given}` : null,
+    const brief = [researchPrompt(p), ig ? (profile ? ig : `INSTAGRAM SAYS (public page): ${ig}`) : handle ? 'INSTAGRAM: the public page could not be read' : null, given ? `${p.website ? 'THEIR WEBSITE' : 'THE LINK IN THEIR INSTAGRAM BIO'}, READ JUST NOW (${site}):\n${given}` : null,
       guessed ? `A SITE GUESSED FROM THE HANDLE — NOT CONFIRMED TO BE THEIRS (${guessed.url}). Use it only if its own text ties it to this Instagram account:\n${guessed.text}` : null].filter(Boolean).join('\n')
     // 1. LOOK IT UP — the model searches the web itself (Anthropic's server-side web search)
     let findings = ''
@@ -383,7 +397,7 @@ export async function researchProspect(p: P): Promise<ResearchRun> {
     }
     run.found = r.found
 
-    const patch = researchPatch(p as never, r)
+    const patch = { ...researchPatch(p as never, r), ...contactPatch(p as never, profile) }
     run.filled = Object.keys(patch)
     if (run.filled.length > 0) await table<ProspectRow>('prospects').update(p.id, { ...patch, updated_at: new Date().toISOString() } as never)
     await logAcqEvent({ prospectId: p.id, kind: 'note', source: 'agent', confidence: r.confidence, detail: `Research by the agent${run.filled.length ? ` — filled in: ${run.filled.map(k => FILLED_WORDS[k] ?? k).join(', ')}` : ''}\n${researchNote(r)}` })
