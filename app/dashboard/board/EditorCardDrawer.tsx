@@ -13,7 +13,7 @@ import Chip from '../ui/Chip'
 import { PRIORITIES, PRIORITY_LABELS, priorityChip, priorityOf, type Priority } from '../../lib/priority-core'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
-import CollapsibleCard from '../CollapsibleCard'
+import CardTabs, { tabPanel, useCardTab } from './CardTabs'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
@@ -69,6 +69,8 @@ const outlineBtn = 'inline-flex h-11 items-center gap-1.5 rounded-full border bo
 const ghostBtn = 'h-11 rounded-full px-4 text-[14px] font-semibold'
 const field = 'min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px] font-normal'
 
+const ED_TABS = ['brief', 'work', 'comments', 'brand', 'history'] as const
+
 export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false }: {
   id: string
   onClose: () => void
@@ -123,6 +125,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   }, [thread])
   const cardThread = useMemo(() => thread.filter(c => !(c as { video_file_id?: string | null }).video_file_id), [thread])
   const [note, setNote] = useState('')
+  // THE CARD IN TABS (21 Sep 2026) — CardTabs.tsx says why; the sections below are where they were
+  const [tab, setTab] = useCardTab('editor', ED_TABS, 'brief')
   const [sendingNote, setSendingNote] = useState(false)
   const [toClient, setToClient] = useState(false)
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
@@ -456,6 +460,15 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         </button>
       </div>
 
+      <CardTabs label="The card" value={tab} onChange={setTab} tabs={[
+        { key: 'brief', label: 'Brief' },
+        { key: 'work', label: 'Your work' },
+        { key: 'comments', label: 'Comments', count: cardThread.length + clipThreads.reduce((n, t) => n + t.count, 0) },
+        { key: 'brand', label: 'Brand' },
+        { key: 'history', label: 'What happened', count: history.length },
+      ]} />
+
+      <div role="tabpanel" className={tabPanel(tab === 'brief')}>
       {/* ── 1. before you start (§2) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-before">
         <p id="ed-before" className={H2}>Before you start</p>
@@ -472,13 +485,21 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </div>
           ))}
         </dl>
-        {item.client_id && (
-          <CollapsibleCard title="Brand guidelines" summary={`${client?.name ?? 'The client'}’s colours, fonts, voice and logo files`}>
-            <BrandCard clientId={item.client_id} />
-          </CollapsibleCard>
-        )}
       </section>
+      </div>
 
+      {/* the brand has its own tab, open and whole — it was a folded box at the foot of the brief. Drawn when
+          opened, so a card that never looks at it never fetches it */}
+      {tab === 'brand' && (
+        <div role="tabpanel" className="flex flex-col gap-2 px-5 py-4">
+          <p className={H2}>Brand guidelines</p>
+          {item.client_id
+            ? <BrandCard clientId={item.client_id} />
+            : <p className="text-[13px] text-muted-foreground">This card has no client, so there is no brand to show.</p>}
+        </div>
+      )}
+
+      <div role="tabpanel" className={tabPanel(tab === 'work')}>
       {/* ── 2. work from (§1) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-from">
         <p id="ed-from" className={H2}>Work from</p>
@@ -642,6 +663,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       </section>
       )}
 
+      </div>
+
+      <div role="tabpanel" className={tabPanel(tab === 'comments')}>
       {/* ── 7a. what was said on each clip: one line per clip, the comments on the clip's page ── */}
       {clipThreads.length > 0 ? (
         <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-clip-threads">
@@ -674,6 +698,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         />
       </section>
 
+      </div>
+
+      <div role="tabpanel" className={tabPanel(tab === 'history')}>
       {/* ── 8. what happened ── */}
       <section className="flex flex-col gap-2 px-5 py-4" aria-labelledby="ed-history">
         <p id="ed-history" className={H2}>What happened</p>
@@ -690,6 +717,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           </ol>
         )}
       </section>
+      </div>
     </div>
   )
 }

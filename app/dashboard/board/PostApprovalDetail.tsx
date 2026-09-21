@@ -32,7 +32,7 @@ import { UploadOverall, UploadRows, useUploadGroup } from '../UploadRows'
 import { usePlayable } from '../social/usePlayable'
 import { CANNOT_PLAY_HERE } from '../../lib/playable-core'
 import BrandCard from '../production/BrandCard'
-import CollapsibleCard from '../CollapsibleCard'
+import CardTabs, { tabPanel, useCardTab } from './CardTabs'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import { finishedEditOf } from '../../lib/card-link-core'
 import { cardPeople } from '../../lib/card-people-core'
@@ -104,6 +104,8 @@ function FileBookingChip({ url, posts, jobsById }: {
     </>
   )
 }
+
+const PA_TABS = ['post', 'comments', 'brand', 'history'] as const
 
 export default function PostApprovalDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { me } = useRole()
@@ -328,6 +330,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
 
   /* ── a note from the team ──────────────────────────────────────────── */
   const [draft, setDraft] = useState('')
+  const [tab, setTab] = useCardTab('post', PA_TABS, 'post')
   const [sending, setSending] = useState(false)
   /** a manager's note is for the team, or a reply the client sees on their
    *  portal — one switch, no email either way unless somebody is @tagged */
@@ -611,6 +614,15 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           onClose={() => setHanding(false)} />
       )}
 
+      {/* THE CARD IN TABS (21 Sep 2026; CardTabs.tsx): what and where, and the decision, stay above — always in reach */}
+      <CardTabs label="The post" value={tab} onChange={setTab} tabs={[
+        { key: 'post', label: 'The post' },
+        { key: 'comments', label: 'Comments', count: said.length },
+        { key: 'brand', label: 'Brand' },
+        { key: 'history', label: 'What happened', count: history.length },
+      ]} />
+
+      <div role="tabpanel" className={tabPanel(tab === 'post')}>
       {/* ── 2a. THE FINISHED EDIT — the link the editor handed in, above the
           folder they worked from, so the reviewer opens the work first ── */}
       {finished && (
@@ -801,14 +813,18 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           the scheduler as much as the manager (the owner, 9 Sep 2026: "make
           sure brand assets are shown … editor or scheduler can see it in the
           card, the brand guidelines, and account manager") ── */}
-      {item.client_id && (
-        <div className="border-b border-border px-5 py-4">
-          <CollapsibleCard title="Brand" summary={`${client?.name ?? 'the client'}’s colours, fonts, voice and logo files`}>
-            <BrandCard clientId={item.client_id} />
-          </CollapsibleCard>
+      </div>
+
+      {tab === 'brand' && (
+        <div role="tabpanel" className="flex flex-col gap-2 px-5 py-4">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Brand</p>
+          {item.client_id
+            ? <BrandCard clientId={item.client_id} />
+            : <p className="text-[13px] text-muted-foreground">This post has no client, so there is no brand to show.</p>}
         </div>
       )}
 
+      <div role="tabpanel" className={tabPanel(tab === 'history')}>
       {/* ── 4. what happened ── */}
       <div className="flex flex-col gap-2 border-b border-border px-5 py-4">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">What happened</p>
@@ -838,6 +854,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         )}
       </div>
 
+      </div>
+
+      <div role="tabpanel" className={tabPanel(tab === 'comments')}>
       {/* ── 5. what was said — the same section the Editor drawer draws ── */}
       <CardSaid
         rows={said as never}
@@ -867,6 +886,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           )}
         </>}
       />
+      </div>
 
       {isManager && status !== 'scheduled' && status !== 'published' && (
         <div className={cn('mt-auto flex items-center justify-end gap-2 border-t border-border px-5 py-4')}>
