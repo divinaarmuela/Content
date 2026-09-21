@@ -11,6 +11,7 @@
 
 import { auditActorName } from './act-as-core'
 import { TRANSITIONS, type ItemStatus } from './workflow-core'
+import { transferHistoryWords } from './editor-transfer-core'
 
 /** The overlay an item wears. The same three the detail page branches on. */
 export type ActivityKind = 'asset' | 'brief' | 'task'
@@ -113,6 +114,8 @@ export function describeActivity(row: ActivityRow, kind: ActivityKind): string |
         : `Taken by ${who}`
     case 'schedule_handoff':
       return `Handed to a scheduler by ${who}`
+    case 'editing_transferred':
+      return transferHistoryWords(who, row.detail)
     // ── the final-post gate: who asked, who answered, and why an answer
     //    was ever taken back ──
     case 'posting_approval_sent':

@@ -67,6 +67,21 @@ export function editorRefusal(
   return null
 }
 
+/**
+ * WHAT HAPPENED SAYS SO (the owner, 21 Sep 2026: "it should also log what
+ * happened, like job transferred by … to …"). The transfer was always written
+ * to the activity log, but neither history list knew the row, so the card
+ * never showed it. The line is read back out of the detail transferWords wrote.
+ */
+export function transferHistoryWords(who: string, detail: string | null | undefined): string {
+  const text = String(detail ?? '').replace(/ — the shoot’s editor too$/, '')
+  const moved = /^editing moved from (.+) to (.+)$/.exec(text)
+  if (moved) return `Editing job transferred by ${who} · from ${moved[1]} to ${moved[2]}`
+  const given = /^editing given to (.+)$/.exec(text)
+  if (given) return `Editor assigned by ${who} · ${given[1]}`
+  return `Editing job transferred by ${who}`
+}
+
 /** the words the history keeps */
 export function transferWords(from: string | null, to: string): string {
   return from ? `editing moved from ${from} to ${to}` : `editing given to ${to}`

@@ -27,6 +27,7 @@ import { auditActorName } from './act-as-core'
 import { networkName } from './publish-core'
 import { outcomesForJob, type OutcomeJob } from './post-outcome-core'
 import { readPostedSlides } from './posted-slides-core'
+import { transferHistoryWords } from './editor-transfer-core'
 
 /** A `workflow_activity` row, with its actor already named. */
 export type HistoryActivity = {
@@ -106,6 +107,8 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       return { text: `Changes asked for on the final post by ${who}${quote(row.detail)}` }
     case 'posting_approval_reset':
       return { text: `Post changed after approval by ${who} · it needs approving again` }
+    case 'editing_transferred':
+      return { text: transferHistoryWords(who, row.detail) }
     case 'status_change':
       return statusLine(row, who)
     // who a move reached, and what the mailer said (14 Sep 2026)

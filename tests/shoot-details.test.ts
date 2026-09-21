@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { transferHistoryWords, transferWords } from '../app/lib/editor-transfer-core'
+import { describeCardActivity } from '../app/lib/card-history-core'
 import { rowsFor, shootDetailsText, shootManagerChoices } from '../app/lib/shoot-sop-core'
 
 describe('what was typed when the shoot was made can be changed and copied (21 Sep 2026)', () => {
@@ -41,5 +43,14 @@ describe('what was typed when the shoot was made can be changed and copied (21 S
   it('a manager who HOLDS the card still has Transfer on it (21 Sep 2026)', () => {
     const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
     expect(page).toContain('{maker && me && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}')
+  })
+
+  it('What happened says who transferred the editing job, from whom, to whom (21 Sep 2026)', () => {
+    expect(transferHistoryWords('Akmal', transferWords('Karly', 'Sarina'))).toBe('Editing job transferred by Akmal · from Karly to Sarina')
+    expect(transferHistoryWords('Akmal', transferWords('Karly', 'Sarina') + ' — the shoot’s editor too')).toBe('Editing job transferred by Akmal · from Karly to Sarina')
+    expect(transferHistoryWords('Akmal', transferWords(null, 'Sarina'))).toBe('Editor assigned by Akmal · Sarina')
+    const line = describeCardActivity({ id: 'a', action: 'editing_transferred', detail: 'editing moved from Karly to Sarina', created_at: '2026-09-21T06:47:30Z' } as never)
+    expect(line?.text).toContain('from Karly to Sarina')
+    expect(readFileSync('app/lib/activity-core.ts', 'utf8')).toContain("case 'editing_transferred':")
   })
 })
