@@ -217,6 +217,7 @@ export function BoardCard({
         {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
+        {!folded && lines.made && <Chip tone="muted">{lines.made}</Chip>}
         {!folded && lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
         {/* somebody wrote to you on this card and it is not done (13 Sep 2026) */}

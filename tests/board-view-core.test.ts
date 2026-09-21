@@ -856,7 +856,9 @@ describe('the order of a board (21 Sep 2026)', () => {
     expect(sortCards(cards, 'board', viewed).map(c => c.id)).toEqual(['a', 'b', 'c'])
     expect(sortCards(cards, 'edited', viewed).map(c => c.id)).toEqual(['b', 'c', 'a'])
     expect(sortCards(cards, 'viewed', viewed).map(c => c.id)).toEqual(['a', 'c', 'b'])
-    expect(BOARD_SORTS).toEqual(['board', 'edited', 'viewed'])
+    expect(BOARD_SORTS).toEqual(['board', 'created', 'edited', 'viewed'])
+    expect(SORT_LABELS.created).toBe('Newest first')
+    expect(sortCards([{ id: 'a', created_at: '2026-09-01' }, { id: 'b', created_at: '2026-09-03' }], 'created', new Map()).map(c => c.id)).toEqual(['b', 'a'])
     expect(SORT_LABELS.viewed).toBe('Last viewed')
     expect(isBoardSort('edited')).toBe(true)
     expect(isBoardSort('x')).toBe(false)
@@ -870,5 +872,16 @@ describe('the order of a board (21 Sep 2026)', () => {
     expect(route).toContain('const user = await requireSignedIn()')
     expect(route).toContain('await loadItemForUser(user, id)')
     expect(route).toContain("await table<CardView>('card_views').upsert({ id: `${user.id}__${id}`, user_id: user.id, item_id: id, viewed_at })")
+  })
+})
+
+describe('a card says when it was made (21 Sep 2026)', () => {
+  it('the lines carry "Made <date>", the card wears it as a chip, the list as a column', async () => {
+    const { cardLines } = await import('../app/lib/board-view-core')
+    const lines = cardLines({ id: 'c', title: 'T', status: 'draft_uploaded', client_id: 'k', owner_id: null, created_at: '2026-09-18T01:00:00Z' } as never, { today: '2026-09-21' })
+    expect(lines.made).toMatch(/^Made 18 Sep/)
+    expect(cardLines({ id: 'c', title: 'T', status: 'draft_uploaded', client_id: 'k', owner_id: null } as never, { today: '2026-09-21' }).made).toBeNull()
+    expect(readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')).toContain('{!folded && lines.made && <Chip tone="muted">{lines.made}</Chip>}')
+    expect(readFileSync('app/dashboard/board/BoardList.tsx', 'utf8')).toContain('<th scope="col" className={th}>Made</th>')
   })
 })

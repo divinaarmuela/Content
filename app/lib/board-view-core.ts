@@ -37,6 +37,8 @@ export type BoardViewCard = {
   /** true when the card exists only to hold a post made on the Schedule page */
   adhoc_post?: boolean | null
   id: string
+  /** when the card was made — the person holding it could not see it (the owner, 21 Sep 2026) */
+  created_at?: string | null
   title: string
   status: ItemStatus
   client_id: string
@@ -129,6 +131,8 @@ export type CardLines = {
   posted: string | null
   /** "Sent to client 11 Sept" — the playbook's delivery date, once stamped */
   delivered: string | null
+  /** "Made 18 Sept" — when the card was made (21 Sep 2026) */
+  made: string | null
   /** the client posts this themselves — the card ends at Delivered */
   deliverOnly: boolean
   /** who is holding it: a name, "You", or "Nobody yet" */
@@ -187,6 +191,7 @@ export function cardLines(
     // playbook: "that's the moment our obligation is met"), so the card says
     // it in those words and keeps saying it through Ready to post and Posted
     delivered: card.delivered_at && shortDate(card.delivered_at) ? `Sent to client ${shortDate(card.delivered_at)}` : null,
+    made: card.created_at && shortDate(card.created_at) ? `Made ${shortDate(card.created_at)}` : null,
     // "Client posts it" is a word about what is still to come: a card the
     // channel already holds or has posted was posted by US, whatever the
     // client's setting says now (the live role-play of 11 Sep 2026)
@@ -1033,14 +1038,14 @@ export function needsWorkFirst(card: Pick<BoardViewCard, 'current_version_number
  * card this person opened most recently first, and the ones they have never
  * opened last. Columns and the list read the same order.
  */
-export type BoardSort = 'board' | 'edited' | 'viewed'
-export const BOARD_SORTS: readonly BoardSort[] = ['board', 'edited', 'viewed']
-export const SORT_LABELS: Record<BoardSort, string> = { board: 'Board order', edited: 'Last edited', viewed: 'Last viewed' }
+export type BoardSort = 'board' | 'created' | 'edited' | 'viewed'
+export const BOARD_SORTS: readonly BoardSort[] = ['board', 'created', 'edited', 'viewed']
+export const SORT_LABELS: Record<BoardSort, string> = { board: 'Board order', created: 'Newest first', edited: 'Last edited', viewed: 'Last viewed' }
 export function isBoardSort(v: unknown): v is BoardSort {
   return typeof v === 'string' && (BOARD_SORTS as readonly string[]).includes(v)
 }
-export function sortCards<T extends { id: string; updated_at?: unknown }>(cards: readonly T[], sort: BoardSort, viewedAt: ReadonlyMap<string, string>): T[] {
+export function sortCards<T extends { id: string; updated_at?: unknown; created_at?: unknown }>(cards: readonly T[], sort: BoardSort, viewedAt: ReadonlyMap<string, string>): T[] {
   if (sort === 'board') return [...cards]
-  const key = (c: T) => (sort === 'edited' ? String(c.updated_at ?? '') : (viewedAt.get(c.id) ?? ''))
+  const key = (c: T) => (sort === 'edited' ? String(c.updated_at ?? '') : sort === 'created' ? String(c.created_at ?? '') : (viewedAt.get(c.id) ?? ''))
   return [...cards].sort((a, b) => key(b).localeCompare(key(a)))
 }

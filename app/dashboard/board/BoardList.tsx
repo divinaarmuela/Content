@@ -39,12 +39,13 @@ export function BoardList<T extends BoardViewCard>({ groups, viewer, names, mana
             <th scope="col" className={th}>Version</th>
             <th scope="col" className={th}>Files</th>
             <th scope="col" className={th}>Due</th>
+            <th scope="col" className={th}>Made</th>
             <th scope="col" className={th}>Account manager</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
-            <tr><td colSpan={9} className={`${td} text-muted-foreground`}>No cards here.</td></tr>
+            <tr><td colSpan={10} className={`${td} text-muted-foreground`}>No cards here.</td></tr>
           )}
           {rows.map(({ card, lane, lines }) => {
             const handedIn = finishedEditOf(card as never) !== null
@@ -62,6 +63,7 @@ export function BoardList<T extends BoardViewCard>({ groups, viewer, names, mana
                 <td className={`${td} whitespace-nowrap`}>{lines.version}</td>
                 <td className={`${td} whitespace-nowrap`}>{handedIn ? 'Finished edit in' : lines.link ? 'Folder only' : 'Nothing yet'}</td>
                 <td className={`${td} whitespace-nowrap ${lines.dueNow ? 'font-semibold text-accent-red-deep' : ''}`}>{lines.due ?? '—'}</td>
+                <td className={`${td} whitespace-nowrap`}>{lines.made ? lines.made.replace(/^Made /, '') : '—'}</td>
                 <td className={`${td} whitespace-nowrap text-muted-foreground`}>{managers.length > 0 ? managers.join(', ') : '—'}</td>
               </tr>
             )
