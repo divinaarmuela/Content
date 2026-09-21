@@ -97,6 +97,8 @@ export function notificationHref(entityType: string, entityId: string, role?: st
     // a calendar note: the id is "<client id>#<note id>", the bell opens that
     // client's week (9 Sep 2026)
     case 'schedule_note': return isUuid ? `/dashboard/social/schedule?client=${id}` : null
+    // an acquisition prompt opens the prospect it is about (21 Sep 2026)
+    case 'prospect': return isUuid ? `/dashboard/leads/acquisition?prospect=${id}` : '/dashboard/leads/acquisition'
     case 'batch':
     case 'shoot': return isUuid ? `/dashboard/production/shoots/${id}` : null
     case 'shoot_proposal': return '/dashboard/production/proposals'

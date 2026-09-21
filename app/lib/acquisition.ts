@@ -1,0 +1,116 @@
+import 'server-only'
+import { table } from '@/lib/db'
+import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
+import { ACQ_EVENT_KINDS, followUpTasks, type AcqEventKind, type Prospect } from './acquisition-core'
+import { escapeHtml, notify, renderEmail } from './mailer'
+import { DASHBOARD_URL } from './app-url'
+
+/**
+ * THE ACQUISITION SYSTEM — the server half (acquisition-core.ts has the rules
+ * and the blueprint's words). Three jobs: write the timeline, tell the NEXT
+ * person their turn has come, and make or pause the follow-up reminders. The
+ * system only prompts — every prospect-facing message is a person's to write.
+ */
+
+type Actor = { id: string; name?: string | null; email?: string | null; clerk_user_id?: string | null }
+
+export function prospectPath(id: string): string {
+  return `/dashboard/leads/acquisition?prospect=${encodeURIComponent(id)}`
+}
+
+/** one line on the prospect's timeline; the points come from the kind unless given */
+export async function logAcqEvent(input: {
+  prospectId: string; kind: AcqEventKind; by?: string | null; detail?: string | null
+  source?: 'person' | 'system' | 'scanner'; points?: number; confirmed?: boolean; at?: string
+}): Promise<ProspectEvent> {
+  return table<ProspectEvent>('prospect_events').insert({
+    prospect_id: input.prospectId,
+    kind: input.kind,
+    at: input.at ?? new Date().toISOString(),
+    by: input.by ?? null,
+    source: input.source ?? 'person',
+    detail: input.detail ? String(input.detail).slice(0, 2000) : null,
+    points: input.points ?? ACQ_EVENT_KINDS[input.kind].points,
+    confirmed: input.confirmed ?? true,
+  } as never)
+}
+
+/**
+ * THE PEOPLE THE BLUEPRINT NAMES (§4): Manal researches, Divina and Martin make
+ * the audit, Joy reaches out. Found by first name among the active team, the
+ * same way the 17 Sep pipeline names its seats; nobody found = nobody told,
+ * never a guess.
+ */
+export async function peopleNamed(firstNames: readonly string[]): Promise<TeamUser[]> {
+  const team = await table<TeamUser>('team_users').list({ where: u => u.active_status !== false && u.role !== 'client' })
+  const wanted = firstNames.map(n => n.toLowerCase())
+  return team.filter(u => wanted.includes(String(u.name ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? ''))
+}
+
+export async function tellPeople(people: readonly TeamUser[], actor: Actor, p: Pick<Prospect, 'id' | 'business'>, input: {
+  event: string; subject: string; html: string; button: string
+}): Promise<void> {
+  await Promise.all(people.filter(u => u.id !== actor.id && !!u.email).map(u => notify({
+    actorName: actor.name ?? null, actorEmail: actor.email ?? null, actorClerkId: actor.clerk_user_id ?? null,
+    eventType: input.event, entityType: 'prospect', entityId: `${p.id}#${input.event}#${u.id}`,
+    recipientId: u.id, recipientEmail: u.email,
+    subject: input.subject,
+    bodyHtml: renderEmail(input.subject, input.html, input.button, `${DASHBOARD_URL}${prospectPath(p.id)}`),
+  }).catch(e => console.error('[acquisition] could not tell', u.email, e))))
+}
+
+/** a reminder on somebody's To-dos, tied to the prospect */
+async function makeTask(ownerId: string | null, byId: string, p: Pick<Prospect, 'id'>, t: { title: string; note: string; due_date: string | null }): Promise<void> {
+  const now = new Date().toISOString()
+  await table<Todo>('todos').insert({
+    title: t.title.slice(0, 200), note: t.note.slice(0, 2000), status: 'open', due_date: t.due_date,
+    owner_id: ownerId, created_by: byId, client_id: null, prospect_id: p.id, files: [], created_at: now, updated_at: now,
+  } as never)
+}
+
+/** RESEARCH DONE → the content people are told, and one of them gets the task (§12) */
+export async function onReadyForContent(actor: Actor, p: ProspectRow): Promise<void> {
+  const people = await peopleNamed(['Divina', 'Martin'])
+  const due = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10)
+  if (people[0]) await makeTask(people[0].id, actor.id, p, { title: `Audit content — ${p.business}`, note: `${p.audit_angle ? `Angle: ${p.audit_angle}. ` : ''}A short public audit post and/or a private Loom. Mark it ready on the prospect and Joy is told.`, due_date: due })
+  await tellPeople(people, actor, p, {
+    event: 'acq_ready_for_content', subject: `New target ready for an audit: ${p.business}`, button: 'Open the target',
+    html: `<p><strong>${escapeHtml(p.business)}</strong> is researched and ready for audit content.</p>${p.audit_angle ? `<p>Angle: ${escapeHtml(String(p.audit_angle))}</p>` : ''}<p><strong>What happens next:</strong> make the public audit post and/or the private Loom, add their links to the target, and press “Content ready”.</p>`,
+  })
+}
+
+/** CONTENT READY → Joy is told and gets the outreach task (§12) */
+export async function onContentReady(actor: Actor, p: ProspectRow): Promise<void> {
+  const people = await peopleNamed(['Joy'])
+  const owner = people[0]?.id ?? (p as { owner_id?: string | null }).owner_id ?? null
+  await makeTask(owner, actor.id, p, { title: `Send the outreach — ${p.business}`, note: 'The audit is ready: its links are on the prospect. Send the DM or email with the asset and the booking link, then mark outreach sent. You write it; this is only the reminder.', due_date: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10) })
+  await tellPeople(people, actor, p, {
+    event: 'acq_content_ready', subject: `Audit ready to send: ${p.business}`, button: 'Open the prospect',
+    html: `<p>The audit content for <strong>${escapeHtml(p.business)}</strong> is ready.</p><p><strong>What happens next:</strong> send the DM or email with the asset and the booking link, then mark outreach sent. The follow-up reminders start from that moment.</p>`,
+  })
+}
+
+/** OUTREACH SENT → the Day 1, 3, 5, 7, 14 and 21 reminders (§8, §12) */
+export async function onOutreachSent(actor: Actor, p: ProspectRow): Promise<void> {
+  const row = p as ProspectRow & { outreach_at?: string | null; owner_id?: string | null; outreach_by?: string | null }
+  const owner = row.owner_id ?? row.outreach_by ?? actor.id
+  for (const t of followUpTasks(p.business, String(row.outreach_at ?? new Date().toISOString()))) {
+    await makeTask(owner, actor.id, p, { title: t.title, note: t.note, due_date: t.due_date })
+  }
+}
+
+/** A REPLY → the no-response reminders stop (§12: "pause no-response follow-up tasks"), and the owner is told */
+export async function onReply(actor: Actor, p: ProspectRow, said: string | null): Promise<void> {
+  const todos = table<Todo>('todos')
+  const open = await todos.list({ where: t => (t as { prospect_id?: string | null }).prospect_id === p.id && t.status === 'open' && /^Day \d+ · /.test(String(t.title ?? '')) })
+  const now = new Date().toISOString()
+  await Promise.all(open.map(t => todos.update(t.id, { status: 'done', done_at: now, done_by: null, note: `Paused — they replied. ${t.note ?? ''}`.slice(0, 2000), updated_at: now } as never)))
+  const ownerId = (p as { owner_id?: string | null }).owner_id
+  const owner = ownerId ? await table<TeamUser>('team_users').get(ownerId) : null
+  if (owner) {
+    await tellPeople([owner], actor, p, {
+      event: 'acq_reply', subject: `${p.business} replied`, button: 'Open the prospect',
+      html: `<p><strong>${escapeHtml(p.business)}</strong> replied${said ? `:</p><blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(said.slice(0, 500))}</blockquote><p>` : '. '}The follow-up reminders are paused. It is now a lead, in New lead / Engaged.</p>`,
+    })
+  }
+}

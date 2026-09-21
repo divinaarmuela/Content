@@ -189,7 +189,8 @@ export function canSeePage(role: Role | null, href: string, granted: GrantedPage
   if (granted.includes(href)) return true
   // a Social child rides on Social itself: whoever may see the channels may
   // see the schedule, the inbox and the rest — one permission, not six
-  const parent = socialParentOf(href)
+  // …and a Leads sub-page — the acquisition views — rides on Leads the same way (21 Sep 2026)
+  const parent = socialParentOf(href) ?? (href.startsWith('/dashboard/leads/') ? '/dashboard/leads' : null)
   return parent !== null && canSeePage(role, parent, granted, hidden)
 }
 

@@ -63,6 +63,8 @@ export type TableName =
   | 'notification_log'
   | 'post_analytics'
   | 'projects'
+  | 'prospect_events'
+  | 'prospects'
   | 'provider_webhooks'
   | 'publish_jobs'
   | 'report_settings'
@@ -1083,6 +1085,67 @@ export interface Project {
   published: boolean
 }
 
+export interface ProspectEvent {
+  id: string
+  prospect_id: string
+  kind: string
+  at: string
+  by: string | null
+  source: string | null
+  detail: string | null
+  points: number | null
+  confirmed: boolean | null
+}
+
+export interface Prospect {
+  id: string
+  business: string
+  tier: number | null
+  industry: string | null
+  website: string | null
+  instagram: string | null
+  linkedin: string | null
+  contact_name: string | null
+  contact_role: string | null
+  email: string | null
+  phone: string | null
+  source: string | null
+  source_detail: string | null
+  stage: string | null
+  stage_entered_at: string | null
+  owner_id: string | null
+  added_by: string | null
+  audit_angle: string | null
+  loom_url: string | null
+  post_url: string | null
+  cta_url: string | null
+  outreach_at: string | null
+  outreach_channel: string | null
+  outreach_by: string | null
+  replied_at: string | null
+  call_at: string | null
+  call_notes: string | null
+  proposal_url: string | null
+  proposal_sent_at: string | null
+  deal_value: number | null
+  invoice_ref: string | null
+  deposit_amount: number | null
+  deposit_sent_at: string | null
+  deposit_paid_at: string | null
+  contract_url: string | null
+  signed_at: string | null
+  client_id: string | null
+  next_action: string | null
+  next_action_at: string | null
+  not_now_at: string | null
+  reopen_at: string | null
+  dormant_at: string | null
+  notes: string | null
+  created_at: string | null
+  updated_at: string | null
+  weakness_tags: unknown | null
+}
+
 export interface ProviderWebhook {
   id: string
   provider: string
@@ -1321,6 +1384,7 @@ export interface TeamUser {
 
 export interface Todo {
   id: string
+  prospect_id: string | null
   title: string
   note: string | null
   status: string
@@ -1458,6 +1522,8 @@ export const TABLE_COLUMNS = {
   notification_log: ['id', 'created_at', 'dedupe_key', 'event_type', 'recipient_id', 'recipient_email', 'subject', 'body_html', 'entity_type', 'entity_id', 'channel', 'status', 'sent_at', 'error', 'retry_count', 'read_at', 'claimed_at'],
   post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'id', 'created_at', 'updated_at', 'client_id', 'slug', 'name', 'industry', 'tag', 'services', 'description', 'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach', 'outcome', 'sort_order', 'published'],
+  prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed'],
+  prospects: ['id', 'business', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'weakness_tags'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
   publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
@@ -1474,7 +1540,7 @@ export const TABLE_COLUMNS = {
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact'],
-  todos: ['id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by'],
+  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
   webhook_deliveries: ['id', 'provider', 'event', 'provider_event_id', 'received_at', 'handled', 'note'],
@@ -1544,6 +1610,8 @@ export const NULLABLE_COLUMNS = {
   notification_log: ['recipient_id', 'entity_type', 'entity_id', 'sent_at', 'error', 'read_at', 'claimed_at'],
   post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'client_id', 'result'],
+  prospect_events: ['by', 'source', 'detail', 'points', 'confirmed'],
+  prospects: ['tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'weakness_tags'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
   publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results'],
   report_settings: ['data_from', 'last_sent_for'],
@@ -1560,7 +1628,7 @@ export const NULLABLE_COLUMNS = {
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact'],
-  todos: ['note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by'],
+  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by'],
   user_page_access: ['granted_by'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
   webhook_deliveries: ['note'],
@@ -1637,6 +1705,8 @@ export const JSON_COLUMNS = {
   notification_log: [],
   post_analytics: ['raw', 'performance', 'interactors'],
   projects: [],
+  prospect_events: [],
+  prospects: ['weakness_tags'],
   provider_webhooks: ['events'],
   publish_jobs: ['media', 'targets', 'platform_results'],
   report_settings: [],
@@ -1729,6 +1799,8 @@ export const JSON_ARRAY_COLUMNS = {
   notification_log: [],
   post_analytics: [],
   projects: [],
+  prospect_events: [],
+  prospects: [],
   provider_webhooks: ['events'],
   publish_jobs: ['media', 'targets', 'platform_results'],
   report_settings: [],

@@ -69,6 +69,18 @@ export const NAV_MAIN: NavItem[] = [
  * may see Social may see all of it, and inventing three more permissions for
  * one page's tabs is a permission model nobody would maintain.
  */
+/**
+ * LEADS' OWN SUB-LINKS (the owner, 21 Sep 2026: "you need to use the
+ * acquisition phase through the sublink"): the acquisition system's views sit
+ * under Leads, on Leads' own permission — whoever may see Leads sees them.
+ */
+export const NAV_LEADS_CHILDREN: NavItem[] = [
+  { href: '/dashboard/leads/acquisition/targets',   label: 'Targets',   icon: Search },
+  { href: '/dashboard/leads/acquisition',           label: 'Pipeline',  icon: Kanban },
+  { href: '/dashboard/leads/acquisition/contacts',  label: 'Contacts',  icon: Users },
+  { href: '/dashboard/leads/acquisition/reporting', label: 'Reporting', icon: BarChart3 },
+]
+
 export const NAV_SOCIAL_CHILDREN: NavItem[] = [
   // first, because it is where the week is planned — the page people open to
   // decide what goes out and when, and the one the rest of Social feeds
@@ -193,6 +205,8 @@ export type ResolvedNav = {
   allowed: Map<string, NavItem>
   /** Social's children, empty when Social itself is not visible */
   children: NavItem[]
+  /** Leads' sub-links — the acquisition views — empty when Leads is not visible */
+  leadsChildren: NavItem[]
   /** the entry the current page belongs to */
   current: string | null
 }
@@ -207,10 +221,12 @@ export function resolveNav(
   // holds ON ITS OWN (a scheduler's Schedule page) is drawn even when Social
   // itself is not. `canSeePage` answers both: it falls back to the parent.
   const children = visiblePages(role, NAV_SOCIAL_CHILDREN, granted, hidden)
+  const leadsChildren = visiblePages(role, NAV_LEADS_CHILDREN, granted, hidden)
   return {
     allowed: new Map([...main, ...tools].map(i => [i.href, i] as const)),
     children,
-    current: activeNavHref(path, [...main, ...children, ...tools].map(i => i.href)),
+    leadsChildren,
+    current: activeNavHref(path, [...main, ...children, ...leadsChildren, ...tools].map(i => i.href)),
   }
 }
 
@@ -228,7 +244,7 @@ function NavLinks({ nav, onNavigate, part }: {
   onNavigate?: () => void
   part: 'groups' | 'pinned'
 }) {
-  const { allowed, children, current } = nav
+  const { allowed, children, leadsChildren, current } = nav
 
   const link = (item: NavItem, nested = false) => {
     const active = current === item.href
@@ -297,6 +313,7 @@ function NavLinks({ nav, onNavigate, part }: {
               <div key={item.href} className="contents">
                 {link(item)}
                 {item.href === '/dashboard/social' && children.map(c => link(c, true))}
+                {item.href === '/dashboard/leads' && leadsChildren.map(c => link(c, true))}
               </div>
             ))}
           </div>
