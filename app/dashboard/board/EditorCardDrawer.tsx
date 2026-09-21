@@ -662,7 +662,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-qc">
         {/* the editor's OWN list from the SOP — not Joy's quality check, which is the next column (the owner, 13 Sep 2026: "how come editor can see the quality check checkbox") */}
         <p id="ed-qc" className={H2}>Your checks before you submit</p>
-        {submitting && holder ? (
+        {/* the holder submits; so does a manager who put the files on (22 Sep 2026: a super admin replaced two clips and had no submit) */}
+        {submitting && mayFile ? (
           <>
             <p className="text-[12px] text-muted-foreground">Tick each one, then submit.</p>
             <ul className="flex flex-col gap-1">

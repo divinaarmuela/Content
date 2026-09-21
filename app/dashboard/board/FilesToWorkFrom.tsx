@@ -216,7 +216,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           {shownVersion.folderUrl && (
             <DrivePullBar kind="item" scopeId={item.id} folderUrl={shownVersion.folderUrl} which="finished" mayStart={mayEdit && shownVersion.folderUrl === (finished?.url ?? '')} showFiles={false} />
           )}
-          {shownVersion.folderUrl && (
+          {/* an uploaded version has no folder — its files are the copies, drawn as they are (22 Sep 2026: the Version 2 tab was blank) */}
+          {(shownVersion.folderUrl || shownVersion.files.length > 0) && (
             <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
           )}
         </>
