@@ -177,6 +177,8 @@ docs/schema-history/*.sql   Postgres schema history — read by scripts/gen-db-t
                             to generate lib/db-types.ts; not run against anything live
 docs/ZERNIO_POSTING_OPTIONS.md  network → option → Zernio field, so nobody
                             re-derives it from the composer
+docs/ZERNIO_INBOX_CAPABILITIES.md  Zernio's social inbox from its OpenAPI spec (v1.17.0): every call,
+                            field and webhook, and what the acquisition scanner can read from each
 docs/BUILD_PLAN.md     the governing plan
 docs/PROJECT_STATE.md  current status — read this
 ```
