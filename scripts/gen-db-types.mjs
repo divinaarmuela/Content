@@ -117,6 +117,21 @@ const GHOST_TABLES = {
   //   app/lib/todo-core.ts: a super admin all, everyone else what they hold
   //   (owner_id) or wrote (created_by). `files` is a list of {url, name,
   //   mime, size} in our own storage.
+  // team_boards — THE TEAM'S OWN CANVASES (the owner, 21 Sep 2026: "a boards
+  //   page, simply for internal, like the board in the shoot brief"). One row
+  //   per board; `canvas_cards` is the same card list a shoot's plan canvas
+  //   keeps on `batches.canvas_cards` (app/lib/batch-brief-core.ts), merged by
+  //   per-card ops inside a claim. No client, no shoot, no approvals. Rules in
+  //   app/lib/team-board-core.ts.
+  team_boards: [
+    ['id', col('string', false)],
+    ['name', col('string', false)],
+    ['canvas_cards', col('unknown', true, true)],
+    ['created_by', col('string', true)],
+    ['updated_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
   todos: [
     ['id', col('string', false)],
     ['title', col('string', false)],

@@ -54,6 +54,7 @@ export const GRANTABLE_PAGES: { href: string; label: string; parent?: string }[]
   { href: '/dashboard/team/activity', label: 'Team activity' },
   { href: '/dashboard/ai', label: 'AI Assistant' },
   { href: '/dashboard/todos', label: 'To-dos' },
+  { href: '/dashboard/team-boards', label: 'Boards' },
   { href: '/dashboard/notifications', label: 'Notifications' },
   { href: '/dashboard/settings', label: 'Settings' },
 ]
@@ -95,7 +96,8 @@ export function socialParentOf(href: string): string | null {
 
 /** Every team role gets the Overview, their own Notifications feed, and
  *  Settings (their profile and notification preferences live there). */
-const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/todos', '/dashboard/notifications', '/dashboard/settings']
+// …and Boards: the team's own canvases are everyone's on the team (the owner, 21 Sep 2026)
+const PERSONAL_PAGES = ['/dashboard', '/dashboard/start', '/dashboard/todos', '/dashboard/team-boards', '/dashboard/notifications', '/dashboard/settings']
 
 /**
  * The default ladder — THE THREE PAGES RESET (6 Sep 2026).
