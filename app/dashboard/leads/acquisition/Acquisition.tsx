@@ -108,6 +108,21 @@ export default function Acquisition({ view }: { view: AcqView }) {
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); return false } finally { setBusy(false) }
   }
 
+  /** the agent looks the business up (about a minute), and says what it filled in */
+  const researchNow = async (id: string) => {
+    setBusy(true)
+    const wait = toast.loading('Looking the business up — about a minute…')
+    try {
+      const res = await fetch(`/api/leads/acquisition/${id}/research`, { method: 'POST' })
+      const json = await res.json().catch(() => ({})) as { error?: string; run?: { found: boolean; filled: string[]; proposed: string[] } }
+      if (!res.ok || !json.run) throw new Error(json.error ?? 'The research did not finish')
+      const r = json.run
+      toast.success(!r.found ? 'It could not be sure which business this is — the note on the timeline says what it saw'
+        : `Research is on the timeline${r.filled.length ? ` · filled in ${r.filled.length} ${r.filled.length === 1 ? 'field' : 'fields'}` : ''}${r.proposed.length ? ` · ${r.proposed.length} to confirm` : ''}`, { id: wait })
+      return true
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'The research did not finish', { id: wait }); return false } finally { setBusy(false) }
+  }
+
   /** the agent's pass for one prospect, and what it found in words */
   const checkNow = async (id: string) => {
     setBusy(true)
@@ -233,7 +248,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
               log={(kind: AcqEventKind, detail, said) => call(`/api/leads/acquisition/${current.id}/events`, 'POST', { kind, detail }, said)}
               remove={() => setDeleting(current)}
               answer={(eventId, confirm) => call(`/api/leads/acquisition/${current.id}/events/${eventId}`, 'POST', { confirm }, confirm ? 'Confirmed — it counts now' : 'Dismissed')}
-              check={() => checkNow(current.id)} />
+              check={() => checkNow(current.id)}
+              research={() => researchNow(current.id)} />
           )}
         </SheetContent>
       </Sheet>

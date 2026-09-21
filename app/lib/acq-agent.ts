@@ -12,8 +12,8 @@ import { encodeKey } from '@/lib/db'
 import { acqStageByKey, cleanHandle, replyPoints, type AcqEvent, type AcqEventKind, type Prospect } from './acquisition-core'
 import { logAcqEvent, recordCallBooked, recordReply } from './acquisition'
 import {
-  AGENT_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, strangerIsLead, strangerLockKey, strangerPrompt,
-  type AgentFinding, type Evidence, type StrangerVerdict,
+  AGENT_SYSTEM, RESEARCH_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, pageTextFrom, publicMetaFrom, researchNote, researchPatch, researchPrompt, safePublicUrl, strangerIsLead, strangerLockKey, strangerPrompt,
+  type AgentFinding, type Evidence, type Research, type StrangerVerdict,
 } from './acq-agent-core'
 import { peopleNamed, tellPeople } from './acquisition'
 import { escapeHtml } from './mailer'
@@ -98,8 +98,11 @@ export async function ownAccountIds(): Promise<string[]> {
   const own = wanted ? [{ id: wanted }] : await table<Client>('clients').list({ where: c => /^md\s*media$/i.test(String(c.name ?? '').trim()) })
   const ids = new Set(own.map(c => c.id))
   const accounts = await table<SocialAccount>('social_accounts').list({ where: a => !!a.client_id && ids.has(a.client_id) })
+  for (const a of accounts) if (a.provider_account_id && a.username) OWN_HANDLES.set(a.provider_account_id, String(a.username).replace(/^@/, ''))
   return accounts.map(a => a.provider_account_id).filter((x): x is string => !!x)
 }
+/** our own handle per connected account — the conversation list does not carry it (seen live, 21 Sep 2026: the line said "@mdmedia" for @mdmedia._) */
+const OWN_HANDLES = new Map<string, string>()
 
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {})
 const listIn = (raw: unknown, key: string): unknown[] => Array.isArray(raw) ? raw : Array.isArray(rec(raw)[key]) ? rec(raw)[key] as unknown[] : Array.isArray(rec(raw).data) ? rec(raw).data as unknown[] : []
@@ -118,7 +121,7 @@ export async function ownThreads(): Promise<OwnThreads> {
     const accountId = str(c.accountId)
     const handle = (cleanHandle(str(c.participantUsername) || str(rec(c.participant).username)) ?? '').toLowerCase()
     if (!handle || !mine.has(accountId) || !str(c.id)) continue
-    out.push({ handle, conversationId: str(c.id), accountId, ours: str(c.accountUsername) })
+    out.push({ handle, conversationId: str(c.id), accountId, ours: str(c.accountUsername) || OWN_HANDLES.get(accountId) || '' })
   }
   return out
 }
@@ -284,5 +287,112 @@ export async function onOwnDm(input: { accountId: string; conversationId: string
       html: `<p><strong>@${escapeHtml(handle)}</strong> wrote to MD Media on Instagram and looks like a potential client.</p><p><strong>What they asked for:</strong> ${escapeHtml(v.wants.trim() || '—')}</p><p><strong>What happens next:</strong> reply to them in the Inbox — you write it. If this is not a lead, delete it from the pipeline.</p>`,
     })
   } catch (e) { console.error('[acq-agent] could not tell Joy about a DM lead:', e) }
+  // …and looked up, so whoever opens it is not starting from a handle and one sentence
+  try { const { inngest } = await import('../inngest/client'); await inngest.send({ name: 'app/acquisition.research.requested', data: { prospect_id: made.id } }) } catch (e) { console.error('[acq-agent] could not queue the research:', e) }
   return { kind: 'lead_made', prospect_id: made.id, business }
+}
+
+/* ── research (acq-agent-core.ts, "the agent researches the business") ──── */
+
+const ResearchShape = z.object({
+  found: z.boolean(), summary: z.string(), what_they_do: z.string(), industry: z.string(),
+  tier: z.number(), website: z.string(), location: z.string(), contact_name: z.string(),
+  weaknesses: z.array(z.string()), audit_angle: z.string(),
+  fit: z.enum(['strong', 'possible', 'poor', 'unknown']), confidence: z.number().min(0).max(1), sources: z.array(z.string()),
+})
+
+const FILLED_WORDS: Record<string, string> = { tier: 'tier', industry: 'industry', website: 'website', audit_angle: 'audit angle', contact_name: 'contact name', weakness_tags: 'what looks weak' }
+
+export type ResearchRun = { prospect_id: string; found: boolean; filled: string[]; proposed: string[]; searched: boolean; error?: string }
+
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+
+/**
+ * WHAT INSTAGRAM SHOWS ANYONE about a profile: the name and the three counts,
+ * from the page's own preview tags. Checked live on 21 Sep 2026 against
+ * @crestlineconsultants — the preview tags answer; Instagram's profile JSON
+ * (the bio, the link in bio) answers NOTHING to a server, and Zernio has no
+ * "look up another account" call. So the bio is not read from Instagram: the
+ * web search finds the business's site, and the site is read instead.
+ */
+export async function instagramPublicMeta(handle: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, { headers: { 'User-Agent': 'facebookexternalhit/1.1' }, signal: AbortSignal.timeout(12_000) })
+    if (!res.ok) return null
+    return publicMetaFrom(await res.text())
+  } catch { return null }
+}
+
+/** the business's own site, as text: what a visitor reads first, and how to reach them */
+export async function siteText(url: string): Promise<string | null> {
+  const safe = safePublicUrl(url)
+  if (!safe) return null
+  try {
+    const res = await fetch(safe, { headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(15_000) })
+    if (!res.ok || !String(res.headers.get('content-type') ?? '').includes('html')) return null
+    return pageTextFrom((await res.text()).slice(0, 600_000))
+  } catch { return null }
+}
+
+export async function researchProspect(p: P): Promise<ResearchRun> {
+  const run: ResearchRun = { prospect_id: p.id, found: false, filled: [], proposed: [], searched: false }
+  try {
+    const handle = (cleanHandle(String(p.instagram ?? '')) ?? '')
+    const ig = handle ? await instagramPublicMeta(handle) : null
+    const given = p.website ? await siteText(String(p.website)) : null
+    const brief = [researchPrompt(p), ig ? `INSTAGRAM SAYS (public page): ${ig}` : handle ? 'INSTAGRAM: the public page could not be read' : null, given ? `THEIR WEBSITE, READ JUST NOW (${p.website}):\n${given}` : null].filter(Boolean).join('\n')
+    // 1. LOOK IT UP — the model searches the web itself (Anthropic's server-side web search)
+    let findings = ''
+    try {
+      const looked = await anthropic.messages.create({
+        model: agentModel(), max_tokens: 3000, system: RESEARCH_SYSTEM,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }] as never,
+        messages: [{ role: 'user', content: `${brief}\n\nResearch this business and write up what you found, with the URL beside every fact.` }],
+      })
+      findings = looked.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim()
+      run.searched = looked.content.some(b => String(b.type).includes('web_search'))
+    } catch (e) {
+      // web search may not be switched on for this API key — say so rather than guess from nothing
+      console.error('[acq-agent] web search failed for', p.business, e)
+      run.error = `Web search is not available: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`
+      await logAcqEvent({ prospectId: p.id, kind: 'note', source: 'agent', detail: `The agent could not research ${p.business}: web search is not available on the AI account. Nothing was filled in.` })
+      return run
+    }
+    // 2. PUT IT IN THE PROSPECT'S SHAPE — a second call that may only use what the first one found
+    const shape = async (notes: string): Promise<Research | null> => (await anthropic.messages.parse({
+      model: agentModel(), max_tokens: 1500,
+      system: 'Turn the research notes into the fields asked for. Use ONLY what the notes and the website text say. Empty string or empty list where they have nothing. sources are the URLs cited. found is false if the business could not be identified.',
+      messages: [{ role: 'user', content: `${brief}\n\nRESEARCH NOTES\n${notes || '(nothing found)'}` }],
+      output_config: { format: zodOutputFormat(ResearchShape) },
+    })).parsed_output as Research | null
+    let r = await shape(findings)
+    if (!r) throw new Error('The research came back unreadable')
+    // 3. THE SEARCH FOUND THEIR SITE — read it ourselves, and let what it says sharpen the write-up
+    if (r.found && !given && r.website) {
+      const site = await siteText(r.website)
+      if (site) r = (await shape(`${findings}\n\nTHEIR WEBSITE, READ JUST NOW (${r.website}):\n${site}`)) ?? r
+    }
+    run.found = r.found
+
+    const patch = researchPatch(p as never, r)
+    run.filled = Object.keys(patch)
+    if (run.filled.length > 0) await table<ProspectRow>('prospects').update(p.id, { ...patch, updated_at: new Date().toISOString() } as never)
+    await logAcqEvent({ prospectId: p.id, kind: 'note', source: 'agent', confidence: r.confidence, detail: `Research by the agent${run.filled.length ? ` — filled in: ${run.filled.map(k => FILLED_WORDS[k] ?? k).join(', ')}` : ''}\n${researchNote(r)}` })
+
+    // the blueprint's two research points are Manal's to give: proposed, never taken
+    const events = await table<ProspectEvent>('prospect_events').list({ where: e => e.prospect_id === p.id })
+    const has = (kind: string) => events.some(e => e.kind === kind && !e.dismissed_at)
+    if (r.found && r.fit === 'strong' && !has('fit')) {
+      await logAcqEvent({ prospectId: p.id, kind: 'fit', source: 'agent', confirmed: false, confidence: r.confidence, detail: `The agent thinks this is a strong fit for tier ${r.tier || '?'}: ${r.summary.slice(0, 240)}` })
+      run.proposed.push('fit')
+    }
+    if (r.found && r.weaknesses.length > 0 && !has('weak_presence')) {
+      await logAcqEvent({ prospectId: p.id, kind: 'weak_presence', source: 'agent', confirmed: false, confidence: r.confidence, detail: `The agent saw: ${r.weaknesses.slice(0, 4).join('; ')}` })
+      run.proposed.push('weak_presence')
+    }
+  } catch (e) {
+    run.error = e instanceof Error ? e.message : String(e)
+    console.error('[acq-agent] research failed for', p.business, e)
+  }
+  return run
 }

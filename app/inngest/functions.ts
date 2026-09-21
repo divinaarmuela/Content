@@ -985,9 +985,36 @@ export const acquisitionDm = inngest.createFunction(
   },
 )
 
+/**
+ * THE AGENT RESEARCHES A BUSINESS (21 Sep 2026; acq-agent.ts researchProspect):
+ * when it makes a lead from a DM, and when a person adds a target. Once per
+ * prospect per request. NEW FUNCTION: re-sync after deploy (CLAUDE.md, 5b).
+ */
+export const acquisitionResearch = inngest.createFunction(
+  {
+    id: 'acquisition-research',
+    name: 'Acquisition: research a business',
+    retries: 1,
+    concurrency: { limit: 2 },
+    triggers: [{ event: 'app/acquisition.research.requested' }],
+  },
+  async ({ event, step }) => {
+    const id = String((event.data as { prospect_id?: string }).prospect_id ?? '')
+    if (!id) return { synced: true, skipped: 'no prospect' }
+    const run = await step.run('research', async () => {
+      const { table } = await import('@/lib/db')
+      const { researchProspect } = await import('../lib/acq-agent')
+      const p = await table('prospects').get(id)
+      return p ? researchProspect(p as never) : null
+    })
+    return { synced: true, run }
+  },
+)
+
 export const functions = [
   acquisitionAgent,
   acquisitionDm,
+  acquisitionResearch,
   dueReminders,
   shootBriefLate,
   editorSopNudges,

@@ -30,6 +30,8 @@ export async function POST(req: Request) {
       await logAcqEvent({ prospectId: prospect.id, kind: 'added', by: user.id, detail: `Added by ${user.name || user.email}` })
       if (body.fit_strong === true) await logAcqEvent({ prospectId: prospect.id, kind: 'fit', by: user.id })
       if (body.weak_presence === true) await logAcqEvent({ prospectId: prospect.id, kind: 'weak_presence', by: user.id })
+      // the agent looks the business up while Manal carries on (acq-agent.ts) — best effort
+      try { const { inngest } = await import('../../../inngest/client'); await inngest.send({ name: 'app/acquisition.research.requested', data: { prospect_id: prospect.id } }) } catch (e) { console.error('[acquisition] could not queue the research:', e) }
       return NextResponse.json({ prospect }, { status: 201 })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)

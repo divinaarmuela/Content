@@ -166,3 +166,123 @@ export function strangerPrompt(handle: string, name: string | null, messages: re
   const lines = messages.map(m => `[${m.at ?? '?'}] ${m.direction === 'in' ? `@${handle}` : 'MD Media'}: ${m.text.replace(/\s+/g, ' ').trim().slice(0, 600)}`).join('\n')
   return `HANDLE: @${handle}\nDISPLAY NAME: ${name ?? '—'}\n\nTHREAD (oldest first)\n${lines}`
 }
+
+/* ── THE AGENT RESEARCHES THE BUSINESS (21 Sep 2026) ───────────────────────
+ * The owner, on the first lead the agent made: "our AI didn't do a research
+ * of the company". It found Crestline Consultants in the DMs and knew nothing
+ * about them. Research is the blueprint's FIRST stage (§7: tier, website,
+ * socials, notes, weakness tags; §10: observed gaps, audit angle) and Manal's
+ * job — so the agent does the looking-up and leaves the judging to her:
+ *
+ *   it SEARCHES the web for the business and reads what it finds;
+ *   it FILLS ONLY WHAT IS EMPTY — a tier, an industry, a website, an audit
+ *     angle a person typed is never overwritten;
+ *   the write-up goes on the timeline as a note WITH ITS SOURCES, so every
+ *     claim can be checked;
+ *   "strong fit" (+10) and "weak presence" (+5) are the blueprint's points
+ *     for Manal's classification — the agent only PROPOSES them, as findings
+ *     a person confirms.
+ * What it could not find it says it could not find. It never invents a
+ * website, a name or a number.
+ */
+export type Research = {
+  found: boolean
+  summary: string
+  what_they_do: string
+  industry: string
+  /** 1 service-based · 2 clinics and beauty · 3 construction, trades, hospitality · 4 ecommerce · 0 unsure */
+  tier: number
+  website: string
+  location: string
+  contact_name: string
+  weaknesses: string[]
+  audit_angle: string
+  fit: 'strong' | 'possible' | 'poor' | 'unknown'
+  confidence: number
+  sources: string[]
+}
+
+export const RESEARCH_SYSTEM =
+  'You research a business for MD Media, a Melbourne marketing agency (content production, social media management, branding, paid ads, personal brands), before anyone contacts them. ' +
+  'Use web search to find the business: its website, what it sells, where it is, who runs it, and the state of its website and social presence. Search the name, the Instagram handle, and the name with "Melbourne" or "Australia". ' +
+  'Be strict about identity: many businesses share a name. Only report facts from pages that are clearly THIS business (the same handle, the same location, a link between them). If you cannot tell which one it is, say so and set found to false. ' +
+  'Never invent a website, a person or a number. What you could not find, leave empty. ' +
+  'Then say, for a marketing agency: what is weak or missing in how they present themselves (each a short phrase, only what you actually saw), and one audit angle — the single most useful thing to show them in a short audit video. ' +
+  'Tier: 1 service-based (finance, property, advisers, consultants, investors), 2 clinics and beauty, 3 construction, trades and hospitality, 4 ecommerce, 0 unsure. ' +
+  'Fit: strong (a real operating business in a tier, with a visible gap the agency fixes), possible, poor (tiny, inactive, not a business, or outside what the agency does), unknown.'
+
+export function researchPrompt(p: { business: string; instagram?: string | null; website?: string | null; email?: string | null; contact_name?: string | null; notes?: string | null }, extra: { followerCount?: number | null } = {}): string {
+  return [
+    `BUSINESS: ${p.business}`,
+    p.instagram ? `INSTAGRAM: @${p.instagram} (https://www.instagram.com/${p.instagram}/)${typeof extra.followerCount === 'number' ? ` — ${extra.followerCount} followers` : ''}` : null,
+    p.website ? `WEBSITE GIVEN: ${p.website}` : null,
+    p.email ? `EMAIL: ${p.email}` : null,
+    p.contact_name ? `CONTACT: ${p.contact_name}` : null,
+    p.notes ? `WHAT WE KNOW SO FAR:\n${String(p.notes).slice(0, 800)}` : null,
+  ].filter(Boolean).join('\n')
+}
+
+const httpUrl = (s: string): string | null => { try { const u = new URL(/^https?:\/\//i.test(s.trim()) ? s.trim() : `https://${s.trim()}`); return /^https?:$/.test(u.protocol) && u.hostname.includes('.') ? u.toString() : null } catch { return null } }
+
+/** rule: fill only what is empty; a person's entry always stands */
+export function researchPatch(p: { tier?: number | null; industry?: string | null; website?: string | null; audit_angle?: string | null; contact_name?: string | null; weakness_tags?: unknown }, r: Research): Record<string, unknown> {
+  if (!r.found) return {}
+  const out: Record<string, unknown> = {}
+  const empty = (v: unknown) => v === null || v === undefined || String(v).trim() === ''
+  if (empty(p.tier) && [1, 2, 3, 4].includes(Number(r.tier)) && r.confidence >= 0.6) out.tier = Number(r.tier)
+  if (empty(p.industry) && r.industry.trim()) out.industry = r.industry.trim().slice(0, 120)
+  if (empty(p.website) && r.website.trim()) { const u = httpUrl(r.website); if (u) out.website = u }
+  if (empty(p.audit_angle) && r.audit_angle.trim()) out.audit_angle = r.audit_angle.trim().slice(0, 500)
+  if (empty(p.contact_name) && r.contact_name.trim()) out.contact_name = r.contact_name.trim().slice(0, 120)
+  const had = Array.isArray(p.weakness_tags) ? p.weakness_tags.filter(Boolean) : []
+  const tags = r.weaknesses.map(w => String(w).trim().slice(0, 60)).filter(Boolean).slice(0, 6)
+  if (had.length === 0 && tags.length > 0) out.weakness_tags = tags
+  return out
+}
+
+/** "1 Followers, 0 Following, 0 Posts - … from Crestline Consultants (@crestlineconsultants)" out of the page's preview tags */
+export function publicMetaFrom(html: string): string | null {
+  const m = /<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i.exec(html) ?? /<meta[^>]+content="([^"]*)"[^>]+property="og:description"/i.exec(html)
+  if (!m) return null
+  const text = m[1].replace(/&#0*64;/g, '@').replace(/&#x2022;/gi, '•').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim()
+  return /Followers/i.test(text) ? text.slice(0, 300) : null
+}
+
+/** a page as a visitor reads it: title, description, headings, then the words; and how to reach them */
+export function pageTextFrom(html: string): string {
+  const pick = (re: RegExp) => { const m = re.exec(html); return m ? m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '' }
+  const title = pick(/<title[^>]*>([\s\S]*?)<\/title>/i)
+  const desc = pick(/<meta[^>]+name="description"[^>]+content="([^"]*)"/i)
+  const heads = [...html.matchAll(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 25)
+  const emails = [...new Set((html.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) ?? []).filter(e => !/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(e)))].slice(0, 5)
+  const socials = [...new Set((html.match(/https?:\/\/(?:www\.)?(?:instagram|facebook|linkedin|tiktok|youtube)\.com\/[^\s"'<>)]+/gi) ?? []))].slice(0, 8)
+  const body = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
+  return [
+    title && `TITLE: ${title}`, desc && `DESCRIPTION: ${desc}`, heads.length && `HEADINGS: ${heads.join(' | ')}`,
+    emails.length && `EMAILS ON THE PAGE: ${emails.join(', ')}`, socials.length && `SOCIAL LINKS: ${socials.join(' ')}`, `TEXT: ${body.slice(0, 3500)}`,
+  ].filter(Boolean).join('\n')
+}
+
+/** only a public web address is ever fetched: http(s), a real hostname, never an IP, localhost or an internal name */
+export function safePublicUrl(raw: string): string | null {
+  const u = httpUrl(raw)
+  if (!u) return null
+  const host = new URL(u).hostname.toLowerCase()
+  if (/^[\d.]+$/.test(host) || host.includes(':') || host === 'localhost' || /\.(local|internal|lan|home|corp)$/.test(host)) return null
+  return u
+}
+
+/** the note on the timeline: what was found, and where — so it can be checked */
+export function researchNote(r: Research): string {
+  if (!r.found) return `The agent looked this business up and could not be sure which business it is${r.summary ? `: ${r.summary}` : '.'} Nothing was filled in.`
+  const lines = [
+    r.summary.trim(),
+    r.what_they_do.trim() ? `What they do: ${r.what_they_do.trim()}` : '',
+    r.location.trim() ? `Where: ${r.location.trim()}` : '',
+    r.weaknesses.length ? `What looks weak: ${r.weaknesses.join('; ')}` : '',
+    r.audit_angle.trim() ? `Audit angle: ${r.audit_angle.trim()}` : '',
+    `Fit: ${r.fit} · ${Math.round(r.confidence * 100)}% sure`,
+    r.sources.length ? `Sources: ${r.sources.slice(0, 6).join(' · ')}` : 'Sources: none it could cite',
+  ]
+  return lines.filter(Boolean).join('\n').slice(0, 1900)
+}

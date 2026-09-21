@@ -29,7 +29,7 @@ const dt = (iso: string | null | undefined) => (iso ? new Date(iso).toISOString(
 const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' }) : '')
 const stamp = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
-export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check }: {
+export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check, research }: {
   prospect: Prospect
   events: AcqEvent[]
   team: TeamUser[]
@@ -43,6 +43,8 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
   answer: (eventId: string, confirm: boolean) => Promise<boolean>
   /** the agent's pass for this prospect, now */
   check: () => Promise<boolean>
+  /** the agent looks the business up: Instagram's public page, the web, their site */
+  research: () => Promise<boolean>
   now: number
 }) {
   const stage = acqStageByKey(p.stage)
@@ -255,6 +257,9 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
           <p id="acq-timeline" className={`${H} min-w-0 flex-1`}>Timeline — the score is the sum of these</p>
           <Button variant="outline" disabled={busy} onClick={() => void check()} className="h-11 rounded-full px-4 text-[13px] font-semibold">
             <Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {busy ? 'Checking…' : 'Check the inboxes now'}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => void research()} className="h-11 rounded-full px-4 text-[13px] font-semibold">
+            <Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {busy ? 'Working…' : 'Research this business'}
           </Button>
         </div>
         <p className="text-[12px] text-muted-foreground">
