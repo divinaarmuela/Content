@@ -17,7 +17,7 @@ import {
   applyCanvasOp, sanitisePlannedDeliverables, sanitiseReferenceMedia, sanitiseShotList,
   shootDeletion,
 } from '../../../../lib/batch-brief-core'
-import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired } from '../../../../lib/shoot-sop-core'
+import { NOT_YOUR_PAGE, acksOf, canManageShoot, footageReadyToHand, peopleOnShoot, planReviewRequired, sanitiseBriefSkipped } from '../../../../lib/shoot-sop-core'
 import { portalToggles } from '../../../../lib/portal-owner-core'
 import { cancelReplacedPullSoon, startPullSoon } from '../../../../lib/drive-pull'
 
@@ -204,6 +204,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         'portal_show_person' in body ? body.portal_show_person !== false : cur.portal_show_person !== false,
       ))
     }
+    // the parts this shoot does not need — known keys only, never the date and place (21 Sep 2026)
+    if ('brief_skipped' in body) patch.brief_skipped = sanitiseBriefSkipped(body.brief_skipped)
     // ── the Shoot Brief SOP's nine parts ──
     for (const [field, max] of [
       ['objective', 2000], ['script', 8000], ['call_time', 60], ['talent', 1000],

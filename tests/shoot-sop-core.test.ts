@@ -596,3 +596,28 @@ describe('the plan is shared with people (the owner, 14 Sep 2026)', () => {
     expect(stageMove(complete({ crew_ids: [] }), 'shared', am, now, AM)).toMatchObject({ ok: true })
   })
 })
+
+describe('the parts a shoot does not need (21 Sep 2026)', () => {
+  it('leave the plan and the count; the date and place always stay; unknown keys are dropped', async () => {
+    const { briefChecklist, briefItemsFor, maySkipBriefItem, sanitiseBriefSkipped, skippedBriefKeys, BRIEF_ITEMS } = await import('../app/lib/shoot-sop-core')
+    const shoot = { id: 's', client_id: 'c', objective: 'Launch', talent: 'Ana' }
+    expect(briefChecklist(shoot as never).words).toBe(`2 of ${BRIEF_ITEMS.length} filled`)
+    const lean = { ...shoot, brief_skipped: ['props', 'script', 'shot_list', 'editor', 'deliverables', 'when_where', 'nonsense', 'props'] }
+    expect(skippedBriefKeys(lean)).toEqual(['props', 'script', 'shot_list', 'editor', 'deliverables'])
+    expect(briefItemsFor(lean).map(i => i.key)).toEqual(['objective', 'when_where', 'talent'])
+    expect(briefChecklist(lean as never).words).toBe('2 of 3 filled')
+    expect(briefChecklist(lean as never).missing.map(i => i.key)).toEqual(['when_where'])
+    expect(briefChecklist({ ...lean, shoot_date: '2026-10-01', call_time: '9am', location: 'Studio' } as never).words).toBe('Plan complete')
+    expect(maySkipBriefItem('when_where')).toBe(false)
+    expect(maySkipBriefItem('talent')).toBe(true)
+    expect(sanitiseBriefSkipped('talent')).toEqual([])
+  })
+  it('the plan offers "Not needed" and the way back, and the route keeps the keys clean', async () => {
+    const { readFileSync } = await import('node:fs')
+    const sop = readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')
+    expect(sop).toContain('if (skipped.includes(key)) return null')
+    expect(sop).toContain("<X className=\"h-3.5 w-3.5\" aria-hidden /> Not needed")
+    expect(sop).toContain('· bring back')
+    expect(readFileSync('app/api/production/batches/[id]/route.ts', 'utf8')).toContain("if ('brief_skipped' in body) patch.brief_skipped = sanitiseBriefSkipped(body.brief_skipped)")
+  })
+})

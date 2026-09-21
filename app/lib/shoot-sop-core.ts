@@ -51,6 +51,8 @@ export type SopShoot = {
   plan_reviewed_at?: string | null
   /** the script blocks (app/lib/script-core.ts), beside the plain `script` */
   scripts?: unknown
+  /** the parts of the plan this shoot does not need (21 Sep 2026) */
+  brief_skipped?: unknown
   review_asked_to?: unknown
   plan_sent_back_at?: string | null
   plan_sent_back_note?: string | null
@@ -154,6 +156,36 @@ export const BRIEF_ITEMS: readonly BriefItem[] = [
   { key: 'editor', label: 'Editor priorities and deadline', hint: 'So the editor knows the goal and the turnaround the moment footage lands' },
 ]
 
+/**
+ * THE PARTS A SHOOT DOES NOT NEED (the owner, 21 Sep 2026: "sometimes in the
+ * shoot brief we don't need all the fields — allow to delete, like the out
+ * of 8"). A part marked not needed leaves the plan: no row, no tick, and the
+ * count is out of what is left — "5 of 6 filled". What was typed in it is
+ * kept, so bringing it back brings the words back. The date, call time and
+ * location always stay: a shoot cannot be booked without them.
+ */
+export const ALWAYS_NEEDED: readonly BriefItemKey[] = ['when_where']
+
+export function sanitiseBriefSkipped(raw: unknown): BriefItemKey[] {
+  if (!Array.isArray(raw)) return []
+  const keys = new Set(BRIEF_ITEMS.map(i => i.key))
+  return [...new Set(raw.map(k => String(k ?? '')))].filter((k): k is BriefItemKey => keys.has(k as BriefItemKey) && !ALWAYS_NEEDED.includes(k as BriefItemKey))
+}
+
+export function skippedBriefKeys(b: Pick<SopShoot, 'brief_skipped'>): BriefItemKey[] {
+  return sanitiseBriefSkipped(b.brief_skipped)
+}
+
+/** the parts this shoot's plan has — every part, less the ones marked not needed */
+export function briefItemsFor(b: Pick<SopShoot, 'brief_skipped'>): BriefItem[] {
+  const skipped = new Set(skippedBriefKeys(b))
+  return BRIEF_ITEMS.filter(i => !skipped.has(i.key))
+}
+
+export function maySkipBriefItem(key: BriefItemKey): boolean {
+  return !ALWAYS_NEEDED.includes(key)
+}
+
 export type ChecklistInput = {
   /** cards already made for this shoot — a deliverable is a line on the
    *  plan OR a card pointed at the shoot */
@@ -224,11 +256,13 @@ export type Checklist = {
 }
 
 export function briefChecklist(b: SopShoot, input: ChecklistInput = {}): Checklist {
-  const missing = BRIEF_ITEMS.filter(i => !briefItemFilled(b, i.key, input))
-  const filled = BRIEF_ITEMS.length - missing.length
+  // out of the parts this shoot NEEDS — a part marked not needed is not missing (21 Sep 2026)
+  const items = briefItemsFor(b)
+  const missing = items.filter(i => !briefItemFilled(b, i.key, input))
+  const filled = items.length - missing.length
   return {
-    filled, total: BRIEF_ITEMS.length, complete: missing.length === 0, missing,
-    words: missing.length === 0 ? 'Plan complete' : `${filled} of ${BRIEF_ITEMS.length} filled`,
+    filled, total: items.length, complete: missing.length === 0, missing,
+    words: missing.length === 0 ? 'Plan complete' : `${filled} of ${items.length} filled`,
   }
 }
 

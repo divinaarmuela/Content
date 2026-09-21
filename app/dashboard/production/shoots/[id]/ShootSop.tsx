@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
-  BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, briefItemFilled, briefItemSource,
+  BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, maySkipBriefItem, skippedBriefKeys, briefItemFilled, briefItemSource,
   REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
   stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
@@ -137,7 +137,12 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
     const v = e.target.value.trim()
     if (v !== String(batch[field] ?? '').trim()) void onPatch(field, v || null)
   }
+  // THE PARTS THIS SHOOT DOES NOT NEED (shoot-sop-core, 21 Sep 2026): a part marked
+  // not needed leaves the plan and the count; what was typed in it is kept
+  const skipped = skippedBriefKeys(batch)
+  const setSkipped = (next: BriefItemKey[]) => void onPatch('brief_skipped', next)
   const row = (key: BriefItemKey, field: React.ReactNode) => {
+    if (skipped.includes(key)) return null
     const item = BRIEF_ITEMS.find(i => i.key === key)!
     const on = briefItemFilled(batch, key, { itemCount })
     const fromCanvas = briefItemSource(batch, key, { itemCount }) === 'canvas'
@@ -149,6 +154,13 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
             <span className="text-[15px] font-semibold">{item.label}</span>
             <span className="text-[12px] text-muted-foreground">{item.hint}</span>
             {fromCanvas && <Chip tone="green" className="text-[12px]">from the canvas</Chip>}
+            {maySkipBriefItem(key) && (
+              <button type="button" onClick={() => setSkipped([...skipped, key])}
+                className="ml-auto inline-flex min-h-9 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={`${item.label} is not needed for this shoot`}>
+                <X className="h-3.5 w-3.5" aria-hidden /> Not needed
+              </button>
+            )}
             <span className="sr-only">{on ? (fromCanvas ? 'filled in, on the canvas' : 'filled in') : 'still to fill in'}</span>
           </div>
           {field}
@@ -180,7 +192,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
           <Chip tone={list.complete ? 'green' : 'amber'} className="ml-auto"><span role="status">{list.words}</span></Chip>
         </div>
         <p className="-mt-2 text-[13px] text-muted-foreground">
-          Nine parts. The plan is shared with the team 7 days before the shoot, and nothing moves forward until all nine are filled in.
+          {list.total} {list.total === 1 ? 'part' : 'parts'}{skipped.length > 0 ? `, ${skipped.length} marked not needed` : ''}. The plan is shared with the team 7 days before the shoot, and nothing moves forward until every part is filled in. A part this shoot does not need can be taken off with “Not needed”.
         </p>
 
         {row('objective', area('objective', 'What this shoot is meant to achieve, and which pillar or campaign it serves'))}
@@ -297,6 +309,18 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
             </label>
           </div>
         ))}
+        {skipped.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-inner border border-dashed border-border p-3 text-[13px]" data-brief-skipped>
+            <span className="font-semibold">Not needed for this shoot:</span>
+            {skipped.map(k => (
+              <button key={k} type="button" onClick={() => setSkipped(skipped.filter(x => x !== k))}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[12px] font-semibold hover:bg-muted"
+                aria-label={`Bring back ${BRIEF_ITEMS.find(i => i.key === k)?.label ?? k}`}>
+                {BRIEF_ITEMS.find(i => i.key === k)?.label ?? k} <span className="text-muted-foreground">· bring back</span>
+              </button>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
