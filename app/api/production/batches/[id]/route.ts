@@ -185,7 +185,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('scripts' in body) patch.scripts = sanitiseScripts(body.scripts)
     if ('planned_deliverables' in body) patch.planned_deliverables = sanitisePlannedDeliverables(body.planned_deliverables)
     if ('reference_media' in body) patch.reference_media = sanitiseReferenceMedia(body.reference_media)
-    if ('owner_id' in body) patch.owner_id = body.owner_id || null
+    // the same rule as on create: an active team member, never a client (21 Sep 2026 — the shoot page can now change it)
+    if ('owner_id' in body) {
+      const named = body.owner_id ? await table<{ id: string; active_status?: boolean; role?: string }>('team_users').get(String(body.owner_id)).catch(() => null) : null
+      if (body.owner_id && (!named || named.active_status !== true || named.role === 'client')) {
+        return NextResponse.json({ error: 'The account manager has to be an active team member' }, { status: 400 })
+      }
+      patch.owner_id = named?.id ?? null
+    }
     // WHO THE SHOOT IS FOR, and what its plan is called on a person's portal (15 Sep 2026)
     if ('for_contact_id' in body) {
       const who = typeof body.for_contact_id === 'string' && body.for_contact_id.trim() ? body.for_contact_id.trim() : null

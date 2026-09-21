@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, Trash2 } from 'lucide-react'
 import { useProductionLive } from '../../useProductionLive'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import PlanReadOnly from './PlanReadOnly'
@@ -22,7 +22,7 @@ import {
   EditorCardPanel, PeoplePanel, PlanParts, StageStrip, WherePanel,
   type CrewRow, type ShootSopBatch, type TeamRow,
 } from './ShootSop'
-import { STAGE_LABEL, createdWords, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
+import { STAGE_LABEL, createdWords, shootDetailsText, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
 import { sanitiseCanvasCards, type CanvasCard, type ReferenceMedia, type ShotRow } from '../../../../lib/batch-brief-core'
 import { createCoalescer } from '../../../../lib/coalesce-core'
 import Chip from '../../../ui/Chip'
@@ -313,6 +313,13 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   }
   const booked = batch.status !== 'brief'
   const stage = today ? shootStage(batch, today) : null
+  const copyDetails = async () => {
+    const text = shootDetailsText({
+      title: batch.title, client: batch.clients?.name, description: batch.objective || batch.description, shoot_date: batch.shoot_date,
+      manager: nameOf(batch.owner_id) ?? team.find(t => t.id === batch.owner_id)?.name ?? null,
+    })
+    try { await navigator.clipboard.writeText(text); toast.success('Details copied') } catch { toast.error('Could not copy — select the text instead') }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -334,6 +341,9 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
           />
         </h1>
         {stage && <Chip tone={stage === 'footage_handed' ? 'green' : stage === 'shoot_day' ? 'amber' : 'ink'}>{STAGE_LABEL[stage]}</Chip>}
+        <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold" onClick={() => void copyDetails()}>
+          <Copy className="h-4 w-4" aria-hidden /> Copy details
+        </Button>
         {items.length === 0 && (
           <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold text-accent-red-deep"
             onClick={() => setDeleteOpen(true)}>
@@ -362,6 +372,24 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── the plan ── */}
         <div className="flex flex-col gap-4">
+          {/* typed when the shoot was made, and until 21 Sep 2026 never shown or editable again. A new
+              shoot puts it straight in the Objective row; this card is for the older shoots that kept it apart */}
+          {!!batch.description && batch.description !== batch.objective && <Card>
+            <CardContent className="p-4">
+              <p className="mb-2 font-mono text-[12px] uppercase tracking-widest text-muted-foreground">What this shoot is for</p>
+              <textarea
+                key={batch.description ?? ''}
+                defaultValue={batch.description ?? ''}
+                rows={2}
+                maxLength={2000}
+                aria-label="What this shoot is for"
+                placeholder="The objective in a line or two, as it was typed when the shoot was made."
+                onBlur={e => { const v = e.target.value; if (v !== (batch.description ?? '')) void patch('description', v) }}
+                className="w-full resize-y bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground"
+              />
+            </CardContent>
+          </Card>}
+
           <PlanParts batch={batch} itemCount={deliverableItems.length} booked={booked} onPatch={patchThenLoad} onShots={editShots} team={team} />
 
           <Card>

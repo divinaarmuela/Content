@@ -109,6 +109,9 @@ export async function POST(req: Request) {
         for_contact_id: forContact,
         title: String(body.title).slice(0, 120),
         description: body.description ? String(body.description).slice(0, 2000) : null,
+        // "What this shoot is for" is the plan's objective (21 Sep 2026): it used to be kept
+        // where nothing showed it, and the person typed it again in the Objective row
+        objective: body.description ? String(body.description).slice(0, 2000) : null,
         concept: body.concept ? String(body.concept).slice(0, 8000) : null,
         location: body.location ? String(body.location).slice(0, 300) : null,
         shoot_date: shootDate,

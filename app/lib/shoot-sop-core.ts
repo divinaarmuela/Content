@@ -1320,3 +1320,30 @@ export function reviewWords(b: SopShoot, nameOf: NameOf, opts?: { planReview?: b
   }
   return `Review asked from ${who} by ${nameOf(b.review_asked_by) ?? 'the team'}${withWhen(b.review_asked_at)} — waiting on their tick`
 }
+
+/* ── WHAT WAS TYPED WHEN THE SHOOT WAS MADE (21 Sep 2026) ──────────────────
+ * "New shoot plan" takes six things. Three could be changed afterwards (the
+ * title, the date, who it is for); "What this shoot is for" and the account
+ * manager could not, and the first was never even shown again. They are now
+ * on the shoot page, editable, and "Copy details" puts all six on the
+ * clipboard as plain lines — for a message, an email, or the next shoot's form.
+ */
+export function shootDetailsText(d: {
+  client?: string | null; forWhom?: string | null; title?: string | null; description?: string | null
+  shoot_date?: string | null; manager?: string | null
+}): string {
+  const line = (label: string, v: string | null | undefined) => { const s = String(v ?? '').trim(); return s ? `${label}: ${s}` : null }
+  return [
+    line('Shoot', d.title),
+    line('Client', d.client),
+    line('For', d.forWhom),
+    line('Shoot date', d.shoot_date ? stampWords(d.shoot_date) : null),
+    line('Account manager', d.manager),
+    line('What this shoot is for', d.description),
+  ].filter(Boolean).join('\n')
+}
+
+/** who may be named the shoot's account manager from the shoot page: the managing roles, and whoever holds it now */
+export function shootManagerChoices<T extends { id: string; role: string }>(team: readonly T[], currentId: string | null | undefined): T[] {
+  return team.filter(t => t.id === currentId || ['super_admin', 'admin', 'account_manager', 'general'].includes(t.role))
+}
