@@ -124,3 +124,45 @@ export function agentPrompt(p: Pick<Prospect, 'business' | 'stage'> & { contact_
     `### evidence_id: ${e.id}\nsource: ${e.source} · direction: ${e.direction} · at: ${e.at ?? 'unknown'}\nfrom: ${e.from}\nto: ${e.to}${e.subject ? `\nsubject: ${clip(e.subject, 200)}` : ''}\n\n${clip(e.text, 1800)}`).join('\n\n')
   return `PROSPECT: ${p.business}${p.contact_name ? ` (contact: ${p.contact_name})` : ''}\nemail: ${p.email ?? '—'} · instagram: ${p.instagram ? `@${p.instagram}` : '—'}\ncurrent stage: ${p.stage}\n\nTIMELINE SO FAR\n${timeline}\n\nNEW EVIDENCE (${evidence.length})\n${items}`
 }
+
+/* ── A STRANGER IN THE DMS (21 Sep 2026) ───────────────────────────────────
+ * The owner: "is it able to identify a potential client using AI even if we
+ * receive data from the DM only?" Yes — a DM thread is often all there is: a
+ * handle, a display name and what they wrote. The model reads the thread and
+ * says whether this is a business that might buy from a marketing agency, and
+ * the code decides what that is worth:
+ *
+ *   sure (0.75+)   a prospect is made at New lead / Engaged — they wrote to
+ *                  us, which is the blueprint's definition of a lead — marked
+ *                  "found by the agent", and Joy is told. A wrong one is one
+ *                  press to delete.
+ *   anything less  nothing is made. A creator asking for a collab, a supplier
+ *                  selling to us, a job seeker, a friend, spam: not a lead.
+ *
+ * One look per handle per day, so a chatty thread is not re-read on every
+ * message; a handle that is one of OUR clients' own accounts is never looked at.
+ */
+export const STRANGER_FROM = 0.75
+
+export const STRANGER_SYSTEM =
+  'You screen Instagram direct messages sent to MD Media, a Melbourne marketing agency (content production, social media management, branding, paid ads, personal brands). ' +
+  'You are given one DM thread with someone who is not yet in the CRM. Decide whether they are a POTENTIAL CLIENT: a business, or a person with a business or personal brand, showing interest in the agency\'s services, pricing, availability or work. ' +
+  'NOT potential clients: creators or models asking to collaborate or be featured, suppliers and agencies selling TO MD Media, job and internship seekers, friends and family, fans reacting to a post, giveaways, spam and scams. ' +
+  'Use only what the thread says. business is the business name if stated or evident from the handle or display name, else empty. wants is what they asked for, in their own words where possible. ' +
+  'confidence is 0 to 1; 0.9+ only when they plainly ask about working with the agency.'
+
+export type StrangerVerdict = { is_potential_client: boolean; confidence: number; business: string; contact_name: string; wants: string; reasoning: string }
+
+export function strangerIsLead(v: StrangerVerdict): boolean {
+  return v.is_potential_client === true && Number(v.confidence) >= STRANGER_FROM
+}
+
+/** one look per handle per day */
+export function strangerLockKey(handle: string, dayIso: string): string {
+  return `${handle.toLowerCase()}__${dayIso.slice(0, 10)}`
+}
+
+export function strangerPrompt(handle: string, name: string | null, messages: readonly Evidence[]): string {
+  const lines = messages.map(m => `[${m.at ?? '?'}] ${m.direction === 'in' ? `@${handle}` : 'MD Media'}: ${m.text.replace(/\s+/g, ' ').trim().slice(0, 600)}`).join('\n')
+  return `HANDLE: @${handle}\nDISPLAY NAME: ${name ?? '—'}\n\nTHREAD (oldest first)\n${lines}`
+}

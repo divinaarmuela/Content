@@ -136,6 +136,12 @@ export type ZernioAction =
       platform: string | null
       /** the event's own name, so the log line says which of the family it was */
       detail: string
+      /** who wrote, on a message event (21 Sep 2026): the acquisition agent is woken by an incoming DM on MD
+       *  Media's own account. Absent on the events that carry no sender. The TEXT is never kept here —
+       *  the agent reads the thread itself, from the provider, when it looks. */
+      senderUsername?: string
+      senderName?: string
+      incoming?: boolean
     }
   /** a review landed — somebody's account manager should hear about it */
   | {
@@ -573,6 +579,9 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
         platform: (str(conversation.platform) || str(message.platform) || str(account.platform))
           .toLowerCase() || null,
         detail: event,
+        senderUsername: str(asRecord(message.sender).username) || str(conversation.participantUsername) || undefined,
+        senderName: str(asRecord(message.sender).name) || str(conversation.participantName) || undefined,
+        incoming: str(message.direction) ? str(message.direction) === 'incoming' : undefined,
       },
     }
   }

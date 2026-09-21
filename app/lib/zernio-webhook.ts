@@ -241,6 +241,15 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
         action.text ? action.text.slice(0, 200) : undefined,
       )
     case 'inbox':
+      // AN INCOMING DM WAKES THE ACQUISITION AGENT AT ONCE (21 Sep 2026; acq-agent.ts). Only the fact and
+      // the handle travel: the job checks the account is MD Media's own, and reads the thread itself.
+      // Best effort — a webhook is never failed because a job could not be queued.
+      if (action.detail === 'message.received' && action.incoming !== false && action.senderUsername && action.accountId) {
+        try {
+          const { inngest } = await import('../inngest/client')
+          await inngest.send({ name: 'app/acquisition.dm.received', data: { account_id: action.accountId, conversation_id: action.conversationId, username: action.senderUsername, name: action.senderName ?? null } })
+        } catch (e) { console.error('[zernio webhook] could not wake the acquisition agent:', e) }
+      }
       return done(NextResponse.json({ ok: true, inbox: action.detail }), true)
 
     case 'review': {

@@ -957,8 +957,37 @@ export const acquisitionAgent = inngest.createFunction(
   },
 )
 
+/**
+ * AN INCOMING DM ON MD MEDIA'S OWN ACCOUNT (21 Sep 2026; the Zernio webhook
+ * sends the event). Someone on the board → the agent's pass for them, now. A
+ * stranger → the model reads the thread and a potential client becomes a lead
+ * (acq-agent-core.ts, "a stranger in the DMs"). One at a time per handle.
+ * NEW FUNCTION: it does nothing until the app is re-synced (CLAUDE.md, 5b).
+ */
+export const acquisitionDm = inngest.createFunction(
+  {
+    id: 'acquisition-dm',
+    name: 'Acquisition: a DM arrived',
+    retries: 1,
+    concurrency: { limit: 1, key: 'event.data.username' },
+    triggers: [{ event: 'app/acquisition.dm.received' }],
+  },
+  async ({ event, step }) => {
+    const d = event.data as { account_id?: string; conversation_id?: string | null; username?: string; name?: string | null }
+    if (!d.account_id || !d.username) return { synced: true, skipped: 'no account or handle' }
+    // Instagram's own read of a new message lags the webhook by a moment
+    await step.sleep('let-the-thread-settle', '20s')
+    const outcome = await step.run('look', async () => {
+      const { onOwnDm } = await import('../lib/acq-agent')
+      return onOwnDm({ accountId: d.account_id!, conversationId: d.conversation_id ?? null, username: d.username!, name: d.name ?? null })
+    })
+    return { synced: true, outcome }
+  },
+)
+
 export const functions = [
   acquisitionAgent,
+  acquisitionDm,
   dueReminders,
   shootBriefLate,
   editorSopNudges,

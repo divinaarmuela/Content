@@ -12,9 +12,11 @@ import { encodeKey } from '@/lib/db'
 import { acqStageByKey, cleanHandle, replyPoints, type AcqEvent, type AcqEventKind, type Prospect } from './acquisition-core'
 import { logAcqEvent, recordCallBooked, recordReply } from './acquisition'
 import {
-  AGENT_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence,
-  type AgentFinding, type Evidence,
+  AGENT_SYSTEM, STRANGER_SYSTEM, agentPrompt, decideFinding, findingKey, newEvidence, strangerIsLead, strangerLockKey, strangerPrompt,
+  type AgentFinding, type Evidence, type StrangerVerdict,
 } from './acq-agent-core'
+import { peopleNamed, tellPeople } from './acquisition'
+import { escapeHtml } from './mailer'
 
 /**
  * THE ACQUISITION AGENT — the server half (acq-agent-core.ts has the rules).
@@ -220,4 +222,67 @@ export async function prospectsDue(limit = 25): Promise<P[]> {
     .filter(p => acqStageByKey(p.stage).key !== 'handoff' && (!!p.email || !!p.instagram || !!p.website))
     .sort((a, b) => String(a.agent_checked_at ?? '').localeCompare(String(b.agent_checked_at ?? '')))
     .slice(0, limit)
+}
+
+/* ── an incoming DM, the moment it lands (the Zernio webhook → Inngest) ─── */
+
+const Stranger = z.object({
+  is_potential_client: z.boolean(), confidence: z.number().min(0).max(1),
+  business: z.string(), contact_name: z.string(), wants: z.string(), reasoning: z.string(),
+})
+
+export type DmOutcome =
+  | { kind: 'not_ours' } | { kind: 'known'; prospect_id: string; run: AgentRun }
+  | { kind: 'a_client_account' } | { kind: 'already_looked' } | { kind: 'empty_thread' }
+  | { kind: 'not_a_lead'; confidence: number; reasoning: string }
+  | { kind: 'lead_made'; prospect_id: string; business: string }
+
+export async function onOwnDm(input: { accountId: string; conversationId: string | null; username: string; name: string | null }): Promise<DmOutcome> {
+  if (!(await ownAccountIds()).includes(input.accountId)) return { kind: 'not_ours' }
+  const handle = (cleanHandle(input.username) ?? '').toLowerCase()
+  if (!handle) return { kind: 'empty_thread' }
+
+  // SOMEONE ON THE BOARD: the ordinary pass, for them, now
+  const all = await table<ProspectRow>('prospects').list() as P[]
+  const known = all.find(p => (cleanHandle(String(p.instagram ?? '')) ?? '').toLowerCase() === handle)
+  if (known) return { kind: 'known', prospect_id: known.id, run: await runAgentForProspect(known, await agentContext()) }
+
+  // one of our clients' own accounts writing to us is client business, not a lead
+  const accounts = await table<SocialAccount>('social_accounts').list()
+  if (accounts.some(a => String(a.username ?? '').toLowerCase().replace(/^@/, '') === handle)) return { kind: 'a_client_account' }
+
+  const lock = await takeClaimLock(`acq_dm__${encodeKey(strangerLockKey(handle, new Date().toISOString()))}`, 'agent')
+  if (!lock.ok) return { kind: 'already_looked' }
+
+  const threads = (await ownThreads()).filter(t => t.handle === handle && (!input.conversationId || t.conversationId === input.conversationId))
+  const messages = await instagramEvidence({ instagram: handle, business: handle } as P, threads.length ? threads : await ownThreads())
+  const incoming = messages.filter(m => m.direction === 'in')
+  if (incoming.length === 0) return { kind: 'empty_thread' }
+
+  const res = await anthropic.messages.parse({
+    model: agentModel(), max_tokens: 800, system: STRANGER_SYSTEM,
+    messages: [{ role: 'user', content: strangerPrompt(handle, input.name, messages.slice(-30)) }],
+    output_config: { format: zodOutputFormat(Stranger) },
+  })
+  const v = res.parsed_output as StrangerVerdict | null
+  if (!v || !strangerIsLead(v)) return { kind: 'not_a_lead', confidence: v?.confidence ?? 0, reasoning: v?.reasoning ?? 'no answer' }
+
+  const now = new Date().toISOString()
+  const first = incoming[0], last = incoming[incoming.length - 1]
+  const business = v.business.trim() || input.name || `@${handle}`
+  const made = await table<ProspectRow>('prospects').insert({
+    business: business.slice(0, 160), instagram: handle, contact_name: v.contact_name.trim() || input.name || null,
+    source: 'organic_social', source_detail: 'Instagram DM — found by the agent', stage: 'engaged', stage_entered_at: now,
+    replied_at: first.at ?? now, next_action: 'Reply to their DM', notes: `What they asked for: ${v.wants.trim() || '—'}\nWhy the agent thinks they are a potential client (${Math.round(v.confidence * 100)}% sure): ${v.reasoning.trim()}`.slice(0, 2000),
+    created_at: now, updated_at: now,
+  } as never) as P
+  await logAcqEvent({ prospectId: made.id, kind: 'added', source: 'agent', detail: `Found by the agent in the Instagram DMs of @${threads[0]?.ours || 'mdmedia'} — ${v.reasoning.trim()}`, confidence: v.confidence })
+  await logAcqEvent({ prospectId: made.id, kind: 'reply', source: 'agent', at: last.at ?? now, evidenceId: last.id, confidence: v.confidence, detail: `They wrote to us first: “${last.text.replace(/\s+/g, ' ').trim().slice(0, 300)}”` })
+  try {
+    await tellPeople(await peopleNamed(['Joy']), AGENT, made, {
+      event: 'acq_dm_lead', subject: `New lead from an Instagram DM: ${business}`, button: 'Open the lead',
+      html: `<p><strong>@${escapeHtml(handle)}</strong> wrote to MD Media on Instagram and looks like a potential client.</p><p><strong>What they asked for:</strong> ${escapeHtml(v.wants.trim() || '—')}</p><p><strong>What happens next:</strong> reply to them in the Inbox — you write it. If this is not a lead, delete it from the pipeline.</p>`,
+    })
+  } catch (e) { console.error('[acq-agent] could not tell Joy about a DM lead:', e) }
+  return { kind: 'lead_made', prospect_id: made.id, business }
 }
