@@ -141,4 +141,14 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
     // the old pipeline's rules are untouched by this build
     expect(readFileSync('app/lib/pipeline-core.ts', 'utf8')).toContain("| 'walkthrough'  // 5. Walkthrough held")
   })
+
+  it('a booking on the app’s own booking page by a prospect is their discovery call: one line per booking, the stage left to a person', () => {
+    const src = readFileSync('app/lib/acquisition.ts', 'utf8')
+    expect(src).toContain('const lock = await takeClaimLock(`acq_booking__${booking.id}`, p.id)')
+    expect(src).toContain("prospectId: p.id, kind: 'call_booked', source: 'scanner',")
+    expect(src).toContain('call_at: row.call_at ?? when')
+    // the booking is written first and never fails because of the board
+    const booking = readFileSync('app/lib/booking.ts', 'utf8')
+    expect(booking).toContain("await import('./acquisition').then(m => m.onBookingMade(made)).catch(() => {})")
+  })
 })

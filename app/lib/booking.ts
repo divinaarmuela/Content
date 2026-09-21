@@ -451,7 +451,7 @@ export async function insertBooking(
   })
   if (!took) throw new DbError('unique', 'bookings_no_overlap: that seat is already booked')
   try {
-    return await table('bookings').insert({
+    const made = await table('bookings').insert({
       status: 'confirmed',
       payment_status: 'unpaid',
       amount_cents: 0,
@@ -460,6 +460,9 @@ export async function insertBooking(
       seat_no,
       space_id,
     }) as unknown as Booking
+    // a prospect's booking is their discovery call (acquisition.ts; never throws, never waited on for long)
+    await import('./acquisition').then(m => m.onBookingMade(made)).catch(() => {})
+    return made
   } catch (e) {
     // never hold a seat for a booking that was not written
     await releaseSeat(space_id, seat_no, id).catch(() => {})

@@ -1,9 +1,10 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
-import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, type AcqEventKind, type Prospect } from './acquisition-core'
+import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, prospectForSender, type AcqEventKind, type Prospect } from './acquisition-core'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { DASHBOARD_URL } from './app-url'
+import { takeClaimLock } from './claim-lock'
 
 /**
  * THE ACQUISITION SYSTEM — the server half (acquisition-core.ts has the rules
@@ -96,6 +97,44 @@ export async function onOutreachSent(actor: Actor, p: ProspectRow): Promise<void
   const owner = row.owner_id ?? row.outreach_by ?? actor.id
   for (const t of followUpTasks(p.business, String(row.outreach_at ?? new Date().toISOString()))) {
     await makeTask(owner, actor.id, p, { title: t.title, note: t.note, due_date: t.due_date })
+  }
+}
+
+/**
+ * A PROSPECT BOOKED A CALL (the owner, 21 Sep 2026: "identify if a call is
+ * booked"). The surest source is the app's own booking page: a booking whose
+ * customer email is a prospect's is that prospect's discovery call — no
+ * reading of subject lines, no guess. It goes on the timeline as the
+ * blueprint's +30, the call's time is kept if none was, the no-response
+ * reminders stop (a booking IS a response), and the owner is told. The stage
+ * is left for a person: the scanner never moves a prospect past Engaged.
+ * One booking is one line — locked on the booking's id. Never throws: a
+ * booking must not fail because the acquisition board could not be told.
+ */
+export async function onBookingMade(booking: { id: string; customer_email?: string | null; customer_name?: string | null; start_at?: string | null }): Promise<void> {
+  try {
+    const email = String(booking.customer_email ?? '').trim()
+    if (!email) return
+    const prospects = table<ProspectRow>('prospects')
+    const known = prospectForSender(await prospects.list(), email)
+    if (!known) return
+    const p = known.prospect
+    const lock = await takeClaimLock(`acq_booking__${booking.id}`, p.id)
+    if (!lock.ok) return
+    const when = booking.start_at ?? null
+    await logAcqEvent({
+      prospectId: p.id, kind: 'call_booked', source: 'scanner',
+      detail: `Booked through the booking page by ${booking.customer_name || email}${when ? ` for ${when}` : ''}${known.by === 'domain' ? ' (matched on the business’s domain)' : ''}`,
+    })
+    const now = new Date().toISOString()
+    await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
+      const row = cur as (ProspectRow & Prospect) | null
+      if (!row) return null
+      return { ...row, call_at: row.call_at ?? when, replied_at: row.replied_at ?? now, updated_at: now }
+    }) as (c: ProspectRow | null) => ProspectRow | null)
+    await onReply({ id: 'scanner', name: 'Booking page' }, p, `They booked a call${when ? ` for ${when}` : ''}.`)
+  } catch (e) {
+    console.error('[acquisition] a booking could not be put on the prospect:', e)
   }
 }
 
