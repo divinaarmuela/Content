@@ -108,6 +108,20 @@ export default function Acquisition({ view }: { view: AcqView }) {
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); return false } finally { setBusy(false) }
   }
 
+  // WHICH INBOXES THE AGENT READS, AND IS MINE ONE OF THEM (21 Sep 2026; /api/leads/acquisition/inbox)
+  const [inbox, setInbox] = useState<{ read: string[]; mine: { email: string | null; work_address: boolean; connected: boolean; switched_off: boolean } } | null>(null)
+  // back from Google: say what happened, in words, once
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search); const got = q.get('inbox'); if (!got) return
+      const who = q.get('detail')
+      if (got === 'connected') toast.success(`${who ?? 'Your inbox'} is connected — the agent reads it from its next look`)
+      else toast.error(got === 'wrong_domain' ? 'That was not an @mdmmarketing.com.au account — sign in to Google with your work address' : got === 'denied' ? 'Nothing was connected — Google’s permission was not given' : got === 'no_refresh_token' ? 'Google did not give lasting access — try again and tick every box' : 'The inbox could not be connected')
+      q.delete('inbox'); q.delete('detail'); window.history.replaceState(null, '', `${window.location.pathname}${q.toString() ? `?${q}` : ''}`)
+    } catch { /* no address to read */ }
+  }, [])
+  useEffect(() => { void fetch('/api/leads/acquisition/inbox').then(r => (r.ok ? r.json() : null)).then(j => { if (j?.mine) setInbox(j) }).catch(() => {}) }, [])
+
   /** the agent looks the business up (about a minute), and says what it filled in */
   const researchNow = async (id: string) => {
     setBusy(true)
@@ -174,6 +188,22 @@ export default function Acquisition({ view }: { view: AcqView }) {
     <div className="flex flex-col gap-4" data-acquisition={view}>
       <PageTitle title={VIEWS.find(v => v.key === view)!.label} summary={SUMMARY[view]}
         actions={<Button onClick={() => setAdding(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90"><Plus className="mr-1.5 h-4 w-4" aria-hidden /> Add a target</Button>} />
+
+      {/* a person whose own work inbox is not read is told so, with the one press that fixes it */}
+      {inbox && inbox.mine.work_address && !inbox.mine.connected && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-tint-amber p-4 text-[14px]">
+          <p className="min-w-0 flex-1">
+            <span className="font-semibold">Your inbox is not being read. </span>
+            {inbox.mine.switched_off
+              ? `${inbox.mine.email} is connected but switched off in Settings → Inbox scanner, so replies sent to you are not seen.`
+              : `A prospect who replies to ${inbox.mine.email} is invisible here until it is connected. It takes one Google sign-in, with that address.`}
+            {inbox.read.length > 0 && <span className="block text-[13px] text-muted-foreground">Read today: {inbox.read.join(', ')}.</span>}
+          </p>
+          {!inbox.mine.switched_off && (
+            <a href="/api/inbox/connect?from=acquisition" className="inline-flex h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">Connect my inbox</a>
+          )}
+        </div>
+      )}
 
       <nav aria-label="Acquisition views" className="flex flex-wrap items-center gap-2">
         {VIEWS.map(v => (

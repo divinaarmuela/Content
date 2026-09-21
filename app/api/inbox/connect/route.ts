@@ -33,7 +33,13 @@ export async function GET(req: Request) {
 
     // state carries who started it, so the callback can record who connected
     // without trusting anything the browser sends back
-    return NextResponse.redirect(inboxConsentUrl(req, encodeURIComponent(user.email)))
+    const res = NextResponse.redirect(inboxConsentUrl(req, encodeURIComponent(user.email), user.email))
+    // WHERE TO COME BACK TO (21 Sep 2026): the acquisition page offers this press to people who cannot open
+    // the scanner's settings (Joy), so the callback returns them to where they pressed it
+    if (new URL(req.url).searchParams.get('from') === 'acquisition') {
+      res.cookies.set('inbox_return', 'acquisition', { httpOnly: true, sameSite: 'lax', secure: true, maxAge: 900, path: '/' })
+    }
+    return res
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

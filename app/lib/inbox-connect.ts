@@ -116,8 +116,11 @@ export function redirectUriFor(req: Request): string {
  * which expires in an hour and leaves a mailbox that scans once and then
  * silently stops.
  */
-export function inboxConsentUrl(req: Request, state: string): string {
+export function inboxConsentUrl(req: Request, state: string, loginHint?: string | null): string {
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    // Google opens on the RIGHT account (21 Sep 2026): a person signed in to three Google accounts was
+    // offered whichever came first, connected the wrong one, and was refused for the domain
+    ...(loginHint ? { login_hint: loginHint } : {}),
     client_id: inboxClientId(),
     redirect_uri: redirectUriFor(req),
     response_type: 'code',
