@@ -1,5 +1,6 @@
 import { isQualityReviewer } from './identity-core'
 import { hasFinishedWork } from './final-files-core'
+import { priorityOf, priorityChoice, priorityWords, type Priority } from './priority-core'
 import { roundOf } from './edit-round-core'
 /**
  * WHO IS DOING WHAT — the Client and People filters on the three boards.
@@ -36,6 +37,8 @@ export type FilterCard = {
   adhoc_post?: boolean | null
   /** the hand-in round (`edit-round-core.roundOf`) */
   edit_round?: unknown
+  /** the card's priority (`priority-core`, 21 Sep 2026) */
+  priority?: unknown
 }
 
 /**
@@ -49,9 +52,10 @@ export type FilesFilter = 'with' | 'without'
 export const VERSION_FILTERS = ['1', '2', '3+'] as const
 export type VersionFilter = typeof VERSION_FILTERS[number]
 
-export type Filters = { client: string | null; person: string | null; files?: FilesFilter | null; version?: VersionFilter | null }
+export type Filters = { client: string | null; person: string | null; files?: FilesFilter | null; version?: VersionFilter | null; priority?: Priority | null }
 
-export const NO_FILTERS: Filters = { client: null, person: null, files: null, version: null }
+export const NO_FILTERS: Filters = { client: null, person: null, files: null, version: null, priority: null }
+export { priorityChoice }
 
 export function filesChoice(v: string | null | undefined): FilesFilter | null {
   return v === 'with' || v === 'without' ? v : null
@@ -158,16 +162,17 @@ export function applyFilters<T extends FilterCard>(cards: readonly T[], f: Filte
     (!f.client || String(c.client_id ?? '') === f.client)
     && (!f.person || cardInvolves(c, f.person))
     && (!f.files || cardHasFiles(c) === (f.files === 'with'))
-    && (!f.version || cardOnVersion(c, f.version)))
+    && (!f.version || cardOnVersion(c, f.version))
+    && (!f.priority || priorityOf(c) === f.priority))
 }
 
 export function hasFilters(f: Filters): boolean {
-  return f.client !== null || f.person !== null || !!f.files || !!f.version
+  return f.client !== null || f.person !== null || !!f.files || !!f.version || !!f.priority
 }
 
 /** " with a finished edit on version 2" — the work half of the words, or '' */
 function workWords(f: Filters): string {
-  return `${f.files ? ` ${FILES_WORDS[f.files]}` : ''}${f.version ? ` ${versionWords(f.version)}` : ''}`
+  return `${f.files ? ` ${FILES_WORDS[f.files]}` : ''}${f.version ? ` ${versionWords(f.version)}` : ''}${f.priority ? ` ${priorityWords(f.priority)}` : ''}`
 }
 
 /**

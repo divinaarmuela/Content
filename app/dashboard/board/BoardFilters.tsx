@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/select'
 import { roleLabel } from '../../lib/identity-core'
 import { VERSION_FILTERS, type ClientRow, type Filters, type PersonRow } from '../../lib/people-filter-core'
+import { PRIORITIES, PRIORITY_LABELS } from '../../lib/priority-core'
 
 /**
  * THE TWO FILTERS ABOVE A BOARD: which client, and whose cards.
@@ -25,7 +26,7 @@ const ALL = 'all'
 const EVERYONE = 'everyone'
 const ANY = 'any'
 
-export function BoardFilters({ clients, people, value, onClient, onPerson, onClear, onFiles, onVersion }: {
+export function BoardFilters({ clients, people, value, onClient, onPerson, onClear, onFiles, onVersion, onPriority }: {
   clients: readonly ClientRow[]
   people: readonly PersonRow[]
   value: Filters
@@ -36,8 +37,10 @@ export function BoardFilters({ clients, people, value, onClient, onPerson, onCle
    *  or without, and which version — drawn only where they are given */
   onFiles?: (v: string | null) => void
   onVersion?: (v: string | null) => void
+  /** the priority filter (21 Sep 2026) — drawn only where it is given */
+  onPriority?: (v: string | null) => void
 }) {
-  const narrowed = value.client !== null || value.person !== null || !!value.files || !!value.version
+  const narrowed = value.client !== null || value.person !== null || !!value.files || !!value.version || !!value.priority
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Narrow the board">
       <Select value={value.client ?? ALL} onValueChange={v => onClient(v === ALL ? null : v)}>
@@ -98,6 +101,16 @@ export function BoardFilters({ clients, people, value, onClient, onPerson, onCle
         <SelectContent>
           <SelectItem value={ANY} className="min-h-11">Any version</SelectItem>
           {VERSION_FILTERS.map(v => <SelectItem key={v} value={v} className="min-h-11">Version {v}</SelectItem>)}
+        </SelectContent>
+      </Select>}
+
+      {onPriority && <Select value={value.priority ?? ANY} onValueChange={v => onPriority(v === ANY ? null : v)}>
+        <SelectTrigger className="h-11 w-40 rounded-full border-border bg-surface px-4 text-[13px] font-semibold" aria-label="Which priority">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ANY} className="min-h-11">Any priority</SelectItem>
+          {PRIORITIES.map(p => <SelectItem key={p} value={p} className="min-h-11">{PRIORITY_LABELS[p]}</SelectItem>)}
         </SelectContent>
       </Select>}
 

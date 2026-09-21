@@ -39,6 +39,8 @@ export type BoardViewCard = {
   id: string
   /** when the card was made — the person holding it could not see it (the owner, 21 Sep 2026) */
   created_at?: string | null
+  /** the card's priority: low, normal, high or urgent (priority-core, 21 Sep 2026) */
+  priority?: string | null
   title: string
   status: ItemStatus
   client_id: string

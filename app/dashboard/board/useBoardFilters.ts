@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { NO_FILTERS, filesChoice, versionChoice, type Filters } from '../../lib/people-filter-core'
+import { NO_FILTERS, filesChoice, priorityChoice, versionChoice, type Filters } from '../../lib/people-filter-core'
 
 /**
  * The Client and People choice on a board — remembered per page, and in the
@@ -18,6 +18,8 @@ export function useBoardFilters(pageKey: string): Filters & {
   /** the Editor page's work filters (16 Sep 2026): with files or without, and the version */
   setFiles: (v: string | null) => void
   setVersion: (v: string | null) => void
+  /** the priority filter (21 Sep 2026) */
+  setPriority: (v: string | null) => void
   clear: () => void
 } {
   const [value, setValue] = useState<Filters>(NO_FILTERS)
@@ -31,7 +33,7 @@ export function useBoardFilters(pageKey: string): Filters & {
       try { fromStorage = localStorage.getItem(storage(k)) } catch { /* blocked storage */ }
       return fromUrl || fromStorage || null
     }
-    setValue({ client: read('client'), person: read('person'), files: filesChoice(read('files')), version: versionChoice(read('version')) })
+    setValue({ client: read('client'), person: read('person'), files: filesChoice(read('files')), version: versionChoice(read('version')), priority: priorityChoice(read('priority')) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageKey])
 
@@ -52,6 +54,7 @@ export function useBoardFilters(pageKey: string): Filters & {
     setPerson: useCallback((id: string | null) => write('person', id), [write]),
     setFiles: useCallback((v: string | null) => write('files', filesChoice(v)), [write]),
     setVersion: useCallback((v: string | null) => write('version', versionChoice(v)), [write]),
-    clear: useCallback(() => { write('client', null); write('person', null); write('files', null); write('version', null) }, [write]),
+    setPriority: useCallback((v: string | null) => write('priority', priorityChoice(v)), [write]),
+    clear: useCallback(() => { write('client', null); write('person', null); write('files', null); write('version', null); write('priority', null) }, [write]),
   }
 }

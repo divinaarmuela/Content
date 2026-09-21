@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkKind, WorkflowActivity } from '@/lib/db-types'
 import Chip from '../ui/Chip'
+import { PRIORITIES, PRIORITY_LABELS, priorityChip, priorityOf, type Priority } from '../../lib/priority-core'
 import { useRole } from '../useRole'
 import BrandCard from '../production/BrandCard'
 import CollapsibleCard from '../CollapsibleCard'
@@ -196,8 +197,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const [eTitle, setETitle] = useState('')
   const [eDue, setEDue] = useState('')
   const [eBrief, setEBrief] = useState('')
+  const [ePriority, setEPriority] = useState<Priority>('normal')
   const openEdit = () => {
     if (!item) return
+    setEPriority(priorityOf(item))
     setETitle(String(item.title ?? ''))
     setEDue(item.due_date ? String(item.due_date).slice(0, 10) : '')
     setEBrief(String((item as { brief?: string | null }).brief ?? ''))
@@ -206,7 +209,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const saveEdit = async () => {
     const title = eTitle.trim()
     if (!title) { toast.error('Give the card a name'); return }
-    const ok = await post(`/api/production/items/${id}`, { title, due_date: eDue || null, brief: eBrief.trim() || null }, 'Card updated', 'Saving the card', 'PATCH')
+    const ok = await post(`/api/production/items/${id}`, { title, due_date: eDue || null, brief: eBrief.trim() || null, priority: ePriority }, 'Card updated', 'Saving the card', 'PATCH')
     if (ok) setEditing(false)
   }
 
@@ -341,6 +344,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>
             <Chip tone="muted">{dueWords}</Chip>
+            {priorityChip(item) && <Chip tone={priorityChip(item)!.tone}>{priorityChip(item)!.label}</Chip>}
             {flags.risk && <Chip tone="red">At risk: {flags.risk}</Chip>}
             {(holder || isManager) && !frozen && !editing && (
               <button type="button" onClick={openEdit} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-muted">
@@ -377,6 +381,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </label>
               <label className="flex flex-col gap-1 text-[12px] font-semibold">Due
                 <input type="date" value={eDue} onChange={e => setEDue(e.target.value)} className={`${field} max-w-[200px]`} aria-label="Due date" />
+              </label>
+              <label className="flex flex-col gap-1 text-[12px] font-semibold">Priority
+                <select value={ePriority} onChange={e => setEPriority(e.target.value as Priority)} className={`${field} max-w-[200px]`} aria-label="Priority">
+                  {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                </select>
               </label>
               <label className="flex flex-col gap-1 text-[12px] font-semibold">What needs doing
                 <textarea rows={3} value={eBrief} onChange={e => setEBrief(e.target.value)} className={`${field} resize-none p-2.5`} aria-label="What needs doing" />

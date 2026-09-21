@@ -14,6 +14,7 @@ import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
   type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
+import { priorityChip } from '../../lib/priority-core'
 import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
@@ -217,7 +218,9 @@ export function BoardCard({
         {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
-        {!folded && lines.made && <Chip tone="muted">{lines.made}</Chip>}
+        {/* the made date shows on a folded card as well (the owner, 21 Sep 2026: "create date is not shown on the congested cards") */}
+        {lines.made && <Chip tone="muted">{lines.made}</Chip>}
+        {priorityChip(card) && <Chip tone={priorityChip(card)!.tone}>{priorityChip(card)!.label}</Chip>}
         {!folded && lines.deliverOnly && <Chip tone="muted">{DELIVER_ONLY_CHIP}</Chip>}
         {risk && <Chip tone="red">{risk}</Chip>}
         {/* somebody wrote to you on this card and it is not done (13 Sep 2026) */}

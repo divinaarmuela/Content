@@ -881,7 +881,7 @@ describe('a card says when it was made (21 Sep 2026)', () => {
     const lines = cardLines({ id: 'c', title: 'T', status: 'draft_uploaded', client_id: 'k', owner_id: null, created_at: '2026-09-18T01:00:00Z' } as never, { today: '2026-09-21' })
     expect(lines.made).toMatch(/^Made 18 Sep/)
     expect(cardLines({ id: 'c', title: 'T', status: 'draft_uploaded', client_id: 'k', owner_id: null } as never, { today: '2026-09-21' }).made).toBeNull()
-    expect(readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')).toContain('{!folded && lines.made && <Chip tone="muted">{lines.made}</Chip>}')
+    expect(readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')).toContain('{lines.made && <Chip tone="muted">{lines.made}</Chip>}')
     expect(readFileSync('app/dashboard/board/BoardList.tsx', 'utf8')).toContain('<th scope="col" className={th}>Made</th>')
   })
 })

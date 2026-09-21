@@ -173,7 +173,7 @@ export default function DesignerPage() {
           filters={mayFilter ? (
             <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
               onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear}
-              onFiles={filter.setFiles} onVersion={filter.setVersion} />
+              onFiles={filter.setFiles} onVersion={filter.setVersion} onPriority={filter.setPriority} />
           ) : undefined}
           filterNote={filterWords(chosen, filterNames, cards.length, allCards.length)}
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}

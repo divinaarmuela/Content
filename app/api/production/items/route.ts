@@ -25,6 +25,7 @@ import { onItemsCreated } from '../../../lib/gdrive-hooks'
 import { takeClaimLock, releaseClaimLock, briefLockKey } from '../../../lib/claim-lock'
 import { CLIENT_LABELS, ITEM_STATUSES, type ItemStatus } from '../../../lib/workflow-core'
 import { slidesOf } from '../../../lib/version-files-core'
+import { isPriority } from '../../../lib/priority-core'
 
 /** List items, role-scoped. Filters: client_id, status, batch_id. */
 export async function GET(req: Request) {
@@ -429,7 +430,7 @@ export async function POST(req: Request) {
         // who handed out the job — the natural default reviewer later
         assigned_by: it.owner_id ? user.id : null,
         due_date: it.due_date ?? null,
-        priority: it.priority ?? 'normal',
+        priority: isPriority(it.priority) ? it.priority : 'normal',
         caption: it.caption ?? null,
         raw_assets_url: it.raw_assets_url ? String(it.raw_assets_url).slice(0, 2000) : null,
         // WHOM THE POST IS FOR (15 Sep 2026): the business, or one of the

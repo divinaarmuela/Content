@@ -8,6 +8,7 @@ import type {
 } from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse, AuthzError } from '../../../../lib/authz'
 import { mayDeleteCard } from '../../../../lib/board-view-core'
+import { isPriority } from '../../../../lib/priority-core'
 import { announceItemChange } from '../../../../lib/production-live'
 import { loadItemForUser, shapeItemDetail } from '../../../../lib/production-access'
 import { logActivity, notifyFilesToWorkFrom, notifyHandedOver, notifyJobAssigned, sanitiseRawAssets } from '../../../../lib/workflow'
@@ -204,6 +205,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files'] as const
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
+    // a priority is one of the four words, or Normal (priority-core, 21 Sep 2026)
+    if ('priority' in patch) patch.priority = isPriority(patch.priority) ? patch.priority : 'normal'
     // WHERE THE REVIEWER SHOULD LOOK (Abby, 11 Sep 2026: "the task must have
     // the link on the description eg. Canva link and page number"): an https
     // link, and a free line such as "page 3" — both optional, both plain

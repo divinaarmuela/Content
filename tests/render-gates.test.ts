@@ -170,7 +170,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(src(EDITOR_DRAWER)).toContain('rows={cardThread as never}')
     // the holder or a manager can change the card's name, due date and brief (16 Sep 2026)
     expect(src(EDITOR_DRAWER)).toContain('{(holder || isManager) && !frozen && !editing && (')
-    expect(src(EDITOR_DRAWER)).toContain("{ title, due_date: eDue || null, brief: eBrief.trim() || null }, 'Card updated', 'Saving the card', 'PATCH')")
+    expect(src(EDITOR_DRAWER)).toContain("{ title, due_date: eDue || null, brief: eBrief.trim() || null, priority: ePriority }, 'Card updated', 'Saving the card', 'PATCH')")
     // …and everyone but an editor — the quality checker, the managers — gets
     // the manager's drawer there (13 and 14 Sep 2026)
     expect(src(CARD_SHEET)).toMatch(/editor && !adhoc && maker\s*\? <EditorCardDrawer/)

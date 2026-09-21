@@ -5,6 +5,7 @@ import { NETWORK_LABEL } from '../../lib/publish-core'
 import BrandCard from '../production/BrandCard'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { PRIORITIES, PRIORITY_LABELS, type Priority } from '../../lib/priority-core'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -589,6 +590,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   const [link, setLink] = useState('')
   const [brief, setBrief] = useState('')
   const [due, setDue] = useState('')
+  const [priority, setPriority] = useState<Priority>('normal')
   // a post starts unassigned so the manager picks the scheduler on purpose
   const [owner, setOwner] = useState(forPosting ? '' : viewer.id)
   const [busy, setBusy] = useState(false)
@@ -697,6 +699,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
           owner_id: owner || null,
           ...(briefText ? { brief: briefText } : {}),
           ...(due ? { due_date: due } : {}),
+          priority,
           ...(batchId ? { batch_id: batchId } : {}),
           ...(groupId ? { group_id: groupId } : {}),
           ...(rawAssets.length > 0 ? { raw_assets: rawAssets } : {}),
@@ -894,6 +897,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-due">Due (optional)</Label>
               <Input id="new-due" type="date" value={due} onChange={e => setDue(e.target.value)} className={field} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-priority">Priority</Label>
+              <select id="new-priority" value={priority} onChange={e => setPriority(e.target.value as Priority)} className={`${field} border text-[14px]`}>
+                {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+              </select>
             </div>
             {isManager && !simple && (
               <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[14px] sm:col-span-2">
