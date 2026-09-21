@@ -257,11 +257,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // A LINK CARD SENT BACK: its copied clips become its files, once, so one can be replaced (final-files-core.ts)
   const adoptTried = useRef<string | null>(null)
   useEffect(() => {
-    if (!item || me?.id !== item.owner_id || adoptTried.current === item.id) return
+    if (!item || !(me?.id === item.owner_id || me?.role === 'super_admin' || me?.role === 'account_manager') || adoptTried.current === item.id) return
     if (!needsAdoption(item as never) || handInRound(item as never) === roundOf(item as never)) return
     adoptTried.current = item.id
     void fetch(`/api/production/items/${item.id}/adopt-clips`, { method: 'POST' }).catch(() => {})
-  }, [item, me?.id])
+  }, [item, me?.id, me?.role])
   const [queued, setQueued] = useState<File[]>([])
   const [linkMode, setLinkMode] = useState(false)
   // ONE ASSET REPLACED IN PLACE: the new file takes the asset's slot as the next version; the rest are untouched
@@ -343,6 +343,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const column = columnOf(item.status as never)
   const lane = EDITOR_LANES.find(l => l.columns.includes(column)) ?? EDITOR_LANES[0]
   const holder = me?.id === item.owner_id
+  // WHO MAY PUT FILES ON THE CARD (the owner, 22 Sep 2026: "can super admins just replace it when it's in
+  // progress — I wanna do it"): the holder, or a manager. The server has always allowed a manager
+  // (item-edit-core canEditItemFields); only the buttons were the holder's.
+  const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'
   const frozen = ['scheduled', 'published'].includes(status)
   const review = reviewWords(status, reviewerNameOf(team as never))
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
@@ -574,7 +578,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         </div>
         {filesCard && !linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
-            {holder && !frozen && (
+            {mayFile && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)}>
                   <Upload className="h-4 w-4" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload the finished files — ${roundLabel(handInRound(item as never))}` : 'Add another file')}
@@ -606,12 +610,12 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           <span className="shrink-0 text-[12px] text-muted-foreground">{roundLabel(f.version)}</span>
                           {waiting && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
                           {okByClient && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold">Approved by the client</span>}
-                          {holder && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (
                             <Button variant="outline" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }} className="h-9 rounded-full px-3 text-[12px] font-semibold">
                               {f.version === handInRound(item as never) ? 'Replace again' : `Replace — ${roundLabel(handInRound(item as never))}`}
                             </Button>
                           )}
-                          {holder && !frozen && earlier.length === 0 && f.version === handInRound(item as never) && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
+                          {mayFile && !frozen && earlier.length === 0 && f.version === handInRound(item as never) && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
                         </div>
                         {earlier.length > 0 && (
                           <p className="pl-1 text-[12px] text-muted-foreground">Earlier: {earlier.map(x => <a key={x.id} href={x.url} target="_blank" rel="noreferrer noopener" className="mr-2 underline underline-offset-4">{roundLabel(x.version)} — {x.name}</a>)}</p>

@@ -49,6 +49,9 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(drawer).toContain('const next = withReplacement(finalFilesOf(item as never), assetId,')
     // an asset the client approved is not offered for replacing
     expect(drawer).toContain('mayReplaceAsset(item as never, a) && !okByClient && (')
+    // a super admin or account manager may upload and replace too, not only the holder (22 Sep 2026)
+    expect(drawer).toContain("const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'")
+    expect(drawer).toContain('{mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (')
   })
 
   it('an existing link card’s copied clips become its assets, so one of them can be swapped (22 Sep 2026)', () => {
