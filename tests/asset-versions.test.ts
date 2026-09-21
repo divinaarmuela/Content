@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { assetHistory, assetIdOf, changeAssetsOf, currentFiles, hasFinishedWork, mayReplaceAsset, sanitiseChangeAssets, stillToReplace, withReplacement, type FinalFile } from '../app/lib/final-files-core'
+import { adoptedFromPull, needsAdoption, assetHistory, assetIdOf, changeAssetsOf, currentFiles, hasFinishedWork, mayReplaceAsset, sanitiseChangeAssets, stillToReplace, withReplacement, type FinalFile } from '../app/lib/final-files-core'
 
 const f = (id: string, version = 1, extra: Partial<FinalFile> = {}): FinalFile => ({ id, name: `${id}.mp4`, url: `https://cdn.x/${id}-${version}.mp4`, mime: 'video/mp4', size: 10, version, uploaded_at: `2026-09-2${version}T00:00:00Z`, by: 'u', ...extra })
 const three = [f('a'), f('b'), f('c')]
@@ -49,5 +49,18 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(drawer).toContain('const next = withReplacement(finalFilesOf(item as never), assetId,')
     // an asset the client approved is not offered for replacing
     expect(drawer).toContain('mayReplaceAsset(item as never, a) && !okByClient && (')
+  })
+
+  it('an existing link card’s copied clips become its assets, so one of them can be swapped (22 Sep 2026)', () => {
+    const pulled = [{ id: '1abc', name: 'Glass Den 1.mov', mime: 'video/quicktime', size: 5, url: 'https://cdn.x/1abc.mov', status: 'done', version: 1 }, { id: '2def', name: 'half.mov', mime: 'video/quicktime', size: null, url: null, status: 'copying', version: 1 }]
+    const files = adoptedFromPull(pulled, 'u', 'now')
+    expect(files).toHaveLength(1)                                                       // a clip still copying is not adopted
+    expect(files[0]).toMatchObject({ id: '1abc', asset_id: '1abc', version: 1, url: 'https://cdn.x/1abc.mov' })   // the Drive id stays: the comments hang off it
+    expect(needsAdoption({ final_files: [], link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true })).toBe(true)
+    expect(needsAdoption({ final_files: files, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true })).toBe(false)
+    // the send-back adopts before it names; the dialog and the editor's card adopt when they meet such a card; decided in a claim
+    expect(readFileSync('app/api/production/items/[id]/send-back/route.ts', 'utf8')).toContain('const adopted = await adoptClips(loaded as never, user.id)')
+    expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('if (!cur || finalFilesOf(cur as never).length > 0) return null')
+    expect(readFileSync('app/dashboard/board/BoardDialogs.tsx', 'utf8')).toContain("/adopt-clips`, { method: 'POST' })")
   })
 })

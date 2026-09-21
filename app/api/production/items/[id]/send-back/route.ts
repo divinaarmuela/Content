@@ -14,6 +14,7 @@ import { canMoveTo, columnOf } from '../../../../../lib/board-core'
 import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
 import { assetIdOf, currentFiles, sanitiseChangeAssets } from '../../../../../lib/final-files-core'
+import { adoptClips } from '../../../../../lib/adopt-clips'
 
 
 /**
@@ -50,7 +51,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'Only an account manager or the quality checker can send a card back' }, { status: 403 })
     }
     const { id } = await params
-    const item = await loadItemForUser(user, id)
+    const loaded = await loadItemForUser(user, id)
+    // a link card's copied clips become its files first, so the send-back can name them (22 Sep 2026)
+    const adopted = await adoptClips(loaded as never, user.id)
+    const item = adopted.adopted > 0 ? { ...loaded, final_files: adopted.files } : loaded
     const body = await req.json().catch(() => ({}))
     // WHICH ASSETS (22 Sep 2026; final-files-core.ts): "2 get approved, 1 needs changing, so 1 gets sent back".
     // Each named asset may carry its own words; together they are the note when no general one was typed.

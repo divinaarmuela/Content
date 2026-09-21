@@ -19,10 +19,10 @@ import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
-import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, stillToReplace, withFinalFiles, withReplacement, withoutFinalFile } from '../../lib/final-files-core'
+import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, needsAdoption, stillToReplace, withFinalFiles, withReplacement, withoutFinalFile } from '../../lib/final-files-core'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
-import { handInRound, roundLabel } from '../../lib/edit-round-core'
+import { handInRound, roundLabel, roundOf } from '../../lib/edit-round-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
 import { pullId, pullInFlight, pullProgress } from '../../lib/drive-pull-core'
@@ -254,6 +254,14 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // THE UPLOAD POPUP (the owner, 22 Sep 2026: "when uploading version 1, a popup — upload the file instead of
   // a Drive link"): pick, see what was picked, upload. The files land on the card, each one its own asset.
   const [uploadOpen, setUploadOpen] = useState(false)
+  // A LINK CARD SENT BACK: its copied clips become its files, once, so one can be replaced (final-files-core.ts)
+  const adoptTried = useRef<string | null>(null)
+  useEffect(() => {
+    if (!item || me?.id !== item.owner_id || adoptTried.current === item.id) return
+    if (!needsAdoption(item as never) || handInRound(item as never) === roundOf(item as never)) return
+    adoptTried.current = item.id
+    void fetch(`/api/production/items/${item.id}/adopt-clips`, { method: 'POST' }).catch(() => {})
+  }, [item, me?.id])
   const [queued, setQueued] = useState<File[]>([])
   const [linkMode, setLinkMode] = useState(false)
   // ONE ASSET REPLACED IN PLACE: the new file takes the asset's slot as the next version; the rest are untouched

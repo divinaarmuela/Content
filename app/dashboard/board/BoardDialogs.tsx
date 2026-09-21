@@ -33,7 +33,7 @@ import { friendlyError } from '../../lib/support-core'
 import { POST_CHANGES_LABEL, type BoardViewCard, type BoardViewer } from '../../lib/board-view-core'
 import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
-import { assetIdOf, currentFiles } from '../../lib/final-files-core'
+import { assetIdOf, currentFiles, needsAdoption } from '../../lib/final-files-core'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 
 /**
@@ -257,7 +257,15 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
 
   // WHICH ASSETS NEED CHANGING (22 Sep 2026; final-files-core.ts). The card's files as they stand; the ones
   // the client approved are shown approved and start unticked, the rest start ticked when anything was approved
-  const assets = useMemo(() => (card ? currentFiles(card as never) : []), [card])
+  const [adopted, setAdopted] = useState<unknown[] | null>(null)
+  useEffect(() => {
+    setAdopted(null)
+    if (!card || !needsAdoption(card as never)) return
+    let gone = false
+    fetch(`/api/production/items/${card.id}/adopt-clips`, { method: 'POST' }).then(r => (r.ok ? r.json() : null)).then((j: { files?: unknown[] } | null) => { if (!gone && j?.files) setAdopted(j.files) }).catch(() => {})
+    return () => { gone = true }
+  }, [card])
+  const assets = useMemo(() => (card ? currentFiles({ final_files: adopted ?? (card as { final_files?: unknown }).final_files }) : []), [card, adopted])
   const approved = useMemo(() => new Set(card ? clipApprovalsOf(card as never).map(a => a.file_id) : []), [card])
   const [picked, setPicked] = useState<Record<string, string | undefined>>({})
   useEffect(() => {

@@ -193,3 +193,25 @@ export function sanitiseChangeAssets(raw: unknown, item: { final_files?: unknown
   const known = new Set(currentFiles(item).map(assetIdOf))
   return Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === 'string' && known.has(x)))] : []
 }
+
+/* ── A LINK CARD'S CLIPS BECOME ITS ASSETS (22 Sep 2026) ───────────────────
+ * The owner: "we already have so many existing cards with a Version 1 from a
+ * Drive link … can I just swap some of the videos?" A pasted link was one lump
+ * — but its clips were copied into our own storage when it was pasted, each
+ * under the Drive file's id, and that id is what the comments and approvals
+ * already hang off. So the copies are ADOPTED as the card's Version 1 files:
+ * the same ids, the same names, our copy's address. From there the card is a
+ * files card — one clip is ticked at send-back and replaced in its slot, the
+ * rest carry forward with everything said on them. Done once, only when the
+ * card has no files of its own yet.
+ */
+export function adoptedFromPull(pulled: readonly { id: string; name: string; mime?: string | null; size?: number | null; url?: string | null; status?: string; version?: number | null }[], by: string | null, now: string): FinalFile[] {
+  return pulled
+    .filter(f => f.status === 'done' && !!f.url && /^https:\/\//.test(String(f.url)))
+    .map(f => ({ id: f.id, asset_id: f.id, name: f.name, url: String(f.url), mime: String(f.mime ?? ''), size: typeof f.size === 'number' ? f.size : null, version: typeof f.version === 'number' && f.version >= 1 ? f.version : 1, uploaded_at: now, by }))
+}
+
+/** a link card with no files of its own is waiting to be adopted */
+export function needsAdoption(item: { final_files?: unknown; link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null }): boolean {
+  return finalFilesOf(item).length === 0 && finishedEditOf(item) !== null
+}
