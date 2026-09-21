@@ -183,6 +183,7 @@ const GHOST_TABLES = {
     ['notes', col('string', true)],
     ['created_at', col('string', true)],
     ['updated_at', col('string', true)],
+    ['agent_checked_at', col('string', true)],
     ['weakness_tags', col('unknown', true, true)],
   ],
   prospect_events: [
@@ -195,6 +196,11 @@ const GHOST_TABLES = {
     ['detail', col('string', true)],
     ['points', col('number', true)],
     ['confirmed', col('boolean', true)],
+    //   the agent's findings (21 Sep 2026): what it read, how sure it was, and a person's 'not this'
+    ['evidence_id', col('string', true)],
+    ['confidence', col('number', true)],
+    ['dismissed_at', col('string', true)],
+    ['dismissed_by', col('string', true)],
   ],
   todos: [
     ['id', col('string', false)],

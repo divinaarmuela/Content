@@ -22,7 +22,9 @@ export function prospectPath(id: string): string {
 /** one line on the prospect's timeline; the points come from the kind unless given */
 export async function logAcqEvent(input: {
   prospectId: string; kind: AcqEventKind; by?: string | null; detail?: string | null
-  source?: 'person' | 'system' | 'scanner'; points?: number; confirmed?: boolean; at?: string
+  source?: 'person' | 'system' | 'scanner' | 'agent'; points?: number; confirmed?: boolean; at?: string
+  /** the agent's: the message it read, and how sure it was (acq-agent-core.ts) */
+  evidenceId?: string | null; confidence?: number | null
 }): Promise<ProspectEvent> {
   return table<ProspectEvent>('prospect_events').insert({
     prospect_id: input.prospectId,
@@ -33,6 +35,8 @@ export async function logAcqEvent(input: {
     detail: input.detail ? String(input.detail).slice(0, 2000) : null,
     points: input.points ?? ACQ_EVENT_KINDS[input.kind].points,
     confirmed: input.confirmed ?? true,
+    evidence_id: input.evidenceId ?? null,
+    confidence: input.confidence ?? null,
   } as never)
 }
 
@@ -109,9 +113,9 @@ const dayOf = (iso: string | number) => new Date(iso).toISOString().slice(0, 10)
  * no-response reminders stopped, a prep task for the day before and a
  * reminder for the day itself.
  */
-export async function recordCallBooked(actor: Actor, p: ProspectRow, when: string | null, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner' } = {}): Promise<ProspectEvent> {
+export async function recordCallBooked(actor: Actor, p: ProspectRow, when: string | null, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner' | 'agent'; evidenceId?: string | null; confidence?: number | null } = {}): Promise<ProspectEvent> {
   const now = new Date().toISOString()
-  const event = await logAcqEvent({ prospectId: p.id, kind: 'call_booked', by: opts.by ?? null, source: opts.source ?? 'person', detail })
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'call_booked', by: opts.by ?? null, source: opts.source ?? 'person', detail, evidenceId: opts.evidenceId, confidence: opts.confidence })
   const prospects = table<ProspectRow>('prospects')
   let movedFrom: string | null = null
   await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
@@ -203,9 +207,9 @@ export async function onBookingMade(booking: { id: string; customer_email?: stri
  * target moved into New lead / Engaged inside a claim (two reporters of one
  * reply move it once), and the no-response reminders paused.
  */
-export async function recordReply(actor: Actor, p: ProspectRow, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner'; points?: number; at?: string } = {}): Promise<ProspectEvent> {
+export async function recordReply(actor: Actor, p: ProspectRow, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner' | 'agent'; points?: number; at?: string; evidenceId?: string | null; confidence?: number | null } = {}): Promise<ProspectEvent> {
   const now = new Date().toISOString()
-  const event = await logAcqEvent({ prospectId: p.id, kind: 'reply', by: opts.by ?? null, source: opts.source ?? 'person', detail, points: opts.points, at: opts.at })
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'reply', by: opts.by ?? null, source: opts.source ?? 'person', detail, points: opts.points, at: opts.at, evidenceId: opts.evidenceId, confidence: opts.confidence })
   const prospects = table<ProspectRow>('prospects')
   const wasAtOutreach = acqStageByKey((p as ProspectRow & Prospect).stage).key === 'outreach'
   const moved = await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {

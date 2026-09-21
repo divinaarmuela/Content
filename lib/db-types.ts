@@ -1095,6 +1095,10 @@ export interface ProspectEvent {
   detail: string | null
   points: number | null
   confirmed: boolean | null
+  evidence_id: string | null
+  confidence: number | null
+  dismissed_at: string | null
+  dismissed_by: string | null
 }
 
 export interface Prospect {
@@ -1143,6 +1147,7 @@ export interface Prospect {
   notes: string | null
   created_at: string | null
   updated_at: string | null
+  agent_checked_at: string | null
   weakness_tags: unknown | null
 }
 
@@ -1522,8 +1527,8 @@ export const TABLE_COLUMNS = {
   notification_log: ['id', 'created_at', 'dedupe_key', 'event_type', 'recipient_id', 'recipient_email', 'subject', 'body_html', 'entity_type', 'entity_id', 'channel', 'status', 'sent_at', 'error', 'retry_count', 'read_at', 'claimed_at'],
   post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'id', 'created_at', 'updated_at', 'client_id', 'slug', 'name', 'industry', 'tag', 'services', 'description', 'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach', 'outcome', 'sort_order', 'published'],
-  prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed'],
-  prospects: ['id', 'business', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'weakness_tags'],
+  prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
+  prospects: ['id', 'business', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
   publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
@@ -1610,8 +1615,8 @@ export const NULLABLE_COLUMNS = {
   notification_log: ['recipient_id', 'entity_type', 'entity_id', 'sent_at', 'error', 'read_at', 'claimed_at'],
   post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance', 'interactors'],
   projects: ['gallery_urls', 'website_url', 'client_id', 'result'],
-  prospect_events: ['by', 'source', 'detail', 'points', 'confirmed'],
-  prospects: ['tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'weakness_tags'],
+  prospect_events: ['by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
+  prospects: ['tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
   publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results'],
   report_settings: ['data_from', 'last_sent_for'],

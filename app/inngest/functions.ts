@@ -924,7 +924,41 @@ export const drivePullFolder = inngest.createFunction(
   })
 )
 
+/**
+ * THE ACQUISITION AGENT (21 Sep 2026; app/lib/acq-agent.ts). Every 30 minutes
+ * through the working day, and whenever a look is asked for: the inboxes and
+ * MD Media's own DM threads are read once, then each prospect due a look is
+ * one step — so one prospect's failure is retried alone and never the pass.
+ * NEW FUNCTION: it does nothing until the app is re-synced (CLAUDE.md, 5b).
+ */
+export const acquisitionAgent = inngest.createFunction(
+  {
+    id: 'acquisition-agent',
+    name: 'Acquisition agent',
+    retries: 1,
+    concurrency: 1,
+    triggers: [{ cron: 'TZ=Australia/Melbourne */30 6-22 * * *' }, { event: 'app/acquisition.agent.requested' }],
+  },
+  async ({ step }) => {
+    const { agentContext, prospectsDue, runAgentForProspect } = await import('../lib/acq-agent')
+    const due = await step.run('prospects-due', async () => (await prospectsDue()).map(p => p.id))
+    if (due.length === 0) return { synced: true, looked_at: 0 }
+    const runs = []
+    for (const id of due) {
+      runs.push(await step.run(`prospect-${id}`, async () => {
+        const { table } = await import('@/lib/db')
+        const p = await table('prospects').get(id)
+        if (!p) return null
+        // read per step: a step is its own request, and nothing survives between them
+        return runAgentForProspect(p as never, await agentContext())
+      }))
+    }
+    return { synced: true, looked_at: due.length, runs }
+  },
+)
+
 export const functions = [
+  acquisitionAgent,
   dueReminders,
   shootBriefLate,
   editorSopNudges,

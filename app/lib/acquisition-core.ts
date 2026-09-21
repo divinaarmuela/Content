@@ -137,6 +137,10 @@ export type AcqEvent = {
   detail?: string | null
   points?: number | null
   confirmed?: boolean | null
+  /** the agent's (acq-agent-core.ts): the message it read, how sure it was, and a person's "not this" */
+  evidence_id?: string | null
+  confidence?: number | null
+  dismissed_at?: string | null
 }
 
 export function isAcqEventKind(v: unknown): v is AcqEventKind {

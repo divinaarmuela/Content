@@ -108,6 +108,21 @@ export default function Acquisition({ view }: { view: AcqView }) {
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save'); return false } finally { setBusy(false) }
   }
 
+  /** the agent's pass for one prospect, and what it found in words */
+  const checkNow = async (id: string) => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/leads/acquisition/${id}/agent`, { method: 'POST' })
+      const json = await res.json().catch(() => ({})) as { error?: string; run?: { gathered: number; fresh: number; recorded: number; asked: number } }
+      if (!res.ok || !json.run) throw new Error(json.error ?? 'The agent could not look')
+      const r = json.run
+      toast.success(r.gathered === 0 ? 'Nothing in the inboxes with this business yet'
+        : r.fresh === 0 ? `Read ${r.gathered} ${r.gathered === 1 ? 'message' : 'messages'} — nothing new since last time`
+        : `Read ${r.fresh} new ${r.fresh === 1 ? 'message' : 'messages'}: ${r.recorded} added to the timeline, ${r.asked} to confirm`)
+      return true
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'The agent could not look'); return false } finally { setBusy(false) }
+  }
+
   const lanesFor = (keys: readonly AcqStageKey[]): Lane[] => keys.map(k => {
     const s = acqStageByKey(k)
     const cards = shown.filter(p => acqStageByKey(p.stage).key === k && !p.not_now_at && !p.dormant_at)
@@ -216,7 +231,9 @@ export default function Acquisition({ view }: { view: AcqView }) {
               patch={body => call(`/api/leads/acquisition/${current.id}`, 'PATCH', body)}
               move={(action, said) => call(`/api/leads/acquisition/${current.id}/stage`, 'POST', { action }, said)}
               log={(kind: AcqEventKind, detail, said) => call(`/api/leads/acquisition/${current.id}/events`, 'POST', { kind, detail }, said)}
-              remove={() => setDeleting(current)} />
+              remove={() => setDeleting(current)}
+              answer={(eventId, confirm) => call(`/api/leads/acquisition/${current.id}/events/${eventId}`, 'POST', { confirm }, confirm ? 'Confirmed — it counts now' : 'Dismissed')}
+              check={() => checkNow(current.id)} />
           )}
         </SheetContent>
       </Sheet>

@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, PauseCircle, PlayCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, PauseCircle, PlayCircle, Sparkles, Trash2 } from 'lucide-react'
+import { isOpenFinding } from '../../../lib/acq-agent-core'
 import { Button } from '@/components/ui/button'
 import { SheetTitle } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -28,7 +29,7 @@ const dt = (iso: string | null | undefined) => (iso ? new Date(iso).toISOString(
 const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' }) : '')
 const stamp = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
-export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now }: {
+export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check }: {
   prospect: Prospect
   events: AcqEvent[]
   team: TeamUser[]
@@ -38,6 +39,10 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
   move: (action: 'move' | 'back' | 'not_now' | 'dormant' | 'reopen', said: string) => Promise<boolean>
   log: (kind: AcqEventKind, detail: string | null, said: string) => Promise<boolean>
   remove: () => void
+  /** a person's answer to something the agent found: Confirm, or Not this */
+  answer: (eventId: string, confirm: boolean) => Promise<boolean>
+  /** the agent's pass for this prospect, now */
+  check: () => Promise<boolean>
   now: number
 }) {
   const stage = acqStageByKey(p.stage)
@@ -246,17 +251,35 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
 
       {/* ── the timeline ── */}
       <section className="flex flex-col gap-2" aria-labelledby="acq-timeline">
-        <p id="acq-timeline" className={H}>Timeline — the score is the sum of these</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p id="acq-timeline" className={`${H} min-w-0 flex-1`}>Timeline — the score is the sum of these</p>
+          <Button variant="outline" disabled={busy} onClick={() => void check()} className="h-11 rounded-full px-4 text-[13px] font-semibold">
+            <Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> {busy ? 'Checking…' : 'Check the inboxes now'}
+          </Button>
+        </div>
+        <p className="text-[12px] text-muted-foreground">
+          The agent reads the emails and Instagram messages with this business every 30 minutes and adds what is new.{(p as { agent_checked_at?: string | null }).agent_checked_at ? ` Last looked ${stamp(String((p as { agent_checked_at?: string | null }).agent_checked_at))}.` : ' It has not looked yet.'}
+        </p>
+        {/* WHAT THE AGENT FOUND AND WILL NOT DECIDE ALONE (acq-agent-core.ts, rule 3) */}
+        {events.filter(isOpenFinding).map(e => (
+          <div key={e.id} role="status" className="flex flex-col gap-2 rounded-inner border border-border bg-tint-amber p-3 text-[13px]">
+            <p><span className="font-semibold">Found — is this right? {isAcqEventKind(e.kind) ? ACQ_EVENT_KINDS[e.kind].label : e.kind}</span><span className="block whitespace-pre-wrap">{e.detail}</span></p>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={busy} onClick={() => void answer(e.id, true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90"><Check className="mr-1.5 h-4 w-4" aria-hidden /> Confirm</Button>
+              <Button variant="outline" disabled={busy} onClick={() => void answer(e.id, false)} className="h-11 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
+            </div>
+          </div>
+        ))}
         <div className="flex gap-2">
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note…" className={field} aria-label="A note for the timeline"
             onKeyDown={async e => { if (e.key === 'Enter' && note.trim()) { e.preventDefault(); if (await log('note', note.trim(), 'Note added')) setNote('') } }} />
           <Button variant="outline" disabled={busy || !note.trim()} onClick={async () => { if (await log('note', note.trim(), 'Note added')) setNote('') }} className="h-11 shrink-0 rounded-full px-4 text-[13px] font-semibold">Add</Button>
         </div>
         <ol className="flex flex-col">
-          {[...events].sort((a, b) => String(b.at).localeCompare(String(a.at))).map(e => (
+          {[...events].filter(e => !isOpenFinding(e) && !e.dismissed_at).sort((a, b) => String(b.at).localeCompare(String(a.at))).map(e => (
             <li key={e.id} className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_auto] gap-3 border-b border-border py-2.5 text-[13px]">
               <span className="font-mono text-[12px] text-muted-foreground">{stamp(e.at)}</span>
-              <span><span className="font-semibold">{isAcqEventKind(e.kind) ? ACQ_EVENT_KINDS[e.kind].label : e.kind}</span>{e.detail ? <span className="block whitespace-pre-wrap text-muted-foreground">{e.detail}</span> : null}</span>
+              <span><span className="font-semibold">{isAcqEventKind(e.kind) ? ACQ_EVENT_KINDS[e.kind].label : e.kind}</span>{e.source === 'agent' ? <span className="ml-1.5 rounded-full bg-foreground/10 px-1.5 py-0.5 text-[11px] font-semibold">agent</span> : null}{e.detail ? <span className="block whitespace-pre-wrap text-muted-foreground">{e.detail}</span> : null}</span>
               <span className={`font-semibold ${Number(e.points) > 0 ? 'text-accent-green-deep' : Number(e.points) < 0 ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>{Number(e.points) ? `${Number(e.points) > 0 ? '+' : ''}${e.points}` : ''}</span>
             </li>
           ))}

@@ -151,7 +151,7 @@ export async function scanInbox(onEvent?: Emit): Promise<ScanResult> {
 }
 
 /** Every mailbox the scanner has credentials for, de-duplicated by address. */
-async function availableMailboxes(): Promise<Mailbox[]> {
+export async function availableMailboxes(): Promise<Mailbox[]> {
   const configured = getMailboxes()
   const self = await listSelfConnectedMailboxes().catch(() => [] as Mailbox[])
   const connected = await listConnectedMailboxes().catch(() => [] as Mailbox[])
