@@ -42,7 +42,7 @@ export type EditingPortal = {
   am_name: string | null
   item: { id: string; title: string; status: ItemStatus; status_label: string; content_type: string | null }
   folder: { url: string; id: string }
-  clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null; asset_id: string | null; carries: boolean })[]
+  clips: (PortalClip & { src: string; version: number; stream: { base: string; duration: number } | null; asset_id: string | null; carries: boolean; retired_round?: number | null })[]
   /** the card is with the client now: they may approve. False while it is being revised — they may still comment */
   can_approve: boolean
   /** the rounds the clips span, newest first — Version 2, Version 1 */
@@ -103,6 +103,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   const seen = clientSeenRound(item as never)
   const uploadedAll = finalFilesOf(item).filter(f => f.version <= seen)
   const assetOf = new Map(uploadedAll.map(f => [f.id, assetIdOf(f)]))
+  const retiredOf = new Map(uploadedAll.filter(f => typeof f.retired_round === 'number').map(f => [f.id, f.retired_round as number]))
   const upRounds = new Set(uploadedAll.map(f => f.version))
   const uploaded = uploadedAll.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const, version: f.version }))
   // A CARD THAT BEGAN AS A LINK AND WENT ON AS FILES keeps its link rounds: Version 1 from the folder, Version 2 uploaded
@@ -117,9 +118,9 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
         const kind = kindOf(f.mime, f.name) === 'image' ? 'image' as const : 'video' as const
         const p = previews.get(f.url as string)
         const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-        return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
+        return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), retired_round: retiredOf.get(f.id) ?? null, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
-    : clipsOf(listing.entries).map(c => ({ ...c, asset_id: null, carries: false, src: signedClipStream(owner.token, item.id, c), version: Math.min(round, seen), stream: null }))
+    : clipsOf(listing.entries).map(c => ({ ...c, asset_id: null, carries: false, retired_round: null, src: signedClipStream(owner.token, item.id, c), version: Math.min(round, seen), stream: null }))
   const rounds = roundsOf(clips)
   return {
     token: owner.token,

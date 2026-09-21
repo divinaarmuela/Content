@@ -33,6 +33,9 @@ export type FinalFile = {
   asset_id?: string
   /** the file this one took the place of */
   replaces?: string | null
+  /** DROPPED FROM THIS VERSION ON (22 Sep 2026): the asset is out of the card from round N; its earlier
+   *  files stay, so the client's earlier version still shows it with what was said on it */
+  retired_round?: number | null
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -62,7 +65,7 @@ export function hasFinishedWork(item: { link_url?: string | null; link_kind?: st
   // whole card) → at least one new file for the round.
   const named = changeAssetsOf(item)
   if (named.length > 0 && currentFiles(item).length > 0) return stillToReplace(item).length === 0
-  return finalFilesForRound(item, round).length > 0
+  return finalFilesForRound(item, round).length > 0 || currentFiles(item).some(f => f.retired_round === round)
 }
 
 /** the id a fresh upload gets — stable, safe in a URL and a key */
@@ -111,6 +114,7 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       version, uploaded_at: typeof x.uploaded_at === 'string' ? x.uploaded_at : now, by: typeof x.by === 'string' ? x.by : by,
       ...(typeof x.asset_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.asset_id) ? { asset_id: x.asset_id } : {}),
       ...(typeof x.replaces === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.replaces) ? { replaces: x.replaces } : {}),
+      ...(typeof x.retired_round === 'number' && x.retired_round >= 1 ? { retired_round: Math.floor(x.retired_round) } : {}),
     })
   }
   return { ok: true, files: out }
@@ -165,7 +169,7 @@ export function changeAssetsOf(item: { change_assets?: unknown }): string[] {
 export function stillToReplace(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }): string[] {
   const round = handInRound(item)
   const current = new Map(currentFiles(item).map(f => [assetIdOf(f), f]))
-  return changeAssetsOf(item).filter(a => current.has(a) && current.get(a)!.version < round)
+  return changeAssetsOf(item).filter(a => current.has(a) && current.get(a)!.version < round && !isRetiredAt(current.get(a)!, round))
 }
 
 /** may this asset be replaced now: the card was sent back, and this asset was named (or none was) */
@@ -190,7 +194,7 @@ export function withReplacement(list: readonly FinalFile[], assetId: string, add
 
 /** what a send-back may name: asset ids that exist on the card, each once */
 export function sanitiseChangeAssets(raw: unknown, item: { final_files?: unknown }): string[] {
-  const known = new Set(currentFiles(item).map(assetIdOf))
+  const known = new Set(currentFiles(item).filter(f => !f.retired_round).map(assetIdOf))
   return Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === 'string' && known.has(x)))] : []
 }
 
@@ -214,4 +218,27 @@ export function adoptedFromPull(pulled: readonly { id: string; name: string; mim
 /** a link card with no files of its own is waiting to be adopted */
 export function needsAdoption(item: { final_files?: unknown; link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null }): boolean {
   return finalFilesOf(item).length === 0 && finishedEditOf(item) !== null
+}
+
+/* ── DROPPING A CLIP FROM A VERSION (22 Sep 2026) ──────────────────────────
+ * The owner: "Version 1 has a video, but in Version 2 I choose not to have
+ * it." The asset is marked out from that round on. Nothing is deleted: its
+ * earlier file stays, so the client's Version 1 tab still shows it with every
+ * comment. Until the version is handed in it can be brought back.
+ */
+export function isRetiredAt(f: Pick<FinalFile, 'retired_round'>, round: number): boolean {
+  return typeof f.retired_round === 'number' && f.retired_round <= round
+}
+
+/** the assets the card carries at a round: the newest file of each, minus the ones dropped by then */
+export function liveFilesAt(item: { final_files?: unknown }, round: number): FinalFile[] {
+  return currentFiles(item).filter(f => f.version <= round && !isRetiredAt(f, round))
+}
+
+/** drop (round) or bring back (null) one asset — on its newest file, the one the card reads */
+export function withRetired(list: readonly FinalFile[], assetId: string, round: number | null): FinalFile[] {
+  const line = list.filter(f => assetIdOf(f) === assetId).sort((a, b) => a.version - b.version)
+  const latest = line[line.length - 1]
+  if (!latest) return [...list]
+  return list.map(f => (f.id === latest.id ? (round === null ? (({ retired_round: _r, ...rest }) => rest)(f) : { ...f, retired_round: round }) : f))
 }

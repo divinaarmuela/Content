@@ -19,7 +19,7 @@ import DriveFolderFiles from './DriveFolderFiles'
 import Link from 'next/link'
 import { reviewPath } from '../../lib/video-review-core'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
-import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, needsAdoption, stillToReplace, withFinalFiles, withReplacement, withoutFinalFile } from '../../lib/final-files-core'
+import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, needsAdoption, stillToReplace, withFinalFiles, withReplacement, withRetired, withoutFinalFile } from '../../lib/final-files-core'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { handInRound, roundLabel, roundOf } from '../../lib/edit-round-core'
@@ -282,6 +282,12 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       setUploading(null); setReplacing(null)
       if (replaceInput.current) replaceInput.current.value = ''
     }
+  }
+  // DROPPED FROM THIS VERSION ON (final-files-core.ts): out of the card from the next hand-in; the earlier
+  // file and its comments stay; reversible until it is handed in
+  const dropAsset = async (assetId: string, back: boolean) => {
+    if (!item) return
+    await post(`/api/production/items/${id}`, { final_files: withRetired(finalFilesOf(item as never), assetId, back ? null : handInRound(item as never)) }, back ? 'Brought back' : `Dropped from ${roundLabel(handInRound(item as never))} on`, back ? 'Bringing it back' : 'Dropping it', 'PATCH')
   }
   const removeFinalFile = async (fid: string) => {
     if (!item) return
@@ -601,6 +607,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     const a = assetIdOf(f)
                     const waiting = stillToReplace(item as never).includes(a)
                     const okByClient = clipApprovalsOf(item as never).some(x => x.file_id === f.id)
+                    const dropped = typeof f.retired_round === 'number'
                     const earlier = assetHistory(item as never, a).filter(x => x.id !== f.id)
                     return (
                       <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a}>
@@ -608,9 +615,16 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           <span className="inline-flex h-6 items-center rounded-full bg-foreground/[0.06] px-2 text-[11px] font-semibold uppercase">{kindOf(f.mime, f.name)}</span>
                           <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline-offset-4 hover:underline" title={f.name}>{f.name}</a>
                           <span className="shrink-0 text-[12px] text-muted-foreground">{roundLabel(f.version)}</span>
-                          {waiting && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
+                          {dropped && <span className="rounded-full bg-foreground/[0.08] px-2 py-0.5 text-[11px] font-semibold">Dropped from {roundLabel(f.retired_round as number)} on</span>}
+                          {waiting && !dropped && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
                           {okByClient && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold">Approved by the client</span>}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && dropped && f.retired_round === handInRound(item as never) && (
+                            <Button variant="outline" disabled={busy} onClick={() => void dropAsset(a, true)} className="h-9 rounded-full px-3 text-[12px] font-semibold">Bring back</Button>
+                          )}
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (
+                            <Button variant="ghost" disabled={busy} onClick={() => void dropAsset(a, false)} className="h-9 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:text-accent-red-deep">Drop from {roundLabel(handInRound(item as never))}</Button>
+                          )}
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (
                             <Button variant="outline" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }} className="h-9 rounded-full px-3 text-[12px] font-semibold">
                               {f.version === handInRound(item as never) ? 'Replace again' : `Replace — ${roundLabel(handInRound(item as never))}`}
                             </Button>

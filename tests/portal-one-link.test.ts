@@ -32,6 +32,10 @@ describe('one link per card, open the whole way (22 Sep 2026)', () => {
     expect(clipsAtRound(clips, 1).map(c => c.id)).toEqual(['a', 'b', 'c'])
     expect(assetLine(clips, clips[3]).map(c => c.id)).toEqual(['c2', 'c'])
     expect(assetLine(clips, clips[0]).map(c => c.id)).toEqual(['a'])
+    // a clip dropped from Version 2 on is out of Version 2 and still in Version 1 (22 Sep 2026)
+    const withDrop = clips.map(c => (c.id === 'b' ? { ...c, retired_round: 2 } : c))
+    expect(clipsAtRound(withDrop, 2).map(c => c.id)).toEqual(['a', 'c2'])
+    expect(clipsAtRound(withDrop, 1).map(c => c.id)).toEqual(['a', 'b', 'c'])
     // a Drive-link round is one lump: its clips belong to their own version only
     const mixed = [{ id: 'd1', version: 1, carries: false }, { id: 'n', version: 2, asset_id: 'n', carries: true }]
     expect(clipsAtRound(mixed, 2).map(c => c.id)).toEqual(['n'])

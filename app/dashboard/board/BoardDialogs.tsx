@@ -265,7 +265,7 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
     fetch(`/api/production/items/${card.id}/adopt-clips`, { method: 'POST' }).then(r => (r.ok ? r.json() : null)).then((j: { files?: unknown[] } | null) => { if (!gone && j?.files) setAdopted(j.files) }).catch(() => {})
     return () => { gone = true }
   }, [card])
-  const assets = useMemo(() => (card ? currentFiles({ final_files: adopted ?? (card as { final_files?: unknown }).final_files }) : []), [card, adopted])
+  const assets = useMemo(() => (card ? currentFiles({ final_files: adopted ?? (card as { final_files?: unknown }).final_files }).filter(f => !f.retired_round) : []), [card, adopted])
   const approved = useMemo(() => new Set(card ? clipApprovalsOf(card as never).map(a => a.file_id) : []), [card])
   const [picked, setPicked] = useState<Record<string, string | undefined>>({})
   useEffect(() => {

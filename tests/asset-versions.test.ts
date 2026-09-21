@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { adoptedFromPull, needsAdoption, assetHistory, assetIdOf, changeAssetsOf, currentFiles, hasFinishedWork, mayReplaceAsset, sanitiseChangeAssets, stillToReplace, withReplacement, type FinalFile } from '../app/lib/final-files-core'
+import { isRetiredAt, liveFilesAt, withRetired, adoptedFromPull, needsAdoption, assetHistory, assetIdOf, changeAssetsOf, currentFiles, hasFinishedWork, mayReplaceAsset, sanitiseChangeAssets, stillToReplace, withReplacement, type FinalFile } from '../app/lib/final-files-core'
 
 const f = (id: string, version = 1, extra: Partial<FinalFile> = {}): FinalFile => ({ id, name: `${id}.mp4`, url: `https://cdn.x/${id}-${version}.mp4`, mime: 'video/mp4', size: 10, version, uploaded_at: `2026-09-2${version}T00:00:00Z`, by: 'u', ...extra })
 const three = [f('a'), f('b'), f('c')]
@@ -48,10 +48,10 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain('const next = withReplacement(finalFilesOf(item as never), assetId,')
     // an asset the client approved is not offered for replacing
-    expect(drawer).toContain('mayReplaceAsset(item as never, a) && !okByClient && (')
+    expect(drawer).toContain('mayReplaceAsset(item as never, a) && !okByClient && !dropped && (')
     // a super admin or account manager may upload and replace too, not only the holder (22 Sep 2026)
     expect(drawer).toContain("const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'")
-    expect(drawer).toContain('{mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && (')
+    expect(drawer).toContain('{mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (')
   })
 
   it('an existing link card’s copied clips become its assets, so one of them can be swapped (22 Sep 2026)', () => {
@@ -65,5 +65,28 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(readFileSync('app/api/production/items/[id]/send-back/route.ts', 'utf8')).toContain('const adopted = await adoptClips(loaded as never, user.id)')
     expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('if (!cur || finalFilesOf(cur as never).length > 0) return null')
     expect(readFileSync('app/dashboard/board/BoardDialogs.tsx', 'utf8')).toContain("/adopt-clips`, { method: 'POST' })")
+  })
+
+  it('a clip can be dropped from a version on: gone from Version 2, still in Version 1 with its comments, reversible until handed in (22 Sep 2026)', () => {
+    const back = { final_files: three, change_assets: [], edit_round: 1, status: 'revision_required' }
+    const dropped = withRetired(three, 'b', 2)
+    expect(dropped.find(x => x.id === 'b')?.retired_round).toBe(2)
+    expect(isRetiredAt(dropped[1], 2)).toBe(true)
+    expect(isRetiredAt(dropped[1], 1)).toBe(false)
+    expect(liveFilesAt({ final_files: dropped }, 2).map(assetIdOf)).toEqual(['a', 'c'])
+    expect(liveFilesAt({ final_files: dropped }, 1).map(assetIdOf)).toEqual(['a', 'b', 'c'])
+    // dropping one IS a change: the whole-card hand-in is met
+    expect(hasFinishedWork({ ...back, final_files: dropped })).toBe(true)
+    // a named asset that is dropped no longer waits for a replacement
+    expect(stillToReplace({ ...back, change_assets: ['b'], final_files: dropped })).toEqual([])
+    // a send-back cannot name what is already out
+    expect(sanitiseChangeAssets(['b', 'c'], { final_files: dropped })).toEqual(['c'])
+    // brought back: the mark is gone, nothing else changed
+    const backAgain = withRetired(dropped, 'b', null)
+    expect(backAgain.find(x => x.id === 'b')?.retired_round).toBeUndefined()
+    expect(backAgain).toHaveLength(3)
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(drawer).toContain('Drop from {roundLabel(handInRound(item as never))}')
+    expect(drawer).toContain('>Bring back</Button>')
   })
 })

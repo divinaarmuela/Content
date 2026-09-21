@@ -118,7 +118,7 @@ export function clientSeenRound(card: { client_round?: unknown; edit_round?: unk
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1
 }
 
-export type VersionedClip = { id: string; version: number; asset_id?: string | null; carries?: boolean }
+export type VersionedClip = { id: string; version: number; asset_id?: string | null; carries?: boolean; retired_round?: number | null }
 
 /**
  * THE CARD AS IT STOOD AT A VERSION. Uploaded files are assets that CARRY FORWARD: Version 2 of the card is
@@ -134,6 +134,8 @@ export function clipsAtRound<T extends VersionedClip>(clips: readonly T[], round
     const a = c.asset_id || c.id, have = newest.get(a)
     if (!have || c.version > have.version) newest.set(a, c)
   }
+  // dropped by this version: out (its earlier version still shows it)
+  for (const [a, c] of newest) if (typeof c.retired_round === 'number' && c.retired_round <= round) newest.delete(a)
   const order = [...new Set(clips.filter(c => c.carries).map(c => c.asset_id || c.id))]
   return [...out, ...order.map(a => newest.get(a)).filter((c): c is T => !!c)]
 }
