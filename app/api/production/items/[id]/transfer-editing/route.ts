@@ -3,7 +3,7 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Batch, TeamUser } from '@/lib/db-types'
 import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/authz'
 import { accessibleClientIds, loadItemForUser } from '../../../../../lib/production-access'
-import { logActivity, notifyHandedOver } from '../../../../../lib/workflow'
+import { logActivity, notifyEditingMovedAway, notifyHandedOver } from '../../../../../lib/workflow'
 import { announceBatchChange, announceItemChange } from '../../../../../lib/production-live'
 import { askedPatch } from '../../../../../lib/asked-core'
 import { editorRefusal, transferRefusal, transferWords } from '../../../../../lib/editor-transfer-core'
@@ -62,6 +62,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     notifyHandedOver(user, updated as never, note || null)
     const toName = editor!.name || editor!.email
+    // …and the person it left is told too, so nobody keeps cutting a card that is not theirs
+    notifyEditingMovedAway(user, updated as never, item.owner_id, toName, note || null)
     const fromName = previousOwner ? (previousOwner.name || previousOwner.email) : null
     await logActivity({
       actor: user, clientId: item.client_id,

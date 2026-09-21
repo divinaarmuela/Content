@@ -37,4 +37,9 @@ describe('what was typed when the shoot was made can be changed and copied (21 S
     const route = readFileSync('app/api/production/batches/[id]/route.ts', 'utf8')
     expect(route).toContain("if (body.owner_id && (!named || named.active_status !== true || named.role === 'client')) {")
   })
+
+  it('a manager who HOLDS the card still has Transfer on it (21 Sep 2026)', () => {
+    const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    expect(page).toContain('{maker && me && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}')
+  })
 })

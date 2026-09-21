@@ -48,6 +48,28 @@ import { useEffect, useState } from 'react'
  */
 const folderUrl = (folderId: string) => `https://drive.google.com/drive/folders/${folderId}`
 
+/**
+ * A MANAGER HOLDING THE CARD CAN STILL GIVE IT AWAY (the owner, 21 Sep 2026:
+ * "how come super admins and AMs can't transfer the editing job"). A manager
+ * who holds a card in Draft or back for changes gets the maker's card — the
+ * link box, the submit — and the manager's buttons, Transfer among them, were
+ * left off it. The one press they need is here; the route decides as before.
+ */
+function HolderTransfer({ item, viewer }: { item: ContentItem; viewer: { id: string; role: string } }) {
+  const [open, setOpen] = useState(false)
+  if (!canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
+      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">You hold this card. Someone else can take the editing, with everything on it.</p>
+      <Button variant="outline" onClick={() => setOpen(true)} className="h-11 rounded-full px-4 text-[14px] font-semibold">
+        <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> Transfer the editing job
+      </Button>
+      <TransferEditingDialog open={open} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
+        viewerId={viewer.id} onClose={() => setOpen(false)} />
+    </div>
+  )
+}
+
 /** The manager's or checker's answers on the card, above the brief: the
  *  board's own buttons and dialogs, so a press here is a press on the board. */
 function ManagerActions({ item, viewer, portalLink, client }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null }) {
@@ -246,6 +268,7 @@ export default function EditorCardPage() {
                       ? `${window.location.origin}${portalHasWork(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
                       : null} />
                 )}
+                {maker && me && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}
                 <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
               </>
             )}

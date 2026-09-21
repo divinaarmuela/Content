@@ -390,6 +390,42 @@ export function notifyHandedOver(actor: TeamUser, item: ContentItem, note?: stri
 }
 
 /**
+ * THE EDITING LEFT YOU (the owner, 21 Sep 2026: "make sure they are
+ * notified"). notifyHandedOver tells the person who now has the card; the
+ * person it was taken from heard nothing and kept working on it. One plain
+ * message, never to the person who moved it themselves.
+ */
+export function notifyEditingMovedAway(actor: TeamUser, item: ContentItem, previousOwnerId: string | null | undefined, toName: string, note?: string | null) {
+  if (!previousOwnerId || previousOwnerId === actor.id || previousOwnerId === item.owner_id) return
+  afterResponse('editing-moved-away notification', async () => {
+    const row = await table<TeamUserRow>('team_users').get(previousOwnerId)
+    if (!row || !row.active_status || row.role === 'client') return
+    const by = actor.name || actor.email
+    const words = tidyNote(note)
+    const subject = `${item.title} is no longer yours — ${by} moved the editing to ${toName}`
+    await notify({
+      actorName: actor.name,
+      actorEmail: actor.email,
+      actorClerkId: actor.clerk_user_id,
+      eventType: 'editing_moved_away',
+      entityType: 'content_item',
+      entityId: `${item.id}#moved_away#${previousOwnerId}#${item.updated_at ?? new Date().toISOString()}`,
+      recipientId: row.id,
+      recipientEmail: row.email,
+      subject,
+      bodyHtml: renderEmail(
+        subject,
+        `<p>${escapeHtml(by)} moved the editing of <strong>${escapeHtml(item.title)}</strong> to ${escapeHtml(toName)}. It is off your board; nothing on the card was lost.</p>`
+        + (words ? `<p><strong>What they said:</strong></p><blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(words)}</blockquote>` : '')
+        + `<p>There is nothing for you to do.</p>`,
+        OPEN_ITEM_CTA,
+        `${DASHBOARD_URL}${itemPath(item, row.role)}`,
+      ),
+    })
+  })
+}
+
+/**
  * A shoot brief's lifecycle moments, told to the people they commit:
  * locking a date informs the brief's owner and the client's managers;
  * "shot" tells the managers footage exists and production can start.

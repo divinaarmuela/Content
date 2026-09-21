@@ -31,8 +31,9 @@ describe('who may transfer, from which stage, to whom (pure)', () => {
     expect(transferRefusal({ id: 'x', role: 'editor', clientIds: [] }, card)).toMatch(/account manager or a super admin/)
     expect(transferRefusal({ id: 'x', role: 'general', clientIds: null }, card)).toMatch(/account manager or a super admin/)
     for (const status of TRANSFER_STATUSES) expect(canTransferEditing({ id: 'x', role: 'super_admin' }, { ...card, status })).toBe(true)
-    for (const status of ['client_review', 'approved_for_scheduling', 'scheduled', 'published', 'delivered']) {
-      expect(transferRefusal({ id: 'x', role: 'super_admin' }, { ...card, status })).toMatch(/finished/)
+    // AT ANY STAGE (21 Sep 2026): with the client, approved, scheduled, published — the card can always be moved
+    for (const status of ['client_review', 'approved_for_scheduling', 'scheduled', 'published']) {
+      expect(transferRefusal({ id: 'x', role: 'super_admin' }, { ...card, status })).toBeNull()
     }
     expect(transferRefusal({ id: 'x', role: 'super_admin' }, { ...card, adhoc_post: true })).toMatch(/hand it to a scheduler/)
   })
@@ -145,9 +146,14 @@ describe('the route moves the card, the shoot’s editor follows, the new editor
     expect(shoot().editor_id).toBe(ED2.id)
     // the new editor is told, with the words, once; nobody else
     await settle()
-    expect(h.emails.map(e => e.recipientEmail)).toEqual([ED2.email])
-    expect(h.emails[0].bodyHtml).toContain('Sam is away')
-    expect(h.emails[0].bodyHtml).toContain('Spring reel')
+    // BOTH are told (21 Sep 2026): Dani that it is hers, Sam that it has left him
+    expect(h.emails.map(e => e.recipientEmail).sort()).toEqual([ED2.email, ED.email].sort())
+    const toDani = h.emails.find(e => e.recipientEmail === ED2.email)!
+    expect(toDani.bodyHtml).toContain('Sam is away')
+    expect(toDani.bodyHtml).toContain('Spring reel')
+    const toSam = h.emails.find(e => e.recipientEmail === ED.email)!
+    expect(toSam.subject).toContain('is no longer yours')
+    expect(toSam.bodyHtml).toContain('Dani')
     // the history says so
     const rows = fake.rows('workflow_activity') as { action?: string; detail?: string }[]
     expect(rows.some(a => a.action === 'editing_transferred' && /moved from Sam to Dani/.test(String(a.detail)))).toBe(true)
@@ -166,10 +172,8 @@ describe('the route moves the card, the shoot’s editor follows, the new editor
     expect((await transfer(ED2.id)).status).toBe(403)
     expect(card().owner_id).toBe(ED.id)
   })
-  it('a finished edit, a scheduler as the target, or the same person again is refused and nothing moves', async () => {
-    fake = seed('client_review')
-    expect((await transfer(ED2.id)).status).toBe(400)
-    fake.restore(); fake = seed()
+  it('a scheduler as the target, or the same person again is refused and nothing moves', async () => {
+    fake = seed()
     expect((await transfer(SCHED.id)).json.error).toMatch(/editor, or a manager/)
     expect((await transfer(ED.id)).json.error).toMatch(/already/)
     expect((await transfer('')).status).toBe(400)

@@ -12,14 +12,16 @@
  *
  * Pure: who may, from which stage, to whom. The route does the writes.
  */
-import type { ItemStatus } from './workflow-core'
+import { ITEM_STATUSES, type ItemStatus } from './workflow-core'
 
-/** the stages where the job is still editing — once the client has it, or
- *  it is approved, there is nothing left to transfer */
-export const TRANSFER_STATUSES: readonly ItemStatus[] = [
-  'draft_uploaded', 'revision_required', 'revision_complete',
-  'internal_review', 'quality_check', 'client_changes_requested',
-] as const
+/**
+ * AT ANY STAGE (the owner, 21 Sep 2026: "I should be able to transfer it
+ * anytime"). It used to stop once the client had the card, on the thought
+ * that the editing was over — but a card with the client comes back with
+ * changes, and the person who would make them may have left the job. Whoever
+ * holds the card is who its next round goes to, so it can always be moved.
+ */
+export const TRANSFER_STATUSES: readonly ItemStatus[] = ITEM_STATUSES
 
 /** the people who can carry an edit: the editors, and the managers who also
  *  cut (the same three the shoot page offers as the editor) */
@@ -42,7 +44,6 @@ export type TransferableCard = {
 /** Why a transfer is refused — null when it may go ahead. */
 export function transferRefusal(viewer: TransferViewer, card: TransferableCard): string | null {
   if (card.adhoc_post === true) return 'This is a post, not an edit — hand it to a scheduler instead'
-  if (!TRANSFER_STATUSES.includes(card.status as ItemStatus)) return 'The editing on this card is finished — there is nothing to transfer'
   if (viewer.role === 'super_admin') return null
   if (viewer.role === 'account_manager') {
     if (viewer.clientIds === null || viewer.clientIds === undefined) return null
