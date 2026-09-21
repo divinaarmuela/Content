@@ -1331,16 +1331,39 @@ export function reviewWords(b: SopShoot, nameOf: NameOf, opts?: { planReview?: b
 export function shootDetailsText(d: {
   client?: string | null; forWhom?: string | null; title?: string | null; description?: string | null
   shoot_date?: string | null; manager?: string | null
+  call_time?: string | null; location?: string | null; talent?: string | null; props_wardrobe?: string | null
+  editor?: string | null; editor_priorities?: string | null; edit_deadline?: string | null; notes?: string | null
+  deliverables?: readonly (string | null | undefined)[]; shots?: readonly (string | null | undefined)[]
 }): string {
   const line = (label: string, v: string | null | undefined) => { const s = String(v ?? '').trim(); return s ? `${label}: ${s}` : null }
+  const list = (label: string, vs: readonly (string | null | undefined)[] | undefined) => {
+    const rows = (vs ?? []).map(v => String(v ?? '').trim()).filter(Boolean)
+    return rows.length ? `${label}:\n${rows.map(r => `- ${r}`).join('\n')}` : null
+  }
   return [
     line('Shoot', d.title),
     line('Client', d.client),
     line('For', d.forWhom),
     line('Shoot date', d.shoot_date ? stampWords(d.shoot_date) : null),
+    line('Call time', d.call_time),
+    line('Location', d.location),
     line('Account manager', d.manager),
     line('What this shoot is for', d.description),
+    list('What is coming out of it', d.deliverables),
+    list('Shot list', d.shots),
+    line('Talent', d.talent),
+    line('Props and wardrobe', d.props_wardrobe),
+    line('Editor', d.editor),
+    line('Editor priorities', d.editor_priorities),
+    line('Edit deadline', d.edit_deadline ? stampWords(d.edit_deadline) : null),
+    line('Notes for the team', d.notes),
   ].filter(Boolean).join('\n')
+}
+
+/** rows for a text box so what is in it is SEEN WHOLE, not two lines of it behind a scrollbar (21 Sep 2026) */
+export function rowsFor(text: string | null | undefined, min = 2, max = 14, perRow = 70): number {
+  const rows = String(text ?? '').split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / perRow)), 0)
+  return Math.min(max, Math.max(min, rows))
 }
 
 /** who may be named the shoot's account manager from the shoot page: the managing roles, and whoever holds it now */

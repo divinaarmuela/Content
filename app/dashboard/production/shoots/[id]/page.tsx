@@ -22,7 +22,7 @@ import {
   EditorCardPanel, PeoplePanel, PlanParts, StageStrip, WherePanel,
   type CrewRow, type ShootSopBatch, type TeamRow,
 } from './ShootSop'
-import { STAGE_LABEL, createdWords, shootDetailsText, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
+import { STAGE_LABEL, createdWords, rowsFor, shootDetailsText, shootStage, stampWords, type ShootStage } from '../../../../lib/shoot-sop-core'
 import { sanitiseCanvasCards, type CanvasCard, type ReferenceMedia, type ShotRow } from '../../../../lib/batch-brief-core'
 import { createCoalescer } from '../../../../lib/coalesce-core'
 import Chip from '../../../ui/Chip'
@@ -118,8 +118,20 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   const canvasCards = useMemo(() => sanitiseCanvasCards(batch?.canvas_cards), [batch?.canvas_cards])
   const canvasRefs = useMemo(() => batch?.reference_media ?? [], [batch?.reference_media])
 
+  // THE COPY IS NEVER BEHIND (21 Sep 2026). A field saves when it is left, and pressing "Copy details"
+  // IS leaving it — so the copy used to be taken while that save was still in the air. It now waits for
+  // the save, and reads the row the server answered with rather than the screen's last render.
+  const savingRef = useRef<Promise<unknown>>(Promise.resolve())
+  const latestRef = useRef<Batch | null>(null)
+  useEffect(() => { latestRef.current = batch }, [batch])
+
   /** Field-level save: send ONLY what changed. */
-  const patch = async (field: string, value: unknown) => {
+  const patch = (field: string, value: unknown): Promise<boolean> => {
+    const run = patchNow(field, value)
+    savingRef.current = savingRef.current.then(() => run, () => run)
+    return run
+  }
+  const patchNow = async (field: string, value: unknown) => {
     setSaveState('saving')
     const res = await fetch(`/api/production/batches/${id}`, {
       method: 'PATCH',
@@ -138,6 +150,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
     // what the person is typing, so it must not overwrite it
     const { shot_list: _echo, ...rest } = json as Record<string, unknown>
     void _echo
+    if (latestRef.current) latestRef.current = { ...latestRef.current, ...rest } as Batch
     setBatch(b => (b ? { ...b, ...rest } : b))
     setLastEdited({ name: 'you', at: new Date().toISOString() })
     setSaveState('saved')
@@ -314,9 +327,14 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   const booked = batch.status !== 'brief'
   const stage = today ? shootStage(batch, today) : null
   const copyDetails = async () => {
+    await savingRef.current.catch(() => null)
+    const b = latestRef.current ?? batch
+    const who = (uid: string | null | undefined) => nameOf(uid) ?? team.find(t => t.id === uid)?.name ?? crew.find(c => c.id === uid)?.name ?? null
     const text = shootDetailsText({
-      title: batch.title, client: batch.clients?.name, description: batch.objective || batch.description, shoot_date: batch.shoot_date,
-      manager: nameOf(batch.owner_id) ?? team.find(t => t.id === batch.owner_id)?.name ?? null,
+      title: b.title, client: b.clients?.name, description: b.objective || b.description, shoot_date: b.shoot_date,
+      manager: who(b.owner_id), call_time: b.call_time, location: b.location, talent: b.talent, props_wardrobe: b.props_wardrobe,
+      editor: who(b.editor_id), editor_priorities: b.editor_priorities, edit_deadline: b.edit_deadline, notes: b.concept,
+      deliverables: ((b.planned_deliverables ?? []) as { title?: string }[]).map(l => l?.title), shots: (b.shot_list ?? []).map(s => s.text),
     })
     try { await navigator.clipboard.writeText(text); toast.success('Details copied') } catch { toast.error('Could not copy — select the text instead') }
   }
@@ -380,13 +398,20 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
               <textarea
                 key={batch.description ?? ''}
                 defaultValue={batch.description ?? ''}
-                rows={2}
+                rows={rowsFor(batch.description)}
                 maxLength={2000}
                 aria-label="What this shoot is for"
                 placeholder="The objective in a line or two, as it was typed when the shoot was made."
                 onBlur={e => { const v = e.target.value; if (v !== (batch.description ?? '')) void patch('description', v) }}
                 className="w-full resize-y bg-transparent text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground"
               />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">This was typed when the shoot was made and differs from the Objective in the plan. The plan, the team and “Copy details” use the Objective.</p>
+                <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold"
+                  onClick={() => void patchThenLoad('objective', batch.description)}>
+                  Use this as the Objective
+                </Button>
+              </div>
             </CardContent>
           </Card>}
 
@@ -398,7 +423,7 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
               <textarea
                 key={batch.concept ?? ''}
                 defaultValue={batch.concept ?? ''}
-                rows={4}
+                rows={rowsFor(batch.concept, 4)}
                 aria-label="Notes for the team"
                 placeholder="Anything else the team should know before the day."
                 onBlur={e => { const v = e.target.value; if (v !== (batch.concept ?? '')) void patch('concept', v) }}

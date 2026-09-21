@@ -19,7 +19,7 @@ import { groupPeople, personWords } from '../../../../lib/people-groups-core'
 import {
   BRIEF_ITEMS, FOOTAGE_ONLY_WORDS, STAGE_LABEL, STAGE_STRIP, ackState, briefChecklist, briefIsLate, maySkipBriefItem, skippedBriefKeys, briefItemFilled, briefItemSource,
   REVIEW_DEFAULT_QUALITY, clientPlanWords, clientShareReady, clockWords, goReady, isFootageOnly, nextStepWords, overrideWords, planReviewPassed, reviewWords, shootStage, stageHappened, stageIndex, stageMove,
-  shootManagerChoices, stampLines, stampWords,
+  rowsFor, shootManagerChoices, stampLines, stampWords,
   type BriefItemKey, type MoveRole, type NameOf, type ShootStage, type SopShoot,
 } from '../../../../lib/shoot-sop-core'
 import { newLineId, planLines, plannedCount, shootCardId } from '../../../../lib/deliverable-group-core'
@@ -169,7 +169,7 @@ export function PlanParts({ batch, itemCount, booked, onPatch, onShots, team }: 
     )
   }
   const area = (field: keyof ShootSopBatch, placeholder: string, rows = 2) => (
-    <Textarea key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')} rows={rows}
+    <Textarea key={String(batch[field] ?? '')} defaultValue={String(batch[field] ?? '')} rows={rowsFor(String(batch[field] ?? ''), rows, 14, 55)}
       placeholder={placeholder} aria-label={placeholder} className="min-h-11 text-[15px]" onBlur={save(field)} />
   )
   const line = (field: keyof ShootSopBatch, placeholder: string) => (
@@ -695,7 +695,7 @@ export function PeoplePanel({ batch, crew, team, busy, onPatch, onUnack, viewerI
         <label className="flex flex-col gap-1 text-[12px] font-semibold">
           Account manager for this shoot
           <Select value={batch.owner_id ?? 'none'} onValueChange={v => void onPatch('owner_id', v === 'none' ? null : v)}>
-            <SelectTrigger className="h-11 text-[15px] font-normal" aria-label="Account manager for this shoot"><SelectValue placeholder="Pick the account manager" /></SelectTrigger>
+            <SelectTrigger className="h-auto min-h-11 whitespace-normal py-2 text-left [&>span]:line-clamp-none text-[15px] font-normal" aria-label="Account manager for this shoot"><SelectValue placeholder="Pick the account manager" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Nobody yet</SelectItem>
               {shootManagerChoices(team, batch.owner_id).map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}

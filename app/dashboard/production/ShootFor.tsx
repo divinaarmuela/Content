@@ -53,7 +53,8 @@ export default function ShootFor({ clientId, value, onChange, disabled = false }
   return (
     <div className="flex flex-col gap-2">
       <Select value={value || 'company'} onValueChange={v => v && onChange(contactIdOf(v) ?? '')} disabled={disabled}>
-        <SelectTrigger className="h-11 text-[14px]"><SelectValue /></SelectTrigger>
+        {/* a long name wraps: the shared trigger clips to one line, which cut "who it is for" short (21 Sep 2026) */}
+        <SelectTrigger className="h-auto min-h-11 whitespace-normal py-2 text-left [&>span]:line-clamp-none text-[14px]"><SelectValue /></SelectTrigger>
         <SelectContent>
           {ownerChoices(client?.name ?? 'The business', contacts).map(c => (
             <SelectItem key={c.value} value={c.value}>{c.label.replace(' — the official business account', ' — the business').replace(' — their personal account', '')}</SelectItem>
