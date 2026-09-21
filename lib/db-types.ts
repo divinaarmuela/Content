@@ -55,6 +55,8 @@ export type TableName =
   | 'item_comments'
   | 'journal_posts'
   | 'leads'
+  | 'linktree_connections'
+  | 'linktree_states'
   | 'monthly_commitments'
   | 'monthly_updates'
   | 'newsletter_subscribers'
@@ -949,6 +951,30 @@ export interface Lead {
   pipeline_notes: string | null
 }
 
+export interface LinktreeConnection {
+  id: string
+  client_id: string
+  access_token_enc: string | null
+  refresh_token_enc: string | null
+  expires_at: string | null
+  profile_username: string | null
+  profile_url: string | null
+  profile_name: string | null
+  connected_by: string | null
+  connected_at: string | null
+  updated_at: string | null
+  last_error: string | null
+}
+
+export interface LinktreeState {
+  id: string
+  client_id: string
+  user_id: string
+  verifier_enc: string
+  used_at: string | null
+  created_at: string
+}
+
 export interface MonthlyCommitment {
   video_quota: number | null
   id: string
@@ -1424,6 +1450,8 @@ export const TABLE_COLUMNS = {
   item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
+  linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
+  linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
   monthly_commitments: ['video_quota', 'id', 'created_at', 'client_id', 'month', 'year', 'reel_quota', 'carousel_quota', 'story_quota', 'static_quota', 'other_quota', 'notes'],
   monthly_updates: ['id', 'created_at', 'client_id', 'month', 'year', 'definition', 'token', 'status', 'answers', 'notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'title', 'created_by'],
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
@@ -1508,6 +1536,8 @@ export const NULLABLE_COLUMNS = {
   item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
+  linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
+  linktree_states: ['used_at'],
   monthly_commitments: ['video_quota', 'notes'],
   monthly_updates: ['notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by'],
   newsletter_subscribers: [],
@@ -1599,6 +1629,8 @@ export const JSON_COLUMNS = {
   item_comments: [],
   journal_posts: ['sections'],
   leads: [],
+  linktree_connections: [],
+  linktree_states: [],
   monthly_commitments: [],
   monthly_updates: ['definition', 'answers'],
   newsletter_subscribers: [],
@@ -1689,6 +1721,8 @@ export const JSON_ARRAY_COLUMNS = {
   item_comments: [],
   journal_posts: ['sections'],
   leads: [],
+  linktree_connections: [],
+  linktree_states: [],
   monthly_commitments: [],
   monthly_updates: [],
   newsletter_subscribers: [],

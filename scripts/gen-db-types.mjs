@@ -435,6 +435,34 @@ const GHOST_TABLES = {
     ['item_id', col('string', false)],
     ['viewed_at', col('string', false)],
   ],
+  // linktree_connections — A CLIENT'S LINKTREE (the owner, 21 Sep 2026). One
+  //   row per client (id = the client's id): the OAuth tokens for Linktree's
+  //   own agent server, ENCRYPTED with the credentials box, when they lapse,
+  //   and which profile is this client's. Rules and what was checked:
+  //   app/lib/linktree-core.ts. linktree_states — one row per sign-in in
+  //   flight (id = the OAuth state), claimed once by the callback.
+  linktree_connections: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['access_token_enc', col('string', true)],
+    ['refresh_token_enc', col('string', true)],
+    ['expires_at', col('string', true)],
+    ['profile_username', col('string', true)],
+    ['profile_url', col('string', true)],
+    ['profile_name', col('string', true)],
+    ['connected_by', col('string', true)],
+    ['connected_at', col('string', true)],
+    ['updated_at', col('string', true)],
+    ['last_error', col('string', true)],
+  ],
+  linktree_states: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['user_id', col('string', false)],
+    ['verifier_enc', col('string', false)],
+    ['used_at', col('string', true)],
+    ['created_at', col('string', false)],
+  ],
   inbox_touches: [
     ['id', col('string', false)],
     ['account_id', col('string', false)],       // the provider's account id

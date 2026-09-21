@@ -1,6 +1,7 @@
 'use client'
 import { useParams } from 'next/navigation'
 import SocialChannels from '../../SocialChannels'
+import LinktreeCard from '../../LinktreeCard'
 import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
 import FollowerSettings from '../../FollowerSettings'
@@ -12,6 +13,8 @@ export default function ClientSocialPage() {
   return (
     <div className="flex flex-col gap-5">
       <SocialChannels clientId={id} />
+      {/* the client's Linktree, beside their channels (21 Sep 2026) */}
+      <LinktreeCard clientId={id} />
       {/* Whether this client sees every post before it goes out. It lives
           here, above the places and the channels, because it is the rule the
           Schedule page's buttons are built on — and because until it had a

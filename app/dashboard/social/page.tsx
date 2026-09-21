@@ -13,6 +13,7 @@ import SocialChannels from '../clients/SocialChannels'
 import { needsAttention, timeLeftWords } from '../../lib/token-health-core'
 import PlatformIcon from './PlatformIcon'
 import ClientConnectLink from './ClientConnectLink'
+import LinktreeCard from '../clients/LinktreeCard'
 import ComposeDialog from './ComposeDialog'
 import PageTitle from '../ui/PageTitle'
 
@@ -45,6 +46,18 @@ type Health = {
  * client record.
  */
 export default function SocialPage() {
+  // BACK FROM LINKTREE'S SIGN-IN (21 Sep 2026): say what happened once, then clean the address
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search)
+      const how = p.get('linktree')
+      if (!how) return
+      const say = p.get('say') || (how === 'connected' ? 'Linktree connected' : 'Linktree could not be connected')
+      if (how === 'connected') toast.success(say); else toast.error(say)
+      p.delete('linktree'); p.delete('say')
+      window.history.replaceState(null, '', `${window.location.pathname}${p.toString() ? `?${p}` : ''}`)
+    } catch { /* no address to read */ }
+  }, [])
   const [clients, setClients] = useState<Client[] | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [health, setHealth] = useState<Record<string, Health>>({})
@@ -224,6 +237,8 @@ export default function SocialPage() {
                   </div>
                 </div>
                 <SocialChannels clientId={c.id} onChanged={load} />
+                {/* the client's Linktree: connect it, read it, edit its links (linktree-core, 21 Sep 2026) */}
+                <LinktreeCard clientId={c.id} />
                 {/* the link the client connects their own accounts from —
                     only a manager holds the token that makes it */}
                 {c.share_token && (
