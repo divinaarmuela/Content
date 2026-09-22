@@ -125,8 +125,10 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
       {/* ── the clip ── */}
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
+        {/* the count follows the version chosen (22 Sep 2026) */}
+        {data.rounds.length <= 1 && clips.length > 0 && <p className="text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? 'clip' : 'clips'}</p>}
         {data.rounds.length > 1 && (
-          <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of the whole set">
+          <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of the whole set">
             <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">The whole set</span>
             {data.rounds.map(r => (
               <button key={r} type="button" role="tab" aria-selected={r === round} onClick={() => setRound(r)}
@@ -134,6 +136,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 {r === data.rounds[0] ? `Latest — ${roundLabel(r)}` : `Earlier — ${roundLabel(r)}`}
               </button>
             ))}
+            <span className="shrink-0 text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? 'clip' : 'clips'}</span>
           </div>
         )}
         {!data.can_approve && (
@@ -143,7 +146,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
           </p>
         )}
         {line.length > 1 && (
-          <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of this piece">
+          <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of this piece">
             <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This clip</span>
             {line.map(v => (
               <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
@@ -192,21 +195,27 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
               </div>
-              {lookingBack ? (
-                <span className="text-[13px] text-muted-foreground">The cut before — the new one is what to approve</span>
-              ) : approved ? (
+              {approved ? (
                 <button type="button" onClick={() => void approve(true)} disabled={approving}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-[14px] font-semibold text-black hover:bg-emerald-300 disabled:opacity-60"
                   title={`Approved by ${approved.by}, ${when(approved.at)} — press to take it back`}>
                   <Check className="h-4 w-4" strokeWidth={3} aria-hidden /> Approved
                 </button>
               ) : (
-                // signed, or not at all (16 Sep 2026): the name box on the right is the signature
-                <button type="button" onClick={() => void approve(false)} disabled={approving || !name.trim()}
-                  title={name.trim() ? undefined : 'Add your name in the comments box first'}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
-                  <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : name.trim() ? 'Approve this clip' : 'Add your name to approve'}
-                </button>
+                // signed, or not at all (16 Sep 2026): the tick carries a name. The name box used to be only in
+                // the comments panel, so the button read "Add your name to approve" and looked missing (the owner,
+                // 22 Sep 2026: "where is the approve button"). It is here now, beside the button, the same name.
+                <span className="flex flex-wrap items-center gap-2">
+                  {!name.trim() && (
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name, to approve" aria-label="Your name, to approve"
+                      className="h-11 w-44 rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50" />
+                  )}
+                  <button type="button" onClick={() => void approve(false)} disabled={approving || !name.trim()}
+                    title={name.trim() ? undefined : 'Type your name first — the approval carries it'}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
+                    <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : 'Approve this clip'}
+                  </button>
+                </span>
               )}
             </div>
           </>

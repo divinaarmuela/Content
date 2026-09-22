@@ -5,7 +5,6 @@ import { getEditingPortal } from '../../../../lib/editing-portal'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import EditingReview from '../../../../components/portal/EditingReview'
-import { clipsAtRound } from '../../../../lib/editing-portal-core'
 
 export const metadata: Metadata = {
   title: 'Your edit — MD Media',
@@ -26,7 +25,6 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
   const { token: raw, id } = await params
   const data = await getEditingPortal(raw, id)
   if (!data) notFound()
-  const shown = clipsAtRound(data.clips, data.rounds[0] ?? data.round).length
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -43,8 +41,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">{data.item.title}</h1>
             <p className="pb-1 text-[13px] text-muted-foreground">
-              {/* the clips AT the newest version — not every file of every version (22 Sep 2026: "21 clips" for a card of 10) */}
-              {shown > 0 ? `${shown} ${shown === 1 ? 'clip' : 'clips'} · ` : ''}{data.item.status_label}
+              {data.item.status_label}
             </p>
           </div>
           <EditingReview data={data} />

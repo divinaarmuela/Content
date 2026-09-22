@@ -128,7 +128,7 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
  * is a card ALREADY handed in by link and not sent back: its round is a link round and nothing is taken
  * from under it. Its next version, after a send-back, is files.
  */
-export function handsInFiles(item: { work_kinds?: { slug?: string | null } | null; final_files?: unknown; link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; edit_round?: unknown; status?: unknown }): boolean {
+export function handsInFiles(item: { work_kinds?: { slug?: string | null } | null; final_files?: unknown; link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown }): boolean {
   if (item.work_kinds?.slug === 'graphics' || finalFilesOf(item).length > 0) return true
   const onALinkRound = finishedEditOf(item) !== null && handInRound(item) === roundOf(item)
   return !onALinkRound

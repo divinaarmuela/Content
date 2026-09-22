@@ -72,7 +72,7 @@ describe('the client’s tick per clip (pure)', () => {
     expect(route).toContain('approved by ${by} (${client.name}) from ${from.ip ?? ')
     const portal = src('app/components/portal/EditingReview.tsx')
     expect(portal).toContain('disabled={approving || !name.trim()}')
-    expect(portal).toContain("name.trim() ? 'Approve this clip' : 'Add your name to approve'")
+    expect(portal).toContain("{approving ? 'Saving…' : 'Approve this clip'}")
   })
 
   it('reads only well-formed ticks off the card; approving twice keeps one; taking it back removes it', () => {
