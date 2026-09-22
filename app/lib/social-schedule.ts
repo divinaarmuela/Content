@@ -700,7 +700,7 @@ async function insertPost(
     announceAfter('schedule', { client_id: item.client_id, post_id: row.id, kind: 'created' })
     // …and the client's account managers hear it is booked (22 Sep 2026: a post booked here told no one —
     // only the card's own Publish button did). Best effort, after the answer, never the person who booked it.
-    notifyPublishQueued(user, item, { jobId: row.id, publishNow: !input.scheduledFor, scheduledFor: input.scheduledFor ?? null, timezone: (input as { timezone?: string | null }).timezone ?? null })
+    notifyPublishQueued(user, item as never, { jobId: row.id, publishNow: !input.scheduledFor, scheduledFor: input.scheduledFor ?? null, timezone: (input as { timezone?: string | null }).timezone ?? null })
     return shape(row)
   } catch (e) {
     await releaseClaimLock(postLockKey(item.id), id).catch(() => {})
