@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import BriefCanvas from '../../dashboard/production/shoots/[id]/BriefCanvas'
 import { CanvasCommentsProvider } from '../canvas/CanvasComments'
 import { PortalTokenProvider } from '../../lib/instagram-video-client'
+import { PortalDriveScopeProvider } from '../canvas/PortalDriveScope'
 import CardCommentPanel from '../canvas/CardCommentPanel'
 import type { CanvasCard } from '../../lib/batch-brief-core'
 import type { PortalCardComment } from '../../lib/portal-core'
@@ -165,7 +166,10 @@ export default function ShootBoard({
               choice, so it follows the page */}
           <div ref={wrapRef} className="min-w-0 overflow-hidden rounded-inner border border-border">
             <PortalTokenProvider value={token}>
-              <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} />
+              {/* the Drive files on the board play through the client's own route (22 Sep 2026) */}
+              <PortalDriveScopeProvider value={token ? { token, kind: thread, id: shootId } : null}>
+                <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} />
+              </PortalDriveScopeProvider>
             </PortalTokenProvider>
           </div>
           {openCard && (

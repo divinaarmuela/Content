@@ -5,7 +5,7 @@ import {
   Bookmark, Forward, Globe, HardDrive, Heart, ImagePlus, MessageCircle, MoreHorizontal,
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
-import { postMediaOf, type PostMedia } from '../../../../lib/canvas-drive-core'
+import { postMediaOf, type PostMedia, DRIVE_PICTURE_SIZE, portalDriveStreamUrl, portalDriveThumbnailUrl } from '../../../../lib/canvas-drive-core'
 import { Link2 } from 'lucide-react'
 import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
@@ -26,6 +26,7 @@ import { boardTileLayout, colourOf, iconOf } from '../../../../lib/board-canvas-
 import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 // canvas comments — see the marked block at the bottom of this file
 import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
+import { usePortalDriveScope } from '../../../../components/canvas/PortalDriveScope'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 /** the words' own colour, when picked; '' = the box decides */
@@ -187,14 +188,19 @@ function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
  */
 function PostMediaFrame({ media, playing, onPlay }: { media: PostMedia; playing?: boolean; onPlay?: () => void }) {
   // The Drive proxies answer a signed-in team member. On the client's link
-  // (a portal token) they would refuse, so a Drive file there is named, not
-  // drawn — the card says what it is rather than showing a broken player.
+  // (a portal token) they would refuse — so on a board the client was shown
+  // the frame asks the client's own route for the file (22 Sep 2026); where
+  // there is no such board, a Drive file is named, not drawn.
   const portal = usePortalToken()
-  const driveOnPortal = media.from === 'drive' && !!portal
+  const scope = usePortalDriveScope()
+  const viaPortal = media.from === 'drive' && !!portal && !!scope && !!media.driveId
+  const driveOnPortal = media.from === 'drive' && !!portal && !viaPortal
+  const picture = viaPortal ? portalDriveThumbnailUrl(scope, media.driveId as string, DRIVE_PICTURE_SIZE, media.driveKey) : media.picture
+  const video = viaPortal && media.video ? portalDriveStreamUrl(scope, { id: media.driveId as string, name: media.name ?? 'clip', key: media.driveKey ?? '' }) : media.video
   const [noPicture, setNoPicture] = React.useState(false)
   const [noVideo, setNoVideo] = React.useState(false)
-  const showVideo = !!media.video && !!playing && !noVideo && !driveOnPortal
-  const pictureShown = !!media.picture && !noPicture && !driveOnPortal && !showVideo
+  const showVideo = !!video && !!playing && !noVideo && !driveOnPortal
+  const pictureShown = !!picture && !noPicture && !driveOnPortal && !showVideo
   // a Drive file with no picture to show (Drive has no still of the clip, the
   // proxy refused, or the clip would not play): its name and what it is
   const named = media.from === 'drive' && !showVideo && !pictureShown
@@ -202,11 +208,11 @@ function PostMediaFrame({ media, playing, onPlay }: { media: PostMedia; playing?
     <div className="relative h-full w-full bg-black" data-post-media={media.from}>
       {pictureShown && (
         // eslint-disable-next-line @next/next/no-img-element -- our own upload, or Drive through our proxy
-        <img src={media.picture ?? undefined} alt={media.name ?? 'post media'} loading="lazy" decoding="async" draggable={false}
+        <img src={picture ?? undefined} alt={media.name ?? 'post media'} loading="lazy" decoding="async" draggable={false}
           onError={() => setNoPicture(true)} className="h-full w-full select-none object-cover" />
       )}
       {showVideo && (
-        <video src={media.video ?? undefined} controls autoPlay playsInline preload="metadata" onError={() => setNoVideo(true)}
+        <video src={video ?? undefined} controls autoPlay playsInline preload="metadata" onError={() => setNoVideo(true)}
           onPointerDown={e => e.stopPropagation()} className="h-full w-full select-none bg-black object-contain" />
       )}
       {named && (
@@ -218,7 +224,7 @@ function PostMediaFrame({ media, playing, onPlay }: { media: PostMedia; playing?
           </span>
         </div>
       )}
-      {media.video && !playing && !noVideo && !driveOnPortal && <PlayBadge onPlay={onPlay} label={media.name ?? 'clip'} />}
+      {video && !playing && !noVideo && !driveOnPortal && <PlayBadge onPlay={onPlay} label={media.name ?? 'clip'} />}
       {media.from === 'drive' && media.name && pictureShown && (
         <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[9px] text-white backdrop-blur-sm" title={media.name}>
           <HardDrive className="h-2.5 w-2.5 shrink-0" aria-hidden /><span className="truncate">{media.name}</span>

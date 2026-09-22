@@ -66,7 +66,7 @@ describe('what the card draws', () => {
       { key: 'upload:https://x/a.jpg', picture: 'https://x/a.jpg', video: null, name: null, from: 'upload' },
     ])
     expect(postMediaOf({ platform: 'ig_post', url: 'https://x/a.jpg', drive_files: [clip] })).toEqual([
-      { key: 'drive:clip456', picture: '/api/drive/thumbnail?id=clip456&size=800', video: '/api/drive/stream?id=clip456&name=Reel%20one.mp4', name: 'Reel one.mp4', from: 'drive' },
+      { key: 'drive:clip456', picture: '/api/drive/thumbnail?id=clip456&size=800', video: '/api/drive/stream?id=clip456&name=Reel%20one.mp4', name: 'Reel one.mp4', from: 'drive', driveId: 'clip456', driveKey: null },
     ])
     expect(postMediaOf({ platform: 'ig_reel', drive_files: [pic, clip] }).map(m => m.key)).toEqual(['drive:abc123_-ABC'])
     expect(postMediaOf({ platform: 'ig_carousel', urls: ['https://x/1.jpg', 'https://x/2.mp4'], drive_files: [pic] }).map(m => [m.key, m.picture, m.video])).toEqual([

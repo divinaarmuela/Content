@@ -117,6 +117,36 @@ export type PostMedia = {
   /** the file's name, for a Drive file — an upload has no name on a post */
   name: string | null
   from: 'upload' | 'drive'
+  /** the Drive file itself, so a client's page can ask its own route for it (22 Sep 2026) */
+  driveId?: string | null
+  driveKey?: string | null
+}
+
+/**
+ * THE CLIENT'S DRIVE ROUTE (22 Sep 2026: the client link to a board, "the files not playing — from
+ * the drive"). The team's proxies answer a signed-in team member; the client's page asks
+ * /api/portal/drive instead — the token, which board, and the file — and the route serves the file
+ * only when it is on a board shared with that client.
+ */
+export type PortalDriveKind = 'shoot' | 'team_board'
+export type PortalDriveScope = { token: string; kind: PortalDriveKind; id: string }
+
+function portalDriveUrl(scope: PortalDriveScope, what: 'thumbnail' | 'stream', driveId: string, extra: Record<string, string | null | undefined>): string {
+  const q = new URLSearchParams({ token: scope.token, kind: scope.kind, board: scope.id, id: driveId, what })
+  for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v)
+  return `/api/portal/drive?${q}`
+}
+export function portalDriveThumbnailUrl(scope: PortalDriveScope, driveId: string, size: number = DRIVE_PICTURE_SIZE, key?: string | null): string {
+  return portalDriveUrl(scope, 'thumbnail', driveId, { size: String(size), key })
+}
+export function portalDriveStreamUrl(scope: PortalDriveScope, file: Pick<CanvasDriveFile, 'id' | 'name' | 'key'>): string {
+  return portalDriveUrl(scope, 'stream', file.id, { name: file.name, key: file.key })
+}
+
+/** the Drive file with this id on the board's cards, or null — a token never reaches a file that is not on the board */
+export function driveFileOnBoard(cards: readonly { drive_files?: CanvasDriveFile[] | null }[], driveId: string): CanvasDriveFile | null {
+  for (const c of cards) for (const f of c.drive_files ?? []) if (f.id === driveId) return f
+  return null
 }
 
 type PostCardLike = {
@@ -140,6 +170,8 @@ export function postMediaOf(card: PostCardLike): PostMedia[] {
     video: f.kind === 'video' ? driveStreamUrl(f) : null,
     name: f.name,
     from: 'drive' as const,
+    driveId: f.id,
+    driveKey: f.key || null,
   }))
   const uploads = (card.urls?.length ? card.urls : card.url ? [card.url] : []).map(u => ({
     key: `upload:${u}`,
