@@ -49,6 +49,10 @@ export const NAV_MAIN: NavItem[] = [
   // one board became three pages, each answering one question: which shoots
   // am I planning, what is mine to edit, what is mine to post
   { href: '/dashboard/production', label: 'Shoots',           icon: Camera },
+  // the inspo boards — the shoot brief's canvas, one per client, through the
+  // quality check (team-board-core, 21–22 Sep 2026: "place the boards page up
+  // higher, near the Shoots link")
+  { href: '/dashboard/team-boards',   label: 'Boards',        icon: StickyNote },
   { href: '/dashboard/editor',     label: 'Editor',           icon: Kanban },
   { href: '/dashboard/designer',   label: 'Designer',         icon: Kanban },
   // THE SCHEDULER PAGE IS THE MANAGER'S APPROVAL BOARD: what schedulers have
@@ -100,8 +104,6 @@ export const NAV_TOOLS: NavItem[] = [
   { href: '/dashboard/ai',            label: 'AI Assistant',  icon: Sparkles },
   // everyone's own list — what they hold and what they wrote (todo-core, 17 Sep 2026)
   { href: '/dashboard/todos',         label: 'To-dos',        icon: ListChecks },
-  // the team's own canvases — the shoot brief's board, internal only (team-board-core, 21 Sep 2026)
-  { href: '/dashboard/team-boards',   label: 'Boards',        icon: StickyNote },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   // the first-day tutorial, kept in the sidebar so it can be reopened
   { href: '/dashboard/start',         label: 'How this works', icon: GraduationCap },
