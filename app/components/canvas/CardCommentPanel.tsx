@@ -67,7 +67,8 @@ export default function CardCommentPanel({
     <aside
       data-card-comments={card.id}
       aria-label={`Comments on ${label}`}
-      className={cn('flex flex-col overflow-hidden rounded-card border border-border bg-popover text-popover-foreground shadow-lg', className)}
+      // the "@" list hangs below the box, so a panel that offers it must not clip its own bottom (seen live, 22 Sep 2026)
+      className={cn('flex flex-col rounded-card border border-border bg-popover text-popover-foreground shadow-lg', members ? 'overflow-visible' : 'overflow-hidden', className)}
     >
       <div className="flex items-start gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
