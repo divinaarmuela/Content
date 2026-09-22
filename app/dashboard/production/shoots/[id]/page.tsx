@@ -61,6 +61,9 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   const [batch, setBatch] = useState<Batch | null>(null)
   const [items, setItems] = useState<ItemLite[]>([])
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  // the details shown to select when the browser would not take the copy — declared with the other state,
+  // above the early returns (22 Sep 2026: a hook after them crashed the page once the shoot loaded)
+  const [detailsToSelect, setDetailsToSelect] = useState<string | null>(null)
   const [lastEdited, setLastEdited] = useState<{ name: string | null; at: string | null }>({ name: null, at: null })
   const [role, setRole] = useState<string>('')
   /** the crew, the editor, the quality checker: the plan, nothing to press */
@@ -327,7 +330,6 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   }
   const booked = batch.status !== 'brief'
   const stage = today ? shootStage(batch, today) : null
-  const [detailsToSelect, setDetailsToSelect] = useState<string | null>(null)
   const copyDetails = async () => {
     const who = (uid: string | null | undefined) => nameOf(uid) ?? team.find(t => t.id === uid)?.name ?? crew.find(c => c.id === uid)?.name ?? null
     const textFor = (b: Batch) => shootDetailsText({
