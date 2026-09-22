@@ -63,3 +63,27 @@ export function noteSubject(author: string, cardTitle: string, text: string): st
   const snippet = text.trim().replace(/\s+/g, ' ').slice(0, 120)
   return `${author} wrote on ${cardTitle}: \u201c${snippet}${text.trim().length > 120 ? '\u2026' : ''}\u201d`
 }
+
+/**
+ * SAID ALREADY (the owner, 22 Sep 2026: "comment showing two is not right — that's not two comments").
+ * A send-back note that only repeats, word for word, a comment already on the card — the client's
+ * words on a clip, copied into the note when their change was logged — is the same comment, not a
+ * second one. The send-back does not write it again, and a card that already holds such a copy
+ * draws and counts it once, on the clip.
+ */
+const sameWords = (a: unknown, b: unknown) => {
+  const norm = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const x = norm(a)
+  return x.length > 0 && x === norm(b)
+}
+
+/** does the card's thread already say this, in these words? */
+export function repeatsAComment(note: string, thread: readonly { body?: string | null }[]): boolean {
+  return thread.some(c => sameWords(c.body, note))
+}
+
+/** the thread without a card-level row that only repeats a clip's comment — the clip's row is the one drawn */
+export function withoutRepeatedNotes<T extends { body?: string | null; video_file_id?: string | null }>(thread: readonly T[]): T[] {
+  const onClips = thread.filter(c => !!c.video_file_id)
+  return thread.filter(c => !!c.video_file_id || !onClips.some(k => sameWords(k.body, c.body)))
+}

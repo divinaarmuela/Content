@@ -165,7 +165,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(boardCard).toContain("${briefOpen ? 'block max-h-[200rem]' : 'max-h-[3em]'} ${briefClamped && !briefOpen ? 'line-clamp-2' : briefOpen ? '' : 'block'}")
     expect(boardCard).toContain('transition-[max-height] duration-500 ease-in-out')
     // comments on a clip are one line per clip with the link, never piled into the card's thread (16 Sep 2026)
-    expect(src(EDITOR_DRAWER)).toContain('const cardThread = useMemo(() => thread.filter(c => !(c as { video_file_id?: string | null }).video_file_id), [thread])')
+    expect(src(EDITOR_DRAWER)).toContain('const cardThread = useMemo(() => withoutRepeatedNotes(thread as { body?: string | null; video_file_id?: string | null }[]).filter(c => !c.video_file_id) as typeof thread, [thread])')
     expect(src(EDITOR_DRAWER)).toContain('<Link href={reviewPath(item.id, t.id, t.name)}')
     expect(src(EDITOR_DRAWER)).toContain('rows={cardThread as never}')
     // the holder or a manager can change the card's name, due date and brief (16 Sep 2026)

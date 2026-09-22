@@ -22,6 +22,7 @@ import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-c
 import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf, handsInFiles, hasFinishedWork, mayReplaceAsset, needsAdoption, stillToReplace, withFinalFiles, withReplacement, withRetired, withoutFinalFile } from '../../lib/final-files-core'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
+import { withoutRepeatedNotes } from '../../lib/card-comment-core'
 import { handInRound, roundLabel, roundOf } from '../../lib/edit-round-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
@@ -125,7 +126,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     }
     return [...m.values()].sort((a, b) => b.last.localeCompare(a.last))
   }, [thread])
-  const cardThread = useMemo(() => thread.filter(c => !(c as { video_file_id?: string | null }).video_file_id), [thread])
+  // a note that only repeats a clip's comment is that comment, drawn on the clip (22 Sep 2026)
+  const cardThread = useMemo(() => withoutRepeatedNotes(thread as { body?: string | null; video_file_id?: string | null }[]).filter(c => !c.video_file_id) as typeof thread, [thread])
   const [note, setNote] = useState('')
   // THE CARD IN TABS (21 Sep 2026) — CardTabs.tsx says why; the sections below are where they were
   const [tab, setTab] = useCardTab('editor', ED_TABS, 'brief')

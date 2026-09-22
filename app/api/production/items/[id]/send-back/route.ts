@@ -15,6 +15,7 @@ import { NOBODY_ASKED } from '../../../../../lib/asked-core'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
 import { assetIdOf, currentFiles, sanitiseChangeAssets } from '../../../../../lib/final-files-core'
 import { adoptClips } from '../../../../../lib/adopt-clips'
+import { repeatsAComment } from '../../../../../lib/card-comment-core'
 
 
 /**
@@ -120,13 +121,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // the words in the card's own thread, tagged to the assignee so they sit
     // in the assignee's narrowed view of it
     const ownerId = (current.owner_id ?? item.owner_id ?? null) as string | null
-    try {
-      await table('item_comments').insert({
-        item_id: id, author_id: user.id, visibility: 'internal', body: note,
-        assigned_to: ownerId, resolved: false,
-      })
-    } catch (e) {
-      console.error('send-back: could not write the note to the thread', e instanceof Error ? e.message : e)
+    // …unless the card already says exactly this (the client's own words on a clip, logged as the change):
+    // one comment, drawn once (22 Sep 2026)
+    const saidAlready = await table<{ id: string; item_id: string; body: string }>('item_comments')
+      .list({ where: r => r.item_id === id }).then(rows => repeatsAComment(note, rows)).catch(() => false)
+    if (!saidAlready) {
+      try {
+        await table('item_comments').insert({
+          item_id: id, author_id: user.id, visibility: 'internal', body: note,
+          assigned_to: ownerId, resolved: false,
+        })
+      } catch (e) {
+        console.error('send-back: could not write the note to the thread', e instanceof Error ? e.message : e)
+      }
     }
     // …and each asset's words ON THAT ASSET, where the editor opens the clip and reads them beside it
     for (const a of perAsset.filter(x => x.words)) {

@@ -130,6 +130,16 @@ describe('POST /api/production/items/[id]/send-back', () => {
     expect(activity().find(a => a.action === 'sent_back')).toMatchObject({ detail: 'Bigger logo, please' })
   })
 
+  it('does not write the note a second time when the card already says exactly this (22 Sep 2026)', async () => {
+    fake = seed('client_changes_requested')
+    await post('Logo too small')
+    await drain()
+    expect(item()).toMatchObject({ change_note: 'Logo too small' })
+    const thread = fake.rows('item_comments') as Record<string, unknown>[]
+    expect(thread.filter(c => c.body === 'Logo too small')).toHaveLength(1)
+    expect(activity().find(a => a.action === 'sent_back')).toMatchObject({ detail: 'Logo too small' })
+  })
+
   it('tells the person ASSIGNED — once, bell and email, in the manager\'s words — and nobody else', async () => {
     fake = seed('client_changes_requested')
     await post('Bigger logo, please')
