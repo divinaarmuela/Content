@@ -115,7 +115,7 @@ describe('team boards (21 Sep 2026)', () => {
     expect(list).toContain("if (!mayManageTeamBoards(user)) {")
     const one = readFileSync('app/api/production/team-boards/[id]/route.ts', 'utf8')
     expect(one).toContain("const result = await table<TeamBoard>('team_boards').claim(id, ((cur: TeamBoard | null): unknown => {")
-    expect(one).toContain('canvas_cards: applyCanvasOp((cur as { canvas_cards?: unknown }).canvas_cards, op)')
+    expect(one).toContain('const nextCards = op ? applyCanvasOp((cur as { canvas_cards?: unknown }).canvas_cards, op) : null')
     expect(one).toContain("return NextResponse.json({ error: 'Only an account manager or a super admin renames a board' }, { status: 403 })")
     expect(one).toContain("return NextResponse.json({ error: 'Only an account manager or a super admin deletes a board' }, { status: 403 })")
     for (const f of ['app/dashboard/team-boards/page.tsx', 'app/dashboard/team-boards/[id]/page.tsx']) {
