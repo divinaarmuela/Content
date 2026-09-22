@@ -126,11 +126,12 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       {/* ── the clip ── */}
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
         {data.rounds.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions">
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions of the whole set">
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">The whole set</span>
             {data.rounds.map(r => (
               <button key={r} type="button" role="tab" aria-selected={r === round} onClick={() => setRound(r)}
                 className={`inline-flex min-h-9 items-center rounded-full border px-4 text-[13px] font-semibold ${r === round ? 'border-foreground bg-foreground text-background' : 'border-border text-foreground hover:border-foreground/50'}`}>
-                {roundLabel(r)}{r === data.rounds[0] ? ' · latest' : ''}
+                {r === data.rounds[0] ? `Latest — ${roundLabel(r)}` : `Earlier — ${roundLabel(r)}`}
               </button>
             ))}
           </div>
@@ -138,20 +139,20 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         {!data.can_approve && (
           <p role="status" className="rounded-xl border border-border bg-card p-3 text-[14px]">
             <span className="font-semibold">The team is making changes. </span>
-            This is the version you were sent, with everything you said on it. You can still leave comments; the new version will appear here, on this same link, when it is ready for you.
+            This is the version you were sent, with everything you said on it. You can still comment, approve a clip or take an approval back; the new cut will appear here, on this same link, when it is ready for you.
           </p>
         )}
         {line.length > 1 && (
           <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions of this piece">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This piece</span>
+            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This clip</span>
             {line.map(v => (
               <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
                 className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
-                {roundLabel(v.version)}{v.id === newest?.id ? ' · new' : ''}
+                {v.id === newest?.id ? `New cut — ${roundLabel(v.version)}` : `Before — ${roundLabel(v.version)}`}
                 {commentsOnClip(comments as never, v.id).length > 0 && <span className="rounded-full bg-black/15 px-1.5 text-[11px]">{commentsOnClip(comments as never, v.id).length}</span>}
               </button>
             ))}
-            {lookingBack && <span className="text-[12px] text-muted-foreground">The earlier version, with what was said on it. It was replaced by {roundLabel(newest!.version)}.</span>}
+            {lookingBack && <span className="text-[12px] text-muted-foreground">The cut before, with what was said on it. It was replaced in {roundLabel(newest!.version)}.</span>}
           </div>
         )}
         {clip ? (
@@ -191,8 +192,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
               </div>
-              {lookingBack || !data.can_approve ? (
-                <span className="text-[13px] text-muted-foreground">{lookingBack ? 'An earlier version — approve the new one' : approved ? 'You approved this one' : 'Approve once the new version is with you'}</span>
+              {lookingBack ? (
+                <span className="text-[13px] text-muted-foreground">The cut before — the new one is what to approve</span>
               ) : approved ? (
                 <button type="button" onClick={() => void approve(true)} disabled={approving}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-[14px] font-semibold text-black hover:bg-emerald-300 disabled:opacity-60"
@@ -212,9 +213,6 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         ) : (
           <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
             <p>{data.folder_note ?? 'Nothing to play yet.'}</p>
-            <a href={data.folder.url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:bg-foreground/10">
-              <ExternalLink className="h-4 w-4" aria-hidden /> Open in Drive
-            </a>
           </div>
         )}
 

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
-import { ExternalLink } from 'lucide-react'
 import { getEditingPortal } from '../../../../lib/editing-portal'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import EditingReview from '../../../../components/portal/EditingReview'
+import { clipsAtRound } from '../../../../lib/editing-portal-core'
 
 export const metadata: Metadata = {
   title: 'Your edit — MD Media',
@@ -26,6 +26,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
   const { token: raw, id } = await params
   const data = await getEditingPortal(raw, id)
   if (!data) notFound()
+  const shown = clipsAtRound(data.clips, data.rounds[0] ?? data.round).length
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -34,10 +35,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
           <div className="mx-auto flex min-h-14 w-full max-w-[1500px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 pr-16 sm:px-8 sm:pr-8">
             <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>MD Media · Editing review · {data.portal_name}</span>
-            <a href={data.folder.url} target="_blank" rel="noreferrer noopener"
-              className="ml-auto inline-flex min-h-11 items-center gap-2 text-[13px] font-semibold text-muted-foreground hover:text-foreground">
-              <ExternalLink className="h-4 w-4" aria-hidden /> Open in Drive
-            </a>
+            {/* "Open in Drive" stood here until 22 Sep 2026 — the clips play on this page, and a card handed in as files has no folder */}
           </div>
         </header>
 
@@ -45,7 +43,8 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
           <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">{data.item.title}</h1>
             <p className="pb-1 text-[13px] text-muted-foreground">
-              {data.clips.length > 0 ? `${data.clips.length} ${data.clips.length === 1 ? 'clip' : 'clips'} · ` : ''}{data.item.status_label}
+              {/* the clips AT the newest version — not every file of every version (22 Sep 2026: "21 clips" for a card of 10) */}
+              {shown > 0 ? `${shown} ${shown === 1 ? 'clip' : 'clips'} · ` : ''}{data.item.status_label}
             </p>
           </div>
           <EditingReview data={data} />

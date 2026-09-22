@@ -8,6 +8,7 @@ import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core
 import { finishedEditOf } from '../../../../../lib/card-link-core'
 import { startPullSoon } from '../../../../../lib/drive-pull'
 import { SENT_BACK_STATUSES, handInRound } from '../../../../../lib/edit-round-core'
+import { finalFilesOf } from '../../../../../lib/final-files-core'
 
 /** Execute a status transition. Role legality, requirement evidence, and the
  *  optimistic-concurrency guard all live in performTransition. */
@@ -59,7 +60,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const round = handInRound(item)
       await table('content_items').update(id, { edit_round: round })
       const finished = finishedEditOf(item as never)
-      if (finished) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })
+      // a card whose hand-in is files has nothing to copy from Drive — it copied the folder again as
+      // Version 2 beside the uploads (seen live, 22 Sep 2026: 20 pulled files for a card of 11)
+      if (finished && finalFilesOf(item as never).length === 0) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })
     }
     // the note also lands in the item's own thread, tagged to the owner so
     // it stays visible in their narrowed view even when the requester isn't
