@@ -118,9 +118,9 @@ export const NAV_TOOLS: NavItem[] = [
  *  simply never drawn, and nothing else would notice. */
 export const GROUPS: { label: string; hrefs: string[] }[] = [
   { label: 'General', hrefs: ['/dashboard', '/dashboard/leads', '/dashboard/clients', '/dashboard/audience'] },
-  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
+  { label: 'Content', hrefs: ['/dashboard/production', '/dashboard/team-boards', '/dashboard/editor', '/dashboard/designer', '/dashboard/scheduler', '/dashboard/bookings', '/dashboard/website', '/dashboard/activity'] },
   { label: 'Social',  hrefs: ['/dashboard/social'] },
-  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/todos', '/dashboard/team-boards', '/dashboard/notifications', '/dashboard/start'] },
+  { label: 'Team',    hrefs: ['/dashboard/team', '/dashboard/team/activity', '/dashboard/reports', '/dashboard/ai', '/dashboard/todos', '/dashboard/notifications', '/dashboard/start'] },
 ]
 export const PINNED_BOTTOM = '/dashboard/settings'
 
