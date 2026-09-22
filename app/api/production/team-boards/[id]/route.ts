@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client, TeamBoard } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
-import { applyCanvasOp } from '../../../../lib/batch-brief-core'
+import { applyCanvasOp, sanitiseCanvasCards } from '../../../../lib/batch-brief-core'
 import {
-  boardStatusOf, checkBoardTransition, cleanBoardName, cleanClientId, mayEditTeamBoard, mayManageTeamBoards, statusAfterEdit,
+  boardStatusOf, checkBoardTransition, cleanBoardName, cleanClientId, editChangesContent, mayEditTeamBoard, mayManageTeamBoards, statusAfterEdit,
 } from '../../../../lib/team-board-core'
 import { mayShareTeamBoard } from '../../../../lib/team-board-comments-core'
 
@@ -105,16 +105,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           stage = to === 'quality_check'
             ? { status: to, submitted_by: user.id, submitted_at: now, review_note: null }
             : { status: to, reviewed_by: user.id, reviewed_at: now, review_note: step.note }
-        } else if (op) {
-          // what was approved is no longer what is on the board
+        }
+        const nextCards = op ? applyCanvasOp((cur as { canvas_cards?: unknown }).canvas_cards, op) : null
+        if (op && nextCards) {
+          // what was approved is no longer what is on the board — when the board's CONTENT changed (a move,
+          // a resize or a blank note is not that; the owner, 22 Sep 2026)
           const after = statusAfterEdit(from)
-          if (after !== from) stage = { status: after }
+          if (after !== from && editChangesContent(sanitiseCanvasCards((cur as { canvas_cards?: unknown }).canvas_cards) as never[], nextCards as never[])) stage = { status: after }
         }
         return {
           ...cur,
           ...(name ? { name } : {}),
           ...(clientChange ?? {}),
-          ...(op ? { canvas_cards: applyCanvasOp((cur as { canvas_cards?: unknown }).canvas_cards, op) } : {}),
+          ...(nextCards ? { canvas_cards: nextCards } : {}),
           ...stage,
           ...shared,
           updated_at: now,

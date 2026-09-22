@@ -147,3 +147,34 @@ export function matchesBoardSearch(board: { name?: string | null }, makerName: s
     || String(makerName ?? '').toLowerCase().includes(needle)
     || String(clientName ?? '').toLowerCase().includes(needle)
 }
+
+/**
+ * WHAT COUNTS AS WORKING ON AN APPROVED BOARD (the owner, 22 Sep 2026: The Glass
+ * Den's approved board fell back to Inspo because "I accidentally added a
+ * blank note"). Only a change to what the board SAYS OR SHOWS is work: a card
+ * with content added, a card removed, a card's words, link, picture, Drive
+ * files or colour changed. Dragging cards around, resizing them, stacking
+ * them, or leaving an empty note that says nothing is not — what was
+ * approved is still what is on the board.
+ */
+const PLACE_ONLY = new Set(['x', 'y', 'w', 'h', 'z', 'updated_at'])
+type AnyCard = { id: string; kind?: string; text?: string | null; [k: string]: unknown }
+
+/** a note or label with no words is nothing on the board */
+export function isBlankCard(c: AnyCard | null | undefined): boolean {
+  return !!c && (c.kind === 'note' || c.kind === 'label') && !String(c.text ?? '').trim()
+}
+
+function content(c: AnyCard): string {
+  const keys = Object.keys(c).filter(k => !PLACE_ONLY.has(k)).sort()
+  return JSON.stringify(keys.map(k => [k, c[k]]))
+}
+
+/** did this edit change what the board says or shows? */
+export function editChangesContent(before: readonly AnyCard[], after: readonly AnyCard[]): boolean {
+  const was = new Map(before.filter(c => !isBlankCard(c)).map(c => [c.id, content(c)]))
+  const now = new Map(after.filter(c => !isBlankCard(c)).map(c => [c.id, content(c)]))
+  if (was.size !== now.size) return true
+  for (const [id, body] of now) if (was.get(id) !== body) return true
+  return false
+}
