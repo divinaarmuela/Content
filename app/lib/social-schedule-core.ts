@@ -1521,3 +1521,33 @@ export function samePostKey(
     .map(c => `${c}:${String(perChannel?.[c]?.kind ?? '')}`).join(',')
   return `${files}#${where}`
 }
+
+/* ── the words of a booked post ─────────────────────────────────────────── */
+
+/**
+ * WHAT A CHANGE TO A BOOKED POST IS (Raina, 22 Sep 2026: "I wanted to edit the
+ * caption of a scheduled post but I'm not able to — do I have to discard it
+ * first and create a new one?"). The words may change: the booking is pulled
+ * back and made again with the new words, same time, same channels. The
+ * media, the channels, their settings and the time may not — those are the
+ * cancel-and-remake the server has always asked for. Nothing changed is
+ * nothing to do.
+ */
+export type BookedChange = 'none' | 'caption' | 'other'
+export function bookedChange(
+  post: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
+  input: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
+): BookedChange {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+  const other = (input.slides !== undefined && !same(input.slides, post.slides))
+    || (input.channels !== undefined && !same(input.channels, post.channels))
+    || (input.per_channel !== undefined && !same(input.per_channel, post.per_channel))
+    || (input.scheduled_for !== undefined && String(input.scheduled_for ?? '') !== String(post.scheduled_for ?? ''))
+  if (other) return 'other'
+  const words = input.caption === undefined ? null : String(input.caption ?? '')
+  return words !== null && words !== String(post.caption ?? '') ? 'caption' : 'none'
+}
+
+/** how soon before it goes out the words may still change: the same minute the composer calls "now" */
+export const REWORD_LEAD_MS = 60_000
+export const TOO_LATE_TO_REWORD = 'It goes out within the minute — too late to change the words. Cancel it instead.'

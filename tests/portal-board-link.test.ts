@@ -43,7 +43,9 @@ describe('Copy board link on the shoot page', () => {
     // the portal link is the business's, or — for a shoot made for one of
     // the client's people — that person's own (15 Sep 2026); the board rides on it
     expect(s).toMatch(/if \(!forWho\) return `\$\{window\.location\.origin\}\/portal\/\$\{portalToken\}`/)
-    expect(s).toMatch(/navigator\.clipboard\.writeText\(`\$\{link\}\/board\/\$\{batch\.id\}`\)/)
+    // claimed inside the press through copyText (Karly, 22 Sep 2026: "it's not copying")
+    expect(s).toMatch(/\.then\(l => `\$\{l\}\/board\/\$\{batch\.id\}`\)/)
+    expect(s).toContain('void copyText(link)')
     expect(s).toContain('Copy board link')
   })
   it('is drawn only once the plan is on the portal, and turns the board on before copying', () => {

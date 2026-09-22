@@ -582,13 +582,34 @@ export default function NewPostDialog({
    * over a minute that has just arrived.
    */
   const postingNow = isPostingNow(state.scheduledFor, Date.now())
-  /* BOOKED IS READ-ONLY. Once the provider holds the post, the server refuses
-   * every edit ("already booked with the channel — cancel it first"), so a
-   * window that still offered the caption, the clock, the channels and
-   * Change media was offering four ways to reach a refusal (the audit of 9
-   * Sep 2026). The fields lock; the trash button (cancel the booking) is the
-   * one thing left, which is what the server allows. */
+  /* BOOKED IS READ-ONLY — EXCEPT THE WORDS. Once the provider holds the post,
+   * the server refuses an edit to its media, channels or time ("already
+   * booked with the channel — cancel it first"), so those fields lock and the
+   * trash button (cancel the booking) stays (the audit of 9 Sep 2026). The
+   * caption is the exception since 22 Sep 2026 (Raina: "do I have to discard
+   * it first?"): it stays open, and "Save the new words" pulls the booking
+   * back and makes it again with them, with no second approval (the owner's
+   * rule, the same day). */
   const locked = status === 'scheduled' || status === 'published'
+  const bookedWords = status === 'scheduled' && !!state.postId
+  const wordsChanged = bookedWords && state.caption !== String(post?.caption ?? '')
+  const saveWords = async () => {
+    if (!state.postId || !wordsChanged || busy) return
+    setBusy(true); setProblems([]); setNote(null)
+    try {
+      const res = await fetch(`/api/social/schedule/${state.postId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: state.caption }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new ComposeProblem(json)
+      dispatch({ type: 'saved' })
+      const again = String(json?.post?.status ?? '') === 'scheduled'
+      setNote(again ? 'Booked again with the new words — same time, same channels.' : 'The new words are saved, but the channel would not take the booking again — book it once more.')
+      if (onDone) onDone({ kind: again ? 'booked' : 'draft', postId: state.postId, itemId: target.itemId, at: state.scheduledFor, channels: [...state.channels], who: null })
+    } catch (e) {
+      setProblems(problemsOf(e))
+    } finally { setBusy(false) }
+  }
   /**
    * WAITING ON SOMEBODY ELSE is not an error.
    *
@@ -1561,11 +1582,19 @@ export default function NewPostDialog({
               <textarea
                 value={state.caption}
                 onChange={e => dispatch({ type: 'caption', caption: e.target.value })}
-                readOnly={locked}
+                readOnly={locked && !bookedWords}
                 rows={4}
                 placeholder="What goes with the picture?"
                 className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
               />
+              {bookedWords && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button type="button" disabled={!wordsChanged || busy} onClick={() => void saveWords()} className="inline-flex h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-40">
+                    {busy ? 'Saving…' : 'Save the new words'}
+                  </button>
+                  <span className="text-[12px] text-muted-foreground">{wordsChanged ? 'The post is booked again with these words — same time, same channels.' : 'This post is booked. Its words can still change; everything else needs the booking cancelled first.'}</span>
+                </div>
+              )}
             </label>
             )}
 

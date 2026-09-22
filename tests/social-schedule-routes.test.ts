@@ -341,15 +341,17 @@ describe('a planned post, end to end', () => {
     await approve('approve')
     as(SCHEDULER)
 
-    // the yes booked it in (8 Sep 2026), and a booked post is not edited in
-    // place: the press is refused and the approval it carries is untouched.
-    // Take it off the calendar first, then change it, then send it again.
+    // THE WORDS OF A BOOKED POST MAY CHANGE (Raina and the owner, 22 Sep 2026): the booking is pulled
+    // back and made again with the new words, same time — and the client's yes stands. It used to be
+    // refused outright (8 Sep 2026).
     const edited = await json(one.PATCH(
       new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: 'A different line' }) }),
       params(id),
     ))
-    expect(edited.status).toBe(409)
+    expect(edited.status).toBe(200)
     expect(row(id).status).toBe('scheduled')
+    expect(row(id).caption).toBe('A different line')
+    expect(row(id).publish_job_ids).toHaveLength(1)
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
   })
 
@@ -390,9 +392,9 @@ describe('a planned post, end to end', () => {
       params(id),
     ))
 
-    // the yes booked it in (8 Sep 2026); a booked post is not re-saved, and
-    // the press must not cost the approval or a single field
-    expect(unchanged.status).toBe(409)
+    // the yes booked it in (8 Sep 2026); an untouched press changes nothing (22 Sep 2026: it answers the
+    // post as it is, rather than a refusal), and must not cost the approval or a single field
+    expect(unchanged.status).toBe(200)
     expect(row(id).status).toBe('scheduled')
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
     // …and nothing was quietly lost on the way through, either
@@ -414,9 +416,13 @@ describe('a planned post, end to end', () => {
       new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: '' }) }),
       params(id),
     ))
-    // booked in by the yes (8 Sep 2026): refused rather than re-approved
-    expect(cleared.status).toBe(409)
-    expect(row(id).caption).toBe('Hello everyone')
+    // THE WORDS OF A BOOKED POST MAY CHANGE (Raina and the owner, 22 Sep 2026): even to nothing — the
+    // booking is pulled back and made again with the new words, and the client's yes stands. It used to
+    // be refused outright (8 Sep 2026).
+    expect(cleared.status).toBe(200)
+    expect(row(id).caption).toBe('')
+    expect(row(id).status).toBe('scheduled')
+    expect(row(id).publish_job_ids).toHaveLength(1)
     expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
   })
 

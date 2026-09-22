@@ -15,6 +15,7 @@ import { clientStatusWord, planState, progressLine, shootStatusLabel } from './p
 import { slidesOf } from './version-files-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { portalOwnerByToken } from './portal-owner'
+import { forTheClient } from './comment-visibility-core'
 
 /**
  * Child-page data for the portal: one item or one shoot, with its comment
@@ -167,6 +168,8 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
     table<BatchComment>('batch_comments')
       .list({ by: { batch_id: b.id }, orderBy: [['created_at', 'asc']], limit: 200 })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role']))
+      // THE PLAN'S THREAD IS THE TEAM'S (22 Sep 2026): the client sees the board's card comments and their own words
+      .then(rows => forTheClient(rows as never[]))
       .catch(() => []),
     // the plan's own brief task, at WHATEVER stage it is at: at client_review
     // the page has to carry the two moves the state machine says are theirs,

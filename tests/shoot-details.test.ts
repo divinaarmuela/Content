@@ -32,7 +32,7 @@ describe('what was typed when the shoot was made can be changed and copied (21 S
     expect(page).toContain("onBlur={e => { const v = e.target.value; if (v !== (batch.description ?? '')) void patch('description', v) }}")
     expect(page).toContain('Copy details')
     // the copy waits for the save that pressing it started, and reads the server's answer
-    expect(page).toContain('await savingRef.current.catch(() => null)')
+    expect(page).toContain('const pending = savingRef.current.catch(() => null).then(() => textFor(latestRef.current ?? batch))')
     expect(page).toContain('Use this as the Objective')
     expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8'))
       .toContain("onValueChange={v => void onPatch('owner_id', v === 'none' ? null : v)}")

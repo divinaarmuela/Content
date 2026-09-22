@@ -6,6 +6,7 @@ import { accountManagerName } from './portal-data'
 import { resolvePortalClient, toPortalComment, type PortalComment } from './portal-thread'
 import { sanitiseCanvasCards, type CanvasCard } from './batch-brief-core'
 import { clientMaySeeTeamBoard } from './team-board-comments-core'
+import { forTheClient } from './comment-visibility-core'
 
 /**
  * A TEAM BOARD ON THE CLIENT'S PORTAL — the loader (the owner, 22 Sep 2026:
@@ -35,6 +36,7 @@ export async function getPortalTeamBoardDetail(rawToken: string, boardId: string
     table<TeamBoardComment>('team_board_comments')
       .list({ where: r => r.board_id === b.id, orderBy: [['created_at', 'asc']], limit: COMMENTS_MAX })
       .then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role']))
+      .then(rows => forTheClient(rows as never[]))
       .catch(() => []),
     accountManagerName(client.id),
   ])

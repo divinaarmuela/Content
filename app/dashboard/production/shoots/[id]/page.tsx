@@ -13,6 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { ArrowLeft, Copy, Trash2 } from 'lucide-react'
+import { copyText } from '../../../../lib/copy-text-client'
 import { useProductionLive } from '../../useProductionLive'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
 import PlanReadOnly from './PlanReadOnly'
@@ -326,17 +327,19 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
   }
   const booked = batch.status !== 'brief'
   const stage = today ? shootStage(batch, today) : null
+  const [detailsToSelect, setDetailsToSelect] = useState<string | null>(null)
   const copyDetails = async () => {
-    await savingRef.current.catch(() => null)
-    const b = latestRef.current ?? batch
     const who = (uid: string | null | undefined) => nameOf(uid) ?? team.find(t => t.id === uid)?.name ?? crew.find(c => c.id === uid)?.name ?? null
-    const text = shootDetailsText({
+    const textFor = (b: Batch) => shootDetailsText({
       title: b.title, client: b.clients?.name, description: b.objective || b.description, shoot_date: b.shoot_date,
       manager: who(b.owner_id), call_time: b.call_time, location: b.location, talent: b.talent, props_wardrobe: b.props_wardrobe,
       editor: who(b.editor_id), editor_priorities: b.editor_priorities, edit_deadline: b.edit_deadline, notes: b.concept,
       deliverables: ((b.planned_deliverables ?? []) as { title?: string }[]).map(l => l?.title), shots: (b.shot_list ?? []).map(s => s.text),
     })
-    try { await navigator.clipboard.writeText(text); toast.success('Details copied') } catch { toast.error('Could not copy — select the text instead') }
+    // the copy is claimed inside the press and the text follows the pending save (Karly, 22 Sep 2026: "it's not copying")
+    const pending = savingRef.current.catch(() => null).then(() => textFor(latestRef.current ?? batch))
+    if (await copyText(pending)) { toast.success('Details copied'); return }
+    setDetailsToSelect(await pending)
   }
 
   return (
@@ -362,6 +365,13 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
         <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold" onClick={() => void copyDetails()}>
           <Copy className="h-4 w-4" aria-hidden /> Copy details
         </Button>
+        {detailsToSelect !== null && (
+          <div className="flex w-full flex-col gap-1.5 rounded-inner border border-border bg-surface p-3" role="status">
+            <p className="text-[13px] text-muted-foreground">This browser would not take the copy — select the text below and copy it yourself.</p>
+            <textarea readOnly value={detailsToSelect} rows={8} autoFocus onFocus={e => e.currentTarget.select()} className="w-full rounded-inner border border-border bg-background p-2 font-mono text-[12px] leading-relaxed outline-none" />
+            <Button variant="outline" className="h-11 w-fit rounded-full px-4 text-[13px] font-semibold" onClick={() => setDetailsToSelect(null)}>Close</Button>
+          </div>
+        )}
         {items.length === 0 && (
           <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold text-accent-red-deep"
             onClick={() => setDeleteOpen(true)}>

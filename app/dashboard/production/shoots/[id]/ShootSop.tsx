@@ -27,6 +27,7 @@ import type { ShotRow } from '../../../../lib/batch-brief-core'
 import Chip from '../../../ui/Chip'
 import LocationSearch from './LocationSearch'
 import DrivePullBar from '../../../board/DrivePullBar'
+import { copyText } from '../../../../lib/copy-text-client'
 
 /**
  * THE SHOOT PAGE, AS THE SHOOT BRIEF SOP §3 READS (rebuilt 13 Sep 2026 —
@@ -903,9 +904,11 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
         {portalToken && (
           <Button variant="outline" className={outlineBtn}
             onClick={() => {
-              void portalLinkFor().then(link => navigator.clipboard.writeText(link))
-                .then(() => setCopied(forWho ? 'Their portal link copied — send it to them' : 'Portal link copied — send it to the client'))
-                .catch(() => setCopied('Could not copy — copy it from the Clients page'))
+              // the copy is claimed inside the press; the link follows (Karly, 22 Sep 2026: "it's not copying")
+              const link = portalLinkFor()
+              void copyText(link)
+                .then(ok => ok ? setCopied(forWho ? 'Their portal link copied — send it to them' : 'Portal link copied — send it to the client') : link.then(l => setCopied(`Could not copy it here — select it: ${l}`)))
+                .catch(() => setCopied('Could not make their link — copy it from the Clients page'))
             }}>
             <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
           </Button>
@@ -918,10 +921,10 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
             onClick={() => {
               const boardOff = (batch as { share_board?: boolean | null }).share_board === false
               const turnOn = boardOff ? onPatch('share_board', true) : Promise.resolve(true)
-              void turnOn.then(ok => ok ? portalLinkFor() : Promise.reject(new Error('not shared')))
-                .then(link => navigator.clipboard.writeText(`${link}/board/${batch.id}`))
-                .then(() => setCopied('Board link copied — send it to the client'))
-                .catch(() => setCopied('Could not copy the board link'))
+              const link = turnOn.then(ok => ok ? portalLinkFor() : Promise.reject(new Error('not shared'))).then(l => `${l}/board/${batch.id}`)
+              void copyText(link)
+                .then(ok => ok ? setCopied('Board link copied — send it to the client') : link.then(l => setCopied(`Could not copy it here — select it: ${l}`)))
+                .catch(() => setCopied('Could not make the board link'))
             }}>
             <LinkIcon className="h-4 w-4" aria-hidden /> Copy board link
           </Button>

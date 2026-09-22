@@ -11,6 +11,7 @@ import {
 import { sanitiseCanvasCards } from '../../../../../lib/batch-brief-core'
 import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } from '../../../../../lib/canvas-comments-core'
 import { notifyManagersOfComment } from '../../../../../lib/portal-actor'
+import { forTheClient } from '../../../../../lib/comment-visibility-core'
 
 /**
  * The shoot's comment thread, team side — the same rows the client reads
@@ -78,6 +79,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       // a thread that cannot be read is an empty thread, not an error page
       comments = []
     }
+    // a signed-in client reads what their portal shows (22 Sep 2026): the plan's thread is the team's
+    if (user.role === 'client') comments = forTheClient(comments as never[])
     return NextResponse.json({ comments, viewer_id: user.id })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
