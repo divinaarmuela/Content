@@ -218,3 +218,6 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
     }),
   }
 }
+
+/** the same mapping for a team board's comments (portal-team-board.ts, 22 Sep 2026) */
+export const toPortalComment = toComment

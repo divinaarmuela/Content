@@ -5,6 +5,8 @@ import { ExternalLink, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CanvasCard } from '../../lib/batch-brief-core'
 import { canvasCardLabel } from '../../lib/canvas-comments-core'
+import MentionBox from '../../dashboard/MentionBox'
+import { extractMentions, type Mentionable } from '../../lib/mention-core'
 
 export type CardComment = {
   id: string
@@ -29,12 +31,15 @@ const when = (iso: string) =>
  * Every control is a 44px target.
  */
 export default function CardCommentPanel({
-  card, comments, onSend, onClose, name, viewer, className,
+  card, comments, onSend, onClose, name, viewer, members, className,
 }: {
   card: CanvasCard
   comments: CardComment[]
-  /** post the words; true when they landed */
-  onSend: (body: string) => Promise<boolean>
+  /** post the words (and who they tag); true when they landed */
+  onSend: (body: string, mentionIds?: string[]) => Promise<boolean>
+  /** TAGGING (22 Sep 2026): the people "@" offers — the team side passes the
+   *  team and the box becomes a MentionBox; the client's side passes nobody */
+  members?: (Mentionable & { email?: string; hint?: string })[]
   onClose: () => void
   /** the client's name, remembered on their device — the team side omits it */
   name?: { value: string; onChange: (v: string) => void }
@@ -49,7 +54,7 @@ export default function CardCommentPanel({
     const body = draft.trim()
     if (!body || busy) return
     setBusy(true)
-    const ok = await onSend(body)
+    const ok = await onSend(body, members ? extractMentions(body, members).map(m => m.id) : undefined)
     setBusy(false)
     if (ok) setDraft('')
   }
@@ -123,18 +128,31 @@ export default function CardCommentPanel({
             className="min-h-11 w-full rounded-tile border border-border bg-background px-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring sm:max-w-[240px]"
           />
         )}
-        <textarea
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder={viewer === 'client' ? 'Say something about this card…' : 'Reply to the client, or leave a note on this card…'}
-          rows={2}
-          maxLength={4000}
-          onKeyDown={e => {
-            e.stopPropagation()
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void send() }
-          }}
-          className="min-h-11 w-full resize-none rounded-tile border border-border bg-background p-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring"
-        />
+        {members ? (
+          <MentionBox
+            value={draft}
+            onChange={setDraft}
+            members={members}
+            placeholder="Leave a note on this card — type @ to tag someone…"
+            rows={2}
+            disabled={busy}
+            onSubmit={() => void send()}
+            className="min-h-11 w-full resize-none rounded-tile border border-border bg-background p-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring"
+          />
+        ) : (
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder={viewer === 'client' ? 'Say something about this card…' : 'Reply to the client, or leave a note on this card…'}
+            rows={2}
+            maxLength={4000}
+            onKeyDown={e => {
+              e.stopPropagation()
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void send() }
+            }}
+            className="min-h-11 w-full resize-none rounded-tile border border-border bg-background p-3 text-[14px] text-foreground outline-none focus:ring-2 focus:ring-ring"
+          />
+        )}
         <div className="flex justify-end">
           <button type="submit" disabled={busy || !draft.trim()}
             className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-40">

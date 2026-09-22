@@ -1,9 +1,9 @@
 import { itemPath } from '../../../lib/workflow-core'
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, ContentItem, Batch } from '@/lib/db-types'
+import type { Client, ContentItem, Batch, TeamBoard } from '@/lib/db-types'
 import { logActivity } from '../../../lib/workflow'
-import { announceItemChange, announceBatchChange } from '../../../lib/production-live'
+import { announceItemChange, announceBatchChange, announceTeamBoardChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 import { NOT_WITH_YOU, portalActions } from '../../../lib/portal-core'
 import type { ItemStatus } from '../../../lib/workflow-core'
@@ -12,6 +12,7 @@ import { canvasCardLabel, commentSubject, findCanvasCard, shootCommentPath } fro
 import { clientByPortalToken } from '../../../lib/portal-owner'
 import { formatStamp, reviewPath } from '../../../lib/video-review-core'
 import { clipCommentWhere } from '../../../lib/editing-portal-core'
+import { clientMaySeeTeamBoard, teamBoardCommentPath, teamBoardCommentSubject } from '../../../lib/team-board-comments-core'
 
 /**
  * A comment from the portal — on a piece, on a shoot, or pinned to ONE card
@@ -114,6 +115,31 @@ export async function POST(req: Request) {
         alsoUserIds: [batch.owner_id],
       }).catch(e => console.error('portal comment notify error:', e))
       announceBatchChange({ batch_id: batch.id, client_id: client.id, status: 'brief', kind: 'updated' })
+      return NextResponse.json({ ok: true })
+    }
+
+    // A TEAM BOARD SHARED WITH THEM (22 Sep 2026): the same rows the team
+    // reads on the board page, on the same card; the managers are told
+    if (kind === 'team_board') {
+      const board = await table<TeamBoard>('team_boards').get(id).catch(() => null)
+      if (!clientMaySeeTeamBoard(board, client.id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      const b = board as TeamBoard & { canvas_cards?: unknown }
+      const cardId = body.card_id == null ? null : String(body.card_id).slice(0, 80)
+      const card = cardId ? findCanvasCard(sanitiseCanvasCards(b.canvas_cards), cardId) : null
+      if (!card) return NextResponse.json({ error: cardId ? 'That card is not on the board any more.' : 'Pick a card to comment on' }, { status: cardId ? 404 : 400 })
+      const cardLabel = canvasCardLabel(card)
+      try {
+        await table('team_board_comments').insert({ board_id: b.id, author_id: actor.id, body: signed, resolved: false, card_id: card.id })
+      } catch {
+        return NextResponse.json({ error: 'Comments are not set up yet — ask your account manager.' }, { status: 503 })
+      }
+      await logActivity({ actor, clientId: client.id, entityType: 'team_board', entityId: b.id, action: 'comment_added', detail: 'client (portal)' })
+      await notifyManagersOfComment({
+        clientId: client.id, speaker, subjectTitle: teamBoardCommentSubject(b.name, cardLabel), body: text,
+        dashboardPath: teamBoardCommentPath(b.id, card.id),
+        alsoUserIds: [b.created_by ?? null],
+      }).catch(e => console.error('portal board comment notify error:', e))
+      announceTeamBoardChange({ board_id: b.id, client_id: client.id })
       return NextResponse.json({ ok: true })
     }
 

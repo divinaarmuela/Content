@@ -6,6 +6,7 @@ import { applyCanvasOp } from '../../../../lib/batch-brief-core'
 import {
   boardStatusOf, checkBoardTransition, cleanBoardName, cleanClientId, mayEditTeamBoard, mayManageTeamBoards, statusAfterEdit,
 } from '../../../../lib/team-board-core'
+import { mayShareTeamBoard } from '../../../../lib/team-board-comments-core'
 
 /**
  * ONE TEAM BOARD (the owner, 21 Sep 2026). Reading it and working on it —
@@ -49,7 +50,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const user = await requireRole('scheduler')
       if (!mayEditTeamBoard(user)) return NextResponse.json({ error: 'Boards are the team’s' }, { status: 403 })
       const { id } = await params
-      const body = await req.json().catch(() => ({})) as { name?: unknown; client_id?: unknown; status?: unknown; note?: unknown; canvas_op?: unknown }
+      const body = await req.json().catch(() => ({})) as { name?: unknown; client_id?: unknown; status?: unknown; note?: unknown; canvas_op?: unknown; shared_with_client?: unknown }
 
       let name: string | null = null
       if ('name' in body) {
@@ -74,11 +75,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
         clientChange = { client_id }
       }
+      // SHOWN TO THE CLIENT (22 Sep 2026): a manager's switch, decided against the board as it stands inside the claim
+      const share = 'shared_with_client' in body ? body.shared_with_client === true : null
       const to = 'status' in body ? String(body.status ?? '') : null
       const op = body.canvas_op && typeof body.canvas_op === 'object'
         ? { upsert: (body.canvas_op as { upsert?: unknown }).upsert, remove: (body.canvas_op as { remove?: unknown }).remove }
         : null
-      if (!name && !clientChange && !to && !op) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
+      if (!name && !clientChange && !to && !op && share === null) return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
 
       const now = new Date().toISOString()
       let refused: string | null = null
@@ -86,6 +89,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (!cur) return null
         const from = boardStatusOf(cur)
         let stage: Partial<TeamBoard> = {}
+        let shared: Partial<TeamBoard> = {}
+        if (share !== null) {
+          if (!mayShareTeamBoard(user, { client_id: (clientChange?.client_id ?? cur.client_id) ?? null })) {
+            refused = cur.client_id || clientChange?.client_id ? 'Only an account manager or a super admin shares a board with the client' : 'Say which client the board is for before sharing it'
+            return null
+          }
+          shared = share
+            ? { shared_with_client: true, client_shared_at: now, client_shared_by: user.id }
+            : { shared_with_client: false }
+        }
         if (to) {
           const step = checkBoardTransition(user, from, to, body.note)
           if (!step.ok) { refused = step.error; return null }
@@ -103,11 +116,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ...(clientChange ?? {}),
           ...(op ? { canvas_cards: applyCanvasOp((cur as { canvas_cards?: unknown }).canvas_cards, op) } : {}),
           ...stage,
+          ...shared,
           updated_at: now,
           updated_by: user.id,
         }
       }) as (c: TeamBoard | null) => TeamBoard | null)
-      if (refused) return NextResponse.json({ error: refused }, { status: 409 })
+      if (refused) return NextResponse.json({ error: refused }, { status: String(refused).startsWith('Only') || String(refused).startsWith('Say which') ? 403 : 409 })
       if (!result.claimed) return NextResponse.json({ error: 'Board not found' }, { status: 404 })
       return NextResponse.json({ board: result.row, canvas_cards: (result.row as { canvas_cards?: unknown }).canvas_cards ?? [] })
     } catch (e) {

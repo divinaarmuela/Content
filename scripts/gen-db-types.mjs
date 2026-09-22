@@ -142,10 +142,32 @@ const GHOST_TABLES = {
     ['reviewed_at', col('string', true)],
     ['review_note', col('string', true)],
     ['canvas_cards', col('unknown', true, true)],
+    // SHOWN TO THE CLIENT (the owner, 22 Sep 2026: "when we show to client,
+    //   can they leave comments"): a manager's switch, on when the client link
+    //   is copied. Until then the client's page for the board is not found.
+    ['shared_with_client', col('boolean', true)],
+    ['client_shared_at', col('string', true)],
+    ['client_shared_by', col('string', true)],
     ['created_by', col('string', true)],
     ['updated_by', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
+  ],
+  // team_board_comments — COMMENTS ON A TEAM BOARD'S CARDS (the owner, 22 Sep
+  //   2026: "internal comments … like tagging" and the client's, "like how we
+  //   do for shoot briefs"). The shape of batch_comments, on a board: every
+  //   row is pinned to ONE card (card_id); a team member's "@Name" sets
+  //   assigned_to and it stays open until resolved; the client writes the same
+  //   rows from their portal page. Rules in app/lib/team-board-comments-core.ts.
+  team_board_comments: [
+    ['id', col('string', false)],
+    ['board_id', col('string', false)],
+    ['author_id', col('string', true)],
+    ['body', col('string', false)],
+    ['card_id', col('string', true)],
+    ['assigned_to', col('string', true)],
+    ['resolved', col('boolean', true)],
+    ['created_at', col('string', false)],
   ],
   // prospects / prospect_events — THE ACQUISITION SYSTEM (the blueprint read
   //   21 Sep 2026; rules in app/lib/acquisition-core.ts). A prospect is one

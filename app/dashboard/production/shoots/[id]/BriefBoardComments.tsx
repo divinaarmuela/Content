@@ -8,6 +8,7 @@ import { CanvasCommentsProvider } from '../../../../components/canvas/CanvasComm
 import CardCommentPanel, { type CardComment } from '../../../../components/canvas/CardCommentPanel'
 import type { CanvasCard } from '../../../../lib/batch-brief-core'
 import { commentsOnCard, countByCard, findCanvasCard } from '../../../../lib/canvas-comments-core'
+import type { Mentionable } from '../../../../lib/mention-core'
 
 type Row = {
   id: string
@@ -40,6 +41,17 @@ export default function BriefBoardComments({ batchId, cards, children, className
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [open, setOpen] = useState<string | null>(null)
+  // TAGGING ON A CARD (22 Sep 2026): the people "@" can reach, as the thread under the plan has them
+  const [members, setMembers] = useState<(Mentionable & { email?: string })[]>([])
+  useEffect(() => {
+    fetch('/api/team')
+      .then(r => (r.ok ? r.json() : { members: [] }))
+      .then((json: { members?: { id: string; name: string; email: string; role: string; active_status?: boolean }[] }) =>
+        setMembers((json.members ?? [])
+          .filter(m => m.role !== 'client' && m.active_status !== false)
+          .map(m => ({ id: m.id, name: m.name || m.email, email: m.email }))))
+      .catch(() => setMembers([]))
+  }, [])
   // full screen turns the board into a fixed layer over the page, which hid
   // this panel behind it (the owner, 14 Sep 2026: "I clicked the comment
   // icon but it is not showing"); the board draws the panel itself then
@@ -101,12 +113,12 @@ export default function BriefBoardComments({ batchId, cards, children, className
     }, 50)
   }, [])
 
-  const send = async (body: string): Promise<boolean> => {
+  const send = async (body: string, mentionIds?: string[]): Promise<boolean> => {
     if (!openCard) return false
     const res = await fetch(`/api/production/batches/${batchId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body, card_id: openCard.id }),
+      body: JSON.stringify({ body, card_id: openCard.id, ...(mentionIds?.length ? { mention_ids: mentionIds } : {}) }),
     })
     if (!res.ok) {
       toast.error((await res.json().catch(() => null))?.error ?? 'Could not send')
@@ -124,13 +136,14 @@ export default function BriefBoardComments({ batchId, cards, children, className
       onSend={send}
       onClose={() => setOpen(null)}
       viewer="team"
+      members={members}
       className={fullscreen ? '' : 'lg:sticky lg:top-4'}
     />
   ) : null
   const ctx = useMemo(
     () => ({ counts, open: openThread, openCardId: open, panel: fullscreen ? panel : null, onFullscreen: setFullscreen }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [counts, openThread, open, fullscreen, comments],
+    [counts, openThread, open, fullscreen, comments, members],
   )
 
   return (

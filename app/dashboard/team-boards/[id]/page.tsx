@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Check, Link2, Send, Undo2 } from 'lucide-react'
+import { ArrowLeft, Check, Link2, Send, Undo2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -22,6 +22,8 @@ import {
   INTERNAL_BOARD_WORD, REVIEW_NOTE_MAX, TEAM_BOARD_STATUS_LABEL, boardClientName, boardStatusOf, cardCountWords, mayEditTeamBoard,
   mayManageTeamBoards, mayReviewTeamBoard, teamBoardLink, type TeamBoardStatus,
 } from '../../../lib/team-board-core'
+import { clientLinkWords, mayShareTeamBoard, portalTeamBoardLink } from '../../../lib/team-board-comments-core'
+import TeamBoardComments from './TeamBoardComments'
 
 /**
  * ONE INSPO BOARD (the owner, 21–22 Sep 2026): the shoot brief's own canvas
@@ -31,6 +33,11 @@ import {
  * a per-card op the server merges on the row as it stands. Anyone on the
  * team sends it to the quality check; the checker or a manager approves it
  * or asks for changes with a note. "Copy board link" copies this address.
+ *
+ * COMMENTS (22 Sep 2026): every card wears a bubble; its thread opens beside
+ * the board, "@" tags a colleague. "Copy client link" (a manager, on a
+ * board that names a client) shares the board and copies the client's page
+ * for it, where they comment on the same cards.
  */
 
 type Row = TeamBoard & { canvas_cards?: unknown }
@@ -59,6 +66,18 @@ export default function TeamBoardPage() {
       await navigator.clipboard.writeText(teamBoardLink(window.location.origin, id))
       toast.success('Board link copied — anyone on the team can open it')
     } catch { toast.error('Could not copy the link') }
+  }
+  // THE CLIENT'S LINK (22 Sep 2026): shares the board (a manager's switch) and copies the client's page for it
+  const clientRow = board?.client_id ? clients.find(c => c.id === board.client_id) ?? null : null
+  const copyClientLink = async () => {
+    const token = clientRow?.share_token
+    if (!token) { toast.error('This client has no portal link yet — make one on their client page first'); return }
+    const ok = board?.shared_with_client === true ? true : await patch({ shared_with_client: true }, 'Shared with the client')
+    if (!ok) return
+    try {
+      await navigator.clipboard.writeText(portalTeamBoardLink(window.location.origin, token, id))
+      toast.success(clientLinkWords(client))
+    } catch { toast.error('Shared, but the link could not be copied — press the button again') }
   }
 
   const patch = async (body: Record<string, unknown>, done: string) => {
@@ -132,6 +151,12 @@ export default function TeamBoardPage() {
             <Button variant="outline" onClick={() => void copyLink()} className="h-11 rounded-full px-4 text-[13px] font-semibold">
               <Link2 className="mr-1.5 h-4 w-4" aria-hidden /> Copy board link
             </Button>
+            {mayShareTeamBoard(me, board) && (
+              <Button variant="outline" disabled={busy} onClick={() => void copyClientLink()} className="h-11 rounded-full px-4 text-[13px] font-semibold"
+                title={board.shared_with_client ? 'The client can open this board and comment on its cards' : 'Share the board with the client and copy their link'}>
+                <Users className="mr-1.5 h-4 w-4" aria-hidden /> {board.shared_with_client ? 'Copy client link' : 'Share with client'}
+              </Button>
+            )}
           </div>
         }
       />
@@ -148,7 +173,9 @@ export default function TeamBoardPage() {
           </Select>
         </div>
       )}
-      <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} />
+      <TeamBoardComments boardId={id} cards={cards} team={team}>
+        <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} />
+      </TeamBoardComments>
 
       <Dialog open={asking} onOpenChange={o => { if (!busy) setAsking(o) }}>
         <DialogContent className="bg-popover sm:max-w-md">

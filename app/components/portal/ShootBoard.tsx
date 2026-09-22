@@ -42,9 +42,11 @@ const NAME_KEY = 'mdm-portal-name'
  * — never through its props or its markup.
  */
 export default function ShootBoard({
-  shootId, boardName, cards, comments, surface, clientName, amName, initialCardId, fullHref, className,
+  shootId, thread = 'shoot', boardName, cards, comments, surface, clientName, amName, initialCardId, fullHref, className,
 }: {
   shootId: string
+  /** WHOSE THREAD (22 Sep 2026): a shoot's planning board, or a team board shared with the client — same panel, different rows */
+  thread?: 'shoot' | 'team_board'
   boardName: string | null
   cards: CanvasCard[]
   /** the shoot's whole thread; the ones with a card_id are pinned to cards */
@@ -120,9 +122,9 @@ export default function ShootBoard({
         ? await fetch('/api/portal/comment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, kind: 'shoot', id: shootId, card_id: openCard.id, body, author_name: who }),
+            body: JSON.stringify({ token, kind: thread, id: shootId, card_id: openCard.id, body, author_name: who }),
           })
-        : await fetch(`/api/production/batches/${shootId}/comments`, {
+        : await fetch(thread === 'team_board' ? `/api/production/team-boards/${shootId}/comments` : `/api/production/batches/${shootId}/comments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ body, card_id: openCard.id }),

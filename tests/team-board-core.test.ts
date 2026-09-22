@@ -85,7 +85,7 @@ describe('team boards (21 Sep 2026)', () => {
     expect(one).toContain("return NextResponse.json({ error: 'Only an account manager or a super admin says which client a board is for' }, { status: 403 })")
     expect(one).toContain('const step = checkBoardTransition(user, from, to, body.note)')
     expect(one).toContain('const after = statusAfterEdit(from)')
-    expect(one).toContain("if (refused) return NextResponse.json({ error: refused }, { status: 409 })")
+    expect(one).toContain("if (refused) return NextResponse.json({ error: refused }, { status: String(refused).startsWith('Only') || String(refused).startsWith('Say which') ? 403 : 409 })")
     const listPage = readFileSync('app/dashboard/team-boards/page.tsx', 'utf8')
     expect(listPage).toContain('const lanes = useMemo(() => lanesOf(boards), [boards])')
     expect(listPage).toContain('{client ?? INTERNAL_BOARD_WORD}')

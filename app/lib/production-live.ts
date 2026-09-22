@@ -45,3 +45,13 @@ export function announceBatchChange(args: {
     kind: 'updated' as const,
   })
 }
+
+/** a team board's comments moved (22 Sep 2026): the client's portal page for it refreshes; the team reads the rows live */
+export function announceTeamBoardChange(args: { board_id: string; client_id: string | null }) {
+  announceAfter('production', {
+    item_id: `board:${args.board_id}`,
+    client_id: args.client_id ?? '',
+    status: 'board',
+    kind: 'updated' as const,
+  })
+}
