@@ -742,24 +742,44 @@ export default function BriefCanvas({
    *  the read-only info route, then it goes on exactly as a pick would, and
    *  the box's link is let go (a Drive link is not a post's link). A folder
    *  link opens the picker on the card instead. Read only, trap 13. */
-  const attachDriveLinkToMockup = async (card: CanvasCard, url: string) => {
+  const attachDriveLinkToMockup = async (card: CanvasCard, url: string, quiet = false) => {
     const id = driveFileIdFromLink(url)
     if (!id) return
     try {
       const key = driveResourceKeyFromLink(url)
       const res = await fetch(`/api/drive/info?id=${encodeURIComponent(id)}${key ? `&key=${encodeURIComponent(key)}` : ''}`, { cache: 'no-store' })
       const json = await res.json().catch(() => ({})) as { entry?: { id: string; name: string; mimeType: string }; error?: string }
-      if (!res.ok || !json.entry) { toast.error(json.error ?? 'Could not read that Drive file — is it shared with the agency’s Drive account?'); return }
+      if (!res.ok || !json.entry) { if (!quiet) toast.error(json.error ?? 'Could not read that Drive file — is it shared with the agency’s Drive account?'); return }
       const file = driveFileFromEntry({ ...json.entry, resourceKey: (json.entry as { resourceKey?: string | null }).resourceKey ?? key })
-      if (!file) { toast.error('That Drive file is not a picture or a clip, so it cannot go on a post'); return }
+      if (!file) { if (!quiet) toast.error('That Drive file is not a picture or a clip, so it cannot go on a post'); return }
       const live = cardsRef.current.find(c => c.id === card.id) ?? card
       const { link_url: _l, preview: _p, ...rest } = live
       void _l; void _p
       const next = withDriveFiles(rest as CanvasCard, [file])
       upsertLocal(next); persist([next])
-      toast.success(driveFilesWords(next.drive_files) ?? 'Put on the post')
-    } catch { toast.error('Could not read that Drive file just now') }
+      if (!quiet) toast.success(driveFilesWords(next.drive_files) ?? 'Put on the post')
+    } catch { if (!quiet) toast.error('Could not read that Drive file just now') }
   }
+  const attachDriveLinkRef = useRef(attachDriveLinkToMockup)
+  attachDriveLinkRef.current = attachDriveLinkToMockup
+
+  /** THE POSTS THAT KEPT A DRIVE LINK AS A LINK (22 Sep 2026): before the info
+   *  route could read a link-shared file, a pasted clip link stayed in the
+   *  post's link box and the card drew a globe — twenty of them on The Glass
+   *  Den's posting-order board. Each such post is put right once per visit,
+   *  quietly, the same way a fresh paste is; one that still cannot be read is
+   *  left as it was and not asked again this visit. Read only, trap 13. */
+  const healedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (readOnly) return
+    for (const c of cards) {
+      if (c.kind !== 'mockup' || c.drive_files?.length || healedRef.current.has(c.id)) continue
+      const url = String(c.link_url ?? '')
+      if (!driveFileIdFromLink(url)) continue
+      healedRef.current.add(c.id)
+      void attachDriveLinkRef.current(c, url, true)
+    }
+  }, [cards, readOnly])
 
   /** Paste a post's link onto a mock-up that already exists. */
   const attachLinkToMockup = (card: CanvasCard, url: string) => {
