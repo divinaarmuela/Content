@@ -99,4 +99,12 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain("{okByClient ? 'Take approval back' : 'Approve for the client'}")
   })
+
+  it('a files card with its revisions on it leaves revision without an asset_versions row (the E2E walk, 22 Sep 2026)', () => {
+    const w = readFileSync('app/lib/workflow.ts', 'utf8')
+    expect(w).toContain('const filesRevised = finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)')
+    expect(w).toContain("if (!system && !isBriefTask && !hasLink && !filesRevised && from === 'revision_required'")
+    // the name box beside Approve stays while it is being typed in
+    expect(readFileSync('app/components/portal/EditingReview.tsx', 'utf8')).toContain('{(!name.trim() || nameTyping) && (')
+  })
 })

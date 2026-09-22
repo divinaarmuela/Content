@@ -63,6 +63,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   const [now, setNow] = useState(0)
   const [duration, setDuration] = useState(0)
   const [name, setName] = useState('')
+  // the box beside Approve stays while it is being typed in — it used to unmount after the first letter (E2E walk, 22 Sep 2026)
+  const [nameTyping, setNameTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const [stamp, setStamp] = useState(true)
   const [sending, setSending] = useState(false)
@@ -206,8 +208,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 // the comments panel, so the button read "Add your name to approve" and looked missing (the owner,
                 // 22 Sep 2026: "where is the approve button"). It is here now, beside the button, the same name.
                 <span className="flex flex-wrap items-center gap-2">
-                  {!name.trim() && (
-                    <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name, to approve" aria-label="Your name, to approve"
+                  {(!name.trim() || nameTyping) && (
+                    <input value={name} onChange={e => setName(e.target.value)} onFocus={() => setNameTyping(true)} onBlur={() => setNameTyping(false)} placeholder="Your name, to approve" aria-label="Your name, to approve"
                       className="h-11 w-44 rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50" />
                   )}
                   <button type="button" onClick={() => void approve(false)} disabled={approving || !name.trim()}

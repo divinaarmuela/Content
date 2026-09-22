@@ -32,7 +32,7 @@ import {
   itemPath,
 } from './workflow-core'
 import { editingPortalPath, portalHasWork } from './editing-portal-core'
-import { liveFilesAt } from './final-files-core'
+import { finalFilesOf, hasFinishedWork, liveFilesAt } from './final-files-core'
 import { withClientRound } from './editing-portal-core'
 import { handInRound, roundOf } from './edit-round-core'
 import type { Role } from './identity-core'
@@ -846,7 +846,11 @@ export async function performTransition(
   // drive link is fine — currently if I submit the same one after revision it
   // doesn't allow me"): the editor fixes the files behind the same Drive or
   // Dropbox link, so there is no new version to ask for
-  if (!system && !isBriefTask && !hasLink && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
+  // …and a FILES card whose revisions are on it (a clip replaced in its slot, a clip dropped, a new file — final-files-core
+  // hasFinishedWork) has its new version already; asset_versions is the posting pipeline's table and a files card
+  // never writes it (the E2E walk of 22 Sep 2026: "Add a new version with the revisions first" on a card with b2.png on it)
+  const filesRevised = finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)
+  if (!system && !isBriefTask && !hasLink && !filesRevised && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would
     // block the move forever with a message about a version nobody asked for
