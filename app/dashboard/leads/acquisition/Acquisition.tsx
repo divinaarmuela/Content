@@ -32,6 +32,7 @@ import {
 import ProspectSheet from './ProspectSheet'
 import QueueView from './QueueView'
 import InboundSheet from './InboundSheet'
+import ScanningView from './ScanningView'
 import { mayViewEveryone, queueFor } from '../../../lib/acq-queue-core'
 
 /**
@@ -44,7 +45,7 @@ import { mayViewEveryone, queueFor } from '../../../lib/acq-queue-core'
  * It sits under Leads as sub-links and leaves the live Leads page alone.
  */
 
-export type AcqView = 'queue' | 'targets' | 'pipeline' | 'contacts' | 'reporting'
+export type AcqView = 'queue' | 'targets' | 'pipeline' | 'contacts' | 'reporting' | 'scanning'
 
 const VIEWS: { key: AcqView; label: string; href: string }[] = [
   // MY QUEUE (the blueprint, §10 "Task & Notification view"; 22 Sep 2026): what waits on me
@@ -53,9 +54,12 @@ const VIEWS: { key: AcqView; label: string; href: string }[] = [
   { key: 'pipeline', label: 'Pipeline', href: '/dashboard/leads/acquisition' },
   { key: 'contacts', label: 'Contacts', href: '/dashboard/leads/acquisition/contacts' },
   { key: 'reporting', label: 'Reporting', href: '/dashboard/leads/acquisition/reporting' },
+  // SCANNING (22 Sep 2026): what was read, when, from which inbox, and what came of it
+  { key: 'scanning', label: 'Scanning', href: '/dashboard/leads/acquisition/scanning' },
 ]
 
 const SUMMARY: Record<AcqView, string> = {
+  scanning: 'What the scanners read and when: each mailbox, the last messages the email scanner looked at and why each was kept or skipped, the agent’s last pass, and what it found. Nothing here is guessed — every line is a row the system wrote.',
   queue: 'What waits on you, soonest first: the follow-ups and tasks on your prospects, the things the agent read but was not sure enough to record, and the prospects that have sat in a stage too long.',
   targets: 'Businesses worth an audit, before any contact. Research it, make the audit, send it. A target becomes a lead only when it replies, clicks or books.',
   pipeline: 'Every business that showed a real signal, from first reply to handoff. It moves right when the stage’s data is captured; the score says where to spend energy.',
@@ -264,6 +268,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
             onOpen={setOpen}
             onDone={id => call(`/api/todos/${id}`, 'PATCH', { status: 'done' }, 'Done')}
             onAnswer={(prospectId, eventId, confirm) => call(`/api/leads/acquisition/${prospectId}/events/${eventId}`, 'POST', { confirm }, confirm ? 'Confirmed — it counts now' : 'Dismissed')} />
+        ) : view === 'scanning' ? (
+          <ScanningView onOpen={setOpen} />
         ) : view === 'contacts' ? (
           <div className="overflow-x-auto rounded-card border border-border bg-card">
             <table className="w-full min-w-[860px] text-left text-[13px]">

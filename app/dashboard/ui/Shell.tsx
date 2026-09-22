@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, CalendarDays, Search, GraduationCap, ListChecks, StickyNote } from 'lucide-react'
+  CalendarClock, CalendarDays, Search, GraduationCap, ListChecks, StickyNote, Radar } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { ActAsButton, ActingBar, useActAs } from './ActAs'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -84,6 +84,7 @@ export const NAV_LEADS_CHILDREN: NavItem[] = [
   { href: '/dashboard/leads/acquisition',           label: 'Pipeline',  icon: Kanban },
   { href: '/dashboard/leads/acquisition/contacts',  label: 'Contacts',  icon: Users },
   { href: '/dashboard/leads/acquisition/reporting', label: 'Reporting', icon: BarChart3 },
+  { href: '/dashboard/leads/acquisition/scanning',  label: 'Scanning',  icon: Radar },
 ]
 
 export const NAV_SOCIAL_CHILDREN: NavItem[] = [

@@ -153,7 +153,7 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
   })
 
   it('the people the blueprint names can open it: Manal (account manager) and Joy (quality checker) hold the four views without holding Leads', () => {
-    for (const href of ['/dashboard/leads/acquisition', '/dashboard/leads/acquisition/queue', '/dashboard/leads/acquisition/targets', '/dashboard/leads/acquisition/contacts', '/dashboard/leads/acquisition/reporting']) {
+    for (const href of ['/dashboard/leads/acquisition', '/dashboard/leads/acquisition/queue', '/dashboard/leads/acquisition/targets', '/dashboard/leads/acquisition/contacts', '/dashboard/leads/acquisition/reporting', '/dashboard/leads/acquisition/scanning']) {
       expect(canSeePage('account_manager', href, [])).toBe(true)
       expect(canSeePage('quality_checker', href, [])).toBe(true)
       expect(canSeePage('editor', href, [])).toBe(false)
