@@ -36,6 +36,9 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(hasFinishedWork(whole)).toBe(false)
     // not sent back: nothing is replaced
     expect(mayReplaceAsset({ final_files: three, edit_round: 1, status: 'quality_check' }, 'a')).toBe(false)
+    // …but a manager may change the set while it is with the client (22 Sep 2026)
+    expect(mayReplaceAsset({ final_files: three, edit_round: 1, status: 'client_review' }, 'a')).toBe(false)
+    expect(mayReplaceAsset({ final_files: three, edit_round: 1, status: 'client_review' }, 'a', true)).toBe(true)
     // a send-back may only name assets that are on the card, each once
     expect(sanitiseChangeAssets(['c', 'c', 'zz', 7], { final_files: three })).toEqual(['c'])
   })
@@ -49,10 +52,10 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain('const next = withReplacement(finalFilesOf(item as never), assetId,')
     // an asset the client approved is not offered for replacing
-    expect(drawer).toContain('mayReplaceAsset(item as never, a) && !okByClient && !dropped && (')
+    expect(drawer).toContain('mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (')
     // a super admin or account manager may upload and replace too, not only the holder (22 Sep 2026)
     expect(drawer).toContain("const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'")
-    expect(drawer).toContain('{mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (')
+    expect(drawer).toContain('{mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (')
   })
 
   it('an existing link card’s copied clips become its assets, so one of them can be swapped (22 Sep 2026)', () => {

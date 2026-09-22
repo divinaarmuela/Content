@@ -623,13 +623,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           {isManager && !frozen && !dropped && (
                             <Button variant="outline" disabled={busy} onClick={() => void teamApprove(f.id, okByClient)} className="h-9 rounded-full px-3 text-[12px] font-semibold">{okByClient ? 'Take approval back' : 'Approve for the client'}</Button>
                           )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && dropped && f.retired_round === handInRound(item as never) && (
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && dropped && f.retired_round === handInRound(item as never) && (
                             <Button variant="outline" disabled={busy} onClick={() => void dropAsset(a, true)} className="h-9 rounded-full px-3 text-[12px] font-semibold">Bring back</Button>
                           )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (
                             <Button variant="ghost" disabled={busy} onClick={() => void dropAsset(a, false)} className="h-9 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:text-accent-red-deep">Drop from {roundLabel(handInRound(item as never))}</Button>
                           )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && !dropped && (
+                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (
                             <Button variant="outline" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }} className="h-9 rounded-full px-3 text-[12px] font-semibold">
                               {f.version === handInRound(item as never) ? 'Replace again' : `Replace — ${roundLabel(handInRound(item as never))}`}
                             </Button>

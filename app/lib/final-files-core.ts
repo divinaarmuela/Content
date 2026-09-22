@@ -176,8 +176,11 @@ export function stillToReplace(item: { final_files?: unknown; change_assets?: un
   return changeAssetsOf(item).filter(a => current.has(a) && !replaced(current.get(a)!) && !isRetiredAt(current.get(a)!, round))
 }
 
-/** may this asset be replaced now: the card was sent back, and this asset was named (or none was) */
-export function mayReplaceAsset(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }, assetId: string): boolean {
+/** may this asset be replaced now: the card was sent back, and this asset was named (or none was) — or a MANAGER
+ *  is changing the set while it is with the client (the owner, 22 Sep 2026: "add the version one back, this is the
+ *  version 2" on a card already with the client; the client sees the change on the same link, same version) */
+export function mayReplaceAsset(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }, assetId: string, manager = false): boolean {
+  if (manager && String(item.status ?? '') === 'client_review') return true
   if (!SENT_BACK_STATUSES.includes(String(item.status ?? ''))) return false
   const named = changeAssetsOf(item)
   return named.length === 0 || named.includes(assetId)
