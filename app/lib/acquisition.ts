@@ -5,6 +5,7 @@ import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, prospectForSender, type 
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { takeClaimLock } from './claim-lock'
+import { clickDetail, clickPoints, TRACKED_WORDS, type TrackedKind } from './tracked-link-core'
 
 /**
  * THE ACQUISITION SYSTEM — the server half (acquisition-core.ts has the rules
@@ -222,6 +223,38 @@ export async function recordReply(actor: Actor, p: ProspectRow, detail: string |
     await logAcqEvent({ prospectId: p.id, kind: 'stage', by: opts.by ?? null, source: 'system', detail: 'Moved to New lead / Engaged — they replied' })
   }
   try { await onReply(actor, p, detail) } catch (e) { console.error('[acquisition] pausing the follow-ups failed:', e) }
+  return event
+}
+
+/**
+ * A TRACKED LINK CLICKED (the blueprint, §8): the click goes on the timeline — the first one with the
+ * Loom's +15, a later one as a note — and a target still at Outreach becomes a lead, in New lead /
+ * Engaged, with its owner told. The no-response reminders keep going: a click is interest, not a reply.
+ */
+export async function recordLinkClick(p: ProspectRow, kind: TrackedKind): Promise<ProspectEvent> {
+  const now = new Date().toISOString()
+  const prior = await table<ProspectEvent>('prospect_events').list({ where: e => e.prospect_id === p.id && e.kind === 'link_click' })
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'link_click', source: 'system', detail: clickDetail(kind, prior.length), points: clickPoints(prior.length) })
+  const prospects = table<ProspectRow>('prospects')
+  const wasAtOutreach = acqStageByKey((p as ProspectRow & Prospect).stage).key === 'outreach'
+  const moved = await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {
+    const row = cur as (ProspectRow & Prospect) | null
+    if (!row) return null
+    const atOutreach = acqStageByKey(row.stage).key === 'outreach'
+    return { ...row, ...(atOutreach ? { stage: 'engaged', stage_entered_at: now } : {}), updated_at: now }
+  }) as (c: ProspectRow | null) => ProspectRow | null)
+  if (moved.claimed && wasAtOutreach) {
+    await logAcqEvent({ prospectId: p.id, kind: 'stage', source: 'system', detail: 'Moved to New lead / Engaged — they opened the link' })
+    const ownerId = (p as { owner_id?: string | null }).owner_id
+    const owner = ownerId ? await table<TeamUser>('team_users').get(ownerId) : null
+    if (owner) {
+      const what = TRACKED_WORDS[kind].label.toLowerCase()
+      await tellPeople([owner], { id: 'system', name: 'The tracked link' }, p, {
+        event: 'acq_click', subject: `${p.business} opened the ${what} link`, button: 'Open the prospect',
+        html: `<p><strong>${escapeHtml(p.business)}</strong> opened the ${escapeHtml(what)} link you sent. It is now a lead, in New lead / Engaged. The follow-up reminders keep going until they reply.</p>`,
+      })
+    }
+  }
   return event
 }
 

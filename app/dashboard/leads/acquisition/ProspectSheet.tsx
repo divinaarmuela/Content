@@ -2,7 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, PauseCircle, PlayCircle, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Link2, PauseCircle, PlayCircle, Sparkles, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { copyText } from '../../../lib/copy-text-client'
+import { destinationFor, TRACKED_KINDS, TRACKED_WORDS, trackedLink, trackedPath } from '../../../lib/tracked-link-core'
 import { isOpenFinding } from '../../../lib/acq-agent-core'
 import { Button } from '@/components/ui/button'
 import { SheetTitle } from '@/components/ui/sheet'
@@ -190,6 +193,21 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
         {text('loom_url', 'Private Loom or audit', 'loom.com/share/…')}
         {text('post_url', 'Public audit post', 'instagram.com/p/…')}
         {text('cta_url', 'Booking or CTA link', 'The tracked link in the message', true)}
+        {/* TRACKED LINKS (the blueprint, §8): the address to paste into the DM or email — a click lands on this
+            prospect's timeline, the first one as the intent signal, and a target at Outreach becomes a lead */}
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2" data-tracked-links>
+          <span className="text-[12px] font-semibold text-muted-foreground">Tracked links to paste</span>
+          {TRACKED_KINDS.map(k => (
+            <Button key={k} type="button" variant="outline" size="sm" disabled={!destinationFor(p, k)}
+              title={destinationFor(p, k) ? trackedPath(p.id, k) : `Fill in the ${TRACKED_WORDS[k].label.toLowerCase()} link first`}
+              onClick={() => void copyText(trackedLink(window.location.origin, p.id, k)).then(ok => ok
+                ? toast.success(`Tracked ${TRACKED_WORDS[k].label.toLowerCase()} link copied — a click lands on this prospect`)
+                : toast.error(`Could not copy — the link is ${trackedLink(window.location.origin, p.id, k)}`))}
+              className="h-9 rounded-full px-3 text-[12px] font-semibold">
+              <Link2 className="mr-1 h-3.5 w-3.5" aria-hidden /> {TRACKED_WORDS[k].label}
+            </Button>
+          ))}
+        </div>
         {when('outreach_at', 'Outreach sent')}
         <label className="flex flex-col gap-1 text-[12px] font-semibold">Channel
           <Select value={p.outreach_channel ?? 'none'} onValueChange={v => void patch({ outreach_channel: v === 'none' ? null : v })}>
