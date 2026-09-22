@@ -11,10 +11,12 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, ImagePlus, Link2, ListTodo, Maximize2,
-  Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
+  Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2, X,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
+import DriveFilePicker from '../../../../components/canvas/DriveFilePicker'
+import { driveButtonWords, driveFilesWords, withDriveFiles, withoutDriveFile, type CanvasDriveFile } from '../../../../lib/canvas-drive-core'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
@@ -150,6 +152,10 @@ export default function BriefCanvas({
   const [mockupMenu, setMockupMenu] = useState(false)
   /** when set, the next file upload lands INSIDE this mockup frame */
   const mockupTargetRef = useRef<string | null>(null)
+  /** A DRIVE FILE ON A POST (the owner, 22 Sep 2026): the post card the
+   *  picker is open for, or null. Read only — the pick puts the file's id
+   *  and name on the card, and the card draws it through the Drive proxies. */
+  const [drivePick, setDrivePick] = useState<string | null>(null)
   const linkInputRef = useRef<HTMLInputElement>(null)
   /** arrow-drawing mode: the card the next click will connect FROM */
   const [connectFrom, setConnectFrom] = useState<string | null>(null)
@@ -738,6 +744,26 @@ export default function BriefCanvas({
     void resolveLink(card.id, url)
   }
 
+  /** The picked Drive files, onto the post card the picker was opened for.
+   *  A single-media post takes the first and lets go of its upload; a
+   *  carousel appends them as slides. The card may have moved or gone while
+   *  the picker was open, so it is read live. */
+  const attachDriveFiles = (picks: CanvasDriveFile[]) => {
+    const id = drivePick
+    if (!id) return
+    const card = cardsRef.current.find(c => c.id === id)
+    if (!card || card.kind !== 'mockup') return
+    const next = withDriveFiles(card, picks)
+    if (next === card) return
+    upsertLocal(next); persist([next])
+    toast.success(driveFilesWords(next.drive_files) ?? 'Put on the post')
+  }
+  /** The post without its Drive file(s). The file is still in Drive — it never left. */
+  const removeDriveFiles = (card: CanvasCard) => {
+    const next = withoutDriveFile(card)
+    upsertLocal(next); persist([next])
+  }
+
   /** Go into a board (or back out to the shoot's own board with null). */
   const openBoard = (id: string | null) => {
     setBoard(id)
@@ -1149,6 +1175,18 @@ export default function BriefCanvas({
                 ? (card.url ? 'Add slides' : 'Add images')
                 : (card.url ? 'Swap image' : 'Add image')}
             </Button>
+            {/* A DRIVE FILE ON THE POST (the owner, 22 Sep 2026): the file stays
+                in Drive and the card shows it from there — read only, trap 13 */}
+            <Button size="sm" variant="ghost" className={tb} title={driveFilesWords(card.drive_files) ?? 'Pick a picture or a clip from Google Drive'}
+              onClick={() => setDrivePick(card.id)}>
+              <HardDrive className="h-3.5 w-3.5" /> {driveButtonWords(card)}
+            </Button>
+            {!!card.drive_files?.length && (
+              <Button size="sm" variant="ghost" className={tb} onClick={() => removeDriveFiles(card)}
+                title="Take the Drive file off the post — the file itself stays in Drive">
+                <X className="h-3.5 w-3.5" /> {card.drive_files.length > 1 ? 'Remove Drive files' : 'Remove Drive file'}
+              </Button>
+            )}
             {/* the real post, in this frame: paste its link */}
             <input
               key={card.id}
@@ -1721,6 +1759,15 @@ export default function BriefCanvas({
           clickable so the toolbar Image + mockup "Add image" both work */}
       <input ref={fileRef} type="file" multiple accept="image/*" className="sr-only"
         onChange={e => e.target.files?.length && void addImages(e.target.files)} />
+
+      {/* a Drive picture or clip for a post card (22 Sep 2026) — the Files
+          page's window, read only; a carousel ticks several */}
+      <DriveFilePicker
+        open={!viewOnly && drivePick !== null}
+        multiple={cards.find(c => c.id === drivePick)?.platform === 'ig_carousel'}
+        onClose={() => setDrivePick(null)}
+        onPick={attachDriveFiles}
+      />
 
       {/* a new board, or a tile's new name / icon / colour — the boards page's
           own dialog: a name, the icon set, the palette's swatches, no picker */}
