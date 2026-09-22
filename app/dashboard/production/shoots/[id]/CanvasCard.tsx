@@ -2,9 +2,10 @@
 
 import React from 'react'
 import {
-  Bookmark, Forward, Globe, Heart, ImagePlus, MessageCircle, MoreHorizontal,
+  Bookmark, Forward, Globe, HardDrive, Heart, ImagePlus, MessageCircle, MoreHorizontal,
   Music2, Play, Send, ThumbsUp, Volume2, VolumeX,
 } from 'lucide-react'
+import { postMediaOf, type PostMedia } from '../../../../lib/canvas-drive-core'
 import { Link2 } from 'lucide-react'
 import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
@@ -170,6 +171,60 @@ function PlayBadge({ onPlay, label }: { onPlay?: () => void; label: string }) {
         <Play className="h-4 w-4 translate-x-[1px] fill-white text-white" />
       </span>
     </button>
+  )
+}
+
+/**
+ * A POST'S OWN MEDIA, FROM DRIVE OR AN UPLOAD (the owner, 22 Sep 2026: "add
+ * the Drive file and it will read [it and] put it on the post I chose") —
+ * the whole frame of a single-media post, or one slide of a carousel. A
+ * picture is drawn; a clip shows Drive's still (or black, when Drive has
+ * none) behind a play badge, and plays with controls once asked, through
+ * the same stream proxy the clip review page uses. A Drive file wears its
+ * name in the corner, so the card says which file it is. Nothing autoplays:
+ * a Drive clip is the original, often a large one, and it is fetched only
+ * on the press.
+ */
+function PostMediaFrame({ media, playing, onPlay }: { media: PostMedia; playing?: boolean; onPlay?: () => void }) {
+  // The Drive proxies answer a signed-in team member. On the client's link
+  // (a portal token) they would refuse, so a Drive file there is named, not
+  // drawn — the card says what it is rather than showing a broken player.
+  const portal = usePortalToken()
+  const driveOnPortal = media.from === 'drive' && !!portal
+  const [noPicture, setNoPicture] = React.useState(false)
+  const [noVideo, setNoVideo] = React.useState(false)
+  const showVideo = !!media.video && !!playing && !noVideo && !driveOnPortal
+  const pictureShown = !!media.picture && !noPicture && !driveOnPortal && !showVideo
+  // a Drive file with no picture to show (Drive has no still of the clip, the
+  // proxy refused, or the clip would not play): its name and what it is
+  const named = media.from === 'drive' && !showVideo && !pictureShown
+  return (
+    <div className="relative h-full w-full bg-black" data-post-media={media.from}>
+      {pictureShown && (
+        // eslint-disable-next-line @next/next/no-img-element -- our own upload, or Drive through our proxy
+        <img src={media.picture ?? undefined} alt={media.name ?? 'post media'} loading="lazy" decoding="async" draggable={false}
+          onError={() => setNoPicture(true)} className="h-full w-full select-none object-cover" />
+      )}
+      {showVideo && (
+        <video src={media.video ?? undefined} controls autoPlay playsInline preload="metadata" onError={() => setNoVideo(true)}
+          onPointerDown={e => e.stopPropagation()} className="h-full w-full select-none bg-black object-contain" />
+      )}
+      {named && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-3 text-center text-white/80">
+          <HardDrive className="h-5 w-5" aria-hidden />
+          <span className="line-clamp-2 break-all text-[11px] font-semibold leading-snug">{media.name}</span>
+          <span className="text-[9px] text-white/60">
+            {noVideo ? 'Could not play it here — open it in Drive' : driveOnPortal ? 'A file in the team’s Google Drive' : media.video ? 'A clip in Google Drive' : 'A picture in Google Drive'}
+          </span>
+        </div>
+      )}
+      {media.video && !playing && !noVideo && !driveOnPortal && <PlayBadge onPlay={onPlay} label={media.name ?? 'clip'} />}
+      {media.from === 'drive' && media.name && pictureShown && (
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex max-w-[calc(100%-12px)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[9px] text-white backdrop-blur-sm" title={media.name}>
+          <HardDrive className="h-2.5 w-2.5 shrink-0" aria-hidden /><span className="truncate">{media.name}</span>
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -629,7 +684,12 @@ function CanvasCardInner({
     // Instagram's own frame behind one tap
     const igFrame = playing && autoKind === 'instagram' && post ? instagramEmbedUrlFor(post.url ?? '') : null
     const film = src ? playableFileFor(src) : null
-    const img = post ? (
+    // a Drive file on a single-media post is what the frame shows, before a
+    // pasted post's picture and before an upload (22 Sep 2026)
+    const driveOne = platform !== 'ig_carousel' ? postMediaOf(card).find(m => m.from === 'drive') ?? null : null
+    const img = driveOne ? (
+      <PostMediaFrame key={driveOne.key} media={driveOne} playing={playing} onPlay={onPlay} />
+    ) : post ? (
       <div ref={frameRef} className="absolute inset-0 bg-black">
         {post.thumb && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -672,7 +732,7 @@ function CanvasCardInner({
     ) : (
       <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
         <ImagePlus className="h-5 w-5" />
-        <span className="text-[12px]">Select, then add the image or paste a link</span>
+        <span className="text-[12px]">Select, then add an image, a Drive file, or paste a link</span>
       </div>
     )
     const caption = (card.text ?? '').trim()
@@ -851,21 +911,20 @@ function CanvasCardInner({
         </div>
         <div className="relative bg-foreground/[0.06]" style={{ aspectRatio: '1 / 1' }}>
           {platform === 'ig_carousel' && !post ? (() => {
-            const slides = card.urls?.length ? card.urls : card.url ? [card.url] : []
+            // the uploaded slides, then the Drive files, each a slide (22 Sep 2026)
+            const slides = postMediaOf(card)
             const count = Math.max(1, slides.length)
             const idx = Math.min(slide, count - 1)
-            const src = slides[idx]
+            const cur = slides[idx]
             const step = (d: number) => setSlide((idx + d + count) % count)
             return (
               <>
-                {src ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={src} alt={`slide ${idx + 1}`} loading="lazy" decoding="async" draggable={false}
-                    className="h-full w-full select-none object-cover" />
+                {cur ? (
+                  <PostMediaFrame key={cur.key} media={cur} playing={playing} onPlay={onPlay} />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
                     <ImagePlus className="h-5 w-5" />
-                    <span className="text-[12px]">Select, then add the images</span>
+                    <span className="text-[12px]">Select, then add the images or Drive files</span>
                   </div>
                 )}
                 {slides.length > 1 && (

@@ -15,6 +15,7 @@ import { planLines, type PlanLine } from './deliverable-group-core'
 import { colourOf, iconOf } from './board-canvas-core'
 import { pruneOrphans } from './shoot-board-core'
 import { providerFor, youtubeId } from './link-preview-core'
+import { sanitiseDriveFiles, type CanvasDriveFile } from './canvas-drive-core'
 
 export const BATCH_STATUSES = ['brief', 'locked', 'shot', 'wrapped'] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
@@ -291,6 +292,12 @@ export type CanvasCard = {
   platform?: (typeof MOCKUP_PLATFORMS)[number]
   /** carousel mockup — every slide, in order (url stays = slide 1) */
   urls?: string[]
+  /** mockup — GOOGLE DRIVE FILES ON THE POST (the owner, 22 Sep 2026: "add
+   *  the Drive file and it will read [it and] put it on the post I chose").
+   *  The file stays in Drive; the card keeps its id, name and kind and
+   *  draws it through the read proxies. One on a single-media post, up to
+   *  ten slides on a carousel. Rules in canvas-drive-core.ts. */
+  drive_files?: CanvasDriveFile[]
   /** todo card — its checklist rows */
   items?: { id: string; text: string; done: boolean }[]
   /** link card — what the link actually is, so the card can SHOW it rather
@@ -530,6 +537,10 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
           })()
         : {}),
       ...(r.name ? { name: String(r.name).slice(0, 200) } : {}),
+      // a post's Drive files: ids the proxies accept, pictures and clips only
+      ...(kind === 'mockup'
+        ? (() => { const files = sanitiseDriveFiles(r.drive_files); return files.length ? { drive_files: files } : {} })()
+        : {}),
       ...(kind === 'board'
         ? {
             name: String(r.name ?? '').trim().slice(0, 80) || 'Board',
