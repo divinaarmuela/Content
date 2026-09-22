@@ -1,5 +1,6 @@
 import 'server-only'
 import { ALL_DRIVES, FILES, accessToken } from './gdrive'
+import { resourceKeyHeader } from './files-core'
 import { videoMimeOf } from './video-review-core'
 
 /**
@@ -39,7 +40,7 @@ const PUBLIC_DOWNLOAD = 'https://drive.usercontent.google.com/download'
  * the wrong bytes and never the whole file in memory. An answer can be
  * abandoned with `signal`.
  */
-export async function openDriveFile(id: string, range: string | null, signal?: AbortSignal): Promise<Response | null> {
+export async function openDriveFile(id: string, range: string | null, signal?: AbortSignal, key?: string | null): Promise<Response | null> {
   const rangeHeader: Record<string, string> = range ? { Range: range } : {}
   const usable = (res: Response) => res.ok && !!res.body && (!range || res.status === 206)
 
@@ -47,7 +48,7 @@ export async function openDriveFile(id: string, range: string | null, signal?: A
   const auth = await accessToken()
   if (auth.ok) {
     const url = `${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({ alt: 'media', ...ALL_DRIVES })
-    const own = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}`, ...rangeHeader }, signal }).catch(() => null)
+    const own = await fetch(url, { headers: { Authorization: `Bearer ${auth.token}`, ...resourceKeyHeader(id, key), ...rangeHeader }, signal }).catch(() => null)
     if (own && usable(own)) return own
     if (own) void own.body?.cancel().catch(() => undefined)
   }
@@ -135,8 +136,8 @@ export async function driveFileSize(id: string): Promise<number | null> {
   } finally { clearTimeout(timer) }
 }
 
-export async function streamDriveFile(id: string, range: string | null, name: string | null): Promise<Response> {
-  const upstream = await openDriveFile(id, range)
+export async function streamDriveFile(id: string, range: string | null, name: string | null, key?: string | null): Promise<Response> {
+  const upstream = await openDriveFile(id, range, undefined, key)
   if (!upstream) return new Response('That file could not be played', { status: 404 })
 
   const headers = new Headers({ 'Cache-Control': 'private, no-store', 'Accept-Ranges': 'bytes' })

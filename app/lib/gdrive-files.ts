@@ -10,8 +10,7 @@ import {
   FOLDER_MIME as FILES_FOLDER_MIME, PAGE_SIZE, SEARCH_FOLDER_CAP, SEARCH_MATCH_CAP,
   SEARCH_MS, SEARCH_PARENT_BATCH, driveOrderBy, driveQuery, isDriveId,
   isGoogleContentUrl, isGoogleUploadUri, searchBatchQuery,
-  type DriveEntry, type QueryOptions, type Sort,
-} from './files-core'
+  type DriveEntry, type QueryOptions, type Sort, resourceKeyHeader } from './files-core'
 
 /**
  * Files in Drive — uploading, copying, moving, and who may see them.
@@ -406,7 +405,7 @@ export async function revokePermission(
  *  not in bytes: a 100-file page fetched with `*` is a few hundred KB of JSON
  *  crossing the wire on every folder click. This list is what the page draws. */
 const ENTRY_FIELDS =
-  'id,name,mimeType,size,modifiedTime,webViewLink,hasThumbnail,owners(displayName,emailAddress)'
+  'id,name,mimeType,size,modifiedTime,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'
 
 type RawEntry = {
   id?: string
@@ -416,6 +415,7 @@ type RawEntry = {
   modifiedTime?: string
   webViewLink?: string
   hasThumbnail?: boolean
+  resourceKey?: string
   owners?: { displayName?: string; emailAddress?: string }[]
 }
 
@@ -432,6 +432,7 @@ function toEntry(raw: RawEntry): DriveEntry | null {
     ownerEmail: owner?.emailAddress ?? null,
     hasThumbnail: Boolean(raw.hasThumbnail),
     webViewLink: raw.webViewLink ?? null,
+    resourceKey: raw.resourceKey ?? null,
   }
 }
 
@@ -473,14 +474,14 @@ export async function listEntries(
 export type EntryDetail = DriveEntry & { parents: string[] }
 
 /** One file or folder, with its parents — the info panel and the breadcrumb. */
-export async function entryDetail(id: string): Promise<DriveResult<{ entry: EntryDetail }>> {
+export async function entryDetail(id: string, key?: string | null): Promise<DriveResult<{ entry: EntryDetail }>> {
   if (!isDriveId(id)) return asError('That file could not be found')
   const auth = await accessToken()
   if (!auth.ok) return auth
   const url = `${FILES}/${encodeURIComponent(id)}?` + new URLSearchParams({
     fields: `${ENTRY_FIELDS},parents,trashed`, ...ALL_DRIVES,
   })
-  const res = await driveFetch<RawEntry & { parents?: string[]; trashed?: boolean }>(auth.token, url)
+  const res = await driveFetch<RawEntry & { parents?: string[]; trashed?: boolean }>(auth.token, url, { headers: resourceKeyHeader(id, key) })
   if (!res.ok) return res
   if (res.data.trashed) return asError('That file is in the Google Drive bin')
   const entry = toEntry(res.data)
@@ -758,14 +759,14 @@ export async function shareableLink(id: string): Promise<DriveResult<{ url: stri
  * pixels back.
  */
 export async function openThumbnail(
-  id: string, size = 400,
+  id: string, size = 400, key?: string | null,
 ): Promise<DriveResult<{ body: ReadableStream<Uint8Array>; contentType: string }>> {
   if (!isDriveId(id)) return asError('That file could not be found')
   const auth = await accessToken()
   if (!auth.ok) return auth
   const url = `${FILES}/${encodeURIComponent(id)}?` +
     new URLSearchParams({ fields: 'thumbnailLink,hasThumbnail', ...ALL_DRIVES })
-  const meta = await driveFetch<{ thumbnailLink?: string; hasThumbnail?: boolean }>(auth.token, url)
+  const meta = await driveFetch<{ thumbnailLink?: string; hasThumbnail?: boolean }>(auth.token, url, { headers: resourceKeyHeader(id, key) })
   if (!meta.ok) return meta
   const link = meta.data.thumbnailLink
   if (!link) return asError('There is no preview for that file')
@@ -784,11 +785,11 @@ export async function openThumbnail(
   }
 }
 
-export async function openDownload(id: string): Promise<DriveResult<{
+export async function openDownload(id: string, key?: string | null): Promise<DriveResult<{
   body: ReadableStream<Uint8Array>; contentType: string; name: string; size: string | null
 }>> {
   if (!isDriveId(id)) return asError('That file could not be found')
-  const detail = await entryDetail(id)
+  const detail = await entryDetail(id, key)
   if (!detail.ok) return detail
   if (detail.entry.mimeType === FILES_FOLDER_MIME) {
     return asError('A folder cannot be downloaded — open it in Google Drive instead')

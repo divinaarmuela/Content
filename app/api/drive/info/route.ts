@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { authzErrorResponse } from '../../../lib/authz'
 import { entryDetail } from '../../../lib/gdrive-files'
 import { mirrorFactsFor, requireFilesAccess } from '../../../lib/drive-page'
-import { isDriveId } from '../../../lib/files-core'
+import { isDriveId, isResourceKey } from '../../../lib/files-core'
 import { previewFor } from '../../../lib/stream'
 import { streamThumbnailUrl } from '../../../lib/stream-core'
 import { table } from '@/lib/db'
@@ -27,7 +27,8 @@ export async function GET(req: Request) {
     if (!isDriveId(id)) {
       return NextResponse.json({ error: 'That file could not be found' }, { status: 400 })
     }
-    const detail = await entryDetail(id)
+    const key = new URL(req.url).searchParams.get('key')
+    const detail = await entryDetail(id, isResourceKey(key) ? key : null)
     if (!detail.ok) return NextResponse.json({ error: detail.message }, { status: 502 })
 
     const facts = (await mirrorFactsFor([id])).get(id) ?? null

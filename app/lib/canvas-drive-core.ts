@@ -32,6 +32,8 @@ export type CanvasDriveFile = {
   kind: 'image' | 'video'
   /** Drive's mime, when known — a `<video>` is told what it is playing */
   mime?: string
+  /** Google's resource key (files-core DriveEntry.resourceKey): a link-shared file is fetched by id only with it */
+  key?: string
 }
 
 /** a carousel's slides are ten at most, the same cap as its uploaded slides */
@@ -61,7 +63,8 @@ export function sanitiseDriveFiles(raw: unknown): CanvasDriveFile[] {
     if (!name) continue
     seen.add(id)
     const mime = typeof r.mime === 'string' ? r.mime.trim().slice(0, MIME_MAX) : ''
-    out.push({ id, name, kind, ...(mime ? { mime } : {}) })
+    const key = typeof r.key === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(r.key) ? r.key : ''
+    out.push({ id, name, kind, ...(mime ? { mime } : {}), ...(key ? { key } : {}) })
     if (out.length >= CANVAS_DRIVE_FILES_MAX) break
   }
   return out
@@ -70,14 +73,15 @@ export function sanitiseDriveFiles(raw: unknown): CanvasDriveFile[] {
 /** A listing row as the card would keep it — null for anything that is not
  *  a picture or a clip (a folder is walked into, not picked; a PDF has no
  *  place in a post frame). */
-export function driveFileFromEntry(e: Pick<DriveEntry, 'id' | 'name' | 'mimeType'>): CanvasDriveFile | null {
+export function driveFileFromEntry(e: Pick<DriveEntry, 'id' | 'name' | 'mimeType'> & { resourceKey?: string | null }): CanvasDriveFile | null {
   if (!isDriveId(e.id)) return null
   const kind = kindOf(e.mimeType, e.name)
   if (kind !== 'image' && kind !== 'video') return null
   const name = String(e.name ?? '').trim().slice(0, NAME_MAX)
   if (!name) return null
   const mime = String(e.mimeType ?? '').trim().slice(0, MIME_MAX)
-  return { id: e.id, name, kind, ...(mime ? { mime } : {}) }
+  const key = typeof e.resourceKey === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(e.resourceKey) ? e.resourceKey : ''
+  return { id: e.id, name, kind, ...(mime ? { mime } : {}), ...(key ? { key } : {}) }
 }
 
 /** What the picker shows of a folder: its subfolders (to walk into) and its
@@ -92,15 +96,15 @@ export function isPickableEntry(e: Pick<DriveEntry, 'id' | 'name' | 'mimeType'>)
  *  the page). 800px: a post frame is 280px wide, so this is sharp on a
  *  retina screen without asking Drive for a poster-sized render. */
 export const DRIVE_PICTURE_SIZE = 800
-export function driveThumbnailUrl(id: string, size: number = DRIVE_PICTURE_SIZE): string {
-  return `/api/drive/thumbnail?id=${encodeURIComponent(id)}&size=${size}`
+export function driveThumbnailUrl(id: string, size: number = DRIVE_PICTURE_SIZE, key?: string | null): string {
+  return `/api/drive/thumbnail?id=${encodeURIComponent(id)}&size=${size}${key ? `&key=${encodeURIComponent(key)}` : ''}`
 }
 
 /** The clip's bytes, through our proxy — the same address the clip review
  *  page plays, with the name so a `application/octet-stream` answer from a
  *  link-shared file is still known to be an .mp4. */
-export function driveStreamUrl(file: Pick<CanvasDriveFile, 'id' | 'name'>): string {
-  return `/api/drive/stream?id=${encodeURIComponent(file.id)}&name=${encodeURIComponent(file.name)}`
+export function driveStreamUrl(file: Pick<CanvasDriveFile, 'id' | 'name' | 'key'>): string {
+  return `/api/drive/stream?id=${encodeURIComponent(file.id)}&name=${encodeURIComponent(file.name)}${file.key ? `&key=${encodeURIComponent(file.key)}` : ''}`
 }
 
 /** One thing a post frame draws: a picture, and for a clip the address
@@ -132,7 +136,7 @@ type PostCardLike = {
 export function postMediaOf(card: PostCardLike): PostMedia[] {
   const drive = (card.drive_files ?? []).map(f => ({
     key: `drive:${f.id}`,
-    picture: driveThumbnailUrl(f.id),
+    picture: driveThumbnailUrl(f.id, undefined, f.key),
     video: f.kind === 'video' ? driveStreamUrl(f) : null,
     name: f.name,
     from: 'drive' as const,
@@ -206,6 +210,10 @@ export function driveButtonWords(card: PostCardLike): string {
 export function driveFileIdFromLink(url: string | null | undefined): string | null {
   const id = driveFileIdFromUrl(url)
   return id && isDriveId(id) ? id : null
+}
+/** the `resourcekey=` a Drive link carries for a link-shared file, when it does */
+export function driveResourceKeyFromLink(url: string | null | undefined): string | null {
+  try { const k = new URL(String(url ?? '')).searchParams.get('resourcekey'); return k && /^[A-Za-z0-9_-]{1,128}$/.test(k) ? k : null } catch { return null }
 }
 export function driveFolderIdFromLink(url: string | null | undefined): string | null {
   const id = driveFolderIdFromUrl(url)

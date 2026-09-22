@@ -1,6 +1,6 @@
 import { authzErrorResponse } from '../../../lib/authz'
 import { requireFilesAccess } from '../../../lib/drive-page'
-import { isDriveId } from '../../../lib/files-core'
+import { isDriveId, isResourceKey } from '../../../lib/files-core'
 import { streamDriveFile } from '../../../lib/drive-stream'
 
 /**
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     const id = search.get('id') ?? ''
     if (!isDriveId(id)) return new Response('Not found', { status: 404 })
     const range = req.headers.get('range')
-    return await streamDriveFile(id, range, search.get('name'))
+    return await streamDriveFile(id, range, search.get('name'), isResourceKey(search.get('key')) ? search.get('key') : null)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return new Response(error, { status })

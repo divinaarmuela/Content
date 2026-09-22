@@ -1,7 +1,7 @@
 import { authzErrorResponse } from '../../../lib/authz'
 import { openThumbnail } from '../../../lib/gdrive-files'
 import { requireFilesAccess } from '../../../lib/drive-page'
-import { isDriveId } from '../../../lib/files-core'
+import { isDriveId, isResourceKey } from '../../../lib/files-core'
 
 /**
  * A file's picture, fetched with our credentials and passed on as pixels.
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
     if (!isDriveId(id)) return new Response('Not found', { status: 404 })
     const size = Number(url.searchParams.get('size') ?? '400')
 
-    const result = await openThumbnail(id, Number.isFinite(size) ? size : 400)
+    const key = url.searchParams.get('key')
+    const result = await openThumbnail(id, Number.isFinite(size) ? size : 400, isResourceKey(key) ? key : null)
     if (!result.ok) return new Response('No preview', { status: 404 })
 
     return new Response(result.body as unknown as BodyInit, {

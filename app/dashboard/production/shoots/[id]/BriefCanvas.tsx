@@ -17,7 +17,7 @@ import {
 import { uploadMedia } from '../../../uploadMedia'
 import DriveFilePicker from '../../../../components/canvas/DriveFilePicker'
 import {
-  driveButtonWords, driveFileFromEntry, driveFileIdFromLink, driveFilesWords, driveFolderIdFromLink, withDriveFiles, withoutDriveFile,
+  driveButtonWords, driveFileFromEntry, driveFileIdFromLink, driveFilesWords, driveFolderIdFromLink, driveResourceKeyFromLink, withDriveFiles, withoutDriveFile,
   type CanvasDriveFile,
 } from '../../../../lib/canvas-drive-core'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
@@ -746,10 +746,11 @@ export default function BriefCanvas({
     const id = driveFileIdFromLink(url)
     if (!id) return
     try {
-      const res = await fetch(`/api/drive/info?id=${encodeURIComponent(id)}`, { cache: 'no-store' })
+      const key = driveResourceKeyFromLink(url)
+      const res = await fetch(`/api/drive/info?id=${encodeURIComponent(id)}${key ? `&key=${encodeURIComponent(key)}` : ''}`, { cache: 'no-store' })
       const json = await res.json().catch(() => ({})) as { entry?: { id: string; name: string; mimeType: string }; error?: string }
       if (!res.ok || !json.entry) { toast.error(json.error ?? 'Could not read that Drive file — is it shared with the agency’s Drive account?'); return }
-      const file = driveFileFromEntry(json.entry)
+      const file = driveFileFromEntry({ ...json.entry, resourceKey: (json.entry as { resourceKey?: string | null }).resourceKey ?? key })
       if (!file) { toast.error('That Drive file is not a picture or a clip, so it cannot go on a post'); return }
       const live = cardsRef.current.find(c => c.id === card.id) ?? card
       const { link_url: _l, preview: _p, ...rest } = live

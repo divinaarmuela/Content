@@ -161,7 +161,7 @@ describe('a Drive link pasted into the post’s link box (22 Sep 2026)', () => {
     const canvas = src('app/dashboard/production/shoots/[id]/BriefCanvas.tsx')
     expect(canvas).toContain("if (driveFileIdFromLink(url)) { void attachDriveLinkToMockup(card, url); return }")
     expect(canvas).toContain("if (driveFolderIdFromLink(url)) { toast('That is a Drive folder — pick the file from it'); setDrivePick(card.id); return }")
-    expect(canvas).toContain('fetch(`/api/drive/info?id=${encodeURIComponent(id)}`, { cache: \'no-store\' })')
+    expect(canvas).toContain('fetch(`/api/drive/info?id=${encodeURIComponent(id)}${key ? `&key=${encodeURIComponent(key)}` : \'\'}`, { cache: \'no-store\' })')
     expect(canvas).toContain('const next = withDriveFiles(rest as CanvasCard, [file])')
     expect(canvas).toContain('placeholder="Paste the post\'s link, or a Drive file\'s…"')
   })

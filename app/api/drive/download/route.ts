@@ -1,7 +1,7 @@
 import { authzErrorResponse } from '../../../lib/authz'
 import { openDownload } from '../../../lib/gdrive-files'
 import { requireFilesAccess } from '../../../lib/drive-page'
-import { isDriveId } from '../../../lib/files-core'
+import { isDriveId, isResourceKey } from '../../../lib/files-core'
 
 /**
  * Download a file through the app rather than through Google.
@@ -27,7 +27,8 @@ export async function GET(req: Request) {
     const id = new URL(req.url).searchParams.get('id') ?? ''
     if (!isDriveId(id)) return new Response('Not found', { status: 404 })
 
-    const result = await openDownload(id)
+    const key = new URL(req.url).searchParams.get('key')
+    const result = await openDownload(id, isResourceKey(key) ? key : null)
     if (!result.ok) return new Response(result.message, { status: 404 })
 
     return new Response(result.body as unknown as BodyInit, {

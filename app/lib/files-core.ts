@@ -162,6 +162,18 @@ export type DriveEntry = {
   ownerEmail: string | null
   hasThumbnail: boolean
   webViewLink: string | null
+  /** GOOGLE'S RESOURCE KEY (22 Sep 2026): a file in a folder shared by link can be LISTED by our account but
+   *  not fetched by its id alone — Google answers 404 until the key from the listing is sent with the id.
+   *  Seen live on The Glass Den's folder: the listing showed all 12 clips, every by-id call 404'd. */
+  resourceKey?: string | null
+}
+
+/** the header Google wants with a by-id call on a link-shared file: `<id>/<key>` */
+export function resourceKeyHeader(id: string, key?: string | null): Record<string, string> {
+  return key && isResourceKey(key) ? { 'X-Goog-Drive-Resource-Keys': `${id}/${key}` } : {}
+}
+export function isResourceKey(key: unknown): key is string {
+  return typeof key === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(key)
 }
 
 export function isFolder(entry: { mimeType: string }): boolean {

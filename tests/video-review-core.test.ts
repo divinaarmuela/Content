@@ -72,7 +72,7 @@ describe('the page, the stream and the tiles (source pins)', () => {
     expect(r).not.toMatch(/export async function (POST|PATCH|PUT|DELETE)\(/)
     expect(r).toContain('await requireFilesAccess()')
     expect(r).toContain("const range = req.headers.get('range')")
-    expect(r).toContain("return await streamDriveFile(id, range, search.get('name'))")
+    expect(r).toContain("return await streamDriveFile(id, range, search.get('name'), isResourceKey(search.get('key')) ? search.get('key') : null)")
     const s = src('app/lib/drive-stream.ts')
     expect(s).toContain("const rangeHeader: Record<string, string> = range ? { Range: range } : {}")
     expect(s).toContain("headers.set(h, v)")

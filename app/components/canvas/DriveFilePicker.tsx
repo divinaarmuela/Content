@@ -188,7 +188,7 @@ export default function DriveFilePicker({ open, multiple = false, onClose, onPic
                                 <span className="relative block aspect-square w-full bg-foreground/[0.06]">
                                   {f.hasThumbnail
                                     // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
-                                    ? <img src={driveThumbnailUrl(f.id, 400)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                                    ? <img src={driveThumbnailUrl(f.id, 400, f.resourceKey)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                                     : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-7 w-7" strokeWidth={1.5} aria-hidden /></span>}
                                   <span className="absolute bottom-1.5 left-1.5 rounded-full bg-ink/70 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cream">{extensionBadge(f.name, kind)}</span>
                                   {on && (
