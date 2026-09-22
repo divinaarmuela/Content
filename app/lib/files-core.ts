@@ -162,9 +162,10 @@ export type DriveEntry = {
   ownerEmail: string | null
   hasThumbnail: boolean
   webViewLink: string | null
-  /** GOOGLE'S RESOURCE KEY (22 Sep 2026): a file in a folder shared by link can be LISTED by our account but
-   *  not fetched by its id alone — Google answers 404 until the key from the listing is sent with the id.
-   *  Seen live on The Glass Den's folder: the listing showed all 12 clips, every by-id call 404'd. */
+  /** GOOGLE'S RESOURCE KEY: an old link-shared file needs it sent with every by-id call. Asked for on the
+   *  listing and passed on. (22 Sep 2026: it was NOT what broke The Glass Den's clips — that listing came from
+   *  the public folder view and carried no key; those files are described as anyone with the link instead,
+   *  see drive-public-file-core.ts.) */
   resourceKey?: string | null
 }
 
