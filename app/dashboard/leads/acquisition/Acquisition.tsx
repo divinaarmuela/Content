@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Plus, Inbox } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,7 @@ import {
 } from '../../../lib/acquisition-core'
 import ProspectSheet from './ProspectSheet'
 import QueueView from './QueueView'
+import InboundSheet from './InboundSheet'
 import { mayViewEveryone, queueFor } from '../../../lib/acq-queue-core'
 
 /**
@@ -72,6 +73,7 @@ export default function Acquisition({ view }: { view: AcqView }) {
   const { rows: team } = useTable<TeamUser>('team_users')
   const { rows: todoRows } = useTable<Todo>('todos')
   const [everyone, setEveryone] = useState(false)
+  const [inbound, setInbound] = useState(false)
   const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) : null }
   const now = Date.now()
 
@@ -194,7 +196,11 @@ export default function Acquisition({ view }: { view: AcqView }) {
   return (
     <div className="flex flex-col gap-4" data-acquisition={view}>
       <PageTitle title={VIEWS.find(v => v.key === view)!.label} summary={SUMMARY[view]}
-        actions={<Button onClick={() => setAdding(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90"><Plus className="mr-1.5 h-4 w-4" aria-hidden /> Add a target</Button>} />
+        actions={<div className="flex flex-wrap items-center gap-2">
+          {/* FROM AN INBOUND LEAD (22 Sep 2026): an enquiry is already a lead — bring it in at New lead / Engaged */}
+          <Button variant="outline" onClick={() => setInbound(true)} className="h-11 rounded-full px-4 text-[13px] font-semibold"><Inbox className="mr-1.5 h-4 w-4" aria-hidden /> From an inbound lead</Button>
+          <Button onClick={() => setAdding(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90"><Plus className="mr-1.5 h-4 w-4" aria-hidden /> Add a target</Button>
+        </div>} />
 
       {/* a person whose own work inbox is not read is told so, with the one press that fixes it */}
       {inbox && inbox.mine.work_address && !inbox.mine.connected && (
@@ -299,6 +305,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
         </SheetContent>
       </Sheet>
 
+      <InboundSheet open={inbound} busy={busy} onClose={() => setInbound(false)}
+        onBring={leadId => call('/api/leads/acquisition/from-lead', 'POST', { lead_id: leadId }, 'Brought in — it is a lead now, in New lead / Engaged')} />
       <NewTarget open={adding} busy={busy} onClose={() => setAdding(false)}
         onCreate={async body => { if (await call('/api/leads/acquisition', 'POST', body, 'Target added')) { setAdding(false); return true } return false }} />
 

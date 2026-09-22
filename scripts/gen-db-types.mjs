@@ -177,6 +177,9 @@ const GHOST_TABLES = {
   prospects: [
     ['id', col('string', false)],
     ['business', col('string', false)],
+    // FROM AN INBOUND LEAD (22 Sep 2026): the `leads` row this prospect was brought in from, so a lead
+    //   enters the system once (acq-inbound-core.ts). Null for a researched target.
+    ['lead_id', col('string', true)],
     ['tier', col('number', true)],
     ['industry', col('string', true)],
     ['website', col('string', true)],
