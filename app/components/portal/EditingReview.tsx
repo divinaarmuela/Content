@@ -46,7 +46,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   const newest = clips[current] ?? null
   // THE OLD VERSION, WITH ITS COMMENTS, BESIDE THE NEW ONE: a replaced piece has tabs; the comments shown are the
   // ones written on the version being looked at, at the moments they were written about
-  const line = useMemo(() => (newest ? assetLine(data.clips, newest).filter(c => c.version <= round) : []), [data.clips, newest, round])
+  const line = useMemo(() => (newest ? assetLine(data.clips, newest) : []), [data.clips, newest])
   const [olderId, setOlderId] = useState<string | null>(null)
   useEffect(() => { setOlderId(null) }, [current, round])
   const clip = (olderId ? line.find(c => c.id === olderId) : null) ?? newest
@@ -126,11 +126,11 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       {/* ── the clip ── */}
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
         {data.rounds.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions of the whole set">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">The whole set</span>
+          <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of the whole set">
+            <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">The whole set</span>
             {data.rounds.map(r => (
               <button key={r} type="button" role="tab" aria-selected={r === round} onClick={() => setRound(r)}
-                className={`inline-flex min-h-9 items-center rounded-full border px-4 text-[13px] font-semibold ${r === round ? 'border-foreground bg-foreground text-background' : 'border-border text-foreground hover:border-foreground/50'}`}>
+                className={`inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-[13px] font-semibold ${r === round ? 'border-foreground bg-foreground text-background' : 'border-border text-foreground hover:border-foreground/50'}`}>
                 {r === data.rounds[0] ? `Latest — ${roundLabel(r)}` : `Earlier — ${roundLabel(r)}`}
               </button>
             ))}
@@ -143,16 +143,16 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
           </p>
         )}
         {line.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions of this piece">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This clip</span>
+          <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of this piece">
+            <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This clip</span>
             {line.map(v => (
               <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
-                {v.id === newest?.id ? `New cut — ${roundLabel(v.version)}` : `Before — ${roundLabel(v.version)}`}
+                className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
+                {v === line[0] ? `Newest cut — ${roundLabel(v.version)}` : `Earlier cut — ${roundLabel(v.version)}`}
                 {commentsOnClip(comments as never, v.id).length > 0 && <span className="rounded-full bg-black/15 px-1.5 text-[11px]">{commentsOnClip(comments as never, v.id).length}</span>}
               </button>
             ))}
-            {lookingBack && <span className="text-[12px] text-muted-foreground">The cut before, with what was said on it. It was replaced in {roundLabel(newest!.version)}.</span>}
+            {lookingBack && <span className="shrink-0 text-[12px] text-muted-foreground">An earlier cut, with what was said on it.</span>}
           </div>
         )}
         {clip ? (

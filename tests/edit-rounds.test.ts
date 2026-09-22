@@ -15,7 +15,11 @@ describe('rounds (pure)', () => {
   it('a card starts at round 1; the hand-in after a send-back is the next; the words', () => {
     expect(handInRound({})).toBe(1)
     expect(handInRound({ status: 'draft_uploaded' })).toBe(1)
-    expect(handInRound({ status: 'revision_required' })).toBe(2)
+    // ONE VERSION NUMBER (22 Sep 2026): a round advances only after the client has seen it — the quality
+    // check's send-back keeps the next hand-in in the same version
+    expect(handInRound({ status: 'revision_required' })).toBe(1)
+    expect(handInRound({ status: 'revision_required', edit_round: 1, client_round: 1 })).toBe(2)
+    expect(handInRound({ status: 'revision_required', edit_round: 2, client_rounds: [1, 2] })).toBe(3)
     expect(handInRound({ status: 'client_changes_requested', edit_round: 2 })).toBe(3)
     expect(handInRound({ status: 'quality_check', edit_round: 2 })).toBe(2)
     expect(roundOf(null)).toBe(1)

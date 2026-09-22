@@ -26,10 +26,24 @@ export function nextRound(item: { edit_round?: unknown }): number {
   return roundOf(item) + 1
 }
 
-/** the round a hand-in belongs to: the next one when the card was sent
- *  back, the current one otherwise (a first hand-in is version 1) */
-export function handInRound(item: { edit_round?: unknown; status?: unknown }): number {
-  return SENT_BACK_STATUSES.includes(String(item.status ?? '')) ? nextRound(item) : roundOf(item)
+/** was this round given to the client? the list of rounds given (client_rounds), the last one given
+ *  (client_round, older cards), or the card is back FROM the client */
+export function roundSeenByClient(item: { edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown }, round = roundOf(item)): boolean {
+  if (String(item.status ?? '') === 'client_changes_requested') return true
+  if (Array.isArray(item.client_rounds) && item.client_rounds.includes(round)) return true
+  return Number(item.client_round) === round
+}
+
+/**
+ * THE ROUND A HAND-IN BELONGS TO — ONE NUMBER FOR EVERYBODY (the owner, 22 Sep
+ * 2026: "one unified status so it does not confuse the team"). A version is a
+ * cut the CLIENT was given. The loop between In progress and the quality check
+ * stays inside the same version: sent back by the reviewer before the client
+ * ever saw it, the next hand-in is still Version 1. Only a round the client has
+ * seen opens the next one. A first hand-in is Version 1.
+ */
+export function handInRound(item: { edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown }): number {
+  return SENT_BACK_STATUSES.includes(String(item.status ?? '')) && roundSeenByClient(item) ? nextRound(item) : roundOf(item)
 }
 
 export function roundLabel(n: number): string {

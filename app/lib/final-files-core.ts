@@ -14,7 +14,7 @@
  * version tabs already draw, so no page learns a second kind of file.
  */
 import { finishedEditOf } from './card-link-core'
-import { fileRound, handInRound, roundOf } from './edit-round-core'
+import { fileRound, handInRound, roundOf, SENT_BACK_STATUSES } from './edit-round-core'
 import { kindOf } from './files-core'
 
 export type FinalFile = {
@@ -56,16 +56,17 @@ export function finalFilesForRound(item: { final_files?: unknown }, round: numbe
  * in for the round the card is on — after a send-back, that is the next
  * round, so last round's files do not count as this round's hand-in.
  */
-export function hasFinishedWork(item: { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; edit_round?: unknown; status?: unknown; change_assets?: unknown }): boolean {
+export function hasFinishedWork(item: { link_url?: string | null; link_kind?: string | null; raw_assets_url?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown; edit_round?: unknown; status?: unknown; change_assets?: unknown; change_note_at?: unknown; client_round?: unknown; client_rounds?: unknown }): boolean {
   const round = handInRound(item)
-  const sentBack = round !== roundOf(item)
+  const sentBack = SENT_BACK_STATUSES.includes(String(item.status ?? ''))
   // not sent back: a finished link, or any file handed in, is a finished piece
   if (!sentBack) return finishedEditOf(item) !== null || currentFiles(item).length > 0
   // SENT BACK: the next version is files. Named assets → every one of them replaced. None named (the
   // whole card) → at least one new file for the round.
   const named = changeAssetsOf(item)
   if (named.length > 0 && currentFiles(item).length > 0) return stillToReplace(item).length === 0
-  return finalFilesForRound(item, round).length > 0 || currentFiles(item).some(f => f.retired_round === round)
+  const since = String((item as { change_note_at?: unknown }).change_note_at ?? '')
+  return currentFiles(item).some(f => (since ? f.uploaded_at > since : f.version === round && round > 1) || f.retired_round === round)
 }
 
 /** the id a fresh upload gets — stable, safe in a URL and a key */
@@ -92,7 +93,7 @@ export function finalFilesAsPulls(item: { final_files?: unknown }): { id: string
 }
 
 /** what a PATCH may carry as `final_files`: cleaned, versions kept, new ones stamped with the card's round */
-export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; status?: unknown }, by: string | null, now: string): { ok: true; files: FinalFile[] } | { ok: false; error: string } {
+export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown }, by: string | null, now: string): { ok: true; files: FinalFile[] } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: 'The finished files are a list' }
   if (raw.length > 200) return { ok: false, error: 'That is too many files on one card — 200 at most' }
   const round = handInRound(item)
@@ -166,15 +167,18 @@ export function changeAssetsOf(item: { change_assets?: unknown }): string[] {
 }
 
 /** the named assets still waiting for their new version */
-export function stillToReplace(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }): string[] {
+export function stillToReplace(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown; change_note_at?: unknown; client_round?: unknown; client_rounds?: unknown }): string[] {
   const round = handInRound(item)
+  const since = String(item.change_note_at ?? '')
   const current = new Map(currentFiles(item).map(f => [assetIdOf(f), f]))
-  return changeAssetsOf(item).filter(a => current.has(a) && current.get(a)!.version < round && !isRetiredAt(current.get(a)!, round))
+  // replaced = a newer cut than the one the send-back was about: uploaded after it (or, without a stamp, in a later round)
+  const replaced = (f: FinalFile) => (since ? f.uploaded_at > since : f.version >= round && f.version > 1)
+  return changeAssetsOf(item).filter(a => current.has(a) && !replaced(current.get(a)!) && !isRetiredAt(current.get(a)!, round))
 }
 
 /** may this asset be replaced now: the card was sent back, and this asset was named (or none was) */
 export function mayReplaceAsset(item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown }, assetId: string): boolean {
-  if (handInRound(item) === roundOf(item)) return false
+  if (!SENT_BACK_STATUSES.includes(String(item.status ?? ''))) return false
   const named = changeAssetsOf(item)
   return named.length === 0 || named.includes(assetId)
 }
@@ -188,8 +192,10 @@ export function withReplacement(list: readonly FinalFile[], assetId: string, add
   const line = list.filter(f => assetIdOf(f) === assetId).sort((a, b) => a.version - b.version)
   const latest = line[line.length - 1]
   if (!latest) return [...list]
-  const fresh: FinalFile = { id: finalFileId(), name: added.name, url: added.url, mime: added.mime, size: added.size, version: round, uploaded_at: now, by, asset_id: assetId, replaces: latest.version === round ? latest.replaces ?? null : latest.id }
-  return latest.version === round ? list.map(f => (f.id === latest.id ? fresh : f)) : [...list, fresh]
+  const fresh: FinalFile = { id: finalFileId(), name: added.name, url: added.url, mime: added.mime, size: added.size, version: round, uploaded_at: now, by, asset_id: assetId, replaces: latest.id }
+  // appended, never swapped (22 Sep 2026): a cut replaced inside the same version — the quality check's
+  // loop — stays on the card as the cut before, with the reviewer's words on it; the client never sees it
+  return [...list, fresh]
 }
 
 /** what a send-back may name: asset ids that exist on the card, each once */

@@ -13,14 +13,15 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(v2).toMatchObject({ asset_id: 'c', replaces: 'c', version: 2, name: 'c-fixed.mp4' })
     expect(currentFiles({ final_files: next }).map(x => [assetIdOf(x), x.version])).toEqual([['a', 1], ['b', 1], ['c', 2]])
     expect(assetHistory({ final_files: next }, 'c').map(x => x.version)).toEqual([1, 2])
-    // the wrong export, then the right one, in the same round: swapped, not stacked
+    // the wrong export, then the right one, in the same round: appended, the newer upload is the current one (22 Sep 2026)
     const again = withReplacement(next, 'c', { name: 'c-right.mp4', url: 'https://cdn.x/c2b.mp4', mime: 'video/mp4', size: 13 }, 2, 'u', '2026-09-22T01:00:00Z')
-    expect(again).toHaveLength(4)
-    expect(again[3]).toMatchObject({ asset_id: 'c', replaces: 'c', version: 2, name: 'c-right.mp4' })
+    expect(again).toHaveLength(5)
+    expect(again[4]).toMatchObject({ asset_id: 'c', replaces: v2.id, version: 2, name: 'c-right.mp4' })
+    expect(currentFiles({ final_files: again }).find(x => assetIdOf(x) === 'c')?.name).toBe('c-right.mp4')
   })
 
   it('a sent-back card is handed in when every NAMED asset has its new version — and only then', () => {
-    const back = { final_files: three, change_assets: ['c'], edit_round: 1, status: 'revision_required' }
+    const back = { final_files: three, change_assets: ['c'], edit_round: 1, client_round: 1, change_note_at: '2026-09-21T12:00:00Z', status: 'revision_required' }
     expect(changeAssetsOf(back)).toEqual(['c'])
     expect(stillToReplace(back)).toEqual(['c'])
     expect(hasFinishedWork(back)).toBe(false)
@@ -30,7 +31,7 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(stillToReplace(done)).toEqual([])
     expect(hasFinishedWork(done)).toBe(true)
     // nothing named = the whole card: any asset may be replaced, and one new file is a hand-in
-    const whole = { final_files: three, change_assets: [], edit_round: 1, status: 'revision_required' }
+    const whole = { final_files: three, change_assets: [], edit_round: 1, client_round: 1, change_note_at: '2026-09-21T12:00:00Z', status: 'revision_required' }
     expect(mayReplaceAsset(whole, 'a')).toBe(true)
     expect(hasFinishedWork(whole)).toBe(false)
     // not sent back: nothing is replaced
@@ -68,7 +69,7 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
   })
 
   it('a clip can be dropped from a version on: gone from Version 2, still in Version 1 with its comments, reversible until handed in (22 Sep 2026)', () => {
-    const back = { final_files: three, change_assets: [], edit_round: 1, status: 'revision_required' }
+    const back = { final_files: three, change_assets: [], edit_round: 1, client_round: 1, change_note_at: '2026-09-21T12:00:00Z', status: 'revision_required' }
     const dropped = withRetired(three, 'b', 2)
     expect(dropped.find(x => x.id === 'b')?.retired_round).toBe(2)
     expect(isRetiredAt(dropped[1], 2)).toBe(true)

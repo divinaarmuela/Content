@@ -14,8 +14,9 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
   it('the hand-in is the files for the round the card is on — last round’s files do not count after a send-back', () => {
     const card = { status: 'draft_uploaded', final_files: [a] }
     expect(hasFinishedWork(card)).toBe(true)
-    expect(hasFinishedWork({ status: 'revision_required', edit_round: 1, final_files: [a] })).toBe(false)
-    expect(hasFinishedWork({ status: 'revision_required', edit_round: 1, final_files: [a, { ...a, id: 'f2', url: 'https://files.test/v2.png', version: 2 }] })).toBe(true)
+    // sent back (by the client — the round was theirs): the old files alone are not a new hand-in; a file uploaded after the send-back is
+    expect(hasFinishedWork({ status: 'revision_required', edit_round: 1, client_round: 1, change_note_at: '2026-09-18T00:00:00.000Z', final_files: [a] })).toBe(false)
+    expect(hasFinishedWork({ status: 'revision_required', edit_round: 1, client_round: 1, change_note_at: '2026-09-18T00:00:00.000Z', final_files: [a, { ...a, id: 'f2', url: 'https://files.test/v2.png', version: 2, uploaded_at: '2026-09-19T00:00:00.000Z' }] })).toBe(true)
     expect(hasFinishedWork({ status: 'draft_uploaded', link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true })).toBe(true)
     expect(hasFinishedWork({ status: 'draft_uploaded' })).toBe(false)
     expect(finalFilesForRound({ final_files: [a, { ...a, id: 'f2', version: 2 }] }, 2).map(f => f.id)).toEqual(['f2'])
@@ -28,7 +29,7 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     expect(finalFilesAsPulls({ final_files: [a] })[0]).toMatchObject({ id: 'f1', status: 'done', url: a.url, version: 1 })
   })
   it('a PATCH’s files are cleaned: https only, no doubles, new ones stamped with the card’s round', () => {
-    const r = sanitiseFinalFiles([{ url: 'https://files.test/new.png', name: 'new.png' }, { id: 'f1', url: 'https://files.test/hero.png', name: 'hero.png', version: 1 }, { url: 'https://files.test/hero.png' }], { status: 'revision_required', edit_round: 1 }, 'u1', '2026-09-17T02:00:00.000Z')
+    const r = sanitiseFinalFiles([{ url: 'https://files.test/new.png', name: 'new.png' }, { id: 'f1', url: 'https://files.test/hero.png', name: 'hero.png', version: 1 }, { url: 'https://files.test/hero.png' }], { status: 'revision_required', edit_round: 1, client_round: 1 }, 'u1', '2026-09-17T02:00:00.000Z')
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.files).toHaveLength(2)
@@ -43,7 +44,7 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     // only a card ALREADY handed in by link, and not sent back, stays on its link for that round
     expect(handsInFiles({ work_kinds: { slug: 'edit' } })).toBe(true)
     expect(handsInFiles({ work_kinds: { slug: 'edit' }, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true, status: 'quality_check' })).toBe(false)
-    expect(handsInFiles({ work_kinds: { slug: 'edit' }, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true, status: 'revision_required' })).toBe(true)
+    expect(handsInFiles({ work_kinds: { slug: 'edit' }, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true, status: 'revision_required', client_round: 1 })).toBe(true)   // sent back by the client: the next version is files
   })
   it('every place that asks “is there a finished edit?” asks about files too', () => {
     expect(src('app/lib/board-view-core.ts')).toContain('!hasFinishedWork(card as never)')

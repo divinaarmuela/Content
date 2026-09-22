@@ -132,7 +132,7 @@ export function clipsAtRound<T extends VersionedClip>(clips: readonly T[], round
     if (c.version > round) continue
     if (!c.carries) { if (c.version === round) out.push(c); continue }
     const a = c.asset_id || c.id, have = newest.get(a)
-    if (!have || c.version > have.version) newest.set(a, c)
+    if (!have || c.version >= have.version) newest.set(a, c)
   }
   // dropped by this version: out (its earlier version still shows it)
   for (const [a, c] of newest) if (typeof c.retired_round === 'number' && c.retired_round <= round) newest.delete(a)
@@ -160,8 +160,8 @@ export function assetLine<T extends VersionedClip>(clips: readonly T[], clip: T)
 export function clientRoundsOf(card: { client_rounds?: unknown; client_round?: unknown; edit_round?: unknown }): number[] {
   const list = Array.isArray(card.client_rounds) ? card.client_rounds.filter((n): n is number => typeof n === 'number' && n >= 1) : []
   if (list.length > 0) return [...new Set(list)].sort((a, b) => a - b)
-  // an older card with no list: the one round it is known to have been given
-  return [clientSeenRound(card)]
+  // an older card with no list: before 22 Sep 2026 every round went through the client, so all of them up to the last
+  return Array.from({ length: clientSeenRound(card) }, (_, i) => i + 1)
 }
 
 /** the list, with this round added once — the same round given again (a card back and forth without a new hand-in) is one version */
@@ -191,7 +191,7 @@ export function asClientVersions<T extends VersionedClip>(clips: readonly T[], c
     if (!c.carries) { out.push({ ...c, version: cv }); continue }
     const key = `${c.asset_id || c.id}@${cv}`
     const have = kept.get(key)
-    if (!have || c.version > have.version) kept.set(key, c)
+    if (!have || c.version >= have.version) kept.set(key, c)   // the later cut in the list wins a tie: files are appended in order
   }
   const order: string[] = []
   for (const c of clips) { const k = `${c.asset_id || c.id}@${clientVersionOf(c.version, clientRounds)}`; if (kept.has(k) && !order.includes(k)) order.push(k) }
