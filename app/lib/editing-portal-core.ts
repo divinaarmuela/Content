@@ -146,3 +146,54 @@ export function assetLine<T extends VersionedClip>(clips: readonly T[], clip: T)
   const a = clip.asset_id || clip.id
   return clips.filter(c => c.carries && (c.asset_id || c.id) === a).sort((x, y) => y.version - x.version)
 }
+
+/* ── THE CLIENT'S VERSIONS ARE THE TIMES IT REACHED THEM (22 Sep 2026) ────
+ * The owner: "if it passed between In progress and the quality check the
+ * first time, why would the client immediately see Version 2?" The team's
+ * round counts every hand-in, the quality check's send-backs included. The
+ * client's version counts only the times the card was given to them: their
+ * Version 1 is the first round that reached them, whatever the team called
+ * it. A cut replaced at the quality check before they ever saw it is not a
+ * "Before" of theirs — they only ever get the newest cut of each clip as it
+ * stood when the round went to them.
+ */
+export function clientRoundsOf(card: { client_rounds?: unknown; client_round?: unknown; edit_round?: unknown }): number[] {
+  const list = Array.isArray(card.client_rounds) ? card.client_rounds.filter((n): n is number => typeof n === 'number' && n >= 1) : []
+  if (list.length > 0) return [...new Set(list)].sort((a, b) => a - b)
+  // an older card with no list: the one round it is known to have been given
+  return [clientSeenRound(card)]
+}
+
+/** the list, with this round added once — the same round given again (a card back and forth without a new hand-in) is one version */
+export function withClientRound(current: unknown, round: number): number[] {
+  const list = Array.isArray(current) ? current.filter((n): n is number => typeof n === 'number' && n >= 1) : []
+  return list.includes(round) ? list : [...list, round]
+}
+
+/** the client's version a file first appeared in: the Nth client round at or after its internal round */
+export function clientVersionOf(internalRound: number, clientRounds: readonly number[]): number | null {
+  const i = clientRounds.findIndex(r => r >= internalRound)
+  return i < 0 ? null : i + 1
+}
+
+/**
+ * The clips as the client counts them: every file renumbered to its client version, files of the same clip
+ * superseded within one client version dropped (the quality check's loop), and nothing beyond what they were given.
+ */
+export function asClientVersions<T extends VersionedClip>(clips: readonly T[], clientRounds: readonly number[]): T[] {
+  const last = clientRounds[clientRounds.length - 1] ?? 0
+  const kept = new Map<string, T>()   // "<asset>@<client version>" → the newest cut in that client version
+  const out: T[] = []
+  for (const c of clips) {
+    if (c.version > last) continue
+    const cv = clientVersionOf(c.version, clientRounds)
+    if (cv === null) continue
+    if (!c.carries) { out.push({ ...c, version: cv }); continue }
+    const key = `${c.asset_id || c.id}@${cv}`
+    const have = kept.get(key)
+    if (!have || c.version > have.version) kept.set(key, c)
+  }
+  const order: string[] = []
+  for (const c of clips) { const k = `${c.asset_id || c.id}@${clientVersionOf(c.version, clientRounds)}`; if (kept.has(k) && !order.includes(k)) order.push(k) }
+  return [...out, ...order.map(k => { const c = kept.get(k)!; return { ...c, version: clientVersionOf(c.version, clientRounds)!, retired_round: typeof c.retired_round === 'number' ? (clientVersionOf(c.retired_round, clientRounds) ?? last + 1) : c.retired_round } })]
+}

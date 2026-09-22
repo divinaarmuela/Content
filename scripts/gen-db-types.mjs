@@ -682,6 +682,9 @@ const GHOST_COLUMNS = {
     //   content_items.client_round — THE VERSION THE CLIENT WAS LAST GIVEN (22 Sep 2026): stamped each time
     //   the card goes to With client. The portal never shows a newer one: a version still with the team.
     ['client_round', col('number', true)],
+    //   content_items.client_rounds — EVERY ROUND THE CLIENT WAS GIVEN, in order (22 Sep 2026): the client's
+    //   "Version N" is the Nth of these. A round sent back at the quality check never reaches them and is no version of theirs.
+    ['client_rounds', col('unknown', true, true)],
     //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
     //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
     ['share_token', col('string', true)],

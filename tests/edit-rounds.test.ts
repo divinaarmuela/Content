@@ -122,7 +122,8 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {
     const portal = src('app/lib/editing-portal.ts')
-    expect(portal).toContain('const rounds = roundsOf(clips)')
+    // …renumbered to the client's own versions first (22 Sep 2026)
+    expect(portal).toContain('const rounds = roundsOf(clientClips)')
     expect(portal).toContain('version: fileRound(f), stream:')
     const c = src('app/components/portal/EditingReview.tsx')
     expect(c).toContain('const [round, setRound] = useState(data.rounds[0] ?? data.round)')

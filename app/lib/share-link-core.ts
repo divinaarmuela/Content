@@ -1,4 +1,4 @@
-import { finalFilesForRound } from './final-files-core'
+import { finalFilesOf, liveFilesAt } from './final-files-core'
 import { fileRound, roundOf } from './edit-round-core'
 import { filesOf } from './drive-pull-core'
 
@@ -34,15 +34,17 @@ export function maySharePublicly(card: { status?: unknown; accepted_at?: unknown
 
 export type SharedFile = { id: string; name: string; url: string; mime: string | null; size: number | null }
 
-/** The accepted version's files: the card's current round, uploaded or copied in. */
+/** The accepted version's files: the card AS IT STANDS at its current round — each clip's newest cut, the ones
+ *  that were fine carried forward, the dropped ones out (22 Sep 2026; final-files-core.ts). A card with files
+ *  takes nothing from the Drive copies: they are the same clips, or older. */
 export function sharedFilesOf(
   item: { id: string; final_files?: unknown; edit_round?: unknown },
   pulls: readonly { scope_id?: string | null; purpose?: string | null; files?: unknown }[],
 ): SharedFile[] {
   const round = roundOf(item)
-  const uploaded: SharedFile[] = finalFilesForRound(item, round)
+  const uploaded: SharedFile[] = liveFilesAt(item, round)
     .map(f => ({ id: f.id, name: f.name, url: f.url, mime: f.mime ?? null, size: f.size ?? null }))
-  const copied: SharedFile[] = pulls
+  const copied: SharedFile[] = finalFilesOf(item).length > 0 ? [] : pulls
     .filter(p => p.scope_id === item.id && p.purpose === 'finished')
     .flatMap(p => filesOf(p))
     .filter(f => f.status === 'done' && !!f.url && fileRound(f) === round)

@@ -32,7 +32,8 @@ import {
   itemPath,
 } from './workflow-core'
 import { editingPortalPath, portalHasWork } from './editing-portal-core'
-import { finalFilesForRound } from './final-files-core'
+import { liveFilesAt } from './final-files-core'
+import { withClientRound } from './editing-portal-core'
 import { handInRound, roundOf } from './edit-round-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
@@ -777,7 +778,8 @@ export async function performTransition(
   const linked = item as { link_url?: string | null; raw_assets_url?: string | null; adhoc_post?: unknown; link_final?: boolean | null }
   const hasLink = typeof linked.link_url === 'string' && linked.link_url.trim() !== ''
   // …or files uploaded onto the card for this round (the Designer page, 17 Sep 2026)
-  const hasFiles = finalFilesForRound(item as never, handInRound(item as never)).length > 0
+  // …the card as it stands at this round: carried-forward clips count, dropped ones do not (22 Sep 2026)
+  const hasFiles = liveFilesAt(item as never, handInRound(item as never)).length > 0
   // A POSTING JOB'S FOLDER IS NOT THE PIECE (the owner, 13 Sep 2026: an AM
   // makes the card with a Drive folder for the scheduler, who "uploads the
   // files and chooses which one to schedule"). Such a card (`adhoc_post`,
@@ -926,7 +928,7 @@ export async function performTransition(
       ...asked,
       ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
       // the version the client is being given now — the newest their link will ever show (editing-portal-core.ts)
-      ...(to === 'client_review' ? { client_round: roundOf(item as never) } : {}),
+      ...(to === 'client_review' ? { client_round: roundOf(item as never), client_rounds: withClientRound((item as { client_rounds?: unknown }).client_rounds, roundOf(item as never)) } : {}),
       ...(defaults.length > 0 ? { scheduler_ids: defaults } : {}),
       // ACCEPTED: the round that went through, stamped here because the
       // hand-over to a scheduler moves the status back to Draft for the

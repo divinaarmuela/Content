@@ -9,7 +9,7 @@ import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
 import { previewsFor } from './stream'
 import { streamBaseUrl } from './stream-core'
-import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound } from './editing-portal-core'
+import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound, asClientVersions, clientRoundsOf } from './editing-portal-core'
 import { finalFilesOf, assetIdOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
@@ -121,7 +121,10 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
         return { id: f.id, name: f.name, asset_id: assetOf.get(f.id) ?? null, carries: assetOf.has(f.id), retired_round: retiredOf.get(f.id) ?? null, thumb: kind === 'image' ? f.url as string : null, kind, src: f.url as string, version: fileRound(f), stream: base && typeof p?.duration_sec === 'number' && p.duration_sec > 0 ? { base, duration: p.duration_sec } : null }
       })
     : clipsOf(listing.entries).map(c => ({ ...c, asset_id: null, carries: false, retired_round: null, src: signedClipStream(owner.token, item.id, c), version: Math.min(round, seen), stream: null }))
-  const rounds = roundsOf(clips)
+  // THE CLIENT'S VERSIONS (editing-portal-core.ts): renumbered to the times the card reached them
+  const clientRounds = clientRoundsOf(item as never)
+  const clientClips = asClientVersions(clips as EditingPortal['clips'], clientRounds)
+  const rounds = roundsOf(clientClips)
   return {
     token: owner.token,
     client: { id: owner.client.id, name: owner.client.name },
@@ -133,7 +136,7 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
       content_type: item.content_type ?? null,
     },
     folder: { url: folder.url, id: folder.folderId },
-    clips,
+    clips: clientClips,
     can_approve: clientMayApprove(item as never),
     rounds,
     round,

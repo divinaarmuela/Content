@@ -40,7 +40,19 @@ describe('share-link-core — the public link for the accepted version (17 Sep 2
       ] },
       { scope_id: 'other-card', purpose: 'finished', files: [{ id: 'z', name: 'z.mp4', mime: 'video/mp4', size: 1, done: 1, url: 'https://m/z.mp4', status: 'done', version: 2 }] },
     ]
-    expect(sharedFilesOf(item, pulls).map(f => f.id)).toEqual(['u2', 'c2'])
+    // THE CARD AS IT STANDS (22 Sep 2026): two uploaded files with no tie between them are two clips, both
+    // carried into Version 2; a card with files takes nothing from the Drive copies
+    expect(sharedFilesOf(item, pulls).map(f => f.id)).toEqual(['u1', 'u2'])
+    // a clip replaced in place hands over its newest cut only; a dropped one is out; the untouched one carries
+    const swapped = { id: 'card', edit_round: 2, final_files: [
+      { id: 'a', name: 'a.mp4', url: 'https://m/a.mp4', mime: 'video/mp4', size: 1, version: 1, uploaded_at: 'x' },
+      { id: 'b', name: 'b.mp4', url: 'https://m/b.mp4', mime: 'video/mp4', size: 1, version: 1, uploaded_at: 'x', retired_round: 2 },
+      { id: 'c', name: 'c.mp4', url: 'https://m/c.mp4', mime: 'video/mp4', size: 1, version: 1, uploaded_at: 'x' },
+      { id: 'c2', name: 'c-fixed.mp4', url: 'https://m/c2.mp4', mime: 'video/mp4', size: 1, version: 2, uploaded_at: 'y', asset_id: 'c', replaces: 'c' },
+    ] }
+    expect(sharedFilesOf(swapped, pulls).map(f => f.id)).toEqual(['a', 'c2'])
+    // a link-only card still takes the round's copies
+    expect(sharedFilesOf({ id: 'card', edit_round: 2 }, pulls).map(f => f.id)).toEqual(['c2', 'u2'])
     expect(sharedFilesOf({ id: 'card' }, [])).toEqual([])
   })
 
