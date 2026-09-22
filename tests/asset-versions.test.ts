@@ -89,4 +89,13 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(drawer).toContain('Drop from {roundLabel(handInRound(item as never))}')
     expect(drawer).toContain('>Bring back</Button>')
   })
+
+  it('a manager marks a clip approved on the client’s behalf, signed as MD Media, or takes it back (22 Sep 2026)', () => {
+    const route = readFileSync('app/api/production/items/[id]/clip-approval/route.ts', 'utf8')
+    expect(route).toContain("const user = await requireRole('account_manager')")
+    expect(route).toContain('const by = `${user.name || user.email} (MD Media)`')
+    expect(route).toContain("? withClipApproved(current, { file_id: fileId, name: file.name, at, by, ip: from.ip, device: from.device })")
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(drawer).toContain("{okByClient ? 'Take approval back' : 'Approve for the client'}")
+  })
 })

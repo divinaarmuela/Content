@@ -289,6 +289,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     if (!item) return
     await post(`/api/production/items/${id}`, { final_files: withRetired(finalFilesOf(item as never), assetId, back ? null : handInRound(item as never)) }, back ? 'Brought back' : `Dropped from ${roundLabel(handInRound(item as never))} on`, back ? 'Bringing it back' : 'Dropping it', 'PATCH')
   }
+  // A CLIP APPROVED ON THE CLIENT'S BEHALF, or taken back — a manager's press (clip-approval route)
+  const teamApprove = async (fileId: string, undo: boolean) => {
+    if (!item) return
+    await post(`/api/production/items/${id}/clip-approval`, { file_id: fileId, decision: undo ? 'undo' : 'approve' }, undo ? 'Approval taken back' : 'Marked approved for the client', undo ? 'Taking it back' : 'Marking it approved')
+  }
   const removeFinalFile = async (fid: string) => {
     if (!item) return
     await post(`/api/production/items/${id}`, { final_files: withoutFinalFile(finalFilesOf(item as never), fid) }, 'Taken off', 'Removing the file', 'PATCH')
@@ -601,7 +606,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                   {currentFiles(item as never).map(f => {
                     const a = assetIdOf(f)
                     const waiting = stillToReplace(item as never).includes(a)
-                    const okByClient = clipApprovalsOf(item as never).some(x => x.file_id === f.id)
+                    const tick = clipApprovalsOf(item as never).find(x => x.file_id === f.id) ?? null
+                    const okByClient = !!tick
+                    const isManager = me?.role === 'super_admin' || me?.role === 'account_manager'
                     const dropped = typeof f.retired_round === 'number'
                     const earlier = assetHistory(item as never, a).filter(x => x.id !== f.id)
                     return (
@@ -612,7 +619,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           <span className="shrink-0 text-[12px] text-muted-foreground">{roundLabel(f.version)}</span>
                           {dropped && <span className="rounded-full bg-foreground/[0.08] px-2 py-0.5 text-[11px] font-semibold">Dropped from {roundLabel(f.retired_round as number)} on</span>}
                           {waiting && !dropped && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
-                          {okByClient && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold">Approved by the client</span>}
+                          {tick && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold" title={`${tick.by}, ${new Date(tick.at).toLocaleString('en-AU')}`}>{/\(MD Media\)$/.test(tick.by) ? `Approved by ${tick.by.replace(/ \(MD Media\)$/, '')} for the client` : 'Approved by the client'}</span>}
+                          {isManager && !frozen && !dropped && (
+                            <Button variant="outline" disabled={busy} onClick={() => void teamApprove(f.id, okByClient)} className="h-9 rounded-full px-3 text-[12px] font-semibold">{okByClient ? 'Take approval back' : 'Approve for the client'}</Button>
+                          )}
                           {mayFile && !frozen && mayReplaceAsset(item as never, a) && !okByClient && dropped && f.retired_round === handInRound(item as never) && (
                             <Button variant="outline" disabled={busy} onClick={() => void dropAsset(a, true)} className="h-9 rounded-full px-3 text-[12px] font-semibold">Bring back</Button>
                           )}
