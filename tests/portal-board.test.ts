@@ -124,12 +124,9 @@ describe('one shoot is one card, all the way through', () => {
 
   it('carries the shoot’s comments on the card, with who and when', async () => {
     const d = await load({ shootStatus: 'brief', shared: true, briefStatus: 'client_review' })
-    expect(shootCards(d)[0].comments).toEqual([{
-      id: 'bc-1', created_at: '2026-09-03T00:00:00.000Z', body: 'Plan is up — have a look',
-      author_name: 'Priya Patel', from_team: true,
-      // the shoot's general thread — not pinned to a card of the board
-      card_id: null,
-    }])
+    // THE PLAN'S THREAD IS THE TEAM'S (22 Sep 2026): a team note in the general thread never reaches the
+    // client's card — only the board's card comments and the client's own words do
+    expect(shootCards(d)[0].comments).toEqual([])
   })
 })
 

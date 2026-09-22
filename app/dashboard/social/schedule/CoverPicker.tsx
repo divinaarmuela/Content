@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { isSameOriginMedia, sameOriginVideoUrl } from '../../../lib/same-origin-media-core'
 import { ImageIcon, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { COVER_RULES, coverFrameTimes, coverPlatforms, coverProblems } from '@/app/lib/cover-core'
@@ -50,11 +51,14 @@ export default function CoverPicker({
     if (mode !== 'frames') return
     let cancelled = false
     const el = document.createElement('video')
-    el.crossOrigin = 'anonymous'
+    // OUR OWN ORIGIN (22 Sep 2026): a file in our bucket is read through /api/assets/stream, so a frame can be drawn
+    // from it — the bucket itself does not expose Content-Range to a cross-origin reader (same-origin-media-core.ts)
+    const src = sameOriginVideoUrl(playable(videoUrl))
+    if (!isSameOriginMedia(src)) el.crossOrigin = 'anonymous'
     el.muted = true
     el.playsInline = true
     el.preload = 'auto'
-    el.src = playable(videoUrl)
+    el.src = src
     video.current = el
     setFrames([])
     setProblem(null)
