@@ -43,6 +43,12 @@ export default function CoverPicker({
   const [frames, setFrames] = useState<{ at: number; still: string }[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  // SCRUBBING (the owner, 22 Sep 2026: "like a scroll through frame and pick"): any instant of the clip, not
+  // only the eight stills — the slider seeks the same video element and draws what is there
+  const [duration, setDuration] = useState(0)
+  const [scrub, setScrub] = useState<{ at: number; still: string } | null>(null)
+  const scrubWant = useRef<number | null>(null)
+  const scrubRun = useRef(false)
   const video = useRef<HTMLVideoElement | null>(null)
   const file = useRef<HTMLInputElement | null>(null)
 
@@ -61,6 +67,8 @@ export default function CoverPicker({
     el.src = src
     video.current = el
     setFrames([])
+    setScrub(null)
+    setDuration(0)
     setProblem(null)
     setBusy('Reading the video')
     const fail = (why: string) => { if (!cancelled) { setProblem(why); setBusy(null) } }
@@ -68,6 +76,7 @@ export default function CoverPicker({
     el.onloadedmetadata = async () => {
       try {
         const times = coverFrameTimes(el.duration)
+        setDuration(el.duration)
         const out: { at: number; still: string }[] = []
         for (const at of times) {
           if (cancelled) return
@@ -82,6 +91,22 @@ export default function CoverPicker({
     }
     return () => { cancelled = true; el.src = ''; video.current = null }
   }, [mode, videoUrl, playable])
+
+  /** seek to where the slider is and show that frame; a drag that outruns the seeks settles on the last place asked for */
+  const scrubTo = (at: number) => {
+    scrubWant.current = at
+    if (scrubRun.current) return
+    scrubRun.current = true
+    void (async () => {
+      const el = video.current
+      while (el && scrubWant.current !== null) {
+        const want = scrubWant.current
+        scrubWant.current = null
+        try { await seek(el, want); setScrub({ at: want, still: draw(el, 180) }) } catch { break }
+      }
+      scrubRun.current = false
+    })()
+  }
 
   const useFrame = async (at: number) => {
     const el = video.current
@@ -212,6 +237,26 @@ export default function CoverPicker({
           ))}
           {frames.length === 0 && !problem && (
             <span className="text-[12px] text-muted-foreground">{busy ?? 'Reading the video'}…</span>
+          )}
+        </div>
+      )}
+
+      {mode === 'frames' && duration > 0 && (
+        <div className="flex flex-col gap-2 rounded-inner border border-border p-2" data-cover-scrub>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-semibold text-muted-foreground">Or scroll through the clip</span>
+            <input type="range" min={0} max={Math.max(0.1, Math.round(duration * 10) / 10)} step={0.1} value={scrub?.at ?? 0}
+              onChange={e => scrubTo(Number(e.target.value))} aria-label="Scroll through the clip" className="w-full accent-[var(--dbx-blue)]" />
+          </label>
+          {scrub && (
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={scrub.still} alt={`Frame at ${scrub.at.toFixed(1)} seconds`} className="h-[90px] w-auto rounded-tile border border-border" />
+              <button type="button" disabled={busy !== null && busy !== 'Reading the video'} onClick={() => void useFrame(scrub.at)}
+                className="min-h-11 rounded-full bg-foreground px-4 text-[12px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-50">
+                Use this frame · {scrub.at.toFixed(1)}s
+              </button>
+            </div>
           )}
         </div>
       )}
