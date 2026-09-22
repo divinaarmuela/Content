@@ -50,7 +50,9 @@ const domainOf = (email: string | null | undefined): string | null => {
 /** the business's name: what they typed, else the person, else their company's domain */
 export function inboundBusinessName(lead: Pick<InboundLead, 'biz' | 'fname' | 'lname' | 'email'>): string {
   const biz = String(lead.biz ?? '').trim()
-  if (biz) return biz
+  // the lead pipeline fills the business with the sender's domain when nothing was typed — a free-mail
+  // domain is not a business (seen live: "outlook.com.au" over Violetta, 22 Sep 2026)
+  if (biz && !FREE_MAIL_DOMAINS.has(biz.toLowerCase())) return biz
   const person = [lead.fname, lead.lname].map(s => String(s ?? '').trim()).filter(Boolean).join(' ')
   if (person) return person
   return domainOf(lead.email) ?? String(lead.email ?? '').trim() ?? 'Unnamed lead'

@@ -19,6 +19,7 @@ describe('what a lead becomes', () => {
   it('a name from the business, else the person, else the company’s domain — never a free-mail address as a website', () => {
     expect(inboundBusinessName(form)).toBe('Australian Venue Co')
     expect(inboundBusinessName({ ...form, biz: '' })).toBe('Sam Lee')
+    expect(inboundBusinessName({ biz: 'outlook.com.au', fname: 'Violetta', lname: null, email: 'v@outlook.com.au' })).toBe('Violetta')
     expect(inboundBusinessName({ biz: null, fname: null, lname: null, email: 'x@crestline.com.au' })).toBe('crestline.com.au')
     expect(prospectFromLead(mail, '2026-09-22T08:00:00.000Z', 'joy')).toMatchObject({ website: null, business: 'hello@gmail.com', source_detail: 'Emailed the agency' })
     expect(inboundFromWords('other')).toBe('Came in as a lead')
