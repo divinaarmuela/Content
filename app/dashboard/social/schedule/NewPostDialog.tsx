@@ -592,13 +592,14 @@ export default function NewPostDialog({
    * rule, the same day). */
   const locked = status === 'scheduled' || status === 'published'
   const bookedWords = status === 'scheduled' && !!state.postId
-  const wordsChanged = bookedWords && state.caption !== String(post?.caption ?? '')
+  const coverChanged = bookedWords && JSON.stringify(state.perChannel ?? {}) !== JSON.stringify(post ? readPerChannel(post.per_channel) : {})
+  const wordsChanged = bookedWords && (state.caption !== String(post?.caption ?? '') || coverChanged)
   const saveWords = async () => {
     if (!state.postId || !wordsChanged || busy) return
     setBusy(true); setProblems([]); setNote(null)
     try {
       const res = await fetch(`/api/social/schedule/${state.postId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: state.caption }),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: state.caption, per_channel: state.perChannel }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new ComposeProblem(json)
@@ -1466,7 +1467,7 @@ export default function NewPostDialog({
                 playable={playable}
                 platforms={chosen.map(a => String(a.platform))}
                 current={currentCover(state.perChannel, chosen.map(a => ({ id: a.id, platform: String(a.platform) })), target.coverUrl)}
-                locked={locked}
+                locked={locked && !bookedWords}
                 onPick={url => {
                   for (const a of chosen) {
                     const patch = coverPatchFor(String(a.platform), url)
@@ -1590,9 +1591,9 @@ export default function NewPostDialog({
               {bookedWords && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button type="button" disabled={!wordsChanged || busy} onClick={() => void saveWords()} className="inline-flex h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-40">
-                    {busy ? 'Saving…' : 'Save the new words'}
+                    {busy ? 'Saving…' : coverChanged ? 'Save the changes' : 'Save the new words'}
                   </button>
-                  <span className="text-[12px] text-muted-foreground">{wordsChanged ? 'The post is booked again with these words — same time, same channels.' : 'This post is booked. Its words can still change; everything else needs the booking cancelled first.'}</span>
+                  <span className="text-[12px] text-muted-foreground">{wordsChanged ? 'The post is booked again with these changes — same time, same channels.' : 'This post is booked. Its words and its cover can still change; the media, the channels and the time need the booking cancelled first.'}</span>
                 </div>
               )}
             </label>

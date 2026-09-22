@@ -1533,7 +1533,7 @@ export function samePostKey(
  * cancel-and-remake the server has always asked for. Nothing changed is
  * nothing to do.
  */
-export type BookedChange = 'none' | 'caption' | 'other'
+export type BookedChange = 'none' | 'caption' | 'settings' | 'other'
 export function bookedChange(
   post: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
   input: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
@@ -1541,9 +1541,11 @@ export function bookedChange(
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
   const other = (input.slides !== undefined && !same(input.slides, post.slides))
     || (input.channels !== undefined && !same(input.channels, post.channels))
-    || (input.per_channel !== undefined && !same(input.per_channel, post.per_channel))
     || (input.scheduled_for !== undefined && String(input.scheduled_for ?? '') !== String(post.scheduled_for ?? ''))
   if (other) return 'other'
+  // A CHANNEL'S OWN SETTINGS — the cover photo above all (the owner, 22 Sep 2026: "cover photo, like
+  // Instagram — same thing") — are re-booked the same way as the words
+  if (input.per_channel !== undefined && !same(input.per_channel, post.per_channel)) return 'settings'
   const words = input.caption === undefined ? null : String(input.caption ?? '')
   return words !== null && words !== String(post.caption ?? '') ? 'caption' : 'none'
 }

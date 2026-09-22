@@ -788,7 +788,11 @@ export async function updatePost(
     // words; anything else is still cancel-and-remake (social-schedule-core.bookedChange)
     const change = bookedChange(post, input)
     if (change === 'none') return shape(post)
-    if (change === 'caption') return rewordBooked(user, post, item, String(input.caption ?? ''))
+    if (change === 'caption' || change === 'settings') {
+      return rewordBooked(user, post, item,
+        input.caption === undefined ? String(post.caption ?? '') : String(input.caption ?? ''),
+        input.per_channel === undefined ? post.per_channel : readPerChannel(input.per_channel))
+    }
     throw new AuthzError(
       'This post is already booked with the channel — cancel it first, then change it', 409,
     )
@@ -1727,7 +1731,7 @@ async function liveJobsOf(post: PlannedPost): Promise<PublishJobRow[]> {
  * Too close to the time, nothing is touched — cancelling is the honest move
  * then.
  */
-async function rewordBooked(user: TeamUser, post: PlannedPost, item: ContentItem, caption: string): Promise<PlannedPost> {
+async function rewordBooked(user: TeamUser, post: PlannedPost, item: ContentItem, caption: string, perChannel: PlannedPost['per_channel'] = post.per_channel): Promise<PlannedPost> {
   assertMayPublish(user)
   const when = new Date(String(post.scheduled_for ?? '')).getTime()
   if (!Number.isFinite(when) || when <= Date.now() + REWORD_LEAD_MS) throw new AuthzError(TOO_LATE_TO_REWORD, 409)
@@ -1743,12 +1747,13 @@ async function rewordBooked(user: TeamUser, post: PlannedPost, item: ContentItem
     channelsFor(item.client_id, post.channels),
     versionsOf(item.id),
   ])
+  const next = { ...post, caption, per_channel: perChannel }
   const queued = await queuePublishJob({
     clientId: item.client_id,
     contentItemId: item.id,
     caption,
     media: mediaOf(post.slides),
-    targets: targetsFor(post, accounts, versions),
+    targets: targetsFor(next, accounts, versions),
     scheduledFor: post.scheduled_for,
     timezone: post.timezone,
     createdBy: user.email,
@@ -1757,19 +1762,19 @@ async function rewordBooked(user: TeamUser, post: PlannedPost, item: ContentItem
     // the old booking is gone and the new one would not take: say so plainly and leave the post
     // approved with the new words, so it can be booked again
     await posts().claim(post.id, cur =>
-      cur ? { ...cur, caption, status: 'approved', publish_job_ids: [], updated_at: nowIso() } as SocialPost : null)
+      cur ? { ...cur, caption, per_channel: perChannel as unknown as SocialPost['per_channel'], status: 'approved', publish_job_ids: [], updated_at: nowIso() } as SocialPost : null)
     throw new AuthzError(queued.error, 409)
   }
   const saved = await posts().claim(post.id, cur =>
     cur && cur.status === 'scheduled'
-      ? { ...cur, caption, publish_job_ids: [queued.id], updated_at: nowIso() } as SocialPost
+      ? { ...cur, caption, per_channel: perChannel as unknown as SocialPost['per_channel'], publish_job_ids: [queued.id], updated_at: nowIso() } as SocialPost
       : null)
   if (!saved.claimed) throw new AuthzError('This post changed while its words were being saved — refresh to see where it got to', 409)
   await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
     .catch(e => console.error('reword dispatch failed:', (e as Error).message))
   await logActivity({
     actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
-    action: 'post_reworded', detail: 'Words changed on a booked post — booked again with the new words, same time, same channels',
+    action: 'post_reworded', detail: `${caption !== String(post.caption ?? '') ? 'Words' : 'Cover or settings'} changed on a booked post — booked again with the new words, same time, same channels`,
   }).catch(() => {})
   announceAfter('schedule', { client_id: item.client_id, post_id: post.id, kind: 'updated' })
   return shape(saved.row)
