@@ -164,7 +164,7 @@ export default function DesignerPage() {
           managersOf={managersOf}
           kinds={live.tables.workKinds.rows}
           today={today}
-          onOpen={c => router.push(`/dashboard/editor/${c.id}`)}
+          onOpen={c => router.push(`/dashboard/designer/${c.id}`)}
           initialColumn={column}
           show={show}
           onClearShow={clearShow}

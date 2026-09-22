@@ -88,7 +88,8 @@ export default function EditorPage() {
     if (!viewer) return [] as BoardCardRow[]
     // a shoot plan lives on Production; everything else somebody is making
     // is a card here
-    const base = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
+    // …and a graphics card is the designer's, on the Designer board only (22 Sep 2026)
+    const base = (live.items as unknown as BoardCardRow[]).filter(c => !['shoot_brief', 'graphics'].includes(c.work_kinds?.slug ?? ''))
     // WHAT THE VIDEO EDITORS SOP ASKS OF A CARD, read off what is already on
     // the wire: which shoot it came from (the shoot board makes these
     // cards), whether the holder acknowledged it, and a standing risk

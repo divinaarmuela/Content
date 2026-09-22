@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRightLeft, Link as LinkIcon, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -192,7 +192,10 @@ export default function EditorCardPage() {
   const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
   // files are everybody's hand-in now (22 Sep 2026), so this asks the narrower thing: is it a designer's card
   const filesOnly = !!item && (kind as { slug?: string } | null)?.slug === 'graphics'
-  const back = () => router.push('/dashboard/editor')
+  // THE BOARD THIS CARD CAME FROM (22 Sep 2026): the same page serves /dashboard/designer/<id>
+  const pathname = usePathname()
+  const board = pathname?.startsWith('/dashboard/designer') ? { href: '/dashboard/designer', word: 'Designer' } : { href: '/dashboard/editor', word: 'Editor' }
+  const back = () => router.push(board.href)
 
   if (loading) {
     return (
@@ -225,12 +228,12 @@ export default function EditorCardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link href="/dashboard/editor" className="inline-flex min-h-11 w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" aria-hidden /> Editor
+      <Link href={board.href} className="inline-flex min-h-11 w-fit items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" aria-hidden /> {board.word}
       </Link>
       <PageTitle
         title={item.title}
-        summary={[client?.name, shoot ? `From the shoot: ${shoot.title}` : null].filter(Boolean).join(' · ') || 'A card on the Editor page.'}
+        summary={[client?.name, shoot ? `From the shoot: ${shoot.title}` : null].filter(Boolean).join(' · ') || `A card on the ${board.word} page.`}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,560px)]">
