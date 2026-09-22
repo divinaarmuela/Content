@@ -45,6 +45,7 @@ import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
 import { portalOwnerByToken } from './portal-owner'
 import { forTheClient } from './comment-visibility-core'
+import { portalHasWork } from './editing-portal-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -158,6 +159,10 @@ export type PortalCard = {
   /** the post's caption, once the team has written one — shown to the client
    *  under the title, since it is what will go out with the work */
   caption: string | null
+  /** AN EDIT IS REVIEWED ON ITS OWN LINK (the owner, 22 Sep 2026: "that is for the team"): a piece with
+   *  finished files or a folder is not asked for on the portal's home — its clips, comments and ticks
+   *  live on the editing page the manager sends */
+  editing?: boolean
   column: PortalColumnKey
   tone: PortalCardTone | undefined
   /** the one sentence under the title */
@@ -732,6 +737,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       comment_target: facing ? { kind: 'item', id: p.id } : null,
       comments: facing ? commentsByItem.get(p.id) ?? [] : [],
       status: p.status,
+      editing: portalHasWork(i as never),
     }
   })
 

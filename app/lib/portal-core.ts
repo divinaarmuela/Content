@@ -291,7 +291,8 @@ export type PortalSection<T> = {
  * counts as needing their review.
  */
 export function portalSections<T extends { column: PortalColumnKey; actions: PortalActions }>(cards: T[]): PortalSection<T>[] {
-  const review = cards.filter(c => c.column === 'your_review' && c.actions.approve)
+  // an EDIT is reviewed on its own link, never here (the owner, 22 Sep 2026: "that is for the team")
+  const review = cards.filter(c => c.column === 'your_review' && c.actions.approve && !(c as { editing?: boolean }).editing)
   const approved = cards.filter(c => c.column === 'approved')
   const published = cards.filter(c => c.column === 'posted')
   return [
