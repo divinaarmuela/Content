@@ -16,7 +16,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useTable } from '@/lib/db-client'
-import type { Prospect as ProspectRow, ProspectEvent, TeamUser } from '@/lib/db-types'
+import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
 import PageTitle from '../../ui/PageTitle'
 import Chip from '../../ui/Chip'
 import WorkCard from '../../ui/WorkCard'
@@ -30,6 +30,8 @@ import {
   type AcqEvent, type AcqEventKind, type AcqStageKey, type Prospect,
 } from '../../../lib/acquisition-core'
 import ProspectSheet from './ProspectSheet'
+import QueueView from './QueueView'
+import { mayViewEveryone, queueFor } from '../../../lib/acq-queue-core'
 
 /**
  * THE ACQUISITION SYSTEM'S FOUR VIEWS (the blueprint, §10), one component so
@@ -41,9 +43,11 @@ import ProspectSheet from './ProspectSheet'
  * It sits under Leads as sub-links and leaves the live Leads page alone.
  */
 
-export type AcqView = 'targets' | 'pipeline' | 'contacts' | 'reporting'
+export type AcqView = 'queue' | 'targets' | 'pipeline' | 'contacts' | 'reporting'
 
 const VIEWS: { key: AcqView; label: string; href: string }[] = [
+  // MY QUEUE (the blueprint, §10 "Task & Notification view"; 22 Sep 2026): what waits on me
+  { key: 'queue', label: 'My queue', href: '/dashboard/leads/acquisition/queue' },
   { key: 'targets', label: 'Targets', href: '/dashboard/leads/acquisition/targets' },
   { key: 'pipeline', label: 'Pipeline', href: '/dashboard/leads/acquisition' },
   { key: 'contacts', label: 'Contacts', href: '/dashboard/leads/acquisition/contacts' },
@@ -51,6 +55,7 @@ const VIEWS: { key: AcqView; label: string; href: string }[] = [
 ]
 
 const SUMMARY: Record<AcqView, string> = {
+  queue: 'What waits on you, soonest first: the follow-ups and tasks on your prospects, the things the agent read but was not sure enough to record, and the prospects that have sat in a stage too long.',
   targets: 'Businesses worth an audit, before any contact. Research it, make the audit, send it. A target becomes a lead only when it replies, clicks or books.',
   pipeline: 'Every business that showed a real signal, from first reply to handoff. It moves right when the stage’s data is captured; the score says where to spend energy.',
   contacts: 'Everyone in the acquisition system, targets and leads alike, one row each: where they came from, where they sit, who owns them.',
@@ -65,6 +70,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
   const { rows: prospects, loading, error } = useTable<Row>('prospects')
   const { rows: eventRows } = useTable<ProspectEvent>('prospect_events')
   const { rows: team } = useTable<TeamUser>('team_users')
+  const { rows: todoRows } = useTable<Todo>('todos')
+  const [everyone, setEveryone] = useState(false)
   const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) : null }
   const now = Date.now()
 
@@ -243,6 +250,14 @@ export default function Acquisition({ view }: { view: AcqView }) {
               </div>
             )}
           </>
+        ) : view === 'queue' ? (
+          <QueueView
+            groups={queueFor({ viewer: me ? { id: me.id, role: me.role } : null, prospects: prospects as never, todos: todoRows as never, events: eventRows as never, now, everyone })}
+            everyone={everyone} mayEveryone={mayViewEveryone(me ? { id: me.id, role: me.role } : null)} onEveryone={setEveryone}
+            busy={busy} now={now} nameOf={nameOf} prospects={prospects as never}
+            onOpen={setOpen}
+            onDone={id => call(`/api/todos/${id}`, 'PATCH', { status: 'done' }, 'Done')}
+            onAnswer={(prospectId, eventId, confirm) => call(`/api/leads/acquisition/${prospectId}/events/${eventId}`, 'POST', { confirm }, confirm ? 'Confirmed — it counts now' : 'Dismissed')} />
         ) : view === 'contacts' ? (
           <div className="overflow-x-auto rounded-card border border-border bg-card">
             <table className="w-full min-w-[860px] text-left text-[13px]">

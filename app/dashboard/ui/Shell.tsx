@@ -79,6 +79,7 @@ export const NAV_MAIN: NavItem[] = [
  * under Leads, on Leads' own permission — whoever may see Leads sees them.
  */
 export const NAV_LEADS_CHILDREN: NavItem[] = [
+  { href: '/dashboard/leads/acquisition/queue',     label: 'My queue',  icon: ListChecks },
   { href: '/dashboard/leads/acquisition/targets',   label: 'Targets',   icon: Search },
   { href: '/dashboard/leads/acquisition',           label: 'Pipeline',  icon: Kanban },
   { href: '/dashboard/leads/acquisition/contacts',  label: 'Contacts',  icon: Users },
