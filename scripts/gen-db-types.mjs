@@ -126,6 +126,21 @@ const GHOST_TABLES = {
   team_boards: [
     ['id', col('string', false)],
     ['name', col('string', false)],
+    // WHICH CLIENT THE BOARD IS FOR (the owner, 22 Sep 2026: "allow to edit /
+    //   add to which client — so it will show the client's name"). Null = the
+    //   team's own, internal board. Set when made, changed later; a manager's.
+    ['client_id', col('string', true)],
+    // THE BOARD GOES THROUGH THE QUALITY CHECK AND IS APPROVED (the owner,
+    //   22 Sep 2026: "ensure it goes through the quality check stage and
+    //   approved"): draft → quality_check → approved, or back with a note
+    //   (changes_requested). Absent = draft. An edit to an approved board
+    //   returns it to draft. Rules in app/lib/team-board-core.ts.
+    ['status', col('string', true)],
+    ['submitted_by', col('string', true)],
+    ['submitted_at', col('string', true)],
+    ['reviewed_by', col('string', true)],
+    ['reviewed_at', col('string', true)],
+    ['review_note', col('string', true)],
     ['canvas_cards', col('unknown', true, true)],
     ['created_by', col('string', true)],
     ['updated_by', col('string', true)],

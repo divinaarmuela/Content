@@ -16,7 +16,10 @@ import {
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
 import DriveFilePicker from '../../../../components/canvas/DriveFilePicker'
-import { driveButtonWords, driveFilesWords, withDriveFiles, withoutDriveFile, type CanvasDriveFile } from '../../../../lib/canvas-drive-core'
+import {
+  driveButtonWords, driveFileFromEntry, driveFileIdFromLink, driveFilesWords, driveFolderIdFromLink, withDriveFiles, withoutDriveFile,
+  type CanvasDriveFile,
+} from '../../../../lib/canvas-drive-core'
 import NewBoardDialog from '../../../boards/NewBoardDialog'
 import { CanvasCardView, NOTE_COLORS, TEXT_COLOR_SWATCH } from './CanvasCard'
 import {
@@ -734,8 +737,34 @@ export default function BriefCanvas({
     upsertLocal(next); persist([next])
   }
 
+  /** A DRIVE LINK IN THE POST'S LINK BOX (22 Sep 2026): a link to one Drive
+   *  file puts that file on the post — the file's name and kind come from
+   *  the read-only info route, then it goes on exactly as a pick would, and
+   *  the box's link is let go (a Drive link is not a post's link). A folder
+   *  link opens the picker on the card instead. Read only, trap 13. */
+  const attachDriveLinkToMockup = async (card: CanvasCard, url: string) => {
+    const id = driveFileIdFromLink(url)
+    if (!id) return
+    try {
+      const res = await fetch(`/api/drive/info?id=${encodeURIComponent(id)}`, { cache: 'no-store' })
+      const json = await res.json().catch(() => ({})) as { entry?: { id: string; name: string; mimeType: string }; error?: string }
+      if (!res.ok || !json.entry) { toast.error(json.error ?? 'Could not read that Drive file — is it shared with the agency’s Drive account?'); return }
+      const file = driveFileFromEntry(json.entry)
+      if (!file) { toast.error('That Drive file is not a picture or a clip, so it cannot go on a post'); return }
+      const live = cardsRef.current.find(c => c.id === card.id) ?? card
+      const { link_url: _l, preview: _p, ...rest } = live
+      void _l; void _p
+      const next = withDriveFiles(rest as CanvasCard, [file])
+      upsertLocal(next); persist([next])
+      toast.success(driveFilesWords(next.drive_files) ?? 'Put on the post')
+    } catch { toast.error('Could not read that Drive file just now') }
+  }
+
   /** Paste a post's link onto a mock-up that already exists. */
   const attachLinkToMockup = (card: CanvasCard, url: string) => {
+    // a Drive file link is the file, not a post's link; a folder link is the picker
+    if (driveFileIdFromLink(url)) { void attachDriveLinkToMockup(card, url); return }
+    if (driveFolderIdFromLink(url)) { toast('That is a Drive folder — pick the file from it'); setDrivePick(card.id); return }
     const platform = mockupPlatformFor(url) ?? card.platform
     const { preview: _old, ...rest } = card
     void _old
@@ -1191,8 +1220,8 @@ export default function BriefCanvas({
             <input
               key={card.id}
               defaultValue={card.link_url ?? ''}
-              placeholder="Paste the post's link…"
-              aria-label="Paste a post link into this mock-up"
+              placeholder="Paste the post's link, or a Drive file's…"
+              aria-label="Paste a post link, or a Google Drive file link, into this mock-up"
               className="h-8 w-44 rounded-inner border border-border bg-surface px-2 font-mono text-[12px] outline-none placeholder:text-muted-foreground focus:border-accent-blue/50 [@media(pointer:coarse)]:h-11"
               onKeyDown={e => {
                 if (e.key === 'Enter') {

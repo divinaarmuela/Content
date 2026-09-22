@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
-  CANVAS_DRIVE_FILES_MAX, driveButtonWords, driveFileFromEntry, driveFilesWords, driveStreamUrl, driveThumbnailUrl,
+  CANVAS_DRIVE_FILES_MAX, driveButtonWords, driveFileFromEntry, driveFileIdFromLink, driveFilesWords, driveFolderIdFromLink, driveStreamUrl, driveThumbnailUrl,
   isPickableEntry, mayPickDriveFile, postMediaOf, sanitiseDriveFiles, withDriveFiles, withoutDriveFile,
 } from '../app/lib/canvas-drive-core'
 import { applyCanvasOp, sanitiseCanvasCards, type CanvasCard } from '../app/lib/batch-brief-core'
@@ -143,6 +143,27 @@ describe('who may pick', () => {
     expect(roleSatisfies('client', FILES_ROLE)).toBe(false)
     expect(mayPickDriveFile(null)).toBe(false)
     expect(mayPickDriveFile(undefined)).toBe(false)
+  })
+})
+
+describe('a Drive link pasted into the post’s link box (22 Sep 2026)', () => {
+  it('a link to one Drive file gives its id; a folder link gives the folder’s; anything else gives nothing', () => {
+    expect(driveFileIdFromLink('https://drive.google.com/file/d/1rROCSam8Vwmn2UZZVTAtmf3BYHv6lP-Z/view?usp=drive_link')).toBe('1rROCSam8Vwmn2UZZVTAtmf3BYHv6lP-Z')
+    expect(driveFileIdFromLink('https://drive.google.com/open?id=1rROCSam8Vwmn2UZZVTAtmf3BYHv6lP-Z')).toBe('1rROCSam8Vwmn2UZZVTAtmf3BYHv6lP-Z')
+    expect(driveFileIdFromLink('https://drive.google.com/drive/folders/1M0ixs9X402qY6cvsz-zNqHvJZ5e6EH5V?usp=drive_link')).toBeNull()
+    expect(driveFolderIdFromLink('https://drive.google.com/drive/folders/1M0ixs9X402qY6cvsz-zNqHvJZ5e6EH5V?usp=drive_link')).toBe('1M0ixs9X402qY6cvsz-zNqHvJZ5e6EH5V')
+    expect(driveFolderIdFromLink('https://drive.google.com/file/d/1rROCSam8Vwmn2UZZVTAtmf3BYHv6lP-Z/view')).toBeNull()
+    expect(driveFileIdFromLink('https://www.instagram.com/p/abc/')).toBeNull()
+    expect(driveFileIdFromLink('')).toBeNull()
+    expect(driveFileIdFromLink(null)).toBeNull()
+  })
+  it('the card’s link box routes a Drive file link to the file (through the read-only info route), a folder link to the picker, and says so in its placeholder', () => {
+    const canvas = src('app/dashboard/production/shoots/[id]/BriefCanvas.tsx')
+    expect(canvas).toContain("if (driveFileIdFromLink(url)) { void attachDriveLinkToMockup(card, url); return }")
+    expect(canvas).toContain("if (driveFolderIdFromLink(url)) { toast('That is a Drive folder — pick the file from it'); setDrivePick(card.id); return }")
+    expect(canvas).toContain('fetch(`/api/drive/info?id=${encodeURIComponent(id)}`, { cache: \'no-store\' })')
+    expect(canvas).toContain('const next = withDriveFiles(rest as CanvasCard, [file])')
+    expect(canvas).toContain('placeholder="Paste the post\'s link, or a Drive file\'s…"')
   })
 })
 

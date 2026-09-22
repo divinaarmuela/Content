@@ -1,5 +1,6 @@
 import { isDriveId, kindOf, type DriveEntry } from './files-core'
 import { isPlayableFile } from './link-preview-core'
+import { driveFileIdFromUrl, driveFolderIdFromUrl } from './card-link-core'
 
 /**
  * A DRIVE FILE ON A POST CARD — the pure half (the owner, 22 Sep 2026: "on
@@ -192,6 +193,23 @@ export function mayPickDriveFile(viewer: { role: string } | null | undefined): b
 export function driveButtonWords(card: PostCardLike): string {
   if (card.platform === 'ig_carousel') return 'Add Drive files'
   return card.drive_files?.length ? 'Swap Drive file' : 'Add a Drive file'
+}
+
+/**
+ * A DRIVE LINK PASTED INTO THE POST'S LINK BOX (the owner, 22 Sep 2026, from
+ * the first walk: the Drive link went into the box meant for a post's link,
+ * and the card showed a globe). A link to one Drive file is the file: its id
+ * is read out of the link, the file's name and kind are asked of the read
+ * proxy, and it goes on the post exactly as a pick would. A folder link is
+ * not a file — the picker opens on it instead.
+ */
+export function driveFileIdFromLink(url: string | null | undefined): string | null {
+  const id = driveFileIdFromUrl(url)
+  return id && isDriveId(id) ? id : null
+}
+export function driveFolderIdFromLink(url: string | null | undefined): string | null {
+  const id = driveFolderIdFromUrl(url)
+  return id && isDriveId(id) ? id : null
 }
 
 /** The line that names what is on the card, for the toolbar and the tooltip. */
