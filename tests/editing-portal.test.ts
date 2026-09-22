@@ -69,7 +69,7 @@ describe('the client’s tick per clip (pure)', () => {
     const route = src('app/api/portal/clip/route.ts')
     expect(route).toContain("if (decision === 'approve' && !authorName) return NextResponse.json({ error: 'Add your name first, so the team knows who approved it' }, { status: 400 })")
     expect(route).toContain('withClipApproved(current, { file_id: fileId, name, at, by, ip: from.ip, device: from.device })')
-    expect(route).toContain('approved by ${by} (${client.name}) from ${from.ip ?? ')
+    expect(route).toContain('approved by ${by} (${client.name})${version ? ` · Version ${version}` : \'\'} from ${from.ip ?? ')
     const portal = src('app/components/portal/EditingReview.tsx')
     expect(portal).toContain('disabled={approving || !name.trim()}')
     expect(portal).toContain("{approving ? 'Saving…' : 'Approve this clip'}")

@@ -41,7 +41,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: id,
         action: decision === 'approve' ? 'clip_approved' : 'clip_unapproved',
-        detail: decision === 'approve' ? `${file.name} marked approved on the client's behalf` : `${file.name} — approval taken back`,
+        newValue: fileId,
+        detail: decision === 'approve' ? `${file.name} marked approved on the client's behalf${file.version ? ` · Version ${file.version}` : ''}` : `${file.name} — approval taken back by ${by}`,
       })
       return NextResponse.json({ ok: true, approvals: next })
     } catch (e) {

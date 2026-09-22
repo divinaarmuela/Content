@@ -28,6 +28,7 @@ import { networkName } from './publish-core'
 import { outcomesForJob, type OutcomeJob } from './post-outcome-core'
 import { readPostedSlides } from './posted-slides-core'
 import { transferHistoryWords } from './editor-transfer-core'
+import { reviewPath } from './video-review-core'
 
 /** A `workflow_activity` row, with its actor already named. */
 export type HistoryActivity = {
@@ -49,8 +50,19 @@ export type HistoryLine = {
   at: string
   /** the whole line, in plain words */
   text: string
-  /** the live post, when the line is about one going out */
+  /** the live post, when the line is about one going out — or the clip, when the line is about one approved */
   href?: string | null
+  /** what the link is called; absent = the live post */
+  hrefWord?: string | null
+}
+
+/** WHAT THE CARD HOLDS, for a line that names a clip (22 Sep 2026: "what version was approved and
+ *  name of the clip — ensure there is a hyperlink"): the files, to say the version; the ticks, to find
+ *  the file an older row named only by its name; the card's id, for the link to the clip. */
+export type HistoryContext = {
+  itemId?: string | null
+  files?: readonly { id: string; name: string; version?: number | null }[]
+  approvals?: readonly { file_id: string; name?: string | null; at?: string | null }[]
 }
 
 const WHO = (row: HistoryActivity) => auditActorName(row.actor_name, row.acting_by)
@@ -67,9 +79,14 @@ const quote = (text: string | null | undefined, cap = 120) => {
  * history a person needs here: a metadata edit, a comment (the thread below
  * says it better), a deletion, a link.
  */
-export function describeCardActivity(row: HistoryActivity): { text: string; at?: string; href?: string | null } | null {
+export function describeCardActivity(row: HistoryActivity, ctx: HistoryContext = {}): { text: string; at?: string; href?: string | null; hrefWord?: string | null } | null {
   const who = WHO(row)
   switch (row.action) {
+    // A CLIP APPROVED, OR THE TICK TAKEN BACK (22 Sep 2026): Laura's eight ticks on The Glass Den's
+    // card were in the database and not on the card
+    case 'clip_approved':
+    case 'clip_unapproved':
+      return clipApprovalLine(row, who, ctx)
     case 'created':
       // an upload on the Schedule page says so in its detail; a card made
       // on a board with nothing in it yet was not "uploaded" (13 Sep 2026)
@@ -118,6 +135,47 @@ export function describeCardActivity(row: HistoryActivity): { text: string; at?:
       // 'updated', 'comment_added', 'deleted', 'link_added' and anything new
       return null
   }
+}
+
+/**
+ * The words of a clip's tick. A row written since 22 Sep 2026 carries the file's id in `new_value` and
+ * the version in its detail; an older row named the clip only ("<name> approved by Laura (The Glass Den)
+ * from <ip>"), so its file is found among the card's ticks by name and time, and the version from the
+ * files. Never the address it was signed from — that is the audit's, not the card's.
+ */
+function clipApprovalLine(row: HistoryActivity, who: string, ctx: HistoryContext): { text: string; href?: string | null; hrefWord?: string | null } {
+  const detail = String(row.detail ?? '').trim()
+  const undone = row.action === 'clip_unapproved'
+  const m = undone
+    ? /^(.+?) — approval taken back(?: by (.+?))?(?: from .+)?$/.exec(detail)
+    : /^(.+?) (?:approved by (.+?)|marked approved on the client's behalf)(?: · Version (\d+))?(?: from .+)?$/.exec(detail)
+  const name = (m?.[1] ?? detail.replace(/ · Version \d+$/, '')).trim() || 'a clip'
+  const by = (m?.[2] ?? '').trim() || who
+  const onBehalf = /on the client's behalf|\(MD Media\)/.test(detail)
+  let version = m && !undone && m[3] ? Number(m[3]) : null
+  // the file: named on the row, else the tick with this name nearest this instant
+  let fileId = String(row.new_value ?? '').trim() || null
+  if (!fileId && ctx.approvals?.length) {
+    const t = Date.parse(row.created_at)
+    const near = ctx.approvals
+      .filter(a => (a.name ?? '') === name)
+      .map(a => ({ a, d: Math.abs(Date.parse(String(a.at ?? '')) - t) }))
+      .filter(x => Number.isFinite(x.d) && x.d < 120_000)
+      .sort((x, y) => x.d - y.d)[0]
+    fileId = near?.a.file_id ?? null
+  }
+  if (version === null && ctx.files?.length) {
+    const f = (fileId ? ctx.files.find(x => x.id === fileId) : null) ?? ctx.files.filter(x => x.name === name).sort((a, b) => Number(b.version ?? 0) - Number(a.version ?? 0))[0]
+    version = f && Number.isFinite(Number(f.version)) ? Number(f.version) : null
+  }
+  const vWords = version ? ` · Version ${version}` : ''
+  const text = undone
+    ? `${by} took back the approval on ${name}${vWords}`
+    : onBehalf
+      ? `${by} marked ${name} approved on the client's behalf${vWords}`
+      : `${by} approved ${name}${vWords}`
+  const href = fileId && ctx.itemId ? reviewPath(ctx.itemId, fileId, name) : null
+  return { text, href, hrefWord: href ? 'Open the clip' : null }
 }
 
 /** "posted 2026-09-10T… · https://…" — the hand record on the activity row. */
@@ -228,7 +286,7 @@ export const NO_HISTORY = 'Nothing has happened to this post yet.'
  * `formatInZone(iso, tz, 'full')`. Rows the list cannot say anything useful
  * about are dropped rather than printed as database words.
  */
-export function historyLines(input: {
+export function historyLines(input: HistoryContext & {
   activity: readonly HistoryActivity[]
   jobs?: readonly HistoryJob[]
   /** the item's `posted_slides`, for a by-hand post with no activity row */
@@ -237,13 +295,14 @@ export function historyLines(input: {
 }): HistoryLine[] {
   const lines: HistoryLine[] = []
   for (const row of input.activity) {
-    const said = describeCardActivity(row)
+    const said = describeCardActivity(row, { itemId: input.itemId, files: input.files, approvals: input.approvals })
     if (!said) continue
     lines.push({
       key: `act-${row.id}`,
       at: said.at ?? row.created_at,
       text: said.text,
       href: said.href ?? null,
+      hrefWord: said.hrefWord ?? null,
     })
   }
   for (const job of input.jobs ?? []) lines.push(...channelLines(job, input.fmt))

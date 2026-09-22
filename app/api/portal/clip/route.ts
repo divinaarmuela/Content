@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { ContentItem } from '@/lib/db-types'
 import { logActivity } from '../../../lib/workflow'
+import { finalFilesOf } from '../../../lib/final-files-core'
 import { announceItemChange } from '../../../lib/production-live'
 import { portalActor, notifyManagersOfComment } from '../../../lib/portal-actor'
 import { editingPortalItem } from '../../../lib/editing-portal'
@@ -51,11 +52,16 @@ export async function POST(req: Request) {
     await table<ContentItem>('content_items').update(item.id, { clip_approvals: next, updated_at: at })
 
     const actor = await portalActor(client.id, client.name)
+    // the row names the file and its version, so "What happened" can say which cut and link to it (22 Sep 2026)
+    const version = finalFilesOf(item as never).find(f => f.id === fileId)?.version ?? null
     await logActivity({
       actor, clientId: client.id,
       entityType: 'content_item', entityId: item.id,
       action: decision === 'approve' ? 'clip_approved' : 'clip_unapproved',
-      detail: decision === 'approve' ? `${name || fileId} approved by ${by} (${client.name}) from ${from.ip ?? 'an unknown address'}` : `${name || fileId} — approval taken back by ${by} from ${from.ip ?? 'an unknown address'}`,
+      newValue: fileId,
+      detail: decision === 'approve'
+        ? `${name || fileId} approved by ${by} (${client.name})${version ? ` · Version ${version}` : ''} from ${from.ip ?? 'an unknown address'}`
+        : `${name || fileId} — approval taken back by ${by} from ${from.ip ?? 'an unknown address'}`,
     })
     announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'updated' })
     if (decision === 'approve') {

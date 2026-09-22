@@ -725,7 +725,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 {handRecord(postedSlides, s.url)?.link && (
                   <a href={handRecord(postedSlides, s.url)!.link!} target="_blank" rel="noreferrer"
                     className="inline-flex min-h-11 items-center text-[12px] underline underline-offset-4">
-                    Live post<span className="sr-only">, opens in a new tab</span>
+                    {l.hrefWord ?? 'Live post'}<span className="sr-only">, opens in a new tab</span>
                   </a>
                 )}
                 {/* a file already booked or out through a channel is not
@@ -839,7 +839,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 {l.href && (
                   <a href={l.href} target="_blank" rel="noreferrer noopener"
                     className="inline-flex min-h-11 items-center text-[12px] underline underline-offset-4">
-                    Live post<span className="sr-only">, opens in a new tab</span>
+                    {l.hrefWord ?? 'Live post'}<span className="sr-only">, opens in a new tab</span>
                   </a>
                 )}
               </li>

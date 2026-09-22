@@ -382,6 +382,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     activity: activity.map(r => ({ ...r, actor_name: nameOf(r.actor_id) })),
     jobs: [] as HistoryJob[],
     postedSlides: (item as { posted_slides?: unknown }).posted_slides,
+    // a clip's tick names the version and links to the clip (22 Sep 2026)
+    itemId: id, files: finalFilesOf(item as never), approvals: clipApprovalsOf(item as never),
     fmt: when,
   })
   const busy = working !== null
@@ -796,6 +798,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
                 <span>{l.text}</span>
                 <span className="text-[12px] text-muted-foreground">{when(l.at)}</span>
+                {l.href && (
+                  <a href={l.href} className="inline-flex min-h-11 items-center text-[12px] underline underline-offset-4">{l.hrefWord ?? 'Live post'}</a>
+                )}
               </li>
             ))}
           </ol>
