@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, Link2, PauseCircle, PlayCircle, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { copyText } from '../../../lib/copy-text-client'
+import { EMAIL_REPLY_NOT_YET, NO_INSTAGRAM_HANDLE, REPLY_MAX } from '../../../lib/acq-reply-core'
 import { destinationFor, TRACKED_KINDS, TRACKED_WORDS, trackedLink, trackedPath } from '../../../lib/tracked-link-core'
 import { isOpenFinding } from '../../../lib/acq-agent-core'
 import { Button } from '@/components/ui/button'
@@ -32,7 +33,7 @@ const dt = (iso: string | null | undefined) => (iso ? new Date(iso).toISOString(
 const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' }) : '')
 const stamp = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
-export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check, research }: {
+export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check, research, reply }: {
   prospect: Prospect
   events: AcqEvent[]
   team: TeamUser[]
@@ -48,6 +49,8 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
   check: () => Promise<boolean>
   /** the agent looks the business up: Instagram's public page, the web, their site */
   research: () => Promise<boolean>
+  /** REPLYING FROM HERE (22 Sep 2026): the person's own words, sent down the prospect's Instagram thread; email until authorised is refused with the reason */
+  reply: (channel: 'instagram' | 'email', message: string) => Promise<boolean>
   now: number
 }) {
   const stage = acqStageByKey(p.stage)
@@ -61,6 +64,7 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
   const people = team.filter(u => u.active_status !== false && u.role !== 'client')
   const [said, setSaid] = useState('')
   const [note, setNote] = useState('')
+  const [draft, setDraft] = useState('')
 
   const text = (key: keyof Prospect, label: string, placeholder = '', wide = false) => (
     <label className={`flex flex-col gap-1 text-[12px] font-semibold ${wide ? 'sm:col-span-2' : ''}`}>{label}
@@ -293,6 +297,21 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
             </div>
           </div>
         ))}
+        {/* REPLY FROM HERE (the owner, 22 Sep 2026: "no auto reply … but please integrate reply systems from the
+            dashboard"): the person writes it; it goes down the prospect's own Instagram thread with MD Media's
+            account and lands on the timeline. Email waits on the mailboxes being authorised to send. */}
+        <div className="flex flex-col gap-2 rounded-inner border border-border p-3" data-acq-reply>
+          <p className="text-[12px] font-semibold text-muted-foreground">Reply to them — your words, sent as MD Media</p>
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} maxLength={REPLY_MAX} disabled={busy} placeholder={p.instagram ? `Write to @${p.instagram}…` : 'Add their Instagram handle to reply on Instagram'}
+            className={`${field} resize-y p-2.5`} aria-label="Your reply" />
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={busy || !draft.trim() || !p.instagram} title={p.instagram ? undefined : NO_INSTAGRAM_HANDLE}
+              onClick={async () => { if (await reply('instagram', draft.trim())) setDraft('') }}
+              className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">Send on Instagram</Button>
+            <Button variant="outline" disabled title={EMAIL_REPLY_NOT_YET} className="h-11 rounded-full px-4 text-[13px] font-semibold">Send by email</Button>
+            <span className="self-center text-[12px] text-muted-foreground">Nothing is ever sent for you — only what you press Send on.</span>
+          </div>
+        </div>
         <div className="flex gap-2">
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note…" className={field} aria-label="A note for the timeline"
             onKeyDown={async e => { if (e.key === 'Enter' && note.trim()) { e.preventDefault(); if (await log('note', note.trim(), 'Note added')) setNote('') } }} />

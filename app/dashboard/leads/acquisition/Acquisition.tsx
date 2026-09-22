@@ -306,7 +306,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
               remove={() => setDeleting(current)}
               answer={(eventId, confirm) => call(`/api/leads/acquisition/${current.id}/events/${eventId}`, 'POST', { confirm }, confirm ? 'Confirmed — it counts now' : 'Dismissed')}
               check={() => checkNow(current.id)}
-              research={() => researchNow(current.id)} />
+              research={() => researchNow(current.id)}
+              reply={(channel, message) => call(`/api/leads/acquisition/${current.id}/reply`, 'POST', { channel, message }, channel === 'instagram' ? 'Sent on Instagram — it is on the timeline' : 'Sent')} />
           )}
         </SheetContent>
       </Sheet>
