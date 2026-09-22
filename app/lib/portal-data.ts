@@ -44,6 +44,7 @@ import {
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
 import { portalOwnerByToken } from './portal-owner'
+import { forTheClient } from './comment-visibility-core'
 
 /**
  * Client-safe portal payload — shared by the logged-in portal and the
@@ -655,7 +656,10 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
           where: r => shootIds.includes(r.batch_id) && !String(r.body ?? '').startsWith('Plan sent back:'),
           orderBy: [['created_at', 'asc']],
           limit: 500,
-        }).then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role'])).catch(() => [])
+        }).then(rows => attachOne(rows, 'author_id', 'team_users', ['name', 'role']))
+          // THE PLAN'S THREAD IS THE TEAM'S (22 Sep 2026): the client sees the board's card comments and their own words
+          .then(rows => forTheClient(rows as never[]))
+          .catch(() => [])
       : Promise.resolve([]),
   ])
   const asComment = toPortalComment(clientRow.name as string)
