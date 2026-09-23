@@ -6,7 +6,9 @@
 export type GmailHeader = { name: string; value: string }
 export type GmailPart = {
   mimeType?: string
-  body?: { data?: string; size?: number }
+  filename?: string
+  headers?: GmailHeader[]
+  body?: { data?: string; size?: number; attachmentId?: string }
   parts?: GmailPart[]
 }
 export type GmailPayload = GmailPart & { headers?: GmailHeader[] }
@@ -91,4 +93,43 @@ export function prefilterSkipReason(input: {
 export function extractHtml(payload: GmailPayload): string | null {
   const html = findPart(payload, 'text/html')
   return html ? decodeBase64Url(html) : null
+}
+
+/* ── INLINE IMAGES (research, 23 Sep 2026: an HTML signature's icons are attachments the message carries itself,
+   referenced as src="cid:<Content-ID>" inside a multipart/related body; Gmail resolves each cid to the attachment
+   part when it draws the mail, a browser cannot, so the frame showed a broken icon with the alt text — the raw link).
+   The parts are listed here (pure); gmail.ts fetches each attachment and the html is rewritten to data: URLs. ── */
+
+export type InlineImagePart = { cid: string; mimeType: string; attachmentId: string | null; data: string | null; size: number }
+
+/** every image part with a Content-ID (or Gmail's X-Attachment-Id), cid without its angle brackets */
+export function inlineImageParts(payload: GmailPart): InlineImagePart[] {
+  const out: InlineImagePart[] = []
+  const walk = (part: GmailPart) => {
+    const mime = String(part.mimeType ?? '').toLowerCase()
+    const cidRaw = header(part.headers, 'Content-ID') || header(part.headers, 'X-Attachment-Id')
+    if (mime.startsWith('image/') && cidRaw) {
+      out.push({ cid: cidRaw.replace(/^<|>$/g, '').trim(), mimeType: mime, attachmentId: part.body?.attachmentId ?? null, data: part.body?.data ?? null, size: part.body?.size ?? 0 })
+    }
+    for (const p of part.parts ?? []) walk(p)
+  }
+  walk(payload)
+  return out
+}
+
+/** base64url (as Gmail returns it) to a data: URL */
+export function dataUrlFromBase64Url(mimeType: string, base64url: string): string {
+  return `data:${mimeType};base64,${base64url.replace(/-/g, '+').replace(/_/g, '/')}`
+}
+
+/** src="cid:…" swapped for the image itself; an image nobody could fetch is removed whole, never drawn broken */
+export function inlineCidImages(html: string, resolved: ReadonlyMap<string, string>): string {
+  return html
+    .replace(/<img\b[^>]*>/gi, tag => {
+      const m = /\ssrc\s*=\s*(["']?)cid:([^"'\s>]+)\1/i.exec(tag)
+      if (!m) return tag
+      const cid = decodeURIComponent(m[2]).replace(/^<|>$/g, '')
+      const url = resolved.get(cid) ?? resolved.get(cid.toLowerCase())
+      return url ? tag.replace(m[0], ` src="${url}"`) : ''
+    })
 }

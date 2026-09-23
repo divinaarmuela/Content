@@ -153,7 +153,7 @@ export const MAILBOX_CANNOT_SEND = (mailbox: string) => `${mailbox} can read but
    make the links clickable with a short label, and fold the quoted history away. No I/O. ── */
 
 export type BodyToken = { kind: 'text'; text: string } | { kind: 'link'; href: string; label: string }
-export type BodyView = { paragraphs: BodyToken[][]; quoted: string | null }
+export type BodyView = { paragraphs: BodyToken[][]; quoted: string | null; signature: string | null }
 
 const QUOTE_HEAD_RE = /^(On .{6,200} wrote:|-{2,}\s*(Original|Forwarded) Message\s*-{2,}|From: .+)$/i
 
@@ -220,8 +220,9 @@ export function tokenise(paragraph: string): BodyToken[] {
 
 /** the message body as the page draws it */
 export function bodyView(body: string | null | undefined): BodyView {
-  const { own, quoted } = splitQuoted(String(body ?? ''))
-  return { paragraphs: unwrapParagraphs(own).map(tokenise), quoted }
+  const { own: beforeQuote, quoted } = splitQuoted(String(body ?? ''))
+  const { own, signature } = splitSignature(beforeQuote)
+  return { paragraphs: unwrapParagraphs(own).map(tokenise), quoted, signature }
 }
 
 /* ── HTML mail, drawn like a mail client does (research, 23 Sep 2026: Close.com "Rendering untrusted HTML email,
@@ -244,7 +245,21 @@ export const EMAIL_FRAME_CSS = `
   pre { white-space: pre-wrap; }
   a { color: #0057ff; }
   blockquote { margin: 0 0 0 .75em; padding-left: .75em; border-left: 2px solid #ccc; color: #555; }
+  .mdm-signature { color: #666; font-size: 13px; margin-top: 1em; }
+  .mdm-signature img { max-width: 200px !important; max-height: 80px; width: auto; }
+  img[src=""], img:not([src]) { display: none; }
 `
+
+/** where each mail client puts the sender's signature */
+export const SIGNATURE_SELECTORS = ['.gmail_signature', '#Signature', '#ms-outlook-mobile-signature', '.moz-signature', '[data-smartmail="gmail_signature"]', '.protonmail_signature_block'] as const
+
+/** a plain-text signature starts at the "-- " line (RFC 3676) */
+export function splitSignature(text: string): { own: string; signature: string | null } {
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  const at = lines.findIndex(l => /^--\s?$/.test(l))
+  if (at < 0) return { own: text, signature: null }
+  return { own: lines.slice(0, at).join('\n').trim(), signature: lines.slice(at + 1).join('\n').trim() || null }
+}
 
 /** the document the frame draws: no scripts by policy, links open outside, the sanitised body */
 export function emailFrameDocument(sanitisedBody: string): string {

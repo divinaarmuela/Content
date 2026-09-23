@@ -1,6 +1,6 @@
 import 'server-only'
 import {
-  extractBody, extractHtml, header, parseFromHeader, type GmailPayload,
+  extractBody, extractHtml, header, parseFromHeader, inlineImageParts, inlineCidImages, dataUrlFromBase64Url, type GmailPayload,
 } from './gmail-core'
 import { buildClaims, signAssertion } from './google-jwt'
 
@@ -270,9 +270,10 @@ export type ThreadMessage = {
 export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<ThreadMessage[]> {
   const head = await gmailGet<{ threadId: string }>(mailbox, `messages/${messageId}?format=minimal`)
   const json = await gmailGet<{ messages?: { id: string; internalDate?: string; payload?: GmailPayload }[] }>(mailbox, `threads/${head.threadId}?format=full`)
-  return (json.messages ?? []).map(m => {
+  return Promise.all((json.messages ?? []).map(async m => {
     const headers = m.payload?.headers
     const from = parseFromHeader(header(headers, 'From'))
+    const rawHtml = m.payload ? (extractHtml(m.payload)?.slice(0, 400000) ?? null) : null
     return {
       id: m.id,
       threadId: head.threadId,
@@ -287,9 +288,30 @@ export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<
       subject: header(headers, 'Subject'),
       at: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
       body: m.payload ? extractBody(m.payload).slice(0, 20000) : '',
-      html: m.payload ? (extractHtml(m.payload)?.slice(0, 400000) ?? null) : null,
+      html: rawHtml && m.payload ? await withInlineImages(mailbox, m.id, m.payload, rawHtml) : rawHtml,
     }
-  })
+  }))
+}
+
+const INLINE_IMAGE_MAX = 1_500_000
+const INLINE_IMAGES_TOTAL_MAX = 5_000_000
+
+/** the message's own images (src="cid:…") fetched and put into the html as data: URLs; an image that cannot be had is removed */
+async function withInlineImages(mailbox: Mailbox, messageId: string, payload: GmailPayload, html: string): Promise<string> {
+  if (!/cid:/i.test(html)) return html
+  const resolved = new Map<string, string>()
+  let total = 0
+  for (const part of inlineImageParts(payload)) {
+    if (part.size > INLINE_IMAGE_MAX || total + part.size > INLINE_IMAGES_TOTAL_MAX) continue
+    try {
+      let data = part.data
+      if (!data && part.attachmentId) data = (await gmailGet<{ data?: string }>(mailbox, `messages/${messageId}/attachments/${part.attachmentId}`)).data ?? null
+      if (!data) continue
+      total += part.size
+      resolved.set(part.cid, dataUrlFromBase64Url(part.mimeType, data))
+    } catch (e) { console.error(`[gmail] inline image ${part.cid} of ${messageId} could not be read:`, e) }
+  }
+  return inlineCidImages(html, resolved)
 }
 
 export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'

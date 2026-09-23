@@ -1,7 +1,7 @@
 'use client'
 
 import DOMPurify from 'dompurify'
-import { QUOTE_SELECTORS } from './acq-conversation-core'
+import { QUOTE_SELECTORS, SIGNATURE_SELECTORS } from './acq-conversation-core'
 
 /**
  * HTML MAIL, MADE SAFE TO DRAW — the browser half (research, 23 Sep 2026:
@@ -58,7 +58,22 @@ export function splitQuotedHtml(html: string): { own: string; quoted: string | n
       }
     }
   }
+  // the signature, dimmed: by the client's own marker, else the block that begins with the "--" line
+  let sig: Element | null = null
+  for (const sel of SIGNATURE_SELECTORS) { sig = doc.querySelector(sel); if (sig) break }
+  if (!sig) sig = Array.from(doc.body.querySelectorAll('div, p')).find(el => /^--\s*$/.test((el.firstChild?.textContent ?? '').trim()) && el.textContent && el.textContent.trim().length > 2) ?? null
+  if (sig && sig !== doc.body) {
+    const wrap = doc.createElement('div'); wrap.className = 'mdm-signature'
+    // Gmail's own signature block, or the div that begins with -- and everything after it
+    const run: Element[] = [sig]; if (!sig.matches(SIGNATURE_SELECTORS.join(','))) { let n = sig.nextElementSibling; while (n) { run.push(n); n = n.nextElementSibling } }
+    sig.parentElement?.insertBefore(wrap, sig); run.forEach(x => wrap.appendChild(x))
+  }
   return { own: doc.body.innerHTML, quoted: quoted.length ? quoted.join('') : null }
+}
+
+/** an <img> with nothing to show — no src, a cid: nobody resolved, or one held back — is removed, never drawn broken */
+export function dropEmptyImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, tag => (/\ssrc\s*=\s*(["'])(?!\s*\1)(?!cid:)[^"']+\1/i.test(tag) ? tag : ''))
 }
 
 /** sanitise for the frame; images blocked unless asked */
@@ -67,8 +82,11 @@ export function prepareEmailHtml(html: string, opts: { images?: boolean } = {}):
   ;(DOMPurify as unknown as { __allowImages?: boolean }).__allowImages = opts.images === true
   const { own, quoted } = splitQuotedHtml(html)
   const clean = (s: string) => DOMPurify.sanitize(s, { FORBID_TAGS, FORBID_ATTR, ALLOW_UNKNOWN_PROTOCOLS: false, USE_PROFILES: { html: true } }) as string
-  const ownClean = clean(own)
-  const quotedClean = quoted ? clean(quoted) : null
-  const blockedImages = opts.images ? 0 : (ownClean.match(/data-blocked-src=/g)?.length ?? 0) + (quotedClean?.match(/data-blocked-src=/g)?.length ?? 0)
+  const ownSafe = clean(own)
+  const quotedSafe = quoted ? clean(quoted) : null
+  // counted before the empty ones are dropped, so "Show images" still knows how many were held back
+  const blockedImages = opts.images ? 0 : (ownSafe.match(/data-blocked-src=/g)?.length ?? 0) + (quotedSafe?.match(/data-blocked-src=/g)?.length ?? 0)
+  const ownClean = dropEmptyImages(ownSafe)
+  const quotedClean = quotedSafe ? dropEmptyImages(quotedSafe) : null
   return { own: ownClean, quoted: quotedClean, blockedImages }
 }

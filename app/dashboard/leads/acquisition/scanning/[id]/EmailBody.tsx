@@ -81,6 +81,7 @@ export default function EmailBody({ html, text }: { html: string | null; text: s
           <div className="flex flex-col gap-3 text-[14px] leading-relaxed">
             {plain.paragraphs.map((p, i) => <p key={i} className="whitespace-pre-wrap"><Tokens tokens={p} /></p>)}
           </div>
+          {plain.signature && <pre className="mt-3 whitespace-pre-wrap font-sans text-[13px] text-muted-foreground">{plain.signature}</pre>}
           {plain.quoted && (
             <div className="mt-3">
               <button type="button" onClick={() => setShowQuoted(v => !v)} aria-expanded={showQuoted} className="inline-flex h-8 items-center rounded-full border border-border px-3 text-[12px] font-semibold text-muted-foreground hover:bg-foreground/[0.04]">

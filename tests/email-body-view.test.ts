@@ -71,3 +71,36 @@ describe('an HTML email, drawn safely', () => {
     expect(readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')).toContain('html: replyHtml(text)')
   })
 })
+
+describe('a signature’s own images, and no broken image ever (research, 23 Sep 2026)', () => {
+  it('lists the message’s inline images by Content-ID and puts them into the html; an unresolved one is removed whole', async () => {
+    const { inlineImageParts, inlineCidImages, dataUrlFromBase64Url } = await import('../app/lib/gmail-core')
+    const payload = { mimeType: 'multipart/related', parts: [
+      { mimeType: 'text/html', body: { data: 'x' } },
+      { mimeType: 'image/png', filename: 'fb.png', headers: [{ name: 'Content-ID', value: '<ii_fb@x>' }], body: { attachmentId: 'att1', size: 900 } },
+      { mimeType: 'image/png', filename: 'li.png', headers: [{ name: 'X-Attachment-Id', value: 'ii_li' }], body: { data: 'AAA_-', size: 5 } },
+      { mimeType: 'application/pdf', headers: [{ name: 'Content-ID', value: '<doc@x>' }], body: { attachmentId: 'att2', size: 1 } },
+    ] }
+    expect(inlineImageParts(payload)).toEqual([
+      { cid: 'ii_fb@x', mimeType: 'image/png', attachmentId: 'att1', data: null, size: 900 },
+      { cid: 'ii_li', mimeType: 'image/png', attachmentId: null, data: 'AAA_-', size: 5 },
+    ])
+    expect(dataUrlFromBase64Url('image/png', 'AAA_-')).toBe('data:image/png;base64,AAA/+')
+    const html = '<p>hi</p><img src="cid:ii_fb@x" alt="https://facebook.com/x"><img src="cid:missing" alt="gone"><img src="https://a.com/b.png">'
+    expect(inlineCidImages(html, new Map([['ii_fb@x', 'data:image/png;base64,AAA']]))).toBe('<p>hi</p><img src="data:image/png;base64,AAA" alt="https://facebook.com/x"><img src="https://a.com/b.png">')
+    expect(readFileSync('app/lib/gmail.ts', 'utf8')).toContain('data = (await gmailGet<{ data?: string }>(mailbox, `messages/${messageId}/attachments/${part.attachmentId}`)).data ?? null')
+  })
+  it('the plain-text signature is split at the -- line and drawn dimmed; the frame keeps signature images small and hides an empty one', async () => {
+    const { splitSignature, bodyView, EMAIL_FRAME_CSS, SIGNATURE_SELECTORS } = await import('../app/lib/acq-conversation-core')
+    expect(splitSignature('Thanks\n-- \nRenee Yap\nMarketing Manager')).toEqual({ own: 'Thanks', signature: 'Renee Yap\nMarketing Manager' })
+    expect(splitSignature('No sig')).toEqual({ own: 'No sig', signature: null })
+    expect(bodyView('Thanks\n--\nRenee').signature).toBe('Renee')
+    expect(EMAIL_FRAME_CSS).toContain('.mdm-signature img { max-width: 200px !important; max-height: 80px; width: auto; }')
+    expect(EMAIL_FRAME_CSS).toContain('img[src=""], img:not([src]) { display: none; }')
+    expect(SIGNATURE_SELECTORS).toContain('.gmail_signature')
+    const client = readFileSync('app/lib/email-html-client.ts', 'utf8')
+    expect(client).toContain('export function dropEmptyImages(html: string): string')
+    expect(client).toContain("const ownClean = dropEmptyImages(ownSafe)")
+    expect(readFileSync('app/dashboard/leads/acquisition/scanning/[id]/EmailBody.tsx', 'utf8')).toContain('{plain.signature && <pre')
+  })
+})
