@@ -184,7 +184,8 @@ export async function runAgentForProspect(p: P, ctx: { boxes: readonly Mailbox[]
         if (!lock.ok) { run.ignored++; continue }
         const ev = fresh.find(e => e.id === f.evidence_id)!
         const at = f.at && !Number.isNaN(Date.parse(f.at)) ? new Date(f.at).toISOString() : ev.at ?? undefined
-        const detail = `${f.summary} — from ${ev.source === 'email' ? `an email (${ev.from}${ev.subject ? `, “${ev.subject.slice(0, 80)}”` : ''})` : `an Instagram DM (${ev.from})`} · ${Math.round(f.confidence * 100)}% sure${verdict === 'ask' ? ` · asked because ${why}` : ''}`
+        const said = String(ev.text ?? '').replace(/\s+/g, ' ').trim()
+        const detail = `${f.summary}${said ? `\n“${said.length > 280 ? `${said.slice(0, 280)}…` : said}”` : ''} — from ${ev.source === 'email' ? `an email (${ev.from}${ev.subject ? `, “${ev.subject.slice(0, 80)}”` : ''})` : `an Instagram DM (${ev.from})`} · ${Math.round(f.confidence * 100)}% sure${verdict === 'ask' ? ` · asked because ${why}` : ''}`
         const extra = { evidenceId: ev.id, confidence: f.confidence }
         if (verdict === 'ask') {
           await logAcqEvent({ prospectId: p.id, kind: f.kind as AcqEventKind, source: 'agent', detail, at, confirmed: false, ...extra })
@@ -265,7 +266,7 @@ export async function onOwnDm(input: { accountId: string; conversationId: string
 
   const res = await anthropic.messages.parse({
     model: agentModel(), max_tokens: 800, system: STRANGER_SYSTEM,
-    messages: [{ role: 'user', content: strangerPrompt(handle, input.name, messages.slice(-30)) }],
+    messages: [{ role: 'user', content: strangerPrompt(handle, input.name, messages.slice(-60)) }],
     output_config: { format: zodOutputFormat(Stranger) },
   })
   const v = res.parsed_output as StrangerVerdict | null

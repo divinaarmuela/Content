@@ -2,7 +2,7 @@ import 'server-only'
 import { table } from '@/lib/db'
 import { getScanSettings } from './scan-settings'
 import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
-import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, prospectForSender, type AcqEventKind, type Prospect } from './acquisition-core'
+import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, prospectForSender, type AcqEventKind, type Prospect, replyPoints } from './acquisition-core'
 import { escapeHtml, notify, renderEmail } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { takeClaimLock } from './claim-lock'
@@ -213,7 +213,10 @@ export async function onBookingMade(booking: { id: string; customer_email?: stri
  */
 export async function recordReply(actor: Actor, p: ProspectRow, detail: string | null, opts: { by?: string | null; source?: 'person' | 'scanner' | 'agent'; points?: number; at?: string; evidenceId?: string | null; confidence?: number | null } = {}): Promise<ProspectEvent> {
   const now = new Date().toISOString()
-  const event = await logAcqEvent({ prospectId: p.id, kind: 'reply', by: opts.by ?? null, source: opts.source ?? 'person', detail, points: opts.points, at: opts.at, evidenceId: opts.evidenceId, confidence: opts.confidence })
+  // ONE REPLY, ONE SCORE: a further reply after the first is recorded with its words but scores nothing
+  const points = opts.points ?? replyPoints(p as never)
+  const words = detail ?? (points === 0 ? 'A further reply — the first one already scored' : null)
+  const event = await logAcqEvent({ prospectId: p.id, kind: 'reply', by: opts.by ?? null, source: opts.source ?? 'person', detail: words, points, at: opts.at, evidenceId: opts.evidenceId, confidence: opts.confidence })
   const prospects = table<ProspectRow>('prospects')
   const wasAtOutreach = acqStageByKey((p as ProspectRow & Prospect).stage).key === 'outreach'
   const moved = await prospects.claim(p.id, ((cur: ProspectRow | null): unknown => {

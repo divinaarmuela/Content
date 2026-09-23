@@ -45,3 +45,14 @@ describe('an incoming DM wakes the acquisition agent at once (21 Sep 2026)', () 
     expect(readFileSync('app/inngest/functions.ts', 'utf8')).toContain("triggers: [{ event: 'app/acquisition.dm.received' }],")
   })
 })
+
+describe('one reply, one score; the words on the timeline (the owner, 23 Sep 2026, of Crestline’s timeline)', () => {
+  it('a further reply is recorded but scores nothing, the agent quotes the message it read, and a stranger’s thread is read to 60', () => {
+    const acq = readFileSync('app/lib/acquisition.ts', 'utf8')
+    expect(acq).toContain('const points = opts.points ?? replyPoints(p as never)')
+    expect(acq).toContain("const words = detail ?? (points === 0 ? 'A further reply — the first one already scored' : null)")
+    const agent = readFileSync('app/lib/acq-agent.ts', 'utf8')
+    expect(agent).toContain("const said = String(ev.text ?? '').replace(/\\s+/g, ' ').trim()")
+    expect(agent).toContain('strangerPrompt(handle, input.name, messages.slice(-60))')
+  })
+})
