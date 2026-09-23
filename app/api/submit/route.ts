@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
   // outage can never lose an enquiry. Email is the notification layer.
   const leadInput = {
     fname, lname, email, phone, biz,
+    // WHERE IT CAME FROM (23 Sep 2026): the website form — the Leads page and the acquisition side say so
+    source: 'web_form',
     model: model ?? null,
     need:  need ?? null,
     budget: budget ?? null,
