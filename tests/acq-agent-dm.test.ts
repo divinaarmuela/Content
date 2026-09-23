@@ -26,7 +26,12 @@ describe('an incoming DM wakes the acquisition agent at once (21 Sep 2026)', () 
     expect(strangerIsLead(v())).toBe(true)
     expect(strangerIsLead(v({ confidence: STRANGER_FROM - 0.01 }))).toBe(false)
     expect(strangerIsLead(v({ is_potential_client: false, confidence: 0.99 }))).toBe(false)
-    expect(strangerLockKey('KodeFinance', '2026-09-21T09:30:00Z')).toBe('kodefinance__2026-09-21')
+    // one look per NEW message, not per day (23 Sep 2026): the key is the newest incoming message
+    expect(strangerLockKey('KodeFinance', 'ig:m_abc')).toBe('kodefinance__ig:m_abc')
+    expect(strangerLockKey('KodeFinance', 'ig:m_abc')).not.toBe(strangerLockKey('KodeFinance', 'ig:m_def'))
+    const agent = readFileSync('app/lib/acq-agent.ts', 'utf8')
+    expect(agent).toContain('strangerLockKey(handle, incoming[incoming.length - 1].id)')
+    expect(agent.indexOf('const incoming = messages.filter')).toBeLessThan(agent.indexOf('const lock = await takeClaimLock(`acq_dm__'))
     const msgs: Evidence[] = [{ id: 'ig:1', source: 'instagram', at: '2026-09-21T01:00:00Z', direction: 'in', from: '@kode', to: '@mdmedia._', text: 'Hi, how much for reels?' }]
     expect(strangerPrompt('kode', 'Kode', msgs)).toContain('[2026-09-21T01:00:00Z] @kode: Hi, how much for reels?')
   })

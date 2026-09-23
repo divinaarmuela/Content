@@ -113,7 +113,7 @@ export function replyTarget(thread: readonly ReplyableMessage[]): ReplyableMessa
   return [...thread].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).find(m => directionOf(m.fromEmail) === 'in') ?? null
 }
 
-const MACHINE_SENDER = /(^|[.\-_])(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|bounce|notifications?|newsletter|marketing)([.\-_@]|$)|@em\d*\.cloudflare\.com$|@.*\.(sendgrid|mailchimp|mailgun|amazonses|hubspotemail|sparkpostmail)\./i
+const MACHINE_SENDER = /(^|[.\-_])(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|bounce|notifications?|newsletter|marketing)([.\-_@]|$)|@em\d*\.cloudflare\.com$|@mail\.asana\.com$|@.*\.(sendgrid|mailchimp|mailgun|amazonses|hubspotemail|sparkpostmail)\./i
 
 /** why a reply to this thread would only bounce: an automated sender (seen live, 23 Sep 2026: a reply to a Cloudflare
  *  newsletter went to em@em1.cloudflare.com and came back "550 5.7.1 relaying denied") */
@@ -122,7 +122,7 @@ export function replyRefusal(thread: readonly ReplyableMessage[]): string | null
   if (!last) return NOBODY_TO_REPLY_TO
   const to = String(last.replyTo ?? '').trim() || String(last.fromEmail ?? '').trim()
   if (!to) return NOBODY_TO_REPLY_TO
-  const automated = Boolean(String(last.listUnsubscribe ?? '').trim()) || /^auto-/i.test(String(last.autoSubmitted ?? '').trim()) || MACHINE_SENDER.test(to)
+  const automated = Boolean(String(last.listUnsubscribe ?? '').trim()) || /^auto-/i.test(String(last.autoSubmitted ?? '').trim()) || MACHINE_SENDER.test(to) || MACHINE_SENDER.test(String(last.fromEmail ?? ''))
   if (automated) return `This came from an automated sender (${to}) — a reply would only bounce. There is nobody at that address.`
   return null
 }

@@ -157,9 +157,14 @@ export function strangerIsLead(v: StrangerVerdict): boolean {
   return v.is_potential_client === true && Number(v.confidence) >= STRANGER_FROM
 }
 
-/** one look per handle per day */
-export function strangerLockKey(handle: string, dayIso: string): string {
-  return `${handle.toLowerCase()}__${dayIso.slice(0, 10)}`
+/**
+ * ONE LOOK PER NEW MESSAGE (the owner, 23 Sep 2026: a thread that opens with "nice post" and ends, hours later, with
+ * "yeah let's do it"). The lock used to be per handle per day, so the first verdict silenced the rest of the day; now it
+ * is keyed on the newest incoming message, so every new message from a stranger re-runs the look over the whole thread,
+ * and the same message is never judged twice.
+ */
+export function strangerLockKey(handle: string, newestIncomingId: string): string {
+  return `${handle.toLowerCase()}__${newestIncomingId}`
 }
 
 export function strangerPrompt(handle: string, name: string | null, messages: readonly Evidence[]): string {

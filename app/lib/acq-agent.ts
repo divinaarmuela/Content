@@ -254,13 +254,14 @@ export async function onOwnDm(input: { accountId: string; conversationId: string
   const accounts = await table<SocialAccount>('social_accounts').list()
   if (accounts.some(a => String(a.username ?? '').toLowerCase().replace(/^@/, '') === handle)) return { kind: 'a_client_account' }
 
-  const lock = await takeClaimLock(`acq_dm__${encodeKey(strangerLockKey(handle, new Date().toISOString()))}`, 'agent')
-  if (!lock.ok) return { kind: 'already_looked' }
-
   const threads = (await ownThreads()).filter(t => t.handle === handle && (!input.conversationId || t.conversationId === input.conversationId))
   const messages = await instagramEvidence({ instagram: handle, business: handle } as P, threads.length ? threads : await ownThreads())
   const incoming = messages.filter(m => m.direction === 'in')
   if (incoming.length === 0) return { kind: 'empty_thread' }
+
+  // one look per NEW message: "nice post" at ten is judged once; "yeah let's do it" at three is a new message and is looked at again, with the whole thread
+  const lock = await takeClaimLock(`acq_dm__${encodeKey(strangerLockKey(handle, incoming[incoming.length - 1].id))}`, 'agent')
+  if (!lock.ok) return { kind: 'already_looked' }
 
   const res = await anthropic.messages.parse({
     model: agentModel(), max_tokens: 800, system: STRANGER_SYSTEM,

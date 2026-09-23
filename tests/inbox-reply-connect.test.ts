@@ -98,7 +98,7 @@ describe('a signature under every reply (the owner, 23 Sep 2026)', () => {
     expect(cleanSignature('x'.repeat(SIGNATURE_MAX + 5))?.length).toBe(SIGNATURE_MAX)
     expect(readFileSync('docs/schema-history/inbox_signature.sql', 'utf8')).toContain('alter table scan_mailboxes add column if not exists signature text;')
     const route = readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')
-    expect(route).toContain('text: withSignatureText(text, signature), html: replyHtml(text) + signatureHtml(signature)')
+    expect(route).toContain("text: withSignatureText(text, sig?.text ?? null), html: replyHtml(text) + (sig?.html ?? '')")
     const settings = readFileSync('app/api/ingest/settings/route.ts', 'utf8')
     expect(settings).toContain("if (typeof body?.mailbox === 'string' && 'signature' in body) {")
     expect(settings).toContain('await setMailboxSignature(body.mailbox, cleanSignature(body.signature), admin.email)')
@@ -115,9 +115,9 @@ describe('the acquisition emails can be paused for a test (the owner, 23 Sep 202
     expect(normaliseSettings({}).acq_notifications_paused).toBe(false)
     const acq = readFileSync('app/lib/acquisition.ts', 'utf8')
     expect(acq).toContain("if ((await getScanSettings().catch(() => null))?.acq_notifications_paused) {")
-    expect(acq.match(/notify(/g)?.length ?? 0).toBe(1)
+    expect(acq.match(/\bnotify\(/g)?.length ?? 0).toBe(1)
     expect(acq).not.toContain('sendSystemEmail(')
-    expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).not.toMatch(/notify(|sendSystemEmail(/)
+    expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).not.toMatch(/\bnotify\(|sendSystemEmail\(/)
     expect(readFileSync('app/dashboard/settings/ScannerSettings.tsx', 'utf8')).toContain('Pause acquisition emails')
   })
 })
@@ -138,5 +138,14 @@ describe('the signature Gmail already has comes first (the owner, 23 Sep 2026: "
     const route = readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')
     expect(route).toContain('const [gmail, typed] = await Promise.all([fetchGmailSignature(box), mailboxSignature(box.email).catch(() => null)])')
     expect(route).toContain("text: withSignatureText(text, sig?.text ?? null), html: replyHtml(text) + (sig?.html ?? '')")
+  })
+})
+
+describe('an Asana notification is a machine even though it sets a Reply-To (23 Sep 2026)', () => {
+  it('is refused, by its From and by its reply address alike', async () => {
+    const { replyRefusal } = await import('../app/lib/acq-conversation-core')
+    const asana = { id: 'a1', fromEmail: 'no-reply@asana.com', replyTo: '4.c00l4stbgk.by45k53a8q@mail.asana.com', subject: 'Renee assigned you a task', at: '2026-09-22T09:43:00.000Z' }
+    expect(replyRefusal([asana])).toContain('automated sender')
+    expect(replyRefusal([{ id: 'a2', fromEmail: 'someone@x.com', replyTo: 'x@mail.asana.com', subject: 's', at: '2026-09-22T09:43:00.000Z' }])).toContain('automated sender')
   })
 })

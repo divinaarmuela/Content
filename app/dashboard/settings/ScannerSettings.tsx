@@ -26,6 +26,7 @@ type Settings = {
   allow_self_connect: boolean
   blocked_domains: string[]
   blocked_senders: string[]
+  acq_notifications_paused: boolean
 }
 
 type MailboxEntry = {
