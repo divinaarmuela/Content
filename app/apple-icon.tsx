@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og'
-import { BLUE, CREAM, INK, iconLayout } from './lib/app-icon-core'
+import { CREAM, INK, iconLayout } from './lib/app-icon-core'
 
 /**
  * THE ICON iOS USES (the owner, 23 Sep 2026: "an icon on the phone like an
@@ -16,9 +16,8 @@ export default function AppleIcon() {
   return new ImageResponse(
     (
       <div style={{ width: l.size, height: l.size, display: 'flex', alignItems: 'center', justifyContent: 'center', background: INK }}>
-        <div style={{ display: 'flex', alignItems: 'center', color: CREAM, fontSize: l.fontSize, fontWeight: 800, letterSpacing: -l.fontSize * 0.03 }}>
+        <div style={{ display: 'flex', alignItems: 'center', color: CREAM, fontSize: l.fontSize, letterSpacing: -l.fontSize * 0.03 }}>
           MD
-          <div style={{ width: l.slashWidth, height: l.fontSize * 1.08, marginLeft: l.fontSize * 0.14, background: BLUE, transform: 'skewX(-14deg)' }} />
         </div>
       </div>
     ),

@@ -92,15 +92,17 @@ export function manifestFor(host: string | null | undefined): WebManifest {
   }
 }
 
-/** how the mark is laid out at any size: the ink square, the cream MD, the blue slash */
+/**
+ * How the mark is laid out at any size: the ink square and the cream MD.
+ * No blue slash — the owner, 23 Sep 2026: "no blue dash please".
+ */
 export function iconLayout(size: number, maskable: boolean) {
   // a maskable icon is cropped to a circle by some launchers, so the mark sits inside 80% of the square
   const scale = maskable ? 0.62 : 0.78
   return {
     size,
-    fontSize: Math.round(size * 0.34 * (scale / 0.78)),
+    fontSize: Math.round(size * 0.40 * (scale / 0.78)),
     padding: Math.round(size * (1 - scale) / 2),
     radius: maskable ? 0 : Math.round(size * 0.22),
-    slashWidth: Math.max(2, Math.round(size * 0.045)),
   }
 }

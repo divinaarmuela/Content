@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og'
-import { BLUE, CREAM, INK, ICON_PARAMS, iconLayout, parseIconParam } from '../../lib/app-icon-core'
+import { CREAM, INK, ICON_PARAMS, iconLayout, parseIconParam } from '../../lib/app-icon-core'
 
 /**
  * THE HOME-SCREEN ICON, DRAWN (the owner, 23 Sep 2026: "how do i make this
@@ -34,7 +34,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
       >
         <div style={{ display: 'flex', alignItems: 'center', color: CREAM, fontSize: l.fontSize, letterSpacing: -l.fontSize * 0.03 }}>
           MD
-          <div style={{ width: l.slashWidth, height: l.fontSize * 1.08, marginLeft: l.fontSize * 0.14, background: BLUE, transform: 'skewX(-14deg)' }} />
         </div>
       </div>
     ),
