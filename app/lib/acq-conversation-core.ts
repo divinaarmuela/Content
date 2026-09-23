@@ -274,3 +274,30 @@ export function replyHtml(text: string): string {
     .map(p => `<p style="margin:0 0 1em">${p.split('\n').map(linkify).join('<br>')}</p>`)
     .join('')
 }
+
+/* ── A SIGNATURE UNDER EVERY REPLY (the owner, 23 Sep 2026: "replying from hello can be shown as the signature in
+   the bottom"): kept per mailbox in Settings → Inbox scanner, appended to the reply's text (after the RFC 3676
+   "-- " line, so other clients fold it) and to its html (dimmed, as the frame draws signatures). ── */
+
+export const SIGNATURE_MAX = 1200
+
+/** the reply's text with the mailbox's signature under it, or unchanged when there is none */
+export function withSignatureText(text: string, signature: string | null | undefined): string {
+  const sig = String(signature ?? '').replace(/\r\n/g, '\n').trim()
+  return sig ? `${text.trim()}\n\n-- \n${sig}` : text.trim()
+}
+
+/** the reply's html with the signature under it: one line per line, links clickable, nothing else */
+export function signatureHtml(signature: string | null | undefined): string {
+  const sig = String(signature ?? '').replace(/\r\n/g, '\n').trim()
+  if (!sig) return ''
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const linkify = (s: string) => esc(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?'")]/g, u => `<a href="${u}">${u}</a>`)
+  return `<div class="mdm-signature" style="margin-top:1.5em;color:#666;font-size:13px;line-height:1.5">${sig.split('\n').map(linkify).join('<br>')}</div>`
+}
+
+/** a signature as saved from Settings: trimmed, bounded, or null for none */
+export function cleanSignature(raw: unknown): string | null {
+  const s = String(raw ?? '').replace(/\r\n/g, '\n').trim()
+  return s ? s.slice(0, SIGNATURE_MAX) : null
+}

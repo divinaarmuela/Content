@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import {
-  getScanSettings, saveScanSettings, listMailboxEntries, setMailboxEnabled,
+  getScanSettings, saveScanSettings, listMailboxEntries, setMailboxEnabled, setMailboxSignature,
 } from '../../../lib/scan-settings'
+import { cleanSignature } from '../../../lib/acq-conversation-core'
 
 /**
  * Is automatic scanning actually running?
@@ -56,6 +57,12 @@ export async function PUT(req: Request) {
       const body = await req.json()
 
       // { mailbox: "a@b.com", enabled: false } toggles one address
+      // { mailbox, signature } sets the signature under every reply from that address (23 Sep 2026)
+      if (typeof body?.mailbox === 'string' && 'signature' in body) {
+        await setMailboxSignature(body.mailbox, cleanSignature(body.signature), admin.email)
+        const mailboxes = await listMailboxEntries()
+        return NextResponse.json({ mailboxes })
+      }
       if (typeof body?.mailbox === 'string') {
         await setMailboxEnabled(body.mailbox, Boolean(body.enabled), admin.email)
         const mailboxes = await listMailboxEntries()

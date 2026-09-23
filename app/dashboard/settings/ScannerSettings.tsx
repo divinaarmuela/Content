@@ -37,6 +37,8 @@ type MailboxEntry = {
   last_status: 'running' | 'success' | 'error' | null
   last_error: string | null
   last_leads_created: number | null
+  /** the signature under every reply sent from it (23 Sep 2026) */
+  signature?: string | null
 }
 
 function relative(iso: string | null): string {
@@ -190,6 +192,8 @@ export default function ScannerSettings() {
 
   /** what a mailbox switch shows: the pending flip if there is one, else the truth */
   const mailboxEnabled = (m: MailboxEntry) => mailboxDraft[m.email] ?? m.enabled
+  const [signatureDraft, setSignatureDraft] = useState<Record<string, string>>({})
+  const [signatureBusy, setSignatureBusy] = useState<string | null>(null)
 
   if (loading) {
     return (
@@ -274,6 +278,37 @@ export default function ScannerSettings() {
                   aria-label={`Scan ${m.email}`}
                 />
               </div>
+              {/* A SIGNATURE UNDER EVERY REPLY (the owner, 23 Sep 2026): what goes under the words when someone
+                  replies from this mailbox on a conversation's page. Saved on its own, per mailbox. */}
+              <details className="pb-3">
+                <summary className="cursor-pointer text-secondary-13 text-muted-foreground">Signature under replies from {m.email}{m.signature ? '' : ' — none yet'}</summary>
+                <div className="mt-2 flex flex-col gap-2">
+                  <textarea
+                    defaultValue={m.signature ?? ''}
+                    rows={5}
+                    maxLength={1200}
+                    placeholder={'Renee Yap\nMarketing Manager\nP 0434 271 070\nhttps://www.linkedin.com/company/mdmedia-marketing/'}
+                    aria-label={`Signature for ${m.email}`}
+                    className="w-full rounded-tile border border-border bg-surface p-2.5 font-sans text-secondary-13"
+                    onChange={e => setSignatureDraft(d => ({ ...d, [m.email]: e.target.value }))}
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="button" size="sm" variant="outline" disabled={signatureDraft[m.email] === undefined || signatureBusy === m.email}
+                      onClick={async () => {
+                        setSignatureBusy(m.email)
+                        try {
+                          const json = await put({ mailbox: m.email, signature: signatureDraft[m.email] ?? '' })
+                          setMailboxes(json.mailboxes)
+                          setSignatureDraft(d => { const next = { ...d }; delete next[m.email]; return next })
+                          toast.success(`Signature saved for ${m.email}`)
+                        } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save the signature') } finally { setSignatureBusy(null) }
+                      }}>
+                      {signatureBusy === m.email ? 'Saving…' : 'Save signature'}
+                    </Button>
+                    <span className="text-[12px] text-muted-foreground">Plain lines; a link becomes clickable. It goes under the words of every reply sent from here, dimmed, after a “-- ” line.</span>
+                  </div>
+                </div>
+              </details>
             </div>
           ))}
         </CardContent>

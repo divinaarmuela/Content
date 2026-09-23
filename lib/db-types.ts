@@ -1215,6 +1215,7 @@ export interface ScanMailbox {
   connected_at: string | null
   connected_by: string | null
   scopes: string | null
+  signature: string | null
   email: string
   enabled: boolean
   label: string | null
@@ -1560,7 +1561,7 @@ export const TABLE_COLUMNS = {
   publish_jobs: ['id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
   room_invite_requests: ['id', 'name', 'email', 'about', 'created_at'],
-  scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
+  scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
   scan_runs: ['id', 'mailbox', 'trigger', 'status', 'started_at', 'finished_at', 'scanned', 'claimed', 'leads_created', 'skipped', 'errors', 'error'],
   scan_settings: ['allow_self_connect', 'id', 'lookback_days', 'max_messages', 'min_confidence', 'duplicate_window_days', 'rules_only', 'schedule_enabled', 'blocked_domains', 'blocked_senders', 'updated_at', 'updated_by'],
   schedule_entries: ['external_match_state', 'id', 'created_at', 'item_id', 'platform', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'publish_status', 'published_at'],
@@ -1649,7 +1650,7 @@ export const NULLABLE_COLUMNS = {
   publish_jobs: ['client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results'],
   report_settings: ['data_from', 'last_sent_for'],
   room_invite_requests: ['about'],
-  scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'label', 'updated_by'],
+  scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'label', 'updated_by'],
   scan_runs: ['finished_at', 'error'],
   scan_settings: ['allow_self_connect', 'updated_by'],
   schedule_entries: ['external_match_state', 'scheduled_at', 'scheduler_id', 'tool_url', 'live_url', 'published_at'],

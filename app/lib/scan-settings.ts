@@ -44,6 +44,8 @@ export type MailboxEntry = {
   last_leads_created: number | null
   /** may the app send from it — a connected mailbox that granted gmail.send (23 Sep 2026) */
   can_send: boolean
+  /** the signature under every reply sent from it, set in Settings (23 Sep 2026) */
+  signature: string | null
 }
 
 /**
@@ -98,12 +100,28 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
       label: row?.label ?? null,
       connected_by: row?.connected_by ?? null,
       can_send: String((row as { scopes?: string | null } | undefined)?.scopes ?? '').split(/\s+/).includes(GMAIL_SEND_SCOPE),
+      signature: String((row as { signature?: string | null } | undefined)?.signature ?? '').trim() || null,
       last_run_at: run?.started_at ?? null,
       last_status: (run?.status as MailboxEntry['last_status']) ?? null,
       last_error: run?.error ?? null,
       last_leads_created: run?.leads_created ?? null,
     }
   })
+}
+
+/** the signature under every reply from this mailbox (the owner, 23 Sep 2026) */
+export async function setMailboxSignature(email: string, signature: string | null, by: string): Promise<void> {
+  const mailboxes = table<ScanMailbox>('scan_mailboxes')
+  const rows = await mailboxes.list({ by: { email: email.toLowerCase() } })
+  await Promise.all(rows.map(r => mailboxes.update(r.id, {
+    signature, updated_at: new Date().toISOString(), updated_by: by,
+  } as never)))
+}
+
+/** the signature for one mailbox, for a reply */
+export async function mailboxSignature(email: string): Promise<string | null> {
+  const rows = await table<ScanMailbox>('scan_mailboxes').list({ by: { email: email.toLowerCase() }, limit: 1 })
+  return String((rows[0] as { signature?: string | null } | undefined)?.signature ?? '').trim() || null
 }
 
 export async function setMailboxEnabled(email: string, enabled: boolean, by: string): Promise<void> {
