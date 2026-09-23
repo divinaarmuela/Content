@@ -21,7 +21,7 @@ import { MAILBOX_CANNOT_SEND, REPLY_TEXT_MAX, type Conversation } from '../../..
  * bottom sends from the mailbox the thread is in, into the same thread.
  * Nothing is sent unless a person presses Send.
  */
-type Answer = Conversation & { can_send: boolean; reply_to: string | null }
+type Answer = Conversation & { can_send: boolean; reply_to: string | null; reply_refusal: string | null }
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 
 export default function ConversationPage({ id }: { id: string }) {
@@ -91,11 +91,12 @@ export default function ConversationPage({ id }: { id: string }) {
           <section aria-label="Reply" className="rounded-card border border-border bg-card p-4" data-conversation-reply>
             <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Reply from {data.mailbox}{data.reply_to ? ` to ${data.reply_to}` : ''}</p>
             {!data.can_send && <p role="status" className="mt-2 text-[13px] text-muted-foreground">{MAILBOX_CANNOT_SEND(data.mailbox)}</p>}
-            <textarea value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight + 2, 600)}px` }} rows={5} maxLength={REPLY_TEXT_MAX} disabled={busy || !data.can_send || !data.reply_to}
-              placeholder={data.can_send ? 'Your words. It goes as a normal email from this mailbox, in this thread.' : 'Connect this mailbox for replies first'}
+            {data.can_send && data.reply_refusal && <p role="status" className="mt-2 text-[13px] font-medium text-accent-red-deep">{data.reply_refusal}</p>}
+            <textarea value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight + 2, 600)}px` }} rows={5} maxLength={REPLY_TEXT_MAX} disabled={busy || !data.can_send || !data.reply_to || !!data.reply_refusal}
+              placeholder={!data.can_send ? 'Connect this mailbox for replies first' : data.reply_refusal ? 'No reply possible to this sender' : `Your words. It goes as a normal email from ${data.mailbox} to ${data.reply_to ?? 'them'}, in this thread.`}
               className="mt-3 w-full resize-y rounded-inner border border-border bg-surface p-3 text-[14px] disabled:opacity-60" aria-label="Your reply" />
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Button disabled={busy || !draft.trim() || !data.can_send || !data.reply_to} onClick={() => void send()} className="h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
+              <Button disabled={busy || !draft.trim() || !data.can_send || !data.reply_to || !!data.reply_refusal} onClick={() => void send()} className="h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
                 <Send className="mr-1.5 h-4 w-4" aria-hidden /> {busy ? 'Sending…' : 'Send'}
               </Button>
               <span className="text-[12px] text-muted-foreground">Nothing is ever sent for you — only what you press Send on.</span>

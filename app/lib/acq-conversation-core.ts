@@ -106,12 +106,36 @@ export function conversationRefusal(row: IngestRowLike | null, mailboxKnown: boo
 }
 
 /** what a reply to this thread is addressed to: the last message from outside, in its thread */
-export function replyDraft(thread: readonly (ThreadMessageLike & { threadId?: string | null; messageId?: string | null; references?: string | null })[], subjectFallback: string): { to: string; subject: string; threadId: string | null; inReplyTo: string | null; references: string | null } | null {
-  const last = [...thread].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).find(m => directionOf(m.fromEmail) === 'in')
-  if (!last || !String(last.fromEmail ?? '').trim()) return null
+export type ReplyableMessage = ThreadMessageLike & { threadId?: string | null; messageId?: string | null; references?: string | null; replyTo?: string | null; listUnsubscribe?: string | null; autoSubmitted?: string | null }
+
+/** the message a reply answers: the last one from outside */
+export function replyTarget(thread: readonly ReplyableMessage[]): ReplyableMessage | null {
+  return [...thread].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).find(m => directionOf(m.fromEmail) === 'in') ?? null
+}
+
+const MACHINE_SENDER = /(^|[.\-_])(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|bounce|notifications?|newsletter|marketing)([.\-_@]|$)|@em\d*\.cloudflare\.com$|@.*\.(sendgrid|mailchimp|mailgun|amazonses|hubspotemail|sparkpostmail)\./i
+
+/** why a reply to this thread would only bounce: an automated sender (seen live, 23 Sep 2026: a reply to a Cloudflare
+ *  newsletter went to em@em1.cloudflare.com and came back "550 5.7.1 relaying denied") */
+export function replyRefusal(thread: readonly ReplyableMessage[]): string | null {
+  const last = replyTarget(thread)
+  if (!last) return NOBODY_TO_REPLY_TO
+  const to = String(last.replyTo ?? '').trim() || String(last.fromEmail ?? '').trim()
+  if (!to) return NOBODY_TO_REPLY_TO
+  const automated = Boolean(String(last.listUnsubscribe ?? '').trim()) || /^auto-/i.test(String(last.autoSubmitted ?? '').trim()) || MACHINE_SENDER.test(to)
+  if (automated) return `This came from an automated sender (${to}) — a reply would only bounce. There is nobody at that address.`
+  return null
+}
+
+export function replyDraft(thread: readonly ReplyableMessage[], subjectFallback: string): { to: string; subject: string; threadId: string | null; inReplyTo: string | null; references: string | null } | null {
+  const last = replyTarget(thread)
+  if (!last) return null
+  // a sender who set Reply-To wants the answer there, not at the address the mail went out from
+  const to = String(last.replyTo ?? '').trim() || String(last.fromEmail ?? '').trim()
+  if (!to) return null
   const subject = String(last.subject ?? '').trim() || subjectFallback
   return {
-    to: String(last.fromEmail ?? '').trim(),
+    to,
     subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
     threadId: last.threadId ?? null,
     inReplyTo: last.messageId ?? null,

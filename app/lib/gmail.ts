@@ -248,6 +248,11 @@ export type ThreadMessage = {
   /** the RFC Message-ID, for In-Reply-To */
   messageId: string
   references: string
+  /** where the sender asked replies to go, when they said */
+  replyTo: string
+  /** the marks of an automated sender: a newsletter's unsubscribe header, an auto-submitted flag */
+  listUnsubscribe: string
+  autoSubmitted: string
   fromName: string
   fromEmail: string
   to: string
@@ -273,6 +278,9 @@ export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<
       threadId: head.threadId,
       messageId: header(headers, 'Message-ID'),
       references: header(headers, 'References'),
+      replyTo: parseFromHeader(header(headers, 'Reply-To')).email,
+      listUnsubscribe: header(headers, 'List-Unsubscribe'),
+      autoSubmitted: header(headers, 'Auto-Submitted'),
       fromName: from.name,
       fromEmail: from.email,
       to: header(headers, 'To'),

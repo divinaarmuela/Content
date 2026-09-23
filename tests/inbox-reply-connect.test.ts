@@ -67,3 +67,21 @@ describe('connect once, read and reply', () => {
     expect(page).toContain('Nothing is ever sent for you — only what you press Send on.')
   })
 })
+
+describe('a reply never goes to a machine, and goes where the sender asked', () => {
+  it('prefers Reply-To, and refuses newsletters, no-reply addresses and auto-submitted mail', async () => {
+    const { replyDraft, replyRefusal } = await import('../app/lib/acq-conversation-core')
+    const lucy = { id: 'm1', threadId: 't', messageId: '<a@x>', fromEmail: 'lucy@ausvenueco.com.au', replyTo: 'lucy.b@ausvenueco.com.au', subject: 'Reels', at: '2026-09-21T01:00:00.000Z' }
+    expect(replyDraft([lucy], 'x')?.to).toBe('lucy.b@ausvenueco.com.au')
+    expect(replyRefusal([lucy])).toBeNull()
+    // seen live, 23 Sep 2026: a reply to a Cloudflare newsletter bounced with "550 5.7.1 relaying denied"
+    const cf = { id: 'm2', fromEmail: 'em@em1.cloudflare.com', listUnsubscribe: '<https://x/unsub>', subject: 'Connect 2026', at: '2026-09-23T01:00:00.000Z' }
+    expect(replyRefusal([cf])).toBe('This came from an automated sender (em@em1.cloudflare.com) — a reply would only bounce. There is nobody at that address.')
+    expect(replyRefusal([{ id: 'm3', fromEmail: 'no-reply@vercel.com', subject: 's', at: '2026-09-23T01:00:00.000Z' }])).toContain('automated sender')
+    expect(replyRefusal([{ id: 'm4', fromEmail: 'sam@x.com', autoSubmitted: 'auto-replied', subject: 's', at: '2026-09-23T01:00:00.000Z' }])).toContain('automated sender')
+    expect(replyRefusal([{ id: 'm5', fromEmail: 'martin@mdmmarketing.com.au', subject: 's', at: '2026-09-23T01:00:00.000Z' }])).toBe('Every message in this thread is ours — there is nobody to reply to.')
+    const route = readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')
+    expect(route).toContain('const why = replyRefusal(t.thread)')
+    expect(route).toContain('if (why) return NextResponse.json({ error: why }, { status: 409 })')
+  })
+})
