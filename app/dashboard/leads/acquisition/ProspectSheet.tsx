@@ -33,7 +33,9 @@ const dt = (iso: string | null | undefined) => (iso ? new Date(iso).toISOString(
 const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' }) : '')
 const stamp = (iso: string) => new Date(iso).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
-export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check, research, reply }: {
+export default function ProspectSheet({ prospect: p, events, team, viewer, busy, patch, move, log, remove, now, answer, check, research, reply, asPage = false }: {
+  /** drawn on its own page (23 Sep 2026) rather than in a drawer: no drawer title, no bottom padding */
+  asPage?: boolean
   prospect: Prospect
   events: AcqEvent[]
   team: TeamUser[]
@@ -97,10 +99,10 @@ export default function ProspectSheet({ prospect: p, events, team, viewer, busy,
   )
 
   return (
-    <div className="flex flex-col gap-5 pb-10">
+    <div className={asPage ? 'flex flex-col gap-5' : 'flex flex-col gap-5 pb-10'}>
       <div>
         <p className={H}>{[p.tier ? `Tier ${p.tier}` : null, p.industry, ACQ_SOURCES.find(s => s.key === p.source)?.label].filter(Boolean).join(' · ') || 'No tier yet'}</p>
-        <SheetTitle className="text-section-title">{p.business}</SheetTitle>
+        {asPage ? <h2 className="text-section-title">{p.business}</h2> : <SheetTitle className="text-section-title">{p.business}</SheetTitle>}
         <p className="text-[13px] text-muted-foreground">{[p.contact_name, p.email, p.phone, p.instagram ? `@${p.instagram}` : null].filter(Boolean).join(' · ') || 'No contact details yet'}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Chip tone={parked ? 'muted' : over ? 'red' : 'surface'}>{stage.n}. {stage.label}</Chip>

@@ -17,7 +17,7 @@ import { clickDetail, clickPoints, TRACKED_WORDS, type TrackedKind } from './tra
 type Actor = { id: string; name?: string | null; email?: string | null; clerk_user_id?: string | null }
 
 export function prospectPath(id: string): string {
-  return `/dashboard/leads/acquisition?prospect=${encodeURIComponent(id)}`
+  return `/dashboard/leads/acquisition/${encodeURIComponent(id)}`
 }
 
 /** one line on the prospect's timeline; the points come from the kind unless given */

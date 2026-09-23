@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Inbox } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Inbox, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -70,7 +70,10 @@ const SUMMARY: Record<AcqView, string> = {
 const ALL = 'all'
 type Row = ProspectRow & Prospect
 
-export default function Acquisition({ view }: { view: AcqView }) {
+export default function Acquisition({ view, prospectId }: { view: AcqView; prospectId?: string }) {
+  // A PROSPECT IS A PAGE, NOT A DRAWER (the owner, 23 Sep 2026: "I don't like how it's appearing as a drawer").
+  // Every view links to /dashboard/leads/acquisition/<id>; that page draws the same component with the prospect open.
+  const router = useRouter()
   const { me } = useRole()
   const { rows: prospects, loading, error } = useTable<Row>('prospects')
   const { rows: eventRows } = useTable<ProspectEvent>('prospect_events')
@@ -81,7 +84,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
   const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) : null }
   const now = Date.now()
 
-  const [open, setOpen] = useState<string | null>(null)
+  const open = prospectId ?? null
+  const setOpen = (id: string | null) => { if (id) router.push(`/dashboard/leads/acquisition/${encodeURIComponent(id)}`) }
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [tier, setTier] = useState(ALL)
@@ -92,7 +96,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
 
   // a link from an email opens the prospect it is about
   useEffect(() => {
-    try { const id = new URLSearchParams(window.location.search).get('prospect'); if (id) setOpen(id) } catch { /* no address */ }
+    // an older link with ?prospect= lands on the page
+    try { const id = new URLSearchParams(window.location.search).get('prospect'); if (id) router.replace(`/dashboard/leads/acquisition/${encodeURIComponent(id)}`) } catch { /* no address */ }
   }, [])
 
   const eventsBy = useMemo(() => {
@@ -199,8 +204,14 @@ export default function Acquisition({ view }: { view: AcqView }) {
 
   return (
     <div className="flex flex-col gap-4" data-acquisition={view}>
-      <PageTitle title={VIEWS.find(v => v.key === view)!.label} summary={SUMMARY[view]}
-        actions={<div className="flex flex-wrap items-center gap-2">
+      {current && (
+        <Link href={VIEWS.find(v => v.key === view)!.href} className="inline-flex min-h-11 w-fit items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" aria-hidden /> {VIEWS.find(v => v.key === view)!.label}
+        </Link>
+      )}
+      <PageTitle title={current ? current.business : VIEWS.find(v => v.key === view)!.label}
+        summary={current ? ([current.tier ? `Tier ${current.tier}` : null, current.industry, ACQ_SOURCES.find(s => s.key === current.source)?.label, `${acqStageByKey(current.stage).n}. ${acqStageByKey(current.stage).label}`].filter(Boolean).join(' · ')) : SUMMARY[view]}
+        actions={current ? undefined : <div className="flex flex-wrap items-center gap-2">
           {/* FROM AN INBOUND LEAD (22 Sep 2026): an enquiry is already a lead — bring it in at New lead / Engaged */}
           <Button variant="outline" onClick={() => setInbound(true)} className="h-11 rounded-full px-4 text-[13px] font-semibold"><Inbox className="mr-1.5 h-4 w-4" aria-hidden /> From an inbound lead</Button>
           <Button onClick={() => setAdding(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90"><Plus className="mr-1.5 h-4 w-4" aria-hidden /> Add a target</Button>
@@ -222,6 +233,7 @@ export default function Acquisition({ view }: { view: AcqView }) {
         </div>
       )}
 
+      {!current && (<>
       <nav aria-label="Acquisition views" className="flex flex-wrap items-center gap-2">
         {VIEWS.map(v => (
           <Link key={v.key} href={v.href} aria-current={v.key === view ? 'page' : undefined}
@@ -295,11 +307,11 @@ export default function Acquisition({ view }: { view: AcqView }) {
             </table>
           </div>
         ) : <Reporting prospects={prospects} />}
+      </>)}
 
-      <Sheet open={current !== null} onOpenChange={o => { if (!o) setOpen(null) }}>
-        <SheetContent side="right" className="w-full overflow-y-auto bg-popover sm:max-w-2xl">
-          {current && (
-            <ProspectSheet prospect={current} events={eventsBy.get(current.id) ?? []} team={team} viewer={me ? { id: me.id, role: me.role } : null} busy={busy} now={now}
+      {current && (
+        <div className="max-w-5xl rounded-card border border-border bg-card p-5 sm:p-6" data-prospect-page>
+            <ProspectSheet asPage prospect={current} events={eventsBy.get(current.id) ?? []} team={team} viewer={me ? { id: me.id, role: me.role } : null} busy={busy} now={now}
               patch={body => call(`/api/leads/acquisition/${current.id}`, 'PATCH', body)}
               move={(action, said) => call(`/api/leads/acquisition/${current.id}/stage`, 'POST', { action }, said)}
               log={(kind: AcqEventKind, detail, said) => call(`/api/leads/acquisition/${current.id}/events`, 'POST', { kind, detail }, said)}
@@ -308,9 +320,8 @@ export default function Acquisition({ view }: { view: AcqView }) {
               check={() => checkNow(current.id)}
               research={() => researchNow(current.id)}
               reply={(channel, message) => call(`/api/leads/acquisition/${current.id}/reply`, 'POST', { channel, message }, channel === 'instagram' ? 'Sent on Instagram — it is on the timeline' : 'Sent')} />
-          )}
-        </SheetContent>
-      </Sheet>
+        </div>
+      )}
 
       <InboundSheet open={inbound} busy={busy} onClose={() => setInbound(false)}
         onBring={leadId => call('/api/leads/acquisition/from-lead', 'POST', { lead_id: leadId }, 'Brought in — it is a lead now, in New lead / Engaged')} />
