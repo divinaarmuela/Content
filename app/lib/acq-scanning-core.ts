@@ -40,6 +40,7 @@ export const SCAN_CRON_WORDS = 'The agent reads the connected inboxes and MD Med
 /** what the email scanner's status means, in words */
 export const INGEST_STATUS_WORDS: Record<string, string> = {
   lead_created: 'Made a lead',
+  attached: 'Added to their existing lead',
   not_a_lead: 'Read — not a lead',
   skipped: 'Skipped',
   error: 'Could not read',
@@ -72,7 +73,7 @@ export function mailboxSummaries(entries: readonly MailboxLike[], rows: readonly
       today: {
         read: todays.length,
         skipped: todays.filter(r => r.status === 'skipped').length,
-        leads: todays.filter(r => r.status === 'lead_created').length,
+        leads: todays.filter(r => r.status === 'lead_created' || r.status === 'attached').length,
         errors: todays.filter(r => r.status === 'error').length,
       },
     }

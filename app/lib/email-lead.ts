@@ -20,6 +20,7 @@ import { getScanSettings, enabledMailboxEmails, listSelfConnectedMailboxes } fro
 import { prospectForSender, replyPoints } from './acquisition-core'
 import { recordReply } from './acquisition'
 import { takeClaimLock } from './claim-lock'
+import { leadBusinessName, wroteAgainPatch } from './lead-dedupe-core'
 
 export { FatalScanError, fatalApiReason }
 
@@ -93,6 +94,7 @@ export type MessageOutcome =
   | 'prefiltered'
   | 'not_a_lead'
   | 'duplicate_sender'
+  | 'attached_to_lead'
   | 'lead_created'
   | 'needs_review'
   | 'error'
@@ -384,27 +386,32 @@ async function scanOneMailbox(
         continue
       }
 
-      // 5. duplicate guard — same sender already a recent lead?
-      const since = new Date(Date.now() - settings.duplicate_window_days * 24 * 3600 * 1000).toISOString()
+      // 5. ONE SENDER, ONE LEAD (the owner, 23 Sep 2026: "why are there duplicates … make sure this never
+      //    happens"). A sender who has ever been a lead lands on that lead, however long ago it was: the new
+      //    enquiry is added to it, dated, and the card asks for a reply. The old 30-day window
+      //    (`duplicate_window_days`) made a second card for Lucy at Australian Venue Co; it is no longer read.
       const sender = msg.fromEmail.toLowerCase()
-      const existing = settings.duplicate_window_days === 0
-        ? null
-        : (await table<Lead>('leads').list({
-            where: l => l.email?.toLowerCase() === sender && l.created_at >= since,
-            limit: 1,
-          }))[0] ?? null
+      const existing = (await table<Lead>('leads').list({
+        where: l => l.email?.toLowerCase() === sender,
+        orderBy: [['created_at', 'desc']],
+        limit: 1,
+      }))[0] ?? null
       if (existing) {
+        const now = new Date().toISOString()
+        const when = new Date(msg.receivedAt ?? now).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', year: 'numeric' })
+        await table<Lead>('leads').update(existing.id, wroteAgainPatch(existing, c.needs || `Email enquiry: ${msg.subject}`, now, when) as never)
         await ingest.update(claimed.id, {
-          status: 'skipped', is_lead: true, confidence: c.confidence,
-          reasoning: 'sender already has a recent lead', lead_id: existing.id,
+          status: 'attached', is_lead: true, confidence: c.confidence,
+          reasoning: 'added to their existing lead', lead_id: existing.id,
         })
-        result.skipped++
+        result.leads_created++
         emit({
-          type: 'message', email: mailbox, outcome: 'duplicate_sender',
+          type: 'message', email: mailbox, outcome: 'attached_to_lead',
           subject: msg.subject, from: msg.fromEmail,
-          reason: `This sender already has a lead from the last ${settings.duplicate_window_days} days`,
+          reason: 'This sender already has a lead — the new enquiry was added to it',
           confidence: c.confidence,
         })
+        announceAfter('leads', { id: existing.id, label: existing.biz || [existing.fname, existing.lname].filter(Boolean).join(' ') || msg.fromEmail, source: 'email_ingest' })
         continue
       }
 
@@ -414,7 +421,7 @@ async function scanOneMailbox(
         lname: c.lname || msg.fromName.split(' ').slice(1).join(' ') || '',
         email: msg.fromEmail,
         phone: c.phone || '',
-        biz: c.business || msg.fromEmail.split('@')[1] || '',
+        biz: leadBusinessName(c.business, msg.fromEmail),
         model: c.service_interest || null,
         need: c.needs || `Email enquiry: ${msg.subject}`,
         budget: c.budget || null,

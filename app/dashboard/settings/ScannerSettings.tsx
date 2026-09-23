@@ -330,7 +330,7 @@ export default function ScannerSettings() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dupe">Duplicate window (days)</Label>
+            <Label htmlFor="dupe">Duplicate window (days) — no longer used: one sender is one lead, always (23 Sep 2026)</Label>
             <Input
               id="dupe" type="number" min={0} max={365}
               value={settings.duplicate_window_days}
