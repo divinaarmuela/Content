@@ -7,7 +7,7 @@ import { fetchThread, mailboxCanSend, sendReply } from '../../../../../lib/gmail
 import { logAcqEvent } from '../../../../../lib/acquisition'
 import { prospectForSender } from '../../../../../lib/acquisition-core'
 import {
-  conversationRefusal, conversationView, MAILBOX_CANNOT_SEND, NOBODY_TO_REPLY_TO, REPLY_TEXT_MAX, replyDraft,
+  conversationRefusal, conversationView, MAILBOX_CANNOT_SEND, NOBODY_TO_REPLY_TO, REPLY_TEXT_MAX, replyDraft, replyHtml,
 } from '../../../../../lib/acq-conversation-core'
 
 /**
@@ -56,7 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!mailboxCanSend(t.box)) return NextResponse.json({ error: MAILBOX_CANNOT_SEND(t.box.email) }, { status: 409 })
       const draft = replyDraft(t.thread, String(t.row.subject ?? ''))
       if (!draft) return NextResponse.json({ error: NOBODY_TO_REPLY_TO }, { status: 409 })
-      const sent = await sendReply(t.box, { to: draft.to, subject: draft.subject, text, threadId: draft.threadId ?? undefined, inReplyTo: draft.inReplyTo ?? undefined, references: draft.references ?? undefined })
+      const sent = await sendReply(t.box, { to: draft.to, subject: draft.subject, text, html: replyHtml(text), threadId: draft.threadId ?? undefined, inReplyTo: draft.inReplyTo ?? undefined, references: draft.references ?? undefined })
       // if the sender is a prospect, the reply is on their timeline too — the thread itself is the record otherwise
       try {
         const prospects = await table<ProspectRow>('prospects').list({ limit: 2000 })

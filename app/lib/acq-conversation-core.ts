@@ -16,6 +16,7 @@ export type ThreadMessageLike = {
   subject?: string | null
   at?: string | null
   body?: string | null
+  html?: string | null
 }
 
 export type IngestRowLike = {
@@ -39,6 +40,8 @@ export type ConversationMessage = {
   to: string
   at: string | null
   body: string
+  /** the HTML as sent, or null — the page sanitises it before drawing */
+  html: string | null
   /** 'in' from outside, 'out' from the agency */
   direction: 'in' | 'out'
   /** the one the scanner read */
@@ -74,6 +77,7 @@ export function conversationView(row: IngestRowLike, thread: readonly ThreadMess
       to: String(m.to ?? '').trim(),
       at: m.at ?? null,
       body: String(m.body ?? '').trim() || '(no text — the message may be an image or an attachment only)',
+      html: String(m.html ?? '').trim() || null,
       direction: directionOf(m.fromEmail),
       scanned: m.id === String(row.gmail_message_id ?? ''),
     }))
@@ -118,3 +122,116 @@ export function replyDraft(thread: readonly (ThreadMessageLike & { threadId?: st
 export const REPLY_TEXT_MAX = 4000
 export const NOBODY_TO_REPLY_TO = 'Every message in this thread is ours — there is nobody to reply to.'
 export const MAILBOX_CANNOT_SEND = (mailbox: string) => `${mailbox} can read but not reply yet. On the Scanning page press Connect for replies beside it, pick that account and allow both.`
+
+/* ── the body, laid out (the owner, 23 Sep 2026: "the lines when replying doesnt layout nicely", "there are links
+   … a lot of flaw in the design"): plain-text email arrives hard-wrapped at ~72 characters, with links as
+   `label <https://…>` or bare, and the whole earlier thread quoted under "On … wrote:". Unwrap the paragraphs,
+   make the links clickable with a short label, and fold the quoted history away. No I/O. ── */
+
+export type BodyToken = { kind: 'text'; text: string } | { kind: 'link'; href: string; label: string }
+export type BodyView = { paragraphs: BodyToken[][]; quoted: string | null }
+
+const QUOTE_HEAD_RE = /^(On .{6,200} wrote:|-{2,}\s*(Original|Forwarded) Message\s*-{2,}|From: .+)$/i
+
+/** a link's short label: the host and, when there is one, the first path word */
+export function linkLabel(href: string): string {
+  try {
+    const u = new URL(href)
+    const host = u.hostname.replace(/^www\./, '')
+    const first = u.pathname.split('/').filter(Boolean)[0]
+    return first && first.length <= 24 ? `${host}/${first}` : host
+  } catch { return href }
+}
+
+/** where the quoted history starts: the "On … wrote:" line, or the first run of "> " lines */
+export function splitQuoted(body: string): { own: string; quoted: string | null } {
+  const lines = body.replace(/\r\n/g, '\n').split('\n')
+  let at = -1
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim()
+    if (QUOTE_HEAD_RE.test(l) || (l.startsWith('>') && lines.slice(i, i + 3).every(x => x.trim().startsWith('>') || x.trim() === ''))) { at = i; break }
+  }
+  if (at <= 0) return { own: at === 0 ? '' : body, quoted: at === 0 ? body : null }
+  return { own: lines.slice(0, at).join('\n').trim(), quoted: lines.slice(at).join('\n').trim() || null }
+}
+
+/** hard-wrapped lines back into paragraphs: a long line that ends without a stop continues onto the next */
+export function unwrapParagraphs(text: string): string[] {
+  const out: string[] = []
+  for (const para of text.replace(/\r\n/g, '\n').split(/\n\s*\n/)) {
+    const lines = para.split('\n').map(l => l.replace(/\s+$/, '')).filter(l => l.trim() !== '')
+    if (lines.length === 0) continue
+    let cur = lines[0]
+    for (let i = 1; i < lines.length; i++) {
+      const prev = cur.split('\n').at(-1) ?? ''
+      const next = lines[i]
+      const listy = /^\s*([-*•]|\d+[.)])\s/.test(next) || /^\s{2,}/.test(next)
+      const joins = prev.length >= 55 && !/[.!?:]$/.test(prev.trim()) && !listy
+      cur = joins ? `${cur} ${next.trim()}` : `${cur}\n${next}`
+    }
+    out.push(cur.trim())
+  }
+  return out
+}
+
+/** one paragraph into text and link tokens: `label <url>`, `label (url)`, `[label](url)`, or a bare url */
+export function tokenise(paragraph: string): BodyToken[] {
+  const tokens: BodyToken[] = []
+  const re = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|([^\s<(\[][^<(\n]{0,80}?)\s*[<(](https?:\/\/[^\s<>()]+)[>)]|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g
+  let last = 0
+  for (const m of paragraph.matchAll(re)) {
+    const start = m.index ?? 0
+    if (start > last) tokens.push({ kind: 'text', text: paragraph.slice(last, start) })
+    if (m[1] && m[2]) tokens.push({ kind: 'link', href: m[2], label: m[1].trim() })
+    else if (m[3] !== undefined && m[4]) {
+      const label = m[3].trim()
+      // "Watch it here <url>" keeps its words; a label that is itself the url, or empty, gets the short one
+      tokens.push({ kind: 'link', href: m[4], label: label && !/^https?:\/\//.test(label) ? label : linkLabel(m[4]) })
+    } else if (m[5]) tokens.push({ kind: 'link', href: m[5], label: linkLabel(m[5]) })
+    last = start + m[0].length
+  }
+  if (last < paragraph.length) tokens.push({ kind: 'text', text: paragraph.slice(last) })
+  return tokens
+}
+
+/** the message body as the page draws it */
+export function bodyView(body: string | null | undefined): BodyView {
+  const { own, quoted } = splitQuoted(String(body ?? ''))
+  return { paragraphs: unwrapParagraphs(own).map(tokenise), quoted }
+}
+
+/* ── HTML mail, drawn like a mail client does (research, 23 Sep 2026: Close.com "Rendering untrusted HTML email,
+   safely"; AdGuard's mail renderer; GitHub's email_reply_parser): sanitise with DOMPurify, draw in a script-less
+   sandboxed iframe with its own CSP, block remote images until asked, and fold the quoted history the sending
+   client wrapped in its own markers. The selectors and the frame's CSS live here so they are tested. ── */
+
+/** where each mail client puts the earlier messages it quotes */
+export const QUOTE_SELECTORS = [
+  '.gmail_quote', 'blockquote[type="cite"]', '#divRplyFwdMsg', '#isReplyFwdMsg', '.yahoo_quoted',
+  '.moz-cite-prefix', '#appendonsend', '.protonmail_quote', 'blockquote.gmail_quote', '.zmail_extra',
+] as const
+
+/** the frame's own stylesheet: readable, contained, nothing wider than the card */
+export const EMAIL_FRAME_CSS = `
+  html, body { margin: 0; padding: 0; }
+  body { font: 14px/1.6 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: #111; word-break: break-word; overflow-wrap: anywhere; }
+  img { max-width: 100% !important; height: auto; }
+  table { max-width: 100% !important; }
+  pre { white-space: pre-wrap; }
+  a { color: #0057ff; }
+  blockquote { margin: 0 0 0 .75em; padding-left: .75em; border-left: 2px solid #ccc; color: #555; }
+`
+
+/** the document the frame draws: no scripts by policy, links open outside, the sanitised body */
+export function emailFrameDocument(sanitisedBody: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; script-src 'none'; frame-src 'none'"><base target="_blank"><style>${EMAIL_FRAME_CSS}</style></head><body>${sanitisedBody}</body></html>`
+}
+
+/** a reply's HTML from its plain text: one <p> per paragraph, <br> for a line break, links clickable, nothing else */
+export function replyHtml(text: string): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const linkify = (s: string) => esc(s).replace(/https?:\/\/[^\s<]+[^\s<.,;:!?'")]/g, u => `<a href="${u}">${u}</a>`)
+  return text.replace(/\r\n/g, '\n').trim().split(/\n\s*\n/)
+    .map(p => `<p style="margin:0 0 1em">${p.split('\n').map(linkify).join('<br>')}</p>`)
+    .join('')
+}

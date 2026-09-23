@@ -86,3 +86,9 @@ export function prefilterSkipReason(input: {
   if (/\b(unsubscribe|newsletter)\b/i.test(input.subject)) return 'newsletter subject'
   return null
 }
+
+/** the text/html part as sent, for the conversation page to draw — null when the message has none */
+export function extractHtml(payload: GmailPayload): string | null {
+  const html = findPart(payload, 'text/html')
+  return html ? decodeBase64Url(html) : null
+}

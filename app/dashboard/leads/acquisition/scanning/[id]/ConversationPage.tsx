@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import PageTitle from '../../../../ui/PageTitle'
 import Chip from '../../../../ui/Chip'
 import { LoadFailed } from '../../../../NotSetUp'
+import EmailBody from './EmailBody'
 import { leadPath } from '../../../../../lib/lead-page-core'
 import { MAILBOX_CANNOT_SEND, REPLY_TEXT_MAX, type Conversation } from '../../../../../lib/acq-conversation-core'
 
@@ -81,7 +82,7 @@ export default function ConversationPage({ id }: { id: string }) {
                   <span className="ml-auto text-muted-foreground">{when(m.at)}</span>
                 </div>
                 {m.to && <p className="mt-0.5 text-[12px] text-muted-foreground">To {m.to}</p>}
-                <p className="mt-3 whitespace-pre-wrap text-[14px] leading-relaxed">{m.body}</p>
+                <EmailBody html={m.html} text={m.body} />
               </li>
             ))}
           </ol>
@@ -90,7 +91,7 @@ export default function ConversationPage({ id }: { id: string }) {
           <section aria-label="Reply" className="rounded-card border border-border bg-card p-4" data-conversation-reply>
             <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Reply from {data.mailbox}{data.reply_to ? ` to ${data.reply_to}` : ''}</p>
             {!data.can_send && <p role="status" className="mt-2 text-[13px] text-muted-foreground">{MAILBOX_CANNOT_SEND(data.mailbox)}</p>}
-            <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={5} maxLength={REPLY_TEXT_MAX} disabled={busy || !data.can_send || !data.reply_to}
+            <textarea value={draft} onChange={e => { setDraft(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight + 2, 600)}px` }} rows={5} maxLength={REPLY_TEXT_MAX} disabled={busy || !data.can_send || !data.reply_to}
               placeholder={data.can_send ? 'Your words. It goes as a normal email from this mailbox, in this thread.' : 'Connect this mailbox for replies first'}
               className="mt-3 w-full resize-y rounded-inner border border-border bg-surface p-3 text-[14px] disabled:opacity-60" aria-label="Your reply" />
             <div className="mt-2 flex flex-wrap items-center gap-3">

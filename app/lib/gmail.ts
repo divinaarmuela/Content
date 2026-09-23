@@ -1,6 +1,6 @@
 import 'server-only'
 import {
-  extractBody, header, parseFromHeader, type GmailPayload,
+  extractBody, extractHtml, header, parseFromHeader, type GmailPayload,
 } from './gmail-core'
 import { buildClaims, signAssertion } from './google-jwt'
 
@@ -254,6 +254,8 @@ export type ThreadMessage = {
   subject: string
   at: string | null
   body: string
+  /** the HTML as sent, for the page; sanitised in the browser before it is drawn */
+  html: string | null
 }
 
 /**
@@ -277,6 +279,7 @@ export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<
       subject: header(headers, 'Subject'),
       at: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
       body: m.payload ? extractBody(m.payload).slice(0, 20000) : '',
+      html: m.payload ? (extractHtml(m.payload)?.slice(0, 400000) ?? null) : null,
     }
   })
 }
@@ -290,7 +293,16 @@ export function mailboxCanSend(mailbox: Pick<Mailbox, 'delegated' | 'scopes' | '
 }
 
 /** base64url of an RFC 822 message, as Gmail's send endpoint wants it */
-export function rawEmail(input: { from: string; to: string; subject: string; text: string; inReplyTo?: string; references?: string }): string {
+export function rawEmail(input: { from: string; to: string; subject: string; text: string; html?: string; inReplyTo?: string; references?: string }): string {
+  const boundary = `=_mdm_${Date.now().toString(36)}`
+  const body = input.html
+    ? [
+        `Content-Type: multipart/alternative; boundary="${boundary}"`, '',
+        `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: 8bit', '', input.text, '',
+        `--${boundary}`, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: 8bit', '', input.html, '',
+        `--${boundary}--`,
+      ]
+    : ['Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: 8bit', '', input.text]
   const lines = [
     `From: ${input.from}`,
     `To: ${input.to}`,
@@ -298,10 +310,7 @@ export function rawEmail(input: { from: string; to: string; subject: string; tex
     ...(input.inReplyTo ? [`In-Reply-To: ${input.inReplyTo}`] : []),
     ...(input.references ? [`References: ${input.references}`] : []),
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
-    '',
-    input.text,
+    ...body,
   ]
   return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
@@ -313,7 +322,7 @@ export function rawEmail(input: { from: string; to: string; subject: string; tex
  * and in the same thread the scanner read. Never called without a person
  * pressing Send.
  */
-export async function sendReply(mailbox: Mailbox, input: { to: string; subject: string; text: string; threadId?: string; inReplyTo?: string; references?: string }): Promise<{ id: string; threadId: string }> {
+export async function sendReply(mailbox: Mailbox, input: { to: string; subject: string; text: string; html?: string; threadId?: string; inReplyTo?: string; references?: string }): Promise<{ id: string; threadId: string }> {
   const token = mailbox.delegated ? await delegatedToken(mailbox.email, GMAIL_SEND_SCOPE) : await accessTokenForMailbox(mailbox)
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
