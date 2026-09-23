@@ -33,11 +33,15 @@ export async function GET(req: Request) {
 
     // state carries who started it, so the callback can record who connected
     // without trusting anything the browser sends back
-    const res = NextResponse.redirect(inboxConsentUrl(req, encodeURIComponent(user.email), user.email))
+    // RECONNECT A NAMED MAILBOX (23 Sep 2026): the Scanning page's button carries the address, so Google opens on it —
+    // Google still decides whose mailbox it is; the hint only picks the account to show
+    const hint = new URL(req.url).searchParams.get('mailbox')?.trim().toLowerCase() || null
+    const res = NextResponse.redirect(inboxConsentUrl(req, encodeURIComponent(user.email), hint && /^[^@\s]+@[^@\s]+$/.test(hint) ? hint : user.email))
     // WHERE TO COME BACK TO (21 Sep 2026): the acquisition page offers this press to people who cannot open
     // the scanner's settings (Joy), so the callback returns them to where they pressed it
-    if (new URL(req.url).searchParams.get('from') === 'acquisition') {
-      res.cookies.set('inbox_return', 'acquisition', { httpOnly: true, sameSite: 'lax', secure: true, maxAge: 900, path: '/' })
+    const from = new URL(req.url).searchParams.get('from')
+    if (from === 'acquisition' || from === 'scanning') {
+      res.cookies.set('inbox_return', from, { httpOnly: true, sameSite: 'lax', secure: true, maxAge: 900, path: '/' })
     }
     return res
   } catch (e) {

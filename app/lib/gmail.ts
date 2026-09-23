@@ -35,6 +35,8 @@ export type Mailbox = {
    *  refreshed with the credentials that minted hello@'s token 60 days ago. */
   clientId?: string
   clientSecret?: string
+  /** the scopes Google granted this token, space-separated — a send needs gmail.send among them */
+  scopes?: string
 }
 
 const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
@@ -242,6 +244,10 @@ export function mailboxAddress(): string {
 /** one message of a thread, as the conversation page draws it */
 export type ThreadMessage = {
   id: string
+  threadId: string
+  /** the RFC Message-ID, for In-Reply-To */
+  messageId: string
+  references: string
   fromName: string
   fromEmail: string
   to: string
@@ -262,6 +268,9 @@ export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<
     const from = parseFromHeader(header(headers, 'From'))
     return {
       id: m.id,
+      threadId: head.threadId,
+      messageId: header(headers, 'Message-ID'),
+      references: header(headers, 'References'),
       fromName: from.name,
       fromEmail: from.email,
       to: header(headers, 'To'),
@@ -270,4 +279,48 @@ export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<
       body: m.payload ? extractBody(m.payload).slice(0, 20000) : '',
     }
   })
+}
+
+export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
+
+/** may this mailbox send? env-delegated ones can only if Google Admin granted gmail.send; connected ones say in their scopes */
+export function mailboxCanSend(mailbox: Pick<Mailbox, 'delegated' | 'scopes' | 'refreshToken' | 'accessToken'>): boolean {
+  if (mailbox.scopes) return mailbox.scopes.split(/\s+/).includes(GMAIL_SEND_SCOPE)
+  return false
+}
+
+/** base64url of an RFC 822 message, as Gmail's send endpoint wants it */
+export function rawEmail(input: { from: string; to: string; subject: string; text: string; inReplyTo?: string; references?: string }): string {
+  const lines = [
+    `From: ${input.from}`,
+    `To: ${input.to}`,
+    `Subject: ${input.subject}`,
+    ...(input.inReplyTo ? [`In-Reply-To: ${input.inReplyTo}`] : []),
+    ...(input.references ? [`References: ${input.references}`] : []),
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    input.text,
+  ]
+  return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
+ * SEND A REPLY FROM A MAILBOX, INTO ITS THREAD (the owner, 23 Sep 2026: "is
+ * there a way to reply it from here too?"). The only send in this file. It
+ * goes through Gmail itself, so the reply sits in the mailbox's Sent folder
+ * and in the same thread the scanner read. Never called without a person
+ * pressing Send.
+ */
+export async function sendReply(mailbox: Mailbox, input: { to: string; subject: string; text: string; threadId?: string; inReplyTo?: string; references?: string }): Promise<{ id: string; threadId: string }> {
+  const token = mailbox.delegated ? await delegatedToken(mailbox.email, GMAIL_SEND_SCOPE) : await accessTokenForMailbox(mailbox)
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ raw: rawEmail({ from: mailbox.email, ...input }), ...(input.threadId ? { threadId: input.threadId } : {}) }),
+  })
+  if (!res.ok) throw new Error(`Gmail send failed for ${mailbox.email} (${res.status}): ${(await res.text()).slice(0, 300)}`)
+  const json = await res.json() as { id: string; threadId: string }
+  return { id: json.id, threadId: json.threadId }
 }

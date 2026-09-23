@@ -13,7 +13,7 @@ describe('a person whose own work inbox is not read is told so on the acquisitio
   it('Google opens on the right account, and the person comes back to where they pressed', () => {
     expect(readFileSync('app/lib/inbox-connect.ts', 'utf8')).toContain('...(loginHint ? { login_hint: loginHint } : {}),')
     const cb = readFileSync('app/api/inbox/connect/callback/route.ts', 'utf8')
-    expect(cb).toContain("const base = fromAcquisition ? '/dashboard/leads/acquisition?' : `${SETTINGS}&`")
+    expect(cb).toContain("const base = fromScanning ? '/dashboard/leads/acquisition/scanning?' : fromAcquisition ? '/dashboard/leads/acquisition?' : `${SETTINGS}&`")
     // the domain rule is untouched: only the work domain is ever connected
     expect(readFileSync('app/lib/inbox-connect.ts', 'utf8')).toContain("if (!email.endsWith(`@${allowedMailDomain()}`)) return { ok: false, reason: 'wrong_domain' }")
   })

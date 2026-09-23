@@ -21,6 +21,9 @@ import { allowedMailDomain } from './clerk-gmail'
  */
 
 const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+/** ONE WAY TO CONNECT (the owner, 23 Sep 2026: "so its easily connected again same way"): read and reply, granted together.
+ *  The app is Internal to the domain, so Google asks no verification for the send scope. */
+export const INBOX_SCOPES = `${GMAIL_READ_SCOPE} https://www.googleapis.com/auth/gmail.send`
 
 /**
  * The inbox-connect app is NOT the app that sends mail.
@@ -124,7 +127,7 @@ export function inboxConsentUrl(req: Request, state: string, loginHint?: string 
     client_id: inboxClientId(),
     redirect_uri: redirectUriFor(req),
     response_type: 'code',
-    scope: GMAIL_READ_SCOPE,
+    scope: INBOX_SCOPES,
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -157,7 +160,7 @@ export async function completeInboxConnect(req: Request, code: string, by: strin
   })
   if (!res.ok) return { ok: false, reason: 'exchange_failed', detail: (await res.text()).slice(0, 200) }
 
-  const token = await res.json() as { access_token?: string; refresh_token?: string }
+  const token = await res.json() as { access_token?: string; refresh_token?: string; scope?: string }
   if (!token.refresh_token) return { ok: false, reason: 'no_refresh_token' }
 
   const profRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
@@ -178,6 +181,8 @@ export async function completeInboxConnect(req: Request, code: string, by: strin
       email,
       source: 'self',
       refresh_token_encrypted: encryptSecret(token.refresh_token),
+      // what Google actually granted — a person may untick "send" on the consent screen
+      scopes: String(token.scope ?? '').trim() || null,
       connected_at: new Date().toISOString(),
       connected_by: by,
       ...(existing ? {} : { enabled: true }),

@@ -11,7 +11,7 @@
 
 import { ACQ_EVENT_KINDS } from './acquisition-core'
 
-export type MailboxLike = { email: string; enabled?: boolean | null; source?: string | null; last_run_at?: string | null; last_status?: string | null; last_error?: string | null }
+export type MailboxLike = { email: string; enabled?: boolean | null; source?: string | null; can_send?: boolean | null; last_run_at?: string | null; last_status?: string | null; last_error?: string | null }
 export type IngestRow = {
   id: string
   created_at: string
@@ -49,6 +49,10 @@ export const INGEST_STATUS_WORDS: Record<string, string> = {
 export type MailboxSummary = {
   email: string
   enabled: boolean
+  /** 'self' = a person connected it (can be reconnected here); 'shared' = the server's own credential */
+  source: string
+  /** may the app reply from it — needs the send scope, granted on connect (23 Sep 2026) */
+  can_send: boolean
   /** the last time the scanner RAN on this mailbox (scan_runs), and how it went */
   last_scan_at: string | null
   last_status: string | null
@@ -75,6 +79,8 @@ export function mailboxSummaries(entries: readonly MailboxLike[], rows: readonly
     return {
       email: e.email.toLowerCase(),
       enabled: e.enabled !== false,
+      source: String(e.source ?? ''),
+      can_send: e.can_send === true,
       last_scan_at: e.last_run_at ?? null,
       last_status: e.last_status ?? null,
       last_error: e.last_error ?? null,
@@ -142,4 +148,12 @@ export function findingsList(events: readonly FindingEvent[], prospects: readonl
       state: e.dismissed_at ? 'dismissed' : e.confirmed === false ? 'unsure' : 'recorded',
       source: String(e.source ?? ''),
     }))
+}
+
+/** what the Scanning page says about a mailbox's reach, and the one press that widens it */
+export function mailboxReach(m: Pick<MailboxSummary, 'enabled' | 'source' | 'can_send'>): { words: string; tone: 'green' | 'amber' | 'muted'; reconnect: boolean } {
+  if (!m.enabled) return { words: 'Switched off', tone: 'muted', reconnect: false }
+  if (m.can_send) return { words: 'Reads and replies', tone: 'green', reconnect: false }
+  if (m.source === 'self') return { words: 'Reads only — reconnect to allow replies', tone: 'amber', reconnect: true }
+  return { words: 'Reads only — the server’s own key; connect it here to allow replies', tone: 'amber', reconnect: true }
 }

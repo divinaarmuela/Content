@@ -1,38 +1,59 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Send } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import PageTitle from '../../../../ui/PageTitle'
 import Chip from '../../../../ui/Chip'
 import { LoadFailed } from '../../../../NotSetUp'
 import { leadPath } from '../../../../../lib/lead-page-core'
-import type { Conversation } from '../../../../../lib/acq-conversation-core'
+import { MAILBOX_CANNOT_SEND, REPLY_TEXT_MAX, type Conversation } from '../../../../../lib/acq-conversation-core'
 
 /**
  * ONE SCANNED MESSAGE'S CONVERSATION (the owner, 23 Sep 2026: "just create
- * a page which shows the convo for that"). The whole Gmail thread the
- * scanner's row belongs to, oldest first, read with the scanner's own
- * credentials; the message it read is marked; its verdict and reason sit
- * at the top. Nothing here writes.
+ * a page which shows the convo for that", then "is there a way to reply it
+ * from here too?"). The whole Gmail thread the scanner's row belongs to,
+ * oldest first, read with the scanner's own credentials; the message it
+ * read is marked; its verdict and reason sit at the top; a reply box at the
+ * bottom sends from the mailbox the thread is in, into the same thread.
+ * Nothing is sent unless a person presses Send.
  */
+type Answer = Conversation & { can_send: boolean; reply_to: string | null }
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 
 export default function ConversationPage({ id }: { id: string }) {
-  const [data, setData] = useState<Conversation | null>(null)
+  const [data, setData] = useState<Answer | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    let live = true
-    void (async () => {
-      try {
-        const res = await fetch(`/api/leads/acquisition/scanning/${encodeURIComponent(id)}`, { cache: 'no-store' })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(json?.error ?? 'Could not read the thread')
-        if (live) setData(json)
-      } catch (e) { if (live) setError(e instanceof Error ? e.message : 'Could not read the thread') }
-    })()
-    return () => { live = false }
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/leads/acquisition/scanning/${encodeURIComponent(id)}`, { cache: 'no-store' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error ?? 'Could not read the thread')
+      setData(json); setError(null)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not read the thread') }
   }, [id])
+  useEffect(() => { void load() }, [load])
+
+  const send = async () => {
+    const message = draft.trim()
+    if (!message || !data) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/leads/acquisition/scanning/${encodeURIComponent(id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error ?? 'Could not send')
+      toast.success(`Sent from ${json.from} to ${json.to} — it is in the thread`)
+      setDraft('')
+      await load()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not send') } finally { setBusy(false) }
+  }
 
   return (
     <div className="flex flex-col gap-4" data-scan-conversation>
@@ -64,6 +85,21 @@ export default function ConversationPage({ id }: { id: string }) {
               </li>
             ))}
           </ol>
+
+          {/* REPLY FROM HERE (23 Sep 2026): from the mailbox the thread is in, into the same thread */}
+          <section aria-label="Reply" className="rounded-card border border-border bg-card p-4" data-conversation-reply>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Reply from {data.mailbox}{data.reply_to ? ` to ${data.reply_to}` : ''}</p>
+            {!data.can_send && <p role="status" className="mt-2 text-[13px] text-muted-foreground">{MAILBOX_CANNOT_SEND(data.mailbox)}</p>}
+            <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={5} maxLength={REPLY_TEXT_MAX} disabled={busy || !data.can_send || !data.reply_to}
+              placeholder={data.can_send ? 'Your words. It goes as a normal email from this mailbox, in this thread.' : 'Connect this mailbox for replies first'}
+              className="mt-3 w-full resize-y rounded-inner border border-border bg-surface p-3 text-[14px] disabled:opacity-60" aria-label="Your reply" />
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Button disabled={busy || !draft.trim() || !data.can_send || !data.reply_to} onClick={() => void send()} className="h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
+                <Send className="mr-1.5 h-4 w-4" aria-hidden /> {busy ? 'Sending…' : 'Send'}
+              </Button>
+              <span className="text-[12px] text-muted-foreground">Nothing is ever sent for you — only what you press Send on.</span>
+            </div>
+          </section>
         </>
       )}
     </div>

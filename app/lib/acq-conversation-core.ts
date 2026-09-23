@@ -100,3 +100,21 @@ export function conversationRefusal(row: IngestRowLike | null, mailboxKnown: boo
   if (!mailboxKnown) return `The scanner has no credentials for ${String(row.mailbox ?? 'that mailbox')} right now, so the thread cannot be read.`
   return null
 }
+
+/** what a reply to this thread is addressed to: the last message from outside, in its thread */
+export function replyDraft(thread: readonly (ThreadMessageLike & { threadId?: string | null; messageId?: string | null; references?: string | null })[], subjectFallback: string): { to: string; subject: string; threadId: string | null; inReplyTo: string | null; references: string | null } | null {
+  const last = [...thread].sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? ''))).find(m => directionOf(m.fromEmail) === 'in')
+  if (!last || !String(last.fromEmail ?? '').trim()) return null
+  const subject = String(last.subject ?? '').trim() || subjectFallback
+  return {
+    to: String(last.fromEmail ?? '').trim(),
+    subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
+    threadId: last.threadId ?? null,
+    inReplyTo: last.messageId ?? null,
+    references: [last.references, last.messageId].map(s => String(s ?? '').trim()).filter(Boolean).join(' ') || null,
+  }
+}
+
+export const REPLY_TEXT_MAX = 4000
+export const NOBODY_TO_REPLY_TO = 'Every message in this thread is ours — there is nobody to reply to.'
+export const MAILBOX_CANNOT_SEND = (mailbox: string) => `${mailbox} can read but not reply yet. On the Scanning page press Connect for replies beside it, pick that account and allow both.`

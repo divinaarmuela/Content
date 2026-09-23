@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { mailboxReach, mailboxSummaries } from '../app/lib/acq-scanning-core'
+import { MAILBOX_CANNOT_SEND, NOBODY_TO_REPLY_TO, replyDraft } from '../app/lib/acq-conversation-core'
+import { INBOX_SCOPES } from '../app/lib/inbox-connect'
+import { GMAIL_SEND_SCOPE, mailboxCanSend, rawEmail } from '../app/lib/gmail'
+
+/**
+ * ONE WAY TO CONNECT, READ AND REPLY (the owner, 23 Sep 2026: "so its easily
+ * connected again same way currently its all over the places", "is there a
+ * way to reply it from here too?").
+ */
+describe('connect once, read and reply', () => {
+  it('the connect flow asks for read and send together, and keeps what Google granted', () => {
+    expect(INBOX_SCOPES).toBe('https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send')
+    const src = readFileSync('app/lib/inbox-connect.ts', 'utf8')
+    expect(src).toContain('scope: INBOX_SCOPES,')
+    expect(src).toContain("scopes: String(token.scope ?? '').trim() || null,")
+    expect(readFileSync('docs/schema-history/inbox_reply_scopes.sql', 'utf8')).toContain('alter table scan_mailboxes add column if not exists scopes text;')
+  })
+
+  it('a mailbox may send only when its token carries gmail.send', () => {
+    expect(mailboxCanSend({ scopes: `https://www.googleapis.com/auth/gmail.readonly ${GMAIL_SEND_SCOPE}` })).toBe(true)
+    expect(mailboxCanSend({ scopes: 'https://www.googleapis.com/auth/gmail.readonly' })).toBe(false)
+    expect(mailboxCanSend({ delegated: true })).toBe(false)
+    expect(mailboxCanSend({ refreshToken: 'x' })).toBe(false)
+  })
+
+  it('the Scanning page says each mailbox’s reach and offers the one press that widens it', () => {
+    expect(mailboxReach({ enabled: true, source: 'self', can_send: true })).toEqual({ words: 'Reads and replies', tone: 'green', reconnect: false })
+    expect(mailboxReach({ enabled: true, source: 'self', can_send: false })).toMatchObject({ words: 'Reads only — reconnect to allow replies', reconnect: true })
+    expect(mailboxReach({ enabled: true, source: 'shared', can_send: false }).reconnect).toBe(true)
+    expect(mailboxReach({ enabled: false, source: 'self', can_send: true })).toMatchObject({ words: 'Switched off', reconnect: false })
+    const s = mailboxSummaries([{ email: 'Tech@mdmmarketing.com.au', source: 'self', can_send: true }], [], '2026-09-23T02:00:00.000Z')
+    expect(s[0]).toMatchObject({ email: 'tech@mdmmarketing.com.au', source: 'self', can_send: true })
+    const view = readFileSync('app/dashboard/leads/acquisition/ScanningView.tsx', 'utf8')
+    expect(view).toContain('href={`/api/inbox/connect?from=scanning&mailbox=${encodeURIComponent(m.email)}`}')
+    expect(view).toContain('Connect for replies</a>')
+    const connect = readFileSync('app/api/inbox/connect/route.ts', 'utf8')
+    expect(connect).toContain("if (from === 'acquisition' || from === 'scanning') {")
+    expect(readFileSync('app/api/inbox/connect/callback/route.ts', 'utf8')).toContain("const base = fromScanning ? '/dashboard/leads/acquisition/scanning?' : fromAcquisition ? '/dashboard/leads/acquisition?' : `${SETTINGS}&`")
+  })
+
+  it('a reply goes to the last message from outside, in its thread, as a normal email', () => {
+    const thread = [
+      { id: 'm1', threadId: 't1', messageId: '<a@x>', references: '', fromEmail: 'lucy@ausvenueco.com.au', subject: 'Reels for three venues', at: '2026-09-21T01:00:00.000Z' },
+      { id: 'm2', threadId: 't1', messageId: '<b@x>', references: '<a@x>', fromEmail: 'martin@mdmmarketing.com.au', subject: 'Re: Reels for three venues', at: '2026-09-21T02:00:00.000Z' },
+    ]
+    expect(replyDraft(thread, 'x')).toEqual({ to: 'lucy@ausvenueco.com.au', subject: 'Re: Reels for three venues', threadId: 't1', inReplyTo: '<a@x>', references: '<a@x>' })
+    expect(replyDraft([thread[1]], 'x')).toBeNull()
+    const raw = Buffer.from(rawEmail({ from: 'hello@mdmmarketing.com.au', to: 'lucy@ausvenueco.com.au', subject: 'Re: Reels', text: 'Hi Lucy', inReplyTo: '<a@x>' }).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+    expect(raw).toContain('From: hello@mdmmarketing.com.au\r\nTo: lucy@ausvenueco.com.au\r\nSubject: Re: Reels\r\nIn-Reply-To: <a@x>\r\n')
+    expect(raw.endsWith('\r\n\r\nHi Lucy')).toBe(true)
+    expect(NOBODY_TO_REPLY_TO).toContain('nobody to reply to')
+    expect(MAILBOX_CANNOT_SEND('hello@mdmmarketing.com.au')).toContain('Connect for replies')
+  })
+
+  it('the route sends only on POST, only from a mailbox that may, and never without a person', () => {
+    const route = readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')
+    expect(route).toContain("const user = await requireRole('scheduler')")
+    expect(route).toContain('if (!mailboxCanSend(t.box)) return NextResponse.json({ error: MAILBOX_CANNOT_SEND(t.box.email) }, { status: 409 })')
+    expect(route).toContain('const sent = await sendReply(t.box, {')
+    expect(route.split('sendReply(').length).toBe(2)
+    // the only send in gmail.ts is the reply; the agent still has none
+    expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).not.toContain('sendReply(')
+    const page = readFileSync('app/dashboard/leads/acquisition/scanning/[id]/ConversationPage.tsx', 'utf8')
+    expect(page).toContain('Nothing is ever sent for you — only what you press Send on.')
+  })
+})

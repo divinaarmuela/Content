@@ -6,7 +6,7 @@ import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Chip from '../../ui/Chip'
 import { conversationPath } from '../../../lib/acq-conversation-core'
-import type { AgentSummary, Finding, MailboxSummary, RecentRead } from '../../../lib/acq-scanning-core'
+import { mailboxReach, type AgentSummary, type Finding, type MailboxSummary, type RecentRead } from '../../../lib/acq-scanning-core'
 
 /**
  * SCANNING (the acquisition blueprint's Scanning page; 22 Sep 2026): what
@@ -48,12 +48,16 @@ export default function ScanningView({ onOpen }: { onOpen: (prospectId: string) 
         <>
           <section aria-label="Mailboxes" className="rounded-card border border-border bg-card">
             <h2 className="border-b border-border px-4 py-3 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Mailboxes read</h2>
-            {data.mailboxes.length === 0 ? <p className="px-4 py-6 text-[13px] text-muted-foreground">No mailbox is connected yet — Settings → Inbox scanner.</p> : (
+            <p className="border-b border-border px-4 py-2 text-[12px] text-muted-foreground">One way to connect: press Connect, pick the mailbox, allow read and reply. <a href="/api/inbox/connect?from=scanning" className="font-semibold underline-offset-4 hover:underline">Connect a mailbox</a></p>
+            {data.mailboxes.length === 0 ? <p className="px-4 py-6 text-[13px] text-muted-foreground">No mailbox is connected yet.</p> : (
               <ul className="divide-y divide-border">
                 {data.mailboxes.map(m => (
                   <li key={m.email} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-[13px]">
                     <span className="font-semibold">{m.email}</span>
-                    <Chip tone={m.enabled ? 'green' : 'muted'}>{m.enabled ? 'Read' : 'Switched off'}</Chip>
+                    <Chip tone={mailboxReach(m).tone}>{mailboxReach(m).words}</Chip>
+                    {mailboxReach(m).reconnect && (
+                      <a href={`/api/inbox/connect?from=scanning&mailbox=${encodeURIComponent(m.email)}`} className="inline-flex h-8 items-center rounded-full border border-border px-3 text-[12px] font-semibold hover:bg-foreground/[0.04]">Connect for replies</a>
+                    )}
                     <span className="text-muted-foreground">Last scanned {when(m.last_scan_at)}{m.last_status === 'error' ? ' · the last run failed' : ''}</span>
                     <span className="text-muted-foreground">Last new message {when(m.last_read_at)}</span>
                     <span className="text-muted-foreground">Today: {m.today.read} read · {m.today.skipped} skipped · {m.today.leads} {m.today.leads === 1 ? 'lead' : 'leads'}{m.today.errors ? ` · ${m.today.errors} could not be read` : ''}</span>

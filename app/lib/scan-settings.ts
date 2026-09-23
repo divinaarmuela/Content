@@ -1,7 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { ScanMailbox, ScanRun } from '@/lib/db-types'
-import { getMailboxes, type Mailbox } from './gmail'
+import { getMailboxes, type Mailbox, GMAIL_SEND_SCOPE } from './gmail'
 import { listConnectedMailboxes } from './clerk-gmail'
 import { normaliseSettings, DEFAULT_SCAN_SETTINGS, type ScanSettings } from './scan-core'
 import { decryptSecret } from './secret-box'
@@ -42,6 +42,8 @@ export type MailboxEntry = {
   last_status: 'running' | 'success' | 'error' | null
   last_error: string | null
   last_leads_created: number | null
+  /** may the app send from it — a connected mailbox that granted gmail.send (23 Sep 2026) */
+  can_send: boolean
 }
 
 /**
@@ -95,6 +97,7 @@ export async function listMailboxEntries(): Promise<MailboxEntry[]> {
       enabled: row?.enabled ?? true,
       label: row?.label ?? null,
       connected_by: row?.connected_by ?? null,
+      can_send: String((row as { scopes?: string | null } | undefined)?.scopes ?? '').split(/\s+/).includes(GMAIL_SEND_SCOPE),
       last_run_at: run?.started_at ?? null,
       last_status: (run?.status as MailboxEntry['last_status']) ?? null,
       last_error: run?.error ?? null,
@@ -135,6 +138,7 @@ export async function listSelfConnectedMailboxes(): Promise<Mailbox[]> {
       out.push({
         email: row.email.toLowerCase(),
         refreshToken: decryptSecret(row.refresh_token_encrypted as string),
+        scopes: String((row as { scopes?: string | null }).scopes ?? '') || undefined,
         // bound to the connect app, not the mail-sending one
         clientId: inboxClientId(),
         clientSecret: inboxClientSecret(),
