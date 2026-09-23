@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useLive, useTable } from '@/lib/db-client'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
@@ -17,99 +18,80 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
-} from '@/components/ui/sheet'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  ArrowUpDown, Copy, Download, Mail, MoreHorizontal, Pencil, RefreshCw, Trash2, UserPlus,
+  ArrowRight, ArrowUpDown, Copy, Download, Mail, MoreHorizontal, RefreshCw, Trash2, UserPlus,
 } from 'lucide-react'
 import ScanPanel from './ScanPanel'
+import Chip from '../ui/Chip'
 import { useRole } from '../useRole'
 import { LoadFailed } from '../NotSetUp'
 import PageTitle from '../ui/PageTitle'
-import Pipeline from './Pipeline'
-import { usePersistedChoice } from '../production/workHooks'
+import { copyText } from '../../lib/copy-text-client'
+import { acqStageByKey } from '../../lib/acquisition-core'
+import {
+  LEADS_SUMMARY, leadBusiness, leadFromWords, leadName, leadPath, prospectForLead, prospectPagePath,
+  type LeadLike, type ProspectLink,
+} from '../../lib/lead-page-core'
 
-/** THE PIPELINE OR THE LIST (the acquisition doc, 17 Sep 2026): the seven
- *  stages are the page; the list is still there for the export and the raw rows */
-const LEAD_VIEWS = ['pipeline', 'list'] as const
-
-interface Lead {
-  id: string
-  created_at: string
-  fname: string
-  lname: string
-  email: string
-  phone: string
-  biz: string
-  model: string
-  need: string
-  budget: string
-  timeline: string
-}
+/**
+ * THE LEADS PAGE IS THE INBOX OF ENQUIRIES (the owner, 23 Sep 2026: "this
+ * page needs fixing i think drawer and all dont think its from the docs").
+ * The website form and the mailboxes the scanner reads land here, newest
+ * first. It has no stages of its own — the acquisition pipeline is the one
+ * road a deal travels, and "Bring into acquisition" is how an enquiry gets
+ * on it. A row opens a page, /dashboard/leads/<id>, not a drawer.
+ */
+type Lead = LeadLike & { id: string; created_at: string }
 
 /** newest first, as the leads API always ordered them — module-level so the
  *  live query stays referentially stable across renders */
 const BY_NEWEST: ['created_at', 'desc'][] = [['created_at', 'desc']]
 
-const COLS: { key: keyof Lead; label: string; mono?: boolean }[] = [
-  { key: 'created_at', label: 'Date', mono: true },
-  { key: 'fname',      label: 'First' },
-  { key: 'lname',      label: 'Last' },
-  { key: 'email',      label: 'Email' },
-  { key: 'phone',      label: 'Phone', mono: true },
+type SortKey = 'created_at' | 'fname' | 'biz' | 'source' | 'model'
+const COLS: { key: SortKey; label: string }[] = [
+  { key: 'created_at', label: 'When' },
+  { key: 'fname',      label: 'Who' },
   { key: 'biz',        label: 'Business' },
-  { key: 'model',      label: 'Service' },
-  { key: 'need',       label: 'Needs' },
-  { key: 'budget',     label: 'Budget', mono: true },
-  { key: 'timeline',   label: 'Timeline', mono: true },
+  { key: 'source',     label: 'From' },
+  { key: 'model',      label: 'Asked for' },
 ]
 
 type TodayLead = { id: string; created_at: string; name: string; biz: string | null; source: string; reason: string }
 
 export default function LeadsPage() {
-  const { can, me } = useRole()
-  const [view, setView] = usePersistedChoice('leads-view', LEAD_VIEWS, 'pipeline', 'view')
+  const router = useRouter()
+  const { can } = useRole()
   const canScan = can('account_manager')
+  const manager = can('account_manager')
+  const scheduler = can('scheduler')
   const [today, setToday] = useState<TodayLead[]>([])
   const [search, setSearch]   = useState('')
-  const [sort, setSort]       = useState<{ key: keyof Lead; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
+  const [sort, setSort]       = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'created_at', dir: 'desc' })
   const [deleting, setDeleting] = useState<Lead | null>(null)
-  const [deleteBusy, setDeleteBusy] = useState(false)
-  const [detail, setDetail] = useState<Lead | null>(null)
-  const [draft, setDraft] = useState<Partial<Lead>>({})
-  const [saveBusy, setSaveBusy] = useState(false)
-
-  const openDetail = (l: Lead) => { setDetail(l); setDraft(l) }
-
-  const saveDetail = async () => {
-    if (!detail) return
-    setSaveBusy(true)
-    try {
-      const res = await fetch(`/api/leads/${detail.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Save failed')
-      // no local splice: the listener has the row already
-      toast.success('Lead updated')
-      setDetail(null)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Save failed')
-    } finally {
-      setSaveBusy(false)
-    }
-  }
+  const [busy, setBusy] = useState(false)
 
   const copyEmail = (l: Lead) => {
-    navigator.clipboard.writeText(l.email)
-    toast.success(`${l.email} copied`)
+    void copyText(Promise.resolve(l.email ?? '')).then(ok => { if (ok) toast.success(`${l.email} copied`) })
+  }
+
+  const bringIn = async (l: Lead) => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/leads/acquisition/from-lead', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lead_id: l.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not bring it in')
+      toast.success('Brought into acquisition — it is a lead at Engaged now', {
+        action: { label: 'Open', onClick: () => router.push(prospectPagePath(json.prospect.id)) },
+      })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not bring it in')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const convertToClient = async (l: Lead) => {
@@ -122,13 +104,13 @@ export default function LeadsPage() {
       const json = await res.json()
       if (res.status === 409) {
         toast.info(json.error, {
-          action: { label: 'Open clients', onClick: () => { window.location.href = '/dashboard/clients' } },
+          action: { label: 'Open clients', onClick: () => router.push('/dashboard/clients') },
         })
         return
       }
       if (!res.ok) throw new Error(json.error ?? 'Convert failed')
       toast.success(`${json.name} added to clients`, {
-        action: { label: 'Open clients', onClick: () => { window.location.href = '/dashboard/clients' } },
+        action: { label: 'Open clients', onClick: () => router.push('/dashboard/clients') },
       })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Convert failed')
@@ -137,17 +119,17 @@ export default function LeadsPage() {
 
   const confirmDelete = async () => {
     if (!deleting) return
-    setDeleteBusy(true)
+    setBusy(true)
     try {
       const res = await fetch(`/api/leads/${deleting.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Delete failed')
       // the listener removes the row itself
-      toast.success(`Lead from ${deleting.fname} ${deleting.lname} deleted`)
+      toast.success(`Lead from ${leadName(deleting)} deleted`)
       setDeleting(null)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Delete failed')
     } finally {
-      setDeleteBusy(false)
+      setBusy(false)
     }
   }
 
@@ -157,9 +139,11 @@ export default function LeadsPage() {
    * Straight off the database: the table paints from the first snapshot and a
    * lead added by the website form or the inbox scanner appears in it by
    * itself, with no refetch and no reload. Newest first, exactly as
-   * `/api/leads` ordered them.
+   * `/api/leads` ordered them. The prospects are read too, so a row can say
+   * it is already in acquisition and link there.
    */
   const { rows: leads, loading, error } = useTable<Lead>('leads', { orderBy: BY_NEWEST })
+  const { rows: prospects } = useTable<ProspectLink & { id: string }>('prospects')
 
   /** today's leads carry WHY they exist — the classifier's reasoning, which
    *  lives in the ingest log — so that one banner is still its own fetch */
@@ -173,8 +157,7 @@ export default function LeadsPage() {
   /**
    * A new lead announces itself the moment it is created. The table does not
    * need telling — its own listener has already drawn the row — so the hint
-   * is now just what it always should have been: the toast, plus the one
-   * banner that is still fetched.
+   * is the toast, plus the one banner that is still fetched.
    */
   const onLeadChange = useCallback((hint: Record<string, unknown> & { ts: number }) => {
     const d = hint as { id?: string; label?: string; source?: string }
@@ -187,17 +170,24 @@ export default function LeadsPage() {
   }, [loadToday])
   useLive('leads', onLeadChange)
 
-  const toggleSort = (key: keyof Lead) =>
+  const toggleSort = (key: SortKey) =>
     setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
+
+  const sortValue = (l: Lead, key: SortKey): string => {
+    if (key === 'fname') return leadName(l).toLowerCase()
+    if (key === 'biz') return leadBusiness(l).toLowerCase()
+    if (key === 'source') return leadFromWords(l.source)
+    return String(l[key] ?? '').toLowerCase()
+  }
 
   const filtered = leads
     .filter(l => {
       if (!search) return true
       const q = search.toLowerCase()
-      return [l.fname, l.lname, l.email, l.biz].some(v => v?.toLowerCase().includes(q))
+      return [l.fname, l.lname, l.email, l.biz, l.need].some(v => v?.toLowerCase().includes(q))
     })
     .sort((a, b) => {
-      const av = a[sort.key] ?? '', bv = b[sort.key] ?? ''
+      const av = sortValue(a, sort.key), bv = sortValue(b, sort.key)
       return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
     })
 
@@ -205,7 +195,8 @@ export default function LeadsPage() {
     const rows = filtered.map(l => ({
       Date: l.created_at ? new Date(l.created_at).toLocaleString('en-AU') : '',
       'First name': l.fname, 'Last name': l.lname, Email: l.email, Phone: l.phone,
-      Business: l.biz, Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
+      Business: l.biz, From: leadFromWords(l.source), Service: l.model, Needs: l.need, Budget: l.budget, Timeline: l.timeline,
+      'In acquisition': prospectForLead(l, prospects) ? 'Yes' : '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -217,16 +208,65 @@ export default function LeadsPage() {
    *  name that isn't there told you the business had no enquiries at all. */
   const emptyMessage = search.trim()
     ? `No leads match “${search.trim()}”. Clear the search to see all ${leads.length}.`
-    : 'No leads yet — submissions appear here automatically.'
+    : 'No enquiries yet — the website form and the inbox scanner put them here by themselves.'
 
-  const fmt = (val: string, key: keyof Lead) => {
-    if (key === 'created_at' && val)
-      return new Date(val).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-    return val || '—'
+  const dateWords = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', year: 'numeric' }) : '—'
+
+  /** the one chip that says where the enquiry stands */
+  const status = (l: Lead) => {
+    const p = prospectForLead(l, prospects)
+    if (p) return <Chip tone="green">{`In acquisition · ${acqStageByKey(p.stage).label}`}</Chip>
+    if (l.next_action) return <Chip tone="amber">{l.next_action}</Chip>
+    return <Chip tone="muted">Not brought in</Chip>
   }
 
+  const open = (l: Lead) => router.push(leadPath(l.id))
+
+  const actions = (l: Lead) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label={`Actions for ${leadName(l)}`}>
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={() => open(l)}>
+          <ArrowRight className="h-3.5 w-3.5" /> Open
+        </DropdownMenuItem>
+        {l.email && (
+          <DropdownMenuItem onClick={() => copyEmail(l)}>
+            <Copy className="h-3.5 w-3.5" /> Copy email
+          </DropdownMenuItem>
+        )}
+        {l.email && (
+          <DropdownMenuItem asChild>
+            <a href={`mailto:${l.email}`}>
+              <Mail className="h-3.5 w-3.5" /> Email them
+            </a>
+          </DropdownMenuItem>
+        )}
+        {scheduler && !prospectForLead(l, prospects) && (
+          <DropdownMenuItem disabled={busy} onClick={() => void bringIn(l)}>
+            <ArrowRight className="h-3.5 w-3.5" /> Bring into acquisition
+          </DropdownMenuItem>
+        )}
+        {manager && (
+          <>
+            <DropdownMenuItem onClick={() => convertToClient(l)}>
+              <UserPlus className="h-3.5 w-3.5" /> Make a client
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-accent-red focus:text-accent-red" onClick={() => setDeleting(l)}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-leads-inbox>
       {today.length > 0 && (
         <div className="rounded-inner border border-accent-green/30 bg-tint-green p-4">
           <div className="flex items-center gap-2">
@@ -243,7 +283,7 @@ export default function LeadsPage() {
                 <span className="font-mono text-secondary-13 tabular-nums text-foreground">
                   {new Date(t.created_at).toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span className="font-medium">{t.name}</span>
+                <button type="button" onClick={() => router.push(leadPath(t.id))} className="font-medium underline-offset-4 hover:underline">{t.name}</button>
                 {t.biz && <span className="text-foreground">({t.biz})</span>}
                 <span className={
                   'rounded-full px-1.5 py-px font-mono text-[12px] uppercase tracking-wide ' +
@@ -261,17 +301,9 @@ export default function LeadsPage() {
       )}
       <PageTitle
         title="Leads"
-        summary={view === 'pipeline' ? 'One pipeline, seven stages, one owner per stage. A deal moves right only when its exit rule is met.' : 'Contact form submissions from mdmmarketing.com.au'}
+        summary={LEADS_SUMMARY}
         actions={<>
           <div className="flex items-center gap-2">
-            <div role="group" aria-label="Pipeline or list" className="inline-flex h-9 items-center rounded-full border border-border bg-surface p-0.5">
-              {LEAD_VIEWS.map(v => (
-                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}
-                  className={`inline-flex h-8 items-center rounded-full px-3 text-[13px] font-semibold ${view === v ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {v === 'pipeline' ? 'Pipeline' : 'List'}
-                </button>
-              ))}
-            </div>
             {/* the table is live, so this refreshes the one thing that is not:
                 today's leads and the reason each of them exists */}
             <Button variant="outline" size="sm" onClick={() => loadToday()}>
@@ -296,7 +328,7 @@ export default function LeadsPage() {
         <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search name, email, business…"
+          placeholder="Search name, email, business, what they wrote…"
           className="max-w-xs bg-surface"
         />
         {search && (
@@ -312,14 +344,12 @@ export default function LeadsPage() {
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
           </CardContent>
         </Card>
-      ) : view === 'pipeline' && !error ? (
-        <Pipeline leads={filtered as never} viewerId={me?.id ?? null} />
       ) : error ? (
         <LoadFailed what="your leads" detail={error} onRetry={() => window.location.reload()} />
       ) : (
         <>
-        {/* Below md the eleven-column table is about one and a half columns
-            wide. Same data, stacked, with the one thing you came to do. */}
+        {/* Below md the table is about one and a half columns wide. Same
+            data, stacked, with the one thing you came to do. */}
         <div className="flex flex-col gap-2 md:hidden">
           {filtered.length === 0 ? (
             <Card className="border-dashed shadow-none">
@@ -327,17 +357,18 @@ export default function LeadsPage() {
                 {emptyMessage}
               </CardContent>
             </Card>
-          ) : filtered.map((l, i) => (
-            <Card key={l.id ?? i} className="py-0">
+          ) : filtered.map(l => (
+            <Card key={l.id} className="py-0">
               <CardContent className="flex items-center gap-3 p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-body-15 font-medium">{l.fname} {l.lname}</p>
+                <button type="button" onClick={() => open(l)} className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-body-15 font-medium">{leadBusiness(l)}</p>
                   <p className="truncate text-secondary-13 text-muted-foreground">
-                    {[l.biz, l.model].filter(Boolean).join(' · ') || l.email}
+                    {[leadName(l), l.model].filter(Boolean).join(' · ')}
                   </p>
-                  <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">{fmt(l.created_at, 'created_at')}</p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => openDetail(l)}>View</Button>
+                  <p className="mt-0.5 font-mono text-[12px] text-muted-foreground">{dateWords(l.created_at)} · {leadFromWords(l.source)}</p>
+                  <div className="mt-1.5">{status(l)}</div>
+                </button>
+                {actions(l)}
               </CardContent>
             </Card>
           ))}
@@ -359,73 +390,34 @@ export default function LeadsPage() {
                       </button>
                     </TableHead>
                   ))}
+                  <TableHead>Where it stands</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLS.length + 1} className="py-12 text-center text-body-15 text-muted-foreground">
+                    <TableCell colSpan={COLS.length + 2} className="py-12 text-center text-body-15 text-muted-foreground">
                       {emptyMessage}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((l, i) => (
-                    // the row is the click target: opening a lead was hidden
-                    // behind a kebab, and clicking the row itself did nothing
-                    <TableRow
-                      key={l.id ?? i}
-                      onClick={() => openDetail(l)}
-                      className="cursor-pointer"
-                    >
-                      {COLS.map(c => (
-                        <TableCell
-                          key={c.key}
-                          className={`max-w-[220px] truncate text-body-15 ${c.mono ? 'font-mono text-secondary-13 text-muted-foreground' : ''}`}
-                          title={l[c.key] ?? ''}
-                        >
-                          {c.key === 'email'
-                            ? <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="text-accent-blue-deep hover:underline">{l.email}</a>
-                            : fmt(l[c.key], c.key)}
-                        </TableCell>
-                      ))}
-                      <TableCell onClick={e => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground"
-                              aria-label={`Actions for ${l.fname} ${l.lname}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => openDetail(l)}>
-                              <Pencil className="h-3.5 w-3.5" /> View &amp; edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => copyEmail(l)}>
-                              <Copy className="h-3.5 w-3.5" /> Copy email
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <a href={`mailto:${l.email}`}>
-                                <Mail className="h-3.5 w-3.5" /> Email lead
-                              </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => convertToClient(l)}>
-                              <UserPlus className="h-3.5 w-3.5" /> Convert to client
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-accent-red focus:text-accent-red"
-                              onClick={() => setDeleting(l)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                  filtered.map(l => (
+                    // the row is the click target and opens the lead's page
+                    <TableRow key={l.id} onClick={() => open(l)} className="cursor-pointer">
+                      <TableCell className="whitespace-nowrap font-mono text-secondary-13 text-muted-foreground">{dateWords(l.created_at)}</TableCell>
+                      <TableCell className="max-w-[220px] text-body-15">
+                        <p className="truncate font-medium">{leadName(l)}</p>
+                        {l.email && <a href={`mailto:${l.email}`} onClick={e => e.stopPropagation()} className="block truncate text-secondary-13 text-accent-blue-deep hover:underline">{l.email}</a>}
                       </TableCell>
+                      <TableCell className="max-w-[220px] truncate text-body-15" title={leadBusiness(l)}>{leadBusiness(l)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-secondary-13 text-muted-foreground">{leadFromWords(l.source)}</TableCell>
+                      <TableCell className="max-w-[320px] text-body-15">
+                        <p className="truncate">{l.model || '—'}</p>
+                        {l.need && <p className="truncate text-secondary-13 text-muted-foreground" title={l.need}>{l.need}</p>}
+                      </TableCell>
+                      <TableCell>{status(l)}</TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>{actions(l)}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -436,107 +428,18 @@ export default function LeadsPage() {
         </>
       )}
 
-      <Sheet open={!!detail} onOpenChange={open => !open && !saveBusy && setDetail(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{detail?.fname} {detail?.lname}</SheetTitle>
-            <SheetDescription>
-              {detail?.biz}
-              {detail?.created_at && (
-                <> · received {new Date(detail.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</>
-              )}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="grid gap-4 px-4 pb-6">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label>First name</Label>
-                <Input value={draft.fname ?? ''} onChange={e => setDraft(d => ({ ...d, fname: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Last name</Label>
-                <Input value={draft.lname ?? ''} onChange={e => setDraft(d => ({ ...d, lname: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Email</Label>
-              <Input type="email" value={draft.email ?? ''} onChange={e => setDraft(d => ({ ...d, email: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label>Phone</Label>
-                <Input value={draft.phone ?? ''} onChange={e => setDraft(d => ({ ...d, phone: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Business</Label>
-                <Input value={draft.biz ?? ''} onChange={e => setDraft(d => ({ ...d, biz: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Service interest</Label>
-              <Input value={draft.model ?? ''} onChange={e => setDraft(d => ({ ...d, model: e.target.value }))} />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Needs — full text</Label>
-              <Textarea rows={5} value={draft.need ?? ''} onChange={e => setDraft(d => ({ ...d, need: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label>Budget</Label>
-                <Input value={draft.budget ?? ''} onChange={e => setDraft(d => ({ ...d, budget: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Timeline</Label>
-                <Input value={draft.timeline ?? ''} onChange={e => setDraft(d => ({ ...d, timeline: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button onClick={saveDetail} disabled={saveBusy}>
-                {saveBusy ? 'Saving…' : 'Save changes'}
-              </Button>
-              <Button variant="outline" onClick={() => detail && convertToClient(detail)}>
-                <UserPlus className="h-4 w-4" /> Convert to client
-              </Button>
-              <Button variant="outline" asChild>
-                <a href={`mailto:${detail?.email}`}><Mail className="h-4 w-4" /> Email</a>
-              </Button>
-              <Button
-                variant="ghost"
-                className="ml-auto text-accent-red hover:text-foreground"
-                onClick={() => { if (detail) { setDeleting(detail); setDetail(null) } }}
-              >
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <AlertDialog open={!!deleting} onOpenChange={open => !open && !deleteBusy && setDeleting(null)}>
+      <AlertDialog open={!!deleting} onOpenChange={open => !open && !busy && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this lead?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleting && (
-                <>
-                  {deleting.fname} {deleting.lname} · {deleting.biz} · {deleting.email}
-                  <br />
-                </>
-              )}
-              This permanently removes the enquiry from the database. It can&apos;t be undone —
-              export to Excel first if you need a record.
+              The enquiry from {deleting ? leadName(deleting) : ''} is removed for good. If it was brought into acquisition, that prospect stays.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={e => { e.preventDefault(); confirmDelete() }}
-              disabled={deleteBusy}
-              className="bg-accent-red hover:bg-accent-red/90"
-            >
-              {deleteBusy ? 'Deleting…' : 'Delete lead'}
+            <AlertDialogCancel disabled={busy}>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={busy} className="bg-accent-red text-white hover:bg-accent-red/90">
+              {busy ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

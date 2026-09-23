@@ -244,7 +244,8 @@ export function captureState(p: Prospect): { line: string; met: boolean }[] {
 /** why the prospect may not move on yet — null when it may */
 export function acqMoveRefusal(p: Prospect): string | null {
   const missing = captureState(p).filter(x => !x.met).map(x => x.line)
-  return missing.length === 0 ? null : `Not yet — ${missing.join(', ').toLowerCase()} first.`
+  // SAY WHERE (the owner, 23 Sep 2026, of "Not yet — an owner first": "dont get it what is this"): the missing thing is a field on this page
+  return missing.length === 0 ? null : `Not yet — ${missing.join(', ').toLowerCase()} first: fill it in below and the move opens.`
 }
 
 /** what a move stamps, besides the stage: the milestone the new stage means, when it is not already dated */

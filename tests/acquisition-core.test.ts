@@ -40,7 +40,7 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
 
   it('a stage is left only when its data is captured, and a move stamps what it means', () => {
     const p: Prospect = { id: 'p', business: 'Kode', stage: 'target' }
-    expect(acqMoveRefusal(p)).toBe('Not yet — tier, website or a social handle, what is weak, or the audit angle first.')
+    expect(acqMoveRefusal(p)).toBe('Not yet — tier, website or a social handle, what is weak, or the audit angle first: fill it in below and the move opens.')
     const ready: Prospect = { ...p, tier: 1, instagram: 'kode', audit_angle: 'No reels' }
     expect(acqMoveRefusal(ready)).toBeNull()
     expect(captureState({ ...p, stage: 'proposal', proposal_url: 'https://x.co/p' }).map(x => x.met)).toEqual([true, false])

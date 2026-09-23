@@ -49,6 +49,8 @@ export async function POST(req: Request) {
       }
       const now = new Date().toISOString()
       const prospect = await table<ProspectRow>('prospects').insert(prospectFromLead(lead as unknown as InboundLead, now, user.id) as never)
+      // the lead's "They wrote again — reply" flag is answered by bringing it in (23 Sep 2026): the prospect's page is where the reply happens now
+      if (lead.next_action) await table<Lead>('leads').update(leadId, { next_action: null, next_action_at: null } as never)
       const who = user.name || user.email
       await logAcqEvent({ prospectId: prospect.id, kind: 'added', by: user.id, detail: `Brought in from an inbound lead by ${who}` })
       const said = [lead.need, lead.model].map(s => String(s ?? '').trim()).filter(Boolean).join(' · ')
