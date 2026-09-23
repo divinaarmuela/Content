@@ -305,7 +305,7 @@ export default function ScannerSettings() {
                       }}>
                       {signatureBusy === m.email ? 'Saving…' : 'Save signature'}
                     </Button>
-                    <span className="text-[12px] text-muted-foreground">Plain lines; a link becomes clickable. It goes under the words of every reply sent from here, dimmed, after a “-- ” line.</span>
+                    <span className="text-[12px] text-muted-foreground">Used only when Gmail has no signature for this mailbox — the one set in Gmail is read and used first. Plain lines; a link becomes clickable.</span>
                   </div>
                 </div>
               </details>
@@ -381,6 +381,21 @@ export default function ScannerSettings() {
         <Separator />
 
         <CardContent className="flex flex-col gap-4 pt-6">
+          {/* ── pause the acquisition emails (23 Sep 2026) ── */}
+          <div className="flex items-start gap-3">
+            <Switch
+              id="acqpause" checked={settings.acq_notifications_paused}
+              onCheckedChange={v => patch({ acq_notifications_paused: v })}
+            />
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="acqpause">Pause acquisition emails</Label>
+              <p className="text-secondary-13 text-muted-foreground">
+                While on, nobody is emailed by the acquisition system — no “new target ready”, “audit ready to send”,
+                “new lead from a DM”, no reminder mail. Tasks, the timeline and stage moves still happen. For testing.
+              </p>
+            </div>
+          </div>
+
           {/* ── connect my inbox ── */}
           <div className="flex items-start gap-3">
             <Switch

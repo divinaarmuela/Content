@@ -15,6 +15,8 @@ export type ScanSettings = {
   allow_self_connect: boolean
   blocked_domains: string[]
   blocked_senders: string[]
+  /** no acquisition email to anyone while on — for testing (23 Sep 2026); tasks and the timeline still happen */
+  acq_notifications_paused: boolean
 }
 
 export const DEFAULT_SCAN_SETTINGS: ScanSettings = {
@@ -27,6 +29,7 @@ export const DEFAULT_SCAN_SETTINGS: ScanSettings = {
   allow_self_connect: true,
   blocked_domains: [],
   blocked_senders: [],
+  acq_notifications_paused: false,
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -57,6 +60,7 @@ export function normaliseSettings(input: unknown): ScanSettings {
     allow_self_connect:    r.allow_self_connect === undefined ? true : Boolean(r.allow_self_connect),
     blocked_domains:       list(r.blocked_domains).map(d => d.replace(/^@/, '')),
     blocked_senders:       list(r.blocked_senders),
+    acq_notifications_paused: Boolean(r.acq_notifications_paused),
   }
 }
 

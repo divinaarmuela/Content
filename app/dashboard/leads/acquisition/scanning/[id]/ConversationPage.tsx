@@ -21,7 +21,7 @@ import { MAILBOX_CANNOT_SEND, REPLY_TEXT_MAX, type Conversation } from '../../..
  * bottom sends from the mailbox the thread is in, into the same thread.
  * Nothing is sent unless a person presses Send.
  */
-type Answer = Conversation & { can_send: boolean; reply_to: string | null; reply_refusal: string | null; signature: string | null }
+type Answer = Conversation & { can_send: boolean; reply_to: string | null; reply_refusal: string | null; signature: string | null; signature_source: 'gmail' | 'settings' | null }
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 
 export default function ConversationPage({ id }: { id: string }) {
@@ -98,8 +98,8 @@ export default function ConversationPage({ id }: { id: string }) {
             {/* the signature that goes under the words, as Settings → Inbox scanner set it for this mailbox */}
             {data.can_send && !data.reply_refusal && (
               data.signature
-                ? <pre className="mt-2 whitespace-pre-wrap border-t border-dashed border-border pt-2 font-sans text-[13px] text-muted-foreground" aria-label="Signature">{data.signature}</pre>
-                : <p className="mt-2 text-[12px] text-muted-foreground">No signature for {data.mailbox} yet — a super admin sets one in Settings → Inbox scanner.</p>
+                ? <div className="mt-2 border-t border-dashed border-border pt-2"><p className="text-[11px] uppercase tracking-widest text-muted-foreground">{data.signature_source === 'gmail' ? 'Signature, as Gmail has it for this mailbox' : 'Signature, from Settings'}</p><pre className="mt-1 whitespace-pre-wrap font-sans text-[13px] text-muted-foreground" aria-label="Signature">{data.signature}</pre></div>
+                : <p className="mt-2 text-[12px] text-muted-foreground">No signature for {data.mailbox} yet — set one in Gmail for that mailbox, or a super admin types one in Settings → Inbox scanner.</p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Button disabled={busy || !draft.trim() || !data.can_send || !data.reply_to || !!data.reply_refusal} onClick={() => void send()} className="h-10 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">

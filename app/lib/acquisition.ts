@@ -1,5 +1,6 @@
 import 'server-only'
 import { table } from '@/lib/db'
+import { getScanSettings } from './scan-settings'
 import type { Prospect as ProspectRow, ProspectEvent, TeamUser, Todo } from '@/lib/db-types'
 import { ACQ_EVENT_KINDS, acqStageByKey, followUpTasks, prospectForSender, type AcqEventKind, type Prospect } from './acquisition-core'
 import { escapeHtml, notify, renderEmail } from './mailer'
@@ -56,6 +57,8 @@ export async function peopleNamed(firstNames: readonly string[]): Promise<TeamUs
 export async function tellPeople(people: readonly TeamUser[], actor: Actor, p: Pick<Prospect, 'id' | 'business'>, input: {
   event: string; subject: string; html: string; button: string
 }): Promise<void> {
+  // PAUSED FOR A TEST (the owner, 23 Sep 2026): the switch in Settings → Inbox scanner stops every acquisition email
+  if ((await getScanSettings().catch(() => null))?.acq_notifications_paused) { console.log(`[acquisition] emails paused — not telling ${people.length} about ${input.event} on ${p.business}`); return }
   await Promise.all(people.filter(u => u.id !== actor.id && !!u.email).map(u => notify({
     actorName: actor.name ?? null, actorEmail: actor.email ?? null, actorClerkId: actor.clerk_user_id ?? null,
     eventType: input.event, entityType: 'prospect', entityId: `${p.id}#${input.event}#${u.id}`,

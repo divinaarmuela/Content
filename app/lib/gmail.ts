@@ -363,3 +363,23 @@ export async function sendReply(mailbox: Mailbox, input: { to: string; subject: 
   const json = await res.json() as { id: string; threadId: string }
   return { id: json.id, threadId: json.threadId }
 }
+
+/**
+ * THE SIGNATURE GMAIL ALREADY HAS (the owner, 23 Sep 2026: "maybe this"): the
+ * send-as alias for this address carries the signature the person set in
+ * Gmail, as HTML. sendAs.list is readable with gmail.readonly, so every
+ * connected mailbox can be asked without a new grant. Null when Gmail has
+ * none, or the call fails — the caller falls back to the typed one.
+ */
+export async function fetchGmailSignature(mailbox: Mailbox): Promise<string | null> {
+  try {
+    const json = await gmailGet<{ sendAs?: { sendAsEmail?: string; isPrimary?: boolean; signature?: string }[] }>(mailbox, 'settings/sendAs')
+    const list = json.sendAs ?? []
+    const mine = list.find(a => String(a.sendAsEmail ?? '').toLowerCase() === mailbox.email.toLowerCase()) ?? list.find(a => a.isPrimary) ?? null
+    const sig = String(mine?.signature ?? '').trim()
+    return sig || null
+  } catch (e) {
+    console.error(`[gmail] the signature for ${mailbox.email} could not be read:`, e)
+    return null
+  }
+}

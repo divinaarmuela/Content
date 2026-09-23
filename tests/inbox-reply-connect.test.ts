@@ -106,3 +106,37 @@ describe('a signature under every reply (the owner, 23 Sep 2026)', () => {
     expect(readFileSync('app/dashboard/leads/acquisition/scanning/[id]/ConversationPage.tsx', 'utf8')).toContain('aria-label="Signature">{data.signature}</pre>')
   })
 })
+
+describe('the acquisition emails can be paused for a test (the owner, 23 Sep 2026)', () => {
+  it('one switch, read by the one place every acquisition email goes through', async () => {
+    const { normaliseSettings, DEFAULT_SCAN_SETTINGS } = await import('../app/lib/scan-core')
+    expect(DEFAULT_SCAN_SETTINGS.acq_notifications_paused).toBe(false)
+    expect(normaliseSettings({ acq_notifications_paused: true }).acq_notifications_paused).toBe(true)
+    expect(normaliseSettings({}).acq_notifications_paused).toBe(false)
+    const acq = readFileSync('app/lib/acquisition.ts', 'utf8')
+    expect(acq).toContain("if ((await getScanSettings().catch(() => null))?.acq_notifications_paused) {")
+    expect(acq.match(/notify(/g)?.length ?? 0).toBe(1)
+    expect(acq).not.toContain('sendSystemEmail(')
+    expect(readFileSync('app/lib/acq-agent.ts', 'utf8')).not.toMatch(/notify(|sendSystemEmail(/)
+    expect(readFileSync('app/dashboard/settings/ScannerSettings.tsx', 'utf8')).toContain('Pause acquisition emails')
+  })
+})
+
+describe('the signature Gmail already has comes first (the owner, 23 Sep 2026: "maybe this")', () => {
+  it('reads it with the permission every mailbox already has, and falls back to the typed one', async () => {
+    const { pickSignature } = await import('../app/lib/acq-conversation-core')
+    const { stripHtml } = await import('../app/lib/gmail-core')
+    const g = pickSignature('<div><b>Renee Yap</b><br>Marketing Manager</div>', 'typed', stripHtml)
+    expect(g).toEqual({ html: '<div class="mdm-signature" style="margin-top:1.5em"><div><b>Renee Yap</b><br>Marketing Manager</div></div>', text: 'Renee Yap\nMarketing Manager', source: 'gmail' })
+    expect(pickSignature('', 'Renee Yap', stripHtml)).toMatchObject({ text: 'Renee Yap', source: 'settings' })
+    expect(pickSignature(null, null, stripHtml)).toBeNull()
+    const gmail = readFileSync('app/lib/gmail.ts', 'utf8')
+    expect(gmail).toContain("gmailGet<{ sendAs?: { sendAsEmail?: string; isPrimary?: boolean; signature?: string }[] }>(mailbox, 'settings/sendAs')")
+    // no new scope: sendAs.list is readable with gmail.readonly (Google's reference, read 23 Sep 2026)
+    const { INBOX_SCOPES } = await import('../app/lib/inbox-connect')
+    expect(INBOX_SCOPES).not.toContain('gmail.settings')
+    const route = readFileSync('app/api/leads/acquisition/scanning/[id]/route.ts', 'utf8')
+    expect(route).toContain('const [gmail, typed] = await Promise.all([fetchGmailSignature(box), mailboxSignature(box.email).catch(() => null)])')
+    expect(route).toContain("text: withSignatureText(text, sig?.text ?? null), html: replyHtml(text) + (sig?.html ?? '')")
+  })
+})

@@ -301,3 +301,14 @@ export function cleanSignature(raw: unknown): string | null {
   const s = String(raw ?? '').replace(/\r\n/g, '\n').trim()
   return s ? s.slice(0, SIGNATURE_MAX) : null
 }
+
+export type ReplySignature = { html: string; text: string; source: 'gmail' | 'settings' } | null
+
+/** Gmail's own signature wins; the one typed in Settings is the fallback; none is none */
+export function pickSignature(gmailHtml: string | null | undefined, typed: string | null | undefined, htmlToText: (html: string) => string): ReplySignature {
+  const g = String(gmailHtml ?? '').trim()
+  if (g) return { html: `<div class="mdm-signature" style="margin-top:1.5em">${g}</div>`, text: htmlToText(g).trim(), source: 'gmail' }
+  const t = String(typed ?? '').trim()
+  if (t) return { html: signatureHtml(t), text: t, source: 'settings' }
+  return null
+}
