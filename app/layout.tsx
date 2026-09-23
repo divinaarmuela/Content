@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import 'lenis/dist/lenis.css'
 import './globals.css'
 
@@ -9,7 +9,28 @@ export const metadata: Metadata = {
   robots: 'index, follow, max-image-preview:large',
   icons: {
     icon: '/favicon.svg',
+    // NAMED, NOT INFERRED: declaring `icons` at all stops Next linking the app/apple-icon.tsx file convention,
+    // so iOS found no apple-touch-icon and would have used a screenshot of the page as the home-screen picture
+    // (checked in the served head on 23 Sep 2026 — the link was simply absent).
+    apple: '/apple-icon',
   },
+  // ADDED TO A HOME SCREEN (the owner, 23 Sep 2026: "how do i make this into an icon on the phone like an app"):
+  // the manifest is what Android installs from; `appleWebApp` writes the meta tags iOS reads instead, and
+  // app/apple-icon.tsx draws the picture it uses. See app/lib/app-icon-core.ts.
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'MD Media',
+    statusBarStyle: 'default',
+  },
+  // `capable` now writes only the standard `mobile-web-app-capable`; iPhones before iOS 16.4 read the
+  // apple-prefixed name and open the icon in Safari with an address bar without it.
+  other: { 'apple-mobile-web-app-capable': 'yes' },
+}
+
+export const viewport: Viewport = {
+  // the colour behind the status bar once it is installed
+  themeColor: '#0A0A0A',
 }
 
 const jsonLd = {

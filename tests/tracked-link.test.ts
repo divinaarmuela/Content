@@ -46,7 +46,10 @@ describe('what a click is worth', () => {
 
 describe('the route and the sheet', () => {
   it('the route is public by design, answers only a real prospect’s own link, and never lets recording block the redirect', () => {
-    const route = readFileSync('app/go/[id]/[kind]/route.ts', 'utf8')
+    const route = readFileSync('app/go/[slug]/[kind]/route.ts', 'utf8')
+    // the folder is [slug], not [id]: /go/<slug> owns this level, and two parameter names on one path stop
+    // the dev server starting at all (seen 23 Sep 2026; the production build was unaffected)
+    expect(route).toContain('const { slug: id, kind } = await params')
     expect(route).toContain("if (!isProspectId(id) || !isTrackedKind(kind)) return new Response('Not found', { status: 404 })")
     expect(route).toContain("if (!p || !to) return new Response('Not found', { status: 404 })")
     expect(route).toContain("if (!isLinkPreviewBot(req.headers.get('user-agent'))) {")
