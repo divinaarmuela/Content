@@ -9,7 +9,7 @@ const rows = [
   { id: 'b', created_at: '2026-09-21T23:55:00.000Z', mailbox: 'hello@mdmmarketing.com.au', from_email: 'sam@ausvenueco.com.au', subject: 'Reels?', received_at: '2026-09-21T23:50:00.000Z', status: 'lead_created', reasoning: 'asks for content', lead_id: 'l1' },
   { id: 'c', created_at: '2026-09-21T10:00:00.000Z', mailbox: 'contact@mdmmarketing.com.au', from_email: 'x@y.test', subject: '', received_at: null, status: 'error', reasoning: null },
 ]
-const boxes = [{ email: 'Hello@mdmmarketing.com.au', enabled: true }, { email: 'contact@mdmmarketing.com.au', enabled: false }, { email: 'tech@mdmmarketing.com.au', enabled: true }]
+const boxes = [{ email: 'Hello@mdmmarketing.com.au', enabled: true, last_run_at: '2026-09-22T10:28:00.000Z', last_status: 'success' }, { email: 'contact@mdmmarketing.com.au', enabled: false }, { email: 'tech@mdmmarketing.com.au', enabled: true, last_run_at: '2026-09-22T10:28:00.000Z', last_status: 'success' }]
 
 describe('the mailboxes', () => {
   it('each one: on or off, when it last looked, today’s tally in Melbourne’s day', () => {
@@ -18,7 +18,8 @@ describe('the mailboxes', () => {
     const hello = s.find(m => m.email === 'hello@mdmmarketing.com.au')!
     expect(hello).toMatchObject({ enabled: true, last_read_at: '2026-09-22T10:25:05.000Z', today: { read: 2, skipped: 1, leads: 1, errors: 0 } })
     expect(s.find(m => m.email === 'contact@mdmmarketing.com.au')).toMatchObject({ enabled: false, today: { read: 0, errors: 0 } })
-    expect(s.find(m => m.email === 'tech@mdmmarketing.com.au')).toMatchObject({ last_read_at: null, today: { read: 0 } })
+    // scanned two minutes ago with nothing new: the scan is recent, the last message is none (tech@, 23 Sep 2026)
+    expect(s.find(m => m.email === 'tech@mdmmarketing.com.au')).toMatchObject({ last_scan_at: '2026-09-22T10:28:00.000Z', last_status: 'success', last_read_at: null, today: { read: 0 } })
   })
 })
 

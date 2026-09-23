@@ -11,7 +11,7 @@
 
 import { ACQ_EVENT_KINDS } from './acquisition-core'
 
-export type MailboxLike = { email: string; enabled?: boolean | null; source?: string | null }
+export type MailboxLike = { email: string; enabled?: boolean | null; source?: string | null; last_run_at?: string | null; last_status?: string | null; last_error?: string | null }
 export type IngestRow = {
   id: string
   created_at: string
@@ -49,6 +49,12 @@ export const INGEST_STATUS_WORDS: Record<string, string> = {
 export type MailboxSummary = {
   email: string
   enabled: boolean
+  /** the last time the scanner RAN on this mailbox (scan_runs), and how it went */
+  last_scan_at: string | null
+  last_status: string | null
+  last_error: string | null
+  /** the last message it looked at — null when nothing new has arrived (seen live, 23 Sep 2026: tech@ scanned every
+   *  5 minutes but with no new mail, which read as never looked at) */
   last_read_at: string | null
   today: { read: number; skipped: number; leads: number; errors: number }
 }
@@ -69,6 +75,9 @@ export function mailboxSummaries(entries: readonly MailboxLike[], rows: readonly
     return {
       email: e.email.toLowerCase(),
       enabled: e.enabled !== false,
+      last_scan_at: e.last_run_at ?? null,
+      last_status: e.last_status ?? null,
+      last_error: e.last_error ?? null,
       last_read_at: last,
       today: {
         read: todays.length,

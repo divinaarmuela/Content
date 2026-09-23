@@ -52,7 +52,8 @@ export default function ScanningView({ onOpen }: { onOpen: (prospectId: string) 
                   <li key={m.email} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-[13px]">
                     <span className="font-semibold">{m.email}</span>
                     <Chip tone={m.enabled ? 'green' : 'muted'}>{m.enabled ? 'Read' : 'Switched off'}</Chip>
-                    <span className="text-muted-foreground">Last looked {when(m.last_read_at)}</span>
+                    <span className="text-muted-foreground">Last scanned {when(m.last_scan_at)}{m.last_status === 'error' ? ' · the last run failed' : ''}</span>
+                    <span className="text-muted-foreground">Last new message {when(m.last_read_at)}</span>
                     <span className="text-muted-foreground">Today: {m.today.read} read · {m.today.skipped} skipped · {m.today.leads} {m.today.leads === 1 ? 'lead' : 'leads'}{m.today.errors ? ` · ${m.today.errors} could not be read` : ''}</span>
                   </li>
                 ))}
