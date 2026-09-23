@@ -50,7 +50,9 @@ function Tokens({ tokens }: { tokens: BodyToken[] }) {
 }
 
 export default function EmailBody({ html, text }: { html: string | null; text: string }) {
-  const [images, setImages] = useState(false)
+  // ALWAYS SHOW IMAGES (the owner, 23 Sep 2026: "can it always be showing images?") — the blocking stays in
+  // email-html-client for anyone who wants it back, but the page opens with them on, as Gmail does
+  const [images, setImages] = useState(true)
   const [showQuoted, setShowQuoted] = useState(false)
   const prepared = useMemo(() => (html ? prepareEmailHtml(html, { images }) : null), [html, images])
   const plain = useMemo(() => (html ? null : bodyView(text)), [html, text])
