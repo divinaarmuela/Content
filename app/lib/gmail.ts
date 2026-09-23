@@ -238,3 +238,36 @@ export function mailboxAddress(): string {
 // invitation to add a send path that skips the EMAIL_TEST_ONLY kill-switch,
 // so they are gone. Read-only Gmail access (the inbox → leads pipeline) is
 // everything above.
+
+/** one message of a thread, as the conversation page draws it */
+export type ThreadMessage = {
+  id: string
+  fromName: string
+  fromEmail: string
+  to: string
+  subject: string
+  at: string | null
+  body: string
+}
+
+/**
+ * THE WHOLE THREAD a message belongs to (the owner, 23 Sep 2026: "a page
+ * which shows the convo"). Read only, like everything else here.
+ */
+export async function fetchThread(mailbox: Mailbox, messageId: string): Promise<ThreadMessage[]> {
+  const head = await gmailGet<{ threadId: string }>(mailbox, `messages/${messageId}?format=minimal`)
+  const json = await gmailGet<{ messages?: { id: string; internalDate?: string; payload?: GmailPayload }[] }>(mailbox, `threads/${head.threadId}?format=full`)
+  return (json.messages ?? []).map(m => {
+    const headers = m.payload?.headers
+    const from = parseFromHeader(header(headers, 'From'))
+    return {
+      id: m.id,
+      fromName: from.name,
+      fromEmail: from.email,
+      to: header(headers, 'To'),
+      subject: header(headers, 'Subject'),
+      at: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
+      body: m.payload ? extractBody(m.payload).slice(0, 20000) : '',
+    }
+  })
+}

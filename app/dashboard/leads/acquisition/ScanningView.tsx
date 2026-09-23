@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Chip from '../../ui/Chip'
+import { conversationPath } from '../../../lib/acq-conversation-core'
 import type { AgentSummary, Finding, MailboxSummary, RecentRead } from '../../../lib/acq-scanning-core'
 
 /**
@@ -98,7 +100,7 @@ export default function ScanningView({ onOpen }: { onOpen: (prospectId: string) 
                         <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{when(r.at)}</td>
                         <td className="px-4 py-2 text-muted-foreground">{r.mailbox}</td>
                         <td className="px-4 py-2">{r.from}</td>
-                        <td className="max-w-[320px] truncate px-4 py-2" title={r.subject}>{r.subject}</td>
+                        <td className="max-w-[320px] truncate px-4 py-2" title={r.subject}><Link href={conversationPath(r.id)} className="underline-offset-4 hover:underline">{r.subject}</Link></td>
                         <td className="px-4 py-2"><Chip tone={r.status === 'lead_created' ? 'green' : r.status === 'error' ? 'red' : 'muted'}>{r.words}</Chip>{r.why && <span className="ml-2 text-muted-foreground">{r.why}</span>}</td>
                       </tr>
                     ))}
