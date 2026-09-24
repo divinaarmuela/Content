@@ -134,9 +134,16 @@ describe('POST /api/production/items/:id/versions — slides', () => {
     expect((addVersion.mock.calls[0][2] as { files: unknown[] }).files).toHaveLength(2)
   })
 
-  it('caps a carousel at ten slides', async () => {
-    await post({ files: Array.from({ length: 14 }, (_, i) => ({ url: u(`s${i}.jpg`) })) })
-    expect((addVersion.mock.calls[0][2] as { files: unknown[] }).files).toHaveLength(10)
+  // TWENTY SINCE INSTAGRAM DOUBLED THE CAROUSEL (24 Sep 2026): thirteen files used to arrive as ten, with
+  // nothing said, and the missing three were then refused as "not part of the approved version".
+  it('keeps thirteen slides and caps a carousel at twenty', async () => {
+    await post({ files: Array.from({ length: 13 }, (_, i) => ({ url: u(`s${i}.jpg`) })) })
+    expect((addVersion.mock.calls[0][2] as { files: unknown[] }).files).toHaveLength(13)
+  })
+
+  it('caps a carousel at twenty slides', async () => {
+    await post({ files: Array.from({ length: 24 }, (_, i) => ({ url: u(`s${i}.jpg`) })) })
+    expect((addVersion.mock.calls[0][2] as { files: unknown[] }).files).toHaveLength(20)
   })
 })
 

@@ -2,7 +2,7 @@
  * A version is a POST, and a post can be many files.
  *
  * One item = one post is still true. What was not true is "one post = one
- * file": an Instagram carousel is two to twenty images and/or videos published (Instagram doubled it from ten; checked 24 Sep 2026)
+ * file": an Instagram carousel is two to twenty images and/or videos published
  * together, in an order somebody chose. `asset_versions.file_url` could hold
  * exactly one, so a carousel could not be represented at all — the editor
  * uploaded six cards and the scheduler had one of them to post.
@@ -53,8 +53,16 @@ export type Slide = {
   drive_file_id?: string
 }
 
-/** Instagram's carousel ceiling, and the tightest of any platform we post to. */
-export const MAX_SLIDES = 10
+/**
+ * Instagram's carousel ceiling, and the tightest of any platform we post to.
+ *
+ * TWENTY SINCE INSTAGRAM DOUBLED IT (the owner, 24 Sep 2026: "when the admin uploads 13 files the change media
+ * section only shows 10 wth is this"). This one number trims a version's files, so at ten a thirteen-file upload
+ * lost three of them on the way in, the picker showed ten, and scheduling then refused the missing three with
+ * "one of those files is not part of the approved version" — the same bug wearing two faces, and nothing said
+ * a file had been dropped.
+ */
+export const MAX_SLIDES = 20
 /** Below this it is not a carousel, it is a post. */
 export const MIN_CAROUSEL_SLIDES = 2
 

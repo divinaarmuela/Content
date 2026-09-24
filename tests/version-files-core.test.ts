@@ -72,7 +72,8 @@ describe('normaliseSlides', () => {
     expect(normaliseSlides([{ url: u('a.jpg') }, { url: u('a.jpg') }])).toHaveLength(1)
   })
   it('caps at the Instagram ceiling', () => {
-    const many = Array.from({ length: 14 }, (_, i) => ({ url: u(`s${i}.jpg`) }))
+    // twenty-four, so the cap is still visible now Instagram's carousel is twenty (24 Sep 2026)
+    const many = Array.from({ length: 24 }, (_, i) => ({ url: u(`s${i}.jpg`) }))
     expect(normaliseSlides(many)).toHaveLength(MAX_SLIDES)
   })
   it('keeps a positive byte count and ignores nonsense', () => {
