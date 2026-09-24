@@ -195,11 +195,18 @@ export function BoardCard({
   const handed = editorFace && handedOver(card as never) ? handedToWords(card as never, names) : null
   const tone = cardTone({
     status: card.status,
-    due: card.due_date,
+    // a handed-over card on Post approval is not late on the EDITING date (24 Sep 2026)
+    due: page === 'scheduler' && handedOver(card as never) ? null : card.due_date,
     changesRequested: card.status === 'client_changes_requested',
     today,
   })
-  const people = card.owner_id
+  // ON POST APPROVAL A HANDED-OVER CARD IS THE SCHEDULER'S (the owner, 24 Sep 2026: "it should have Cath's circle, not
+  // TA", "this card is also out of date"): their circle, and no editing due date — the post has its own time
+  const schedulerIds = Array.isArray((card as { scheduler_ids?: unknown }).scheduler_ids) ? ((card as unknown as { scheduler_ids: unknown[] }).scheduler_ids).map(String) : []
+  const theirs = page === 'scheduler' && (card as { adhoc_post?: unknown }).adhoc_post !== true && schedulerIds.length > 0
+  const people = theirs
+    ? schedulerIds.map(id => ({ id, initials: initialsOf(names.get(id) ?? ''), name: names.get(id) ?? 'Scheduler' }))
+    : card.owner_id
     ? [{ id: card.owner_id, initials: initialsOf(names.get(card.owner_id) ?? (lines.assignee === 'You' ? 'You' : '')), name: names.get(card.owner_id) ?? lines.assignee }]
     : []
   const mayDelete = Boolean(canDelete && onDelete)
@@ -220,7 +227,7 @@ export function BoardCard({
         {!folded && review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
         {!folded && finals && <Chip tone="green">{finals}</Chip>}
         {handed && <Chip tone="green">{handed}</Chip>}
-        {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
+        {!theirs && (!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
         {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
         {/* the made date shows on a folded card as well (the owner, 21 Sep 2026: "create date is not shown on the congested cards") */}

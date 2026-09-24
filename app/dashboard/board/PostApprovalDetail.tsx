@@ -216,9 +216,18 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
    * which one to change without reading the client.
    */
   const readsClient = canReadClientComments(me?.role ?? null)
+  // POST APPROVAL STARTS AT THE HAND-OVER (the owner, 24 Sep 2026: "why can they see what needs doing and all the
+  // comments from the editing phase"): on an edited card the scheduler sees what was said from the hand-over on —
+  // the editing thread (clip notes, send-backs) stays on the Editor side
+  const handedAt = useMemo(() => {
+    if (adhoc) return null
+    const stamps = activity.filter(a => a.action === 'schedule_handoff').map(a => String(a.created_at)).sort()
+    return stamps.length ? stamps[stamps.length - 1] : null
+  }, [activity, adhoc])
   const said = useMemo(() => [...comments]
     .filter(c => readsClient || roleOf(c.author_id) !== 'client')
-    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [comments, readsClient, team])
+    .filter(c => !handedAt || String(c.created_at) >= handedAt)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [comments, readsClient, team, handedAt])
   const changeNote = (item as { change_note?: string | null } | null)?.change_note ?? null
   const changeAbout = changeNote ? splitSlideTag(changeNote) : null
 
@@ -548,7 +557,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           )}
           {!adhoc && (
             <div className="mt-1.5 flex flex-col gap-1 text-[13px]">
-              {(item as { brief?: string | null }).brief && (
+              {/* the editing brief is the editor's, not the scheduler's (24 Sep 2026) */}
+              {(item as { brief?: string | null }).brief && !(Array.isArray(item.scheduler_ids) && item.scheduler_ids.length > 0) && (
                 <p><span className="font-semibold">What needs doing: </span>{(item as { brief?: string | null }).brief}</p>
               )}
               <p className="text-muted-foreground">
