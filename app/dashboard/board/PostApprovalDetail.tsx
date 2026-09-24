@@ -247,11 +247,12 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const [showAllHistory, setShowAllHistory] = useState(false)
   const zone = client?.timezone || DEFAULT_TZ
   const history = useMemo(() => historyLines({
-    activity: activity.map(r => ({ ...r, actor_name: team.find(u => u.id === r.actor_id)?.name ?? null })),
+    // from the hand-over on, like the comments: the editing history is the Editor side's (24 Sep 2026)
+    activity: activity.filter(r => !handedAt || String(r.created_at) >= handedAt).map(r => ({ ...r, actor_name: team.find(u => u.id === r.actor_id)?.name ?? null })),
     jobs: fileJobs as unknown as HistoryJob[],
     postedSlides: (item as { posted_slides?: unknown } | null)?.posted_slides,
     fmt: (iso: string) => formatInZone(iso, zone, 'full') ?? iso,
-  }), [activity, team, fileJobs, item, zone])
+  }), [activity, team, fileJobs, item, zone, handedAt])
 
   const viewer = me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
