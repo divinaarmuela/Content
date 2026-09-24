@@ -19,7 +19,7 @@ import {
   type PublishJob, type Tone,
 } from '../../../lib/publish-activity-core'
 import {
-  clientStats, kindsLine, outcomeTitle, outcomeWords, outcomesForJob, sortForTab,
+  clientStats, foldResends, kindsLine, outcomeTitle, outcomeWords, outcomesForJob, sortForTab,
   type ByHandRow, type PlatformOutcome, type PostsTab,
 } from '../../../lib/post-outcome-core'
 import { postPageHref } from '../../../lib/post-page-core'
@@ -74,7 +74,8 @@ export default function PublishActivityPage() {
       ])
       const j = await jRes.json().catch(() => ({}))
       if (!jRes.ok) throw new Error(j.error ?? 'Could not load the posts')
-      setJobs(j.jobs ?? [])
+      // a re-send is the same post: folded onto its parent before anything reads it (24 Sep 2026)
+      setJobs(foldResends((j.jobs ?? []) as Job[]))
       setByHand(Array.isArray(j.by_hand) ? j.by_hand : [])
       if (cRes.ok) setClients(await cRes.json())
     } catch (e) {

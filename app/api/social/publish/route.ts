@@ -204,6 +204,9 @@ export async function GET(req: Request) {
       post_id: postByJob.get(j.id) ?? null,
       // what happened on EACH channel (post-outcome-core)
       platform_results: j.platform_results ?? null,
+      // a re-send names its parent, and the parent lists what it re-sent (24 Sep 2026): the Posts page folds
+      // the two back into one post
+      resend_of: j.resend_of ?? null, resent_platforms: j.resent_platforms ?? null,
       item_title: j.content_item_id ? titleOf.get(String(j.content_item_id)) ?? null : null,
     }))
     return NextResponse.json({ jobs, by_hand })

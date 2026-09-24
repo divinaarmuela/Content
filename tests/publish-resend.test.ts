@@ -162,5 +162,8 @@ describe('a re-send is the same post to everything that reads (the owner, 24 Sep
     expect(foldResends([parent])).toEqual([parent])
     const card = readFileSync('app/dashboard/board/PostApprovalDetail.tsx', 'utf8')
     expect(card).toContain('foldResends(fileJobs as unknown as ResendJob[])')
+    // and the Posts page, which lists every job, folds too — and the list it fetches carries the two columns
+    expect(readFileSync('app/dashboard/social/activity/page.tsx', 'utf8')).toContain('setJobs(foldResends((j.jobs ?? []) as Job[]))')
+    expect(readFileSync('app/api/social/publish/route.ts', 'utf8')).toContain('resend_of: j.resend_of ?? null, resent_platforms: j.resent_platforms ?? null,')
   })
 })
