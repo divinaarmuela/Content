@@ -6,7 +6,7 @@ import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { canEditItemFields } from '../../../../../lib/item-edit-core'
-import { linkKindOf, nextVersionAfterLink } from '../../../../../lib/card-link-core'
+import { linkKindOf, nextVersionAfterLink, withLinkVersion } from '../../../../../lib/card-link-core'
 import { cancelReplacedPullSoon, startPullSoon } from '../../../../../lib/drive-pull'
 import { handInRound } from '../../../../../lib/edit-round-core'
 
@@ -65,6 +65,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           link_kind: check.kind,
           // the mark card-link-core.finishedEditOf reads: the finished edit, or a folder
           link_final: final,
+          // EVERY CUT STAYS OPENABLE (24 Sep 2026): the card used to hold one link, so each hand-in wrote over
+          // the last and the cut the client had commented on could not be opened again
+          ...(final ? { link_versions: withLinkVersion(cur as never, { version: next.version, url: check.url, kind: check.kind, by: user.id, at: new Date().toISOString() }) } : {}),
           // a folder is the card's folder everywhere (card-link-core.folderOf)
           // — unless this link is the finished edit, which is not the folder
           ...(check.kind !== 'other' && !final ? { raw_assets_url: check.url } : {}),

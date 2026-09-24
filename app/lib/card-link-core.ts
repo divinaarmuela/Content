@@ -167,3 +167,67 @@ export function nextVersionAfterLink(
   if (!had) return { version: Math.max(now, 1), changed: true }
   return { version: now + 1, changed: true }
 }
+
+/* ── EVERY CUT STAYS OPENABLE (the owner, 24 Sep 2026: "where is the version 1 and version 2") ──────────
+ * A card held ONE finished-edit link, so every hand-in wrote over the last. Seen live on Jordan Wilson's
+ * First Shoot: eight links saved between 21 and 24 September, only the eighth still reachable, and the cut
+ * the client had written sixteen comments about was gone from the card. The history below keeps each save,
+ * so a version can still be opened after the next one lands. No I/O.
+ */
+
+export type LinkVersion = {
+  /** the number this hand-in was saved as */
+  version: number
+  url: string
+  kind: string
+  /** who saved it, and when */
+  by?: string | null
+  at: string
+}
+
+export function linkVersionsOf(card: { link_versions?: unknown }): LinkVersion[] {
+  const raw = Array.isArray(card?.link_versions) ? card.link_versions : []
+  const out: LinkVersion[] = []
+  for (const v of raw) {
+    const r = (v ?? {}) as Record<string, unknown>
+    const version = Math.floor(Number(r.version))
+    const url = String(r.url ?? '').trim()
+    if (!(version >= 1) || !url) continue
+    out.push({ version, url, kind: String(r.kind ?? 'other'), by: r.by == null ? null : String(r.by), at: String(r.at ?? '') })
+  }
+  return out.sort((a, b) => a.version - b.version || a.at.localeCompare(b.at))
+}
+
+/**
+ * The history with this save added.
+ *
+ * One entry per version: saving the same version again replaces its entry rather than stacking, which is
+ * what happens when somebody corrects a link they have just pasted. Bounded so a card that is re-linked
+ * fifty times does not carry fifty rows.
+ */
+export const LINK_VERSIONS_MAX = 40
+
+export function withLinkVersion(
+  card: { link_versions?: unknown },
+  entry: { version: number; url: string; kind: string; by?: string | null; at: string },
+): LinkVersion[] {
+  const version = Math.floor(Number(entry.version))
+  const url = String(entry.url ?? '').trim()
+  if (!(version >= 1) || !url) return linkVersionsOf(card)
+  const kept = linkVersionsOf(card).filter(v => v.version !== version)
+  const next = [...kept, { version, url, kind: String(entry.kind ?? 'other'), by: entry.by ?? null, at: String(entry.at) }]
+    .sort((a, b) => a.version - b.version || a.at.localeCompare(b.at))
+  return next.slice(-LINK_VERSIONS_MAX)
+}
+
+/** the link saved as this version, if the card still holds it */
+export function linkForVersion(card: { link_versions?: unknown }, version: number): LinkVersion | null {
+  return linkVersionsOf(card).find(v => v.version === Math.floor(Number(version))) ?? null
+}
+
+/** the ones worth listing beside the current link: everything but the newest */
+export function earlierLinkVersions(card: { link_versions?: unknown; current_version_number?: unknown }): LinkVersion[] {
+  const all = linkVersionsOf(card)
+  const now = Math.floor(Number(card?.current_version_number ?? 0))
+  return all.filter(v => v.version !== now || all.filter(x => x.version === now).length > 1).filter(v => v.version < (now || Infinity))
+}
