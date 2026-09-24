@@ -266,6 +266,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   }, [item, me?.id, me?.role])
   const [queued, setQueued] = useState<File[]>([])
   const [linkMode, setLinkMode] = useState(false)
+  /** a link card handing in files this time — the Drive box is still there, one press away */
+  const [fileMode, setFileMode] = useState(false)
   // ONE ASSET REPLACED IN PLACE: the new file takes the asset's slot as the next version; the rest are untouched
   const replaceInput = useRef<HTMLInputElement | null>(null)
   const [replacing, setReplacing] = useState<string | null>(null)
@@ -615,7 +617,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </span>
           </div>
         )}
-        {filesCard && !linkMode ? (
+        {(filesCard || fileMode) && !linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
             {mayFile && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
@@ -694,6 +696,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <a href={item.link_url} target="_blank" rel="noreferrer noopener" className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-4">Open the finished edit<span className="sr-only">, opens in a new tab</span></a>
         )}
         {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
+        {/* UPLOAD INSTEAD OF A LINK (the owner, 24 Sep 2026): a card handed in by link offered nothing but the
+            Drive box, so an editor asked to redo the cut had no way to put the new files anywhere. */}
+        {!filesCard && mayFile && !frozen && (
+          <button type="button" onClick={() => { setFileMode(true); setUploadOpen(true) }} className="min-h-11 w-fit text-[12px] text-muted-foreground underline underline-offset-4">
+            Upload the files here instead
+          </button>
+        )}
       </section>
 
       {/* ── 4. quality check, then submit (§4) ── */}

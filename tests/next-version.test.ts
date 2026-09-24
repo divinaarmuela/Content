@@ -53,3 +53,22 @@ describe('starting the next version', () => {
     expect(drawer).toContain('{nextRound.label}')
   })
 })
+
+describe('a card handed in by a link can hand in files instead (the owner, 24 Sep 2026)', () => {
+  it('offers the upload where before there was only the Drive box', () => {
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    // Yusuf's card: sent back by the quality check, a finished link on it, so `handsInFiles` was false and the
+    // whole files half of the drawer was hidden — no upload button anywhere on it
+    expect(drawer).toContain('{(filesCard || fileMode) && !linkMode ? (')
+    expect(drawer).toContain('Upload the files here instead')
+    expect(drawer).toContain('onClick={() => { setFileMode(true); setUploadOpen(true) }}')
+  })
+
+  it('and the version it lands on is still the one the rule says', async () => {
+    const { handsInFiles } = await import('../app/lib/final-files-core')
+    // the card as the database held it on 24 Sep: revision_required, a link, no files, no round yet
+    const card = { status: 'revision_required', link_url: 'https://drive.google.com/drive/folders/x', link_final: true, final_files: [], work_kinds: null }
+    expect(handInRound(card)).toBe(1)
+    expect(handsInFiles(card as never)).toBe(false)
+  })
+})
