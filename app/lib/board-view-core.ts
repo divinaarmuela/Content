@@ -698,7 +698,10 @@ export function laneOf(page: BoardPage, column: BoardColumnKey): PageLaneKey {
  *  Draft again for that job, but the EDIT is finished (the owner, 17 Sep 2026:
  *  "once completed and handed over, which column should I look at?"). On a
  *  board with a Done lane (the Editor and Designer pages) it sits there. */
-export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown }): boolean {
+export function handedOver(card: { scheduler_ids?: unknown; adhoc_post?: unknown; status?: unknown }): boolean {
+  // signed off first (24 Sep 2026): the quality check names the scheduler the moment it passes, and Jordan
+  // Wilson's First Shoot sat in Done, "Handed to Cath Lorenzo", while it was still waiting on the client
+  if (card.status !== undefined && ['quality_check', 'client_review', 'client_changes_requested'].includes(String(card.status))) return false
   return card.adhoc_post !== true && Array.isArray(card.scheduler_ids) && card.scheduler_ids.length > 0
 }
 

@@ -173,7 +173,9 @@ export function stillToReplace(item: { final_files?: unknown; change_assets?: un
   const current = new Map(currentFiles(item).map(f => [assetIdOf(f), f]))
   // replaced = a newer cut than the one the send-back was about: uploaded after it (or, without a stamp, in a later round)
   const replaced = (f: FinalFile) => (since ? f.uploaded_at > since : f.version >= round && f.version > 1)
-  return changeAssetsOf(item).filter(a => current.has(a) && !replaced(current.get(a)!) && !isRetiredAt(current.get(a)!, round))
+  // a named clip is dealt with by a NEW CUT only — dropping it is not an answer to "change this" (24 Sep 2026:
+  // Script 1 and Script 5 of Jordan Wilson's First Shoot were named, dropped, and the card went on to the client)
+  return changeAssetsOf(item).filter(a => current.has(a) && !replaced(current.get(a)!))
 }
 
 /** may this asset be replaced now: the card was sent back, and this asset was named (or none was) — or a MANAGER
@@ -250,4 +252,46 @@ export function withRetired(list: readonly FinalFile[], assetId: string, round: 
   const latest = line[line.length - 1]
   if (!latest) return [...list]
   return list.map(f => (f.id === latest.id ? (round === null ? (({ retired_round: _r, ...rest }) => rest)(f) : { ...f, retired_round: round }) : f))
+}
+
+/* ── EVERY DRIVE HAND-IN BECOMES FILES (the owner, 24 Sep 2026: "didnt i tell u track everything as files instead
+ * of drive links") ──────────────────────────────────────────────────────────────────────────────────────────────
+ * Only a card's FIRST Drive hand-in used to become its files, and only when somebody opened the card. Version 2
+ * of Jordan Wilson's First Shoot went in as a Drive folder and stayed a link: the quality check passed the folder
+ * and the scheduler was handed the folder, with the Version 1 Script 1 and Script 5 still in it.
+ *
+ * Every copied hand-in is now merged into the card's files at its round, by the rules a person would use:
+ *   - a Drive file already on the card (same id) is the same cut — carried, not re-added;
+ *   - a file whose name matches a clip on the card is that clip's next version;
+ *   - anything else is a new clip.
+ */
+function clipKey(name: string): string {
+  return String(name ?? '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/[\s_-]+/g, ' ').trim()
+}
+
+export function mergeHandIn(
+  list: readonly FinalFile[],
+  pulled: readonly { id: string; name: string; mime?: string | null; size?: number | null; url?: string | null; status?: string }[],
+  round: number,
+  by: string | null,
+  now: string,
+): { files: FinalFile[]; added: number } {
+  const have = new Set(list.map(f => f.id))
+  const byName = new Map(currentFiles({ final_files: list }).map(f => [clipKey(f.name), f]))
+  const out = [...list]
+  let added = 0
+  for (const p of pulled) {
+    if (p.status !== 'done' || !p.url || !/^https:\/\//.test(String(p.url)) || have.has(p.id)) continue
+    const same = byName.get(clipKey(p.name))
+    const file: FinalFile = {
+      id: p.id, asset_id: same ? assetIdOf(same) : p.id, name: p.name, url: String(p.url),
+      mime: String(p.mime ?? ''), size: typeof p.size === 'number' ? p.size : null,
+      version: Math.max(1, Math.floor(round)), uploaded_at: now, by,
+      ...(same ? { replaces: same.id } : {}),
+    }
+    out.push(file)
+    have.add(p.id)
+    added++
+  }
+  return { files: out, added }
 }

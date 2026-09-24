@@ -81,8 +81,9 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(liveFilesAt({ final_files: dropped }, 1).map(assetIdOf)).toEqual(['a', 'b', 'c'])
     // dropping one IS a change: the whole-card hand-in is met
     expect(hasFinishedWork({ ...back, final_files: dropped })).toBe(true)
-    // a named asset that is dropped no longer waits for a replacement
-    expect(stillToReplace({ ...back, change_assets: ['b'], final_files: dropped })).toEqual([])
+    // a named asset that is dropped STILL waits for its new cut (24 Sep 2026: Jordan Wilson's Script 1 and Script 5
+    // were named, dropped by the editor, and the card went on to the client without them)
+    expect(stillToReplace({ ...back, change_assets: ['b'], final_files: dropped })).toEqual(['b'])
     // a send-back cannot name what is already out
     expect(sanitiseChangeAssets(['b', 'c'], { final_files: dropped })).toEqual(['c'])
     // brought back: the mark is gone, nothing else changed

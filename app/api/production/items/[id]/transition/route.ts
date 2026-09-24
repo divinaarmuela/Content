@@ -8,7 +8,7 @@ import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core
 import { finishedEditOf } from '../../../../../lib/card-link-core'
 import { startPullSoon } from '../../../../../lib/drive-pull'
 import { SENT_BACK_STATUSES, handInRound } from '../../../../../lib/edit-round-core'
-import { finalFilesOf } from '../../../../../lib/final-files-core'
+import { finalFilesOf, stillToReplace, currentFiles, assetIdOf } from '../../../../../lib/final-files-core'
 
 /** Execute a status transition. Role legality, requirement evidence, and the
  *  optimistic-concurrency guard all live in performTransition. */
@@ -44,6 +44,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Pick at least one active team member' }, { status: 400 })
       }
       schedulerIds = valid
+    }
+    // A SENT-BACK CLIP NEEDS ITS NEW CUT BEFORE THE CARD GOES BACK (24 Sep 2026). The drawer said so; nothing
+    // enforced it, and Jordan Wilson's card went to quality check with Script 1 and Script 5 never re-cut.
+    if (SENT_BACK_STATUSES.includes(String(item.status)) && to === 'quality_check' && finalFilesOf(item as never).length > 0) {
+      const waiting = stillToReplace(item as never)
+      if (waiting.length > 0) {
+        const names = currentFiles(item as never).filter(f => waiting.includes(assetIdOf(f))).map(f => f.name)
+        return NextResponse.json({ error: `${names.join(', ')} ${names.length === 1 ? 'still needs its' : 'still need their'} new version — upload ${names.length === 1 ? 'it' : 'them'} on the card first` }, { status: 409 })
+      }
     }
     const note = String(body.note ?? '').trim().slice(0, 2000)
     const updated = await performTransition(user, item, to, {

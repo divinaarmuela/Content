@@ -318,5 +318,16 @@ export async function finishPull(id: string): Promise<'done' | 'failed'> {
     status, finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     error: failed.length ? `${failed.length} ${failed.length === 1 ? 'file' : 'files'} could not be copied (${failed[0].name}${failed[0].error ? `: ${failed[0].error}` : ''})` : null,
   } as never)
+  // EVERY DRIVE HAND-IN BECOMES FILES (24 Sep 2026): a card's finished edit, once copied, is merged into its
+  // files on the server — nobody has to open the card for it. Best effort: the copy is kept either way.
+  if (row.kind === 'item' && (row as { purpose?: string | null }).purpose === 'finished') {
+    try {
+      const { adoptClips } = await import('./adopt-clips')
+      const item = await table('content_items').get(row.scope_id)
+      if (item) await adoptClips(item as never, (row as { by?: string | null }).by ?? null)
+    } catch (e) {
+      console.error('[drive-pull] the hand-in could not be turned into files:', e instanceof Error ? e.message : e)
+    }
+  }
   return status
 }

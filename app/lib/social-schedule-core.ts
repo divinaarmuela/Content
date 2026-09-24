@@ -34,6 +34,8 @@ import {
 } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
+import { finalFilesOf, liveFilesAt } from './final-files-core'
+import { roundOf } from './edit-round-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
 import type { ItemStatus } from './workflow-core'
 
@@ -68,6 +70,29 @@ export type ScheduleItem = {
   status?: string | null
   content_type?: string | null
   posting_approval_state?: unknown
+  /** a files card's hand-in — when present, THIS is the approved media (24 Sep 2026) */
+  final_files?: unknown
+  edit_round?: unknown
+}
+
+/**
+ * WHAT WAS APPROVED IS WHAT IS SCHEDULED (the owner, 24 Sep 2026: "if the card is handed over whatever things
+ * that has been approved is the things that are scheduled"). A card handed in as files is approved as those files:
+ * the newest cut of every clip at the card's version, minus the clips dropped. The scheduler is offered exactly
+ * those — never the Drive link, never an older upload. Jordan Wilson's First Shoot had no media version at all, so
+ * the only thing a scheduler could reach was the Drive folder with the Version 1 Script 1 and Script 5 still in it.
+ */
+export function approvedFilesVersion(item: ScheduleItem | null | undefined): ScheduleVersion | null {
+  if (!item || finalFilesOf(item as never).length === 0) return null
+  const round = roundOf(item as never)
+  const live = liveFilesAt(item as never, round)
+  if (live.length === 0) return null
+  const files = live.map(f => ({
+    url: f.url, name: f.name,
+    type: (/^video\//.test(String(f.mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : 'image') as Slide['type'],
+    ...(typeof f.size === 'number' ? { bytes: f.size } : {}),
+  }))
+  return { id: `files-v${round}`, version_number: round, file_url: files[0].url, files } as ScheduleVersion
 }
 export type ScheduleVersion = VersionLike & {
   id?: string
@@ -374,7 +399,8 @@ export function postingEligibility(
   if (!usable) {
     return { ok: false, reason: NOT_ELIGIBLE[status] ?? 'Not ready yet' }
   }
-  const version = latestVersion(versions)
+  // a files card: the approved files ARE the media, whatever older uploads say (24 Sep 2026)
+  const version = approvedFilesVersion(item) ?? latestVersion(versions)
   if (!version) return { ok: false, reason: 'No media yet' }
   const slides = postSlides(item?.content_type, slidesOf(version))
   if (slides.length === 0) return { ok: false, reason: 'No media yet' }
