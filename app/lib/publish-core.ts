@@ -1686,6 +1686,10 @@ export function describeRemoteOutcome(
  */
 export const TRANSIENT_PUBLISH_ERROR = /timed out|time out|timeout|too slow|connection (was )?(reset|closed|refused)|ECONNRESET|socket hang up|network error|gateway|503|502/i
 export const RESEND_GAP_MINUTES = 3
+/** how long after its slot a job may still be re-sent: a timeout is re-sent promptly or not at all. The
+ *  7 pm post was re-sent by the sweep at 20:10 — seventy minutes on, after two hand re-sends — and LinkedIn
+ *  went out twice (24 Sep 2026). */
+export const RESEND_WINDOW_MINUTES = 45
 
 export function isTransientPublishError(reason: string | null | undefined): boolean {
   return TRANSIENT_PUBLISH_ERROR.test(String(reason ?? ''))
@@ -1694,10 +1698,16 @@ export function isTransientPublishError(reason: string | null | undefined): bool
 /** the networks a settled job should be re-sent to: failed for a transient reason, targeted by the job, not
  *  already re-sent — and none at all when the job is itself a re-send */
 export function resendPlanFor(
-  job: { resend_of?: string | null; resent_platforms?: unknown; targets?: unknown },
+  job: { resend_of?: string | null; resent_platforms?: unknown; targets?: unknown; status?: string | null; scheduled_for?: string | null; created_at?: string | null },
   outcomes: readonly { platform: string; status: string; reason?: string | null }[],
+  now: Date = new Date(),
 ): string[] {
   if (job.resend_of) return []
+  // a job already written down as out is not re-sent, whatever the provider's stale verdict says
+  if (job.status === 'published') return []
+  // and only a FRESH timeout: past the window after the slot, a person has long since dealt with it
+  const slot = Date.parse(String(job.scheduled_for ?? job.created_at ?? ''))
+  if (!Number.isFinite(slot) || now.getTime() - slot > RESEND_WINDOW_MINUTES * 60_000) return []
   const targeted = new Set((Array.isArray(job.targets) ? job.targets : []).map(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase()).filter(Boolean))
   const done = new Set((Array.isArray(job.resent_platforms) ? job.resent_platforms : []).map(p => String(p).toLowerCase()))
   const out: string[] = []

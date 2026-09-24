@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import {
   RESEND_GAP_MINUTES, childJobFor, isTransientPublishError, resendPlanFor, resendWords,
 } from '../app/lib/publish-core'
-import { foldResends, outcomesForJob } from '../app/lib/post-outcome-core'
+import { foldResends, keepLive, outcomesForJob } from '../app/lib/post-outcome-core'
 
 /**
  * RE-SEND WHAT TIMED OUT, ONE NETWORK AT A TIME (Jordan Wilson's 7 pm post,
@@ -14,8 +14,9 @@ import { foldResends, outcomesForJob } from '../app/lib/post-outcome-core'
  * again by hand — LinkedIn first, then TikTok alone from Zernio's copy — both
  * went out. That re-send is now the app's job.
  */
+const NOW = new Date('2026-09-24T09:12:15.000Z')
 const job = {
-  id: 'job-1', client_id: 'c1', content_item_id: 'i1', schedule_entry_id: null,
+  id: 'job-1', client_id: 'c1', content_item_id: 'i1', schedule_entry_id: null, status: 'failed', scheduled_for: '2026-09-24T09:00:00.000Z',
   caption: 'When I was working in a display…', timezone: 'Australia/Melbourne', created_by: 'hello@x',
   media: [{ type: 'video', url: 'https://media.zernio.com/temp/a.mov' }],
   targets: [
@@ -33,7 +34,30 @@ const outcomes = [
 
 describe('which networks get re-sent', () => {
   it('the ones that failed for a transient reason — the live one and the fine ones are left alone', () => {
-    expect(resendPlanFor(job, outcomes)).toEqual(['linkedin', 'tiktok'])
+    expect(resendPlanFor(job, outcomes, NOW)).toEqual(['linkedin', 'tiktok'])
+  })
+
+  it('only a FRESH timeout — never seventy minutes on, never a job already written down as out (20:10, 24 Sep 2026)', () => {
+    // the first sweep after the deploy re-read Zernio’s stale "partial" on the 7 pm post and re-sent LinkedIn,
+    // which had gone out by hand at 19:17: it posted twice
+    expect(resendPlanFor(job, outcomes, new Date('2026-09-24T10:10:07.000Z'))).toEqual([])
+    expect(resendPlanFor({ ...job, status: 'published' }, outcomes, NOW)).toEqual([])
+    expect(resendPlanFor({ ...job, scheduled_for: null, created_at: null }, outcomes, NOW)).toEqual([])
+    // inside the window it is re-sent
+    expect(resendPlanFor(job, outcomes, new Date('2026-09-24T09:40:00.000Z'))).toEqual(['linkedin', 'tiktok'])
+  })
+
+  it('a network our record shows as live stays live whatever the provider says of the original post', () => {
+    const stored = [{ platform: 'linkedin', status: 'published' as const, kind: 'Video', reason: null, url: 'https://li/x', at: '2026-09-24T09:17:59.000Z' }]
+    const fresh = [
+      { platform: 'linkedin', status: 'failed' as const, kind: 'Video', reason: TIMED_OUT, url: null, at: '2026-09-24T10:10:07.000Z' },
+      { platform: 'tiktok', status: 'failed' as const, kind: 'Video', reason: TIMED_OUT, url: null, at: '2026-09-24T10:10:07.000Z' },
+    ]
+    expect(keepLive(stored, fresh).map(o => [o.platform, o.status])).toEqual([['linkedin', 'published'], ['tiktok', 'failed']])
+    expect(keepLive(null, fresh)).toEqual(fresh)
+    const sweep = readFileSync('app/lib/publish.ts', 'utf8')
+    expect(sweep).toContain("const recorded = keepLive(readPlatformResults(job.platform_results), resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now))")
+    expect(sweep).toContain("if (!recorded.some(o => o.status === 'failed')) {")
   })
 
   it('never a failure that says something is wrong with the post', () => {
@@ -43,14 +67,14 @@ describe('which networks get re-sent', () => {
     expect(isTransientPublishError(TIMED_OUT)).toBe(true)
     expect(isTransientPublishError('Video download timed out')).toBe(true)
     expect(isTransientPublishError(null)).toBe(false)
-    expect(resendPlanFor(job, [{ platform: 'tiktok', status: 'failed', reason: 'Unsupported image format: webp' }])).toEqual([])
+    expect(resendPlanFor(job, [{ platform: 'tiktok', status: 'failed', reason: 'Unsupported image format: webp' }], NOW)).toEqual([])
   })
 
   it('once per network, and never for a re-send itself', () => {
-    expect(resendPlanFor({ ...job, resent_platforms: ['linkedin'] }, outcomes)).toEqual(['tiktok'])
-    expect(resendPlanFor({ ...job, resend_of: 'job-0' }, outcomes)).toEqual([])
+    expect(resendPlanFor({ ...job, resent_platforms: ['linkedin'] }, outcomes, NOW)).toEqual(['tiktok'])
+    expect(resendPlanFor({ ...job, resend_of: 'job-0' }, outcomes, NOW)).toEqual([])
     // a network the job never targeted is not invented from the provider's rows
-    expect(resendPlanFor({ ...job, targets: [{ platform: 'tiktok' }] }, outcomes)).toEqual(['tiktok'])
+    expect(resendPlanFor({ ...job, targets: [{ platform: 'tiktok' }] }, outcomes, NOW)).toEqual(['tiktok'])
   })
 })
 
@@ -113,8 +137,9 @@ describe('a re-send is the same post to everything that reads (the owner, 24 Sep
   const tt = { id: 'child-2', status: 'scheduled', resend_of: 'job-1', updated_at: '2026-09-24T09:15:20.000Z', scheduled_for: '2026-09-24T09:15:15.000Z',
     targets: [{ platform: 'tiktok' }], platform_results: null }
 
-  it('folds each child onto its parent and lists the parent once', () => {
-    const folded = foldResends([parent, li, tt])
+  it('folds each child onto its parent and lists the parent once — a cancelled re-send says nothing', () => {
+    const cancelled = { ...li, id: 'child-0', status: 'cancelled', updated_at: '2026-09-24T09:19:00.000Z', platform_results: null }
+    const folded = foldResends([parent, li, tt, cancelled])
     expect(folded.map(j => j.id)).toEqual(['job-1'])
     const rows = outcomesForJob(folded[0])
     expect(rows.map(o => [o.platform, o.status])).toEqual([
@@ -130,7 +155,7 @@ describe('a re-send is the same post to everything that reads (the owner, 24 Sep
     const [job] = foldResends([parent, li, ttLive])
     expect(job.status).toBe('published')
     expect(outcomesForJob(job).every(o => o.status === 'published')).toBe(true)
-    expect(job.permalink).toBe('https://ig/reel')
+    expect((job as { permalink?: string | null }).permalink).toBe('https://ig/reel')
   })
 
   it('leaves a job with no re-sends exactly as it was, and the card folds before it reads', () => {

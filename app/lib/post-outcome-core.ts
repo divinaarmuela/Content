@@ -552,7 +552,8 @@ export function foldResends<J extends ResendJob>(jobs: readonly J[]): J[] {
     const rows = outcomesForJob(j)
     // newest word per network wins: a child's row for its one network replaces the parent's
     const byPlatform = new Map(rows.map(o => [o.platform, o]))
-    for (const kid of kids.slice().sort((a, b) => String(a.updated_at ?? '').localeCompare(String(b.updated_at ?? '')))) {
+    // a re-send that was cancelled says nothing about the network
+    for (const kid of kids.filter(k => k.status !== 'cancelled').sort((a, b) => String(a.updated_at ?? '').localeCompare(String(b.updated_at ?? '')))) {
       for (const o of outcomesForJob(kid)) byPlatform.set(o.platform, o)
     }
     const merged = [...byPlatform.values()]
@@ -566,4 +567,12 @@ export function foldResends<J extends ResendJob>(jobs: readonly J[]): J[] {
     })
   }
   return out
+}
+
+/** the fresh rows, except that a network the stored record already shows as live keeps its stored row: the
+ *  provider's verdict on an original post never learns that a re-send (or a hand re-send) took that network
+ *  live, and re-failing it every sweep re-sent it — twice — on 24 Sep 2026 */
+export function keepLive(stored: readonly PlatformOutcome[] | null | undefined, fresh: readonly PlatformOutcome[]): PlatformOutcome[] {
+  const live = new Map((stored ?? []).filter(o => o.status === 'published').map(o => [o.platform, o]))
+  return fresh.map(o => live.get(o.platform) ?? o)
 }

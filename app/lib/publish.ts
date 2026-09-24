@@ -12,7 +12,7 @@ import { measuredDurationOf, smallerCopyOf } from './stream'
 import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
-import { resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
+import { keepLive, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
   resendPlanFor, childJobFor, resendWords,
@@ -927,7 +927,13 @@ export async function reconcilePublishedJobs(): Promise<number> {
       }
       // the one `status` word says failed; the record says WHICH channel went
       // out and which did not — "went out on instagram; tiktok: too big"
-      const recorded = resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now)
+      // a network our own record already shows as live stays live: the provider's verdict on the ORIGINAL
+      // post never learns about a re-send, so it would re-fail LinkedIn every ten minutes forever (24 Sep 2026)
+      const recorded = keepLive(readPlatformResults(job.platform_results), resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now))
+      if (!recorded.some(o => o.status === 'failed')) {
+        await table('publish_jobs').update(job.id, { platform_results: recorded, updated_at: now })
+        continue
+      }
       await table('publish_jobs').update(job.id, {
         status: 'failed',
         error: outcome.error,
