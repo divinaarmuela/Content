@@ -135,3 +135,45 @@ export function finishedVersionsOf<F extends { version?: number | null }>(
   }
   return [...byRound.values()].sort((a, b) => b.round - a.round)
 }
+
+/**
+ * MAY THE EDITOR START THE NEXT VERSION THEMSELVES? (the owner, 24 Sep 2026:
+ * "they just wanna upload version 2 with the new files".)
+ *
+ * A version normally moves when a card comes back for changes and is handed
+ * in again — that is what keeps one number meaning the same thing to the team
+ * and the client. But an editor who has already handed this round in and then
+ * re-exports had nowhere to put the new cut: it landed on the round already
+ * handed in, and the screen kept saying Version 1 while they uploaded what
+ * they thought was Version 2.
+ *
+ * So they may start the next one deliberately, and only then:
+ *   - this round has actually been handed in (a finished link, or files), so
+ *     the number never runs ahead of the work;
+ *   - the card is not booked in or already posted, where the files belong to
+ *     the channel rather than to the editor.
+ * No I/O.
+ */
+export function mayStartNextRound(input: {
+  status?: unknown
+  handedIn: boolean
+}): boolean {
+  const status = String(input.status ?? '')
+  if (['scheduled', 'published'].includes(status)) return false
+  return input.handedIn === true
+}
+
+/** what the button says, and why it is off when it is */
+export function nextRoundWords(input: { status?: unknown; handedIn: boolean; round: number }): {
+  label: string
+  why: string | null
+} {
+  const label = `Start ${roundLabel(input.round + 1)}`
+  if (['scheduled', 'published'].includes(String(input.status ?? ''))) {
+    return { label, why: 'Booked in or already posted — the files are the channel’s now.' }
+  }
+  if (!input.handedIn) {
+    return { label, why: `Nothing handed in for ${roundLabel(input.round)} yet — replace those files instead.` }
+  }
+  return { label, why: null }
+}

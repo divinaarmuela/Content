@@ -23,7 +23,7 @@ import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { withoutRepeatedNotes } from '../../lib/card-comment-core'
-import { handInRound, roundLabel, roundOf } from '../../lib/edit-round-core'
+import { handInRound, nextRoundWords, roundLabel, roundOf } from '../../lib/edit-round-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
 import { pullId, pullInFlight, pullProgress } from '../../lib/drive-pull-core'
@@ -310,6 +310,24 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const [source, setSource] = useState(finishedUrl)
   useEffect(() => { setSource(finishedUrl) }, [finishedUrl])
   const sourceCheck = linkKindOf(source)
+  /* START THE NEXT VERSION (the owner, 24 Sep 2026: "they just wanna upload version 2 with the new files").
+     Without this an editor who re-exported had nowhere to put the new cut: every upload landed on the round
+     already handed in, and the screen kept saying Version 1 while they uploaded what they thought was 2. */
+  const handedIn = item ? (!!finishedUrl || currentFiles(item as never).length > 0) : false
+  const nextRound = item ? nextRoundWords({ status: item.status, handedIn, round: handInRound(item as never) }) : null
+  const startNextRound = async () => {
+    setWorking('Starting the next version')
+    try {
+      const res = await fetch(`/api/production/items/${id}/next-version`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error ?? 'Could not start the next version')
+      toast.success(`${roundLabel(json.round)} started — upload the new files`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not start the next version')
+    } finally {
+      setWorking(null)
+    }
+  }
   const saveSource = async () => {
     const url = source.trim()
     setWorking('Saving the link')
@@ -586,6 +604,17 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(handInRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
+        {/* a new cut is a new version, said deliberately — the number never runs ahead of the work */}
+        {nextRound && !frozen && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" className={outlineBtn} disabled={busy || !!nextRound.why} title={nextRound.why ?? undefined} onClick={() => void startNextRound()}>
+              {nextRound.label}
+            </Button>
+            <span className="text-[12px] text-muted-foreground">
+              {nextRound.why ?? `New files for a fresh cut go in as ${roundLabel(handInRound(item as never) + 1)}; replacing a file here stays on ${roundLabel(handInRound(item as never))}.`}
+            </span>
+          </div>
+        )}
         {filesCard && !linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
             {mayFile && !frozen && (
