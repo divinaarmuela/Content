@@ -526,3 +526,44 @@ export function fileBooking(
   }
   return null
 }
+
+/* ── re-sends, folded back onto the post they belong to ─────────────────── */
+
+/**
+ * A RE-SEND IS THE SAME POST (24 Sep 2026). When a network timed out, the app queues that network again as its
+ * own job naming the parent in `resend_of` (publish-core.resendPlanFor). To everything that READS — the post
+ * approval card, "went out on…", the file chips — there is still one post: the child's outcome replaces the
+ * parent's failed row for that network, and the child itself is not listed. Jordan Wilson's 7 pm post reads
+ * "Went out on Instagram, LinkedIn, TikTok", not "did not go out on TikTok" beside a second post that did.
+ */
+export type ResendJob = OutcomeJob & { resend_of?: string | null }
+
+export function foldResends<J extends ResendJob>(jobs: readonly J[]): J[] {
+  const children = new Map<string, J[]>()
+  for (const j of jobs) {
+    if (!j.resend_of) continue
+    children.set(j.resend_of, [...(children.get(j.resend_of) ?? []), j])
+  }
+  const out: J[] = []
+  for (const j of jobs) {
+    if (j.resend_of) continue
+    const kids = j.id ? children.get(j.id) : undefined
+    if (!kids?.length) { out.push(j); continue }
+    const rows = outcomesForJob(j)
+    // newest word per network wins: a child's row for its one network replaces the parent's
+    const byPlatform = new Map(rows.map(o => [o.platform, o]))
+    for (const kid of kids.slice().sort((a, b) => String(a.updated_at ?? '').localeCompare(String(b.updated_at ?? '')))) {
+      for (const o of outcomesForJob(kid)) byPlatform.set(o.platform, o)
+    }
+    const merged = [...byPlatform.values()]
+    const everyLive = merged.length > 0 && merged.every(o => o.status === 'published')
+    const latestLive = merged.filter(o => o.status === 'published' && o.at).map(o => o.at as string).sort().pop() ?? null
+    out.push({
+      ...j,
+      platform_results: merged,
+      ...(everyLive ? { status: 'published', published_at: j.published_at ?? latestLive, error: null } : {}),
+      permalink: j.permalink ?? merged.find(o => o.url)?.url ?? null,
+    })
+  }
+  return out
+}

@@ -15,9 +15,11 @@ import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-c
 import { resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
+  resendPlanFor, childJobFor, resendWords,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
   type RemotePlatformRow,
 } from './publish-core'
+import type { PlatformOutcome } from './post-outcome-core'
 export { LIVE_JOB_STATUSES }
 
 /**
@@ -216,6 +218,48 @@ export async function queuePublishJob(input: {
     if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets }))), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
+}
+
+/**
+ * RE-SEND THE NETWORKS THAT TIMED OUT (24 Sep 2026, see resendPlanFor). Called wherever a partial lands — the
+ * ten-minute sweep and the provider's webhook — and safe to be called from both: the parent row is claimed on
+ * `resent_platforms`, so one caller wins and the other finds nothing left to do. Each network becomes its own
+ * queued job, a few minutes apart, and the dispatcher's next pass sends it the ordinary way; the first is woken
+ * now so the wait is minutes, not the sweep's ten. Best effort: a re-send that cannot be queued leaves the
+ * failure exactly as recorded.
+ */
+export async function resendTimedOut(job: PublishJobRow, outcomes: readonly PlatformOutcome[]): Promise<string[]> {
+  const plan = resendPlanFor(job as never, outcomes)
+  if (plan.length === 0) return []
+  const jobs = table<PublishJobRow>('publish_jobs')
+  const taken = await jobs.claim(job.id, cur => {
+    if (!cur) return null
+    const have = (Array.isArray((cur as { resent_platforms?: unknown }).resent_platforms) ? (cur as { resent_platforms: unknown[] }).resent_platforms : []).map(String)
+    if (plan.some(p => have.includes(p))) return null
+    return { ...cur, resent_platforms: [...have, ...plan], error: `${cur.error ?? ''}${resendWords(plan)}`.trim(), updated_at: new Date().toISOString() } as PublishJobRow
+  })
+  if (!taken.claimed) return []
+  const now = new Date()
+  const made: string[] = []
+  for (const [i, platform] of plan.entries()) {
+    const row = childJobFor(job as never, platform, i, { id: randomUUID(), requestId: randomUUID() }, now)
+    if (!row) continue
+    try {
+      await jobs.insert(row as never)
+      made.push(String(row.id))
+    } catch (e) {
+      console.error('[publish] could not queue the re-send of', platform, 'for job', job.id, e instanceof Error ? e.message : e)
+    }
+  }
+  if (made.length) {
+    try {
+      const { inngest } = await import('../inngest/client')
+      await inngest.send({ name: 'app/post.publish.requested', data: { jobId: made[0] } })
+    } catch (e) {
+      console.error('[publish] re-send queued but not woken (the dispatcher will):', e instanceof Error ? e.message : e)
+    }
+  }
+  return made
 }
 
 /**
@@ -883,14 +927,17 @@ export async function reconcilePublishedJobs(): Promise<number> {
       }
       // the one `status` word says failed; the record says WHICH channel went
       // out and which did not — "went out on instagram; tiktok: too big"
+      const recorded = resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now)
       await table('publish_jobs').update(job.id, {
         status: 'failed',
         error: outcome.error,
         ...(outcome.permalink ? { permalink: outcome.permalink } : {}),
-        platform_results: resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now),
+        platform_results: recorded,
         updated_at: now,
       })
       changed++
+      // a timeout is re-sent by the app, one network at a time (24 Sep 2026)
+      await resendTimedOut(job, recorded).catch(e => console.error('[publish] re-send failed to queue:', e instanceof Error ? e.message : e))
       await healthAfterFailure((job as { client_id?: string | null }).client_id ?? null)
     } else {
       // capture the permalink once the platform assigns one

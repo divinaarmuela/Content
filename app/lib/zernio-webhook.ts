@@ -400,13 +400,22 @@ async function failed(postId: string, message: string, rows?: RemotePlatformRow[
     // a partial names its channels: the live one keeps `published` and its link, only the refused ones
     // read failed — the 7 pm post of 24 Sep 2026 was live on Instagram and written down as failed there
     const permalink = rows?.find(r => r.platformPostUrl)?.platformPostUrl ?? null
+    const recorded = new Map(open.map(j => [j.id, rows?.length
+      ? resultsFromRemote(j as unknown as OutcomeJob, rows, 'failed', now)
+      : resultsForAll(j as unknown as OutcomeJob, 'failed', { at: now, reason: message })]))
     await Promise.all(open.map(j => jobs.update(j.id, {
       status: 'failed', error: message, updated_at: now,
       ...(permalink && !j.permalink ? { permalink } : {}),
-      platform_results: rows?.length
-        ? resultsFromRemote(j as unknown as OutcomeJob, rows, 'failed', now)
-        : resultsForAll(j as unknown as OutcomeJob, 'failed', { at: now, reason: message }),
+      platform_results: recorded.get(j.id),
     })))
+    // a network that timed out is re-sent by the app, one at a time (24 Sep 2026). Imported lazily, like the
+    // workflow above, so verifying a signature does not load the publisher.
+    try {
+      const { resendTimedOut } = await import('./publish')
+      for (const j of open) await resendTimedOut(j, recorded.get(j.id) ?? [])
+    } catch (e) {
+      console.error('[zernio webhook] re-send failed to queue:', e instanceof Error ? e.message : e)
+    }
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
     console.error('zernio webhook could not record the failure:', postId, detail)

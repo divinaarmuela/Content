@@ -21,7 +21,7 @@ import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-cor
 import { canReadClientComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import { handRecord, readPostedSlides } from '../../lib/posted-slides-core'
-import { fileBooking, outcomeWords, type OutcomeJob } from '../../lib/post-outcome-core'
+import { fileBooking, foldResends, outcomeWords, type OutcomeJob, type ResendJob } from '../../lib/post-outcome-core'
 import {
   historyLines, HISTORY_PREVIEW, NO_HISTORY, type HistoryJob,
 } from '../../lib/card-history-core'
@@ -125,7 +125,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const { rows: filePosts } = useTable<SocialPost>('social_posts', { by: byItem })
   const byContentItem = useMemo(() => ({ content_item_id: id }), [id])
   const { rows: fileJobs } = useTable<PublishJob>('publish_jobs', { by: byContentItem })
-  const jobsById = useMemo(() => new Map<string, OutcomeJob>(fileJobs.map(j => [j.id, j as unknown as OutcomeJob])), [fileJobs])
+  // a re-send is the same post: its outcome replaces the parent's failed network, so the card reads
+  // "Went out on Instagram, LinkedIn, TikTok" (24 Sep 2026)
+  const jobsById = useMemo(() => new Map<string, OutcomeJob>(foldResends(fileJobs as unknown as ResendJob[]).map(j => [j.id as string, j])), [fileJobs])
   // THE CARD'S OWN HISTORY — the audit trail for this item. `entity_id` is
   // not an indexed column, so this is the whole table filtered in the
   // browser, exactly as the boards already read it (`useWorkTables`).

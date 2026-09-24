@@ -766,6 +766,13 @@ const GHOST_COLUMNS = {
   //     refused by TikTok, and the one `status` word could not say so.
   publish_jobs: [
     ['platform_results', col('unknown', true, true, true)],
+    //   publish_jobs.resend_of / resent_platforms — RE-SENDING WHAT TIMED OUT (24 Sep 2026).
+    //     A partial whose failures were transient is re-sent by the app, each network as its own job:
+    //     the child names its parent in `resend_of` (and is never re-sent itself); the parent lists the
+    //     networks already re-sent in `resent_platforms`, claimed so the sweep and the webhook cannot both
+    //     queue the same one (app/lib/publish-core.ts resendPlanFor).
+    ['resend_of', col('string', true)],
+    ['resent_platforms', col('unknown', true, true, true)],
   ],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],

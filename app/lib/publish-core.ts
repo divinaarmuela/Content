@@ -1669,3 +1669,81 @@ export function describeRemoteOutcome(
     livePlatforms: live.map(name), failedPlatforms: failed.map(name), pendingPlatforms: pending.map(name),
   }
 }
+
+
+/* ── re-send what timed out ─────────────────────────────────────────────── */
+
+/**
+ * RE-SEND THE NETWORKS THAT TIMED OUT, ONE AT A TIME (Jordan Wilson's 7 pm post, 24 Sep 2026).
+ *
+ * Zernio posted to Instagram in thirty seconds, then its own upload of the 81 MB video to LinkedIn and to TikTok
+ * ran past its time limit and it gave up on both: "Publishing timed out during platform API call". A re-send by
+ * hand of those two, then of TikTok alone from Zernio's own copy, went out. Nobody should have to be watching at
+ * 7 pm for that: a partial whose failures are TRANSIENT — a timeout, a slow transfer, a dropped connection — is
+ * re-sent by the app, each failed network as its own job, a few minutes apart, from the media the parent job
+ * already relayed to the provider. Once per network, never for a re-send itself, and never for a failure that
+ * says something is wrong with the post (a format the network refuses, a missing token): those need a person.
+ */
+export const TRANSIENT_PUBLISH_ERROR = /timed out|time out|timeout|too slow|connection (was )?(reset|closed|refused)|ECONNRESET|socket hang up|network error|gateway|503|502/i
+export const RESEND_GAP_MINUTES = 3
+
+export function isTransientPublishError(reason: string | null | undefined): boolean {
+  return TRANSIENT_PUBLISH_ERROR.test(String(reason ?? ''))
+}
+
+/** the networks a settled job should be re-sent to: failed for a transient reason, targeted by the job, not
+ *  already re-sent — and none at all when the job is itself a re-send */
+export function resendPlanFor(
+  job: { resend_of?: string | null; resent_platforms?: unknown; targets?: unknown },
+  outcomes: readonly { platform: string; status: string; reason?: string | null }[],
+): string[] {
+  if (job.resend_of) return []
+  const targeted = new Set((Array.isArray(job.targets) ? job.targets : []).map(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase()).filter(Boolean))
+  const done = new Set((Array.isArray(job.resent_platforms) ? job.resent_platforms : []).map(p => String(p).toLowerCase()))
+  const out: string[] = []
+  for (const o of outcomes) {
+    const p = String(o.platform ?? '').toLowerCase()
+    if (o.status !== 'failed' || !isTransientPublishError(o.reason) || !targeted.has(p) || done.has(p) || out.includes(p)) continue
+    out.push(p)
+  }
+  return out
+}
+
+/** the row of one re-send: the parent's caption and relayed media, one target, spaced by its place in the line */
+export function childJobFor(
+  job: {
+    id: string; client_id?: string | null; content_item_id?: string | null; schedule_entry_id?: string | null
+    caption: string; media: unknown; targets: unknown; timezone?: string | null; created_by?: string | null
+  },
+  platform: string,
+  index: number,
+  ids: { id: string; requestId: string },
+  now: Date,
+): Record<string, unknown> | null {
+  const target = (Array.isArray(job.targets) ? job.targets : []).find(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase() === platform)
+  if (!target) return null
+  const at = new Date(now.getTime() + index * RESEND_GAP_MINUTES * 60_000).toISOString()
+  return {
+    id: ids.id,
+    client_id: job.client_id ?? null,
+    content_item_id: job.content_item_id ?? null,
+    schedule_entry_id: job.schedule_entry_id ?? null,
+    caption: job.caption,
+    media: Array.isArray(job.media) ? job.media : [],
+    targets: [target],
+    scheduled_for: at,
+    timezone: job.timezone ?? 'Australia/Melbourne',
+    created_by: job.created_by ?? null,
+    status: 'queued',
+    request_id: ids.requestId,
+    attempts: 0,
+    resend_of: job.id,
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  }
+}
+
+/** the sentence on the parent row once its failed networks are re-sent */
+export function resendWords(platforms: readonly string[]): string {
+  return platforms.length ? ' Re-sending ' + platforms.join(', ') + ' — one at a time, ' + RESEND_GAP_MINUTES + ' minutes apart.' : ''
+}

@@ -562,9 +562,10 @@ describe('the encode ladder', () => {
   it('spends the channel ceiling on a clip short enough to afford it', () => {
     // a 20-second reel: 20 Mbps for 20s is 50 MB, nowhere near Instagram's 300
     expect(encodeTargetFor('instagram', 'reel', 20)!.maxrateKbps).toBe(20_000)
-    // 10 Sep 2026: TikTok keeps 4K under a 20 Mbps ceiling — and a copy is
-    // never budgeted past what the relay can carry, whatever TikTok allows
-    expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(20_000)
+    // 24 Sep 2026: TikTok and LinkedIn are capped at 8 Mbps — Zernio carries the bytes to those two itself and
+    // timed out on an 81 MB copy at 7 pm; both re-encode every upload, so nothing above shows. 4K stays (10 Sep).
+    expect(encodeTargetFor('tiktok', undefined, 20)!.maxrateKbps).toBe(8_000)
+    expect(encodeTargetFor('linkedin', undefined, 20)!.maxrateKbps).toBe(8_000)
     expect(encodeTargetFor('tiktok', undefined, 10 * 60)!.maxrateKbps).toBeLessThan(4_000)
     expect(encodeTargetFor('tiktok', undefined, 10 * 60)!.maxMB).toBe(4096)
     expect(encodeTargetFor('tiktok', undefined, 20)!.longSide).toBe(3840)

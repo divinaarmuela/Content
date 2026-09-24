@@ -1114,8 +1114,10 @@ export const PLATFORM_ENCODE: Record<Platform, EncodeLadder> = {
   // 1920 x 1080 at 12 Mbps). The copy now keeps the master's size — never
   // upscaled, `outputSize` — under a 20 Mbps ceiling, so TikTok's own
   // encoder works from the real picture. ~270 MB for a two-minute clip.
-  tiktok:    { maxrateCapKbps: 20_000, audioKbps: 160, longSide: 3840, shortSide: 2160, maxFps: 60 },
-  linkedin:  { maxrateCapKbps: 10_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
+  // 8 Mbps since 24 Sep 2026: Zernio carries the bytes to TikTok and LinkedIn itself and timed out on an 81 MB
+  // copy; both re-encode to their own ladder, so above ~8 Mbps only the transfer grows. 4K stays allowed (10 Sep).
+  tiktok:    { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 3840, shortSide: 2160, maxFps: 60 },
+  linkedin:  { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   twitter:   { maxrateCapKbps:  8_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 30 },
   youtube:   { maxrateCapKbps: 12_000, audioKbps: 160, longSide: 1920, shortSide: 1080, maxFps: 60 },
   // no published guidance of their own; 8 Mbps is the conservative end of the

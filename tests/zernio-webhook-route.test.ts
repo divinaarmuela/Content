@@ -22,7 +22,8 @@ const notify = vi.fn(async (_input: Record<string, unknown>) => 'sent' as const)
 const send = vi.fn(async () => ({ ids: [] }))
 
 vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem }))
-vi.mock('../app/lib/publish', () => ({ syncSocialAccounts }))
+const resendTimedOut = vi.fn(async () => [])
+vi.mock('../app/lib/publish', () => ({ syncSocialAccounts, resendTimedOut }))
 vi.mock('../app/lib/mailer', () => ({ notify }))
 vi.mock('@/app/inngest/client', () => ({ inngest: { send } }))
 
@@ -185,6 +186,9 @@ describe('POST /api/zernio/webhook — publishing', () => {
     expect(job()).toMatchObject({ status: 'failed', error: 'Token expired' })
     // the item stays Scheduled — it is booked, it just did not go out
     expect(recordPublishOnItem).not.toHaveBeenCalled()
+    // and the re-send of anything that timed out is asked for, with the per-network record (24 Sep 2026)
+    expect(resendTimedOut).toHaveBeenCalledTimes(1)
+    expect((resendTimedOut.mock.calls[0] as unknown[])[1]).toEqual([expect.objectContaining({ platform: 'instagram', status: 'failed' })])
 
     const again = await deliver({ id: 'evt_2', event: 'post.failed', data: { post: { _id: 'post_1' } } })
     expect(again.json).toEqual({ ok: true, duplicate: true })
