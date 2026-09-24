@@ -13,6 +13,7 @@ import { scriptWords } from '../../lib/script-core'
 import type { PortalCard } from '../../lib/portal-data'
 import { actedLine, planPdfHref, swipeOffset, swipeToApprove } from '../../lib/portal-core'
 import { portalPostHref } from '../../lib/post-page-core'
+import { editingPortalPath } from '../../lib/editing-portal-core'
 import PlatformIcon from '../../dashboard/social/PlatformIcon'
 import { onCardLine } from '../../lib/canvas-comments-core'
 import { commentsBySlide, slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
@@ -435,9 +436,14 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         )}
 
         {/* where the work lives */}
-        {(card.link || card.live_url || pdf) && (
+        {(card.link || card.live_url || pdf || (card.clips ?? 0) > 0) && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            {card.link && (
+            {(card.clips ?? 0) > 0 && token ? (
+              <Link href={editingPortalPath(token, card.id)}
+                className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
+                Watch the {card.clips} {card.clips === 1 ? 'clip' : 'clips'}
+              </Link>
+            ) : card.link && (
               <a href={card.link.url} target="_blank" rel="noreferrer noopener"
                 className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
                 <ExternalLink className="h-3.5 w-3.5" /> {card.link.label}

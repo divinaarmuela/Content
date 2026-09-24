@@ -1,4 +1,6 @@
 import { deliverOnly } from './deliver-only-core'
+import { liveFilesAt } from './final-files-core'
+import { roundOf } from './edit-round-core'
 import { sanitiseScripts, type ScriptBlock } from './script-core'
 import 'server-only'
 import { table } from '@/lib/db'
@@ -169,6 +171,8 @@ export type PortalCard = {
   line: string
   /** where the work lives (Drive / Dropbox / the file) — only once it has reached the client */
   link: PortalLink | null
+  /** a files card: how many clips the client reviews on its editing page — shown INSTEAD of the Drive link (24 Sep 2026) */
+  clips?: number
   /** a shared shoot plan has a PDF; the page builds the href from its token */
   pdf: boolean
   preview_url: string | null
@@ -719,6 +723,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       line: cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
       deliver_only: selfPosts,
       link: linkFor(url, kind),
+      clips: facing ? liveFilesAt(i as never, roundOf(i as never)).length : 0,
       pdf: false,
       preview_url: p.preview_url,
       slides: p.slides,
