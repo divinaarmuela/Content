@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Copy, Play, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import { groupForList, monthCells } from '@/app/lib/social-schedule-core'
 import { dropIntent, dropLabelAt, moveToDay, previewOrder } from '@/app/lib/schedule-drag-core'
+import { feedWords, type LiveTile } from '@/app/lib/feed-preview-core'
 import PlatformIcon from '../PlatformIcon'
 import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
 import { isFileDrag } from '@/app/lib/schedule-upload-core'
@@ -322,18 +323,47 @@ export function MonthGrid({
   )
 }
 
-/** The feed as it will look: the posts in the order they go out. */
-export function PreviewGrid({ posts, tz, onOpen }: {
+/**
+ * THE FEED AS IT WILL LOOK (the owner, 24 Sep 2026, pointing at Later's visual Instagram planner).
+ *
+ * The planned posts sit above the account's OWN grid as it is right now, read from the platform, so the
+ * next post can be judged against what it will actually join. Drafts are in — that is the whole point of
+ * looking before committing — and each says so. Nothing here posts anything.
+ */
+export function PreviewGrid({ posts, tz, onOpen, accountId, handle }: {
   posts: SchedulePostRow[]
   tz: string
   onOpen: (post: SchedulePostRow) => void
+  /** the Instagram account whose feed sits underneath, when one is picked */
+  accountId?: string | null
+  handle?: string | null
 }) {
+  const [live, setLive] = useState<LiveTile[] | null>(null)
+  const [reason, setReason] = useState<string | null>(null)
+  useEffect(() => {
+    if (!accountId) { setLive(null); setReason(null); return }
+    let alive = true
+    setLive(null); setReason(null)
+    void fetch(`/api/social/schedule/feed?account=${encodeURIComponent(accountId)}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { if (alive) { setLive(Array.isArray(j?.tiles) ? j.tiles : []); setReason(j?.reason ?? null) } })
+      .catch(() => { if (alive) { setLive([]); setReason('unreadable') } })
+    return () => { alive = false }
+  }, [accountId])
   // what has not gone out yet first, soonest at the top left — the order it
   // will actually appear in — then what is already up, newest first
   const ordered = previewOrder(posts)
-  if (ordered.length === 0) return <Empty>Nothing planned yet, so there is nothing to preview.</Empty>
+  const feed = live ?? []
+  if (ordered.length === 0 && feed.length === 0) {
+    return <Empty>{accountId && live === null ? 'Reading the feed…' : 'Nothing planned yet, so there is nothing to preview.'}</Empty>
+  }
   return (
-    <div className="grid max-w-xl grid-cols-3 gap-1 pb-4">
+    <div className="flex max-w-xl flex-col gap-2 pb-4">
+      <p className="text-[13px] text-muted-foreground">
+        {feedWords(ordered.length, feed.length, handle ?? null)}
+        {reason === 'not_connected' ? ' Connect the account to see its own grid.' : ''}
+      </p>
+      <div className="grid grid-cols-3 gap-1">
       {ordered.map(p => (
         <button
           key={p.id}
@@ -350,6 +380,24 @@ export function PreviewGrid({ posts, tz, onOpen }: {
           )}
         </button>
       ))}
+      {/* the account's own grid, as it is now — opens the real post, never this dashboard's copy */}
+      {feed.map(t => (
+        <a
+          key={t.id}
+          href={t.permalink ?? undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Already posted${t.at ? ` · ${formatInZone(t.at, tz, 'full') ?? ''}` : ''}`}
+          aria-label={`Already posted: ${t.caption.slice(0, 80) || 'post'}`}
+          className="relative aspect-square overflow-hidden border border-border"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.thumbnail ?? ''} alt="" loading="lazy" className="h-full w-full object-cover" />
+          {t.mediaType === 'video' && <Play className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
+          {t.mediaType === 'carousel' && <Copy className="absolute right-1.5 top-1.5 h-3.5 w-3.5 text-white drop-shadow" aria-hidden />}
+        </a>
+      ))}
+      </div>
     </div>
   )
 }

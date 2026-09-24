@@ -38,6 +38,12 @@ export interface Publisher {
   followerStats(): Promise<unknown>
   /** Published and scheduled posts. */
   listPosts(params?: { limit?: number }): Promise<unknown>
+  /**
+   * THE ACCOUNT'S OWN FEED — the 25 most recent posts that exist on the
+   * platform, including every one published outside this dashboard. What the
+   * feed preview draws under our own planned posts (24 Sep 2026).
+   */
+  accountPosts(providerAccountId: string): Promise<unknown>
   /** Per-post analytics, including posts published outside this dashboard. */
   postAnalytics(postId?: string): Promise<unknown>
   /** One post's numbers day by day since it went up (needs the Analytics add-on). */
@@ -593,6 +599,10 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/posts?limit=${params.limit ?? 20}`)
   }
 
+  accountPosts(providerAccountId: string) {
+    return this.getJson(`/accounts/${encodeURIComponent(providerAccountId)}/posts`)
+  }
+
   listComments() {
     return this.getJson('/inbox/comments')
   }
@@ -971,6 +981,7 @@ class UnconfiguredPublisher implements Publisher {
   async dailyMetrics() { return null }
   async followerStats() { return null }
   async listPosts() { return null }
+  async accountPosts() { return null }
   async postAnalytics() { return null }
   async postTimeline() { return null }
   async listComments() { return null }

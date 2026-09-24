@@ -141,12 +141,12 @@ describe('the window holds one composition', () => {
 describe('what each channel will take, said in words', () => {
   it('says it the way the design says it', () => {
     expect(limitsLine(['instagram', 'tiktok'], [slide('a'), slide('b')]))
-      .toBe('Instagram carousel: up to 10 · TikTok photo post: up to 35')
+      .toBe('Instagram carousel: up to 20 · TikTok photo post: up to 35')
   })
 
   it('says each channel once, however many accounts are on it', () => {
     expect(limitsLine(['instagram', 'instagram'], [slide('a')]))
-      .toBe('Instagram carousel: up to 10')
+      .toBe('Instagram carousel: up to 20')
   })
 
   it('counts by KIND — a video is a different ceiling from twelve pictures', () => {

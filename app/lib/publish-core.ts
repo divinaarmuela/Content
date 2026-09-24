@@ -70,7 +70,8 @@ export const PLATFORM_RULES: Record<Platform, {
    *  "Reel" there would be inventing a format. */
   shortForm: boolean
 }> = {
-  instagram: { captionMax: 2200,  images: 10, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 10, mixedCarousel: true,  stories: true,  shortForm: true  },
+  // twenty since Instagram doubled the carousel; ten silently cut the 11th to 13th file (the owner, 24 Sep 2026)
+  instagram: { captionMax: 2200,  images: 20, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 20, mixedCarousel: true,  stories: true,  shortForm: true  },
   tiktok:    { captionMax: 2200,  images: 35, videos: 1, documents: 0, mixed: false, requiresMedia: true,  carousel: 35, mixedCarousel: false, stories: false, shortForm: true  },
   twitter:   { captionMax: 280,   images: 4,  videos: 1, documents: 0, mixed: false, requiresMedia: false, carousel: 4,  mixedCarousel: false, stories: false, shortForm: false },
   linkedin:  { captionMax: 3000,  images: 20, videos: 1, documents: 1, mixed: false, requiresMedia: false, carousel: 20, mixedCarousel: false, stories: false, shortForm: false },

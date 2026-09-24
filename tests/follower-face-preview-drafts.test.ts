@@ -59,7 +59,7 @@ describe('drafts in the feed preview', () => {
 
   it('the Preview is given every post on the channel, and says which are drafts', () => {
     const page = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
-    expect(page).toContain('<PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost} />')
+    expect(page).toContain('<PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost}')
     // the grids still hide drafts; only the Preview shows them
     expect(page).toContain('const planned = useMemo(() => channelPosts.filter(showsOnGrid), [channelPosts])')
     const views = readFileSync('app/dashboard/social/schedule/views.tsx', 'utf8')
