@@ -228,7 +228,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     .filter(c => readsClient || roleOf(c.author_id) !== 'client')
     .filter(c => !handedAt || String(c.created_at) >= handedAt)
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))), [comments, readsClient, team, handedAt])
-  const changeNote = (item as { change_note?: string | null } | null)?.change_note ?? null
+  // the editor's send-back note is the editing phase's — not shown once the card is handed over (24 Sep 2026)
+  const changeNote = handedAt ? null : (item as { change_note?: string | null } | null)?.change_note ?? null
   const changeAbout = changeNote ? splitSlideTag(changeNote) : null
 
   /**
@@ -563,8 +564,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                 <p><span className="font-semibold">What needs doing: </span>{(item as { brief?: string | null }).brief}</p>
               )}
               <p className="text-muted-foreground">
-                {item.due_date ? `Due ${new Date(item.due_date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'No due date'}
-                {' · '}{item.owner_id ? `With ${nameOf(item.owner_id) ?? 'someone'}` : 'Not assigned yet'}
+                {/* handed over: it is the scheduler's, and the editing due date is not theirs (24 Sep 2026: "wdym with
+                    AA Team Edits") */}
+                {Array.isArray(item.scheduler_ids) && item.scheduler_ids.length > 0
+                  ? `With ${(item.scheduler_ids as string[]).map(s => nameOf(s) ?? 'a scheduler').join(', ')}`
+                  : <>
+                    {item.due_date ? `Due ${new Date(item.due_date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'No due date'}
+                    {' · '}{item.owner_id ? `With ${nameOf(item.owner_id) ?? 'someone'}` : 'Not assigned yet'}
+                  </>}
               </p>
             </div>
           )}
