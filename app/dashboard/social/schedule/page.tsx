@@ -832,7 +832,9 @@ export default function SchedulePage() {
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <PreviewGrid posts={planned} tz={tz} onOpen={flow.openPost} />
+              {/* DRAFTS BELONG IN THE FEED (24 Sep 2026): the grids still hide them, but the Preview is where
+                  you look at the feed before committing, so it gets every post on the channel and marks the drafts */}
+              <PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">

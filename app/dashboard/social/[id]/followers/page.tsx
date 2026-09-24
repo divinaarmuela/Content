@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useState } from 'react'
+import { initialOf, pictureUsable } from '@/app/lib/follower-avatar-core'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -297,21 +298,42 @@ function Empty({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * A FOLLOWER'S FACE (the owner, 24 Sep 2026: "the followers profile image is
+ * not showing"). Instagram signs a picture's address with an expiry and
+ * refuses it after; the daily look refreshes only the top 100 of the list, so
+ * most rows carry an address that has already lapsed. The date is read out of
+ * the address, and a lapsed one draws the initial instead of firing a request
+ * that will 403 and leave a broken picture. `onError` catches the rest: an
+ * address with no date in it, or one revoked early.
+ */
+function Face({ person }: { person: Person }) {
+  const [broken, setBroken] = useState(false)
+  const show = !broken && pictureUsable(person.profile_pic)
+  if (!show) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-secondary-13 text-muted-foreground">
+        {initialOf(person.username, person.full_name)}
+      </span>
+    )
+  }
+  return (
+    // Instagram's CDN; next/image would need host config
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={person.profile_pic as string} alt="" loading="lazy" onError={() => setBroken(true)}
+      className="h-10 w-10 shrink-0 rounded-full bg-foreground/[0.06] object-cover"
+    />
+  )
+}
+
 /** the list: a face, a name, the handle, one line about when */
 function People({ rows, line }: { rows: Person[]; line: (p: Person) => string }) {
   return (
     <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {rows.map(p => (
         <li key={p.username} className="flex min-h-11 items-center gap-3 rounded-inner border border-border p-2">
-          {p.profile_pic ? (
-            // Instagram's CDN; next/image would need host config
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.profile_pic} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
-          ) : (
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-secondary-13 text-muted-foreground">
-              {p.username.slice(0, 1).toUpperCase()}
-            </span>
-          )}
+          <Face person={p} />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-body-15 font-medium">{p.full_name || p.username}</span>

@@ -357,7 +357,7 @@ export default function NewPostSources({
                 <span className="text-[14px] font-semibold">Drop photos or video here</span>
                 <span className="text-[12px] text-muted-foreground">or browse your computer</span>
                 <span className="mt-1 max-w-[360px] text-[12px] leading-snug text-muted-foreground">
-                  One photo or one video is one post. <b className="font-semibold text-foreground">Two to ten photos together make a carousel</b> — one post people swipe through. Drop them all at once, or add more below.
+                  One photo or one video is one post. <b className="font-semibold text-foreground">Two to twenty photos together make a carousel</b> — one post people swipe through. Drop them all at once, or add more below.
                 </span>
                 <input
                   ref={fileInput}
@@ -549,11 +549,11 @@ function ChosenStrip({ files, onRemove }: {
   const shape = videos > 0 && images > 0
     ? 'Photos and a video together: Instagram posts them as a carousel; TikTok and YouTube take the video only.'
     : videos > 1
-      ? 'Several videos: Instagram takes up to ten in a carousel; most other channels take one video per post.'
+      ? 'Several videos: Instagram takes up to twenty in a carousel; most other channels take one video per post.'
       : videos === 1
         ? 'One video — posts as a Reel on Instagram.'
         : images === 1
-          ? 'One photo. Add more to make a carousel (up to ten).'
+          ? 'One photo. Add more to make a carousel (up to twenty).'
           : `${images} photos — this posts as a carousel people swipe through.`
   return (
     <div className="flex flex-col gap-1.5">

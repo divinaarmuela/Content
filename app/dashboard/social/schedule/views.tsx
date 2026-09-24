@@ -345,6 +345,9 @@ export function PreviewGrid({ posts, tz, onOpen }: {
         >
           <Thumb slide={p.slides[0] ?? null} label={p.item_title ?? 'Post'} className="h-full w-full" />
           <StatusDot tone={p.tone} className="absolute left-1.5 top-1.5" />
+          {p.live_status === 'draft' && (
+            <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-cream">Draft</span>
+          )}
         </button>
       ))}
     </div>

@@ -234,8 +234,11 @@ describe('the feed preview', () => {
     expect(ordered.map(p => p.id)).toEqual(['next', 'recent', 'old'])
   })
 
-  it('leaves out a post that has no time at all', () => {
-    expect(previewOrder([post('a', null), post('b', 'soon')])).toEqual([])
+  // DRAFTS BELONG IN THE FEED (24 Sep 2026): this used to drop every post with no time, which is every draft —
+  // the one thing Divina and the owner's manager wanted to look at before committing. Now it leads.
+  it('puts a post with no time at the front, where the next one goes', () => {
+    expect(previewOrder([post('a', null), post('b', 'soon')]).map(p => p.id)).toEqual(['a', 'b'])
+    expect(previewOrder([post('a', null)]).map(p => p.id)).toEqual(['a'])
   })
 })
 

@@ -650,7 +650,7 @@ export type PostOptions = {
   /**
    * A link under every picture — Facebook's clickable carousel.
    *
-   * One card per picture in the post, in the same order, two to ten of them.
+   * One card per picture in the post, in the same order, two to twenty of them.
    * Sent inside `facebookSettings`.
    */
   carouselCards?: FacebookCarouselCard[]

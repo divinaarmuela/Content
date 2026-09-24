@@ -856,7 +856,7 @@ const OPTION_SPECS: OptionSpec[] = [
     key: 'fbCards', field: 'carouselCards', control: 'cards',
     label: 'Put a link under each picture', on: ['facebook'], lead: 'image',
     help: 'Facebook turns the pictures into cards people can click. One card per '
-      + 'picture, two to ten of them, pictures only.',
+      + 'picture, two to twenty of them, pictures only.',
   },
   {
     key: 'fbCardsLink', field: 'carouselLink', control: 'text',

@@ -2,7 +2,7 @@
  * A version is a POST, and a post can be many files.
  *
  * One item = one post is still true. What was not true is "one post = one
- * file": an Instagram carousel is two to ten images and/or videos published
+ * file": an Instagram carousel is two to twenty images and/or videos published (Instagram doubled it from ten; checked 24 Sep 2026)
  * together, in an order somebody chose. `asset_versions.file_url` could hold
  * exactly one, so a carousel could not be represented at all — the editor
  * uploaded six cards and the scheduler had one of them to post.

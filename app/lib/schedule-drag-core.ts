@@ -226,9 +226,12 @@ export type PreviewablePost = { scheduled_for?: string | null }
  */
 export function previewOrder<T extends PreviewablePost>(posts: readonly T[]): T[] {
   const at = (p: T) => Date.parse(String(p.scheduled_for ?? ''))
-  return posts
-    .filter(p => Number.isFinite(at(p)))
-    .sort((a, b) => at(b) - at(a))
+  // A POST WITH NO TIME STILL BELONGS IN THE FEED (the owner's manager and Divina, 24 Sep 2026: "allow drafts on
+  // schedule still appear on preview, that way i can see what i would look like without submitting yet"). A draft
+  // usually has no time yet, and dropping it left the very thing they wanted to look at out of the picture. It sits
+  // at the front, where the next post goes, in the order it was given.
+  const dated = posts.filter(p => Number.isFinite(at(p))).sort((a, b) => at(b) - at(a))
+  return [...posts.filter(p => !Number.isFinite(at(p))), ...dated]
 }
 
 /* —— a move, from the drop to the server's answer ————————————————————————————————————— */
