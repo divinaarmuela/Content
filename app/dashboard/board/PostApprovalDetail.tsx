@@ -17,6 +17,7 @@ import { cardActions, type BoardViewCard } from '../../lib/board-view-core'
 import { EDITING_STATUSES, STATUS_LABELS, handedToScheduler, type ItemStatus } from '../../lib/workflow-core'
 import { whatHappensNext } from '../../lib/email-voice-core'
 import { slidesOf, slideTypeFromUrl, type Slide } from '../../lib/version-files-core'
+import { approvedFilesVersion } from '../../lib/social-schedule-core'
 import { slideTag, splitSlideTag, tagComment } from '../../lib/slide-comment-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
@@ -146,7 +147,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const playable = usePlayable()
   const [cannotPlay, setCannotPlay] = useState<Set<string>>(new Set())
 
-  const latest = useMemo(() => [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions])
+  // WHAT WAS APPROVED IS WHAT IS SCHEDULED (24 Sep 2026): a card handed in as files shows those files — the newest cut
+  // of each clip at its version — not the Drive link it was once handed in by
+  const approvedFiles = useMemo(() => approvedFilesVersion(item as never), [item])
+  const latest = useMemo(() => (approvedFiles as unknown as typeof versions[number] | null) ?? [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null, [versions, approvedFiles])
   const slides = useMemo(() => slidesOf(latest), [latest])
   // a name, never a whole email address (13 Sep 2026: "With akmaltestmdmedia@gmail.com")
   const nameOf = (uid: string | null | undefined) => { const u = team.find(t => t.id === uid); return u ? personLabel(u.name, u.email) || null : null }
@@ -473,7 +477,8 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   const secondary = 'h-11 rounded-full px-4 text-[14px] font-semibold'
   // THE FINISHED EDIT — the editor's link, drawn as what it is (the owner,
   // 14 Sep 2026: the reviewer's card showed it only as "Open the folder")
-  const finished = item ? finishedEditOf(item as Parameters<typeof finishedEditOf>[0]) : null
+  // a card with approved files has no "finished edit" link to open: the files below are the edit (24 Sep 2026)
+  const finished = item && !approvedFiles ? finishedEditOf(item as Parameters<typeof finishedEditOf>[0]) : null
   // WHILE THE CARD IS WITH THE EDITOR THERE ARE NO FILES (the owner, 14 Sep
   // 2026: "the card in Editor is showing add final files when it should be
   // the Drive or Dropbox link"): an edit is a link until it is approved and

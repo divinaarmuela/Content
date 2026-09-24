@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { statusesIn, columnOf } from '../../lib/board-core'
+import { approvedFilesVersion } from '../../lib/social-schedule-core'
 import {
   cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
   type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
@@ -172,6 +173,10 @@ export function BoardCard({
   // the Editor page shows the editor's face to EVERYONE — a manager's tools
   // live on Post approval (the owner, 12 Sep 2026: "too many options")
   const editorFace = page === 'editor'
+  // a files card shows its files, never the Drive link it was handed in by (24 Sep 2026)
+  const approvedFiles = approvedFilesVersion(card as never)
+  const approvedCount = Array.isArray(approvedFiles?.files) ? approvedFiles!.files!.length : 0
+  const approvedRound = approvedFiles?.version_number ?? 1
   // POST APPROVAL IS ASSETS ONLY (the owner, 13 Sep 2026: "what is this video
   // edit tag under post approval"): every card here is a piece to post, so
   // the kind of work says nothing — except an internal TASK, which is not
@@ -284,7 +289,11 @@ export function BoardCard({
             {folded ? <ChevronDown className="mr-1 h-3.5 w-3.5" aria-hidden /> : <ChevronUp className="mr-1 h-3.5 w-3.5" aria-hidden />}{folded ? 'Details' : 'Less'}
           </Button>
         )}
-        {!folded && (lines.link ? (
+        {!folded && approvedCount > 0 ? (
+          <span className="inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-3.5 text-[13px] font-semibold text-foreground [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            {approvedCount} {approvedCount === 1 ? 'file' : 'files'} · version {approvedRound}
+          </span>
+        ) : !folded && (lines.link ? (
           <a
             href={lines.link.url}
             target="_blank"

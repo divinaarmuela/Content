@@ -742,7 +742,14 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
     // the editor's road ends at the hand-over: the scheduler's Draft is not the editor's In Progress
-    const key = handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
+    // …and on the post approval page a handed-over card is the scheduler's Draft until it is ready to post (the owner,
+    // 24 Sep 2026: "it needs to hand over to scheduler in draft")
+    const handed = (card as { adhoc_post?: unknown }).adhoc_post !== true
+      && Array.isArray((card as { scheduler_ids?: unknown }).scheduler_ids) && ((card as unknown as { scheduler_ids: unknown[] }).scheduler_ids).length > 0
+    const early = !POST_APPROVAL_FROM.includes(cardColumn(card))
+    const key = handedOver(card as never) && buckets.has('done') ? 'done'
+      : handed && early && buckets.has('draft') && !buckets.has('done') ? 'draft'
+      : laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))

@@ -486,7 +486,8 @@ describe('the reviewer’s card shows the finished edit as what it is (14 Sep 20
   // files" asked the reviewer for files, and the close × sat alone on a row
   it('Post approval’s drawer opens the finished edit above the folder, and the close sits in the corner', () => {
     const s = src('app/dashboard/board/PostApprovalDetail.tsx')
-    expect(s).toMatch(/const finished = item \? finishedEditOf\(/)
+    // …unless the card has approved files: then the files are the edit, not the link (24 Sep 2026)
+    expect(s).toMatch(/const finished = item && !approvedFiles \? finishedEditOf\(/)
     expect(s).toContain('data-finished-edit')
     expect(s).toContain('Open the finished edit · {finished.label}')
     expect(s).toMatch(/finished \? 'Add files' : 'Add the finished files'/)
