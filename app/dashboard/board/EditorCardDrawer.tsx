@@ -261,7 +261,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const adoptTried = useRef<string | null>(null)
   useEffect(() => {
     if (!item || !(me?.id === item.owner_id || me?.role === 'super_admin' || me?.role === 'account_manager') || adoptTried.current === item.id) return
-    if (!needsAdoption(item as never)) return
+    // every Drive hand-in becomes files, not only a card's first (24 Sep 2026) — the server takes in whatever copy it has not yet
     adoptTried.current = item.id
     void fetch(`/api/production/items/${item.id}/adopt-clips`, { method: 'POST' }).catch(() => {})
   }, [item, me?.id, me?.role])

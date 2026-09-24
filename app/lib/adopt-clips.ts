@@ -1,51 +1,57 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import type { ContentItem, DrivePull } from '@/lib/db-types'
-import { finishedEditOf, driveTargetOf } from './card-link-core'
-import { filesOf, pullId } from './drive-pull-core'
-import { adoptedFromPull, finalFilesOf, mergeHandIn, needsAdoption, type FinalFile } from './final-files-core'
-import { handInRound } from './edit-round-core'
+import { filesOf } from './drive-pull-core'
+import { finalFilesOf, mergeHandIn, type FinalFile } from './final-files-core'
+import { roundOf } from './edit-round-core'
 
 /**
- * A LINK CARD'S CLIPS BECOME ITS ASSETS — the server half (final-files-core.ts
- * says why). Reads the finished link's copies, writes them as the card's
- * Version 1 files inside a claim: only a card with NO files of its own is
- * changed, so two presses, or a press racing an upload, produce one answer.
+ * EVERY DRIVE HAND-IN ON A CARD BECOMES ITS FILES (the owner, 24 Sep 2026: "didnt i tell u track everything as
+ * files instead of drive links").
+ *
+ * An editor hands work in by Drive in two ways: one folder, or one file link after another, each pasted over the
+ * last. Only the CURRENT link used to become files — Justin Engelke's First Shoot was four links (Script 1, 5, 2, 6)
+ * and the card, the quality check and the client portal had only Script 6; Jordan Wilson's second folder never
+ * became files at all.
+ *
+ * Now every finished copy made for the card is merged into its files (final-files-core.mergeHandIn: the same Drive
+ * file is carried, a same-named clip is its next version, anything else is a new clip), once per copy — the card
+ * lists the copies it has taken in `adopted_pulls`, so a file an editor later took off is not brought back. A copy
+ * made before that list existed counts as taken in when any of its files is on the card.
+ * Called when a copy finishes (drive-pull.finishPull), when the card is opened, and before a send-back.
  */
 export async function adoptClips(item: ContentItem, by: string | null): Promise<{ adopted: number; files: FinalFile[]; reason?: string }> {
-  // a card that already has files takes a later Drive hand-in as its next version, clip by clip (24 Sep 2026)
-  if (!needsAdoption(item as never)) return mergeLaterHandIn(item, by)
-  const finished = finishedEditOf(item as never)
-  const target = finished ? driveTargetOf(finished.url) : null
-  if (!target) return { adopted: 0, files: [], reason: 'not a Drive link' }
-  const pull = await table<DrivePull>('drive_pulls').get(pullId(target.id, item.id)).catch(() => null)
-  const files = adoptedFromPull(filesOf(pull), by, new Date().toISOString())
-  if (files.length === 0) return { adopted: 0, files: [], reason: 'the clips have not been copied yet' }
-  const result = await table<ContentItem>('content_items').claim(item.id, ((cur: ContentItem | null): unknown => {
-    if (!cur || finalFilesOf(cur as never).length > 0) return null
-    return { ...cur, final_files: files, updated_at: new Date().toISOString() }
-  }) as (c: ContentItem | null) => ContentItem | null)
-  return result.claimed ? { adopted: files.length, files } : { adopted: 0, files: finalFilesOf(result.current as never), reason: 'already has files' }
-}
-
-/** a later Drive hand-in on a card that already has files: merged at the round it was handed in as */
-async function mergeLaterHandIn(item: ContentItem, by: string | null): Promise<{ adopted: number; files: FinalFile[]; reason?: string }> {
-  const finished = finishedEditOf(item as never)
-  const target = finished ? driveTargetOf(finished.url) : null
-  if (!target) return { adopted: 0, files: finalFilesOf(item as never), reason: 'already has files' }
-  const pull = await table<DrivePull>('drive_pulls').get(pullId(target.id, item.id)).catch(() => null)
-  const pulled = filesOf(pull)
-  if (pulled.length === 0) return { adopted: 0, files: finalFilesOf(item as never), reason: 'the clips have not been copied yet' }
-  const pullRound = Number((pull as { version?: unknown } | null)?.version)
+  const pulls = (await table<DrivePull>('drive_pulls').list({
+    where: p => p.scope_id === item.id && p.kind === 'item' && (p as { purpose?: string | null }).purpose === 'finished'
+      && !(p as { cancelled_at?: string | null }).cancelled_at,
+  }).catch(() => [] as DrivePull[]))
+    .sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+  if (pulls.length === 0) return { adopted: 0, files: finalFilesOf(item as never), reason: 'nothing copied from Drive' }
   const now = new Date().toISOString()
   let added = 0
   const result = await table<ContentItem>('content_items').claim(item.id, ((cur: ContentItem | null): unknown => {
     if (!cur) return null
-    const round = Number.isFinite(pullRound) && pullRound >= 1 ? pullRound : handInRound(cur as never)
-    const merged = mergeHandIn(finalFilesOf(cur as never), pulled, round, by, now)
-    added = merged.added
-    if (merged.added === 0) return null
-    return { ...cur, final_files: merged.files, updated_at: now }
+    let files = finalFilesOf(cur as never)
+    const onCard = new Set(files.map(x => x.id))
+    const taken = new Set(Array.isArray((cur as { adopted_pulls?: unknown }).adopted_pulls) ? ((cur as unknown as { adopted_pulls: unknown[] }).adopted_pulls).map(String) : [])
+    const nowTaken: string[] = []
+    added = 0
+    for (const p of pulls) {
+      if (taken.has(p.id)) continue
+      const pulled = filesOf(p)
+      if (pulled.length === 0 || pulled.some(x => x.status !== 'done' && x.status !== 'failed')) continue   // still copying
+      if (pulled.some(x => onCard.has(x.id))) { nowTaken.push(p.id); continue }                          // taken in before the list existed
+      const v = Number((p as { version?: unknown }).version)
+      const round = Number.isFinite(v) && v >= 1 ? v : Math.max(1, roundOf(cur as never))
+      const merged = mergeHandIn(files, pulled, round, by, now)
+      files = merged.files
+      added += merged.added
+      for (const x of files) onCard.add(x.id)
+      nowTaken.push(p.id)
+    }
+    if (nowTaken.length === 0) return null
+    return { ...cur, final_files: files, adopted_pulls: [...taken, ...nowTaken], updated_at: now }
   }) as (c: ContentItem | null) => ContentItem | null)
-  return result.claimed ? { adopted: added, files: finalFilesOf(result.row as never) } : { adopted: 0, files: finalFilesOf(item as never), reason: 'nothing new in the hand-in' }
+  if (!result.claimed) return { adopted: 0, files: finalFilesOf(item as never), reason: 'nothing new copied' }
+  return { adopted: added, files: finalFilesOf(result.row as never) }
 }

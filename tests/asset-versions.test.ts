@@ -67,7 +67,7 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(needsAdoption({ final_files: files, link_url: 'https://drive.google.com/drive/folders/abcdefghijk', link_kind: 'drive', link_final: true })).toBe(false)
     // the send-back adopts before it names; the dialog and the editor's card adopt when they meet such a card; decided in a claim
     expect(readFileSync('app/api/production/items/[id]/send-back/route.ts', 'utf8')).toContain('const adopted = await adoptClips(loaded as never, user.id)')
-    expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('if (!cur || finalFilesOf(cur as never).length > 0) return null')
+    expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('if (pulled.some(x => onCard.has(x.id))) { nowTaken.push(p.id); continue }')
     expect(readFileSync('app/dashboard/board/BoardDialogs.tsx', 'utf8')).toContain("/adopt-clips`, { method: 'POST' })")
   })
 

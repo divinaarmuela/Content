@@ -69,7 +69,9 @@ describe('a card keeps the link of every version', () => {
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     // the copied clips used to become the card's files only once it had been sent back AND the client had seen
     // it, so a card handed in by link and never past round 1 had no files and no per-file replace at all
-    expect(drawer).toContain('if (!needsAdoption(item as never)) return')
+    // 24 Sep 2026: every Drive hand-in becomes files, not only a card's first — the drawer always asks the server
+    expect(drawer).not.toContain('if (!needsAdoption(item as never)) return')
+    expect(readFileSync('app/lib/adopt-clips.ts', 'utf8')).toContain('const merged = mergeHandIn(files, pulled, round, by, now)')
     expect(drawer).not.toContain('handInRound(item as never) === roundOf(item as never)) return')
     expect(drawer).toContain('Handed in before')
     expect(readFileSync('docs/schema-history/link_versions.sql', 'utf8'))
