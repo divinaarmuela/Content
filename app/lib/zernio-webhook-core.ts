@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import type { RemotePlatformRow } from './publish-core'
 
 /**
  * Zernio webhooks — authentication and payload → action, as pure functions.
@@ -84,8 +85,9 @@ export const ZERNIO_WEBHOOK_EVENTS = [
 export type ZernioAction =
   /** the post-level rollup: every platform succeeded */
   | { kind: 'published'; postId: string; permalink: string | null; platforms: string[] }
-  /** the post-level rollup: failed, or published to only some platforms */
-  | { kind: 'failed'; postId: string; error: string }
+  /** the post-level rollup: failed, or published to only some platforms — with the provider's per-channel
+   *  rows when it gave them, so a channel that DID go out is not written down as failed (24 Sep 2026) */
+  | { kind: 'failed'; postId: string; error: string; rows?: RemotePlatformRow[] }
   /** one platform inside a post finished — or a TikTok URL arrived late */
   | {
       kind: 'platform_published'
@@ -297,6 +299,26 @@ function platformsOf(post: Record<string, unknown>, data: Record<string, unknown
   return [...new Set(out)]
 }
 
+/** The provider's per-channel rows, in the one spelling the outcome reader takes (`platformPostUrl`,
+ *  `errorMessage`) whichever of Zernio's two spellings arrived. Empty when it named no channel. */
+function rowsOf(post: Record<string, unknown>, data: Record<string, unknown>): RemotePlatformRow[] {
+  const out: RemotePlatformRow[] = []
+  for (const list of [post.platforms, data.platforms]) {
+    if (!Array.isArray(list)) continue
+    for (const row of list) {
+      const r = asRecord(row)
+      const platform = (str(r.platform) || str(r.name)).toLowerCase()
+      if (!platform) continue
+      out.push({
+        platform, status: str(r.status).toLowerCase() || undefined,
+        errorMessage: str(r.errorMessage) || str(r.error) || null,
+        platformPostUrl: urlOf(r) || null,
+      })
+    }
+  }
+  return out
+}
+
 /** The provider's reason for a failure, or a usable stand-in. */
 function errorOf(post: Record<string, unknown>, data: Record<string, unknown>, event: string): string {
   const rows: Record<string, unknown>[] = []
@@ -356,7 +378,8 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
   if (event === 'post.failed' || event === 'post.partial') {
     const postId = postIdOf(post, data)
     if (!postId) return ignore('no post id')
-    return { eventId, event, action: { kind: 'failed', postId, error: errorOf(post, data, event) } }
+    const rows = rowsOf(post, data)
+    return { eventId, event, action: { kind: 'failed', postId, error: errorOf(post, data, event), ...(rows.length ? { rows } : {}) } }
   }
 
   // account.disconnected / .revoked / .expired — already in production since

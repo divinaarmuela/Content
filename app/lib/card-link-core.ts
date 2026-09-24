@@ -176,10 +176,12 @@ export function nextVersionAfterLink(
  */
 
 export type LinkVersion = {
-  /** the number this hand-in was saved as */
+  /** the ROUND this hand-in belongs to — the number the card shows, not the link counter (24 Sep 2026) */
   version: number
   url: string
   kind: string
+  /** the file's name when the round was handed in as separate files */
+  label?: string | null
   /** who saved it, and when */
   by?: string | null
   at: string
@@ -193,7 +195,7 @@ export function linkVersionsOf(card: { link_versions?: unknown }): LinkVersion[]
     const version = Math.floor(Number(r.version))
     const url = String(r.url ?? '').trim()
     if (!(version >= 1) || !url) continue
-    out.push({ version, url, kind: String(r.kind ?? 'other'), by: r.by == null ? null : String(r.by), at: String(r.at ?? '') })
+    out.push({ version, url, kind: String(r.kind ?? 'other'), by: r.by == null ? null : String(r.by), at: String(r.at ?? ''), label: r.label == null ? null : String(r.label) })
   }
   return out.sort((a, b) => a.version - b.version || a.at.localeCompare(b.at))
 }
@@ -201,21 +203,22 @@ export function linkVersionsOf(card: { link_versions?: unknown }): LinkVersion[]
 /**
  * The history with this save added.
  *
- * One entry per version: saving the same version again replaces its entry rather than stacking, which is
- * what happens when somebody corrects a link they have just pasted. Bounded so a card that is re-linked
- * fifty times does not carry fifty rows.
+ * One entry per round AND address: the same address saved again for a round replaces its entry (a corrected
+ * paste), a different address for the same round stacks (a round handed in as several files). Bounded so a
+ * card that is re-linked fifty times does not carry fifty rows.
  */
 export const LINK_VERSIONS_MAX = 40
 
 export function withLinkVersion(
   card: { link_versions?: unknown },
-  entry: { version: number; url: string; kind: string; by?: string | null; at: string },
+  entry: { version: number; url: string; kind: string; by?: string | null; at: string; label?: string | null },
 ): LinkVersion[] {
   const version = Math.floor(Number(entry.version))
   const url = String(entry.url ?? '').trim()
   if (!(version >= 1) || !url) return linkVersionsOf(card)
-  const kept = linkVersionsOf(card).filter(v => v.version !== version)
-  const next = [...kept, { version, url, kind: String(entry.kind ?? 'other'), by: entry.by ?? null, at: String(entry.at) }]
+  // the same address saved again for the same round is a correction, not a second hand-in
+  const kept = linkVersionsOf(card).filter(v => !(v.version === version && v.url === url))
+  const next = [...kept, { version, url, kind: String(entry.kind ?? 'other'), by: entry.by ?? null, at: String(entry.at), label: entry.label ?? null }]
     .sort((a, b) => a.version - b.version || a.at.localeCompare(b.at))
   return next.slice(-LINK_VERSIONS_MAX)
 }
@@ -225,9 +228,9 @@ export function linkForVersion(card: { link_versions?: unknown }, version: numbe
   return linkVersionsOf(card).find(v => v.version === Math.floor(Number(version))) ?? null
 }
 
-/** the ones worth listing beside the current link: everything but the newest */
-export function earlierLinkVersions(card: { link_versions?: unknown; current_version_number?: unknown }): LinkVersion[] {
+/** the ones worth listing beside the current link: every round but the newest one on the card */
+export function earlierLinkVersions(card: { link_versions?: unknown }): LinkVersion[] {
   const all = linkVersionsOf(card)
-  const now = Math.floor(Number(card?.current_version_number ?? 0))
-  return all.filter(v => v.version !== now || all.filter(x => x.version === now).length > 1).filter(v => v.version < (now || Infinity))
+  const newest = all.reduce((m, v) => Math.max(m, v.version), 0)
+  return all.filter(v => v.version < newest)
 }

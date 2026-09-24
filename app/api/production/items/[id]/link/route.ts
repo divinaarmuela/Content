@@ -67,7 +67,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           link_final: final,
           // EVERY CUT STAYS OPENABLE (24 Sep 2026): the card used to hold one link, so each hand-in wrote over
           // the last and the cut the client had commented on could not be opened again
-          ...(final ? { link_versions: withLinkVersion(cur as never, { version: next.version, url: check.url, kind: check.kind, by: user.id, at: new Date().toISOString() }) } : {}),
+          ...(final ? { link_versions: withLinkVersion(cur as never, { version: handInRound(cur as never), url: check.url, kind: check.kind, by: user.id, at: new Date().toISOString() }) } : {}),
           // a folder is the card's folder everywhere (card-link-core.folderOf)
           // — unless this link is the finished edit, which is not the folder
           ...(check.kind !== 'other' && !final ? { raw_assets_url: check.url } : {}),

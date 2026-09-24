@@ -123,7 +123,10 @@ describe('payload → action', () => {
         },
       },
     })
-    expect(action).toEqual({ kind: 'failed', postId: 'post_2', error: 'Token expired' })
+    expect(action).toEqual({
+      kind: 'failed', postId: 'post_2', error: 'Token expired',
+      rows: [{ platform: 'tiktok', status: 'failed', errorMessage: 'Token expired', platformPostUrl: null }],
+    })
   })
 
   it('says WHICH platforms failed on a partial, and does not call it published', () => {
@@ -143,6 +146,12 @@ describe('payload → action', () => {
     expect(action).toMatchObject({ postId: 'post_3' })
     expect((action as { error: string }).error).toContain('Rejected by LinkedIn')
     expect((action as { error: string }).error).toContain('some platforms only')
+    // and it carries the rows, so the job's record can keep Instagram live with its link (24 Sep 2026:
+    // the 7 pm post was up on Instagram and the dashboard said it did not go out)
+    expect((action as { rows?: unknown }).rows).toEqual([
+      { platform: 'instagram', status: 'published', errorMessage: null, platformPostUrl: 'https://ig/x' },
+      { platform: 'linkedin', status: 'failed', errorMessage: 'Rejected by LinkedIn', platformPostUrl: null },
+    ])
   })
 
   it('still records a failure when the provider gives no reason', () => {

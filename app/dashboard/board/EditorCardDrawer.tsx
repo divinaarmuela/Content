@@ -24,7 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { withoutRepeatedNotes } from '../../lib/card-comment-core'
 import { handInRound, nextRoundWords, roundLabel, roundOf } from '../../lib/edit-round-core'
-import { linkVersionsOf } from '../../lib/card-link-core'
+import { earlierLinkVersions } from '../../lib/card-link-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
 import { pullId, pullInFlight, pullProgress } from '../../lib/drive-pull-core'
@@ -699,13 +699,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         {source.trim() !== '' && !sourceCheck.ok && <p role="alert" className="text-[12px] font-medium text-accent-red-deep">{sourceCheck.reason}</p>}
         {/* EVERY CUT STAYS OPENABLE (the owner, 24 Sep 2026: "where is the version 1 and version 2"). The card
             held one link, so each hand-in wrote over the last; these are the ones it still has. */}
-        {item && linkVersionsOf(item as never).length > 1 && (
+        {item && earlierLinkVersions(item as never).length > 0 && (
           <div className="flex flex-col gap-1" data-link-versions>
             <p className="text-[12px] uppercase tracking-wider text-muted-foreground">Handed in before</p>
-            {linkVersionsOf(item as never).slice().reverse().map(v => (
+            {earlierLinkVersions(item as never).slice().reverse().map(v => (
               <a key={`${v.version}-${v.at}`} href={v.url} target="_blank" rel="noreferrer noopener"
                 className="min-h-11 text-[13px] text-muted-foreground underline underline-offset-4 hover:text-foreground">
-                {roundLabel(v.version)} — {new Date(v.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                {roundLabel(v.version)}{v.label ? ` · ${v.label}` : ''} — {new Date(v.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
               </a>
             ))}
           </div>

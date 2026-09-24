@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { table } from '@/lib/db'
 import type { ProviderWebhook, PublishJob, SocialAccount } from '@/lib/db-types'
 import { decryptSecret } from './secret-box'
-import { resultsForAll, type OutcomeJob } from './post-outcome-core'
+import { resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
+import type { RemotePlatformRow } from './publish-core'
 import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
 import {
   claimDelivery, finishDelivery, releaseDelivery,
@@ -165,7 +166,7 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
       return done(res, res.ok, action.permalink ? 'permalink captured' : undefined)
     }
     case 'failed':
-      return done(await failed(action.postId, action.error), true, action.error)
+      return done(await failed(action.postId, action.error, action.rows), true, action.error)
 
     case 'platform_published': {
       const wrote = await platformPublished(action)
@@ -388,16 +389,23 @@ async function published(
  * Moving it backwards would erase the scheduler's work over a failure that is
  * usually a re-auth away from being retried.
  */
-async function failed(postId: string, message: string): Promise<Response> {
+async function failed(postId: string, message: string, rows?: RemotePlatformRow[]): Promise<Response> {
   const jobs = table<PublishJob>('publish_jobs')
   let open: PublishJob[]
   try {
     open = await jobs.list({
       where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status),
     })
+    const now = new Date().toISOString()
+    // a partial names its channels: the live one keeps `published` and its link, only the refused ones
+    // read failed — the 7 pm post of 24 Sep 2026 was live on Instagram and written down as failed there
+    const permalink = rows?.find(r => r.platformPostUrl)?.platformPostUrl ?? null
     await Promise.all(open.map(j => jobs.update(j.id, {
-      status: 'failed', error: message, updated_at: new Date().toISOString(),
-      platform_results: resultsForAll(j as unknown as OutcomeJob, 'failed', { at: new Date().toISOString(), reason: message }),
+      status: 'failed', error: message, updated_at: now,
+      ...(permalink && !j.permalink ? { permalink } : {}),
+      platform_results: rows?.length
+        ? resultsFromRemote(j as unknown as OutcomeJob, rows, 'failed', now)
+        : resultsForAll(j as unknown as OutcomeJob, 'failed', { at: now, reason: message }),
     })))
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)

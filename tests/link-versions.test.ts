@@ -28,12 +28,16 @@ describe('a card keeps the link of every version', () => {
     expect(linkForVersion(card, 9)).toBeNull()
   })
 
-  it('a correction to the same version replaces its entry rather than stacking', () => {
+  it('the same address saved again for a version is a correction; a different one is another file of it', () => {
+    // Jordan Wilson's First Shoot, 21–22 Sep: version 1 was four separate file links — the owner, 24 Sep 2026:
+    // "why v1 v2 v3 — its supposed to be v1 or v2 right"
     let card: { link_versions?: unknown } = {}
-    card = { link_versions: withLinkVersion(card, { version: 1, url: 'https://drive.google.com/typo', kind: 'drive', at: at('21') }) }
-    card = { link_versions: withLinkVersion(card, { version: 1, url: 'https://drive.google.com/right', kind: 'drive', at: at('21') }) }
+    card = { link_versions: withLinkVersion(card, { version: 1, url: 'https://drive.google.com/a', kind: 'drive', at: at('21'), label: 'Script 1.mp4' }) }
+    card = { link_versions: withLinkVersion(card, { version: 1, url: 'https://drive.google.com/a', kind: 'drive', at: at('21'), label: 'Script 1.mp4' }) }
     expect(linkVersionsOf(card)).toHaveLength(1)
-    expect(linkForVersion(card, 1)?.url).toBe('https://drive.google.com/right')
+    card = { link_versions: withLinkVersion(card, { version: 1, url: 'https://drive.google.com/b', kind: 'drive', at: at('21'), label: 'Script 6.mp4' }) }
+    expect(linkVersionsOf(card).map(v => [v.version, v.label])).toEqual([[1, 'Script 1.mp4'], [1, 'Script 6.mp4']])
+    expect(linkForVersion(card, 1)?.url).toBe('https://drive.google.com/a')
   })
 
   it('ignores a row with no url or no version, and is bounded', () => {
@@ -49,7 +53,6 @@ describe('a card keeps the link of every version', () => {
 
   it('the earlier ones are the ones worth listing beside the current link', () => {
     const card = {
-      current_version_number: 3,
       link_versions: [
         { version: 1, url: 'https://drive.google.com/a', kind: 'drive', at: at('21') },
         { version: 2, url: 'https://drive.google.com/b', kind: 'drive', at: at('22') },
@@ -61,7 +64,8 @@ describe('a card keeps the link of every version', () => {
 
   it('the save records it, and a Drive card gets the per-file flow like any other', () => {
     const route = readFileSync('app/api/production/items/[id]/link/route.ts', 'utf8')
-    expect(route).toContain('withLinkVersion(cur as never, { version: next.version, url: check.url, kind: check.kind, by: user.id')
+    // stamped with the card's VERSION (the round), never the link counter that ticks on every save
+    expect(route).toContain('withLinkVersion(cur as never, { version: handInRound(cur as never), url: check.url, kind: check.kind, by: user.id')
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     // the copied clips used to become the card's files only once it had been sent back AND the client had seen
     // it, so a card handed in by link and never past round 1 had no files and no per-file replace at all
