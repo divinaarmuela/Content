@@ -801,10 +801,8 @@ describe('handed to a scheduler — the editor\u2019s road ends in Done (17 Sep 
     const scheduler = groupByLane(pageLanes('scheduler'), rows)
     expect(scheduler.find(x => x.lane.key === 'draft')!.cards.length).toBe(3)
     expect(handedOver({ scheduler_ids: ['s1'] })).toBe(true)
-    // …but not while it is with the quality check or the client (24 Sep 2026: Jordan Wilson's First Shoot sat in
-    // Done, "Handed to Cath Lorenzo", while the client had not answered)
-    expect(handedOver({ scheduler_ids: ['s1'], status: 'client_review' })).toBe(false)
-    expect(handedOver({ scheduler_ids: ['s1'], status: 'approved_for_scheduling' })).toBe(true)
+    // the owner, 24 Sep 2026: handed over is Done on the Editor page whatever the client is doing
+    expect(handedOver({ scheduler_ids: ['s1'], status: 'client_review' })).toBe(true)
     expect(handedOver({ scheduler_ids: [] })).toBe(false)
     expect(handedOver({ scheduler_ids: ['s1'], adhoc_post: true })).toBe(false)
     expect(handedToWords({ scheduler_ids: ['s1', 's2'] }, new Map([['s1', 'Cath']]))).toBe('Handed to Cath')

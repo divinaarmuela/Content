@@ -39,7 +39,7 @@ describe('once handed, the scheduler uploads the files on the card (the owner, 1
   it('the post approval drawer shows the folder to work from, the finished edit, and the Add files button on a handed card', () => {
     const d = src('app/dashboard/board/PostApprovalDetail.tsx')
     expect(d).toContain("const stillEditing = !!item && !adhoc && EDITING_STATUSES.includes(String(item.status)) && !handedToScheduler(item)")
-    expect(d).toContain('{!stillEditing && (')
+    expect(d).toContain('{(!stillEditing || !!approvedFiles) && (')
     expect(d).toMatch(/finished \? 'Add files' : 'Add the finished files'/)
     expect(d).toContain('<FilesToWorkFrom')
     expect(d).toContain('Open the finished edit')

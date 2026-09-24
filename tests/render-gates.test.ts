@@ -589,7 +589,7 @@ describe('a card still with the editor shows no files box on the manager’s dra
   it('the versions section waits until the card is approved or is a post; until then it is the link, or waiting for it', () => {
     const s = src('app/dashboard/board/PostApprovalDetail.tsx')
     expect(s).toMatch(/const stillEditing = !!item && !adhoc && EDITING_STATUSES\.includes\(String\(item\.status\)\) && !handedToScheduler\(item\)/)
-    expect(s).toContain('{!stillEditing && (')
+    expect(s).toContain('{(!stillEditing || !!approvedFiles) && (')
     expect(s).toContain('Waiting for the editor’s Drive or Dropbox link.')
   })
 })

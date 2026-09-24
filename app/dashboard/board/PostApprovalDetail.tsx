@@ -656,13 +656,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       )}
 
       {/* ── 3. the files: the scheduler's uploads, once the card is theirs ── */}
-      {stillEditing && !finished && (
+      {stillEditing && !finished && !approvedFiles && (
         <div className="flex flex-col gap-1 border-b border-border px-5 py-4">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Finished edit</p>
           <p className="text-[14px] text-muted-foreground">Waiting for the editor’s Drive or Dropbox link.</p>
         </div>
       )}
-      {!stillEditing && (
+      {/* a card with approved files shows them at every stage — never "waiting for the editor's link" (24 Sep 2026) */}
+      {(!stillEditing || !!approvedFiles) && (
       <div className="flex flex-col gap-4 border-b border-border px-5 py-4">
         <div className="flex items-center justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
