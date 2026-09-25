@@ -33,7 +33,7 @@ import {
   applySlideLimit, canReschedule, channelBlockReason,
   coverForSlide, eligibility, MIN_LEAD_MS, POST_NOW_WINDOW_MS, TOO_SOON,
   assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, samePostKey, validateComposition,
-  type CoverSource, type Eligibility, type SocialPostStatus, bookedChange, REWORD_LEAD_MS, TOO_LATE_TO_REWORD } from './social-schedule-core'
+  type CoverSource, type Eligibility, type SocialPostStatus, bookedChange, REWORD_LEAD_MS, TOO_LATE_TO_REWORD, approvedFilesVersion } from './social-schedule-core'
 import {
   normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
 } from './version-files-core'
@@ -2211,8 +2211,10 @@ export async function analyticsForClient(clientId: string): Promise<Record<strin
 /** every file of the piece's latest version sits in a booked or live post,
  *  or was marked posted by hand (posted-slides-core) */
 async function everyFileBooked(item: ContentItem, versions: AssetVersion[]): Promise<boolean> {
-  const latest = [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
-  const files = slidesOf(latest)
+  // a files card counts its APPROVED FILES (24 Sep 2026: with no upload version, posting one clip of two read as
+  // "every file booked" and the second could never be posted)
+  const latest = approvedFilesVersion(item as never) ?? [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
+  const files = slidesOf(latest as never)
   if (files.length === 0) return true
   const own = await posts().list({ by: { item_id: item.id } as Partial<SocialPost> }).catch(() => [] as SocialPost[])
   const gone = takenSlideUrls(own)

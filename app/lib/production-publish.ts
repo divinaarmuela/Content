@@ -11,6 +11,7 @@ import {
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
 import { postSlides, slidesOf } from './version-files-core'
+import { approvedFilesVersion } from './social-schedule-core'
 import { DEFAULT_TZ, safeZone } from './timezone-core'
 import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
@@ -451,8 +452,10 @@ export async function postedSlidesFor(
     table<SocialPost>('social_posts').list({ by: { item_id: contentItemId } }).catch(() => [] as SocialPost[]),
     table<PublishJob>('publish_jobs').list({ by: { content_item_id: contentItemId } }).catch(() => [] as PublishJob[]),
   ])
-  const latest = [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
-  const slides = slidesOf(latest)
+  // a files card counts its APPROVED FILES, the same as the Schedule offers them (24 Sep 2026)
+  const item = await table<ContentItemRow>('content_items').get(contentItemId).catch(() => null)
+  const latest = (item ? approvedFilesVersion(item as never) : null) ?? [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
+  const slides = slidesOf(latest as never)
   const publishedJobs = new Set(jobs.filter(j => String(j.status) === 'published').map(j => j.id))
   const prev = readPostedSlides(row.posted_slides)
   return postedProgress(slides, publishedSlideUrls(socialPosts, publishedJobs), prev?.urls ?? [], prev?.hand)

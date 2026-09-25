@@ -5,6 +5,7 @@ import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyScheduleHandoff, performTransition } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
+import { approvedFilesVersion } from '../../../../../lib/social-schedule-core'
 
 /** Hand an approved item to specific schedulers — the follow-up to a client
  *  approval, where the fan-out went to everyone and the manager narrows it. */
@@ -62,7 +63,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         skipAudiences: ['assigned_schedulers', 'schedulers'],
       }) as unknown as typeof item
     }
-    const toDraftMode = item.status === 'approved_for_scheduling'
+    // a card whose approved FILES are on it is ready to post as it is; only a card with nothing to post goes to the
+    // scheduler's Draft for them to make the files (24 Sep 2026)
+    const hasApprovedFiles = approvedFilesVersion(item as never) !== null
+    const toDraftMode = item.status === 'approved_for_scheduling' && !hasApprovedFiles
     const sent = await notifyScheduleHandoff(user, item, valid, toDraftMode ? 'work' : 'schedule')
 
     // INTO THE SCHEDULER'S DRAFT, NOT READY TO POST (the owner, 14 Sep 2026:
@@ -72,7 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // for the quality check. A card the scheduler only has to book (already
     // scheduled) is left where it is.
     const patch: Record<string, unknown> = { scheduler_ids: valid }
-    const toDraft = item.status === 'approved_for_scheduling'
+    const toDraft = item.status === 'approved_for_scheduling' && !hasApprovedFiles
     if (toDraft) patch.status = 'draft_uploaded'
     await table('content_items').update(id, patch)
     announceItemChange({ item_id: id, client_id: item.client_id, status: toDraft ? 'draft_uploaded' : item.status, kind: 'updated' })

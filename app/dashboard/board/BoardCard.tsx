@@ -229,7 +229,7 @@ export function BoardCard({
         {handed && <Chip tone="green">{handed}</Chip>}
         {!theirs && (!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
-        {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
+        {!folded && !theirs && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
         {/* the made date shows on a folded card as well (the owner, 21 Sep 2026: "create date is not shown on the congested cards") */}
         {lines.made && <Chip tone="muted">{lines.made}</Chip>}
         {priorityChip(card) && <Chip tone={priorityChip(card)!.tone}>{priorityChip(card)!.label}</Chip>}
@@ -252,7 +252,7 @@ export function BoardCard({
         {askAck && (
           <span className="mb-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">New — press Acknowledge so the team knows you are on it.</span>
         )}
-        {lines.brief && (
+        {lines.brief && !theirs && (
           <span
             className={`mb-1 overflow-hidden whitespace-pre-line text-foreground transition-[max-height] duration-500 ease-in-out motion-reduce:transition-none [[data-tone=ink]_&]:text-cream ${briefOpen ? 'block max-h-[200rem]' : 'max-h-[3em]'} ${briefClamped && !briefOpen ? 'line-clamp-2' : briefOpen ? '' : 'block'}`}
             title={briefOpen ? undefined : lines.brief}
@@ -263,7 +263,9 @@ export function BoardCard({
         )}
         {/* who holds it, and — beside it, never instead of it — who was
             actually asked for the next thing on it */}
-        <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>
+        {theirs
+          ? <span>With {schedulerIds.map(s => names.get(s) ?? 'the scheduler').join(', ')}</span>
+          : <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>}
         {booking && (
           <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{booking}</span>
         )}
@@ -322,7 +324,7 @@ export function BoardCard({
           </span>
         ))}
 
-        {!folded && briefFolds && (
+        {!folded && briefFolds && !theirs && (
           <Button variant="outline" aria-expanded={briefOpen}
             onClick={e => { e.preventDefault(); toggleBrief() }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
