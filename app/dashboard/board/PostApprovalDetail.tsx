@@ -580,7 +580,11 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               {STATUS_LABELS[status] ?? status}
             </Chip>
             <span className="text-[13px] text-muted-foreground">
-              {adhoc && status === 'draft_uploaded' ? 'Uploaded — waiting for the team to check it.' : whatHappensNext(status)}
+              {adhoc && status === 'draft_uploaded' ? 'Uploaded — waiting for the team to check it.'
+                // a handed-over Draft is the scheduler's, not the editor's first cut (25 Sep 2026)
+                : status === 'draft_uploaded' && Array.isArray(item.scheduler_ids) && item.scheduler_ids.length > 0
+                  ? `With ${(item.scheduler_ids as string[]).map(s => nameOf(s) ?? 'the scheduler').join(', ')} — building the post, then Send to quality check.`
+                  : whatHappensNext(status)}
             </span>
           </div>
         </div>

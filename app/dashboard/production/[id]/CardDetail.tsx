@@ -598,7 +598,9 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     },
     turns,
   )
-  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : isInternal ? TASK_STATUS_MEANING[detail.status] : STATUS_MEANING[detail.status]
+  const handedDraft = detail.status === 'draft_uploaded' && Array.isArray((detail as { scheduler_ids?: unknown }).scheduler_ids) && ((detail as unknown as { scheduler_ids: unknown[] }).scheduler_ids).length > 0
+  // a handed-over Draft is the scheduler's, not the editor's first cut (25 Sep 2026)
+  const meaning = isBrief ? BRIEF_STATUS_MEANING[detail.status] : isInternal ? TASK_STATUS_MEANING[detail.status] : handedDraft ? 'With the scheduler — building the post, then it goes to quality check.' : STATUS_MEANING[detail.status]
 
   const nameOf = (uid: string) => {
     const m = editors.find(e => e.id === uid)
