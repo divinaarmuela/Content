@@ -618,16 +618,14 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </span>
           </div>
         )}
-        {(filesCard || fileMode) && !linkMode ? (
+        {/* files only (the owner, 25 Sep 2026): the finished edit is never a Drive link */}
+        {!linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
             {mayFile && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)}>
                   <Upload className="h-4 w-4" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload the finished files — ${roundLabel(handInRound(item as never))}` : 'Add another file')}
                 </Button>
-                {currentFiles(item as never).length === 0 && !finishedUrl && (
-                  <button type="button" onClick={() => setLinkMode(true)} className="min-h-11 text-[12px] text-muted-foreground underline underline-offset-4">A file over 5GB? Hand in a Drive link instead</button>
-                )}
               </div>
             )}
             {stillToReplace(item as never).length > 0 && (

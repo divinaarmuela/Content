@@ -775,7 +775,8 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         // is the same link the card's "Your finished edit" box saves, so it
         // never reads as a footage folder
         const put = await fetch(`/api/production/items/${id}/link`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: cardLink, ...(isManager ? {} : { final: true }) }),
+          // the folder to work from, whoever made the card — finished work is uploaded as files (25 Sep 2026)
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: cardLink }),
         })
         if (!put.ok) toast.error('The card is made, but the link did not save — add it from the card')
       }

@@ -302,6 +302,10 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   // schedulers can pick it up
   // …and a general user books in what nobody was handed, like a scheduler
   if (ids.includes(viewer.id) || (ids.length === 0 && (viewer.role === 'scheduler' || viewer.role === 'general'))) roles.push('scheduler')
+  // THE SCHEDULER'S DRAFT IS THEIRS TO MAKE (the owner, 25 Sep 2026: a handed card goes Draft → Quality check → With
+  // client → Ready to post): the person it was handed to holds the maker's hat on it while it is in Draft, so they
+  // can send it on — it was stuck, only an editor or account manager could
+  if (ids.includes(viewer.id) && (item as { status?: unknown }).status === 'draft_uploaded' && !roles.includes('editor')) roles.push('editor')
 
   const order: Hat[] = ['account_manager', QUALITY_HAT, 'editor', 'scheduler']
   return order.filter(r => roles.includes(r))

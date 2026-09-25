@@ -59,7 +59,7 @@ describe('a card handed in by a link can hand in files instead (the owner, 24 Se
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     // Yusuf's card: sent back by the quality check, a finished link on it, so `handsInFiles` was false and the
     // whole files half of the drawer was hidden — no upload button anywhere on it
-    expect(drawer).toContain('{(filesCard || fileMode) && !linkMode ? (')
+    expect(drawer).toContain('{!linkMode ? (')
     expect(drawer).toContain('Upload the files here instead')
     expect(drawer).toContain('onClick={() => { setFileMode(true); setUploadOpen(true) }}')
   })

@@ -146,18 +146,15 @@ describe('PUT /api/production/items/[id]/link', () => {
     expect(item().link_final).toBe(false)
   })
 
-  it('the finished edit (final: true) leaves the folder to work from alone', async () => {
-    // the 14 Sep 2026 failure: the editor's pasted edit overwrote the footage
-    // folder on their own card, and then read as "folder only" at submit
+  it('a link is never the finished edit — it is refused, and the folder to work from is left alone (25 Sep 2026)', async () => {
+    // the owner: "the drive link is only for the folder to work from, the rest are file submissions"
     const folder = 'https://drive.google.com/drive/folders/1work'
     expect((await put(folder)).status).toBe(200)
     const r = await put(DRIVE_1, { final: true })
-    expect(r.status).toBe(200)
-    expect(item().link_url).toBe(DRIVE_1)
-    expect(item().link_kind).toBe('drive')
+    expect(r.status).toBe(400)
+    expect(item().link_url).toBe(folder)
     expect(item().raw_assets_url).toBe(folder)
-    expect(item().link_final).toBe(true)
-    expect(item().current_version_number).toBe(2)
+    expect(item().link_final).not.toBe(true)
   })
 
   it('DELETE clears the link and keeps the version number', async () => {

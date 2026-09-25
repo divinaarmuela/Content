@@ -127,8 +127,8 @@ export default function EditorCardTools({ item, viewer, activity, frozen, workin
     try {
       const res = url
         ? await fetch(`/api/production/items/${item.id}/link`, {
-          // the finished edit, not the folder to work from (the link route)
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, final: true }),
+          // the folder to work from — the finished edit is uploaded as files (25 Sep 2026)
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
         })
         : await fetch(`/api/production/items/${item.id}/link`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save the link')

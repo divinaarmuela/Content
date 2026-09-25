@@ -222,7 +222,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     // …and on 22 Sep 2026 the owner reversed the link-only card: "when uploading version 1, a popup — upload the
     // file instead of a Drive link". The link is now the fallback for a file over 5GB, behind linkMode.
     // a link card may hand in files too since 24 Sep 2026 — the files half is no longer hidden from it
-    expect(s).toContain('{(filesCard || fileMode) && !linkMode ? (')
+    expect(s).toContain('{!linkMode ? (')
     expect(s).toContain('<Dialog open={uploadOpen}')
     expect(s).toContain("const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)")
     expect(s).toContain('const filesCard = item ? handsInFiles({ ...item, work_kinds: (item as { work_kinds?: { slug?: string } | null }).work_kinds ?? kind } as never) : false')

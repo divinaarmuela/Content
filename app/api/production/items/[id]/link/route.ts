@@ -44,7 +44,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const body = await req.json().catch(() => ({}))
     const check = linkKindOf(body?.url)
     if (!check.ok) return NextResponse.json({ error: check.reason }, { status: 400 })
-    const final = body?.final === true
+    // a link is ONLY the folder to work from (the owner, 25 Sep 2026): the finished edit is uploaded as files on the
+    // card, so a link sent as the finished edit is refused rather than saved as one
+    if (body?.final === true) {
+      return NextResponse.json({ error: 'The finished edit is uploaded as files on the card — a Drive link is only the folder to work from.' }, { status: 400 })
+    }
+    const final = false
     // THE CARD'S FIRST LINK IS THE FILES TO WORK FROM, NEVER A VERSION ON ITS
     // OWN (the owner, 16 Sep 2026). The finished edit is whatever is saved in
     // the finished-edit box — the same link again is allowed ("it's okay to
