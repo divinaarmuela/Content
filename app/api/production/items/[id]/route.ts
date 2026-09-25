@@ -24,7 +24,7 @@ import {
 } from '../../../../lib/gdrive-mirror'
 import { previewVideos } from '../../../../lib/stream'
 import { cancelReplacedPullSoon, startPullSoon } from '../../../../lib/drive-pull'
-import { sanitiseFinalFiles } from '../../../../lib/final-files-core'
+import { finalFilesChangeRefusal, finalFilesOf, sanitiseFinalFiles } from '../../../../lib/final-files-core'
 
 /** Item detail — versions, comments, schedule — shaped per role. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -227,6 +227,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if ('final_files' in patch) {
       const cleaned = sanitiseFinalFiles(patch.final_files, current as never, user.id, new Date().toISOString())
       if (!cleaned.ok) return NextResponse.json({ error: cleaned.error }, { status: 400 })
+      // what a save may change, decided on the server (the audit of 25 Sep 2026)
+      const refusal = finalFilesChangeRefusal(finalFilesOf(current as never), cleaned.files, current as never, ['account_manager', 'super_admin'].includes(user.role))
+      if (refusal) return NextResponse.json({ error: refusal }, { status: 409 })
       patch.final_files = cleaned.files
     }
     // ONE FOLDER: the open card's "Files to work from" folder is the same

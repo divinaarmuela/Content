@@ -295,3 +295,39 @@ export function mergeHandIn(
   }
   return { files: out, added }
 }
+
+/* ── WHAT A SAVE OF THE FILE LIST MAY CHANGE (the audit of 25 Sep 2026) ─────────────────────────────────────
+ * The card's files were saved whole from whoever's screen sent them, with no rule on the server: a stale screen
+ * could wipe clips copied in since, and an editor could swap an approved clip after the client said yes — the
+ * scheduler was then offered a cut nobody had checked. The server now holds three rules:
+ *   - an APPROVED card's files are locked (Ready to post, Booked in, Posted): a change is a new version, which
+ *     goes back through the check and the client — never an edit under the approval;
+ *   - while the quality check or the client is looking, only a manager changes them;
+ *   - a hand-in that has gone out (an earlier version) is history: its files are never removed or rewritten.
+ */
+const LOCKED_STATUSES = ['approved_for_scheduling', 'scheduled', 'published']
+const LOOKING_STATUSES = ['quality_check', 'client_review']
+
+export function finalFilesChangeRefusal(
+  before: readonly FinalFile[],
+  after: readonly FinalFile[],
+  item: { status?: unknown; edit_round?: unknown; client_round?: unknown; client_rounds?: unknown },
+  manager: boolean,
+): string | null {
+  const same = (a: FinalFile, b: FinalFile) => a.url === b.url && a.version === b.version && (a.asset_id ?? a.id) === (b.asset_id ?? b.id) && (a.retired_round ?? null) === (b.retired_round ?? null)
+  const byId = new Map(after.map(f => [f.id, f]))
+  const changed = before.length !== after.length || before.some(f => { const g = byId.get(f.id); return !g || !same(f, g) })
+  if (!changed) return null
+  const status = String(item.status ?? '')
+  if (LOCKED_STATUSES.includes(status)) return 'These files are approved — a change is a new version, sent back through the check and the client'
+  if (LOOKING_STATUSES.includes(status) && !manager) return 'The quality check or the client is looking at these files — only a manager can change them now'
+  const round = handInRound(item)
+  for (const f of before) {
+    if (f.version >= round) continue
+    const g = byId.get(f.id)
+    // an earlier version's file may only be dropped from THIS version on (retired_round set to this round)
+    if (!g) return `${f.name} is part of an earlier version — it stays on the card; drop it from this version instead`
+    if (g.url !== f.url || g.version !== f.version) return `${f.name} is part of an earlier version and cannot be rewritten`
+  }
+  return null
+}

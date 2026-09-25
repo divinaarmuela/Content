@@ -309,7 +309,9 @@ describe('asked, then answered — the round trip', () => {
   it('the move and the clear are ONE write — never a second round trip', async () => {
     const src = (await import('node:fs')).readFileSync(
       (await import('node:path')).join(process.cwd(), 'app', 'lib', 'workflow.ts'), 'utf8')
-    expect(src).toMatch(/update\(item\.id, \{\s*status: to,\s*\.\.\.asked,/)
+    // one patch, one conditional write — the one-winner claim (25 Sep 2026)
+    expect(src).toMatch(/const movePatch = \{\s*status: to,\s*\.\.\.asked,/)
+    expect(src).toContain('{ ...cur, ...movePatch }')
   })
 
   it('sending a card back clears the ask too', async () => {

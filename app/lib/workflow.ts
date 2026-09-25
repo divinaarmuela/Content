@@ -894,7 +894,7 @@ export async function performTransition(
   // before the write, so a request working from a stale snapshot — the two
   // Approve clicks that arrive together — is refused rather than replaying a
   // transition somebody already made
-  const before = await table<ContentItemRow>('content_items').get(item.id)
+  const before = await table<ContentItemRow>('content_items').get(item.id, { fresh: true })
   if (!before || before.status !== from) {
     throw new AuthzError('This item was just updated by someone else — refresh and try again', 409)
   }
@@ -922,12 +922,13 @@ export async function performTransition(
   // the card ends at the client's approval — no scheduler is handed it and
   // nobody is told to book it
   const selfPosts = !isBriefTask && !isInternal && await deliverOnlyFor(item)
-  const defaults = (from === 'quality_check' && to !== 'revision_required' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal && !selfPosts)
+  // …only once it is SIGNED OFF (25 Sep 2026): a card going to the client is not handed to anyone yet — Jordan
+  // Wilson's First Shoot sat "Handed to Cath" while the client had not answered
+  const defaults = (to === 'approved_for_scheduling' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal && !selfPosts)
     ? await defaultSchedulersOf(item.client_id)
     : []
   let updated: ContentItemRow | null
-  try {
-    updated = await table<ContentItemRow>('content_items').update(item.id, {
+  const movePatch = {
       status: to,
       ...asked,
       ...(deliveredNow ? { delivered_at: new Date().toISOString() } : {}),
@@ -945,7 +946,13 @@ export async function performTransition(
       ...(to === 'approved_for_scheduling' && !isBriefTask && !isInternal
         && (before as { deliver_only?: unknown }).deliver_only == null
         ? { deliver_only: selfPosts } : {}),
-    })
+  }
+  try {
+    // ONE WINNER (trap 11, the audit of 25 Sep 2026): the move lands only on a row still at `from`. The re-read above
+    // is a courtesy; this is the guarantee — two presses at once (a pass and a send-back), one of them is refused.
+    const taken = await table<ContentItemRow>('content_items').claim(item.id, cur =>
+      (cur && cur.status === from ? { ...cur, ...movePatch } as ContentItemRow : null))
+    updated = taken.claimed ? taken.row : null
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)
   }
