@@ -90,19 +90,19 @@ describe('a three-clip card, from first cut to posted', () => {
     card.status = 'approved_for_scheduling'
     const v = approvedFilesVersion(card as never)!
     expect(v.version_number).toBe(2)
-    expect((v.files ?? []).map(f => f.name)).toEqual(['A.mp4', 'B-fixed.mp4', 'C-v2.mp4'])
+    expect((v.files as { name: string }[] ?? []).map(f => f.name)).toEqual(['A.mp4', 'B-fixed.mp4', 'C-v2.mp4'])
     const late = withReplacement(card.final_files, A, up('A-late.mp4'), 2, 'editor', at(6))
     expect(finalFilesChangeRefusal(card.final_files, late, card as never, true)).toMatch(/approved/)
   })
 
   it('8. handed to the scheduler (their Draft): they are offered the same three approved files', () => {
     card.status = 'draft_uploaded'; card.scheduler_ids = ['cath']
-    expect((approvedFilesVersion(card as never)!.files ?? []).map(f => f.name)).toEqual(['A.mp4', 'B-fixed.mp4', 'C-v2.mp4'])
+    expect((approvedFilesVersion(card as never)!.files as { name: string }[] ?? []).map(f => f.name)).toEqual(['A.mp4', 'B-fixed.mp4', 'C-v2.mp4'])
     expect(liveFilesAt(card as never, roundOf(card as never)).length).toBe(3)
   })
 
   it('9. posted one clip at a time: after A the card is 1 of 3, not "posted"', () => {
-    const files = approvedFilesVersion(card as never)!.files ?? []
+    const files = (approvedFilesVersion(card as never)!.files ?? []) as { url: string; name: string }[]
     const one = postedProgress(files, new Set([url('A.mp4')]))
     expect([one.posted, one.total]).toEqual([1, 3])
     const all = postedProgress(files, new Set(files.map(f => f.url)))
