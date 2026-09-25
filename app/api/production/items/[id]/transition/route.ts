@@ -8,7 +8,7 @@ import { ITEM_STATUSES, type ItemStatus } from '../../../../../lib/workflow-core
 import { finishedEditOf } from '../../../../../lib/card-link-core'
 import { startPullSoon } from '../../../../../lib/drive-pull'
 import { SENT_BACK_STATUSES, handInRound } from '../../../../../lib/edit-round-core'
-import { finalFilesOf, stillToReplace, currentFiles, assetIdOf } from '../../../../../lib/final-files-core'
+import { finalFilesOf, stillToReplace, currentFiles, assetIdOf, hasFinishedWork } from '../../../../../lib/final-files-core'
 
 /** Execute a status transition. Role legality, requirement evidence, and the
  *  optimistic-concurrency guard all live in performTransition. */
@@ -53,6 +53,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const names = currentFiles(item as never).filter(f => waiting.includes(assetIdOf(f))).map(f => f.name)
         return NextResponse.json({ error: `${names.join(', ')} ${names.length === 1 ? 'still needs its' : 'still need their'} new version — upload ${names.length === 1 ? 'it' : 'them'} on the card first` }, { status: 409 })
       }
+    }
+    // …AND A CARD HANDED IN BY DRIVE, SENT BACK, COMES BACK AS FILES (the owner, 25 Sep 2026: "existing cards that
+    // have drives, if sent back, only allowed to submit files, not a link anymore"): its old finished link used to count
+    // as the revision, so a whole-card send-back could be resubmitted with nothing new on it
+    if (SENT_BACK_STATUSES.includes(String(item.status)) && to === 'quality_check'
+      && (finalFilesOf(item as never).length > 0 || (item as { link_final?: boolean | null }).link_final === true)
+      && !hasFinishedWork(item as never)) {
+      return NextResponse.json({ error: 'Upload the new files on the card first — a Drive link is only the folder to work from' }, { status: 409 })
     }
     const note = String(body.note ?? '').trim().slice(0, 2000)
     const updated = await performTransition(user, item, to, {

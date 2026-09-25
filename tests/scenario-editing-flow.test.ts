@@ -124,3 +124,21 @@ describe('the Drive hand-ins that went wrong on 24 Sep 2026', () => {
     expect(s5.url).toBe(url('s5v2.mp4'))
   })
 })
+
+describe('an OLD card handed in by Drive, sent back, comes back as files (the owner, 25 Sep 2026)', () => {
+  it('its finished link no longer counts as the revision — a new file does', async () => {
+    const { hasFinishedWork } = await import('../app/lib/final-files-core')
+    const old = {
+      status: 'revision_required', link_url: 'https://drive.google.com/drive/folders/old', link_kind: 'drive', link_final: true,
+      client_round: 1, client_rounds: [1], change_note_at: at(10), final_files: [] as FinalFile[],
+    }
+    // the whole card sent back: nothing new on it, the old link is not an answer
+    expect(hasFinishedWork(old as never)).toBe(false)
+    // a new file uploaded after the send-back is
+    const fixed = { ...old, final_files: withFinalFiles([], [up('Recut.mp4')], 2, 'editor', at(11)) }
+    expect(hasFinishedWork(fixed as never)).toBe(true)
+    // and the server route says so before anything moves
+    const route = (await import('node:fs')).readFileSync('app/api/production/items/[id]/transition/route.ts', 'utf8')
+    expect(route).toContain("Upload the new files on the card first — a Drive link is only the folder to work from")
+  })
+})
