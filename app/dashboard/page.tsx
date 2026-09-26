@@ -855,6 +855,19 @@ export default function OverviewPage() {
     <div className="flex flex-col gap-6">
       <PageTitle title={title} summary={summary} />
 
+      {/* at the very top, above the numbers (the owner, 26 Sep 2026: "so we can see") */}
+      {reconnect.length > 0 && (
+        <Section title={`${reconnect.length} social ${reconnect.length === 1 ? 'account needs' : 'accounts need'} reconnecting`}>
+          <div className="flex flex-col gap-2">
+            {reconnect.map(r => (
+              <WorkRow key={r.id} tone="amber" href={`/dashboard/social#client-${r.client_id}`}
+                title={`${r.client} · ${r.what}`} detail={r.why} chip="Reconnect" />
+            ))}
+          </div>
+        </Section>
+      )}
+
+
       {/* a listener that could not read is a failure, not a page of zeros —
           every number below is drawn from those rows, and showing "0 waiting
           on you" because the connection dropped is a lie with a number on it */}
@@ -922,17 +935,6 @@ export default function OverviewPage() {
                     href={shootHref(s.id)}
                     title={s.clients?.name ? `${s.clients.name} · ${s.title}` : s.title}
                     detail={s.line ?? 'Shoot'} chip={s.line ? 'Open the plan' : 'Answer this'} />
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {!loading && reconnect.length > 0 && (
-            <Section title={`${reconnect.length} social ${reconnect.length === 1 ? 'account needs' : 'accounts need'} reconnecting`}>
-              <div className="flex flex-col gap-2">
-                {reconnect.map(r => (
-                  <WorkRow key={r.id} tone="amber" href={`/dashboard/social#client-${r.client_id}`}
-                    title={`${r.client} · ${r.what}`} detail={r.why} chip="Reconnect" />
                 ))}
               </div>
             </Section>

@@ -145,6 +145,27 @@ export default function SocialPage() {
         </>}
       />
 
+      {/* WHAT NEEDS RECONNECTING, AT THE TOP (the owner, 26 Sep 2026) — each opens that client's card and its link */}
+      {(() => {
+        const down = accounts.filter(a => !a.active && a.client_id)
+        if (down.length === 0) return null
+        const nameOf = (id: string | null) => (clients ?? []).find(c => c.id === id)?.name ?? 'A client'
+        return (
+          <div className="flex flex-col gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-3 text-secondary-13 text-foreground">
+            <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-3.5 w-3.5 shrink-0" />{down.length} {down.length === 1 ? 'account needs' : 'accounts need'} reconnecting — posts will not go out to {down.length === 1 ? 'it' : 'them'} until then</p>
+            <div className="flex flex-wrap gap-2">
+              {down.map(a => (
+                <a key={a.id} href={'#client-' + a.client_id}
+                  onClick={e => { e.preventDefault(); document.getElementById('client-' + a.client_id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-[13px] font-semibold hover:bg-muted">
+                  <PlatformIcon platform={a.platform} className="h-3.5 w-3.5" /> {nameOf(a.client_id)} · @{a.username ?? a.name ?? ''} — Reconnect
+                </a>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {!configured && (
         <div className="flex items-start gap-2 rounded-inner border border-accent-amber/35 bg-tint-amber px-3 py-2 text-secondary-13 text-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
