@@ -1012,8 +1012,20 @@ export async function syncSocialAccounts(
   if (accounts.length === 0) return 0
   const before = new Set((await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } })).map(r => r.provider_account_id))
 
+  const current = new Set(accounts.map(a => a.providerAccountId))
   for (const a of accounts) {
     const isNew = !before.has(a.providerAccountId)
+    // A RECONNECT KEEPS ITS ROW (the owner, 26 Sep 2026: "make sure it doesn't override data we have — like the
+    // followers data"). The provider may give a reconnected account a new id; matched by that id alone, Jordan
+    // Wilson's Instagram would have become a second row, its followers history left on the old one and the old one
+    // still "needs reconnecting". The same handle on the same network for this client, whose old id the provider
+    // no longer lists, IS that account: its row takes the new id, so everything keyed to it stays.
+    if (isNew && a.username) {
+      const handle = String(a.username).toLowerCase()
+      const old = (await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } }))
+        .find(r => r.platform === a.platform && String(r.username ?? '').toLowerCase() === handle && !current.has(String(r.provider_account_id)))
+      if (old) await table<SocialAccount>('social_accounts').update(old.id, { provider_account_id: a.providerAccountId } as Partial<SocialAccount>)
+    }
     const row = await table<SocialAccount>('social_accounts').upsert({
       client_id: clientId,
       platform: a.platform,
@@ -1034,6 +1046,12 @@ export async function syncSocialAccounts(
     // the snapshot claim; nothing for anyone to press; best-effort.
     if (a.platform === 'instagram' && a.username) await firstFollowerLook(row.id).catch(() => undefined)
   }
+  // read the accounts' health again straight away: a reconnected account stops saying "needs reconnecting" on the
+  // Overview now, not at tomorrow morning's check (26 Sep 2026). Best effort; nobody is emailed from here.
+  try {
+    const { refreshClientAccountsHealth } = await import('./account-health')
+    await refreshClientAccountsHealth(clientId, { tell: false })
+  } catch { /* the morning check will catch up */ }
   return accounts.length
 }
 
