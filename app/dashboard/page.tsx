@@ -35,6 +35,9 @@ import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
+import { readStoredHealth } from '../lib/account-health-core'
+
+const PLATFORM_NAMES: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', bluesky: 'Bluesky', googlebusiness: 'Google Business' }
 import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from '../lib/board-view-core'
 import {
   CALENDAR_PAGE, EDITOR_BOARD, POST_APPROVAL_BOARD, SHOOTS_PAGE, actionFor, cardHref, chipCount, linkAllowed, overviewChips, shootHref,
@@ -567,6 +570,24 @@ export default function OverviewPage() {
   }, [me, viewer, live, entryRows, leadRows, mayLeads])
 
   const loading = data === null && live.error === null
+  /**
+   * ACCOUNTS THAT NEED RECONNECTING (the owner, 26 Sep 2026: Jordan Wilson's Instagram was cut by Meta overnight). A
+   * super admin sees every client's; an account manager sees their own clients'. Each opens the client on the Social
+   * page, where the connect link is copied again. Disconnected (inactive) or judged 'act' — either is enough.
+   */
+  const reconnect = useMemo(() => {
+    if (!viewer || !isManager) return []
+    const scoped = accessibleClientIdsOf(viewer, live.tables.assignments.rows)
+    const names = new Map(live.tables.clients.rows.map(c => [c.id, c.name]))
+    return accountRows
+      .filter(a => (a.active === false || readStoredHealth((a as { health?: unknown }).health)?.level === 'act')
+        && !!a.client_id && (scoped === null || scoped.includes(a.client_id)))
+      .map(a => ({
+        id: a.id, client_id: String(a.client_id), client: names.get(String(a.client_id)) ?? 'A client',
+        what: `${PLATFORM_NAMES[String(a.platform)] ?? a.platform} · @${(a as { username?: string | null }).username ?? a.name ?? ''}`,
+        why: readStoredHealth((a as { health?: unknown }).health)?.level === 'act' ? readStoredHealth((a as { health?: unknown }).health)!.reason : 'Disconnected — posts will not go out until it is reconnected.',
+      }))
+  }, [viewer, isManager, accountRows, live.tables.assignments.rows, live.tables.clients.rows])
   const role = data?.role
   const zone = viewerTz || me?.timezone || DEFAULT_TZ
   const todayKey = now ? dayKeyInZone(now, zone) : null
@@ -901,6 +922,17 @@ export default function OverviewPage() {
                     href={shootHref(s.id)}
                     title={s.clients?.name ? `${s.clients.name} · ${s.title}` : s.title}
                     detail={s.line ?? 'Shoot'} chip={s.line ? 'Open the plan' : 'Answer this'} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {!loading && reconnect.length > 0 && (
+            <Section title={`${reconnect.length} social ${reconnect.length === 1 ? 'account needs' : 'accounts need'} reconnecting`}>
+              <div className="flex flex-col gap-2">
+                {reconnect.map(r => (
+                  <WorkRow key={r.id} tone="amber" href={`/dashboard/social#client-${r.client_id}`}
+                    title={`${r.client} · ${r.what}`} detail={r.why} chip="Reconnect" />
                 ))}
               </div>
             </Section>

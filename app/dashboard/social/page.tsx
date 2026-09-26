@@ -87,6 +87,11 @@ export default function SocialPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  // the Overview's "needs reconnecting" row opens the client's card here (26 Sep 2026): once the list is in, go to it
+  useEffect(() => {
+    if (!clients || typeof window === 'undefined' || !window.location.hash.startsWith('#client-')) return
+    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'start' })
+  }, [clients])
 
   const visible = (clients ?? [])
     .filter(c => c.status !== 'archived')
@@ -197,7 +202,7 @@ export default function SocialPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {visible.map(c => (
-            <Card key={c.id}>
+            <Card key={c.id} id={`client-${c.id}`} className="scroll-mt-4">
               <CardContent className="flex flex-col gap-3 p-4">
                 <div className="flex items-center gap-2">
                   <span className="text-card-title">{c.name}</span>
