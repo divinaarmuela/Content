@@ -172,3 +172,23 @@ describe('the final post, once the edit is approved (28 Sep 2026: "send for appr
     expect(String(notify.mock.calls[0][0].subject)).toContain('Your post is ready to approve')
   })
 })
+
+describe('send me a test first (28 Sep 2026)', () => {
+  it('emails only the person pressing it, as team mail, with the page in preview — and nothing on the post moves', async () => {
+    fake = seedDb({
+      content_items: [{ id: 'item-1', client_id: 'c1', title: '11', status: 'approved_for_scheduling', posting_approval_state: 'pending', posting_client_required: false }] as unknown as Row[],
+      clients: [{ id: 'c1', name: 'Jordan Wilson', email: 'jordan@example.com', share_token: 'tok-1' }] as unknown as Row[],
+      client_contacts: [] as unknown as Row[],
+      social_posts: [{ id: 'p1', item_id: 'item-1', status: 'pending', caption: 'Where it started.', updated_at: '2026-09-28T02:00:00Z' }] as unknown as Row[],
+    })
+    const r = await call('POST', { test: true, emails: ['jordan@example.com'] })
+    expect(r.status).toBe(200)
+    expect(notify).toHaveBeenCalledTimes(1)
+    const sent = notify.mock.calls[0][0]
+    expect(sent).toMatchObject({ recipientEmail: 'manal@mdmmarketing.com.au', toClient: false, deliberateClientSend: false })
+    expect(String(sent.subject)).toMatch(/^\[Test — what Jordan Wilson gets\]/)
+    expect(String(sent.bodyHtml)).toContain('/portal/tok-1/approve/item-1?preview=1')
+    expect(String(sent.bodyHtml)).toContain('Where it started.')
+    expect((fake.rows('content_items')[0] as unknown as { posting_client_required: boolean }).posting_client_required).toBe(false)
+  })
+})

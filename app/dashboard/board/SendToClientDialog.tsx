@@ -48,15 +48,17 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
     return n
   })
 
-  const send = async () => {
+  const send = async (test = false) => {
     setSending(true); setProblem(null)
     try {
       const res = await fetch(`/api/production/items/${itemId}/send-to-client`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails: [...picked], note }),
+        body: JSON.stringify({ emails: [...picked], note, ...(test ? { test: true } : {}) }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) { setProblem(String(j?.message ?? j?.error ?? 'Could not send it')); return }
+      // a test leaves the window open, so the real send is one press away
+      if (test) { toast.success(String(j.message ?? 'Test sent.')); return }
       setDone(String(j.message ?? 'Sent.'))
       toast.success(String(j.message ?? 'Sent.'))
     } catch {
@@ -111,6 +113,13 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" className="min-h-11 rounded-full" onClick={onClose} disabled={sending}>{done ? 'Close' : 'Cancel'}</Button>
+          {!done && (
+            <Button variant="outline" className="min-h-11 rounded-full" onClick={() => void send(true)}
+              disabled={sending || (!!problem && problem.startsWith('This'))}
+              title="Emails you the exact email the client gets, with the page in preview">
+              Send me a test first
+            </Button>
+          )}
           {!done && (
             <Button className="min-h-11 rounded-full" onClick={() => void send()}
               disabled={sending || picked.size === 0 || !recipients?.length || (!!problem && problem.startsWith('This'))}>

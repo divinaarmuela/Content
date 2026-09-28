@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, ClientContact, ContentItem } from '@/lib/db-types'
+import type { Client, ClientContact, ContentItem, SocialPost } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
@@ -65,37 +65,46 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!client.share_token) {
         return NextResponse.json({ error: 'This client has no portal link yet — make one on the client first' }, { status: 409 })
       }
-      const body = await req.json().catch(() => ({})) as { emails?: unknown; note?: unknown }
-      const picked = pickRecipients(body.emails, recipients)
-      if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
+      const body = await req.json().catch(() => ({})) as { emails?: unknown; note?: unknown; test?: unknown }
       const note = String(body.note ?? '').trim().slice(0, 1000)
+      // SEND ME A TEST FIRST (the owner, 28 Sep 2026: "send a test link to me, I want to see how you plan to send"): the
+      // exact email the client would get, to the person pressing it, with the page in preview — nothing on the post moves
+      const test = body.test === true
+      const picked = test ? { ok: true as const, emails: [String(user.email).toLowerCase()] } : pickRecipients(body.emails, recipients)
+      if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
       // THE FINAL POST: marked as the client's to answer, so their page (and the portal's list) offers it to them — the
       // same flag the composer's old "Send to client" set, without which nobody was ever asked (24 Sep 2026)
-      if (stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
+      if (!test && stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
         const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
           cur && String((cur as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
             ? { ...cur, posting_client_required: true } as ContentItem
             : null)
         if (!taken.claimed) return NextResponse.json({ error: 'Somebody answered this post while you were sending it — refresh to see where it stands' }, { status: 409 })
       }
-      const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id)
+      const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id) + (test ? '?preview=1' : '')
       const title = String(item.title ?? 'Your post')
-      const caption = String((item as { caption?: string | null }).caption ?? '').trim()
+      // the words the client will be approving: the post's own caption once there is a post
+      const posts = stage === 'post'
+        ? await table<SocialPost>('social_posts').list({ by: { item_id: item.id } }).catch(() => [] as SocialPost[])
+        : []
+      const post = posts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
+      const caption = String(post?.caption ?? (item as { caption?: string | null }).caption ?? '').trim()
       const from = user.name || user.email
       const stamp = new Date().toISOString()
 
       const results: { email: string; result: string }[] = []
       for (const email of picked.emails) {
-        const who = recipients.find(r => r.email === email)
+        const who = test ? null : recipients.find(r => r.email === email)
         const hello = who && who.name !== email ? who.name.split(' ')[0] : client.name
         const result = await notify({
           eventType: 'post_to_client', entityType: 'content_item',
           entityId: sendKey(item.id, email, stamp),
-          recipientEmail: email, toClient: true, deliberateClientSend: true,
+          recipientEmail: email, toClient: !test, deliberateClientSend: !test,
           actorName: user.name, actorEmail: user.email,
-          subject: stage === 'post' ? `Your post is ready to approve: ${title}` : `Ready for your approval: ${title}`,
+          subject: (test ? `[Test — what ${client.name} gets] ` : '') + (stage === 'post' ? `Your post is ready to approve: ${title}` : `Ready for your approval: ${title}`),
           bodyHtml: renderEmail(
             `Ready for your approval: ${escapeHtml(title)}`,
+            (test ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;"><em>A test copy for you — exactly what ${escapeHtml(client.name)} receives. The link opens in preview, so nothing changes on the post.</em></p>` : '') +
             `<p>Hi ${escapeHtml(hello)},</p>` +
             `<p>${escapeHtml(from)} has sent you <strong>${escapeHtml(title)}</strong> to look over before it goes out.</p>` +
             (note ? `<p style="border-left:3px solid #e4e4e7;padding-left:12px;">${escapeHtml(note)}</p>` : '') +
@@ -109,14 +118,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       const delivered = results.filter(r => r.result === 'sent' || r.result === 'duplicate').map(r => r.email)
-      await logActivity({
+      if (!test) await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
         action: 'sent_to_client',
         detail: delivered.length ? `Emailed ${delivered.join(', ')}${note ? ` — “${note}”` : ''}` : `Could not email ${picked.emails.join(', ')}`,
       }).catch(() => undefined)
 
       return NextResponse.json({
-        sent: delivered, results, link, message: sendOutcomeWords(results),
+        sent: delivered, results, link,
+        message: test
+          ? (delivered.length ? `Test sent to ${delivered[0]} — open it to see exactly what ${client.name} gets.` : 'The test could not be emailed — try again in a moment')
+          : sendOutcomeWords(results),
       }, { status: delivered.length > 0 ? 200 : 502 })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
