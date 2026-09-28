@@ -64,19 +64,24 @@ export function portalColumnFor(status: ItemStatus): PortalColumnKey {
  * status). A post put to the client and not yet answered is theirs to review; one waiting on the team, or being
  * changed after their notes, is being checked; only a yes (or a post that never needed one) is Approved.
  */
-export function portalColumnForPost(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown }): PortalColumnKey {
+export function portalColumnForPost(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown; clientSaw?: boolean }): PortalColumnKey {
   const base = portalColumnFor(status)
   if (base !== 'approved' && base !== 'posted') return base
   if (status === 'published') return base
   const state = String(posting.state ?? '')
   if (state === 'pending') return posting.clientRequired === true ? 'your_review' : 'checking'
-  if (state === 'changes') return 'checking'
+  if (state === 'approved') return base
+  // SCHEDULING IS A NEW FLOW (28 Sep 2026): an approved EDIT is not an approved POST. Nothing is "Approved" to the
+  // client until they said yes to it (the edit, on their portal) or the post itself was approved — an upload straight
+  // to the Schedule, a draft, or a change being made is the team's, and not on their page.
+  if (status === 'approved_for_scheduling' && posting.clientSaw !== true) return 'checking'
+  if (state === 'changes' || state === 'draft') return 'checking'
   return base
 }
 
 /** …and what that column's card says and wears, when the post's approval moved it (28 Sep 2026: "why does it say
  *  Approved with green on the page" — Jordan had not approved anything) */
-export function postingCardFace(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown }): { tone: PortalCardTone | undefined; line: string } | null {
+export function postingCardFace(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown; clientSaw?: boolean }): { tone: PortalCardTone | undefined; line: string } | null {
   const col = portalColumnForPost(status, posting)
   if (col === portalColumnFor(status)) return null
   if (col === 'your_review') return { tone: 'amber', line: 'Waiting on your approval' }

@@ -18,7 +18,10 @@ describe('a post waiting on its approval is not Approved on the portal', () => {
   })
   it('only a yes — or a post that never needed one — is Approved; a published post stays Published', () => {
     expect(portalColumnForPost('approved_for_scheduling', { state: 'approved' })).toBe('approved')
-    expect(portalColumnForPost('approved_for_scheduling', {})).toBe('approved')
+    // an approved EDIT is not an approved POST: shown as Approved only when the client said yes to it themselves
+    expect(portalColumnForPost('approved_for_scheduling', { clientSaw: true })).toBe('approved')
+    expect(portalColumnForPost('approved_for_scheduling', {})).toBe('checking')
+    expect(portalColumnForPost('approved_for_scheduling', { state: 'draft', clientSaw: true })).toBe('checking')
     expect(postingCardFace('approved_for_scheduling', { state: 'approved' })).toBeNull()
     expect(portalColumnForPost('published', { state: 'pending', clientRequired: true })).toBe('posted')
   })

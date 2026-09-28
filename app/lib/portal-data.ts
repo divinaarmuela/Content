@@ -702,7 +702,12 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
   const workCards: PortalCard[] = items.map(i => {
     const p = toPortal(i)
     // the post's own approval, not only the edit's status (28 Sep 2026)
-    const posting = { state: (i as { posting_approval_state?: unknown }).posting_approval_state, clientRequired: (i as { posting_client_required?: unknown }).posting_client_required }
+    const posting = {
+      state: (i as { posting_approval_state?: unknown }).posting_approval_state,
+      clientRequired: (i as { posting_client_required?: unknown }).posting_client_required,
+      // did the client ever say yes to this piece themselves — the edit on their portal
+      clientSaw: !!((i as { client_round?: unknown }).client_round || (Array.isArray((i as { client_rounds?: unknown }).client_rounds) && ((i as { client_rounds: unknown[] }).client_rounds).length > 0)),
+    }
     const face = postingCardFace(p.status, posting)
     const facing = isClientFacing(p.status)
     const booked = p.schedule.find(s => s.scheduled_at && !s.live_url)
