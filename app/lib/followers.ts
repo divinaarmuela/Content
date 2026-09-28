@@ -150,7 +150,7 @@ export async function watchedAccount(accountId: string): Promise<{ ok: true; val
   if (account.platform !== 'instagram') return { ok: false, reason: 'not instagram' }
   if (!account.client_id) return { ok: false, reason: 'no client' }
   if (!account.username) return { ok: false, reason: 'no username' }
-  if (account.active === false) return { ok: false, reason: 'inactive' }
+  // a disconnected account is still read — its followers are public (28 Sep 2026)
   const client = await table<Client>('clients').get(account.client_id)
   if (!client) return { ok: false, reason: 'no client' }
   return { ok: true, value: { account, client } }
@@ -161,7 +161,10 @@ export async function accountsDueToday(now: Date = new Date()): Promise<{ accoun
   if (!followersEnabled()) return []
   const day = dayKey(now)
   const accounts = await table<SocialAccount>('social_accounts').list({
-    where: a => a.platform === 'instagram' && !!a.client_id && !!a.username && a.active !== false,
+    // A DISCONNECT LOSES NOTHING (the owner, 28 Sep 2026: "why is the data lost when an account is disconnected"): Meta
+    // cancelling the app's access stops POSTING, not reading — the follower list and a post's likers are read from
+    // Instagram's public pages. The account's history is kept, shown and topped up while it waits to be reconnected.
+    where: a => a.platform === 'instagram' && !!a.client_id && !!a.username,
   })
   if (accounts.length === 0) return []
   const clients = await table<Client>('clients').list()

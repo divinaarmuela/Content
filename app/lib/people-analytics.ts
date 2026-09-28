@@ -59,7 +59,10 @@ export async function loadPeople(
   const today = dayKey(now)
 
   const accounts = await table<SocialAccount>('social_accounts').list({
-    where: a => a.client_id === client.id && a.platform === 'instagram' && a.active !== false,
+    // A DISCONNECT LOSES NOTHING (the owner, 28 Sep 2026: "why is the data lost when an account is disconnected"): Meta
+    // cancelling the app's access stops POSTING, not reading — the follower list and a post's likers are read from
+    // Instagram's public pages. The account's history is kept, shown and topped up while it waits to be reconnected.
+    where: a => a.client_id === client.id && a.platform === 'instagram',
   })
   if (accounts.length === 0) return empty('not_instagram', client, today)
   if (!followersEnabled()) return empty('off', client, today)

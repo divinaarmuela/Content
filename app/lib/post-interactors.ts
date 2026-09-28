@@ -51,7 +51,10 @@ export async function duePosts(now: Date = new Date()): Promise<{ post: PostAnal
   const items = await table<ContentItem>('content_items').list({ where: i => posts.some(p => p.item_id === i.id) })
   const clientOf = new Map(items.map(i => [i.id, i.client_id]))
   const accounts = await table<SocialAccount>('social_accounts').list({
-    where: a => a.platform === 'instagram' && !!a.client_id && a.active !== false,
+    // A DISCONNECT LOSES NOTHING (the owner, 28 Sep 2026: "why is the data lost when an account is disconnected"): Meta
+    // cancelling the app's access stops POSTING, not reading — the follower list and a post's likers are read from
+    // Instagram's public pages. The account's history is kept, shown and topped up while it waits to be reconnected.
+    where: a => a.platform === 'instagram' && !!a.client_id,
   })
   const out: { post: PostAnalytic; account: SocialAccount }[] = []
   for (const post of posts) {
