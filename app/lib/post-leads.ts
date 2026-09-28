@@ -44,7 +44,7 @@ export type PostLeadsData = {
 
 export async function loadPostLeads(user: TeamUser, postId: string): Promise<PostLeadsData> {
   const page = await loadPostPage(user, postId)
-  const analytics = page.analytics.find(a => String(a.platform) === 'instagram') ?? null
+  const analytics = page.analytics.find(a => String(a.platform) === 'instagram' || !!a.instagram_url) ?? null
   const base = {
     post: page.post, item: page.item, client: page.client, analytics,
     account: null, post_day: null, rows: [] as LeadRow[], counts: leadCounts([]),

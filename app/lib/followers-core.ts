@@ -674,3 +674,29 @@ export function fromPostChip(how: FollowedFromPost['how'], title: string | null)
   const what = title?.trim() || 'a post'
   return `${how} ${what}`
 }
+
+/**
+ * THE INSTAGRAM ADDRESS OF A POST THAT WENT TO SEVERAL NETWORKS (28 Sep 2026: "Justin's recent post did not show a
+ * new follower from there" — "this is for Instagram"). A post's analytics row carries ONE address, the first network
+ * the provider lists: Justin's 25 Sep Reel went to TikTok, Instagram and LinkedIn, the row said TikTok, and the
+ * likes-and-comments reader — Instagram only — never looked at it, so no follower could be traced to it. The Reel's
+ * address is in the provider's per-network block, or failing that on the publish job's own results.
+ */
+export function instagramUrlOf(
+  row: { platform?: string | null; platform_post_url?: string | null; raw?: unknown },
+  jobResults?: unknown,
+): string | null {
+  const ig = (u: unknown): string | null => (typeof u === 'string' && /instagram\.com\//i.test(u) ? u : null)
+  if ((!row.platform || row.platform === 'instagram') && ig(row.platform_post_url)) return ig(row.platform_post_url)
+  const per = (row.raw as { platformAnalytics?: unknown } | null | undefined)?.platformAnalytics
+  if (Array.isArray(per)) {
+    for (const p of per as Record<string, unknown>[]) {
+      if (String(p?.platform ?? '') === 'instagram' && ig(p.platformPostUrl)) return ig(p.platformPostUrl)
+    }
+  }
+  const list = Array.isArray(jobResults) ? jobResults : jobResults && typeof jobResults === 'object' ? Object.values(jobResults) : []
+  for (const r of list as Record<string, unknown>[]) {
+    if (String(r?.platform ?? '') === 'instagram' && String(r?.status ?? '') === 'published' && ig(r.url)) return ig(r.url)
+  }
+  return null
+}

@@ -7,6 +7,7 @@ import type { TeamUser } from './authz'
 import { loadPostOrRecordForUser, type PlannedPost } from './social-schedule'
 import { analyticsForPost } from './post-page-core'
 import { safeZone } from './timezone-core'
+import { instagramUrlOf } from './followers-core'
 
 /**
  * A PAGE FOR EVERY POST — the server half.
@@ -55,7 +56,7 @@ export type PostPageData = {
   channels: PostChannel[]
   jobs: PostJob[]
   /** the cached rows for this post, newest first — one per provider post */
-  analytics: PostAnalytic[]
+  analytics: (PostAnalytic & { instagram_url?: string | null })[]
   /** may this viewer ask for who liked / who commented to be read now */
   may_read_people: boolean
   /** the card behind this post was deleted; the post is read as a record */
@@ -118,8 +119,14 @@ export async function loadPostPage(user: TeamUser, id: string): Promise<PostPage
       attempts: typeof j.attempts === 'number' ? j.attempts : 0,
       created_at: j.created_at,
     })),
+    // each row with its Instagram address, whichever network the row names (28 Sep 2026: Justin's Reel went out beside
+    // TikTok and LinkedIn, its row said TikTok, and the page hid "Who it brought in" and "Read now")
     analytics: analyticsForPost(analyticRows, {
       item_id: item.id, publish_job_ids: post.publish_job_ids,
-    }),
+    }).map(r => ({
+      ...r,
+      instagram_url: instagramUrlOf(r as never,
+        (jobRows.find(j => j.id === (r as { publish_job_id?: string | null }).publish_job_id) as { platform_results?: unknown } | undefined)?.platform_results),
+    })),
   }
 }

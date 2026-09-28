@@ -198,14 +198,14 @@ export default function PostView({ data }: { data: PostPageData }) {
           <CardTitle>People</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
             {/* who the post brought in — judged against the follower list and the Inbox */}
-            {main && String(main.platform) === 'instagram' && (
+            {main && (String(main.platform) === 'instagram' || !!(main as { instagram_url?: string | null }).instagram_url) && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/dashboard/social/posts/${encodeURIComponent(post.id)}/leads`}>Who it brought in</Link>
               </Button>
             )}
             {/* the morning look reads these once a day at 6 am; a manager can
                 ask for them now instead of being told to come back tomorrow */}
-            {data.may_read_people && main && String(main.platform) === 'instagram' && (
+            {data.may_read_people && main && (String(main.platform) === 'instagram' || !!(main as { instagram_url?: string | null }).instagram_url) && (
               <ReadPeopleButton
                 postId={post.id}
                 analyticsId={main.id}

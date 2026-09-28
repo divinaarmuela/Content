@@ -1,10 +1,10 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { ContentItem, PostAnalytic, SocialAccount } from '@/lib/db-types'
+import type { ContentItem, PostAnalytic, PublishJob, SocialAccount } from '@/lib/db-types'
 import { configuredSource, followersEnabled, type FollowerSource } from './follower-source'
 import { followersOf } from './followers'
 import {
-  COMMENT_PAGES_MAX, dayKey, followedFromPost, mergeInteractors, postWindowOpen, readInteractors,
+  COMMENT_PAGES_MAX, dayKey, followedFromPost, instagramUrlOf, mergeInteractors, postWindowOpen, readInteractors,
   type FollowedFromPost, type Interactors,
 } from './followers-core'
 
@@ -28,17 +28,25 @@ import {
 
 const analytics = () => table<PostAnalytic>('post_analytics')
 
-function isInstagramPost(r: PostAnalytic): boolean {
-  if (!r.platform_post_url) return false
-  if (r.platform && r.platform !== 'instagram') return false
-  return /instagram\.com\//i.test(r.platform_post_url)
+/**
+ * The post's Instagram Reel or post, whichever network its row happens to name (28 Sep 2026: Justin's Reel went out
+ * beside TikTok and LinkedIn, the row said TikTok, and it was never read). `instagramUrlOf` has the reasons.
+ */
+async function instagramUrlFor(r: PostAnalytic): Promise<string | null> {
+  const own = instagramUrlOf(r as never)
+  if (own) return own
+  const jobId = (r as { publish_job_id?: string | null }).publish_job_id
+  if (!jobId) return null
+  const job = await table<PublishJob>('publish_jobs').get(jobId).catch(() => null)
+  return instagramUrlOf({ platform: 'none' }, (job as { platform_results?: unknown } | null)?.platform_results)
 }
 
 /** the posts whose likers should be read today, with the account they belong to */
 export async function duePosts(now: Date = new Date()): Promise<{ post: PostAnalytic; account: SocialAccount }[]> {
   const today = dayKey(now)
-  const posts = (await analytics().list({ where: r => isInstagramPost(r) && postWindowOpen(r.published_at, today) }))
-    .filter(r => !!r.item_id)
+  const recent = (await analytics().list({ where: r => postWindowOpen(r.published_at, today) })).filter(r => !!r.item_id)
+  const posts: PostAnalytic[] = []
+  for (const r of recent) if (await instagramUrlFor(r)) posts.push(r)
   if (posts.length === 0) return []
   const items = await table<ContentItem>('content_items').list({ where: i => posts.some(p => p.item_id === i.id) })
   const clientOf = new Map(items.map(i => [i.id, i.client_id]))
@@ -95,7 +103,9 @@ export async function readPostInteractors(
 
   let mediaId = prev?.media_id ?? null
   if (!mediaId) {
-    const m = await source.mediaId(row.platform_post_url as string)
+    const url = await instagramUrlFor(row)
+    if (!url) { await settle({ status: 'failed', error: 'no_instagram_post' }); return { status: 'failed', reason: 'no Instagram post' } }
+    const m = await source.mediaId(url)
     if (!m.ok) { await settle({ status: 'failed', error: m.error }); return { status: 'failed', reason: m.error } }
     mediaId = m.value
   }

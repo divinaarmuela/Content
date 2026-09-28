@@ -28,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const wanted = typeof body.analytics_id === 'string' ? body.analytics_id : page.analytics[0]?.id
       const row = page.analytics.find(a => a.id === wanted)
       if (!row) return NextResponse.json({ error: 'This post has not been read by the analytics sweep yet — give it a few minutes after it goes live.' }, { status: 409 })
-      if (String(row.platform) !== 'instagram') {
+      if (String(row.platform) !== 'instagram' && !row.instagram_url) {
         return NextResponse.json({ error: 'Only Instagram says who liked a post.' }, { status: 400 })
       }
       const result = await readPostInteractors(row.id, { force: true })
@@ -36,7 +36,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (result.status === 'skipped') return NextResponse.json({ error: result.reason ?? 'A read is already under way.' }, { status: 409 })
       // …and the cross — who of these FOLLOWED after the post went out — is
       // recomputed now too, rather than waiting for the next followers look
-      const accountId = String((row as { account_id?: unknown }).account_id ?? '')
+      // the post's own Instagram channel — an analytics row carries no account (28 Sep 2026: the cross never ran from here)
+      const accountId = String((row as { account_id?: unknown }).account_id ?? page.channels.find(c => c.platform === 'instagram')?.account_id ?? '')
       const crossed = accountId ? await crossFollowersWithPosts(accountId).catch(() => null) : null
       return NextResponse.json({
         ok: true, likers: result.likers ?? 0, commenters: result.commenters ?? 0,
