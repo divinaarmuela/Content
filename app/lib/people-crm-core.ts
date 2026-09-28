@@ -39,6 +39,8 @@ export type CrmEvent = {
   detail: string | null
   /** YYYY-MM-DD */
   day: string
+  /** the exact instant, when the provider gave one (a comment, a DM) — a time is shown beside the day */
+  at?: string | null
   /** where the detail opens — the post's page, or the Inbox on this person */
   href: string | null
   /** a word for the link */
@@ -80,7 +82,7 @@ export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): Crm
     if (liked) likes++
     if (commented) comments++
     if (!a.day) continue
-    if (commented) timeline.push({ what: 'Commented on a post', detail: a.title, day: a.day, href: a.href, link: a.href ? 'Open the post' : null, tone: 'strong' })
+    if (commented) timeline.push({ what: a.text ? `Commented “${a.text}”` : 'Commented on a post', detail: a.title, day: a.day, at: a.at ?? null, href: a.href, link: a.href ? 'Open the post' : null, tone: 'strong' })
     if (liked) timeline.push({ what: 'Liked a post', detail: a.title, day: a.day, href: a.href, link: a.href ? 'Open the post' : null, tone: 'plain' })
   }
   const dmed = p.reached_out_how === 'message' || p.reached_out_how === 'both'
@@ -91,7 +93,7 @@ export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): Crm
   }
   if (p.followed_on) timeline.push({ what: 'Started following', detail: p.from_us.likely && p.from_us.title ? `after ${p.from_us.title}` : null, day: p.followed_on, href: null, link: null, tone: 'strong' })
   if (p.gone_on) timeline.push({ what: 'Unfollowed', detail: null, day: p.gone_on, href: null, link: null, tone: 'lost' })
-  timeline.sort((a, b) => (a.day === b.day ? 0 : a.day < b.day ? 1 : -1))
+  timeline.sort((a, b) => (a.day === b.day ? String(b.at ?? '').localeCompare(String(a.at ?? '')) : a.day < b.day ? 1 : -1))
 
   const days = timeline.map(e => e.day)
   const first = days.reduce<string | null>((m, d) => min(m, d), p.reached_out_first_on ?? null)
@@ -153,6 +155,14 @@ export function crmCounts(rows: readonly CrmRow[]): { people: number; new_follow
     likely_from_posts: real.filter(r => r.from_post).length,
     unfollowed: real.filter(r => r.status === 'unfollowed').length,
   }
+}
+
+/** the time of day in Melbourne, "9:51 pm" */
+export function timeWords(at: string | null | undefined): string | null {
+  if (!at) return null
+  const d = new Date(at)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: 'numeric', minute: '2-digit' }).replace(/\s+/g, ' ').toLowerCase()
 }
 
 /** "Today", "Yesterday", or "27 Sep" — against a Melbourne today */

@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     const params = new URL(req.url).searchParams
     const postId = params.get('postId')
     if (!postId) return NextResponse.json({ error: 'postId is required' }, { status: 400 })
-    const comments = await getPublisher().postComments(postId)
+    const comments = await getPublisher().postComments(postId, params.get('accountId'))
     await noteComments(comments, { accountId: params.get('accountId'), postId })
     return NextResponse.json({ comments })
   } catch (e) {

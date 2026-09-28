@@ -83,3 +83,33 @@ describe('the page and its wiring', () => {
     expect(readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')).toContain("{ href: '/dashboard/social/people',      label: 'People',      icon: Users }")
   })
 })
+
+describe('comments carry who, when and what (28 Sep 2026: "there are comments on his posts but I don\'t see any")', () => {
+  it('each comment is its own line, with the words and the exact time', () => {
+    const rows = buildPeople({
+      followers: [],
+      posts: [{ item_id: 'i1', title: 'Justin', href: '/dashboard/social/posts/p', day: '2026-09-25', likers: ['kaity.j_'], commenters: [], people: {},
+        comment_log: [
+          { username: 'kaity.j_', text: 'So grateful for what you do', at: '2026-09-25T11:39:50+0000' },
+          { username: 's.jkani', text: 'No wayyyy 20k is crazy', at: '2026-09-25T09:52:27+0000' },
+        ] }],
+      inbox: [],
+    }).map(p => crmRow(p))
+    const k = rows.find(r => r.username === 'kaity.j_')!
+    expect([k.likes, k.comments]).toEqual([1, 1])
+    expect(k.status).toBe('commented')
+    expect(k.timeline[0]).toMatchObject({ what: 'Commented “So grateful for what you do”', detail: 'Justin', at: '2026-09-25T11:39:50+0000' })
+    expect(k.timeline.map(e => e.what)).toContain('Liked a post')
+    expect(rows.find(r => r.username === 's.jkani')!.comments).toBe(1)
+  })
+  it('Activity is the log alone — no buttons at its head', () => {
+    const page = readFileSync('app/dashboard/social/people/page.tsx', 'utf8')
+    expect(page).not.toContain('Open their Instagram')
+    expect(page).not.toContain('Follows the client')
+  })
+  it('the comments call carries the account the provider requires', () => {
+    expect(readFileSync('app/lib/publisher.ts', 'utf8')).toContain('&accountId=${encodeURIComponent(accountId)}')
+    expect(readFileSync('app/lib/post-analytics.ts', 'utf8')).toContain('publisher.postComments(id, commentAccountOf(job.targets))')
+    expect(readFileSync('app/api/social/comments/route.ts', 'utf8')).toContain("postComments(postId, params.get('accountId'))")
+  })
+})

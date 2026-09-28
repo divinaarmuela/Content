@@ -66,8 +66,9 @@ export interface Publisher {
   createAutomation(body: Record<string, unknown>): Promise<unknown>
   updateAutomation(id: string, body: Record<string, unknown>): Promise<unknown>
   deleteAutomation(id: string): Promise<unknown>
-  /** Comments on one post. */
-  postComments(postId: string): Promise<unknown>
+  /** Comments on one post. `accountId` is REQUIRED by the provider (its docs, GET /v1/inbox/comments/{postId}) —
+   *  without it nothing came back, and no comment ever reached a post page or the People page (28 Sep 2026). */
+  postComments(postId: string, accountId?: string | null): Promise<unknown>
   /** Public reply, visible under the comment. */
   replyToComment(postId: string, commentId: string, message: string): Promise<unknown>
   /** Private DM to the comment's author (Instagram/Facebook). */
@@ -698,8 +699,8 @@ class ZernioPublisher implements Publisher {
     return this.send('DELETE', `/comment-automations/${encodeURIComponent(id)}`)
   }
 
-  postComments(postId: string) {
-    return this.getJson(`/inbox/comments/${encodeURIComponent(postId)}`)
+  postComments(postId: string, accountId?: string | null) {
+    return this.getJson(`/inbox/comments/${encodeURIComponent(postId)}?limit=100${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ''}`)
   }
 
   replyToComment(postId: string, commentId: string, message: string) {

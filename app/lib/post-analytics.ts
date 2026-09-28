@@ -36,6 +36,13 @@ import {
  */
 
 /** A published job, as the refresh needs it. */
+/** the account to read a post's comments through — its Instagram, else its first channel (28 Sep 2026) */
+function commentAccountOf(targets: unknown): string | null {
+  const list = (Array.isArray(targets) ? targets : []) as { accountId?: unknown; platform?: unknown }[]
+  const pick = list.find(t => t?.platform === 'instagram') ?? list[0]
+  return typeof pick?.accountId === 'string' ? pick.accountId : null
+}
+
 type PublishedJob = {
   id: string
   client_id?: string | null
@@ -145,7 +152,7 @@ export async function refreshOnePost(
   const [raw, timelineRaw, commentsRaw, followers] = await Promise.all([
     publisher.postAnalytics(id).catch(() => null),
     publisher.postTimeline(id).catch(() => null),
-    publisher.postComments(id).catch(() => null),
+    publisher.postComments(id, commentAccountOf(job.targets)).catch(() => null),
     ctx.followers !== undefined ? Promise.resolve(ctx.followers) : loadFollowerStats().catch(() => null),
   ])
   const shaped = shapePostAnalytics(id, raw)
@@ -164,7 +171,7 @@ export async function refreshOnePost(
     ),
     timeline: shapeTimeline(timelineRaw),
     followers: seriesFor(job, row.platform, followers),
-    comments: shapeComments(commentsRaw),
+    comments: shapeComments(commentsRaw, 100),
     providerPostId: id,
   })
   try {

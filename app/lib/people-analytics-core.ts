@@ -86,6 +86,8 @@ export type PeoplePost = {
   commenters: string[]
   /** faces by lower-case handle */
   people: Record<string, PeopleFace>
+  /** every comment the provider returned, with who, when and what (28 Sep 2026) — exact, unlike a like */
+  comment_log?: { username: string; text: string; at: string | null }[]
 }
 
 /** somebody seen in the Inbox */
@@ -105,6 +107,9 @@ export type InboxKind = 'comment' | 'message' | 'both'
 
 export type PeopleAction = {
   kind: 'liked' | 'commented' | 'liked and commented'
+  /** what they wrote, and the exact time — when the provider gave them */
+  text?: string | null
+  at?: string | null
   item_id: string | null
   title: string
   href: string | null
@@ -238,13 +243,23 @@ export function buildPeople(input: {
 
   for (const post of input.posts) {
     const liked = new Set(post.likers.map(key).filter(Boolean))
-    const commented = new Set(post.commenters.map(key).filter(Boolean))
+    const log = post.comment_log ?? []
+    const commented = new Set([...post.commenters, ...log.map(c => c.username)].map(key).filter(Boolean))
+    // one line per comment when we have the words: the newest is on the action, the rest become their own lines below
+    const byWho = new Map<string, { text: string; at: string | null }[]>()
+    for (const c of log) { const k = key(c.username); if (k) byWho.set(k, [...(byWho.get(k) ?? []), { text: c.text, at: c.at }]) }
     for (const k of new Set([...liked, ...commented])) {
       const face = post.people[k] ?? null
       const row = at(face?.username ?? k, face)
       if (!row) continue
       const l = liked.has(k)
       const c = commented.has(k)
+      const said = (byWho.get(k) ?? []).sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
+      if (said.length > 0) {
+        if (l) row.actions.push({ kind: 'liked', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: post.day })
+        for (const w of said) row.actions.push({ kind: 'commented', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: dayOfInstant(w.at) ?? post.day, text: w.text, at: w.at })
+        continue
+      }
       row.actions.push({
         kind: l && c ? 'liked and commented' : l ? 'liked' : 'commented',
         item_id: post.item_id,

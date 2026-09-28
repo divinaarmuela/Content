@@ -5,6 +5,7 @@ import { followersEnabled, followersOf, snapshotsOf } from './followers'
 import { dayKey, latestOf, postDay, readInteractors, type FollowerRow } from './followers-core'
 import { postPageHref } from './post-page-core'
 import { inboxTouchesFor } from './inbox-people'
+import { readPerformance } from './post-performance-core'
 import { buildPeople, type PeoplePost, type PeopleRow, type PeopleState } from './people-analytics-core'
 
 /**
@@ -94,6 +95,8 @@ export async function loadPeople(
       likers: it?.likers ?? [],
       commenters: it?.commenters ?? [],
       people: it?.people ?? {},
+      // the comments themselves, read through the provider every half hour — who, when and what (28 Sep 2026)
+      comment_log: (readPerformance(row.performance)?.comments ?? []).map(c => ({ username: c.author, text: c.text, at: c.at })),
     }
   })
 

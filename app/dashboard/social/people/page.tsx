@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import PageTitle from '../../ui/PageTitle'
 import Chip, { type ChipTone } from '../../ui/Chip'
 import {
-  CRM_STATUS_WORDS, PEOPLE_CRM_CLIENTS, crmFilter, dayWords,
+  CRM_STATUS_WORDS, PEOPLE_CRM_CLIENTS, crmFilter, dayWords, timeWords,
   type CrmFilter, type CrmRow, type CrmStatus,
 } from '@/app/lib/people-crm-core'
 
@@ -194,13 +194,8 @@ export default function PeopleCrmPage() {
                       {isOpen && (
                         <tr className="border-b border-border bg-muted/30">
                           <td colSpan={10} className="px-3 pb-4 pt-2">
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Activity</p>
-                              <a href={r.profile_href} target="_blank" rel="noreferrer noopener" className="text-[13px] underline underline-offset-2">Open their Instagram</a>
-                              {/* no Inbox link here (28 Sep 2026: "why is this clickable") — only a person who wrote has anything there,
-                                  and their DM or comment carries its own link on the timeline below */}
-                              <span className="text-[13px] text-muted-foreground">{r.following ? 'Follows the client' : 'Not on the follower list'}</span>
-                            </div>
+                            {/* ACTIVITY IS THEIR LOG, NOT A ROW OF BUTTONS (the owner, 28 Sep 2026) */}
+                            <p className="pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Activity</p>
                             {r.timeline.length === 0 ? (
                               <p className="text-[13px] text-muted-foreground">Followed before we started watching — no touch seen since.</p>
                             ) : (
@@ -212,7 +207,7 @@ export default function PeopleCrmPage() {
                                       {e.detail}
                                       {e.href && e.link && <>{e.detail ? ' · ' : ''}<Link href={e.href} className="underline underline-offset-2">{e.link}</Link></>}
                                     </span>
-                                    <span className="whitespace-nowrap text-muted-foreground">{dayWords(e.day, today)}</span>
+                                    <span className="whitespace-nowrap text-muted-foreground">{dayWords(e.day, today)}{timeWords(e.at) ? ` · ${timeWords(e.at)}` : ''}</span>
                                   </li>
                                 ))}
                               </ul>
