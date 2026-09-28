@@ -24,6 +24,7 @@
  * pair the items API and the boards use. This file subscribes and assembles.
  */
 
+import { waitingOnWords } from '../../../lib/post-to-client-core'
 import { DELIVER_ONLY_REASON, deliverOnly } from '@/app/lib/deliver-only-core'
 import { folderOf } from '@/app/lib/card-link-core'
 import { useMemo } from 'react'
@@ -55,6 +56,8 @@ export type SchedulePostRow = SocialPost & {
   platforms: string[]
   publish_job_ids: string[]
   live_status: SocialPostStatus
+  /** "Waiting on Jordan Wilson · emailed 28 Sep, 12:40 pm" — who a post waiting on a yes is waiting on (28 Sep 2026) */
+  waiting_on?: string | null
   tone: TileTone
   item_title: string | null
   item_type: string | null
@@ -307,6 +310,7 @@ export function useSchedulePosts(
           channels: asArray<string>(row.channels).map(String),
           publish_job_ids: jobIds,
           item_title: (item.title as string | null) ?? null,
+          waiting_on: facts.live_status === 'pending' ? waitingOnWords(item as never, client?.name as string | null, tz) : null,
           item_type: (item.content_type as string | null) ?? null,
           ...facts,
           outcomes,

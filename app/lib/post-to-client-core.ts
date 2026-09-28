@@ -111,3 +111,21 @@ export function sentWords(s: SentStamp, tz = 'Australia/Melbourne'): string {
   const when = new Date(s.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
   return `Emailed to ${s.to.join(', ')} · ${when}`
 }
+
+
+/**
+ * WHO A POST IS WAITING ON (the owner, 28 Sep 2026: the Schedule List said only "Waiting for approval"). The client,
+ * once it has been put to them — with when it was emailed — or the team, while it is an internal sign-off.
+ */
+export function waitingOnWords(
+  item: { posting_client_required?: unknown; client_sent?: unknown; status?: unknown; posting_approval_state?: unknown },
+  clientName: string | null | undefined,
+  tz = 'Australia/Melbourne',
+): string {
+  const name = String(clientName ?? '').trim() || 'the client'
+  if (item.posting_client_required !== true) return 'Waiting on the team'
+  const sent = sentForStage(item as never)
+  if (!sent) return `Waiting on ${name} · not emailed yet`
+  const when = new Date(sent.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  return `Waiting on ${name} · emailed ${when}`
+}

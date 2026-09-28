@@ -61,7 +61,7 @@ function PostRow({ post, tz, onOpen, onDelete }: {
         <span className="block truncate text-[13px] text-muted-foreground">
           {clockLabel(post.scheduled_for, tz) || 'No time yet'}
           {' · '}
-          {STATUS_WORDS[post.live_status]}
+          {post.waiting_on ?? STATUS_WORDS[post.live_status]}
         </span>
         {/* WHAT EACH CHANNEL DID — one word per channel once a job exists,
             so "went out on Instagram, TikTok refused it" is on the row */}

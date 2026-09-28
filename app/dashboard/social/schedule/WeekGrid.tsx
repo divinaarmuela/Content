@@ -555,7 +555,7 @@ export default function WeekGrid({
                               <span className="truncate text-[12px] font-semibold">{p.item_title ?? 'Post'}</span>
                               <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                                 <StatusDot tone={p.tone} className="h-1.5 w-1.5" />
-                                {clockLabel(p.scheduled_for, tz)} · {STATUS_WORDS[p.live_status]}
+                                {clockLabel(p.scheduled_for, tz)} · {p.waiting_on ?? STATUS_WORDS[p.live_status]}
                               </span>
                             </span>
                             {p.platforms[0] && <PlatformIcon platform={p.platforms[0]} size={14} className="shrink-0 rounded-full" />}

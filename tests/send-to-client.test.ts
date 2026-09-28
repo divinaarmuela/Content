@@ -233,3 +233,13 @@ describe('once sent, the button says so (28 Sep 2026)', () => {
     expect((fake.rows('content_items')[0] as unknown as { client_sent?: unknown }).client_sent).toBeUndefined()
   })
 })
+
+describe('who a post is waiting on, on the Schedule (28 Sep 2026)', () => {
+  it('the client once it is theirs — with when it was emailed — or the team', async () => {
+    const { waitingOnWords } = await import('../app/lib/post-to-client-core')
+    expect(waitingOnWords({ posting_client_required: false }, 'Jordan Wilson')).toBe('Waiting on the team')
+    expect(waitingOnWords({ posting_client_required: true, status: 'approved_for_scheduling', posting_approval_state: 'pending' }, 'Jordan Wilson')).toBe('Waiting on Jordan Wilson · not emailed yet')
+    const words = waitingOnWords({ posting_client_required: true, status: 'approved_for_scheduling', posting_approval_state: 'pending', client_sent: { at: '2026-09-28T02:40:20Z', to: ['jordan@tkbg.com.au'], stage: 'post' } }, 'Jordan Wilson')
+    expect(words).toMatch(/^Waiting on Jordan Wilson · emailed 28 Sept?, 12:40/)
+  })
+})
