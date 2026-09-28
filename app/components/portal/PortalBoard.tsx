@@ -304,6 +304,13 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         : (card.comment_target ? `/portal/${token}/item/${card.id}` : null))
     : null
   const pdf = card.pdf ? planPdfHref(token, card.id) : null
+  /**
+   * ONE PAGE TO REVIEW A POST (the owner, 28 Sep 2026: "clients have two links now, and the post approval card has
+   * board and brief plan info, which is not right … one scroll down if there are many assets"). On the shared portal a
+   * post with pictures is a short card — its cover, what it is, and one way in: the review page, where every slide,
+   * the notes on each and the answer live. The card no longer stacks every slide, nor carries the shoot's plan.
+   */
+  const reviewHref = token && card.kind === 'work' && assets.length > 0 ? `/portal/${token}/approve/${card.id}` : null
   const line = acted ?? card.line
 
   return (
@@ -334,7 +341,18 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.preview_url} alt="" loading="lazy" className="h-[120px] w-full rounded-tile object-cover" />
         )}
-        {assets.length > 0 && (
+        {reviewHref && (
+          <Link href={reviewHref} className="relative block overflow-hidden rounded-tile bg-foreground/[0.06]" aria-label={`Review ${card.title}`}>
+            {assets[0].type === 'video'
+              ? <video src={assets[0].url} muted playsInline preload="metadata" className="max-h-[320px] w-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              : <img src={assets[0].url} alt="" loading="lazy" className="max-h-[320px] w-full object-cover" />}
+            {assets.length > 1 && (
+              <span className="absolute right-2 top-2 rounded-full bg-black/70 px-2.5 py-1 text-[12px] font-semibold text-white">1 of {assets.length}</span>
+            )}
+          </Link>
+        )}
+        {!reviewHref && assets.length > 0 && (
           <div className="flex flex-col gap-4">
             {assets.map((s, i) => {
               const here = comments.filter(c => splitSlideTag(c.body).index === i)
@@ -468,7 +486,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
 
         {/* the written plan, on the same card — the board itself is drawn
             open, under the card, by ShootBoard */}
-        {card.shoot?.shared && (card.shoot.concept || card.shoot.planned_deliverables.length > 0 || card.shoot.shot_list.length > 0 || card.shoot.scripts.length > 0) && (
+        {!reviewHref && card.shoot?.shared && (card.shoot.concept || card.shoot.planned_deliverables.length > 0 || card.shoot.shot_list.length > 0 || card.shoot.scripts.length > 0) && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setPlanOpen(v => !v)}
               className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>
@@ -510,7 +528,13 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         )}
 
         {/* the decision — only on the card that is with them */}
-        {(canApprove || canAsk) && (
+        {reviewHref && (
+          <Link href={reviewHref}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:opacity-90">
+            {canApprove || canAsk ? 'Review and approve' : 'Open'}
+          </Link>
+        )}
+        {!reviewHref && (canApprove || canAsk) && (
           <div className="flex flex-col gap-2 pt-1">
             {asking ? (
               <>
@@ -569,7 +593,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
         {/* the post as a whole — comments that are not about one asset, and
             a box for one. On a card with no assets to press, this is the
             only thread. */}
-        {canComment && (
+        {!reviewHref && canComment && (
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setOpen(v => !v)}
               className={cn('inline-flex min-h-11 w-fit items-center gap-1.5 text-[14px] font-semibold', muted)}>

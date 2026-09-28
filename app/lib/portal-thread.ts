@@ -245,6 +245,8 @@ export type PortalApproval = {
   whereLine: string | null
   /** its planned time has gone while it waited on them — approving still counts, and a new time is picked (28 Sep 2026) */
   missed?: boolean
+  /** the notes on this piece, the client's and the team's — shown beside the slide they are about (28 Sep 2026) */
+  comments: PortalComment[]
 }
 
 /** the post, sanitised for the client: a card handed in as files shows the files they were given (the newest cut of
@@ -292,6 +294,7 @@ export async function getPortalApproval(rawToken: string, itemId: string, opts: 
       state: postState === 'pending' ? 'waiting' : postState === 'approved' ? 'approved' : 'changes',
       kind: 'post',
       typeLine: (() => { const n = media.length; const allVideo = n > 0 && media.every(s => s.type === 'video'); const t = String((row as { content_type?: string | null }).content_type ?? '').toLowerCase(); const w = t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'; return n > 1 ? `${w} · ${n} ${allVideo ? 'clips' : 'slides'}` : w })(),
+      comments: detail.comments,
       whenLine: when,
       missed: postState === 'pending' && slotMissed(post?.scheduled_for ?? null),
       whereLine: accounts.length ? [...new Set(accounts.map(a => NAMES[String(a.platform)] ?? String(a.platform)))].join(', ') : null,
@@ -309,6 +312,7 @@ export async function getPortalApproval(rawToken: string, itemId: string, opts: 
       : status === 'client_changes_requested' ? 'changes'
       : 'not_ready',
     kind: 'card',
+    comments: detail.comments,
     typeLine: kindWord(slides.length),
     whenLine: null,
     whereLine: null,

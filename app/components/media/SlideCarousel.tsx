@@ -59,6 +59,8 @@ export type SlideCarouselProps = {
   /** told every time the set of seen cards grows — ReviewCard prints it
    *  beside Approve. Never a gate: see the note there. */
   onSeenChange?: (state: { seen: number[]; total: number; allSeen: boolean }) => void
+  /** told which card is showing — the review page keeps the notes for that slide beside it (28 Sep 2026) */
+  onIndexChange?: (index: number) => void
   /** for screen readers: "Carousel — <title>" */
   label?: string
 }
@@ -79,7 +81,7 @@ function isVideo(s: CarouselSlide): boolean {
 export default function SlideCarousel({
   slides, aspect = 'natural', initial = 0, mode = 'full',
   className, chromeClassName = '', naturalMax = 'max-h-[70vh]',
-  background = '#0a0a0a', onSeenChange, label,
+  background = '#0a0a0a', onSeenChange, onIndexChange, label,
 }: SlideCarouselProps) {
   const total = slides.length
   const [index, setIndex] = useState(() => clampIndex(initial, total))
@@ -105,6 +107,11 @@ export default function SlideCarousel({
     // the callback is usually an inline arrow — depending on it would loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seen, total])
+
+  useEffect(() => {
+    onIndexChange?.(index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index])
 
   /** a video left playing behind a slide you have swiped away from is a voice
    *  coming out of a page that shows something else */

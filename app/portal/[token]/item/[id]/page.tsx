@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Toaster } from 'sonner'
-import { getPortalItemDetail } from '../../../../lib/portal-thread'
+import { getPortalApproval, getPortalItemDetail } from '../../../../lib/portal-thread'
 import { getPortalDataByToken } from '../../../../lib/portal-data'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
@@ -24,6 +24,10 @@ export const dynamic = 'force-dynamic'
 export default async function PortalItemPage({ params }: { params: Promise<{ token: string; id: string }> }) {
   const { token: raw, id } = await params
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
+  // ONE LINK, ONE PAGE (the owner, 28 Sep 2026: "clients have two links now"): a piece with something to look at
+  // opens the review page — the post, the notes on each slide, the answer — whichever link the client followed
+  const approval = await getPortalApproval(raw, id).catch(() => null)
+  if (approval && approval.slides.length > 0) redirect(`/portal/${raw}/approve/${id}`)
   const [data, portal] = await Promise.all([getPortalItemDetail(raw, id), getPortalDataByToken(token)])
   if (!data || !portal) notFound()
   const card = portal.cards.find(c => c.kind === 'work' && c.id === id)

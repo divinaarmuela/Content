@@ -3,8 +3,7 @@ import { notFound } from 'next/navigation'
 import { getPortalApproval } from '../../../../lib/portal-thread'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
-import SlideCarousel from '../../../../components/media/SlideCarousel'
-import ApprovePanel from '../../../../components/portal/ApprovePanel'
+import PostReview from '../../../../components/portal/PostReview'
 
 export const metadata: Metadata = {
   title: 'For your approval — MD Media',
@@ -36,62 +35,21 @@ export default async function PortalApprovePage({ params, searchParams }: {
         className="min-h-screen bg-background text-foreground"
         style={{ fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif' }}
       >
-        <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 pb-24 pt-8 sm:px-8 sm:pt-12">
-          <header className="flex flex-col gap-2">
+        <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-5 px-5 pb-24 pt-6 sm:px-8 sm:pt-10">
+          <header className="flex flex-col gap-1">
             <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
               MD Media · For your approval · {data.client.name}
             </p>
-            <h1 className="text-[28px] font-semibold leading-tight sm:text-[34px]">{data.title}</h1>
-            <p className="text-[15px] text-muted-foreground">{typeLine}{slides.length > 1 ? ' — swipe or use the arrows to see each one' : ''}</p>
+            <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px]">{data.title}</h1>
           </header>
-
-          {slides.length > 0 ? (
-            <SlideCarousel slides={slides} aspect="natural" mode="full"
-              className="overflow-hidden rounded-card border border-border"
-              label={`${data.title}${slides.length > 1 ? ` — ${slides.length} slides` : ''}`} />
-          ) : (
-            <p className="rounded-card border border-dashed border-border p-6 text-center text-[14px] text-muted-foreground">
-              The pictures are still being added — check back shortly.
-            </p>
-          )}
-
           {preview && (
-            <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[13px]">Preview — this is exactly what the client sees. Approve is switched off here.</p>
+            <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[13px]">Preview — this is exactly what the client sees. Approve and notes are switched off here.</p>
           )}
-
-          {/* THE TIME HAS GONE (the owner, 28 Sep 2026: "schedule a new time and go through approval again"): this approval has closed */}
-          {missed && state === 'waiting' && (
-            <p role="status" className="rounded-card border border-accent-amber/40 bg-tint-amber px-4 py-3 text-[15px]">
-              The planned time for this post has passed, so this approval has closed. We&rsquo;ll pick a new time and send it to you again to approve.
-            </p>
-          )}
-
-          {(whenLine || whereLine) && (
-            <section className="grid gap-3 rounded-card border border-border bg-card p-5 sm:grid-cols-2">
-              {whenLine && (
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{missed ? 'Was planned for' : 'Goes out'}</p>
-                  <p className={`mt-1 text-[15px] font-medium ${missed ? 'text-muted-foreground line-through' : ''}`}>{whenLine}</p>
-                </div>
-              )}
-              {whereLine && (
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Where</p>
-                  <p className="mt-1 text-[15px] font-medium">{whereLine}</p>
-                </div>
-              )}
-            </section>
-          )}
-
-          {caption && (
-            <section className="rounded-card border border-border bg-card p-5">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{kind === 'post' ? 'Caption, exactly as it will post' : 'Caption'}</p>
-              <p className="mt-2 whitespace-pre-line text-[15px] leading-[1.55]">{caption}</p>
-            </section>
-          )}
-
-          <ApprovePanel token={token} itemId={id} state={state} kind={kind} preview={preview} clientName={data.client.name} missed={missed === true} />
-
+          {/* ONE LAYOUT for every way a client reaches a post (28 Sep 2026): the post on the left, one slide at a time;
+              the details, the notes on that slide and the answer on the right, in view */}
+          <PostReview token={token} itemId={id} title={data.title} slides={slides} caption={caption} typeLine={typeLine}
+            whenLine={whenLine} whereLine={whereLine} missed={missed === true} state={state} kind={kind} preview={preview}
+            clientName={data.client.name} comments={data.comments} />
         </main>
       </div>
     </PortalShell>

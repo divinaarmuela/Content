@@ -32,7 +32,7 @@ describe('a post whose time went before the client said yes', () => {
     expect(waitingOnWords(sent, 'Jordan Wilson', 'Australia/Melbourne', six, at('06:00'))).toMatch(/^Waiting on Jordan Wilson · emailed/)
   })
   it('the client\'s link closes — on the page and on the server', () => {
-    expect(readFileSync('app/portal/[token]/approve/[id]/page.tsx', 'utf8')).toContain('so this approval has closed')
+    expect(readFileSync('app/components/portal/PostReview.tsx', 'utf8')).toContain('so this approval has closed')
     expect(readFileSync('app/components/portal/ApprovePanel.tsx', 'utf8')).toContain('This approval has closed because its time passed')
     const route = readFileSync('app/api/portal/act/route.ts', 'utf8')
     expect(route).toContain('live.every(p => slotMissed(p.scheduled_for))')
