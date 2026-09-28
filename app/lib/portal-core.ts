@@ -58,6 +58,32 @@ export function portalColumnFor(status: ItemStatus): PortalColumnKey {
   return col?.key ?? 'making'
 }
 
+/**
+ * THE POST'S OWN APPROVAL DECIDES ITS COLUMN (the owner, 28 Sep 2026: "why is it under Approved and Scheduled" —
+ * Jordan's posts 3, 4 and 11 were waiting on his yes and sat under Approved, because the column read only the edit's
+ * status). A post put to the client and not yet answered is theirs to review; one waiting on the team, or being
+ * changed after their notes, is being checked; only a yes (or a post that never needed one) is Approved.
+ */
+export function portalColumnForPost(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown }): PortalColumnKey {
+  const base = portalColumnFor(status)
+  if (base !== 'approved' && base !== 'posted') return base
+  if (status === 'published') return base
+  const state = String(posting.state ?? '')
+  if (state === 'pending') return posting.clientRequired === true ? 'your_review' : 'checking'
+  if (state === 'changes') return 'checking'
+  return base
+}
+
+/** …and what that column's card says and wears, when the post's approval moved it (28 Sep 2026: "why does it say
+ *  Approved with green on the page" — Jordan had not approved anything) */
+export function postingCardFace(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown }): { tone: PortalCardTone | undefined; line: string } | null {
+  const col = portalColumnForPost(status, posting)
+  if (col === portalColumnFor(status)) return null
+  if (col === 'your_review') return { tone: 'amber', line: 'Waiting on your approval' }
+  if (String(posting.state ?? '') === 'changes') return { tone: undefined, line: 'We’re making your changes' }
+  return { tone: undefined, line: 'A last look before it comes to you' }
+}
+
 // ── what the client may see and do ──────────────────────────────────────────
 
 /** Statuses at which the piece has reached the client at least once. Only

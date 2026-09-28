@@ -41,7 +41,7 @@ import { loadPortalFollowers } from './portal-followers'
 import type { PortalFollowers } from './followers-core'
 import {
   brandLogoUrl, cardLine, isClientFacing, kindWord, linkFor, portalActions, portalCardTone,
-  portalColumnFor, shootDayLabel, shootStanding, toPortalComment,
+  portalColumnFor, portalColumnForPost, postingCardFace, shootDayLabel, shootStanding, toPortalComment,
   type PortalActions, type PortalCardComment, type PortalCardTone, type PortalColumnKey, type PortalLink,
 } from './portal-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
@@ -701,6 +701,9 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
 
   const workCards: PortalCard[] = items.map(i => {
     const p = toPortal(i)
+    // the post's own approval, not only the edit's status (28 Sep 2026)
+    const posting = { state: (i as { posting_approval_state?: unknown }).posting_approval_state, clientRequired: (i as { posting_client_required?: unknown }).posting_client_required }
+    const face = postingCardFace(p.status, posting)
     const facing = isClientFacing(p.status)
     const booked = p.schedule.find(s => s.scheduled_at && !s.live_url)
     const live = p.schedule.find(s => s.live_url)?.live_url ?? p.metrics?.post_url ?? null
@@ -721,9 +724,9 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       // was filed under
       word: p.adhoc_post ? 'Post' : (row.work_kinds?.name?.trim() || kindWord(p.content_type)),
       caption: facing && typeof row.caption === 'string' && row.caption.trim() ? row.caption.trim() : null,
-      column: portalColumnFor(p.status),
-      tone: portalCardTone(p.status),
-      line: cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
+      column: portalColumnForPost(p.status, posting),
+      tone: face ? face.tone : portalCardTone(p.status),
+      line: face ? face.line : cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
       deliver_only: selfPosts,
       link: linkFor(url, kind),
       clips: facing ? liveFilesAt(i as never, roundOf(i as never)).length : 0,
