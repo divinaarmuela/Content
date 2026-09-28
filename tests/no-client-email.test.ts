@@ -33,3 +33,16 @@ describe('the mailer and the client', () => {
     expect(fake.rows('notification_log')).toHaveLength(0)
   })
 })
+
+describe('the one exception: a manager deliberately sending a post to the client (28 Sep 2026)', () => {
+  it('goes through only when marked as a person\'s deliberate send', async () => {
+    fake = seedDb({ notification_log: [], team_users: [] })
+    const auto = await notify({
+      eventType: 'post_to_client', entityType: 'content_item', entityId: 'i-1#auto',
+      recipientEmail: 'client@zz.invalid', toClient: true, subject: 'Approve', bodyHtml: '<p>hi</p>',
+    })
+    expect(auto).toBe('muted')
+    const src = (await import('node:fs')).readFileSync('app/lib/mailer.ts', 'utf8')
+    expect(src).toContain("input.toClient === true && input.deliberateClientSend !== true")
+  })
+})

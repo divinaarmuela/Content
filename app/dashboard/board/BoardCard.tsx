@@ -2,6 +2,7 @@
 
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
+import SendToClientDialog from './SendToClientDialog'
 import Link from 'next/link'
 import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -173,6 +174,7 @@ export function BoardCard({
   // the Editor page shows the editor's face to EVERYONE — a manager's tools
   // live on Post approval (the owner, 12 Sep 2026: "too many options")
   const editorFace = page === 'editor'
+  const [sendOpen, setSendOpen] = useState(false)
   // a files card shows its files, never the Drive link it was handed in by (24 Sep 2026)
   const approvedFiles = approvedFilesVersion(card as never)
   const approvedCount = Array.isArray(approvedFiles?.files) ? approvedFiles!.files!.length : 0
@@ -215,6 +217,8 @@ export function BoardCard({
   const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete
 
   return (
+    <>
+    {sendOpen && <SendToClientDialog itemId={card.id} onClose={() => setSendOpen(false)} />}
     <WorkCard
       onOpen={() => onOpen(card)}
       client={lines.client}
@@ -324,6 +328,14 @@ export function BoardCard({
           </span>
         ))}
 
+        {/* SEND TO CLIENT, on the card itself (28 Sep 2026): With client, a manager, on Post approval */}
+        {!folded && page === 'scheduler' && card.status === 'client_review' && (viewer.role === 'account_manager' || viewer.role === 'super_admin') && (
+          <Button variant="outline"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setSendOpen(true) }}
+            className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            Send to client
+          </Button>
+        )}
         {!folded && briefFolds && !theirs && (
           <Button variant="outline" aria-expanded={briefOpen}
             onClick={e => { e.preventDefault(); toggleBrief() }}
@@ -445,5 +457,6 @@ export function BoardCard({
         )}
       </>}
     />
+    </>
   )
 }

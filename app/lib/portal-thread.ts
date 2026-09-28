@@ -224,3 +224,42 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
 
 /** the same mapping for a team board's comments (portal-team-board.ts, 22 Sep 2026) */
 export const toPortalComment = toComment
+
+/* ── FOR YOUR APPROVAL: the one post a "Send to client" email opens (28 Sep 2026) ── */
+export type PortalApproval = {
+  client: { id: string; name: string }
+  am_name: string | null
+  title: string
+  /** every picture or clip the client is being asked about, in order */
+  slides: { url: string; name?: string; type?: 'image' | 'video' }[]
+  caption: string
+  /** waiting = theirs to answer now; approved / changes = already answered; not_ready = not with them yet */
+  state: 'waiting' | 'approved' | 'changes' | 'not_ready'
+}
+
+/** the post, sanitised for the client: a card handed in as files shows the files they were given (the newest cut of
+ *  each clip at the version sent to them); anything else shows its post's pictures */
+export async function getPortalApproval(rawToken: string, itemId: string): Promise<PortalApproval | null> {
+  const detail = await getPortalItemDetail(rawToken, itemId)
+  if (!detail) return null
+  const row = await table<ContentItem>('content_items').get(itemId).catch(() => null)
+  if (!row || row.client_id !== detail.client.id) return null
+  const { finalFilesOf, liveFilesAt } = await import('./final-files-core')
+  const { clientSeenRound } = await import('./editing-portal-core')
+  const files = finalFilesOf(row as never).length > 0 ? liveFilesAt(row as never, clientSeenRound(row as never)) : []
+  const slides = files.length > 0
+    ? files.map(f => ({ url: f.url, name: f.name, type: (/^video\//.test(String(f.mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : 'image') as 'video' | 'image' }))
+    : (detail.item.slides ?? []).filter(s => s && s.url).map(s => ({ url: s.url, name: s.name, type: s.type }))
+  const status = String(row.status)
+  return {
+    client: detail.client,
+    am_name: detail.am_name,
+    title: String(detail.item.title ?? 'Your post'),
+    slides: slides.length > 0 ? slides : (detail.item.preview_url ? [{ url: detail.item.preview_url }] : []),
+    caption: String((row as { caption?: string | null }).caption ?? '').trim(),
+    state: status === 'client_review' ? 'waiting'
+      : ['approved_for_scheduling', 'scheduled', 'published'].includes(status) ? 'approved'
+      : status === 'client_changes_requested' ? 'changes'
+      : 'not_ready',
+  }
+}

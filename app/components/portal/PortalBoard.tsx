@@ -92,7 +92,9 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
    * do"). They look at every asset and say what they think of each; the
    * manager reads it and moves the card. Production work keeps its one-tap
    * approve. */
-  const decides = !card.adhoc_post
+  // …UNTIL 28 SEP 2026: the owner — "once approved it goes Ready to post, from the client, or we can log it ourselves".
+  // A post sent to the client for approval is theirs to approve, uploaded or not.
+  const decides = true
   const target = card.act_item_id ? { item_id: card.act_item_id } : card.act_shoot_id ? { shoot_id: card.act_shoot_id } : null
   const canApprove = decides && card.actions.approve && !acted && !!target
   const canAsk = decides && card.actions.askForChange && !acted && !!target

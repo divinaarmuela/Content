@@ -215,6 +215,10 @@ export type NotifyInput = {
    *  client-facing path so `PAUSE_CLIENT_NOTIFICATIONS` can hold them all back
    *  during a rebuild without silencing the team. */
   toClient?: boolean
+  /** A PERSON CHOSE THIS CLIENT ADDRESS AND PRESSED SEND (the owner, 28 Sep 2026: "Send to client, which lists the
+   *  emails and sends the link"). The client is still never emailed AUTOMATICALLY; this one exception is a manager's
+   *  deliberate press on a post waiting on the client, to addresses on that client's own list. */
+  deliberateClientSend?: boolean
 }
 
 /**
@@ -244,7 +248,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
   // Checked FIRST, before the bell guard and before the notification_log
   // claim, so a paused client notification leaves no trace at all — no email,
   // no bell row, nothing for a later replay to send.
-  if (clientNotificationsPaused() && input.toClient === true) {
+  if (clientNotificationsPaused() && input.toClient === true && input.deliberateClientSend !== true) {
     console.log('[notify] client notifications are paused — dropped:', input.eventType)
     return 'muted'
   }

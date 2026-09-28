@@ -4,7 +4,8 @@ import { deliverOnly } from '@/app/lib/deliver-only-core'
 import { managesClients, personLabel } from '@/app/lib/identity-core'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { ExternalLink, Mail, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import SendToClientDialog from './SendToClientDialog'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
 import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
@@ -427,6 +428,9 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // Ready to post (the handoff route takes nothing earlier), and reads
   // "With X · change" once booked in
   const mayHandOn = isManager && (item?.status === 'approved_for_scheduling' || item?.status === 'scheduled')
+  /** an account manager or a super admin sends a card that is With client to the client, by email (28 Sep 2026) */
+  const maySendToClient = isManager && item?.status === 'client_review'
+  const [sendingToClient, setSendingToClient] = useState(false)
   const markPosted = async () => {
     if (!item || handOn === null) return
     const s = slides[handOn]
@@ -617,8 +621,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       </div>
 
       {/* ── 2. the decision ── */}
-      {(actions.primary || actions.more.length > 0 || mayHandOn) && (
+      {(actions.primary || actions.more.length > 0 || mayHandOn || maySendToClient) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-4">
+          {/* SEND TO CLIENT (28 Sep 2026): at With client, a manager emails the client the link to view and approve */}
+          {maySendToClient && (
+            <Button className={primary} disabled={busy} onClick={() => setSendingToClient(true)}>
+              <Mail className="mr-1.5 h-4 w-4" aria-hidden /> Send to client
+            </Button>
+          )}
           {actions.primary && (
             <Button className={primary} disabled={busy} onClick={() => card && act(card, actions.primary!)}>
               {actions.primary.label}
@@ -934,6 +944,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
         </div>
       )}
       {dialogs}
+      {sendingToClient && item && <SendToClientDialog itemId={item.id} onClose={() => setSendingToClient(false)} />}
     </div>
   )
 }
