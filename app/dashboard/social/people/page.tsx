@@ -197,7 +197,8 @@ export default function PeopleCrmPage() {
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2">
                               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Activity</p>
                               <a href={r.profile_href} target="_blank" rel="noreferrer noopener" className="text-[13px] underline underline-offset-2">Open their Instagram</a>
-                              <Link href={r.inbox_href} className="text-[13px] underline underline-offset-2">Open in Inbox</Link>
+                              {/* no Inbox link here (28 Sep 2026: "why is this clickable") — only a person who wrote has anything there,
+                                  and their DM or comment carries its own link on the timeline below */}
                               <span className="text-[13px] text-muted-foreground">{r.following ? 'Follows the client' : 'Not on the follower list'}</span>
                             </div>
                             {r.timeline.length === 0 ? (
