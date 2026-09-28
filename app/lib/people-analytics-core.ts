@@ -86,6 +86,8 @@ export type PeoplePost = {
   commenters: string[]
   /** faces by lower-case handle */
   people: Record<string, PeopleFace>
+  /** the day a read first saw each like, by lower-case handle — the like's day when known */
+  liked_on?: Record<string, string>
   /** every comment the provider returned, with who, when and what (28 Sep 2026) — exact, unlike a like */
   comment_log?: { username: string; text: string; at: string | null }[]
 }
@@ -256,7 +258,7 @@ export function buildPeople(input: {
       const c = commented.has(k)
       const said = (byWho.get(k) ?? []).sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
       if (said.length > 0) {
-        if (l) row.actions.push({ kind: 'liked', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: post.day })
+        if (l) row.actions.push({ kind: 'liked', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: post.liked_on?.[k] ?? post.day })
         for (const w of said) row.actions.push({ kind: 'commented', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: dayOfInstant(w.at) ?? post.day, text: w.text, at: w.at })
         continue
       }
@@ -265,7 +267,8 @@ export function buildPeople(input: {
         item_id: post.item_id,
         title: post.title?.trim() || A_POST,
         href: post.href,
-        day: post.day,
+        // a like is dated by the read that first saw it; otherwise the post's own day
+        day: (l ? post.liked_on?.[k] : null) ?? post.day,
       })
     }
   }

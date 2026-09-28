@@ -113,3 +113,28 @@ describe('comments carry who, when and what (28 Sep 2026: "there are comments on
     expect(readFileSync('app/api/social/comments/route.ts', 'utf8')).toContain("postComments(postId, params.get('accountId'))")
   })
 })
+
+describe('a like is logged on the day our read first saw it (28 Sep 2026)', () => {
+  it('the first read that finds a liker stamps that day; a later read keeps it', async () => {
+    const { mergeInteractors } = await import('../app/lib/followers-core')
+    const me = (u: string) => ({ username: u, full_name: null, profile_pic: null })
+    const day1 = mergeInteractors(null, { media_id: 'm', likers: [me('Ann')], commenters: [], now: '2026-09-26T20:00:00Z', today: '2026-09-27' })
+    const day2 = mergeInteractors(day1, { media_id: 'm', likers: [me('ann'), me('bob')], commenters: [], now: '2026-09-27T20:00:00Z', today: '2026-09-28' })
+    expect(day2.liked_on).toEqual({ ann: '2026-09-27', bob: '2026-09-28' })
+  })
+  it('an existing follower who comes back and likes a newer post gets a new line, and is active again', () => {
+    const rows = buildPeople({
+      followers: [{ username: 'loyal', full_name: null, profile_pic: null, is_private: false, is_verified: false, first_seen_at: null, gone_at: null }],
+      posts: [
+        { item_id: 'a', title: 'Old reel', href: null, day: '2026-09-10', likers: ['loyal'], commenters: [], people: {}, liked_on: { loyal: '2026-09-11' } },
+        { item_id: 'b', title: 'New reel', href: null, day: '2026-09-25', likers: ['loyal'], commenters: [], people: {}, liked_on: { loyal: '2026-09-27' } },
+      ],
+      inbox: [],
+    }).map(p => crmRow(p))
+    const r = rows[0]
+    expect(r.likes).toBe(2)
+    expect(r.timeline.map(e => `${e.what} ${e.detail} ${e.day}`)).toEqual(['Liked a post New reel 2026-09-27', 'Liked a post Old reel 2026-09-11'])
+    expect(r.last_active).toBe('2026-09-27')
+    expect(r.status).toBe('liked')
+  })
+})

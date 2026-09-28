@@ -95,6 +95,7 @@ export async function loadPeople(
       likers: it?.likers ?? [],
       commenters: it?.commenters ?? [],
       people: it?.people ?? {},
+      liked_on: it?.liked_on ?? {},
       // the comments themselves, read through the provider every half hour — who, when and what (28 Sep 2026)
       comment_log: (readPerformance(row.performance)?.comments ?? []).map(c => ({ username: c.author, text: c.text, at: c.at })),
     }

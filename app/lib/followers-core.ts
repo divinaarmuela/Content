@@ -500,6 +500,12 @@ export type Interactors = {
   commenters: string[]
   /** faces and names, by username, for the avatar row */
   people: Record<string, Interactor>
+  /**
+   * THE DAY EACH LIKE WAS FIRST SEEN, by lower-case handle (the owner, 28 Sep 2026: "if there's no time, our scraper
+   * still logs it for that day, right"). Instagram gives no time for a like; the read that first finds a handle among
+   * the likers is the day it is logged — the same rule as a follow. Absent for likes read before this was kept.
+   */
+  liked_on?: Record<string, string>
   fetched_at: string | null
   /** the day of the last read, Melbourne — the once-a-day guard */
   fetched_day: string | null
@@ -526,6 +532,7 @@ export function readInteractors(v: unknown): Interactors | null {
     likers: names(it.likers),
     commenters: names(it.commenters),
     people: it.people && typeof it.people === 'object' ? it.people as Record<string, Interactor> : {},
+    liked_on: it.liked_on && typeof it.liked_on === 'object' ? it.liked_on as Record<string, string> : {},
     fetched_at: typeof it.fetched_at === 'string' ? it.fetched_at : null,
     fetched_day: typeof it.fetched_day === 'string' ? it.fetched_day : null,
     reads: typeof it.reads === 'number' ? it.reads : 0,
@@ -598,10 +605,14 @@ export function mergeInteractors(prev: Interactors | null, read: {
   const key = (p: Interactor) => p.username.toLowerCase()
   for (const p of [...read.likers, ...read.commenters]) people[key(p)] = p
   const union = (a: string[], b: Interactor[]) => [...new Set([...a, ...b.map(key)])]
+  // a like is logged on the day a read first saw it; a like already logged keeps its day
+  const liked_on = { ...(base.liked_on ?? {}) }
+  for (const p of read.likers) if (!liked_on[key(p)]) liked_on[key(p)] = read.today
   return {
     ...base,
     media_id: read.media_id ?? base.media_id,
     likers: union(base.likers, read.likers),
+    liked_on,
     commenters: union(base.commenters, read.commenters),
     people,
     fetched_at: read.now,
