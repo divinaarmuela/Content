@@ -260,6 +260,8 @@ export function postWaitingLine(
   card: BoardViewCard, viewer: BoardViewer,
 ): string | null {
   if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
+  // once it is put to the client it is waiting on THEM, whoever may also answer for them (28 Sep 2026)
+  if (card.posting_client_required === true) return POST_WAITING_CLIENT
   if (mayApprovePost(actingRoles(viewer, card))) return POST_WAITING_LINE
   return awaitsClientPostApproval({
     status: card.status,

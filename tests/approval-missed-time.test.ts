@@ -42,3 +42,18 @@ describe('a post whose time went before the client said yes', () => {
     expect(readFileSync('app/api/production/items/[id]/send-to-client/route.ts', 'utf8')).toContain("for_time: stage === 'post' ? (post?.scheduled_for ?? null) : null")
   })
 })
+
+describe('a post put to the client is waiting on the client, not "on you" (28 Sep 2026)', () => {
+  it('the Post approval panel and the card say so, even to a super admin', async () => {
+    const { waitingRow } = await import('../app/lib/waiting-core')
+    const { postWaitingLine, POST_WAITING_CLIENT } = await import('../app/lib/board-view-core')
+    const card = { id: 'c', client_id: 'j', title: '11', status: 'approved_for_scheduling', posting_approval_state: 'pending', posting_client_required: true, updated_at: '2026-09-28T02:40:00Z', clients: { name: 'Jordan Wilson' } }
+    const boss = { id: 'u', role: 'super_admin' as const, quality_reviewer: false }
+    const row = waitingRow(card as never, boss as never, '2026-09-28')!
+    expect(row.onYou).toBe(false)
+    expect(row.who).toBe('client')
+    expect(postWaitingLine(card as never, boss as never)).toBe(POST_WAITING_CLIENT)
+    // not yet put to the client: still the team's
+    expect(waitingRow({ ...card, posting_client_required: false } as never, boss as never, '2026-09-28')!.onYou).toBe(true)
+  })
+})

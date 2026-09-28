@@ -183,7 +183,9 @@ export function waitingRow(
   // 1. THE POST'S OWN GATE — it outranks the card's stage, because a post
   //    sitting unanswered is somebody else already held up.
   if (parseApprovalState(card.posting_approval_state) === 'pending') {
-    const offer = postApprovalOffer(card, viewer)
+    // PUT TO THE CLIENT, IT IS THEIRS (the owner, 28 Sep 2026: four posts emailed to Justin and Jordan sat under "5
+    // waiting on you" on Post approval): a manager MAY log the client's yes, but the post is waiting on the client
+    const offer = card.posting_client_required === true ? null : postApprovalOffer(card, viewer)
     const line = offer ? POST_WAITING_LINE : postWaitingLine(card, viewer) ?? POST_WAITING_LINE
     return {
       ...base,
