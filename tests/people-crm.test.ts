@@ -178,3 +178,29 @@ describe('the MD Media lead tag (28 Sep 2026: "where is a tag for MD Media lead"
     expect(run({ first_seen_at: null }, '2026-09-28', null).md_lead).toBeNull()
   })
 })
+
+describe('a like read days late still counts before the follow (28 Sep 2026: "how is Cory Pearce not an MD Media lead?")', () => {
+  it('Cory: the Reel out on the 25th, followed seen the 27th, the like first read on the 28th — a lead', () => {
+    const cory = crmRow(buildPeople({
+      followers: [{ username: 'cory.pearcee', full_name: 'Cory', profile_pic: null, is_private: false, is_verified: false, first_seen_at: '2026-09-27', gone_at: null }],
+      posts: [{ item_id: 'i', title: 'Justin', href: null, day: '2026-09-25', likers: ['cory.pearcee'], commenters: [], people: {}, liked_on: { 'cory.pearcee': '2026-09-28' } }],
+      inbox: [],
+    })[0])
+    expect(cory.md_lead).toBe('Liked ‘Justin’, then followed')
+    expect(cory.from_post).toBe('Justin')
+    // the timeline still shows the day the like was logged
+    expect(cory.timeline.find(e => e.what === 'Liked a post')?.day).toBe('2026-09-28')
+  })
+})
+
+describe('the team and the client side are never leads (28 Sep 2026)', () => {
+  it('Manal liking and following is Team or client, not an MD Media lead; TurnKey\'s page neither', () => {
+    const rows = buildPeople({
+      followers: ['manal.rzn', 'turnkeybuildinggroup', 'jess.turnkeybuildinggroup'].map(u => ({ username: u, full_name: null, profile_pic: null, is_private: false, is_verified: false, first_seen_at: '2026-09-27', gone_at: null })),
+      posts: [{ item_id: 'i', title: 'Justin', href: null, day: '2026-09-25', likers: ['manal.rzn', 'turnkeybuildinggroup', 'jess.turnkeybuildinggroup'], commenters: [], people: {} }],
+      inbox: [],
+    }).map(p => crmRow(p))
+    for (const r of rows) { expect(r.md_lead).toBeNull(); expect(r.status).toBe('ours') }
+    expect(crmCounts(rows).md_leads).toBe(0)
+  })
+})

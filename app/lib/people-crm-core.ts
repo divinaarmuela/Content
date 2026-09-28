@@ -9,7 +9,7 @@
  * for a like or a follow, so each is dated by the only honest day there is (the post's day; the look that first saw
  * them follow) and the page says so.
  */
-import type { PeopleRow } from './people-analytics-core'
+import { orderDay, type PeopleRow } from './people-analytics-core'
 
 /**
  * The clients the page is for (the owner, 28 Sep 2026: "only for Justin and Jordan"). Add an id to open it to
@@ -20,6 +20,21 @@ export const PEOPLE_CRM_CLIENTS: readonly { id: string; name: string }[] = [
   { id: 'eb550318-b5a4-4dd6-81ea-9310588a55bb', name: 'Jordan Wilson' },
 ]
 
+/**
+ * NOT A LEAD, WHATEVER THEY DO (28 Sep 2026: Manal and Renée liked Justin's Reel and followed, and TurnKey's own page
+ * liked Jordan's — all three came up as MD Media leads). The team's own Instagram handles, matched to the team's
+ * logins (Manal Rizwan, Renée YY, Karly Merau, Joy Armuela, Divina), and the client side's own business pages. They
+ * show on the list as the team, and never count. Add a handle here when somebody new joins.
+ */
+export const TEAM_HANDLES: readonly string[] = ['mdmedia._', 'manal.rzn', 'renee.svt', 'karly_merau', 'joyarmuela', 'divina.armuela']
+/** the client's own business, and its staff pages named after it */
+export const CLIENT_SIDE_PATTERN = /turnkeybuildinggroup/i
+
+export function isTeamOrClientSide(handle: string): boolean {
+  const h = handle.replace(/^@/, '').toLowerCase()
+  return TEAM_HANDLES.includes(h) || CLIENT_SIDE_PATTERN.test(h)
+}
+
 export type CrmStatus = 'dmed' | 'commented' | 'liked' | 'new_follower' | 'follower' | 'unfollowed' | 'ours'
 
 export const CRM_STATUS_WORDS: Record<CrmStatus, string> = {
@@ -29,7 +44,7 @@ export const CRM_STATUS_WORDS: Record<CrmStatus, string> = {
   new_follower: 'New follower',
   follower: 'Follower',
   unfollowed: 'Unfollowed',
-  ours: 'Our account',
+  ours: 'Team or client',
 }
 
 export type CrmEvent = {
@@ -77,7 +92,8 @@ const max = (a: string | null, b: string | null) => (a === null ? b : b === null
 const min = (a: string | null, b: string | null) => (a === null ? b : b === null ? a : a < b ? a : b)
 
 /** one person, as the CRM draws them. `ours` = handles that are the team's or the client's own accounts */
-export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): CrmRow {
+export function crmRow(p: PeopleRow, ownAccounts: ReadonlySet<string> = new Set()): CrmRow {
+  const ours = { has: (k: string) => ownAccounts.has(k) || isTeamOrClientSide(k) }
   const timeline: CrmEvent[] = []
   let likes = 0
   let comments = 0
@@ -106,9 +122,10 @@ export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): Crm
   const following = p.follows === true
 
   // the lead rule: our post first, then the follow or the DM. Every action here is on a post we made.
-  const ourTouches = p.actions.filter(a => a.day).sort((a, b) => (a.day! < b.day! ? -1 : 1))
+  // ordered by `orderDay`: a like by its post's day (our read may have seen it days late), a comment by its own time
+  const ourTouches = p.actions.filter(a => orderDay(a)).sort((a, b) => (orderDay(a)! < orderDay(b)! ? -1 : 1))
   const firstOurs = ourTouches[0] ?? null
-  const touched = (after: string | null | undefined) => firstOurs && after && firstOurs.day! <= after ? firstOurs : null
+  const touched = (after: string | null | undefined) => firstOurs && after && orderDay(firstOurs)! <= after ? firstOurs : null
   const byFollow = touched(p.followed_on)
   const byDm = dmed ? touched(p.reached_out_first_on ?? p.reached_out_on) : null
   const verb = (a: { kind: string }) => (a.kind === 'liked' ? 'Liked' : a.kind === 'commented' ? 'Commented on' : 'Liked and commented on')

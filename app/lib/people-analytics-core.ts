@@ -112,6 +112,8 @@ export type PeopleAction = {
   /** what they wrote, and the exact time — when the provider gave them */
   text?: string | null
   at?: string | null
+  /** the day the post went out — the earliest a like on it can have been (28 Sep 2026) */
+  post_day?: string | null
   item_id: string | null
   title: string
   href: string | null
@@ -258,8 +260,8 @@ export function buildPeople(input: {
       const c = commented.has(k)
       const said = (byWho.get(k) ?? []).sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))
       if (said.length > 0) {
-        if (l) row.actions.push({ kind: 'liked', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: post.liked_on?.[k] ?? post.day })
-        for (const w of said) row.actions.push({ kind: 'commented', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: dayOfInstant(w.at) ?? post.day, text: w.text, at: w.at })
+        if (l) row.actions.push({ kind: 'liked', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: post.liked_on?.[k] ?? post.day, post_day: post.day })
+        for (const w of said) row.actions.push({ kind: 'commented', item_id: post.item_id, title: post.title?.trim() || A_POST, href: post.href, day: dayOfInstant(w.at) ?? post.day, text: w.text, at: w.at, post_day: post.day })
         continue
       }
       row.actions.push({
@@ -269,6 +271,7 @@ export function buildPeople(input: {
         href: post.href,
         // a like is dated by the read that first saw it; otherwise the post's own day
         day: (l ? post.liked_on?.[k] : null) ?? post.day,
+        post_day: post.day,
       })
     }
   }
@@ -299,13 +302,24 @@ export function buildPeople(input: {
  * post named is the LAST such post — the one closest to the follow, which is
  * the one a person would point at.
  */
+/**
+ * THE DAY TO PUT A TOUCH IN ORDER BY (28 Sep 2026: "how is Cory Pearce not an MD Media lead?"). A comment carries its
+ * exact time. A like carries only the day our read first SAW it — and a read done days late (Justin's Reel, read on
+ * the 28th) would put the like after a follow seen on the 27th. A like can be no earlier than its post, so a like is
+ * ordered by the post's day; the timeline still shows the day it was logged.
+ */
+export function orderDay(a: Pick<PeopleAction, 'day' | 'at' | 'post_day'>): string | null {
+  return a.at ? a.day : (a.post_day ?? a.day)
+}
+
 export function likelyFromUs(
   followedOn: string | null,
-  actions: readonly Pick<PeopleAction, 'title' | 'day'>[],
+  actions: readonly Pick<PeopleAction, 'title' | 'day' | 'at' | 'post_day'>[],
 ): FromUs {
   if (!followedOn) return { likely: false, title: null, day: null }
   let best: { title: string; day: string } | null = null
-  for (const a of actions) {
+  for (const raw of actions) {
+    const a = { title: raw.title, day: orderDay(raw) }
     if (!a.day || a.day > followedOn) continue
     if (!best || a.day > best.day) best = { title: a.title, day: a.day }
   }
