@@ -77,8 +77,12 @@ export async function readPostInteractors(
     const it = readInteractors(cur.interactors)
     // `force` is a person asking now: today's earlier read does not stand in
     // the way, only a read that is still running (the same day's claim)
-    if (it?.fetched_day === today && (!opts.force || it.status === 'running')) return null
-    const running: Interactors = { ...(it ?? { ...emptyLike(), followed: [] }), status: 'running', fetched_day: today }
+    // A READ KILLED MID-FLIGHT (28 Sep 2026): its step died with the row still "running", and every later try that
+    // day stood down to it. A run stamped over 15 minutes ago is dead — take it over.
+    const stale = it?.status === 'running' && typeof it.fetched_at === 'string' && now.getTime() - Date.parse(it.fetched_at) > 15 * 60_000
+    const unstamped = it?.status === 'running' && typeof it.fetched_at !== 'string' && !!opts.force
+    if (it?.fetched_day === today && !stale && !unstamped && (!opts.force || it.status === 'running')) return null
+    const running: Interactors = { ...(it ?? { ...emptyLike(), followed: [] }), status: 'running', fetched_day: today, fetched_at: stamp }
     return { ...cur, interactors: running }
   })
   if (!seat.claimed) return { status: 'skipped', reason: 'already read today' }

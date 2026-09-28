@@ -704,25 +704,38 @@ export const followersDaily = inngest.createFunction(
     concurrency: { limit: 1 },
   },
   async ({ step }) => withRequestCache(async () => {
-    // first, who liked and commented on this week's posts — read once a day
-    // for a post's first week, a handful of requests each, and never retried
-    // on a paid failure (its own step, so it never re-runs the dispatch)
-    const interactors = await step.run('read-post-interactors', async () => {
-      const { readDueInteractors } = await import('../lib/post-interactors')
-      return readDueInteractors(new Date())
-    })
+    // THE FOLLOWER LOOKS GO OUT FIRST (28 Sep 2026: Divina asked how Jordan's and Justin's conversions are tracked,
+    // and no client had a look on 26 or 27 Sep). The likes-and-comments read used to run first, every post in ONE
+    // step: one hung request (45 s each, several per post) could outlive the step, and the dispatch below it never
+    // ran — Jordan Wilson's first post was left "running" with nothing read. Now the looks are sent before anything
+    // slow, and each post is its own step, so a hang costs that post, not the morning.
     const due = await step.run('who-is-due', async () => {
       const { accountsDueToday } = await import('../lib/followers')
       return accountsDueToday(new Date())
     })
-    if (due.length === 0) return { interactors, skipped: 'nothing due — not switched on, or no public Instagram accounts' }
-    await step.sendEvent(
-      'dispatch-looks',
-      due.map(d => ({
-        name: 'app/followers.snapshot.requested',
-        data: { accountId: d.accountId, mode: d.mode, trigger: 'scheduled' as const, dedupe: `${d.accountId}:${d.mode}:${d.day}` },
-      }))
-    )
+    if (due.length > 0) {
+      await step.sendEvent(
+        'dispatch-looks',
+        due.map(d => ({
+          name: 'app/followers.snapshot.requested',
+          data: { accountId: d.accountId, mode: d.mode, trigger: 'scheduled' as const, dedupe: `${d.accountId}:${d.mode}:${d.day}` },
+        }))
+      )
+    }
+    // who liked and commented on this week's posts — read once a day for a post's first week, never retried on a
+    // paid failure (the morning is the retry)
+    const posts = await step.run('posts-due-a-read', async () => {
+      const { duePosts } = await import('../lib/post-interactors')
+      return (await duePosts(new Date())).map(d => d.post.id)
+    })
+    const interactors = { read: 0, skipped: 0, failed: 0 }
+    for (const id of posts) {
+      const r = await step.run(`read-post-${id}`, async () => {
+        const { readPostInteractors } = await import('../lib/post-interactors')
+        return readPostInteractors(id, { now: new Date() }).catch(e => ({ status: 'failed' as const, reason: String(e) }))
+      })
+      interactors[r.status === 'read' ? 'read' : r.status === 'failed' ? 'failed' : 'skipped']++
+    }
     return { interactors, dispatched: due.length }
   })
 )
