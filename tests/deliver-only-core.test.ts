@@ -59,7 +59,7 @@ describe('the Delivered column', () => {
   })
   it('groups by the card’s column, and the Editor page folds Delivered into Done', () => {
     const lanes = pageLanes('scheduler')
-    const grouped = groupByLane(lanes, [card(), card({ id: 'c2', deliver_only: false })])
+    const grouped = groupByLane(lanes, [card(), card({ id: 'c2', deliver_only: false, posting_approval_state: 'approved' } as never)])
     expect(grouped.find(g => g.lane.key === 'delivered')!.cards.map(c => c.id)).toEqual(['c1'])
     expect(grouped.find(g => g.lane.key === 'ready_to_post')!.cards.map(c => c.id)).toEqual(['c2'])
     const editor = pageLanes('editor')

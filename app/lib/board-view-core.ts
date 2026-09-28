@@ -733,6 +733,24 @@ export function handedToWords(card: { scheduler_ids?: unknown }, names: Readonly
 
 /** Group cards by lane, every lane present (empty arrays included), in
  *  board order. Input order within a lane is preserved. */
+/**
+ * WHERE A POST SITS ON THE POSTING ROAD (the owner, 28 Sep 2026: "why are all posts Ready to post when they're not
+ * client approved — I think our current flow is wrong … this is a post approval, not editing; those are independent").
+ * An approved EDIT puts a card at Ready to post; the POST on it has its own approval. While that is waiting, the card
+ * is not ready: waiting on the client → With client; waiting on the team → Quality check; the client asked for a
+ * change → back in Draft. Only the posting pages read this — the editor's and designer's boards keep the edit's own
+ * stage, which is finished.
+ */
+export function postingColumn(card: { status?: unknown; posting_approval_state?: unknown; posting_client_required?: unknown }, column: BoardColumnKey): BoardColumnKey {
+  if (column !== 'ready_to_post') return column
+  // SCHEDULING IS A NEW FLOW (the owner, 28 Sep 2026: "even if it's approved from there, once it's gone to the
+  // scheduling phase it's a new flow"): the edit's yes does not make the POST ready. Ready to post = the post approved.
+  const state = String(card.posting_approval_state ?? '')
+  if (state === 'approved') return column
+  if (state === 'pending') return card.posting_client_required === true ? 'with_client' : 'quality_check'
+  return 'draft'
+}
+
 export function groupByLane<T extends { status: ItemStatus; deliver_only?: unknown; clients?: { posts_own_content?: unknown } | null }>(
   lanes: readonly PageLane[], cards: readonly T[],
 ): { lane: PageLane; cards: T[] }[] {
@@ -748,7 +766,8 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
     const early = !POST_APPROVAL_FROM.includes(cardColumn(card))
     const key = handedOver(card as never) && buckets.has('done') ? 'done'
       : handed && early && buckets.has('draft') && !buckets.has('done') ? 'draft'
-      : laneByColumn.get(cardColumn(card))
+      // the posting pages (not the editor's): the post's own approval decides (28 Sep 2026)
+      : laneByColumn.get(buckets.has('done') ? cardColumn(card) : postingColumn(card as never, cardColumn(card)))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))

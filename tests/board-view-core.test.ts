@@ -377,7 +377,8 @@ describe('the lanes each page arranges the eight columns into', () => {
       card({ id: 'a', status: 'draft_uploaded' }),
       card({ id: 'b', status: 'published' }),
       card({ id: 'c', status: 'revision_required' }),
-      card({ id: 'd', status: 'approved_for_scheduling' }),
+      // its POST approved, so Ready to post on every page (28 Sep 2026: an approved edit alone is the scheduler's Draft)
+      card({ id: 'd', status: 'approved_for_scheduling', posting_approval_state: 'approved' } as never),
       card({ id: 'e', status: 'scheduled' }),
       card({ id: 'f', status: 'client_review' }),
     ]
