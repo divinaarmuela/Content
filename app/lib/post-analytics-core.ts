@@ -87,7 +87,11 @@ export function shapePostAnalytics(
   // the first platform that actually carries a link wins — a post fanned out
   // to three channels has one live URL worth showing, not three
   const withUrl = platforms.find(p => typeof p.platformPostUrl === 'string' && p.platformPostUrl)
-  const first = withUrl ?? platforms[0]
+  // INSTAGRAM FIRST when the post went there (28 Sep 2026: Justin's Reel had 12 comments on Instagram and the post
+  // page showed TikTok's 1 — the provider listed TikTok first). Instagram is where the likes, comments and new
+  // followers are read, so its numbers and its link are the row's.
+  const instagram = platforms.find(p => String(p.platform ?? '') === 'instagram' && typeof p.platformPostUrl === 'string' && p.platformPostUrl)
+  const first = instagram ?? withUrl ?? platforms[0]
 
   // the per-platform block carries fuller numbers than the roll-up on a
   // single-platform post; prefer it and fall back to the roll-up
