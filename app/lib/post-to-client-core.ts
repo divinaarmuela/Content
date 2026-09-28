@@ -92,12 +92,13 @@ export function sendStage(item: { status?: unknown; posting_approval_state?: unk
  * second send is a deliberate "Send again". A new round (the card sent back and handed in again, or the post edited
  * and sent for approval again) clears the stamp — see `sentStampFor`.
  */
-export type SentStamp = { at: string; to: string[]; stage: 'card' | 'post'; /** the post's time when it was sent — a new time means a new send */ for_time?: string | null }
+export type SentStamp = { at: string; to: string[]; stage: 'card' | 'post'; /** the post's time when it was sent — a new time means a new send */ for_time?: string | null; /** 'link' — the approval link was copied to send by hand (28 Sep 2026) */ via?: 'email' | 'link' }
 
 export function readSentStamp(item: { client_sent?: unknown } | null | undefined): SentStamp | null {
   const v = item?.client_sent as Partial<SentStamp> | undefined
-  if (!v || typeof v.at !== 'string' || !Array.isArray(v.to) || v.to.length === 0) return null
-  return { at: v.at, to: v.to.map(String), stage: v.stage === 'post' ? 'post' : 'card', for_time: typeof v.for_time === 'string' ? v.for_time : null }
+  const byLink = v?.via === 'link'
+  if (!v || typeof v.at !== 'string' || !Array.isArray(v.to ?? []) || (!byLink && (v.to ?? []).length === 0)) return null
+  return { at: v.at, to: (v.to ?? []).map(String), stage: v.stage === 'post' ? 'post' : 'card', for_time: typeof v.for_time === 'string' ? v.for_time : null, via: byLink ? 'link' : 'email' }
 }
 
 /** the stamp counts only for the moment it was sent in: a card stamp is stale once the card is a post, and the other way */
@@ -109,7 +110,7 @@ export function sentForStage(item: { client_sent?: unknown; status?: unknown; po
 
 export function sentWords(s: SentStamp, tz = 'Australia/Melbourne'): string {
   const when = new Date(s.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-  return `Emailed to ${s.to.join(', ')} · ${when}`
+  return s.via === 'link' ? `Approval link copied · ${when}` : `Emailed to ${s.to.join(', ')} · ${when}`
 }
 
 
@@ -136,7 +137,7 @@ export function waitingOnWords(
   const sent = sentForStage(item as never)
   if (!sent) return `Waiting on ${name} · not emailed yet`
   const when = new Date(sent.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-  return `Waiting on ${name} · emailed ${when}`
+  return `Waiting on ${name} · ${sent.via === 'link' ? 'link sent' : 'emailed'} ${when}`
 }
 
 /**
@@ -163,12 +164,17 @@ export const MISSED_WORDS = 'Missed its time — pick a new time, then send it f
 /** …and once a new time is picked, until it is sent again */
 export const NEW_TIME_WORDS = 'New time set — send it to the client for approval again'
 
+/** approved with no time (the owner, 28 Sep 2026: "some cases I want approval without a scheduled time") */
+export const NEEDS_TIME_WORDS = 'Approved — pick a time to book it in'
+
 /** what a post-approval card says about its post's time, if anything needs doing (28 Sep 2026) */
 export function approvalTimeLine(
   item: { posting_approval_state?: unknown; posting_client_required?: unknown; client_sent?: unknown },
   posts: readonly { status?: string | null; scheduled_for?: string | null }[],
   now: number = Date.now(),
 ): string | null {
+  // approved, and a post with no time is waiting to be booked — nothing books it by itself
+  if (String(item.posting_approval_state ?? '') === 'approved' && posts.some(p => p.status === 'approved' && !p.scheduled_for)) return NEEDS_TIME_WORDS
   if (String(item.posting_approval_state ?? '') !== 'pending') return null
   const live = posts.filter(p => p.status !== 'cancelled' && p.status !== 'published' && p.scheduled_for)
   if (live.length === 0) return null

@@ -79,11 +79,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!client.share_token) {
         return NextResponse.json({ error: 'This client has no portal link yet — make one on the client first' }, { status: 409 })
       }
-      const body = await req.json().catch(() => ({})) as { emails?: unknown; note?: unknown; test?: unknown }
+      const body = await req.json().catch(() => ({})) as { emails?: unknown; note?: unknown; test?: unknown; copy?: unknown }
       const note = String(body.note ?? '').trim().slice(0, 1000)
       // SEND ME A TEST FIRST (the owner, 28 Sep 2026: "send a test link to me, I want to see how you plan to send"): the
       // exact email the client would get, to the person pressing it, with the page in preview — nothing on the post moves
       const test = body.test === true
+      // COPY THE LINK (the owner, 28 Sep 2026: "make sure I can copy the link to send it to them — not just send"):
+      // no email — the link is theirs to send by hand. It opens the approval exactly as an email would.
+      if (body.copy === true) {
+        if (stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
+          const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
+            cur && String((cur as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
+              ? { ...cur, posting_client_required: true } as ContentItem
+              : null)
+          if (!taken.claimed) return NextResponse.json({ error: 'Somebody answered this post while you were copying it — refresh to see where it stands' }, { status: 409 })
+        }
+        const copyPosts = stage === 'post' ? await table<SocialPost>('social_posts').list({ by: { item_id: item.id } }).catch(() => [] as SocialPost[]) : []
+        const copyPost = copyPosts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
+        const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id)
+        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: new Date().toISOString(), to: [], stage, via: 'link', for_time: stage === 'post' ? (copyPost?.scheduled_for ?? null) : null } } as never).catch(() => undefined)
+        await logActivity({ actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id, action: 'sent_to_client', detail: 'Copied the approval link to send by hand' }).catch(() => undefined)
+        return NextResponse.json({ link, message: 'Link ready — paste it to the client. It opens this post for them to approve.' })
+      }
       const picked = test ? { ok: true as const, emails: [String(user.email).toLowerCase()] } : pickRecipients(body.emails, recipients)
       if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
       // THE FINAL POST: marked as the client's to answer, so their page (and the portal's list) offers it to them — the

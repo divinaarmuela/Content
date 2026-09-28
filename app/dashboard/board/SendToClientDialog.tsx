@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Mail, X } from 'lucide-react'
+import { Link2, Mail, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import type { ClientRecipient } from '../../lib/post-to-client-core'
@@ -21,6 +21,7 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
   const [problem, setProblem] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  const [link, setLink] = useState<string | null>(null)
 
   useEffect(() => {
     let gone = false
@@ -71,6 +72,26 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
     }
   }
 
+  // COPY THE LINK (the owner, 28 Sep 2026: "make sure I can copy the link to send it to them — not just send"):
+  // the same approval, for a WhatsApp or a text; the link is shown too, in case the browser will not copy
+  const copyLink = async () => {
+    setSending(true); setProblem(null)
+    try {
+      const res = await fetch(`/api/production/items/${itemId}/send-to-client`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ copy: true }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setProblem(String(j?.error ?? 'Could not make the link')); return }
+      setLink(String(j.link))
+      try { await navigator.clipboard.writeText(String(j.link)); toast.success('Approval link copied — paste it to the client') }
+      catch { toast.info('Select the link below and copy it') }
+    } catch {
+      setProblem('Could not make the link — check the connection and try again')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="stc-title"
       onClick={e => { if (e.target === e.currentTarget && !sending) onClose() }}>
@@ -88,6 +109,13 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
         {/* the answer first, where it is seen (28 Sep 2026) */}
         {problem && <p role="alert" className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px]">{problem}</p>}
         {done && <p role="status" className="rounded-inner border border-accent-green/40 bg-tint-green px-3 py-2 text-[13px]">{done}</p>}
+        {link && (
+          <div className="flex flex-col gap-1">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Approval link — send it to {clientName || 'the client'}</p>
+            <input readOnly value={link} onFocus={e => e.currentTarget.select()} aria-label="Approval link"
+              className="min-h-11 w-full rounded-inner border border-border bg-background px-3 text-[13px]" />
+          </div>
+        )}
 
         {!done && (
           <>
@@ -114,8 +142,15 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
           </>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" className="min-h-11 rounded-full" onClick={onClose} disabled={sending}>{done ? 'Close' : 'Cancel'}</Button>
+          {!done && (
+            <Button variant="outline" className="min-h-11 rounded-full" onClick={() => void copyLink()}
+              disabled={sending || (!!problem && problem.startsWith('This'))}
+              title="Copies the link to this post's approval page, to send by WhatsApp or text">
+              <Link2 className="mr-1.5 h-4 w-4" aria-hidden /> Copy link
+            </Button>
+          )}
           {!done && (
             <Button variant="outline" className="min-h-11 rounded-full" onClick={() => void send(true)}
               disabled={sending || (!!problem && problem.startsWith('This'))}

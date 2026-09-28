@@ -57,3 +57,26 @@ describe('a post put to the client is waiting on the client, not "on you" (28 Se
     expect(waitingRow({ ...card, posting_client_required: false } as never, boss as never, '2026-09-28')!.onYou).toBe(true)
   })
 })
+
+describe('approval without a time, and a link to send by hand (28 Sep 2026)', () => {
+  it('approved with no time: the card says to pick one', async () => {
+    const { approvalTimeLine, NEEDS_TIME_WORDS } = await import('../app/lib/post-to-client-core')
+    expect(approvalTimeLine({ posting_approval_state: 'approved' }, [{ status: 'approved', scheduled_for: null }])).toBe(NEEDS_TIME_WORDS)
+    expect(approvalTimeLine({ posting_approval_state: 'approved' }, [{ status: 'scheduled', scheduled_for: six }])).toBeNull()
+  })
+  it('a copied link counts as sent, and says so', async () => {
+    const { readSentStamp, sentWords, waitingOnWords } = await import('../app/lib/post-to-client-core')
+    const item = { posting_client_required: true, status: 'approved_for_scheduling', posting_approval_state: 'pending', client_sent: { at: '2026-09-28T09:00:00Z', to: [], stage: 'post', via: 'link', for_time: null } }
+    expect(readSentStamp(item)?.via).toBe('link')
+    expect(sentWords(readSentStamp(item)!)).toMatch(/^Approval link copied · /)
+    expect(waitingOnWords(item, 'Justin Engelke', 'Australia/Melbourne', null)).toMatch(/^Waiting on Justin Engelke · link sent /)
+  })
+  it('the dialog copies the link, and the route opens the approval without emailing', () => {
+    expect(readFileSync('app/dashboard/board/SendToClientDialog.tsx', 'utf8')).toContain("JSON.stringify({ copy: true })")
+    const route = readFileSync('app/api/production/items/[id]/send-to-client/route.ts', 'utf8')
+    expect(route).toContain('if (body.copy === true) {')
+    expect(route).toContain("via: 'link'")
+    const copyBlock = route.slice(route.indexOf('if (body.copy === true) {'), route.indexOf("return NextResponse.json({ link, message"))
+    expect(copyBlock).not.toContain('notify(')
+  })
+})

@@ -86,9 +86,10 @@ async function notifyManagers(clientId: string, item: { id: string; adhoc_post?:
 async function tellTeamApprovedLate(clientId: string, item: { id: string; title?: string | null; adhoc_post?: unknown }, clientName: string): Promise<void> {
   const posts = await table<{ id: string; item_id: string; status: string; scheduled_for: string | null; timezone?: string | null; created_by?: string | null }>('social_posts')
     .list({ by: { item_id: item.id } as never }).catch(() => [])
-  const late = posts.filter(p => p.status === 'approved' && slotMissed(p.scheduled_for))
+  // a time that had gone, or no time at all (approval asked without one — 28 Sep 2026): either way it needs a time now
+  const late = posts.filter(p => p.status === 'approved' && (!p.scheduled_for || slotMissed(p.scheduled_for)))
   if (late.length === 0) return
-  const when = slotWords(String(late[0].scheduled_for), String(late[0].timezone ?? 'Australia/Melbourne'))
+  const when = late[0].scheduled_for ? slotWords(String(late[0].scheduled_for), String(late[0].timezone ?? 'Australia/Melbourne')) : null
   const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
   const data = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
   const people = new Map<string, { id: string; email: string; role: string }>()
@@ -107,10 +108,12 @@ async function tellTeamApprovedLate(clientId: string, item: { id: string; title?
       actorName: clientName, actorEmail: 'portal+client@mdmmarketing.com.au',
       eventType: 'client_approved_late', entityType: 'content_item', entityId: `${item.id}#approved-late`,
       recipientId: m.id, recipientEmail: m.email,
-      subject: `${clientName} approved ${title} — it needs a new time`,
+      subject: when ? `${clientName} approved ${title} — it needs a new time` : `${clientName} approved ${title} — pick a time to book it`,
       bodyHtml: renderEmail(
-        `${escapeHtml(clientName)} approved ${escapeHtml(title)} — it needs a new time`,
-        `<p>${escapeHtml(clientName)} approved it, but its time (${escapeHtml(when)}) had already passed, so it could not be booked. Pick a new time on the Schedule and it goes out then.</p>`,
+        when ? `${escapeHtml(clientName)} approved ${escapeHtml(title)} — it needs a new time` : `${escapeHtml(clientName)} approved ${escapeHtml(title)} — pick a time to book it`,
+        when
+          ? `<p>${escapeHtml(clientName)} approved it, but its time (${escapeHtml(when)}) had already passed, so it could not be booked. Pick a new time on the Schedule and it goes out then.</p>`
+          : `<p>${escapeHtml(clientName)} approved it. It was sent without a time, so it is not booked yet — pick a time on the Schedule and it goes out then.</p>`,
         'Open it', `${DASHBOARD_URL}${itemPath(item as never, m.role)}`,
       ),
     }).catch(e => console.error('approved-late notify failed:', e))

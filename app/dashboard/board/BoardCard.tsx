@@ -334,7 +334,7 @@ export function BoardCard({
           <Button variant="outline"
             onClick={e => { e.preventDefault(); e.stopPropagation(); setSendOpen(true) }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
-            {sentForStage(card as never) ? '✓ Emailed to client · Send again' : 'Send to client'}
+            {sentForStage(card as never) ? (sentForStage(card as never)?.via === 'link' ? '✓ Link sent to client · Send again' : '✓ Emailed to client · Send again') : 'Send to client'}
           </Button>
         )}
         {!folded && briefFolds && !theirs && (
