@@ -32,9 +32,12 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
         const list = (j.recipients ?? []) as ClientRecipient[]
         setRecipients(list)
         setClientName(String(j.client_name ?? ''))
-        // the main addresses ticked; if none is marked main, the first one
+        // THE CLIENT'S OWN ADDRESS, ticked by itself (the owner, 28 Sep 2026: "Justin is Justin and Jordan is Jordan — it
+        // sends to them individually"): Justin Engelke's record lists Jordan as its main contact, so ticking every
+        // "main" person emailed Jordan about Justin's post. Anyone else is one tick away.
+        const own = list.filter(x => x.label === 'The business')
         const main = list.filter(x => x.primary)
-        setPicked(new Set((main.length ? main : list.slice(0, 1)).map(x => x.email)))
+        setPicked(new Set((own.length ? own : main.length ? main.slice(0, 1) : list.slice(0, 1)).map(x => x.email)))
         if (!j.has_portal) setProblem('This client has no portal link yet — make one on the client first')
         else if (!j.sendable) setProblem('This can be sent once it is With client')
       })
