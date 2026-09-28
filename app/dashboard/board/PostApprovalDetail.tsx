@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ExternalLink, Mail, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import SendToClientDialog from './SendToClientDialog'
+import { sendStage } from '../../lib/post-to-client-core'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
 import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
@@ -429,7 +430,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // "With X · change" once booked in
   const mayHandOn = isManager && (item?.status === 'approved_for_scheduling' || item?.status === 'scheduled')
   /** an account manager or a super admin sends a card that is With client to the client, by email (28 Sep 2026) */
-  const maySendToClient = isManager && item?.status === 'client_review'
+  const maySendToClient = isManager && !!item && sendStage(item as never) !== null
   const [sendingToClient, setSendingToClient] = useState(false)
   const markPosted = async () => {
     if (!item || handOn === null) return

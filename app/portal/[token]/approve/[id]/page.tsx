@@ -18,12 +18,17 @@ export const dynamic = 'force-dynamic'
  * question, Approve or Ask for a change. No board, no menu, nothing else to find. The client's yes takes the card to
  * Ready to post through the same rules the board uses.
  */
-export default async function PortalApprovePage({ params }: { params: Promise<{ token: string; id: string }> }) {
+export default async function PortalApprovePage({ params, searchParams }: {
+  params: Promise<{ token: string; id: string }>
+  searchParams: Promise<{ preview?: string }>
+}) {
   const { token: raw, id } = await params
+  // PREVIEW: the team sees exactly what the client will, with the answer switched off (28 Sep 2026)
+  const preview = (await searchParams).preview === '1'
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
-  const data = await getPortalApproval(raw, id)
+  const data = await getPortalApproval(raw, id, { preview })
   if (!data) notFound()
-  const { slides, caption, state } = data
+  const { slides, caption, state, typeLine, whenLine, whereLine, kind } = data
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -37,9 +42,7 @@ export default async function PortalApprovePage({ params }: { params: Promise<{ 
               MD Media · For your approval · {data.client.name}
             </p>
             <h1 className="text-[28px] font-semibold leading-tight sm:text-[34px]">{data.title}</h1>
-            {slides.length > 1 && (
-              <p className="text-[14px] text-muted-foreground">{slides.length} {slides.every(s => s.type === 'video') ? 'clips' : 'slides'} — swipe or use the arrows to see each one.</p>
-            )}
+            <p className="text-[15px] text-muted-foreground">{typeLine}{slides.length > 1 ? ' — swipe or use the arrows to see each one' : ''}</p>
           </header>
 
           {slides.length > 0 ? (
@@ -52,14 +55,35 @@ export default async function PortalApprovePage({ params }: { params: Promise<{ 
             </p>
           )}
 
+          {preview && (
+            <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[13px]">Preview — this is exactly what the client sees. Approve is switched off here.</p>
+          )}
+
+          {(whenLine || whereLine) && (
+            <section className="grid gap-3 rounded-card border border-border bg-card p-5 sm:grid-cols-2">
+              {whenLine && (
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Goes out</p>
+                  <p className="mt-1 text-[15px] font-medium">{whenLine}</p>
+                </div>
+              )}
+              {whereLine && (
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Where</p>
+                  <p className="mt-1 text-[15px] font-medium">{whereLine}</p>
+                </div>
+              )}
+            </section>
+          )}
+
           {caption && (
             <section className="rounded-card border border-border bg-card p-5">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Caption</p>
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{kind === 'post' ? 'Caption, exactly as it will post' : 'Caption'}</p>
               <p className="mt-2 whitespace-pre-line text-[15px] leading-[1.55]">{caption}</p>
             </section>
           )}
 
-          <ApprovePanel token={token} itemId={id} state={state} clientName={data.client.name} />
+          <ApprovePanel token={token} itemId={id} state={state} kind={kind} preview={preview} clientName={data.client.name} />
 
           <p className="text-center text-[12px] text-muted-foreground">
             {data.am_name ? `Questions? Reply to the email — it goes to ${data.am_name}.` : 'Questions? Reply to the email and we’ll get back to you.'}

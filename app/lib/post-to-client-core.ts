@@ -72,3 +72,16 @@ export function sendOutcomeWords(results: readonly { email: string; result: stri
   return `Emailed ${sent.join(', ')} the link to view and approve it.`
     + (failed.length ? ` Could not email ${failed.join(', ')} — send them the link yourself.` : '')
 }
+
+/**
+ * WHAT IS BEING SENT (the owner, 28 Sep 2026: "now we need to do the send for approval — send to actual clients").
+ * Two moments ask the client: the CARD at With client (the edit itself), and the FINAL POST once the edit is
+ * approved and a post is waiting on sign-off (its pictures, caption and time). Anything else is not theirs to answer.
+ */
+export type SendStage = 'card' | 'post' | null
+export function sendStage(item: { status?: unknown; posting_approval_state?: unknown }): SendStage {
+  const status = String(item.status ?? '')
+  if (status === SENDABLE_STATUS) return 'card'
+  if (['approved_for_scheduling', 'scheduled'].includes(status) && String(item.posting_approval_state ?? '') === 'pending') return 'post'
+  return null
+}

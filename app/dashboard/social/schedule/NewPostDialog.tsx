@@ -52,6 +52,7 @@ import type { Slide } from '@/app/lib/version-files-core'
 import PlatformIcon from '../PlatformIcon'
 import type { ImageEditorTarget } from './ImageEditor'
 import MediaPicker from './MediaPicker'
+import SendToClientDialog from '../../board/SendToClientDialog'
 import TimePicker from './TimePicker'
 import { DOT_CLASS, STATUS_WORDS, Thumb } from './tiles'
 import type { SchedulePostRow } from './useSchedulePosts'
@@ -211,6 +212,7 @@ export default function NewPostDialog({
   /** the post a refusal named — one press opens it instead */
   const [existingPost, setExistingPost] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
+  const [sendingToClient, setSendingToClient] = useState(false)
   /** WHERE THE ANSWER IS (the owner, 28 Sep 2026: "things are showing all the way at the bottom — they would need to
    *  scroll"): a new problem or note is brought into view the moment it appears */
   const messagesRef = useRef<HTMLDivElement>(null)
@@ -1807,7 +1809,8 @@ export default function NewPostDialog({
                 <button
                   type="button"
                   disabled={busy || !state.postId}
-                  onClick={() => void sendToClient()}
+                  // emails the client a link to approve it — the addresses confirmed first (28 Sep 2026)
+                  onClick={() => setSendingToClient(true)}
                   className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold disabled:opacity-60"
                 >
                   Send to {clientName || 'the client'}
@@ -1920,6 +1923,7 @@ export default function NewPostDialog({
         </div>
       </div>
 
+      {sendingToClient && <SendToClientDialog itemId={target.itemId} onClose={() => setSendingToClient(false)} />}
       <MediaPicker
         open={picking}
         onClose={() => setPicking(false)}

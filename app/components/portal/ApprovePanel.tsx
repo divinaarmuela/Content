@@ -11,7 +11,11 @@ const NAME_KEY = 'mdm-portal-name'
  * One big Approve; "Ask for a change" opens a box for what to change. The same /api/portal/act the board uses, so
  * the server's rules (only a card With client, only this client's) decide — this only asks.
  */
-export default function ApprovePanel({ token, itemId, state, clientName }: {
+export default function ApprovePanel({ token, itemId, state, clientName, kind = 'card', preview = false }: {
+  /** card = the edit (approve / request_changes); post = the final post (approve_post / request_post_changes) */
+  kind?: 'card' | 'post'
+  /** the team's preview: shown exactly, answered never */
+  preview?: boolean
   token: string
   itemId: string
   /** waiting = theirs to answer now; approved / changes = already answered; not_ready = not with them yet */
@@ -29,6 +33,7 @@ export default function ApprovePanel({ token, itemId, state, clientName }: {
   useEffect(() => { try { setName(localStorage.getItem(NAME_KEY) ?? '') } catch { /* private mode */ } }, [])
 
   const act = async (action: 'approve' | 'request_changes') => {
+    if (preview) { setProblem('Preview — Approve and Ask for a change are switched off here'); return }
     const text = action === 'request_changes' ? note.trim() : ''
     if (action === 'request_changes' && !text) { setProblem('Tell us what to change — a few words is enough'); return }
     const who = name.trim().slice(0, 60)
@@ -37,7 +42,7 @@ export default function ApprovePanel({ token, itemId, state, clientName }: {
     try {
       const res = await fetch('/api/portal/act', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, item_id: itemId, action, comment: text, author_name: who }),
+        body: JSON.stringify({ token, item_id: itemId, action: kind === 'post' ? (action === 'approve' ? 'approve_post' : 'request_post_changes') : action, comment: text, author_name: who }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(j?.error ?? 'That did not go through — try again in a moment'))

@@ -3,6 +3,7 @@
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import SendToClientDialog from './SendToClientDialog'
+import { sendStage } from '../../lib/post-to-client-core'
 import Link from 'next/link'
 import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -329,7 +330,7 @@ export function BoardCard({
         ))}
 
         {/* SEND TO CLIENT, on the card itself (28 Sep 2026): With client, a manager, on Post approval */}
-        {!folded && page === 'scheduler' && card.status === 'client_review' && (viewer.role === 'account_manager' || viewer.role === 'super_admin') && (
+        {!folded && page === 'scheduler' && sendStage(card as never) !== null && (viewer.role === 'account_manager' || viewer.role === 'super_admin') && (
           <Button variant="outline"
             onClick={e => { e.preventDefault(); e.stopPropagation(); setSendOpen(true) }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">

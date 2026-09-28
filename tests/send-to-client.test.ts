@@ -144,10 +144,31 @@ describe('POST /api/production/items/:id/send-to-client', () => {
 describe('where it is on the page', () => {
   it('the Post approval drawer and card offer it to a manager at With client; the portal lets the client approve an uploaded post', () => {
     const drawer = readFileSync('app/dashboard/board/PostApprovalDetail.tsx', 'utf8')
-    expect(drawer).toContain("const maySendToClient = isManager && item?.status === 'client_review'")
+    expect(drawer).toContain('const maySendToClient = isManager && !!item && sendStage(item as never) !== null')
     const card = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
-    expect(card).toContain("page === 'scheduler' && card.status === 'client_review' && (viewer.role === 'account_manager' || viewer.role === 'super_admin')")
+    expect(card).toContain("page === 'scheduler' && sendStage(card as never) !== null && (viewer.role === 'account_manager' || viewer.role === 'super_admin')")
+    // and the Schedule page's post window — where Divina sends posts for approval — opens the same dialog
+    expect(readFileSync('app/dashboard/social/schedule/NewPostDialog.tsx', 'utf8')).toContain('<SendToClientDialog itemId={target.itemId}')
     const portal = readFileSync('app/components/portal/PortalBoard.tsx', 'utf8')
     expect(portal).toContain('const decides = true')
+  })
+})
+
+describe('the final post, once the edit is approved (28 Sep 2026: "send for approval to actual clients")', () => {
+  it('is sendable while its post waits on sign-off, and becomes the client\'s to answer', async () => {
+    const { sendStage } = await import('../app/lib/post-to-client-core')
+    expect(sendStage({ status: 'client_review' })).toBe('card')
+    expect(sendStage({ status: 'approved_for_scheduling', posting_approval_state: 'pending' })).toBe('post')
+    expect(sendStage({ status: 'approved_for_scheduling', posting_approval_state: 'approved' })).toBeNull()
+    expect(sendStage({ status: 'quality_check' })).toBeNull()
+    fake = seedDb({
+      content_items: [{ id: 'item-1', client_id: 'c1', title: '11', status: 'approved_for_scheduling', posting_approval_state: 'pending', posting_client_required: false }] as unknown as Row[],
+      clients: [{ id: 'c1', name: 'Jordan Wilson', email: 'jordan@example.com', share_token: 'tok-1' }] as unknown as Row[],
+      client_contacts: [] as unknown as Row[],
+    })
+    const r = await call('POST', { emails: ['jordan@example.com'] })
+    expect(r.status).toBe(200)
+    expect((fake.rows('content_items')[0] as unknown as { posting_client_required: boolean }).posting_client_required).toBe(true)
+    expect(String(notify.mock.calls[0][0].subject)).toContain('Your post is ready to approve')
   })
 })

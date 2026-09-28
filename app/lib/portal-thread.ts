@@ -3,7 +3,7 @@ import { sanitiseScripts } from './script-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
-  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, WorkflowActivity,
+  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, SocialAccount, SocialPost, WorkflowActivity,
 } from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
@@ -235,11 +235,18 @@ export type PortalApproval = {
   caption: string
   /** waiting = theirs to answer now; approved / changes = already answered; not_ready = not with them yet */
   state: 'waiting' | 'approved' | 'changes' | 'not_ready'
+  /** card = the edit itself (With client); post = the final post, once the edit is approved */
+  kind: 'card' | 'post'
+  /** "Carousel · 14 slides", "Reel", "Video" — what it is, in one line */
+  typeLine: string
+  /** the final post only: when it goes out, and where */
+  whenLine: string | null
+  whereLine: string | null
 }
 
 /** the post, sanitised for the client: a card handed in as files shows the files they were given (the newest cut of
  *  each clip at the version sent to them); anything else shows its post's pictures */
-export async function getPortalApproval(rawToken: string, itemId: string): Promise<PortalApproval | null> {
+export async function getPortalApproval(rawToken: string, itemId: string, opts: { preview?: boolean } = {}): Promise<PortalApproval | null> {
   const detail = await getPortalItemDetail(rawToken, itemId)
   if (!detail) return null
   const row = await table<ContentItem>('content_items').get(itemId).catch(() => null)
@@ -251,6 +258,42 @@ export async function getPortalApproval(rawToken: string, itemId: string): Promi
     ? files.map(f => ({ url: f.url, name: f.name, type: (/^video\//.test(String(f.mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : 'image') as 'video' | 'image' }))
     : (detail.item.slides ?? []).filter(s => s && s.url).map(s => ({ url: s.url, name: s.name, type: s.type }))
   const status = String(row.status)
+  const kindWord = (n: number) => {
+    const t = String((row as { content_type?: string | null }).content_type ?? '').toLowerCase()
+    const allVideo = n > 0 && slides.every(s => s.type === 'video')
+    const word = t === 'carousel' ? 'Carousel' : t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'
+    return n > 1 ? `${word} · ${n} ${allVideo ? 'clips' : 'slides'}` : word
+  }
+
+  // THE FINAL POST, when that is what is waiting on them (28 Sep 2026): its own pictures, caption, time and networks
+  const postState = String((row as { posting_approval_state?: unknown }).posting_approval_state ?? '')
+  if (['approved_for_scheduling', 'scheduled', 'published'].includes(status) && ((row as { posting_client_required?: unknown }).posting_client_required === true || (opts.preview && postState === 'pending')) && ['pending', 'approved', 'changes'].includes(postState)) {
+    const posts = await table<SocialPost>('social_posts').list({ by: { item_id: row.id } }).catch(() => [] as SocialPost[])
+    const post = posts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
+    const postSlides = (Array.isArray(post?.slides) ? post!.slides as unknown as { url?: string; name?: string; type?: string }[] : [])
+      .filter(s => s && typeof s.url === 'string' && s.url)
+      .map(s => ({ url: String(s.url), name: s.name, type: (s.type === 'video' ? 'video' : 'image') as 'video' | 'image' }))
+    const accounts = post && Array.isArray(post.channels) && post.channels.length
+      ? await table<SocialAccount>('social_accounts').list({ where: a => (post.channels as unknown as string[]).includes(a.id) }).catch(() => [] as SocialAccount[])
+      : []
+    const NAMES: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' }
+    const tz = String((post as { timezone?: string | null } | null)?.timezone ?? 'Australia/Melbourne')
+    const when = post?.scheduled_for
+      ? new Date(post.scheduled_for).toLocaleString('en-AU', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
+      : null
+    const media = postSlides.length ? postSlides : slides
+    return {
+      client: detail.client, am_name: detail.am_name, title: String(detail.item.title ?? 'Your post'),
+      slides: media,
+      caption: String(post?.caption ?? (row as { caption?: string | null }).caption ?? '').trim(),
+      state: postState === 'pending' ? 'waiting' : postState === 'approved' ? 'approved' : 'changes',
+      kind: 'post',
+      typeLine: (() => { const n = media.length; const allVideo = n > 0 && media.every(s => s.type === 'video'); const t = String((row as { content_type?: string | null }).content_type ?? '').toLowerCase(); const w = t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'; return n > 1 ? `${w} · ${n} ${allVideo ? 'clips' : 'slides'}` : w })(),
+      whenLine: when,
+      whereLine: accounts.length ? [...new Set(accounts.map(a => NAMES[String(a.platform)] ?? String(a.platform)))].join(', ') : null,
+    }
+  }
+
   return {
     client: detail.client,
     am_name: detail.am_name,
@@ -261,5 +304,9 @@ export async function getPortalApproval(rawToken: string, itemId: string): Promi
       : ['approved_for_scheduling', 'scheduled', 'published'].includes(status) ? 'approved'
       : status === 'client_changes_requested' ? 'changes'
       : 'not_ready',
+    kind: 'card',
+    typeLine: kindWord(slides.length),
+    whenLine: null,
+    whereLine: null,
   }
 }

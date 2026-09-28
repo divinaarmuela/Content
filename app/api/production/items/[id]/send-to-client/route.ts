@@ -7,7 +7,7 @@ import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
 import {
-  SENDABLE_STATUS, clientRecipients, itemApprovalLink, pickRecipients, sendKey, sendOutcomeWords,
+  clientRecipients, itemApprovalLink, pickRecipients, sendKey, sendOutcomeWords, sendStage,
 } from '../../../../../lib/post-to-client-core'
 
 /**
@@ -42,7 +42,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({
         recipients,
         client_name: client.name,
-        sendable: item.status === SENDABLE_STATUS,
+        sendable: sendStage(item as never) !== null,
+        stage: sendStage(item as never),
         has_portal: !!client.share_token,
       })
     } catch (e) {
@@ -57,8 +58,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     try {
       const { id } = await params
       const { user, item, client, recipients } = await context(id)
-      if (item.status !== SENDABLE_STATUS) {
-        return NextResponse.json({ error: 'This can be sent to the client once it is With client — pass the quality check first' }, { status: 409 })
+      const stage = sendStage(item as never)
+      if (!stage) {
+        return NextResponse.json({ error: 'This can be sent to the client once it is With client, or once its post is waiting on approval' }, { status: 409 })
       }
       if (!client.share_token) {
         return NextResponse.json({ error: 'This client has no portal link yet — make one on the client first' }, { status: 409 })
@@ -67,6 +69,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const picked = pickRecipients(body.emails, recipients)
       if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
       const note = String(body.note ?? '').trim().slice(0, 1000)
+      // THE FINAL POST: marked as the client's to answer, so their page (and the portal's list) offers it to them — the
+      // same flag the composer's old "Send to client" set, without which nobody was ever asked (24 Sep 2026)
+      if (stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
+        const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
+          cur && String((cur as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
+            ? { ...cur, posting_client_required: true } as ContentItem
+            : null)
+        if (!taken.claimed) return NextResponse.json({ error: 'Somebody answered this post while you were sending it — refresh to see where it stands' }, { status: 409 })
+      }
       const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id)
       const title = String(item.title ?? 'Your post')
       const caption = String((item as { caption?: string | null }).caption ?? '').trim()
@@ -82,7 +93,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           entityId: sendKey(item.id, email, stamp),
           recipientEmail: email, toClient: true, deliberateClientSend: true,
           actorName: user.name, actorEmail: user.email,
-          subject: `Ready for your approval: ${title}`,
+          subject: stage === 'post' ? `Your post is ready to approve: ${title}` : `Ready for your approval: ${title}`,
           bodyHtml: renderEmail(
             `Ready for your approval: ${escapeHtml(title)}`,
             `<p>Hi ${escapeHtml(hello)},</p>` +
