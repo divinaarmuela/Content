@@ -9,6 +9,21 @@ import { groupByLane, pageLanes, postingColumn } from '../app/lib/board-view-cor
 const card = (id: string, posting: string | undefined, clientRequired = false) =>
   ({ id, status: 'approved_for_scheduling' as const, posting_approval_state: posting, posting_client_required: clientRequired })
 
+describe('an upload straight from Schedule, passed at quality check, is Ready to post (28 Sep 2026)', () => {
+  const lanes = pageLanes('scheduler')
+  const where = (c: object) => groupByLane(lanes, [c as never]).find(g => g.cards.length)!.lane.key
+  it("Alia's uploads, passed by Joy, with no post approval of their own: Ready to post", () => {
+    expect(where({ id: 'alia', status: 'approved_for_scheduling', adhoc_post: true })).toBe('ready_to_post')
+  })
+  it('an upload the client asked to change goes back to Draft; one put to the client is With client', () => {
+    expect(where({ id: 'j3', status: 'approved_for_scheduling', adhoc_post: true, posting_approval_state: 'changes' })).toBe('draft')
+    expect(where({ id: 'j4', status: 'approved_for_scheduling', adhoc_post: true, posting_approval_state: 'pending', posting_client_required: true })).toBe('with_client')
+  })
+  it('a card from a shoot or an edit still needs its own post approval', () => {
+    expect(where({ id: 'edit', status: 'approved_for_scheduling' })).toBe('draft')
+  })
+})
+
 describe('Post approval board', () => {
   const lanes = pageLanes('scheduler')
   const where = (c: ReturnType<typeof card>) => groupByLane(lanes, [c]).find(g => g.cards.length)!.lane.key

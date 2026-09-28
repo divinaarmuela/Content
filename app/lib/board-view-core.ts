@@ -741,13 +741,17 @@ export function handedToWords(card: { scheduler_ids?: unknown }, names: Readonly
  * change → back in Draft. Only the posting pages read this — the editor's and designer's boards keep the edit's own
  * stage, which is finished.
  */
-export function postingColumn(card: { status?: unknown; posting_approval_state?: unknown; posting_client_required?: unknown }, column: BoardColumnKey): BoardColumnKey {
+export function postingColumn(card: { status?: unknown; posting_approval_state?: unknown; posting_client_required?: unknown; adhoc_post?: unknown }, column: BoardColumnKey): BoardColumnKey {
   if (column !== 'ready_to_post') return column
   // SCHEDULING IS A NEW FLOW (the owner, 28 Sep 2026: "even if it's approved from there, once it's gone to the
   // scheduling phase it's a new flow"): the edit's yes does not make the POST ready. Ready to post = the post approved.
   const state = String(card.posting_approval_state ?? '')
   if (state === 'approved') return column
   if (state === 'pending') return card.posting_client_required === true ? 'with_client' : 'quality_check'
+  // AN UPLOAD STRAIGHT FROM SCHEDULE IS THE POST (the owner, 28 Sep 2026: "I think she passed it, no?" — Joy passed
+  // Alia's three uploads a week ago and they dropped to Draft): its quality-check pass IS the post's approval. Only a
+  // change asked for sends it back. A card made from a shoot or an edit still needs its own post approval.
+  if (card.adhoc_post === true && state !== 'changes') return column
   return 'draft'
 }
 
