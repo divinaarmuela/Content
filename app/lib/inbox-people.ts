@@ -113,5 +113,6 @@ export async function inboxTouchesFor(clientId: string): Promise<InboxTouch[]> {
     name: r.name ?? null,
     kind: r.kind === 'comment' || r.kind === 'both' ? r.kind : 'message',
     last_at: r.last_at,
+    first_at: r.first_at ?? null,
   }))
 }

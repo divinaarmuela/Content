@@ -129,6 +129,11 @@ export type ZernioAction =
       platform: string | null
       platformPostId: string | null
       text: string
+      /** who wrote it (28 Sep 2026: the People page tracks every touch) — absent when the payload names nobody */
+      authorUsername?: string
+      authorName?: string
+      /** the connected account's own reply, re-delivered as a comment — not a touch from anybody */
+      own?: boolean
     }
   /** anything that changes what the Inbox page would show */
   | {
@@ -536,6 +541,9 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
         platform: (str(comment.platform) || str(account.platform)).toLowerCase() || null,
         platformPostId: str(comment.platformPostId) || null,
         text: str(comment.text).slice(0, 500),
+        authorUsername: str(asRecord(comment.author).username) || undefined,
+        authorName: str(asRecord(comment.author).name) || undefined,
+        own: asRecord(comment.author).isOwnAccount === true || undefined,
       },
     }
   }

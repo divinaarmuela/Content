@@ -170,13 +170,13 @@ describe('resolveNav by role', () => {
   })
 
   it('opens all the Social children when Social itself is visible, and none to an editor', () => {
-    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(5)
-    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(5)
+    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(6)
+    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(6)
     expect(resolveNav('editor', [], [], '/dashboard').children).toEqual([])
     // hiding Social hides what rides on it
     expect(resolveNav('super_admin', [], ['/dashboard/social'], '/dashboard').children).toEqual([])
     // a grant of Social opens all of it
-    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(5)
+    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(6)
   })
 })
 

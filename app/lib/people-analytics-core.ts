@@ -95,6 +95,8 @@ export type InboxTouch = {
   kind: InboxKind
   /** ISO instant of the last time they were seen there */
   last_at: string
+  /** …and the first (28 Sep 2026, the People page's timeline) */
+  first_at?: string | null
 }
 
 export type InboxKind = 'comment' | 'message' | 'both'
@@ -132,6 +134,10 @@ export type PeopleRow = {
   gone_on: string | null
   from_us: FromUs
   reached_out_on: string | null
+  /** the first day they were seen in the Inbox or wrote in */
+  reached_out_first_on?: string | null
+  /** on the follower list today (28 Sep 2026, the People page) */
+  follows?: boolean
   reached_out_how: InboxKind | null
   inbox_href: string
 }
@@ -199,6 +205,7 @@ export function buildPeople(input: {
     gone_on: null,
     from_us: { likely: false, title: null, day: null },
     reached_out_on: null,
+    reached_out_first_on: null,
     reached_out_how: null,
     inbox_href: inboxPersonHref(username),
   })
@@ -226,6 +233,7 @@ export function buildPeople(input: {
     row.is_verified = f.is_verified
     row.followed_on = f.first_seen_at
     row.gone_on = f.gone_at
+    row.follows = !f.gone_at
   }
 
   for (const post of input.posts) {
@@ -252,6 +260,8 @@ export function buildPeople(input: {
     if (!row) continue
     const day = dayOfInstant(touch.last_at)
     if (day && (row.reached_out_on === null || day > row.reached_out_on)) row.reached_out_on = day
+    const first = dayOfInstant(touch.first_at ?? touch.last_at)
+    if (first && (!row.reached_out_first_on || first < row.reached_out_first_on)) row.reached_out_first_on = first
     row.reached_out_how = mergeKind(row.reached_out_how, touch.kind)
   }
 
