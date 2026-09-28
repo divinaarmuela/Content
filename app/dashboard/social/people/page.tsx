@@ -24,7 +24,7 @@ type Payload = {
   client: { id: string; name: string }
   today: string
   as_of: string | null
-  counts: { people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number }
+  counts: { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number }
   rows: CrmRow[]
 }
 
@@ -34,6 +34,7 @@ const STATUS_TONE: Record<CrmStatus, ChipTone> = {
 
 const FILTERS: { key: CrmFilter; label: string }[] = [
   { key: 'active', label: 'Everyone with a touch' },
+  { key: 'md_lead', label: 'MD Media leads' },
   { key: 'new', label: 'New followers' },
   { key: 'engaged', label: 'Liked or commented' },
   { key: 'dmed', label: 'DMed' },
@@ -97,8 +98,9 @@ export default function PeopleCrmPage() {
       {data && (
         <>
           {/* the headline numbers */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             {[
+              ['MD Media leads', data.counts.md_leads],
               ['People with a touch', data.counts.people],
               ['New followers', data.counts.new_followers],
               ['Liked or commented', data.counts.engaged],
@@ -177,7 +179,12 @@ export default function PeopleCrmPage() {
                             </span>
                           </button>
                         </td>
-                        <td className="px-3 py-2.5"><Chip tone={STATUS_TONE[r.status]}>{CRM_STATUS_WORDS[r.status]}</Chip></td>
+                        <td className="px-3 py-2.5">
+                          <span className="flex flex-wrap items-center gap-1">
+                            {r.md_lead && <span title={r.md_lead}><Chip tone="ink">MD Media lead</Chip></span>}
+                            <Chip tone={STATUS_TONE[r.status]}>{CRM_STATUS_WORDS[r.status]}</Chip>
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{dayWords(r.first_seen, today)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{dayWords(r.last_active, today)}</td>
                         <td className="px-3 py-2.5"><Chip tone="surface">Organic social</Chip></td>
@@ -196,6 +203,7 @@ export default function PeopleCrmPage() {
                           <td colSpan={10} className="px-3 pb-4 pt-2">
                             {/* ACTIVITY IS THEIR LOG, NOT A ROW OF BUTTONS (the owner, 28 Sep 2026) */}
                             <p className="pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Activity</p>
+                            {r.md_lead && <p className="pb-2 text-[13px]"><span className="font-semibold">MD Media lead</span> — {r.md_lead}</p>}
                             {r.timeline.length === 0 ? (
                               <p className="text-[13px] text-muted-foreground">Followed before we started watching — no touch seen since.</p>
                             ) : (

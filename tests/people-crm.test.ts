@@ -47,7 +47,7 @@ describe('one row per person, every touch dated', () => {
     expect(by('mdmedia._').status).toBe('ours')
   })
   it('the counts leave our own accounts out', () => {
-    expect(crmCounts(rows)).toEqual({ people: 4, new_followers: 1, engaged: 2, dmed: 1, likely_from_posts: 1, unfollowed: 1 })
+    expect(crmCounts(rows)).toEqual({ md_leads: 1, people: 4, new_followers: 1, engaged: 2, dmed: 1, likely_from_posts: 1, unfollowed: 1 })
   })
   it('the filters and the newest-first order', () => {
     expect(crmFilter(rows, 'active').map(r => r.username)).not.toContain('old_friend')
@@ -153,5 +153,28 @@ describe('handles with a dot save (28 Sep 2026: Jordan\'s likes failed with a 40
   it('every write of the record goes through the encoder', () => {
     const lib = readFileSync('app/lib/post-interactors.ts', 'utf8')
     expect(lib.match(/interactors: interactorsForStorage\(/g)?.length).toBe(4)
+  })
+})
+
+describe('the MD Media lead tag (28 Sep 2026: "where is a tag for MD Media lead")', () => {
+  const run = (follower: { first_seen_at: string | null } | null, likedDay: string | null, dm: string | null) => crmRow(buildPeople({
+    followers: follower ? [{ username: 'nuria_jewell', full_name: null, profile_pic: null, is_private: false, is_verified: false, first_seen_at: follower.first_seen_at, gone_at: null }] : [],
+    posts: likedDay ? [{ item_id: 'i', title: 'Jordan 1', href: null, day: '2026-09-24', likers: ['nuria_jewell'], commenters: [], people: {}, liked_on: { nuria_jewell: likedDay } }] : [],
+    inbox: dm ? [{ username: 'nuria_jewell', name: null, kind: 'message', last_at: dm, first_at: dm }] : [],
+  })[0])
+  it('liked our post, then followed and DMed — Nuria on Jordan\'s page', () => {
+    expect(run({ first_seen_at: '2026-09-28' }, '2026-09-28', '2026-09-28T05:07:11Z').md_lead).toBe('Liked ‘Jordan 1’, then followed and DMed')
+  })
+  it('liked, then followed', () => {
+    expect(run({ first_seen_at: '2026-09-28' }, '2026-09-27', null).md_lead).toBe('Liked ‘Jordan 1’, then followed')
+  })
+  it('a DM with no touch on our posts is not our lead', () => {
+    expect(run({ first_seen_at: '2026-09-28' }, null, '2026-09-28T05:07:11Z').md_lead).toBeNull()
+  })
+  it('followed first, liked later — not our lead', () => {
+    expect(run({ first_seen_at: '2026-09-20' }, '2026-09-28', null).md_lead).toBeNull()
+  })
+  it('an old follower who only liked is not a lead either', () => {
+    expect(run({ first_seen_at: null }, '2026-09-28', null).md_lead).toBeNull()
   })
 })

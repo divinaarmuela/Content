@@ -64,6 +64,11 @@ export type CrmRow = {
   comments: number
   dmed: boolean
   following: boolean
+  /**
+   * AN MD MEDIA LEAD (the owner, 28 Sep 2026: "where is a tag for MD Media lead"): they liked or commented on a post
+   * we made, and THEN followed or DMed. The reason says which — null when they are not one.
+   */
+  md_lead: string | null
   /** newest first */
   timeline: CrmEvent[]
 }
@@ -100,6 +105,19 @@ export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): Crm
   const last = days.reduce<string | null>((m, d) => max(m, d), null)
   const following = p.follows === true
 
+  // the lead rule: our post first, then the follow or the DM. Every action here is on a post we made.
+  const ourTouches = p.actions.filter(a => a.day).sort((a, b) => (a.day! < b.day! ? -1 : 1))
+  const firstOurs = ourTouches[0] ?? null
+  const touched = (after: string | null | undefined) => firstOurs && after && firstOurs.day! <= after ? firstOurs : null
+  const byFollow = touched(p.followed_on)
+  const byDm = dmed ? touched(p.reached_out_first_on ?? p.reached_out_on) : null
+  const verb = (a: { kind: string }) => (a.kind === 'liked' ? 'Liked' : a.kind === 'commented' ? 'Commented on' : 'Liked and commented on')
+  const md_lead = ours.has(p.key) ? null
+    : byFollow && byDm ? `${verb(byFollow)} ‘${byFollow.title}’, then followed and DMed`
+    : byFollow ? `${verb(byFollow)} ‘${byFollow.title}’, then followed`
+    : byDm ? `${verb(byDm)} ‘${byDm.title}’, then DMed`
+    : null
+
   const status: CrmStatus = ours.has(p.key) ? 'ours'
     : dmed ? 'dmed'
     : comments > 0 || inboxComment ? 'commented'
@@ -115,12 +133,12 @@ export function crmRow(p: PeopleRow, ours: ReadonlySet<string> = new Set()): Crm
     status,
     from_post: p.from_us.likely ? p.from_us.title : null,
     first_seen: first, last_active: last,
-    likes, comments, dmed, following,
+    likes, comments, dmed, following, md_lead,
     timeline,
   }
 }
 
-export type CrmFilter = 'active' | 'all' | 'dmed' | 'new' | 'engaged'
+export type CrmFilter = 'active' | 'all' | 'dmed' | 'new' | 'engaged' | 'md_lead'
 
 /** "active" = anybody who did something we saw: followed since we started watching, liked, commented, wrote, left */
 export function crmFilter(rows: readonly CrmRow[], filter: CrmFilter, search = ''): CrmRow[] {
@@ -129,6 +147,7 @@ export function crmFilter(rows: readonly CrmRow[], filter: CrmFilter, search = '
     if (q && !r.username.toLowerCase().includes(q) && !(r.full_name ?? '').toLowerCase().includes(q)) return false
     if (filter === 'all') return true
     if (filter === 'dmed') return r.dmed
+    if (filter === 'md_lead') return r.md_lead !== null
     if (filter === 'new') return r.status !== 'ours' && r.timeline.some(e => e.what === 'Started following')
     if (filter === 'engaged') return r.likes + r.comments > 0 || r.dmed
     return r.timeline.length > 0
@@ -145,9 +164,10 @@ export function crmSort(rows: readonly CrmRow[]): CrmRow[] {
   })
 }
 
-export function crmCounts(rows: readonly CrmRow[]): { people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number } {
+export function crmCounts(rows: readonly CrmRow[]): { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number } {
   const real = rows.filter(r => r.status !== 'ours')
   return {
+    md_leads: real.filter(r => r.md_lead).length,
     people: real.filter(r => r.timeline.length > 0).length,
     new_followers: real.filter(r => r.timeline.some(e => e.what === 'Started following')).length,
     engaged: real.filter(r => r.likes + r.comments > 0).length,
