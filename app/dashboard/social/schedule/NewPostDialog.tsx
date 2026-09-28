@@ -670,6 +670,8 @@ export default function NewPostDialog({
       id: a.id,
       platform: String(a.platform),
       options: optionsFromExtras(state.perChannel[a.id]),
+      // its own pictures, when it has them — each network is counted against what it will actually get (28 Sep 2026)
+      slides: (state.perChannel[a.id] as { slides?: Slide[] } | undefined)?.slides ?? null,
     })),
     scheduledFor: state.scheduledFor,
     now: Date.now(),

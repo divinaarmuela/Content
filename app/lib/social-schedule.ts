@@ -486,6 +486,7 @@ function problemsWith(input: {
       platform: a.platform,
       kind: (input.perChannel[a.id]?.kind as PostKind | undefined) ?? null,
       options: optionsFromExtras(input.perChannel[a.id]),
+      slides: (input.perChannel[a.id] as { slides?: Slide[] } | undefined)?.slides ?? null,
     })),
     scheduledFor: input.scheduledFor,
     withoutApproval: input.withoutApproval,

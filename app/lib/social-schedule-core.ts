@@ -1361,6 +1361,8 @@ export type ComposerChannel = {
   kind?: PostKind | null
   /** this channel's own posting options, as the composer holds them */
   options?: PostOptions | null
+  /** this channel's OWN pictures, when it has them — Instagram's ten beside LinkedIn's fourteen (28 Sep 2026) */
+  slides?: readonly Slide[] | null
 }
 
 export type CompositionInput = {
@@ -1437,9 +1439,13 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
       )
     }
     const limit = limits[platform]
+    // EACH NETWORK AGAINST ITS OWN PICTURES (28 Sep 2026: Jordan's 14 slides — Instagram takes ten, LinkedIn all
+    // fourteen; a post giving Instagram its own ten was refused for the fourteen it was not sending there)
+    const own = channels.filter(c => String(c.platform) === platform).map(c => c.slides).find((x): x is readonly Slide[] => Array.isArray(x) && x.length > 0)
+    const theirs: readonly Slide[] = own ?? slides
     if (limit) {
-      const images = slides.filter(s => s.type === 'image').length
-      const videos = slides.filter(s => s.type === 'video').length
+      const images = theirs.filter(s => s.type === 'image').length
+      const videos = theirs.filter(s => s.type === 'video').length
       // count by KIND before counting at all: a channel that takes video and
       // no pictures whatsoever (YouTube) is not "too many slides", it is the
       // wrong kind of media — trimming twelve photos to one photo there is
@@ -1450,8 +1456,8 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
         problems.push(`${name} takes pictures, not video`)
       } else {
         const max = limit.carousel > 0 ? limit.carousel : Math.max(limit.images, limit.videos)
-        if (slides.length > max) {
-          const over = slides.length - max
+        if (theirs.length > max) {
+          const over = theirs.length - max
           problems.push(
             `${name} takes ${max} ${max === 1 ? 'media file' : 'media files'} — take ${over} out`,
           )
