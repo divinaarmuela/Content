@@ -164,7 +164,7 @@ function seedOf(target: ComposerTarget, accounts: SocialAccount[]) {
 
 export default function NewPostDialog({
   target, tz, accounts, contacts = [], suggested, role, userId, clientSignsOff, locations, clientName,
-  reviewOnly, onClose, onOpenPost, onEditMedia, onDone,
+  reviewOnly: reviewOnlyAsked, onClose, onOpenPost, onEditMedia, onDone,
 }: {
   target: ComposerTarget
   tz: string
@@ -583,6 +583,14 @@ export default function NewPostDialog({
   }, [mayApprove, clientIdOfPost])
 
   const canPublish = role ? roleMayPublish(role) : false
+  /**
+   * NO DEAD END FOR A MANAGER (Divina, 28 Sep 2026: "I've made the changes for the posts but it's a dead end — it
+   * doesn't give me an 'actioned' button that saves the new items back into the posts to finally post … I really need
+   * to be able to bypass this"). The Post approval page opens this window review-only: one press, Send for approval.
+   * An account manager or a super admin may schedule straight out on the Schedule page (the owner's ruling, 9 Sep
+   * 2026), so here too they get Schedule — with Send for approval under the arrow — and the time to pick.
+   */
+  const reviewOnly = reviewOnlyAsked === true && !((role === 'account_manager' || role === 'super_admin') && canPublish)
   /**
    * "Schedule" or "Post now" — the words have to match what pressing it does.
    *
