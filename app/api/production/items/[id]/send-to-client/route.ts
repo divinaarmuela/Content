@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, ClientContact, ContentItem, SocialPost } from '@/lib/db-types'
+import type { Client, ClientContact, ContentItem, SocialPost, TeamUser } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
@@ -22,6 +22,20 @@ import {
  *      client's Approve (or "Log the client's approval") is what takes it to Ready to post.
  */
 export const dynamic = 'force-dynamic'
+
+/**
+ * WHO THE CLIENT HEARS FROM (the owner, 28 Sep 2026: "it should be from Divina"). Every client approval email goes out
+ * in Divina's name, and a reply reaches her — whoever pressed Send. The four sent at 12:40 pm that day said "Akmal
+ * Ashwin" because they were pressed from his login. CLIENT_EMAIL_SENDER_ID overrides; an inactive sender falls back to
+ * whoever pressed Send, so a client email never goes out in the name of somebody who has left.
+ */
+const CLIENT_EMAIL_SENDER_ID = process.env.CLIENT_EMAIL_SENDER_ID || '54926a48-335e-46e9-a080-df8c1ad42ac9'
+
+async function clientFacingSender(fallback: { name?: string | null; email: string }): Promise<{ name: string; email: string }> {
+  const u = await table<TeamUser>('team_users').get(CLIENT_EMAIL_SENDER_ID).catch(() => null)
+  if (u && u.active_status && u.email) return { name: u.name || u.email, email: u.email }
+  return { name: fallback.name || fallback.email, email: fallback.email }
+}
 
 async function context(id: string) {
   const user = await requireRole('account_manager')
@@ -89,7 +103,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         : []
       const post = posts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
       const caption = String(post?.caption ?? (item as { caption?: string | null }).caption ?? '').trim()
-      const from = user.name || user.email
+      // a test goes out as it will for real — from the client-facing sender — so what you see is what they get
+      const sender = await clientFacingSender(user)
+      const from = sender.name
       const stamp = new Date().toISOString()
 
       const results: { email: string; result: string }[] = []
@@ -100,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           eventType: 'post_to_client', entityType: 'content_item',
           entityId: sendKey(item.id, email, stamp),
           recipientEmail: email, toClient: !test, deliberateClientSend: !test,
-          actorName: user.name, actorEmail: user.email,
+          actorName: sender.name, actorEmail: sender.email,
           subject: (test ? `[Test — what ${client.name} gets] ` : '') + (stage === 'post' ? `Your post is ready to approve: ${title}` : `Ready for your approval: ${title}`),
           bodyHtml: renderEmail(
             `Ready for your approval: ${escapeHtml(title)}`,

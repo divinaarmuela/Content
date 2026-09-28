@@ -192,3 +192,17 @@ describe('send me a test first (28 Sep 2026)', () => {
     expect((fake.rows('content_items')[0] as unknown as { posting_client_required: boolean }).posting_client_required).toBe(false)
   })
 })
+
+describe('the client hears from Divina (the owner, 28 Sep 2026: "it should be from Divina")', () => {
+  it('whoever presses Send, the email is in Divina\'s name, and falls back to the sender if she is inactive', async () => {
+    fake = seedDb({
+      content_items: [{ id: 'item-1', client_id: 'c1', title: '11', status: 'client_review' }] as unknown as Row[],
+      clients: [{ id: 'c1', name: 'Jordan Wilson', email: 'jordan@example.com', share_token: 'tok-1' }] as unknown as Row[],
+      client_contacts: [] as unknown as Row[],
+      team_users: [{ id: '54926a48-335e-46e9-a080-df8c1ad42ac9', name: 'Divina', email: 'divina@mdmmarketing.com.au', active_status: true }] as unknown as Row[],
+    })
+    await call('POST', { emails: ['jordan@example.com'] })
+    expect(notify.mock.calls[0][0]).toMatchObject({ actorName: 'Divina', actorEmail: 'divina@mdmmarketing.com.au' })
+    expect(String(notify.mock.calls[0][0].bodyHtml)).toContain('Divina has sent you')
+  })
+})
