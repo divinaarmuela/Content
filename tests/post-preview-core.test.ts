@@ -344,19 +344,19 @@ describe('it invents no rules — every refusal is the publisher\'s own', () => 
     expect(li.problems).toEqual([])
   })
 
-  it('twenty-one pictures on Instagram is refused, in the publisher\'s words', () => {
-    // TWENTY SINCE INSTAGRAM DOUBLED THE CAROUSEL (24 Sep 2026): thirteen is fine now, twenty-one is not
+  it('eleven pictures on Instagram is refused, in the publisher\'s words', () => {
+    // TEN THROUGH THE API (28 Sep 2026): Justin's fifteen went out as ten, the provider reporting success
     expect(buildPostPreview({
       caption: 'x',
-      media: Array.from({ length: 13 }, (_, i) => image(`s${i}`)),
+      media: Array.from({ length: 10 }, (_, i) => image(`s${i}`)),
       channels: [channel('instagram')],
     }).networks[0].problems).toEqual([])
     const p = buildPostPreview({
       caption: 'x',
-      media: Array.from({ length: 21 }, (_, i) => image(`s${i}`)),
+      media: Array.from({ length: 11 }, (_, i) => image(`s${i}`)),
       channels: [channel('instagram')],
     })
-    expect(p.networks[0].problems.join(' ')).toMatch(/21 .*(images|slides)/)
+    expect(p.networks[0].problems.join(' ')).toMatch(/11 .*(images|slides)/)
   })
 
   it('a Reel made of photographs is refused', () => {

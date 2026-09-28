@@ -85,19 +85,19 @@ describe('post kinds — reels, stories, carousels', () => {
     expect(issues.some(i => /at least two slides/.test(i.problem))).toBe(true)
   })
 
-  // TWENTY, NOT TEN (24 Sep 2026): Instagram doubled the carousel, and the old ten silently cut the 11th file
-  // off a thirteen-file post — the admin saw ten and no word about the rest.
-  it('accepts a twenty-slide Instagram carousel and refuses a twenty-first', () => {
+  // TEN THROUGH THE API (28 Sep 2026): the Instagram app takes twenty, the publishing API ten; Justin's fifteen
+  // went out as ten with the provider reporting success. The eleventh is refused here, in words, never dropped.
+  it('accepts a ten-slide Instagram carousel and refuses an eleventh', () => {
     expect(validatePost({
-      caption: 'a', media: img(13), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+      caption: 'a', media: img(9), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })).toEqual([])
     expect(validatePost({
-      caption: 'a', media: img(20), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+      caption: 'a', media: img(10), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })).toEqual([])
     const issues = validatePost({
-      caption: 'a', media: img(21), platforms: ['instagram'], kinds: { instagram: 'carousel' },
+      caption: 'a', media: img(11), platforms: ['instagram'], kinds: { instagram: 'carousel' },
     })
-    expect(issues.some(i => /21 slides; instagram allows 20/.test(i.problem))).toBe(true)
+    expect(issues.some(i => /11 slides; instagram allows 10/.test(i.problem))).toBe(true)
   })
 
   it('lets an Instagram carousel mix images and video', () => {
