@@ -211,6 +211,9 @@ export default function NewPostDialog({
   /** the post a refusal named — one press opens it instead */
   const [existingPost, setExistingPost] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
+  /** WHERE THE ANSWER IS (the owner, 28 Sep 2026: "things are showing all the way at the bottom — they would need to
+   *  scroll"): a new problem or note is brought into view the moment it appears */
+  const messagesRef = useRef<HTMLDivElement>(null)
   /**
    * WHICH PICTURE THE BUTTONS ARE ABOUT.
    *
@@ -222,6 +225,10 @@ export default function NewPostDialog({
    */
   const [chosenSlide, setChosenSlide] = useState(0)
   const [note, setNote] = useState<string | null>(null)
+  useEffect(() => {
+    if (problems.length === 0 && !note) return
+    messagesRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [problems, note])
   /**
    * WRITING IT, OR LOOKING AT IT.
    *
@@ -1677,7 +1684,7 @@ export default function NewPostDialog({
             sits above it — a question you are being asked wins over a problem
             you already know about. */}
         {!confirm && (problems.length > 0 || shownChecks.length > 0 || caps.stops.length > 0 || note) && (
-          <div className="flex flex-col gap-1.5 px-3.5">
+          <div ref={messagesRef} className="flex flex-col gap-1.5 px-3.5 scroll-mt-4">
             {[...problems, ...(problems.length === 0 ? [...caps.stops, ...shownChecks] : [])].map(p => (
               <p key={p} className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
                 {p}
@@ -1924,6 +1931,7 @@ export default function NewPostDialog({
         onSave={saveMedia}
         onEditSlide={index => { setPicking(false); editSlide(index) }}
         saving={busy}
+        saveProblems={problems}
         allowUploads={mayPostWithoutApproval(role, clientSignsOff)}
       />
     </div>

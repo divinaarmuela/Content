@@ -49,8 +49,10 @@ const DRAG_TYPE = 'application/x-md-slide'
 
 export default function MediaPicker({
   open, onClose, itemId, approved, versionLabel, slides, platforms, onSave,
-  onEditSlide, saving, allowUploads = true,
+  onEditSlide, saving, allowUploads = true, saveProblems = [],
 }: {
+  /** why the last Save was refused — shown HERE, not behind this window (28 Sep 2026) */
+  saveProblems?: readonly string[]
   open: boolean
   onClose: () => void
   itemId: string
@@ -563,6 +565,17 @@ export default function MediaPicker({
                   Close and lose it
                 </button>
               </span>
+            </div>
+          )}
+
+          {/* WHY THE SAVE DID NOT GO THROUGH, here where the person is looking (the owner's video, 28 Sep 2026: the
+              refusal sat in the post window behind this one, so Save looked like it did nothing) */}
+          {saveProblems.length > 0 && !saving && (
+            <div role="alert" className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px] text-foreground">
+              <p className="font-semibold">Not saved yet:</p>
+              <ul className="mt-1 list-disc pl-5">
+                {saveProblems.map(p => <li key={p}>{p}</li>)}
+              </ul>
             </div>
           )}
 

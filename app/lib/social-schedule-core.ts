@@ -1426,7 +1426,9 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
 
     // A channel that does not need media is a channel built on words: a
     // picture with nothing said is a post with nothing said.
-    if (!caption && !rules.requiresMedia) {
+    // …when it goes OUT. A draft being written down owes no caption yet (the owner's video, 28 Sep 2026: reordering
+    // Jordan Wilson's 14 LinkedIn slides was refused, silently, because the caption was still empty)
+    if (!caption && !rules.requiresMedia && !input.draft) {
       problems.push(`${name} needs a caption — write a line to go with the picture`)
     }
     if (caption.length > rules.captionMax) {
