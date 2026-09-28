@@ -11,7 +11,9 @@ const NAME_KEY = 'mdm-portal-name'
  * One big Approve; "Ask for a change" opens a box for what to change. The same /api/portal/act the board uses, so
  * the server's rules (only a card With client, only this client's) decide — this only asks.
  */
-export default function ApprovePanel({ token, itemId, state, clientName, kind = 'card', preview = false }: {
+export default function ApprovePanel({ token, itemId, state, clientName, kind = 'card', preview = false, missed = false }: {
+  /** the post's planned time has gone — their yes still counts, and we book a new time */
+  missed?: boolean
   /** card = the edit (approve / request_changes); post = the final post (approve_post / request_post_changes) */
   kind?: 'card' | 'post'
   /** the team's preview: shown exactly, answered never */
@@ -69,6 +71,14 @@ export default function ApprovePanel({ token, itemId, state, clientName, kind = 
           </p>
         </div>
       </div>
+    )
+  }
+  // its time went before anyone answered: nothing to press — a new time comes to them as a new request (28 Sep 2026)
+  if (missed && state === 'waiting' && !answered) {
+    return (
+      <p className="rounded-card border border-border bg-card p-5 text-[15px] text-muted-foreground">
+        This approval has closed because its time passed. We’ll send it to you again with a new time.
+      </p>
     )
   }
   if (state === 'not_ready') {

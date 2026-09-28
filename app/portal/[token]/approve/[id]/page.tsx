@@ -28,7 +28,7 @@ export default async function PortalApprovePage({ params, searchParams }: {
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const data = await getPortalApproval(raw, id, { preview })
   if (!data) notFound()
-  const { slides, caption, state, typeLine, whenLine, whereLine, kind } = data
+  const { slides, caption, state, typeLine, whenLine, whereLine, kind, missed } = data
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -59,12 +59,19 @@ export default async function PortalApprovePage({ params, searchParams }: {
             <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[13px]">Preview — this is exactly what the client sees. Approve is switched off here.</p>
           )}
 
+          {/* THE TIME HAS GONE (the owner, 28 Sep 2026: "schedule a new time and go through approval again"): this approval has closed */}
+          {missed && state === 'waiting' && (
+            <p role="status" className="rounded-card border border-accent-amber/40 bg-tint-amber px-4 py-3 text-[15px]">
+              The planned time for this post has passed, so this approval has closed. We&rsquo;ll pick a new time and send it to you again to approve.
+            </p>
+          )}
+
           {(whenLine || whereLine) && (
             <section className="grid gap-3 rounded-card border border-border bg-card p-5 sm:grid-cols-2">
               {whenLine && (
                 <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Goes out</p>
-                  <p className="mt-1 text-[15px] font-medium">{whenLine}</p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{missed ? 'Was planned for' : 'Goes out'}</p>
+                  <p className={`mt-1 text-[15px] font-medium ${missed ? 'text-muted-foreground line-through' : ''}`}>{whenLine}</p>
                 </div>
               )}
               {whereLine && (
@@ -83,7 +90,7 @@ export default async function PortalApprovePage({ params, searchParams }: {
             </section>
           )}
 
-          <ApprovePanel token={token} itemId={id} state={state} kind={kind} preview={preview} clientName={data.client.name} />
+          <ApprovePanel token={token} itemId={id} state={state} kind={kind} preview={preview} clientName={data.client.name} missed={missed === true} />
 
         </main>
       </div>

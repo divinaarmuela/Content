@@ -15,6 +15,7 @@ import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-
 import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
 import { DASHBOARD_URL } from '../../../lib/app-url'
 import { clientByPortalToken } from '../../../lib/portal-owner'
+import { slotMissed, slotWords } from '../../../lib/post-to-client-core'
 
 
 /**
@@ -74,6 +75,45 @@ async function notifyManagers(clientId: string, item: { id: string; adhoc_post?:
         `${DASHBOARD_URL}${itemPath(item, (m as { role?: string | null }).role)}`
       ),
     })
+  }
+}
+
+/**
+ * APPROVED AFTER ITS TIME (the owner, 28 Sep 2026: "what happens to the 6 pm one"). The client's yes books the post
+ * in — unless its time has gone, when the booking is refused and the post sat approved with nobody told. Now the
+ * client's account managers and whoever built the post are emailed: approved, needs a new time. Best effort.
+ */
+async function tellTeamApprovedLate(clientId: string, item: { id: string; title?: string | null; adhoc_post?: unknown }, clientName: string): Promise<void> {
+  const posts = await table<{ id: string; item_id: string; status: string; scheduled_for: string | null; timezone?: string | null; created_by?: string | null }>('social_posts')
+    .list({ by: { item_id: item.id } as never }).catch(() => [])
+  const late = posts.filter(p => p.status === 'approved' && slotMissed(p.scheduled_for))
+  if (late.length === 0) return
+  const when = slotWords(String(late[0].scheduled_for), String(late[0].timezone ?? 'Australia/Melbourne'))
+  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+  const data = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
+  const people = new Map<string, { id: string; email: string; role: string }>()
+  for (const r of data) {
+    const u = r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null
+    if (u && u.active_status && (u.role === 'account_manager' || u.role === 'super_admin')) people.set(u.id, u)
+  }
+  for (const p of late) {
+    if (!p.created_by || people.has(p.created_by)) continue
+    const u = await table<{ id: string; email: string; role: string; active_status: boolean }>('team_users').get(p.created_by).catch(() => null)
+    if (u && u.active_status) people.set(u.id, u)
+  }
+  const title = String(item.title ?? 'A post')
+  for (const m of people.values()) {
+    await notify({
+      actorName: clientName, actorEmail: 'portal+client@mdmmarketing.com.au',
+      eventType: 'client_approved_late', entityType: 'content_item', entityId: `${item.id}#approved-late`,
+      recipientId: m.id, recipientEmail: m.email,
+      subject: `${clientName} approved ${title} — it needs a new time`,
+      bodyHtml: renderEmail(
+        `${escapeHtml(clientName)} approved ${escapeHtml(title)} — it needs a new time`,
+        `<p>${escapeHtml(clientName)} approved it, but its time (${escapeHtml(when)}) had already passed, so it could not be booked. Pick a new time on the Schedule and it goes out then.</p>`,
+        'Open it', `${DASHBOARD_URL}${itemPath(item as never, m.role)}`,
+      ),
+    }).catch(e => console.error('approved-late notify failed:', e))
   }
 }
 
@@ -183,6 +223,15 @@ export async function POST(req: Request) {
       if (action === 'request_post_changes' && !comment) {
         return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
       }
+      // A YES AFTER ITS TIME IS CLOSED (the owner, 28 Sep 2026: "schedule a new time and go through approval again"):
+      // the post is re-timed by the team and sent again; a note asking for a change is still welcome
+      if (action === 'approve_post') {
+        const itemPosts = await table<{ id: string; status: string; scheduled_for: string | null }>('social_posts').list({ by: { item_id: item.id } as never }).catch(() => [])
+        const live = itemPosts.filter(p => p.status !== 'cancelled' && p.status !== 'published' && p.scheduled_for)
+        if (live.length > 0 && live.every(p => slotMissed(p.scheduled_for))) {
+          return NextResponse.json({ error: 'The time for this post has passed, so this approval has closed — we’ll send it to you again with a new time.' }, { status: 409 })
+        }
+      }
       try {
         await actOnPostingApproval(actor, item as never, {
           action: action === 'approve_post' ? 'approve' : 'request_changes',
@@ -202,6 +251,9 @@ export async function POST(req: Request) {
       if (action === 'approve_post') {
         await bookApprovedPosts(item.id, null).catch(e =>
           console.error('booking after the client approved failed:', (e as Error).message))
+        // …and a post whose time had gone could not be booked: the team hears it needs a new one
+        await tellTeamApprovedLate(client.id, item as never, speaker).catch(e =>
+          console.error('approved-late check failed:', (e as Error).message))
       }
       // whatever they wrote also reaches the thread, client-visible, and the
       // client's managers — the same promise every portal note gets

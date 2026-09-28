@@ -13,6 +13,7 @@ import { accountManagerName, type PortalItem, type PortalShoot } from './portal-
 import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
+import { slotMissed } from './post-to-client-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { portalOwnerByToken } from './portal-owner'
 import { forTheClient } from './comment-visibility-core'
@@ -242,6 +243,8 @@ export type PortalApproval = {
   /** the final post only: when it goes out, and where */
   whenLine: string | null
   whereLine: string | null
+  /** its planned time has gone while it waited on them — approving still counts, and a new time is picked (28 Sep 2026) */
+  missed?: boolean
 }
 
 /** the post, sanitised for the client: a card handed in as files shows the files they were given (the newest cut of
@@ -290,6 +293,7 @@ export async function getPortalApproval(rawToken: string, itemId: string, opts: 
       kind: 'post',
       typeLine: (() => { const n = media.length; const allVideo = n > 0 && media.every(s => s.type === 'video'); const t = String((row as { content_type?: string | null }).content_type ?? '').toLowerCase(); const w = t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'; return n > 1 ? `${w} · ${n} ${allVideo ? 'clips' : 'slides'}` : w })(),
       whenLine: when,
+      missed: postState === 'pending' && slotMissed(post?.scheduled_for ?? null),
       whereLine: accounts.length ? [...new Set(accounts.map(a => NAMES[String(a.platform)] ?? String(a.platform)))].join(', ') : null,
     }
   }

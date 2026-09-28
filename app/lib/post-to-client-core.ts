@@ -92,12 +92,12 @@ export function sendStage(item: { status?: unknown; posting_approval_state?: unk
  * second send is a deliberate "Send again". A new round (the card sent back and handed in again, or the post edited
  * and sent for approval again) clears the stamp — see `sentStampFor`.
  */
-export type SentStamp = { at: string; to: string[]; stage: 'card' | 'post' }
+export type SentStamp = { at: string; to: string[]; stage: 'card' | 'post'; /** the post's time when it was sent — a new time means a new send */ for_time?: string | null }
 
 export function readSentStamp(item: { client_sent?: unknown } | null | undefined): SentStamp | null {
   const v = item?.client_sent as Partial<SentStamp> | undefined
   if (!v || typeof v.at !== 'string' || !Array.isArray(v.to) || v.to.length === 0) return null
-  return { at: v.at, to: v.to.map(String), stage: v.stage === 'post' ? 'post' : 'card' }
+  return { at: v.at, to: v.to.map(String), stage: v.stage === 'post' ? 'post' : 'card', for_time: typeof v.for_time === 'string' ? v.for_time : null }
 }
 
 /** the stamp counts only for the moment it was sent in: a card stamp is stale once the card is a post, and the other way */
@@ -121,11 +121,59 @@ export function waitingOnWords(
   item: { posting_client_required?: unknown; client_sent?: unknown; status?: unknown; posting_approval_state?: unknown },
   clientName: string | null | undefined,
   tz = 'Australia/Melbourne',
+  scheduledFor?: string | null,
+  now: number = Date.now(),
 ): string {
   const name = String(clientName ?? '').trim() || 'the client'
+  // its time has gone while it waited: say so first — it needs a new time, whoever answers (28 Sep 2026)
+  // THE TIME WENT WHILE IT WAITED (the owner, 28 Sep 2026: "we need to schedule a new time and go through approval
+  // again — make sure it says so on the card"): that approval has closed
+  if (slotMissed(scheduledFor, now)) return MISSED_WORDS
+  // a new time since it was sent: the client approves the new time, so it goes to them again
+  const stamp = readSentStamp(item as never)
+  if (item.posting_client_required === true && stamp?.stage === 'post' && stamp.for_time && scheduledFor && stamp.for_time !== scheduledFor) return NEW_TIME_WORDS
   if (item.posting_client_required !== true) return 'Waiting on the team'
   const sent = sentForStage(item as never)
   if (!sent) return `Waiting on ${name} · not emailed yet`
   const when = new Date(sent.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
   return `Waiting on ${name} · emailed ${when}`
+}
+
+/**
+ * HAS THE POST'S TIME GONE? (the owner, 28 Sep 2026: "if the time passed — 15 minutes before scheduling — the portal
+ * is expired; what happens to the 6 pm one, because they can't approve it anymore"). A booking needs fifteen minutes
+ * (MIN_LEAD_MS in social-schedule-core: the copies, and the ten-minute cycle), so a post whose time is inside that —
+ * or past — can no longer go out when planned. An approval then is still an approval of the post; it needs a NEW time.
+ */
+export const SLOT_LEAD_MS = 15 * 60_000
+
+export function slotMissed(scheduledFor: string | null | undefined, now: number = Date.now()): boolean {
+  if (!scheduledFor) return false
+  const when = new Date(scheduledFor).getTime()
+  return Number.isFinite(when) && when < now + SLOT_LEAD_MS
+}
+
+/** "6:00 pm, Monday 28 September" — the missed time, for the page and the email */
+export function slotWords(scheduledFor: string, tz = 'Australia/Melbourne'): string {
+  return new Date(scheduledFor).toLocaleString('en-AU', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
+}
+
+/** the card and the Schedule, when a post's time went before anyone approved it */
+export const MISSED_WORDS = 'Missed its time — pick a new time, then send it for approval again'
+/** …and once a new time is picked, until it is sent again */
+export const NEW_TIME_WORDS = 'New time set — send it to the client for approval again'
+
+/** what a post-approval card says about its post's time, if anything needs doing (28 Sep 2026) */
+export function approvalTimeLine(
+  item: { posting_approval_state?: unknown; posting_client_required?: unknown; client_sent?: unknown },
+  posts: readonly { status?: string | null; scheduled_for?: string | null }[],
+  now: number = Date.now(),
+): string | null {
+  if (String(item.posting_approval_state ?? '') !== 'pending') return null
+  const live = posts.filter(p => p.status !== 'cancelled' && p.status !== 'published' && p.scheduled_for)
+  if (live.length === 0) return null
+  if (live.some(p => slotMissed(p.scheduled_for, now))) return MISSED_WORDS
+  const stamp = readSentStamp(item as never)
+  if (item.posting_client_required === true && stamp?.stage === 'post' && stamp.for_time && !live.some(p => p.scheduled_for === stamp.for_time)) return NEW_TIME_WORDS
+  return null
 }

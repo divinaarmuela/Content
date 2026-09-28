@@ -136,7 +136,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const delivered = results.filter(r => r.result === 'sent' || r.result === 'duplicate').map(r => r.email)
       // STAMPED ON THE CARD, so the button says it went (28 Sep 2026) — only for a real send that reached someone
       if (!test && delivered.length > 0) {
-        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: stamp, to: delivered, stage } } as never).catch(() => undefined)
+        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: stamp, to: delivered, stage, for_time: stage === 'post' ? (post?.scheduled_for ?? null) : null } } as never).catch(() => undefined)
       }
       if (!test) await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,

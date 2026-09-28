@@ -310,7 +310,7 @@ export function useSchedulePosts(
           channels: asArray<string>(row.channels).map(String),
           publish_job_ids: jobIds,
           item_title: (item.title as string | null) ?? null,
-          waiting_on: facts.live_status === 'pending' ? waitingOnWords(item as never, client?.name as string | null, tz) : null,
+          waiting_on: facts.live_status === 'pending' ? waitingOnWords(item as never, client?.name as string | null, tz, row.scheduled_for as string | null) : null,
           item_type: (item.content_type as string | null) ?? null,
           ...facts,
           outcomes,
