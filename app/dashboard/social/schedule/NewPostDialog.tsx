@@ -1720,32 +1720,6 @@ export default function NewPostDialog({
           </div>
         )}
 
-        {/* ── a question, when something is about to be thrown away ── */}
-        {confirm && (
-          <div className="mx-3.5 mt-3.5 flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
-            <span className="text-[13px] font-medium">
-              {confirm === 'close'
-                ? 'You have changes that have not been saved. Close anyway?'
-                : 'Take this post off the calendar? The piece itself is not deleted.'}
-            </span>
-            <span className="ml-auto flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirm(null)}
-                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
-              >
-                Keep editing
-              </button>
-              <button
-                type="button"
-                onClick={() => (confirm === 'close' ? onClose() : void remove())}
-                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background"
-              >
-                {confirm === 'close' ? 'Close and lose them' : 'Take it off'}
-              </button>
-            </span>
-          </div>
-        )}
 
         {/* ── the answer, when this post is waiting on the person reading it ──
              The same gate as the item page, the same route, the same emails:
@@ -1849,6 +1823,34 @@ export default function NewPostDialog({
 
       {/* ── footer ── */}
         <div className="sticky bottom-0 z-20 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-surface p-3.5">
+          {/* ── a question, when something is about to be thrown away — IN THE FOOTER, beside the bin that asked it
+              (the owner, 28 Sep 2026: "any bin icon should be working"): it sat in the scrolling body, below the fold on
+              a long post, so pressing the bin looked like nothing happened ── */}
+        {confirm && (
+          <div role="alertdialog" className="flex w-full basis-full flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+            <span className="text-[13px] font-medium">
+              {confirm === 'close'
+                ? 'You have changes that have not been saved. Close anyway?'
+                : 'Take this post off the calendar? The piece itself is not deleted.'}
+            </span>
+            <span className="ml-auto flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirm(null)}
+                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => (confirm === 'close' ? onClose() : void remove())}
+                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background"
+              >
+                {confirm === 'close' ? 'Close and lose them' : 'Take it off'}
+              </button>
+            </span>
+          </div>
+        )}
           {/* a posted post cannot come off the calendar — the server says
               so, and a red refusal is worse than no button (the `hidden`
               attribute lost to the flex class on the live site, 10 Sep 2026) */}
