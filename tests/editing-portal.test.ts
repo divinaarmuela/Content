@@ -72,7 +72,7 @@ describe('the client’s tick per clip (pure)', () => {
     expect(route).toContain('approved by ${by} (${client.name})${version ? ` · Version ${version}` : \'\'} from ${from.ip ?? ')
     const portal = src('app/components/portal/EditingReview.tsx')
     expect(portal).toContain('disabled={approving || !name.trim()}')
-    expect(portal).toContain("{approving ? 'Saving…' : 'Approve this clip'}")
+    expect(portal).toContain("{approving ? 'Saving…' : `Approve this ${words.one}`}")
   })
 
   it('reads only well-formed ticks off the card; approving twice keeps one; taking it back removes it', () => {
@@ -133,7 +133,7 @@ describe('the routes and the pages (source pins)', () => {
     expect(c).toContain("fetch('/api/portal/comment'")
     expect(c).toContain('video_file_id: clip.id, video_file_name: clip.name')
     expect(c).not.toContain('/api/portal/act')
-    expect(c).toContain('Approve this clip')
+    expect(c).toContain('Approve this ${words.one}')
     const lib = src('app/lib/editing-portal.ts')
     expect(lib).toContain("where: r => r.visibility === 'client'")
     expect(lib).toContain('if (!belongsToPortal(item, owner.scope)) return null')

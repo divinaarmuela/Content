@@ -286,6 +286,9 @@ export function toScanShape(p: BrandProfile): ScanProfile {
   if (p.colours.length) out.colors = p.colours.map(c => ({ name: c.name || undefined, hex: c.hex, usage: c.role }))
   if (p.fonts.length) out.fonts = p.fonts.map(f => ({ family: f.name, usage: f.role }))
   if (p.logo_rules.length) out.logo_rules = [...p.logo_rules]
+  // THE LOGO FILES TRAVEL TOO (28 Sep 2026: Karly, "new logos and assets that I need to ensure designers and editors
+  // have access to"): they were kept on the Brand tab and dropped here, so no card ever showed them
+  if (p.logo_files.length) out.logo_files = p.logo_files.map(f => ({ name: f.name, url: f.url }))
   if (p.voice.tone || p.voice.summary) {
     out.voice = { ...(p.voice.tone ? { tone: p.voice.tone } : {}), ...(p.voice.summary ? { description: p.voice.summary } : {}) }
   }
@@ -393,4 +396,10 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
   const [it] = out.splice(from, 1)
   out.splice(to, 0, it)
   return out
+}
+
+/** a logo or brand file that is a picture, so it is shown as one (28 Sep 2026) */
+export function isPictureFile(f: { name?: string | null; url?: string | null }): boolean {
+  const pic = /\.(png|jpe?g|webp|gif|svg|avif)(\?|$)/i
+  return pic.test(String(f.name ?? '')) || pic.test(String(f.url ?? ''))
 }

@@ -196,6 +196,12 @@ export default function EditorCardPage() {
   const pathname = usePathname()
   const board = pathname?.startsWith('/dashboard/designer') ? { href: '/dashboard/designer', word: 'Designer' } : { href: '/dashboard/editor', word: 'Editor' }
   const back = () => router.push(board.href)
+  // A DESIGNER'S CARD OPENS ON THE DESIGNER BOARD (the owner, 28 Sep 2026: "did we fix the designer page flow"): every
+  // email, bell and ?card= link builds /dashboard/editor/<id>, so a graphics card landed under Editor with an Editor
+  // back link. The card knows its kind — it moves itself to its own board's address.
+  useEffect(() => {
+    if (filesOnly && id && pathname === `/dashboard/editor/${id}`) router.replace(`/dashboard/designer/${id}`)
+  }, [filesOnly, id, pathname, router])
 
   if (loading) {
     return (

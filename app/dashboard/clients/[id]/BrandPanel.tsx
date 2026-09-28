@@ -21,6 +21,7 @@ import {
   COLOUR_ROLES, COLOUR_ROLE_LABEL, FONT_ROLES, FONT_ROLE_LABEL, applyProposal, asHandle, asHashtag,
   emptyProfile, moveItem, normaliseHex, normaliseProfile, profileHasContent,
   type BrandColour, type BrandFont, type BrandProfile, type ColourRole, type FontRole, type Proposal,
+  isPictureFile,
 } from '@/app/lib/brand-profile-core'
 
 /**
@@ -576,6 +577,40 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
     else run()
   }
 
+  // ── LOGOS AND BRAND FILES, UPLOADED (28 Sep 2026: Karly, "Mgmt have provided some new logos and assets that I need to
+  //    ensure designers and editors have access to"). Only a pasted link was possible, and it never reached a card.
+  //    Each file goes straight to storage, then onto the list every card's Brand tab shows.
+  const assetRef = useRef<HTMLInputElement>(null)
+  const [assetBusy, setAssetBusy] = useState<string | null>(null)
+  const uploadAssets = async (files: File[]) => {
+    const added: { name: string; url: string }[] = []
+    const failed: string[] = []
+    for (const [n, file] of files.entries()) {
+      setAssetBusy(`Uploading ${n + 1} of ${files.length} — ${file.name}`)
+      try {
+        const signRes = await fetch(`/api/clients/${clientId}/brand`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sign_asset', name: file.name, size: file.size, type: file.type || 'application/octet-stream' }),
+        })
+        const signed = await signRes.json().catch(() => ({}))
+        if (!signRes.ok) throw new Error(String(signed?.error ?? 'Could not start the upload'))
+        const put = await fetch(signed.signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
+        if (!put.ok) throw new Error('Upload to storage failed')
+        added.push({ name: file.name, url: String(signed.publicUrl) })
+      } catch (e) {
+        failed.push(`${file.name}: ${e instanceof Error ? e.message : 'failed'}`)
+      }
+    }
+    setAssetBusy(null)
+    if (assetRef.current) assetRef.current.value = ''
+    if (added.length) {
+      const now = profileRef.current.logo_files
+      setList('logo_files')([...now, ...added.filter(a => !now.some(f => f.url === a.url))])
+      toast.success(`${added.length} ${added.length === 1 ? 'file' : 'files'} added — every card for this client shows them on its Brand tab`)
+    }
+    if (failed.length) toast.error(failed.join(' · '))
+  }
+
   // ── scan ──
   const scan = async (file: File) => {
     if (file.type !== 'application/pdf') { toast.error('Brand guidelines must be a PDF'); return }
@@ -714,24 +749,40 @@ export default function BrandPanel({ clientId }: { clientId: string }) {
       </Section>
 
       {/* ── logo ── */}
-      <Section icon={ImageIcon} title="Logo rules" count={profile.logo_rules.length + profile.logo_files.length} canEdit={canEdit}
+      <Section icon={ImageIcon} title="Logos & brand files" count={profile.logo_rules.length + profile.logo_files.length} canEdit={canEdit}
         copy={{ label: 'the logo rules', value: profile.logo_rules.join('\n') }}
         onClear={() => clearList('logo rules', profile.logo_rules.length, () => setList('logo_rules')([], `${profile.logo_rules.length} logo rules`))}>
         <TextList items={profile.logo_rules} onChange={setList('logo_rules')} canEdit={canEdit} placeholder="Add a rule" empty="No logo rules yet — add one, e.g. Keep clear space around the logo" />
         <div className="mt-4 border-t border-border pt-3">
-          <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">Logo files</p>
-          {profile.logo_files.length === 0 && <p className="mb-2 text-body-15 text-muted-foreground">No logo files linked yet.</p>}
+          <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">Logo & brand files · editors and designers see these on every card</p>
+          {profile.logo_files.length === 0 && <p className="mb-2 text-body-15 text-muted-foreground">No logos or brand files yet — upload them here.</p>}
           <ul className="flex flex-col gap-1">
             {profile.logo_files.map((f, i) => (
               <li key={f.url} className="flex items-center gap-2 text-body-15">
+                {isPictureFile(f)
+                  // eslint-disable-next-line @next/next/no-img-element -- the client's own logo, from our storage
+                  ? <img src={f.url} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-inner border border-border bg-[repeating-conic-gradient(#e5e5e5_0%_25%,#fff_0%_50%)] bg-[length:12px_12px] object-contain" />
+                  : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-inner border border-border text-[10px] font-semibold uppercase text-muted-foreground">{(f.name.split('.').pop() ?? 'file').slice(0, 4)}</span>}
                 <a href={f.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate underline underline-offset-2">{f.name}</a>
                 {canEdit && <button type="button" onClick={() => setList('logo_files')(profile.logo_files.filter((_, j) => j !== i), f.name)} className={ICON_BTN} aria-label={`Remove ${f.name}`}><X className="h-3.5 w-3.5" /></button>}
               </li>
             ))}
           </ul>
           {canEdit && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input ref={assetRef} type="file" multiple className="hidden"
+                accept=".png,.jpg,.jpeg,.webp,.gif,.svg,.avif,.heic,.pdf,.ai,.eps,.psd,.indd,.fig,.sketch,.zip,.otf,.ttf,.woff,.woff2,.mp4,.mov"
+                onChange={e => { const list = [...(e.target.files ?? [])]; if (list.length) void uploadAssets(list) }} />
+              <Button type="button" size="sm" variant="outline" disabled={assetBusy !== null} onClick={() => assetRef.current?.click()} className="min-h-11 rounded-full sm:min-h-9">
+                {assetBusy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <FileUp className="mr-1.5 h-4 w-4" aria-hidden />}
+                {assetBusy ? 'Uploading…' : 'Upload logos & files'}
+              </Button>
+              {assetBusy && <span role="status" className="text-[13px] text-muted-foreground">{assetBusy}</span>}
+            </div>
+          )}
+          {canEdit && (
             <div className="mt-2">
-              <AddRow placeholder="Paste a link to a logo file (https://…)" onAdd={url => {
+              <AddRow placeholder="…or paste a link to a file (https://…)" onAdd={url => {
                 if (!/^https?:\/\//i.test(url)) { toast.error('A link starts with https://'); return }
                 if (profile.logo_files.some(f => f.url === url)) { toast.error('That file is already listed'); return }
                 setList('logo_files')([...profile.logo_files, { name: url.split('/').pop()?.split('?')[0] || 'logo', url }])

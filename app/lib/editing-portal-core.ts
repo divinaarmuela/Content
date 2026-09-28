@@ -197,3 +197,25 @@ export function asClientVersions<T extends VersionedClip>(clips: readonly T[], c
   for (const c of clips) { const k = `${c.asset_id || c.id}@${clientVersionOf(c.version, clientRounds)}`; if (kept.has(k) && !order.includes(k)) order.push(k) }
   return [...out, ...order.map(k => { const c = kept.get(k)!; return { ...c, version: clientVersionOf(c.version, clientRounds)!, retired_round: typeof c.retired_round === 'number' ? (clientVersionOf(c.retired_round, clientRounds) ?? last + 1) : c.retired_round } })]
 }
+
+/**
+ * WHAT TO CALL THE PIECES (the owner, 28 Sep 2026: "did we fix the designer page flow"). A designer's carousel is eight
+ * pictures, and the client was told to "Watch the 8 clips" and "Approve this clip". Pictures only → designs; clips only
+ * → clips; a mix → files. `see` is the verb for the link to them.
+ */
+export function pieceWords(kinds: readonly (string | null | undefined)[]): { one: string; many: string; see: string } {
+  const k = kinds.map(x => String(x ?? ''))
+  if (k.length > 0 && k.every(x => x === 'image')) return { one: 'design', many: 'designs', see: 'See' }
+  if (k.some(x => x === 'image')) return { one: 'file', many: 'files', see: 'See' }
+  return { one: 'clip', many: 'clips', see: 'Watch' }
+}
+
+/** a file's kind from its type or name — enough to tell a picture from a clip */
+export function pieceKindOf(mime: string | null | undefined, name?: string | null): 'image' | 'video' | 'other' {
+  const m = String(mime ?? '').toLowerCase()
+  if (m.startsWith('image/')) return 'image'
+  if (m.startsWith('video/')) return 'video'
+  if (/\.(png|jpe?g|webp|gif|heic|avif)$/i.test(String(name ?? ''))) return 'image'
+  if (/\.(mp4|mov|m4v|webm|avi)$/i.test(String(name ?? ''))) return 'video'
+  return 'other'
+}

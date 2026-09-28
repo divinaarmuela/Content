@@ -25,6 +25,14 @@ import { normaliseProfile, toScanShape } from '../../../../lib/brand-profile-cor
  *  to hundreds of megabytes and are exactly what clients send. */
 const MAX_PDF_BYTES = 2 * 1024 * 1024 * 1024
 
+/**
+ * LOGOS AND BRAND FILES (28 Sep 2026: Karly, "Mgmt have provided some new logos and assets that I need to ensure
+ * designers and editors have access to"). Uploaded straight to storage like the guidelines PDF, then listed on the
+ * profile's logo files, which every card's Brand tab shows. Pictures, vector and design files, PDFs, fonts and zips.
+ */
+const MAX_ASSET_BYTES = 1024 * 1024 * 1024
+const BRAND_ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|avif|heic|pdf|ai|eps|psd|indd|fig|sketch|zip|otf|ttf|woff2?|mp4|mov)$/i
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
@@ -89,6 +97,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'That file is over 2GB.' }, { status: 413 })
       }
       const signed = await signUpload(String(body?.name ?? 'brand.pdf'), 'application/pdf')
+      return NextResponse.json(signed)
+    }
+
+    // ── sign an asset: a logo or brand file for the profile's file list ──
+    if (body?.action === 'sign_asset') {
+      const name = String(body?.name ?? '').trim()
+      if (!BRAND_ASSET_EXT.test(name)) {
+        return NextResponse.json({ error: `${name || 'That file'} is not a logo or brand file — pictures, SVG, PDF, AI, EPS, PSD, fonts or a zip` }, { status: 415 })
+      }
+      if ((Number(body?.size) || 0) > MAX_ASSET_BYTES) {
+        return NextResponse.json({ error: `${name} is over 1GB.` }, { status: 413 })
+      }
+      const signed = await signUpload(name, String(body?.type || 'application/octet-stream'))
       return NextResponse.json(signed)
     }
 

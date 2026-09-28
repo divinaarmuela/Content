@@ -443,7 +443,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
             {(card.clips ?? 0) > 0 && token ? (
               <Link href={editingPortalPath(token, card.id)}
                 className="inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline">
-                Watch the {card.clips} {card.clips === 1 ? 'clip' : 'clips'}
+                {card.clip_words?.see ?? 'Watch'} the {card.clips} {card.clips === 1 ? (card.clip_words?.one ?? 'clip') : (card.clip_words?.many ?? 'clips')}
               </Link>
             ) : card.link && (
               <a href={card.link.url} target="_blank" rel="noreferrer noopener"

@@ -29,6 +29,8 @@ export type BrandProfile = {
   fonts?: { family: string; usage?: string; weights?: string[] }[]
   colors?: { name?: string; hex?: string; usage?: string }[]
   logo_rules?: string[]
+  /** the logos and brand files themselves, uploaded on the Brand tab — shown on every card's Brand tab (28 Sep 2026) */
+  logo_files?: { name: string; url: string }[]
   voice?: { tone?: string; description?: string; keywords?: string[] }
   imagery?: string[]
   dos_and_donts?: { dos?: string[]; donts?: string[] }

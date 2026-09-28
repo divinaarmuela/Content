@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Check, ChevronDown, ChevronUp, Copy, X } from 'lucide-react'
 import type { BrandProfile } from '../../lib/brand-core'
+import { isPictureFile } from '../../lib/brand-profile-core'
 
 /**
  * The client's brand guide, travelling with the job — a working reference,
@@ -127,6 +128,33 @@ export default function BrandCard({ clientId }: { clientId: string }) {
         )}
 
         {/* ── voice: tone chip, full description, keywords ── */}
+        {/* THE LOGOS AND BRAND FILES (28 Sep 2026: Karly — "new logos and assets that I need to ensure designers and
+            editors have access to"): uploaded on the client's Brand tab, open or downloaded from here on every card */}
+        {(profile.logo_files?.length ?? 0) > 0 && (
+          <div className="flex flex-col gap-2">
+            <SectionLabel>Logos & brand files</SectionLabel>
+            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {profile.logo_files!.map(f => {
+                const picture = isPictureFile(f)
+                return (
+                  <li key={f.url}>
+                    <a href={f.url} target="_blank" rel="noreferrer noopener" download={f.name}
+                      className="flex h-full flex-col gap-1.5 rounded-inner border border-border p-2 hover:border-foreground/40">
+                      <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-inner bg-[repeating-conic-gradient(#e5e5e5_0%_25%,#fff_0%_50%)] bg-[length:12px_12px]">
+                        {picture
+                          // eslint-disable-next-line @next/next/no-img-element -- the client's own logo, from our storage
+                          ? <img src={f.url} alt={f.name} loading="lazy" className="h-full w-full object-contain p-2" />
+                          : <span className="text-[13px] font-semibold uppercase text-muted-foreground">{(f.name.split('.').pop() ?? 'file').slice(0, 4)}</span>}
+                      </span>
+                      <span className="truncate text-[13px] font-medium" title={f.name}>{f.name}</span>
+                    </a>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
         {profile.voice && (profile.voice.tone || profile.voice.description || (profile.voice.keywords?.length ?? 0) > 0) && (
           <div className="flex flex-col gap-2">
             <SectionLabel>Voice &amp; tone</SectionLabel>

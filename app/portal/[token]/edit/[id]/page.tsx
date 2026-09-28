@@ -46,7 +46,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
           </div>
           <EditingReview data={data} />
           <p className="text-[12px] text-muted-foreground">
-            Your comments and approvals go straight to {data.am_name ?? 'your account manager'}. Approving a clip marks it for the team; the piece itself is moved on by them.
+            Your comments and approvals go straight to {data.am_name ?? 'your account manager'}. Approving one marks it for the team; the piece itself is moved on by them.
           </p>
         </main>
         <Toaster position="top-center" />

@@ -10,7 +10,7 @@ import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../
 import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
 import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
-import { assetLine, clipsAtRound } from '../../lib/editing-portal-core'
+import { assetLine, clipsAtRound, pieceWords } from '../../lib/editing-portal-core'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -41,6 +41,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   // THE CARD AS IT STOOD AT THAT VERSION (22 Sep 2026; editing-portal-core.ts): the ones that were fine carried
   // forward, the one that was replaced in its new version
   const clips = useMemo(() => clipsAtRound(data.clips, round), [data.clips, round])
+  // designs, clips or files — a designer's carousel is not "clips" (28 Sep 2026)
+  const words = useMemo(() => pieceWords(data.clips.map(c => c.kind)), [data.clips])
   const [current, setCurrent] = useState(0)
   useEffect(() => { setCurrent(0) }, [round])
   const newest = clips[current] ?? null
@@ -77,7 +79,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   const markers = useMemo(() => markersFor(onClip as never, duration), [onClip, duration])
   const active = activeCommentId(onClip as never, now)
   const approved = clip ? clipApproval(approvals, clip.id) : null
-  const approvedWords = approvedClipsWords(clips.filter(c => clipApproval(approvals, c.id)).length, clips.length)
+  const approvedWords = approvedClipsWords(clips.filter(c => clipApproval(approvals, c.id)).length, clips.length, words)
 
   const seek = (at: number) => {
     const v = video.current
@@ -128,7 +130,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       {/* ── the clip ── */}
       <section className="flex min-w-0 flex-col gap-4" aria-label="The clip">
         {/* the count follows the version chosen (22 Sep 2026) */}
-        {data.rounds.length <= 1 && clips.length > 0 && <p className="text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? 'clip' : 'clips'}</p>}
+        {data.rounds.length <= 1 && clips.length > 0 && <p className="text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? words.one : words.many}</p>}
         {data.rounds.length > 1 && (
           <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of the whole set">
             <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">The whole set</span>
@@ -138,7 +140,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 {r === data.rounds[0] ? `Latest — ${roundLabel(r)}` : `Earlier — ${roundLabel(r)}`}
               </button>
             ))}
-            <span className="shrink-0 text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? 'clip' : 'clips'}</span>
+            <span className="shrink-0 text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? words.one : words.many}</span>
           </div>
         )}
         {!data.can_approve && (
@@ -149,7 +151,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         )}
         {line.length > 1 && (
           <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none]" role="tablist" aria-label="Versions of this piece">
-            <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This clip</span>
+            <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">This {words.one}</span>
             {line.map(v => (
               <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
                 className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
@@ -215,7 +217,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   <button type="button" onClick={() => void approve(false)} disabled={approving || !name.trim()}
                     title={name.trim() ? undefined : 'Type your name first — the approval carries it'}
                     className="inline-flex min-h-11 items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
-                    <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : 'Approve this clip'}
+                    <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : `Approve this ${words.one}`}
                   </button>
                 </span>
               )}
@@ -266,10 +268,10 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       <aside className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card" aria-label="Your comments on this clip">
         <div className="border-b border-border px-5 py-4">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>Your comments</p>
-          <p className="mt-1 text-[13px] text-muted-foreground">Pause the clip where you have something to say and write it here — the second is stamped on it. {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">{clip?.kind === 'image' ? 'Write what you’d like changed on this design.' : 'Pause the clip where you have something to say and write it here — the second is stamped on it.'} {data.am_name ? `${data.am_name} is told each time.` : 'Your account manager is told each time.'}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 lg:max-h-[52vh]">
-          {onClip.length === 0 && <p className="text-[14px] text-muted-foreground">Nothing said on this clip yet.</p>}
+          {onClip.length === 0 && <p className="text-[14px] text-muted-foreground">Nothing said on this {words.one} yet.</p>}
           <ul className="flex flex-col gap-2">
             {onClip.map(c => (
               <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-border'}`}>
@@ -294,7 +296,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             <input type="checkbox" checked={stamp} onChange={e => setStamp(e.target.checked)} className="h-4 w-4 accent-amber-300" />
             Stamp the current second{stamp && duration > 0 ? `: ${formatStamp(now)}` : ''}
           </label>
-          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder="Your thoughts on this clip — a note at this second, or anything you’d like us to know"
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={clip?.kind === 'image' ? 'Your thoughts on this design — anything you’d like us to change' : 'Your thoughts on this clip — a note at this second, or anything you’d like us to know'}
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
             className={`${input} rounded-2xl py-3`} />
           {error && <p role="alert" className="text-[13px] text-red-500 dark:text-red-300">{error}</p>}

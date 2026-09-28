@@ -1,5 +1,6 @@
 import { deliverOnly } from './deliver-only-core'
 import { liveFilesAt } from './final-files-core'
+import { pieceKindOf, pieceWords } from './editing-portal-core'
 import { roundOf } from './edit-round-core'
 import { sanitiseScripts, type ScriptBlock } from './script-core'
 import 'server-only'
@@ -173,6 +174,8 @@ export type PortalCard = {
   link: PortalLink | null
   /** a files card: how many clips the client reviews on its editing page — shown INSTEAD of the Drive link (24 Sep 2026) */
   clips?: number
+  /** what to call them: designs, clips or files (28 Sep 2026) */
+  clip_words?: { one: string; many: string; see: string }
   /** a shared shoot plan has a PDF; the page builds the href from its token */
   pdf: boolean
   preview_url: string | null
@@ -724,6 +727,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       deliver_only: selfPosts,
       link: linkFor(url, kind),
       clips: facing ? liveFilesAt(i as never, roundOf(i as never)).length : 0,
+      clip_words: pieceWords(liveFilesAt(i as never, roundOf(i as never)).map(f => pieceKindOf(f.mime, f.name))),
       pdf: false,
       preview_url: p.preview_url,
       slides: p.slides,

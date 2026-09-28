@@ -57,8 +57,8 @@ export function clipApproval(list: readonly ClipApproval[], fileId: string): Cli
 }
 
 /** "2 of 6 clips approved by the client" — the one line on the card */
-export function approvedClipsWords(approved: number, total: number): string | null {
+export function approvedClipsWords(approved: number, total: number, words: { one: string; many: string } = { one: 'clip', many: 'clips' }): string | null {
   if (total === 0 || approved === 0) return null
-  if (approved >= total) return `All ${total} ${total === 1 ? 'clip' : 'clips'} approved by the client`
-  return `${approved} of ${total} clips approved by the client`
+  if (approved >= total) return `All ${total} ${total === 1 ? words.one : words.many} approved by the client`
+  return `${approved} of ${total} ${words.many} approved by the client`
 }
