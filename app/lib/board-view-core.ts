@@ -192,7 +192,12 @@ export function cardLines(
     // DELIVERED is the moment the final was sent to the client (the
     // playbook: "that's the moment our obligation is met"), so the card says
     // it in those words and keeps saying it through Ready to post and Posted
-    delivered: card.delivered_at && shortDate(card.delivered_at) ? `Sent to client ${shortDate(card.delivered_at)}` : null,
+    // …but ONLY when the client actually had it (the owner, 28 Sep 2026: every card read "Sent to client", Alia's
+    // included, because the date is stamped at every quality-check pass — "approve without client" and a self-pass too).
+    // Put to the client (their edit review, an emailed or copied post link) → "Sent to client"; otherwise "Passed".
+    delivered: card.delivered_at && shortDate(card.delivered_at)
+      ? `${clientHadIt(card) ? 'Sent to client' : 'Passed'} ${shortDate(card.delivered_at)}`
+      : null,
     made: card.created_at && shortDate(card.created_at) ? `Made ${shortDate(card.created_at)}` : null,
     // "Client posts it" is a word about what is still to come: a card the
     // channel already holds or has posted was posted by US, whatever the
@@ -256,9 +261,19 @@ export const POST_WAITING_MANAGER = 'A post is waiting on an account manager'
  * The one line a card says about a post waiting on somebody — whoever is
  * looking. Null when no post on this card is waiting on anyone.
  */
+/** did the client actually receive this piece — their edit review, or the post emailed or its link copied to them */
+function clientHadIt(card: object): boolean {
+  const c = card as { client_round?: unknown; client_rounds?: unknown; client_sent?: unknown; posting_client_required?: unknown }
+  return !!c.client_round || (Array.isArray(c.client_rounds) && c.client_rounds.length > 0) || !!c.client_sent || c.posting_client_required === true
+}
+
+/** the client asked for a change on the post — the card says so, rather than sitting in Draft with no reason (28 Sep 2026) */
+export const POST_CHANGES_ASKED = 'The client asked for a change'
+
 export function postWaitingLine(
   card: BoardViewCard, viewer: BoardViewer,
 ): string | null {
+  if (String(card.posting_approval_state ?? '') === 'changes') return POST_CHANGES_ASKED
   if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
   // once it is put to the client it is waiting on THEM, whoever may also answer for them (28 Sep 2026)
   if (card.posting_client_required === true) return POST_WAITING_CLIENT

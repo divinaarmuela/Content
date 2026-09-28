@@ -753,8 +753,11 @@ describe('the Sent to client line', () => {
     } as unknown as Parameters<typeof cardLines>[0]
     const opts = { today: '2026-09-11', viewerId: 'me' }
     expect(cardLines(base, opts).delivered).toBeNull()
-    expect(cardLines({ ...base, delivered_at: '2026-09-11T03:00:00Z' }, opts).delivered)
+    // only when the client actually had it (28 Sep 2026); a pass nobody sent them reads as Passed
+    expect(cardLines({ ...base, delivered_at: '2026-09-11T03:00:00Z', client_round: 1 } as never, opts).delivered)
       .toMatch(/^Sent to client /)
+    expect(cardLines({ ...base, delivered_at: '2026-09-11T03:00:00Z' }, opts).delivered)
+      .toMatch(/^Passed /)
   })
 })
 
