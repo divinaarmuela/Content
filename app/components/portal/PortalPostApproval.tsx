@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -167,6 +168,13 @@ function PostApprovalCard({ item, surface, accent }: {
             </button>
           </div>
         </div>
+      ) : token && !answered ? (
+        // ONE WAY IN (the owner, 28 Sep 2026: "I just want one easy portal"): the review page, where every slide, the
+        // notes on each and the answer live — the same page the approval email opens
+        <Link href={`/portal/${token}/approve/${item.id}`} style={accent}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-foreground px-6 text-[15px] font-semibold text-background sm:w-fit">
+          <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden /> Review and approve
+        </Link>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <button
