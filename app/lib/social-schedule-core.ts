@@ -1496,7 +1496,11 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     problems.push('Pick a time — this post has none')
   }
 
-  if (input.scheduledFor) {
+  // THE CLOCK IS CHECKED ONLY WHEN IT MATTERS (Divina, 28 Sep 2026: "it's now asking me to choose a different time
+  // inside post rearrangement — shouldn't come up in this section"): saving the files, the words or a draft is not
+  // booking anything, so a time that has gone is not a reason to refuse it. The time is checked by the presses that
+  // send — Schedule, Post now, a move — which pass requireTime.
+  if (input.scheduledFor && input.requireTime !== false) {
     const when = new Date(input.scheduledFor).getTime()
     const now = new Date(input.now as string).getTime()
     if (!Number.isFinite(when)) {
