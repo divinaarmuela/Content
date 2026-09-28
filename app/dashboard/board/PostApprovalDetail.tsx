@@ -6,7 +6,7 @@ import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ExternalLink, Mail, MessageCircle, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import SendToClientDialog from './SendToClientDialog'
-import { sendStage } from '../../lib/post-to-client-core'
+import { sendStage, sentForStage, sentWords } from '../../lib/post-to-client-core'
 import { cn } from '@/lib/utils'
 import { useRow, useTable } from '@/lib/db-client'
 import type { AssetVersion, Client, ContentItem, ItemComment, PublishJob, SocialPost, TeamUser, TeamUserClient, WorkflowActivity, WorkKind } from '@/lib/db-types'
@@ -627,7 +627,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
           {/* SEND TO CLIENT (28 Sep 2026): at With client, a manager emails the client the link to view and approve */}
           {maySendToClient && (
             <Button className={primary} disabled={busy} onClick={() => setSendingToClient(true)}>
-              <Mail className="mr-1.5 h-4 w-4" aria-hidden /> Send to client
+              {(() => {
+                const sent = item ? sentForStage(item as never) : null
+                return sent ? <>✓ {sentWords(sent)} · Send again</> : <><Mail className="mr-1.5 h-4 w-4" aria-hidden /> Send to client</>
+              })()}
             </Button>
           )}
           {actions.primary && (

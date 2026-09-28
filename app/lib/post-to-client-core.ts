@@ -85,3 +85,29 @@ export function sendStage(item: { status?: unknown; posting_approval_state?: unk
   if (['approved_for_scheduling', 'scheduled'].includes(status) && String(item.posting_approval_state ?? '') === 'pending') return 'post'
   return null
 }
+
+/**
+ * WHAT WAS ALREADY SENT (the owner, 28 Sep 2026: "since it sent, the post should show emailed to client with a tick —
+ * why is it a Send button again"). The send stamps the card; the button then says who was emailed and when, and a
+ * second send is a deliberate "Send again". A new round (the card sent back and handed in again, or the post edited
+ * and sent for approval again) clears the stamp — see `sentStampFor`.
+ */
+export type SentStamp = { at: string; to: string[]; stage: 'card' | 'post' }
+
+export function readSentStamp(item: { client_sent?: unknown } | null | undefined): SentStamp | null {
+  const v = item?.client_sent as Partial<SentStamp> | undefined
+  if (!v || typeof v.at !== 'string' || !Array.isArray(v.to) || v.to.length === 0) return null
+  return { at: v.at, to: v.to.map(String), stage: v.stage === 'post' ? 'post' : 'card' }
+}
+
+/** the stamp counts only for the moment it was sent in: a card stamp is stale once the card is a post, and the other way */
+export function sentForStage(item: { client_sent?: unknown; status?: unknown; posting_approval_state?: unknown }): SentStamp | null {
+  const s = readSentStamp(item)
+  const stage = sendStage(item)
+  return s && stage && s.stage === stage ? s : null
+}
+
+export function sentWords(s: SentStamp, tz = 'Australia/Melbourne'): string {
+  const when = new Date(s.at).toLocaleString('en-AU', { timeZone: tz, day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  return `Emailed to ${s.to.join(', ')} · ${when}`
+}

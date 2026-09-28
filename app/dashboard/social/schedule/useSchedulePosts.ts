@@ -141,7 +141,6 @@ const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 
 /** The statuses that mean the work is sitting with someone for approval —
  *  the rail's footer count. */
-const WAITING_STATUSES = ['client_review', 'internal_review', 'quality_check']
 
 export type ScheduleData = {
   /** the clients this person may pick between, by name */
@@ -373,9 +372,10 @@ export function useSchedulePosts(
         Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
   }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff])
 
+  /** posts waiting on a yes — what the rail's "Waiting for approval" counts and opens (28 Sep 2026) */
   const waiting = useMemo(
-    () => scopedItems.filter(i => WAITING_STATUSES.includes(String(i.status))).length,
-    [scopedItems])
+    () => tiles.filter(p => p.live_status === 'pending').length,
+    [tiles])
 
   // The page waits only on what the tiles are made of. Versions and accounts
   // decorate the rail and the badges; a missing one leaves a card plain

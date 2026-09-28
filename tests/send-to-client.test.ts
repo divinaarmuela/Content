@@ -206,3 +206,30 @@ describe('the client hears from Divina (the owner, 28 Sep 2026: "it should be fr
     expect(String(notify.mock.calls[0][0].bodyHtml)).toContain('Divina has sent you')
   })
 })
+
+describe('once sent, the button says so (28 Sep 2026)', () => {
+  it('a real send stamps the card; the stamp counts only for the moment it was sent in', async () => {
+    const { sentForStage, sentWords } = await import('../app/lib/post-to-client-core')
+    fake = seedDb({
+      content_items: [{ id: 'item-1', client_id: 'c1', title: '11', status: 'approved_for_scheduling', posting_approval_state: 'pending' }] as unknown as Row[],
+      clients: [{ id: 'c1', name: 'Jordan Wilson', email: 'jordan@example.com', share_token: 'tok-1' }] as unknown as Row[],
+      client_contacts: [] as unknown as Row[],
+    })
+    await call('POST', { emails: ['jordan@example.com'] })
+    const row = fake.rows('content_items')[0] as unknown as Record<string, unknown>
+    const s = sentForStage(row as never)
+    expect(s).toMatchObject({ to: ['jordan@example.com'], stage: 'post' })
+    expect(sentWords(s!)).toMatch(/^Emailed to jordan@example\.com · /)
+    // a later moment (the card back With client) is not "already sent"
+    expect(sentForStage({ ...row, status: 'client_review' } as never)).toBeNull()
+    // and a test never stamps
+    fake.restore()
+    fake = seedDb({
+      content_items: [{ id: 'item-1', client_id: 'c1', title: '11', status: 'client_review' }] as unknown as Row[],
+      clients: [{ id: 'c1', name: 'Jordan Wilson', email: 'jordan@example.com', share_token: 'tok-1' }] as unknown as Row[],
+      client_contacts: [] as unknown as Row[],
+    })
+    await call('POST', { test: true })
+    expect((fake.rows('content_items')[0] as unknown as { client_sent?: unknown }).client_sent).toBeUndefined()
+  })
+})

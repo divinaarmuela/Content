@@ -53,6 +53,7 @@ import PlatformIcon from '../PlatformIcon'
 import type { ImageEditorTarget } from './ImageEditor'
 import MediaPicker from './MediaPicker'
 import SendToClientDialog from '../../board/SendToClientDialog'
+import { sentForStage, sentWords } from '../../../lib/post-to-client-core'
 import TimePicker from './TimePicker'
 import { DOT_CLASS, STATUS_WORDS, Thumb } from './tiles'
 import type { SchedulePostRow } from './useSchedulePosts'
@@ -1813,7 +1814,11 @@ export default function NewPostDialog({
                   onClick={() => setSendingToClient(true)}
                   className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold disabled:opacity-60"
                 >
-                  Send to {clientName || 'the client'}
+                  {(() => {
+                    // already emailed for this moment: say so, with a tick — sending again is a choice (28 Sep 2026)
+                    const sent = itemRow ? sentForStage(itemRow as never) : null
+                    return sent ? <>✓ {sentWords(sent, tz)} · Send again</> : <>Send to {clientName || 'the client'}</>
+                  })()}
                 </button>
                 <button
                   type="button"

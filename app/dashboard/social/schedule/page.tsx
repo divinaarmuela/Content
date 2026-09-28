@@ -561,7 +561,9 @@ export default function SchedulePage() {
   const rail = (
     <MediaRail
       media={ownerMedia}
-      waiting={data.waiting}
+      // THE POSTS WAITING ON A YES — the same ones the count opens (28 Sep 2026: it counted cards at the editing
+      // stages, so Jordan Wilson's four posts waiting on approval were not in the number)
+      waiting={channelPosts.filter(p => p.live_status === 'pending').length}
       drafts={draftCount}
       onDrafts={() => { setOnlyWaiting(false); setView('List') }}
       onWaiting={() => { setOnlyWaiting(true); setView('List') }}
