@@ -85,9 +85,6 @@ export default async function PortalApprovePage({ params, searchParams }: {
 
           <ApprovePanel token={token} itemId={id} state={state} kind={kind} preview={preview} clientName={data.client.name} />
 
-          <p className="text-center text-[12px] text-muted-foreground">
-            {data.am_name ? `Questions? Reply to the email — it goes to ${data.am_name}.` : 'Questions? Reply to the email and we’ll get back to you.'}
-          </p>
         </main>
       </div>
     </PortalShell>
