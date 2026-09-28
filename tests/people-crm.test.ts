@@ -138,3 +138,20 @@ describe('a like is logged on the day our read first saw it (28 Sep 2026)', () =
     expect(r.status).toBe('liked')
   })
 })
+
+describe('handles with a dot save (28 Sep 2026: Jordan\'s likes failed with a 400)', () => {
+  it('people and liked_on go to the database encoded, and come back plain', async () => {
+    const { mergeInteractors, interactorsForStorage, readInteractors } = await import('../app/lib/followers-core')
+    const me = (u: string) => ({ username: u, full_name: null, profile_pic: null })
+    const merged = mergeInteractors(null, { media_id: 'm', likers: [me('s.jkani'), me('manal.rzn')], commenters: [], now: '2026-09-28T06:00:00Z', today: '2026-09-28' })
+    const stored = interactorsForStorage(merged)
+    for (const k of [...Object.keys(stored.people), ...Object.keys(stored.liked_on ?? {})]) expect(k).not.toMatch(/[.#$[\]/]/)
+    const back = readInteractors(JSON.parse(JSON.stringify(stored)))!
+    expect(Object.keys(back.people).sort()).toEqual(['manal.rzn', 's.jkani'])
+    expect(back.liked_on).toEqual({ 's.jkani': '2026-09-28', 'manal.rzn': '2026-09-28' })
+  })
+  it('every write of the record goes through the encoder', () => {
+    const lib = readFileSync('app/lib/post-interactors.ts', 'utf8')
+    expect(lib.match(/interactors: interactorsForStorage\(/g)?.length).toBe(4)
+  })
+})

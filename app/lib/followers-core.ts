@@ -523,6 +523,26 @@ export function emptyInteractors(): Interactors {
   }
 }
 
+/**
+ * HANDLES AS DATABASE KEYS (28 Sep 2026). `people` and `liked_on` are keyed by Instagram handle, and the database
+ * refuses a key with a dot in it (CLAUDE.md trap 9): a post liked by @s.jkani or @manal.rzn failed to save with a
+ * 400, and Jordan Wilson's first post sat "running" with nothing read. Written encoded, read back plain.
+ */
+const HANDLE_KEY_CHARS = /[.#$[\]/%]/g
+export function handleKey(handle: string): string {
+  return handle.replace(HANDLE_KEY_CHARS, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
+}
+export function handleFromKey(key: string): string {
+  return key.replace(/%([0-9A-F]{2})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+}
+const mapKeys = <T>(m: Record<string, T> | undefined, f: (k: string) => string): Record<string, T> =>
+  Object.fromEntries(Object.entries(m ?? {}).map(([k, v]) => [f(k), v]))
+
+/** the record as the database may hold it — every handle key encoded */
+export function interactorsForStorage(it: Interactors): Interactors {
+  return { ...it, people: mapKeys(it.people, handleKey), liked_on: mapKeys(it.liked_on, handleKey) }
+}
+
 export function readInteractors(v: unknown): Interactors | null {
   if (!v || typeof v !== 'object') return null
   const it = v as Partial<Interactors>
@@ -531,8 +551,8 @@ export function readInteractors(v: unknown): Interactors | null {
     media_id: typeof it.media_id === 'string' ? it.media_id : null,
     likers: names(it.likers),
     commenters: names(it.commenters),
-    people: it.people && typeof it.people === 'object' ? it.people as Record<string, Interactor> : {},
-    liked_on: it.liked_on && typeof it.liked_on === 'object' ? it.liked_on as Record<string, string> : {},
+    people: it.people && typeof it.people === 'object' ? mapKeys(it.people as Record<string, Interactor>, handleFromKey) : {},
+    liked_on: it.liked_on && typeof it.liked_on === 'object' ? mapKeys(it.liked_on as Record<string, string>, handleFromKey) : {},
     fetched_at: typeof it.fetched_at === 'string' ? it.fetched_at : null,
     fetched_day: typeof it.fetched_day === 'string' ? it.fetched_day : null,
     reads: typeof it.reads === 'number' ? it.reads : 0,

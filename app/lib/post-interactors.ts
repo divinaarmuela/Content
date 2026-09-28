@@ -4,7 +4,7 @@ import type { ContentItem, PostAnalytic, PublishJob, SocialAccount } from '@/lib
 import { configuredSource, followersEnabled, type FollowerSource } from './follower-source'
 import { followersOf } from './followers'
 import {
-  COMMENT_PAGES_MAX, dayKey, followedFromPost, instagramUrlOf, mergeInteractors, postWindowOpen, readInteractors,
+  COMMENT_PAGES_MAX, dayKey, followedFromPost, instagramUrlOf, interactorsForStorage, mergeInteractors, postWindowOpen, readInteractors,
   type FollowedFromPost, type Interactors,
 } from './followers-core'
 
@@ -91,14 +91,14 @@ export async function readPostInteractors(
     const unstamped = it?.status === 'running' && typeof it.fetched_at !== 'string' && !!opts.force
     if (it?.fetched_day === today && !stale && !unstamped && (!opts.force || it.status === 'running')) return null
     const running: Interactors = { ...(it ?? { ...emptyLike(), followed: [] }), status: 'running', fetched_day: today, fetched_at: stamp }
-    return { ...cur, interactors: running }
+    return { ...cur, interactors: interactorsForStorage(running) }
   })
   if (!seat.claimed) return { status: 'skipped', reason: 'already read today' }
   const row = seat.row
   const prev = readInteractors(row.interactors)
   const settle = async (patch: Partial<Interactors>) => {
     const it = readInteractors((await analytics().get(postId, { fresh: true }))?.interactors) ?? emptyLike()
-    await analytics().update(postId, { interactors: { ...it, ...patch } })
+    await analytics().update(postId, { interactors: interactorsForStorage({ ...it, ...patch }) })
   }
 
   let mediaId = prev?.media_id ?? null
@@ -123,7 +123,7 @@ export async function readPostInteractors(
   }
 
   const merged = mergeInteractors(prev, { media_id: mediaId, likers: likers.value, commenters, now: stamp, today })
-  await analytics().update(postId, { interactors: merged })
+  await analytics().update(postId, { interactors: interactorsForStorage(merged) })
   return { status: 'read', likers: likers.value.length, commenters: commenters.length }
 }
 
@@ -161,7 +161,7 @@ export async function crossFollowersWithPosts(accountId: string, now: Date = new
     const followed = followedFromPost({ followers, interactors: it, publishedAt: post.published_at })
     total += followed.length
     if (JSON.stringify(followed) === JSON.stringify(it.followed)) continue
-    await analytics().update(post.id, { interactors: { ...it, followed } })
+    await analytics().update(post.id, { interactors: interactorsForStorage({ ...it, followed }) })
   }
   void now
   return { posts: posts.length, followed: total }
