@@ -153,6 +153,7 @@ const DIALOG_WORDS: Partial<Record<string, string>> = {
   set_steps: 'Choose who approves this post. The client’s usual setting is the default.',
   team_decides: 'The team approves this version without waiting for the client. The client’s page will say the team decided it — never that they approved it.',
   change_time: 'Pick the new time. The files and words stay as they are, so nothing is checked again.',
+  schedule_direct: 'This books the post in for its time without the quality check. The post says it was scheduled without the check, by you. It then shows on Schedule.',
 }
 
 /**
@@ -317,7 +318,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
 
           {needs.has('time') && (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="post-act-time">New posting time</Label>
+              <Label htmlFor="post-act-time">{action.action === 'schedule_direct' ? 'Posting time' : 'New posting time'}</Label>
               <input id="post-act-time" type="datetime-local" value={when} onChange={e => setWhen(e.target.value)}
                 className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]" />
               <p className="text-[12px] text-muted-foreground">In the client’s time zone ({zone}). At least 15 minutes from now.</p>

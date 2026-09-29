@@ -713,3 +713,116 @@ describe('the only writer of social_posts.stage is app/lib/post-stage.ts', () =>
     expect(writers).toEqual(['app/lib/post-stage.ts'])
   })
 })
+
+/* ── Schedule it: a super admin books without the quality check (the owner, 29 Sep 2026) ── */
+
+describe('Schedule it — the one writer', () => {
+  it('from Draft: freezes the working copy as version 1, books it for its time, and the door lets it out', async () => {
+    const { publishDoorRefusal } = await import('../app/lib/publish-core')
+    const id = await newDraft()
+    const p = await stateOf(id)
+    const r = await performPostTransition(id, 'schedule_direct', await as(SA, id), { expect_rev: p.rev })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    if (!r.ok) return
+    expect(r.stage).toBe('booked')
+    expect(r.words).toBe('Schedule it — now in Booked in')
+    expect(r.post.sent_version).toBe(1)
+    expect(r.post.draft_version).toBe(2)
+    expect(r.post.qc_pass).toBeNull()
+    expect(r.post.approval).toMatchObject({ version: 1, by: SA.id, hat: 'super_admin', on_behalf_of_client: false, skipped_check: true })
+    expect(r.post.booking).toMatchObject({ job_ids: ['job-1'], pending: false })
+    const v1 = fake.rows('post_versions').find(v => v.id === `${id}_v1`) as Record<string, any>
+    expect(v1).toMatchObject({ caption: 'Hello everyone', frozen_for: 'schedule', frozen_by: SA.id, scheduled_for: p.scheduled_for })
+    // the provider got the FROZEN version at its time — never now
+    const q = deps.queuePublish.mock.calls[0][0] as { copy: { n: number }; forTime: string; now: boolean }
+    expect(q.copy.n).toBe(1)
+    expect(q.forTime).toBe(p.scheduled_for)
+    expect(q.now).toBe(false)
+    // the second lock on the door: booked, holding an approval of the version it sends
+    expect(publishDoorRefusal({ postId: id, clientId: CLIENT }, r.post)).toBeNull()
+    const ev = fake.rows('post_events').find(e => e.id === `${id}_r1`) as Record<string, any>
+    expect(ev).toMatchObject({ action: 'schedule_direct', from: 'draft', to: 'booked', hat: 'sa', actor_id: SA.id, version: 1, note: 'Scheduled by a super admin without the quality check' })
+    // nobody is told at the press; "Booked in" goes out as the booking lands
+    expect(deps.notify).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'schedule_direct' }))
+    expect(deps.notify).toHaveBeenCalledWith(expect.objectContaining({ to: 'team', action: 'booking_done' }))
+  })
+
+  it('from Quality check: the version already sent is the one booked, at a time picked in the question', async () => {
+    const id = await newDraft()
+    let p = await stateOf(id)
+    await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
+    p = await stateOf(id)
+    expect(p.stage).toBe('quality_check')
+    const when = IN(72)
+    const r = await performPostTransition(id, 'schedule_direct', await as(SA, id), { expect_rev: p.rev, version: p.sent_version, scheduled_for: when })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    if (!r.ok) return
+    expect(r.post.stage).toBe('booked')
+    // a new time is not new content: version 2 is version 1 with only the time replaced
+    expect(r.post.sent_version).toBe(2)
+    expect(r.post.scheduled_for).toBe(when)
+    expect(r.post.approval).toMatchObject({ version: 2, hat: 'super_admin', skipped_check: true })
+    const v2 = fake.rows('post_versions').find(v => v.id === `${id}_v2`) as Record<string, any>
+    expect(v2).toMatchObject({ frozen_for: 'retime', scheduled_for: when, caption: 'Hello everyone' })
+    const q = deps.queuePublish.mock.calls[0][0] as { copy: { n: number }; forTime: string; now: boolean }
+    expect(q.copy.n).toBe(2)
+    expect(q.forTime).toBe(when)
+    expect(q.now).toBe(false)
+  })
+
+  it('a scheduler, an account manager and a quality checker are refused, and nothing changes', async () => {
+    const id = await newDraft()
+    let p = await stateOf(id)
+    for (const who of [SCHED, AM, QR]) {
+      const r = await actOnPost(who, id, { action: 'schedule_direct', expect_rev: p.rev })
+      expect(r).toMatchObject({ ok: false, code: 'not_allowed' })
+    }
+    await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
+    p = await stateOf(id)
+    for (const who of [SCHED, AM, QR]) {
+      const r = await actOnPost(who, id, { action: 'schedule_direct', expect_rev: p.rev, version: p.sent_version })
+      expect(r).toMatchObject({ ok: false, code: 'not_allowed' })
+    }
+    expect((await stateOf(id)).stage).toBe('quality_check')
+    expect(deps.queuePublish).not.toHaveBeenCalled()
+  })
+
+  it('through the act route, a super admin books it', async () => {
+    const id = await newDraft()
+    const p = await stateOf(id)
+    const r = await actOnPost(SA, id, { action: 'schedule_direct', expect_rev: p.rev })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    expect((await stateOf(id)).stage).toBe('booked')
+  })
+
+  it('refuses a past time, a post with no channel, and eleven files for Instagram — nothing frozen, nothing queued', async () => {
+    const past = await newDraft({ scheduled_for: IN(-1) })
+    const r1 = await performPostTransition(past, 'schedule_direct', await as(SA, past), { expect_rev: 0 })
+    expect(r1).toMatchObject({ ok: false, code: 'time' })
+    const r1b = await performPostTransition(past, 'schedule_direct', await as(SA, past), { expect_rev: 0, scheduled_for: IN(-2) })
+    expect(r1b).toMatchObject({ ok: false, code: 'time' })
+    const none = await newDraft({ id: 'p-none', channels: [] })
+    expect(await performPostTransition(none, 'schedule_direct', await as(SA, none), { expect_rev: 0 })).toMatchObject({ ok: false, code: 'invalid' })
+    const many = Array.from({ length: 11 }, (_, i) => ({ url: `https://media.mdmmarketing.com.au/${i}.jpg`, name: `${i}.jpg`, type: 'image' }))
+    const eleven = await newDraft({ id: 'p-eleven', slides: many })
+    const r3 = await performPostTransition(eleven, 'schedule_direct', await as(SA, eleven), { expect_rev: 0 })
+    expect(r3).toMatchObject({ ok: false, code: 'invalid' })
+    for (const id of [past, none, eleven]) expect((await stateOf(id)).stage).toBe('draft')
+    expect(fake.rows('post_versions')).toHaveLength(0)
+    expect(deps.queuePublish).not.toHaveBeenCalled()
+  })
+
+  it('the channel refusing the booking brings it back to Ready to post with the reason, like Book in', async () => {
+    deps.queuePublish.mockImplementationOnce(async () => ({ error: 'Instagram said no' }))
+    const id = await newDraft()
+    const p = await stateOf(id)
+    const r = await performPostTransition(id, 'schedule_direct', await as(SA, id), { expect_rev: p.rev })
+    expect(r).toMatchObject({ ok: false, code: 'jobs' })
+    const after = await stateOf(id)
+    expect(after.stage).toBe('ready')
+    expect(after.booking).toBeNull()
+    expect(after.problem).toMatch(/Instagram said no/)
+    // the approval stays the super admin's, still marked — never turned into a pass
+    expect(after.approval).toMatchObject({ hat: 'super_admin', skipped_check: true })
+  })
+})

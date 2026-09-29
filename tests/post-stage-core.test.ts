@@ -944,3 +944,155 @@ describe('post-act-contract', () => {
     expect(refusalStatus('wrong_stage')).toBe(409)
   })
 })
+
+/* ── Schedule it: a super admin books without the quality check (the owner, 29 Sep 2026) ── */
+
+describe('Schedule it — a super admin books a Draft or a post at the quality check, without the check', () => {
+  const sa: PostActor = { id: 'u-akmal', hats: ['sa'] }
+  const nameOf = (id: string | null | undefined) => (id === 'u-akmal' ? 'Akmal' : null)
+
+  it('is one row: Draft or Quality check → Booked in, super admin only, asks for the time, never Post now', () => {
+    const row = ROW_OF.schedule_direct
+    expect([...row.from].sort()).toEqual(['draft', 'quality_check'])
+    expect(row.to).toBe('booked')
+    expect(row.who).toEqual(['sa'])
+    expect(row.label).toBe('Schedule it')
+    expect(row.needs).toEqual(['time'])
+    // Post now is still only from Ready to post
+    expect(ROW_OF.post_now.from).toEqual(['ready'])
+  })
+
+  it('from Draft: the working copy is frozen as version N, recorded as a super admin\'s, the check marked skipped, booked for its time', () => {
+    const p = post('draft', { draft_version: 1, sent_version: null })
+    const plan = planPostTransition(p, 'schedule_direct', sa, { expect_rev: 5 }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.to).toBe('booked')
+    expect(plan.patch.stage).toBe('booked')
+    expect(plan.effects[0]).toEqual({ when: 'before', kind: 'freeze', n: 1, frozen_for: 'schedule', time: p.scheduled_for })
+    expect(plan.patch.sent_version).toBe(1)
+    expect(plan.patch.draft_version).toBe(2)
+    expect(plan.patch.approval).toMatchObject({ version: 1, by: 'u-akmal', hat: 'super_admin', on_behalf_of_client: false, skipped_check: true })
+    expect(plan.patch.approval?.without_client).toBeUndefined()
+    expect(plan.patch.qc_pass).toBeUndefined()
+    expect(plan.patch.booking).toEqual({ job_ids: [], pending: true, at: NOW, for_time: p.scheduled_for })
+    // at its time, never now — the same booking steps as Book in
+    expect(plan.effects).toContainEqual({ when: 'after', kind: 'queue_publish', for_time: p.scheduled_for, now: false })
+    expect(plan.effects.some(e => e.kind === 'notify')).toBe(false)
+    expect(plan.event).toMatchObject({ action: 'schedule_direct', hat: 'sa', from: 'draft', to: 'booked', version: 1, note: 'Scheduled by a super admin without the quality check' })
+    expect(approvalLine(plan.patch.approval, nameOf)).toBe('Scheduled without the quality check by Akmal')
+    expect(approvalLine(plan.patch.approval, nameOf)).not.toMatch(/Passed/)
+  })
+
+  it('from Quality check: the version already sent is the one booked (no new freeze at its own time)', () => {
+    const p = post('quality_check')
+    const plan = planPostTransition(p, 'schedule_direct', sa, { expect_rev: 5, version: 1 }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.to).toBe('booked')
+    expect(plan.effects.some(e => e.kind === 'freeze')).toBe(false)
+    expect(plan.patch.sent_version).toBeUndefined()
+    expect(plan.patch.approval).toMatchObject({ version: 1, hat: 'super_admin', skipped_check: true })
+    expect(plan.effects).toContainEqual({ when: 'after', kind: 'queue_publish', for_time: p.scheduled_for, now: false })
+    // a stale page (the wrong version) is refused like every versioned move
+    expect(checkPostTransition(p, 'schedule_direct', sa, { expect_rev: 5, version: 2 }, CTX)).toMatchObject({ ok: false, code: 'version' })
+  })
+
+  it('a time picked in the question is the booked time; from Quality check it re-freezes with only the time replaced', () => {
+    const when = at(96)
+    const plan = planPostTransition(post('quality_check'), 'schedule_direct', sa, { expect_rev: 5, version: 1, scheduled_for: when }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.effects[0]).toEqual({ when: 'before', kind: 'freeze', n: 2, frozen_for: 'retime', time: when })
+    expect(plan.patch.scheduled_for).toBe(when)
+    expect(plan.patch.approval?.version).toBe(2)
+    expect(plan.patch.booking?.for_time).toBe(when)
+    expect(plan.effects).toContainEqual({ when: 'after', kind: 'queue_publish', for_time: when, now: false })
+  })
+
+  it('team, then the client: allowed, and the record says the client did not see it either', () => {
+    const p = post('draft', { approval_steps: 'team_then_client' })
+    const plan = planPostTransition(p, 'schedule_direct', sa, {}, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.patch.approval).toMatchObject({ skipped_check: true, without_client: true })
+    expect(approvalLine(plan.patch.approval, nameOf)).toBe('Scheduled without the quality check and without the client by Akmal')
+    expect(plan.event.note).toBe('Scheduled by a super admin without the quality check and without the client')
+    // the client's own default counts the same
+    const byDefault = planPostTransition(post('draft'), 'schedule_direct', sa, {}, { ...CTX, client: { client_approval_required: true } })
+    if (!byDefault.ok) throw new Error(byDefault.reason)
+    expect(byDefault.patch.approval?.without_client).toBe(true)
+  })
+
+  it('nobody else may: scheduler, account manager, quality checker, the maker, the client', () => {
+    for (const hats of [['scheduler'], ['am'], ['qr'], ['creator'], ['am', 'qr'], ['creator', 'scheduler'], ['client']] as PostHat[][]) {
+      for (const stage of ['draft', 'quality_check'] as PostStage[]) {
+        expect(checkPostTransition(post(stage), 'schedule_direct', { id: 'u-x', hats }, { version: 1 }, CTX), `${hats} ${stage}`)
+          .toMatchObject({ ok: false, code: 'not_allowed' })
+      }
+    }
+  })
+
+  it('refuses what Book in refuses: a past time, too soon, a channel not connected — with the same words', () => {
+    for (const stage of ['draft', 'quality_check'] as PostStage[]) {
+      const past = post(stage, { scheduled_for: at(-1) })
+      const bookPast = checkPostTransition(post('ready', { scheduled_for: at(-1) }), 'book', { id: 'u-s', hats: ['scheduler'] }, {}, CTX)
+      const direct = checkPostTransition(past, 'schedule_direct', sa, { version: 1 }, CTX)
+      expect(direct).toMatchObject({ ok: false, code: 'time' })
+      if (!direct.ok && !bookPast.ok) expect(direct.reason).toBe(bookPast.reason)
+      // a past time picked in the question is refused too
+      expect(checkPostTransition(post(stage), 'schedule_direct', sa, { version: 1, scheduled_for: at(-2) }, CTX)).toMatchObject({ ok: false, code: 'time' })
+      // inside the 15-minute lead — and it never offers "post now"
+      const soon = checkPostTransition(post(stage, { scheduled_for: at(0.1) }), 'schedule_direct', sa, { version: 1 }, CTX)
+      expect(soon).toMatchObject({ ok: false, code: 'time' })
+      if (!soon.ok) expect(soon.reason).not.toMatch(/now/i)
+      const lost = { ...CTX, accounts: [{ id: 'acc-ig', platform: 'instagram', live: false }, ACCOUNTS[1]] }
+      const bookLost = checkPostTransition(post('ready'), 'book', { id: 'u-s', hats: ['scheduler'] }, {}, lost)
+      const directLost = checkPostTransition(post(stage), 'schedule_direct', sa, { version: 1 }, lost)
+      expect(directLost).toMatchObject({ ok: false, code: 'channels' })
+      if (!directLost.ok && !bookLost.ok) expect(directLost.reason).toBe(bookLost.reason)
+      // the channels were not loaded: no guess
+      expect(checkPostTransition(post(stage), 'schedule_direct', sa, { version: 1 }, { now: NOW })).toMatchObject({ ok: false, code: 'context' })
+    }
+  })
+
+  it('refuses what the check would have caught: no channel, more than ten for Instagram', () => {
+    const none = checkPostTransition(post('draft', { channels: [] }), 'schedule_direct', sa, {}, CTX)
+    expect(none).toMatchObject({ ok: false, code: 'invalid' })
+    const sendNone = checkPostTransition(post('draft', { channels: [] }), 'send_to_qc', { id: 'u-maker', hats: ['creator'] }, {}, CTX)
+    if (!none.ok && !sendNone.ok) expect(none.reason).toBe(sendNone.reason)
+    const eleven = checkPostTransition(post('draft', { slides: slides(11) }), 'schedule_direct', sa, {}, CTX)
+    expect(eleven).toMatchObject({ ok: false, code: 'invalid' })
+    if (!eleven.ok) expect(eleven.problems?.join(' ')).toMatch(/Instagram/)
+    expect(checkPostTransition(post('draft', { slides: slides(10) }), 'schedule_direct', sa, {}, CTX)).toMatchObject({ ok: true })
+  })
+
+  it('is offered only to a super admin, only on Draft and Quality check, never as the main button', () => {
+    for (const stage of POST_STAGES) {
+      for (const role of [...TEAM_ROLES, 'quality_checker'] as const) {
+        const list = postActions(post(stage), viewerHats(role), NOW, { accounts: ACCOUNTS, clientHasContact: true })
+        const all = [list.primary, ...list.secondary, list.danger].filter(Boolean).map(a => a!.action)
+        const want = role === 'super_admin' && (stage === 'draft' || stage === 'quality_check')
+        expect(all.includes('schedule_direct'), `${stage} × ${role}`).toBe(want)
+        expect(list.primary?.action).not.toBe('schedule_direct')
+      }
+    }
+    const draft = postActions(post('draft'), viewerHats('super_admin'), NOW, { accounts: ACCOUNTS, clientHasContact: true })
+    expect(draft.primary?.action).toBe('send_to_qc')
+    expect(draft.secondary[0]).toMatchObject({ action: 'schedule_direct', label: 'Schedule it', blocked: null, needs: ['time'] })
+    const qc = postActions(post('quality_check'), viewerHats('super_admin'), NOW, { accounts: ACCOUNTS, clientHasContact: true })
+    expect(qc.primary?.action).toBe('pass')
+    expect(qc.secondary.map(a => a.action)).toContain('schedule_direct')
+  })
+
+  it('the act route takes it (TEAM_ACT_ACTIONS derives from the table)', () => {
+    expect(TEAM_ACT_ACTIONS).toContain('schedule_direct')
+    expect(parsePostActRequest({ action: 'schedule_direct', expect_rev: 2, version: 1, scheduled_for: '2026-10-01T08:00:00+10:00' }))
+      .toEqual({ ok: true, request: { action: 'schedule_direct', expect_rev: 2, version: 1, scheduled_for: '2026-09-30T22:00:00.000Z' } })
+  })
+
+  it('reads its marks back from a row, and only when they are there', () => {
+    const base = { id: 'p', client_id: 'c', stage: 'booked', rev: 1 }
+    const marked = readPostState({ ...base, approval: { version: 1, by: 'u-akmal', hat: 'super_admin', skipped_check: true, without_client: true, at: NOW } })
+    expect(marked?.approval).toMatchObject({ skipped_check: true, without_client: true })
+    const plain = readPostState({ ...base, approval: TEAM_APPROVAL })
+    expect(plain?.approval).toEqual({ ...TEAM_APPROVAL })
+    expect(approvalLine(plain?.approval, () => 'joy')).toBe('Passed quality check — Joy')
+  })
+})

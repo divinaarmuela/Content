@@ -154,6 +154,7 @@ export function factProblem(action: PostAction | string, post: PostState, versio
     case 'team_decides':
       return at('ready') ?? (post.approval != null && post.approval.hat !== 'client' && !post.approval.on_behalf_of_client && post.approval.version === post.sent_version ? null : 'The team did not decide this version')
     case 'book':
+    case 'schedule_direct':
     case 'post_now':
       // the press is not the booking: "Booked in" waits for booking_done (audit V14)
       return 'Booking is under way — the booked email waits until the booking exists'
@@ -190,6 +191,19 @@ export function bookedFactProblem(row: Record<string, unknown> | null | undefine
   const jobs = row.publish_job_ids
   const ids = Array.isArray(jobs) ? jobs : jobs && typeof jobs === 'object' ? Object.values(jobs) : []
   return ids.some(x => typeof x === 'string' && x.length > 0) ? null : 'The post has no publish job yet'
+}
+
+/**
+ * THE MAKER OF A POST A SUPER ADMIN SCHEDULED (Schedule it, 29 Sep 2026): told once the booking exists
+ * (on `booking_done`, never at the press — audit V14). Null when the press was not Schedule it, or the
+ * super admin made the post themselves.
+ */
+export function scheduledDirectMaker(
+  pressed: { action?: string | null; actor_id?: string | null } | null,
+  post: Pick<PostState, 'created_by'>,
+): string | null {
+  if (pressed?.action !== 'schedule_direct' || !post.created_by) return null
+  return post.created_by === pressed.actor_id ? null : post.created_by
 }
 
 /* ── who hears about one move ───────────────────────────────────────────── */
@@ -339,7 +353,12 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
       const nets = (w.networks ?? []).map(networkName)
       return {
         subject: `Booked in: ${title}${when ? ` — ${when}` : ''}`,
-        lines: [`${title} is booked in. It goes out ${when ?? 'at its time'}${nets.length ? ` on ${joinNames(nets)}` : ''}.`, 'Nothing is needed from you. This is so you know.'],
+        lines: [
+          `${title} is booked in. It goes out ${when ?? 'at its time'}${nets.length ? ` on ${joinNames(nets)}` : ''}.`,
+          // a super admin's Schedule it says so, never as a pass
+          ...(post.approval?.skipped_check ? [`${approvalLine(post.approval, nameOf)}.`] : []),
+          'Nothing is needed from you. This is so you know.',
+        ],
         cta: 'See it',
       }
     }

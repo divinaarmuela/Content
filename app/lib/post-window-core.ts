@@ -308,6 +308,7 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   approve_for_client: { prompt: 'How did the client say yes? It is saved as your approval, for the client.', go: 'Approve for the client' },
   team_decides: { prompt: 'Why is the team deciding without the client? Their page will say the team decided it.', go: 'Approve without the client' },
   change_time: { prompt: 'Pick the new posting time.', go: 'Move it' },
+  schedule_direct: { prompt: 'Pick the posting time. It is booked in for that time without the quality check, and the record says so.', go: 'Schedule it' },
   post_now: { prompt: 'This goes out on the client\'s accounts now.', go: 'Post now', stay: 'Not yet' },
   edit_booked: { prompt: 'This takes it off the schedule. It needs checking again after the change.', go: 'Take it off and edit', stay: 'Keep it booked' },
   cancel: { prompt: 'Cancel this post? It will not go out. You can Re-book it later.', go: 'Cancel post', stay: 'Keep it' },
@@ -718,7 +719,8 @@ export async function pressAction(api: PostWindowApi, input: {
   }
 
   const body = workingBody(input.working, input.timezone)
-  const keepsCopy = action === 'save' || action === 'send_to_qc'
+  // Schedule it from a Draft freezes the working copy too: what is booked is what is on screen
+  const keepsCopy = action === 'save' || action === 'send_to_qc' || action === 'schedule_direct'
   try {
     if (!postId) {
       if (!input.itemId) return { ok: false, reason: 'Pick the files for this post first.', problems: [], post: null, postId: null }

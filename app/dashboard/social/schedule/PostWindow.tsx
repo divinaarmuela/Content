@@ -723,7 +723,7 @@ export default function PostWindow({
         ref={card}
         tabIndex={-1}
         data-post-window
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)]"
+        data-window-scroll className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[760px] flex-col overflow-y-auto overscroll-contain rounded-card bg-popover text-popover-foreground shadow-xl outline-none sm:max-h-[calc(100dvh-3rem)]"
       >
         {/* ── TOP: the stage, and what happens next ── */}
         <div className="sticky top-0 z-20 flex flex-col gap-1.5 border-b border-border bg-popover p-3.5">

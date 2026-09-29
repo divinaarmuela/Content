@@ -9,7 +9,7 @@ import type { TeamUser } from './authz'
 import {
   CLIENT_ACTIONS, ROW_OF, SYSTEM_ACTIONS, anyNetworkLive, defaultApproveBy, failedNetworks, hatsFor,
   isPostAction, mayWorkOnPost, planPostTransition, postVersionId, readPostState,
-  type AccountRef, type NotifyTarget, type Plan, type PostAction, type PostActor,
+  type AccountRef, type FrozenFor, type NotifyTarget, type Plan, type PostAction, type PostActor,
   type PostEventRow, type PostHat, type PostStage, type PostState, type Refusal, type RefusalCode,
   type TransitionContext, type TransitionInput,
 } from './post-stage-core'
@@ -299,7 +299,7 @@ function contentKey(c: Pick<FrozenCopy, 'slides' | 'per_channel' | 'channels' | 
 
 /* ── freezing ───────────────────────────────────────────────────────────── */
 
-type FreezeFor = 'quality_check' | 'client' | 'retime'
+type FreezeFor = FrozenFor
 
 /**
  * WRITE VERSION n OF THIS POST (SPEC §2.2, the owner's decision 8), before the claim that adopts it.
@@ -595,7 +595,8 @@ async function runFreezes(
   let frozenN: number | null = null
   for (const effect of dry.effects) {
     if (effect.when !== 'before' || effect.kind !== 'freeze') continue
-    const time = effect.frozen_for === 'retime' ? (input.scheduled_for ?? post.scheduled_for) : post.scheduled_for
+    // Schedule it names its time on the effect: the frozen copy carries the time it is booked at
+    const time = effect.time ?? (effect.frozen_for === 'retime' ? (input.scheduled_for ?? post.scheduled_for) : post.scheduled_for)
     const f = await freezeVersion(post, effect.frozen_for, actor.id, time, at)
     if (!f.ok) return f.skipped ? 'again' : { ok: false }
     frozenN = f.n

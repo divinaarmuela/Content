@@ -144,8 +144,10 @@ export function laneFromAddress(value: string | null | undefined): string | null
  * Schedule.
  */
 export const PAGE_ACTIONS: Readonly<Partial<Record<PostStage, readonly PostAction[]>>> = {
-  draft: ['send_to_qc', 'set_steps', 'delete_draft', 'cancel'],
-  quality_check: ['pass', 'pass_send_client', 'ask_change', 'edit', 'set_steps', 'cancel'],
+  // schedule_direct: a super admin's Schedule it (the owner, 29 Sep 2026) — booked at its time, it then
+  // shows on Schedule. Book in, Post now and every move of a booked post stay on Schedule.
+  draft: ['send_to_qc', 'schedule_direct', 'set_steps', 'delete_draft', 'cancel'],
+  quality_check: ['pass', 'pass_send_client', 'schedule_direct', 'ask_change', 'edit', 'set_steps', 'cancel'],
   with_client: ['remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['send_to_client', 'edit', 'set_steps', 'cancel'],
   cancelled: ['rebook', 'duplicate'],

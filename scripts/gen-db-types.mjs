@@ -134,7 +134,9 @@ const GHOST_TABLES = {
     //   sent_version   the frozen version with the quality check or the client, or the one approved
     //   approval_steps 'team' | 'team_then_client' for THIS post; null = the client's default
     //                  (clients.client_approval_required: true means team then client)
-    //   approval       {version, by, hat, on_behalf_of_client, agreed_via, note, at}
+    //   approval       {version, by, hat, on_behalf_of_client, agreed_via, note, at,
+    //                   skipped_check?: true, without_client?: true} — the last two only on a super
+    //                   admin's Schedule it (booked without the quality check, 29 Sep 2026)
     //   qc_pass        {version, by, at}
     //   changes_asked  {version, by, who: 'client'|'team', to, note, at} — `to` is a named person
     //   client_send    {version, at, to[], via: 'email'|'link', approve_by, for_time} — only once

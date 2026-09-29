@@ -430,3 +430,38 @@ describe('every stage has a way forward in the window (no dead ends, audit W2)',
     expect(footerButtons(list).map(b => b.offered.action)).toContain('approve_for_client')
   })
 })
+
+describe('Schedule it in the window (a super admin, 29 Sep 2026)', () => {
+  it('is a footer button for a super admin on a Draft and at the quality check — not for anyone else', () => {
+    for (const stage of ['draft', 'quality_check'] as const) {
+      const p = post({ stage, sent_version: stage === 'draft' ? null : 1, draft_version: stage === 'draft' ? 1 : 2 })
+      expect(footerButtons(postActions(p, ['sa'], NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), stage).toContain('schedule_direct')
+      for (const hats of [['scheduler'], ['am'], ['qr'], ['creator', 'scheduler']] as PostHat[][]) {
+        expect(footerButtons(postActions(p, hats, NOW, { accounts: ACCOUNTS })).map(b => b.offered.action), `${stage} ${hats}`).not.toContain('schedule_direct')
+      }
+    }
+  })
+
+  it('asks for the time, and a changed draft is saved first so what is booked is what is on screen', async () => {
+    const q = questionFor({ action: 'schedule_direct', label: 'Schedule it', needs: ['time'], confirm: null })
+    expect(q).toMatchObject({ go: 'Schedule it', needs: ['time'] })
+    expect(answerProblem(q!, { scheduled_for: inHours(-1) }, NOW)).toBeTruthy()
+    const { api, calls } = fakeApi()
+    const when = inHours(30)
+    await pressAction(api, { itemId: 'item1', working: working(), timezone: MELB, post: post({ rev: 7 }), dirty: true, action: 'schedule_direct', answers: { scheduled_for: when } })
+    expect(calls.map(c => c.kind)).toEqual(['save', 'act'])
+    expect(calls[1].arg).toMatchObject({ action: 'schedule_direct', expect_rev: 8, scheduled_for: when })
+    // a never-sent draft has no version to name; at the quality check the version seen rides with it
+    expect((calls[1].arg as Record<string, unknown>).version).toBeUndefined()
+    expect(buildActRequest(post({ stage: 'quality_check', sent_version: 1 }), 'schedule_direct', { scheduled_for: when })).toMatchObject({ version: 1, scheduled_for: when })
+  })
+
+  it('the approval line says the check was skipped, never "Passed"', () => {
+    const p = post({
+      stage: 'booked', sent_version: 1,
+      approval: { version: 1, by: 'akmal', hat: 'super_admin', on_behalf_of_client: false, agreed_via: null, note: null, at: inHours(-1), skipped_check: true },
+    })
+    const h = windowHeader(p, NOW, { nameOf: id => (id === 'akmal' ? 'Akmal' : null) })
+    expect(h.approvalLine).toBe('Scheduled without the quality check by Akmal')
+  })
+})

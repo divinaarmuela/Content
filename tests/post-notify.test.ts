@@ -301,3 +301,44 @@ describe('the seams P1\'s engine calls', () => {
     }
   })
 })
+
+describe('Schedule it (a super admin, without the quality check, 29 Sep 2026)', () => {
+  const approval = { version: 1, by: DIVINA, hat: 'super_admin', on_behalf_of_client: false, skipped_check: true, at: NOW.toISOString() }
+
+  it('the press sends nothing — the email waits for the booking', async () => {
+    const row = { ...basePost, stage: 'draft', sent_version: null, draft_version: 1 }
+    seed([row])
+    const post = state(row)
+    const plan = planPostTransition(post, 'schedule_direct', { id: DIVINA, hats: ['sa'] }, {}, { now: NOW, accounts: [{ id: 'acc-ig', platform: 'instagram', live: true }] })
+    if (!plan.ok) throw new Error(plan.reason)
+    const report = await notifyPostMove({ plan, post: land(post, plan.patch), actor: { id: DIVINA, name: 'Divina Armuela', email: 'divina@x.invalid' }, now: NOW })
+    expect(h.emails).toHaveLength(0)
+    expect(report.told).toEqual([])
+  })
+
+  it('once booked: the maker is told, with the line that says the check was skipped; the super admin is not told their own news', async () => {
+    const row = { ...basePost, stage: 'booked', sent_version: 1, draft_version: 2, approval, booking: { job_ids: [], pending: true, at: NOW.toISOString(), for_time: LATER } }
+    seed([row], { post_events: [{ id: 'p1_r1', post_id: 'p1', client_id: 'c1', rev: 1, from: 'draft', to: 'booked', action: 'schedule_direct', actor_id: DIVINA, at: NOW.toISOString() }] as unknown as Row[] })
+    const post = state(row)
+    const plan = planPostTransition(post, 'booking_done', { id: null, hats: ['system'] }, { job_ids: ['job-9'] }, { now: NOW })
+    if (!plan.ok) throw new Error(plan.reason)
+    const report = await notifyPostMove({ plan, post: land(post, plan.patch), actor: null, now: NOW })
+    const told = report.told.map(t => t.id)
+    expect(told).toContain('cath')
+    expect(told).not.toContain(DIVINA)
+    const toCath = h.emails.find(e => e.recipientId === 'cath')!
+    expect(toCath).toMatchObject({ eventType: 'post_booking_done', actorName: 'Divina Armuela' })
+    expect(String(toCath.bodyHtml)).toContain('Scheduled without the quality check by Divina Armuela')
+    expect(String(toCath.bodyHtml)).not.toContain('Passed quality check')
+  })
+
+  it('a super admin who made the post themselves is not emailed about it', async () => {
+    const row = { ...basePost, created_by: DIVINA, stage: 'booked', sent_version: 1, draft_version: 2, approval, booking: { job_ids: [], pending: true, at: NOW.toISOString(), for_time: LATER } }
+    seed([row], { post_events: [{ id: 'p1_r1', post_id: 'p1', client_id: 'c1', rev: 1, from: 'draft', to: 'booked', action: 'schedule_direct', actor_id: DIVINA, at: NOW.toISOString() }] as unknown as Row[] })
+    const post = state(row)
+    const plan = planPostTransition(post, 'booking_done', { id: null, hats: ['system'] }, { job_ids: ['job-9'] }, { now: NOW })
+    if (!plan.ok) throw new Error(plan.reason)
+    const report = await notifyPostMove({ plan, post: land(post, plan.patch), actor: null, now: NOW })
+    expect(report.told.map(t => t.id)).not.toContain(DIVINA)
+  })
+})

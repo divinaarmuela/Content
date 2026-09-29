@@ -432,3 +432,20 @@ describe('a posted card says it went out (live test, 29 Sep 2026)', () => {
     expect(readFileSync('app/dashboard/scheduler/board/PostCard.tsx', 'utf8')).toContain('{face.whenWord} {face.when}')
   })
 })
+
+describe('Schedule it on the Post approval board (a super admin, 29 Sep 2026)', () => {
+  it('is a card button for a super admin on Draft and Quality check — never the main one, never for anyone else', () => {
+    expect(PAGE_ACTIONS.draft).toContain('schedule_direct')
+    expect(PAGE_ACTIONS.quality_check).toContain('schedule_direct')
+    for (const stage of ['draft', 'quality_check'] as PostStage[]) {
+      const sa = boardActions(post(stage), HATS.sa, NOW, CTX)
+      const offered = offeredList(sa).find(a => a.action === 'schedule_direct')
+      expect(offered, stage).toMatchObject({ label: 'Schedule it', blocked: null, needs: ['time'] })
+      expect(sa.primary?.action).not.toBe('schedule_direct')
+      for (const [name, hats] of Object.entries(HATS)) {
+        if (hats.includes('sa')) continue
+        expect(offeredList(boardActions(post(stage), hats, NOW, CTX)).map(a => a.action), `${stage} ${name}`).not.toContain('schedule_direct')
+      }
+    }
+  })
+})

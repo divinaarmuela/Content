@@ -13,7 +13,7 @@ import {
 } from './post-stage-core'
 import {
   clientRoundEmail, clientRoundKey, dueApprovalReminder, moveWords,
-  planMoveEmails, recipientsFor, reminderWords, roundOutcomeWords,
+  planMoveEmails, recipientsFor, reminderWords, roundOutcomeWords, scheduledDirectMaker,
   teamPostPath, type RoundPost, type Roster, type TeamPerson, type Words,
 } from './post-notify-core'
 import { clientRecipients, pickRecipients } from './client-recipients-core'
@@ -150,10 +150,15 @@ export async function notifyPostMove(input: {
     // tell them their own news; "Not booked" is told to THEM first — they are the one who thinks it is booked.
     if (!actor && (plan.action === 'booking_done' || plan.action === 'booking_failed')) {
       const pressed = (await table<PostEvent>('post_events').list({ by: { post_id: post.id } }).catch(() => [] as PostEvent[]))
-        .filter(e => e.action === 'book' || e.action === 'post_now' || (e.action === 'change_time' && e.from === 'booked'))
+        .filter(e => e.action === 'book' || e.action === 'schedule_direct' || e.action === 'post_now' || (e.action === 'change_time' && e.from === 'booked'))
         .sort((a, b) => b.rev - a.rev)[0]
       const who = pressed?.actor_id ? roster.people.find(p => p.id === pressed.actor_id) : null
       if (who && plan.action === 'booking_done') actor = { id: who.id, name: who.name, email: who.email }
+      // a super admin's Schedule it: the post's maker is told it is booked in (once it IS booked)
+      const maker = scheduledDirectMaker(pressed ?? null, post)
+      if (maker && plan.action === 'booking_done') {
+        effects = [...effects, { when: 'after', kind: 'notify', to: 'person', action: 'booking_done', person_id: maker }]
+      }
       if (who && plan.action === 'booking_failed') {
         effects = [{ when: 'after', kind: 'notify', to: 'person', action: 'booking_failed', person_id: who.id }, ...effects]
       }

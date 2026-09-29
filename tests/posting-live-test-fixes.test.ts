@@ -431,3 +431,13 @@ describe('opening a post never flashes "That post is not there any more" (29 Sep
     expect(src).toContain('asked.current !== postId')
   })
 })
+
+describe('the post window shows a scrollbar (the owner, 29 Sep 2026)', () => {
+  it('the window is marked and the dashboard CSS brings its scrollbar back', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')).toContain('data-window-scroll className="flex max-h-')
+    const css = readFileSync('app/globals.css', 'utf8')
+    expect(css).toContain('.dbx [data-window-scroll]::-webkit-scrollbar { display: block; width: 10px; }')
+    expect(css).toContain('.dbx [data-window-scroll] { scrollbar-width: thin;')
+  })
+})

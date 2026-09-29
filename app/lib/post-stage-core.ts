@@ -32,6 +32,8 @@
  *     move: a post reaches the client only from the quality check (Passed —
  *     send to client) or, once passed, from Ready to post (Send to client).
  *     An account manager who is not the quality checker cannot pass a post.
+ *     The one exception (the owner, 29 Sep 2026): a SUPER ADMIN may "Schedule it" from Draft or
+ *     Quality check — booked at its time, recorded as scheduled without the check. Never Post now.
  *   - Schedulers may cancel ANY post, not only their own.
  *   - Client approval is optional per post. Each client has a default
  *     (`clients.client_approval_required` true = team then client), and a
@@ -282,6 +284,14 @@ export type Approval = {
   agreed_via: AgreedVia | null
   note: string | null
   at: string
+  /**
+   * Schedule it (the owner, 29 Sep 2026: "super admin should be able to schedule posts not post now"):
+   * a super admin booked this version with NO quality check. Present only then, so the record never
+   * reads as a pass.
+   */
+  skipped_check?: true
+  /** …and the post's steps were team then the client, so the client did not see it either */
+  without_client?: true
 }
 export type QcPass = { version: number; by: string | null; at: string }
 export type ChangesAsked = {
@@ -376,6 +386,8 @@ function readApproval(v: unknown): Approval | null {
     on_behalf_of_client: v.on_behalf_of_client === true,
     agreed_via: isAgreedVia(v.agreed_via) ? v.agreed_via : null,
     note: str(v.note), at: str(v.at) ?? '',
+    ...(v.skipped_check === true ? { skipped_check: true as const } : {}),
+    ...(v.without_client === true ? { without_client: true as const } : {}),
   }
 }
 
@@ -688,7 +700,7 @@ export function postedWords(post: Pick<PostState, 'outcomes'>): string {
 export const POST_ACTIONS = [
   'save', 'send_to_qc', 'pass', 'pass_send_client', 'ask_change',
   'client_approve', 'client_ask_change', 'approve_for_client', 'team_decides', 'take_back', 'resend_new_time',
-  'remind_client', 'send_to_client', 'book', 'post_now', 'change_time', 'unbook',
+  'remind_client', 'send_to_client', 'book', 'schedule_direct', 'post_now', 'change_time', 'unbook',
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
 ] as const
@@ -756,6 +768,11 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'remind_client', spec: 'live test 29 Sep', from: ['with_client'], to: 'with_client', who: MANAGERS, label: 'Remind the client', needs: ['recipients'] },
   { action: 'send_to_client', spec: 'T2b', from: ['ready'], to: 'with_client', who: MANAGERS, label: 'Send to client', versioned: true, needs: ['recipients'] },
   { action: 'book', spec: 'T11', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Book in' },
+  // the owner, 29 Sep 2026: "super admin should be able to schedule posts not post now". A super admin
+  // books a Draft (its working copy frozen, as Send for quality check freezes it) or a post waiting on
+  // the check (the version sent), at its time, WITHOUT the check. Never now: Post now stays on Ready.
+  // Versioned from the quality check only — a Draft has no version the person saw (see the check).
+  { action: 'schedule_direct', spec: 'owner 29 Sep', from: ['quality_check', 'draft'], to: 'booked', who: ['sa'], label: 'Schedule it', needs: ['time'], versioned: true },
   { action: 'post_now', spec: 'T12', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Post now', needs: ['confirm'], confirm:'This goes out on the client\'s accounts now.' },
   // …and from the quality check: a time that has passed (or will) is fixed there, without a full re-check
   { action: 'change_time', spec: 'T13/T15', from: ['quality_check', 'ready', 'booked'], to: 'same', who: BOOKERS, label: 'Change time', needs: ['time'] },
@@ -899,7 +916,10 @@ export function checkPostTransition(
   const hat = actingHat(row, actor)
   if (!hat) return refuse('not_allowed', `Only ${hatList(row.who)} can do "${row.label}".`)
   if (input.expect_rev != null && input.expect_rev !== post.rev) return refuse('stale', STALE)
-  if (row.versioned) {
+  // Schedule it from a Draft freezes the working copy now, like Send for quality check: there is no
+  // earlier version the person looked at (the rev guards a stale page)
+  const versionless = action === 'schedule_direct' && post.stage === 'draft'
+  if (row.versioned && !versionless) {
     if (input.version == null) return refuse('version', VERSION_MISSING)
     if (input.version !== post.sent_version) return refuse('version', VERSION_CHANGED)
   }
@@ -924,6 +944,12 @@ export function checkPostTransition(
     if (ms(by) >= ms(when)) return refuse('time', 'The "approve by" time has to come before the posting time.')
     if (ctx.clientHasContact === false) return refuse('contact', 'This client has nobody to send to — add a contact on the client\'s page first.')
     return null
+  }
+  /** THE booking checks — Book in and Schedule it both ask these: a bookable time, every channel connected. */
+  const bookingProblem = (when: string | null, postNowOffered: boolean): Refusal | null => {
+    const t = bookableTimeProblem(when, now, postNowOffered)
+    if (t) return refuse('time', t)
+    return channelsProblem()
   }
   const approvedNow = post.approval != null && post.approval.version === post.sent_version
   const liveNow = () => [...new Set([...liveNetworks(post), ...(ctx.liveOnJobs ?? [])])]
@@ -1005,10 +1031,20 @@ export function checkPostTransition(
 
     case 'book': {
       if (!approvedNow) return refuse('unapproved', 'This version is not approved yet.')
-      const t = bookableTimeProblem(post.scheduled_for, now, true)
-      if (t) return refuse('time', t)
-      const c = channelsProblem()
-      if (c) return c
+      const b = bookingProblem(post.scheduled_for, true)
+      if (b) return b
+      break
+    }
+
+    case 'schedule_direct': {
+      // no approval asked (that is the point), but everything Book in asks, never Post now's "or post
+      // now", and — as nobody checked it — the composition rule Send for quality check asks
+      const when = input.scheduled_for ?? post.scheduled_for
+      const b = bookingProblem(when, false)
+      if (b) return b
+      if (!accounts) break
+      const problems = compositionProblems({ ...post, scheduled_for: when }, accounts, now)
+      if (problems.length > 0) return refuse('invalid', problems[0], problems)
       break
     }
 
@@ -1094,13 +1130,17 @@ export function checkPostTransition(
  * Every email is sent after the fact it reports (audit V14).
  */
 export type PostEffect =
-  | { when: 'before'; kind: 'freeze'; n: number; frozen_for: 'quality_check' | 'client' | 'retime' }
+  /** `time`: the posting time the frozen copy carries, when the move sets one (Schedule it) */
+  | { when: 'before'; kind: 'freeze'; n: number; frozen_for: FrozenFor; time?: string }
   | { when: 'before'; kind: 'cancel_jobs'; job_ids: string[] }
   | { when: 'before'; kind: 'reschedule_jobs'; job_ids: string[]; for_time: string }
   | { when: 'after'; kind: 'queue_publish'; for_time: string; now: boolean }
   | { when: 'after'; kind: 'notify'; to: NotifyTarget; action: PostAction; person_id?: string | null }
   | { when: 'after'; kind: 'create_post'; stage: 'ready' | 'draft'; platforms: string[] | null; carry_approval: boolean }
   | { when: 'instead'; kind: 'delete_post' }
+
+/** Why a version was frozen. 'schedule': a super admin's Schedule it froze a Draft's working copy. */
+export type FrozenFor = 'quality_check' | 'client' | 'retime' | 'schedule'
 
 export type NotifyTarget = 'quality_checkers' | 'account_managers' | 'schedulers' | 'client' | 'person' | 'team'
 
@@ -1139,11 +1179,12 @@ export type Plan = {
   words: string
 }
 
-function eventNote(act: PostAction, note: string | null, post: PostState, input: TransitionInput): string | null {
+function eventNote(act: PostAction, note: string | null, post: PostState, input: TransitionInput, patch: StagePatch): string | null {
   if (note) return note
   if (act === 'change_time' && post.approval) return 'Time changed after approval'
   if (act === 'booking_failed') return String(input.problem ?? '').trim() || null
   if (act === 'remind_client') return `Reminded ${joinNames((input.delivered_to ?? []).filter(Boolean))}`
+  if (act === 'schedule_direct') return `Scheduled by a super admin without the quality check${patch.approval?.without_client ? ' and without the client' : ''}`
   return null
 }
 
@@ -1191,9 +1232,9 @@ export function planPostTransition(
   let version: number | null = post.sent_version
   const notify = (t: NotifyTarget, person_id?: string | null) =>
     effects.push({ when: 'after', kind: 'notify', to: t, action: act, ...(person_id !== undefined ? { person_id } : {}) })
-  const freeze = (frozen_for: 'quality_check' | 'client' | 'retime') => {
+  const freeze = (frozen_for: FrozenFor, time?: string) => {
     const n = post.draft_version
-    effects.push({ when: 'before', kind: 'freeze', n, frozen_for })
+    effects.push({ when: 'before', kind: 'freeze', n, frozen_for, ...(time !== undefined ? { time } : {}) })
     patch.sent_version = n
     patch.draft_version = n + 1
     version = n
@@ -1292,6 +1333,27 @@ export function planPostTransition(
       patch.problem = null
       patch.assigned_to = null
       effects.push({ when: 'after', kind: 'queue_publish', for_time: forTime, now: act === 'post_now' })
+      break
+    }
+    case 'schedule_direct': {
+      const when = input.scheduled_for ?? post.scheduled_for!
+      // the version that goes out: a Draft's working copy, frozen now; from the quality check the version
+      // already sent — re-frozen with only the time replaced when a new time was picked (as Change time)
+      const n = post.stage === 'draft'
+        ? freeze('schedule', when)
+        : ms(when) !== ms(post.scheduled_for) ? freeze('retime', when) : post.sent_version!
+      patch.scheduled_for = when
+      patch.approval = {
+        version: n, by: actor.id, hat: APPROVAL_HAT[hat]!, on_behalf_of_client: false, agreed_via: null, note, at,
+        skipped_check: true,
+        ...(approvalStepsOf(post, ctx.client) === 'team_then_client' ? { without_client: true as const } : {}),
+      }
+      patch.changes_asked = null
+      patch.booking = { job_ids: [], pending: true, at, for_time: when }
+      patch.problem = null
+      patch.assigned_to = null
+      // at its time, never now — then the same booking steps as Book in (runBooking, the door, the lock)
+      effects.push({ when: 'after', kind: 'queue_publish', for_time: when, now: false })
       break
     }
     case 'change_time': {
@@ -1397,7 +1459,7 @@ export function planPostTransition(
     hat,
     on_behalf_of_client: act === 'approve_for_client',
     version,
-    note: eventNote(act, note, post, input),
+    note: eventNote(act, note, post, input, patch),
     at,
   }
   const words = to === 'deleted' ? 'Draft deleted'
@@ -1422,8 +1484,8 @@ const DANGER: readonly PostAction[] = ['cancel', 'delete_draft']
 
 /** The order a stage's buttons are listed in; the first unblocked entry of `PRIMARY` is the main button. */
 const ORDER: Record<PostStage, readonly PostAction[]> = {
-  draft: ['send_to_qc', 'save', 'set_steps', 'delete_draft', 'cancel'],
-  quality_check: ['pass', 'pass_send_client', 'ask_change', 'change_time', 'edit', 'set_steps', 'cancel'],
+  draft: ['send_to_qc', 'schedule_direct', 'save', 'set_steps', 'delete_draft', 'cancel'],
+  quality_check: ['pass', 'pass_send_client', 'schedule_direct', 'ask_change', 'change_time', 'edit', 'set_steps', 'cancel'],
   with_client: ['client_approve', 'client_ask_change', 'remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['book', 'change_time', 'post_now', 'send_to_client', 'edit', 'set_steps', 'cancel'],
   booked: ['change_time', 'unbook', 'edit_booked', 'cancel'],
@@ -1588,6 +1650,10 @@ export function waitingOnViewer(post: PostState, viewer: { id: string | null; ha
  */
 export function approvalLine(approval: Approval | null | undefined, nameOf: NameOf = () => null): string | null {
   if (!approval) return null
+  // a super admin's Schedule it: never worded as a pass (the owner, 29 Sep 2026)
+  if (approval.skipped_check) {
+    return `Scheduled without the quality check${approval.without_client ? ' and without the client' : ''} by ${nameOf(approval.by) || 'a super admin'}`
+  }
   const name = nameOf(approval.by) || 'the team'
   if (approval.hat === 'client') return 'Approved by the client'
   if (approval.on_behalf_of_client) {

@@ -307,6 +307,13 @@ body::-webkit-scrollbar,
 .dbx [data-lane-scroll]::-webkit-scrollbar-track { background: hsl(var(--foreground) / 0.08); border-radius: 999px; }
 .dbx [data-lane-scroll]::-webkit-scrollbar-thumb { background: hsl(var(--foreground) / 0.35); border-radius: 999px; }
 .dbx [data-lane-scroll]::-webkit-scrollbar-thumb:hover { background: hsl(var(--foreground) / 0.55); }
+/* THE POST WINDOW SHOWS IT SCROLLS (the owner, 29 Sep 2026: "in the popup there is no scrollbar indication") —
+   every scrollbar is hidden above; the window's own comes back, the same thin bar as the board's lanes */
+.dbx [data-window-scroll] { scrollbar-width: thin; scrollbar-color: hsl(var(--foreground) / 0.35) transparent; -ms-overflow-style: auto; }
+.dbx [data-window-scroll]::-webkit-scrollbar { display: block; width: 10px; }
+.dbx [data-window-scroll]::-webkit-scrollbar-track { background: transparent; }
+.dbx [data-window-scroll]::-webkit-scrollbar-thumb { background: hsl(var(--foreground) / 0.35); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+.dbx [data-window-scroll]::-webkit-scrollbar-thumb:hover { background: hsl(var(--foreground) / 0.55); background-clip: padding-box; }
 
 body {
   font-family: var(--sans);
