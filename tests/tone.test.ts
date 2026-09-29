@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GATE_TONE, cardTone, kindTone, todayKey } from '@/app/dashboard/ui/tone'
-import { approvalChip } from '@/app/lib/posting-approval-core'
+import { cardTone, kindTone, todayKey } from '@/app/dashboard/ui/tone'
 
 /**
  * The three boards used to carry three hand-copied versions of this map, and
@@ -86,21 +85,3 @@ describe('kindTone', () => {
   })
 })
 
-describe('GATE_TONE', () => {
-  it('has a tone for every gate state approvalChip can return, and no dead keys', () => {
-    const produced = new Set(
-      ['pending', 'approved', 'changes', 'nonsense', null, undefined]
-        .map(s => approvalChip(s)?.tone)
-        .filter((t): t is 'waiting' | 'approved' | 'changes' => !!t),
-    )
-    expect([...produced].sort()).toEqual(['approved', 'changes', 'waiting'])
-    expect(Object.keys(GATE_TONE).sort()).toEqual(['approved', 'changes', 'waiting'])
-  })
-
-  it('says waiting in blue, approved in green and changes in red', () => {
-    expect(GATE_TONE.waiting).toBe('blue')
-    expect(GATE_TONE.approved).toBe('green')
-    // the same red the Editor board uses for "client changes" — one fact, one colour
-    expect(GATE_TONE.changes).toBe('red')
-  })
-})

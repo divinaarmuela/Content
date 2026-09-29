@@ -15,8 +15,7 @@ import { logActivity, notifyFilesToWorkFrom, notifyHandedOver, notifyJobAssigned
 import { actingRoles } from '../../../../lib/workflow-core'
 import { canEditItemFields } from '../../../../lib/item-edit-core'
 import { askedPatch, NOBODY_ASKED } from '../../../../lib/asked-core'
-import { stateAfterPostEdit } from '../../../../lib/posting-approval-core'
-import { readPostingApproval } from '../../../../lib/posting-approval'
+import { cascadeItemDelete } from '../../../../lib/post-stage'
 import { loadPostingContext } from '../../../../lib/production-publish'
 import { DEFAULT_TZ } from '../../../../lib/timezone-core'
 import {
@@ -117,10 +116,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({
       ...shaped,
       posting,
-      // the final-post gate, read tolerantly off the '*' row: supported=false
-      // on a database the migration has not reached, and the card then draws
-      // nothing new at all
-      posting_approval: user.role === 'client' ? null : readPostingApproval(item),
       client_name: client?.name ?? null,
       client_timezone: (client?.timezone as string | null) || DEFAULT_TZ,
       owner_name,
@@ -288,21 +283,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'No editable fields in request' }, { status: 400 })
     }
 
-    // A caption approved and THEN changed must never post silently: editing
-    // the post text after its final sign-off flips the gate back to pending,
-    // so the changed words get looked at again. Only on a database that has
-    // the column (the '*' row carries the key once the migration has run) —
-    // anywhere else this whole block is a no-op.
-    const approvalReset = 'caption' in patch
-      && 'posting_approval_state' in current
-      && (patch.caption ?? null) !== ((current as Record<string, unknown>).caption ?? null)
-      ? stateAfterPostEdit((current as Record<string, unknown>).posting_approval_state)
-      : null
-    if (approvalReset) {
-      patch.posting_approval_state = approvalReset
-      patch.posting_approved_by = null
-      patch.posting_approved_at = null
-    }
+    // The card's caption is the EDIT's. A post has its own words, frozen when it is sent, so changing
+    // the card no longer un-approves any post (the posting rebuild, 29 Sep 2026 — SPEC §1.3): the old
+    // item-wide reset took the approval off every post of the card at once.
 
     const data = await table('content_items').update(id, patch) as unknown as ContentItem | null
     if (!data) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
@@ -314,16 +297,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       action: 'updated',
       detail: Object.keys(patch).filter(k => k !== 'asked_ids' && k !== 'asked_at').join(', '),
     })
-    // the History has to say WHY the approval vanished — a chip that flips
-    // from "Approved to post" to "Waiting on approval" with no line about it
-    // reads as the app losing the answer
-    if (approvalReset) {
-      await logActivity({
-        actor: user, clientId: data.client_id,
-        entityType: 'content_item', entityId: id,
-        action: 'posting_approval_reset', detail: 'caption changed after approval',
-      })
-    }
     // (re)assignment is a handoff: email the editor their job pack.
     // A DELIBERATE hand-over says so instead, in the words that came with
     // it — one message, never both, so the receiver hears once.
@@ -376,33 +349,24 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const item = await loadItemForUser(user, id)
     // a manager, or the editor whose card it still is (board-view-core.mayDeleteCard, 21 Sep 2026)
     if (!mayDeleteCard(user, item)) throw new AuthzError('Only a manager, or the editor who holds this card, can delete it', 403)
-    // a post the channel is holding, or has published, is not deleted from
-    // here: the post would stay live and the app would lose every record of
-    // it (the audit of 10 Sep 2026)
-    if (item.status === 'scheduled' || item.status === 'published') {
-      // …only when a post really is behind it: a card moved to Booked in by
-      // hand, with no post, can still be thrown away (review, 10 Sep 2026)
-      const behind = await table<PublishJob>('publish_jobs').list({
-        where: r => r.content_item_id === id && ['queued', 'publishing', 'scheduled', 'published', 'duplicate'].includes(r.status),
-        limit: 1,
-      })
-      if (behind.length > 0) {
-        throw new AuthzError(
-          item.status === 'scheduled'
-            ? 'This is booked with the channel — cancel it on the Schedule page first'
-            : 'This has gone out — delete it at the channel; the record stays here',
-          409,
-        )
-      }
+    // ANYTHING THE CHANNEL IS HOLDING OR SENDING stops the delete, whatever the card's own status says
+    // (audit V8: a part-booked card in Ready to post was deleted while the provider still held its
+    // 'scheduled' job, and nothing in the app showed it any more). Taking a post off the schedule pulls
+    // the job back from the provider properly; a delete here never could.
+    const holding = await table<PublishJob>('publish_jobs').list({
+      where: r => r.content_item_id === id && ['queued', 'publishing', 'scheduled'].includes(r.status),
+      limit: 1,
+      fresh: true,
+    })
+    if (holding.length > 0) {
+      throw new AuthzError('A post from this card is booked in with the channel — take it off the schedule first, then delete the card.', 409)
     }
 
-    // publish_jobs has NO fk to content_items — cancel any queued/publishing job
-    // FIRST, or the cron would publish a deleted item to the client's live account
-    const jobs = table<PublishJob>('publish_jobs')
-    const live = await jobs.list({
-      where: r => r.content_item_id === id && ['queued', 'publishing'].includes(r.status),
-    })
-    await Promise.all(live.map(j => jobs.update(j.id, { status: 'cancelled' })))
+    // ITS POSTS (SPEC §5): refused while any is booked or partly out; otherwise every post not yet
+    // posted is cancelled ("card deleted") and every post is marked, so the posted history and the
+    // cancelled posts stay on Schedule instead of vanishing (audit L6, S9)
+    const cascade = await cascadeItemDelete(id, user.id)
+    if (!cascade.ok) throw new AuthzError(cascade.reason, 409)
 
     for (const name of ['schedule_entries', 'item_comments', 'asset_versions', 'approvals'] as const) {
       await table(name).removeWhere(r => r.item_id === id)

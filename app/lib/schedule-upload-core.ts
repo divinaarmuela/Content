@@ -163,23 +163,12 @@ function clip(text: string): string {
 /* ── what happens next, said before anybody presses anything ────────────── */
 
 /**
- * The one sentence under the sources, and it has to be true for this person.
- *
- * An account manager or a super admin posts with no approval step in the way
- * (the owner's ruling of 5 Sep): the app records their own sign-off behind the
- * scenes. Everybody else uploads exactly the same way, and the post still
- * waits for the manager's check — which is what happens today and is not a
- * thing this change takes away from anybody.
+ * The one sentence under the sources, and it has to be true for everyone (the posting rebuild, 29 Sep 2026): an
+ * upload is born a Draft post and every post passes the quality check before the client or the schedule sees it —
+ * managers included (the owner's decision 3). The old "Nothing waits for approval" line for managers stopped
+ * being true, so there is one line now.
  */
-export function uploadOutcomeLine(canPostWithoutApproval: boolean): string {
-  return canPostWithoutApproval
-    ? 'Your files go straight into a post. Nothing waits for approval.'
-    : 'Your files go into a post. An account manager checks it before it goes out.'
-}
-
-/** …and the reason a client who signs off every post never sees the short cut. */
-export const CLIENT_SIGNS_OFF_UPLOAD_NOTE =
-  'This client signs off every post, so this one goes to them first.'
+export const UPLOAD_OUTCOME_LINE = 'Your files become a draft post. It goes to the quality check before the client or the schedule sees it.'
 
 /* ── the desktop drag ───────────────────────────────────────────────────── */
 

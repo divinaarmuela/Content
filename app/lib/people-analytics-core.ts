@@ -56,6 +56,8 @@
  */
 
 import { shiftDay, shortDay, type FollowerRow } from './followers-core'
+import { postPageHref } from './post-page-core'
+import { jobIdsOfPost, type PostJobsLike } from './post-outcome-core'
 
 /* ── what goes in ──────────────────────────────────────────────────────── */
 
@@ -660,4 +662,25 @@ export function nextTouch(
     last_at: prev.last_at > at ? prev.last_at : at,
     name: seen.name ?? prev.name,
   }
+}
+
+/**
+ * The post page a `post_analytics` row belongs to, when one can be named: the post whose booking
+ * holds the row's publish job (`jobIdsOfPost` — the booking's job ids, which is what the engine
+ * writes), else the only post of the row's card.
+ */
+export function analyticsPostHref(
+  row: { publish_job_id?: string | null; item_id?: string | null },
+  posts: readonly (PostJobsLike & { id: string; item_id?: string | null })[],
+): string | null {
+  const jobId = row.publish_job_id
+  if (jobId) {
+    const byJob = posts.find(p => jobIdsOfPost(p).includes(jobId))
+    if (byJob) return postPageHref(byJob.id)
+  }
+  if (row.item_id) {
+    const byItem = posts.filter(p => p.item_id === row.item_id)
+    if (byItem.length === 1) return postPageHref(byItem[0].id)
+  }
+  return null
 }

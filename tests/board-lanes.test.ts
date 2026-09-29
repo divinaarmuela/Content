@@ -16,16 +16,17 @@ const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').f
 describe('the three pages hand the board their page, and the board makes the lanes', () => {
   // Shoots (production) no longer draws the work board at all — it is one
   // card per shoot in the playbook's own columns (11 Sep 2026)
+  // Post approval draws POSTS, not this board of cards (the posting rebuild,
+  // 29 Sep 2026): its lanes are pinned in tests/post-approval-page.test.ts
   it.each([
     ['app/dashboard/editor/page.tsx', 'editor'],
-    ['app/dashboard/scheduler/page.tsx', 'scheduler'],
   ])('%s says page="%s" and passes no column list', (rel, page) => {
     const src = code(read(rel))
     expect(src).toContain(`page="${page}"`)
     expect(src).not.toMatch(/columns=\{/)
     expect(src).not.toMatch(/pageColumns/)
     // Posted keeps the last two weeks: every page passes today into pageCards
-    expect(src).toMatch(/pageCards\('(editor|scheduler)', rows, viewer, today\)/)
+    expect(src).toMatch(/pageCards\('editor', rows, viewer, today\)/)
   })
 
   it('the board groups by lane, drops on lanes, and maps a column deep link to its lane', () => {

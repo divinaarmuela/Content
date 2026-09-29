@@ -8,8 +8,17 @@ import { cn } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  matchesChannel, mayEditNote, nowLineTop, belongsInList, onOneOfDays, showsOnGrid, scheduleWeekGrid,
+  matchesChannel, mayEditNote, nowLineTop, onOneOfDays, scheduleWeekGrid,
 } from '@/app/lib/social-schedule-core'
+import {
+  LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
+} from '@/app/lib/schedule-stage-core'
+import { MISSED_LABEL, STAGE_LABEL, STAGE_PAGE, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
+import { postWindowHref } from '@/app/lib/post-board-core'
+import { SCHEDULE_PAGE } from '@/app/lib/page-access-core'
+import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
+import { useRouter } from 'next/navigation'
+import { postAct, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { refusedFilesLine, usableUploadFiles } from '@/app/lib/schedule-upload-core'
@@ -32,29 +41,34 @@ import { brandFor } from '../PlatformIcon'
 import WeekGrid, { StoriesStrip, WEEK_ROW_PX } from './WeekGrid'
 import Tour, { useTourOnce } from './Tour'
 import { SCHEDULE_TOUR } from '@/app/lib/tour-core'
-import { ListView, MonthGrid, PreviewGrid, StoriesView } from './views'
+import { ListView, MonthGrid, PreviewGrid, StoriesView, type BinHandler } from './views'
+import { StageDot } from './tiles'
 import { useSchedulePosts } from './useSchedulePosts'
 import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
 
 /**
  * THE SCHEDULE: one client's week, media on the left, hours on the right.
  *
- * Read-only in this pass — it shows what is planned and where each post
- * stands. Starting a post, dragging one to a new time and writing a note all
- * arrive with the composer, and the page says so rather than offering a
- * control that does nothing.
+ * ITS ONE JOB IS GETTING APPROVED POSTS OUT (the owner's decision 1, 29 Sep
+ * 2026). It draws Ready to post, Booked in and Posted, and marks a time that
+ * was missed. It never approves anything: a post still being made or checked
+ * lives on Post approval, and this page only counts it and links there.
  *
- * Three things it refuses to get wrong:
+ * Four things it refuses to get wrong:
  *
  *  1. EVERY TIME IS THE CLIENT'S. The columns, the now-line and the labels are
  *     all in `clients.timezone` — a posting time is a fact about the audience,
  *     not about whoever is looking at the screen.
- *  2. THE STATUS IS DERIVED, NEVER STORED. `postTileFacts` reads the item's
- *     approval and THIS POST's jobs; a tile cannot claim "scheduled" because a
- *     row said so an hour ago, and an old post's cancelled job never speaks
- *     for the one that replaced it.
- *  3. IT IS LIVE. Everything on it is a database listener, so an approval
- *     landing in another tab repaints this week without a refresh.
+ *  2. A POST'S PLACE IS ITS STAGE. Every tile, row, count and word reads
+ *     `social_posts.stage` through `post-stage-core`'s one list of words
+ *     (`scheduleFacts`). Nothing is worked out from the edit card, the jobs or
+ *     the old `status` column (audit S2, S5, S7).
+ *  3. EVERY MOVE GOES THROUGH THE ONE ACT ROUTE. A drag is "Change time", the
+ *     bin is "Delete draft" or "Cancel post" — exactly what `postActions` offers
+ *     this person — and the page redraws from what the server answers.
+ *  4. IT IS LIVE. Everything on it is a database listener, and a one-minute
+ *     clock re-reads the words, so a time missed while the page is open says
+ *     so (audit S12).
  *
  * The layout is the approved mockup's: the media rail is a full-height column
  * pinned to the left of the calendar, and the whole thing fills the window —
@@ -63,17 +77,24 @@ import { monthLabel, rangeLabel, shiftDays, shiftMonths } from './week-nav'
 
 const VIEW_KEY = 'md-schedule-view'
 
+/** The counts above the calendar: the schedule's three stages and the missed times, in the stage colours. */
+const SUMMARY: { key: 'ready' | 'booked' | 'posted' | 'missed'; tone: StageTone }[] = [
+  { key: 'ready', tone: STAGE_TONE.ready },
+  { key: 'booked', tone: STAGE_TONE.booked },
+  { key: 'posted', tone: STAGE_TONE.posted },
+  { key: 'missed', tone: MISSED_TONE },
+]
+
 export default function SchedulePage() {
   const { me, noAccount } = useRole()
   const viewer: ScopeViewer | null = useMemo(
-    () => (me ? { id: me.id, role: me.role } : null), [me])
+    () => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer ?? false } : null), [me])
 
   /**
-   * ARRIVING FROM A LINK — the bell, or the "approve this post" email.
+   * ARRIVING FROM A LINK — the bell, or an email.
    *
-   * `?client=…&item=…` opens this page on that client with the composer
-   * already on that piece, which is where the preview and the two answers
-   * are. Read ONCE, lazily, as the initial state rather than in an effect:
+   * `?client=…&item=…` opens this page on that client with the post window
+   * on that piece; `&post=…` opens that one post. Read ONCE, lazily, as the initial state rather than in an effect:
    * the "client you had last time" effect below would otherwise race it and
    * land the reviewer on somebody else's week.
    */
@@ -89,14 +110,19 @@ export default function SchedulePage() {
   const hours = useMemo(() => ({ fromHour: night === 'show' ? 0 : 6, toHour: 23 }), [night])
   /** any day in the week (or month) on screen, as a 'YYYY-MM-DD' key */
   const [anchor, setAnchor] = useState<string | null>(null)
-  /** the clock, for the now-line — a minute is close enough to "now" */
+  /** the clock, for the now-line AND the words — a minute is close enough to
+   *  "now", and a post whose time passes while the page is open has to say it
+   *  missed it (audit S12) */
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(id)
   }, [])
 
-  const data = useSchedulePosts(viewer, clientId)
+  const data = useSchedulePosts(viewer, clientId, now)
+  /** the freshest rows, for a handler that runs after the render that drew them */
+  const postsRef = useRef(data.posts)
+  postsRef.current = data.posts
   /** WHOSE ACCOUNTS (15 Sep 2026): 'all', 'company', or a contact's id — the
    *  bar, the calendar, the rail and a new upload all follow it */
   const [owner, setOwner] = useState('all')
@@ -112,6 +138,10 @@ export default function SchedulePage() {
   /** the channel the profiles bar is filtering to, as the core reads it */
   const selected = useMemo(
     () => data.accounts.find(a => a.id === channel) ?? null, [data.accounts, channel])
+  /** the Instagram accounts the feed preview is of — the one picked, or all of the client's */
+  const instagramIds = useMemo(() => new Set(
+    (selected ? [selected] : data.allAccounts).filter(a => a.platform === 'instagram').map(a => a.id)),
+  [selected, data.allAccounts])
 
   const suggested = useSuggestedTimes(
     clientId, selected?.platform ?? data.accounts[0]?.platform ?? 'instagram', data.tz)
@@ -137,6 +167,33 @@ export default function SchedulePage() {
     typeof window === 'undefined'
       ? null
       : new URLSearchParams(window.location.search).get('item'))
+  /** …or the one POST a link named (`?post=`), opened in the post window once it is here */
+  const arrivedPost = useRef<string | null>(
+    typeof window === 'undefined'
+      ? null
+      : new URLSearchParams(window.location.search).get('post'))
+  /**
+   * OPEN A POST ON THE PAGE THAT OWNS ITS STAGE (the owner's decision 1). A
+   * post still being approved — a draft, one at the quality check, one with
+   * the client — opens its window on Post approval, so nothing is approved on
+   * this page. Ready, booked, posted and cancelled posts open here.
+   */
+  const router = useRouter()
+  const openPost = useCallback((row: SchedulePostRow) => {
+    if (STAGE_PAGE[row.stage] === 'post_approval') {
+      router.push(postWindowHref({ id: row.id, client_id: row.client_id, stage: row.stage }, SCHEDULE_PAGE, 'schedule'))
+      return
+    }
+    flow.openPost(row)
+  }, [flow.openPost, router])
+  useEffect(() => {
+    const postId = arrivedPost.current
+    if (!postId) return
+    const row = data.posts.find(p => p.id === postId)
+    if (!row) return
+    arrivedPost.current = null
+    openPost(row)
+  }, [data.posts, openPost])
   useEffect(() => {
     const itemId = arrivedOn.current
     if (!itemId) return
@@ -165,28 +222,30 @@ export default function SchedulePage() {
   const [uploadNote, setUploadNote] = useState<string | null>(null)
 
   /**
-   * MOVING A POST BY HAND.
-   *
-   * The hook does the mouse, the finger and the arrow keys; the only thing
-   * the page owns is the save. The message on a refusal is the SERVER's own
-   * sentence — it is the one that knows a scheduled post could not be pulled
-   * back off the provider, and rewriting it here would only make the screen
-   * and the API disagree about why.
+   * ONE WAY TO MOVE A POST: the act route (`POST /api/posts/<id>/act`). It
+   * carries the `rev` this page drew, so a post somebody else changed a moment
+   * ago is refused rather than overwritten, and the answer is the post as the
+   * server now holds it (audit W4: never draw what we assumed happened).
+   */
+  const act = useCallback((
+    post: SchedulePostRow,
+    body: Omit<PostActRequest, 'expect_rev'>,
+  ): Promise<PostActResponse> => postAct(post.id, { ...body, expect_rev: post.state.rev }), [])
+
+  /**
+   * MOVING A POST BY HAND is "Change time" (T13 on Ready to post, T15 on
+   * Booked in) and nothing else. The hook does the mouse, the finger and the
+   * arrow keys; a tile lifts only when `postActions` offers this person
+   * Change time (`move_block`). A refusal is the SERVER's own sentence.
    */
   const drag = useDragSchedule({
     tz: data.tz,
     hours,
     onMove: async (postId, at) => {
-      const res = await fetch(`/api/social/schedule/${postId}/reschedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ at }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        return { ok: false, error: friendlyError(String(json?.error ?? ''), 'Schedule') }
-      }
-      return { ok: true }
+      const post = postsRef.current.find(p => p.id === postId)
+      if (!post) return { ok: false, error: 'That post is not on this page any more — reload and try again.' }
+      const r = await act(post, { action: 'change_time', scheduled_for: at })
+      return r.ok ? { ok: true } : { ok: false, error: r.reason }
     },
   })
 
@@ -393,41 +452,64 @@ export default function SchedulePage() {
   /** every post for this client on the selected channel */
   const channelPosts = useMemo(
     () => livePosts.filter(p => matchesChannel(p.channels, selected) && (owner === 'all' || p.channels.some(id => ownerAccountIds.has(id)))),
-    [livePosts, selected])
+    // `owner` and its accounts are read, so they are listened to: picking a
+    // person used to leave the calendar on the last one's posts (audit S4)
+    [livePosts, selected, owner, ownerAccountIds])
 
   const weekKeys = useMemo(() => new Set(grid.days.map(d => d.iso)), [grid.days])
 
-  /** what the grids draw: everything past draft (`showsOnGrid`) */
-  const planned = useMemo(() => channelPosts.filter(showsOnGrid), [channelPosts])
-  const draftCount = useMemo(() => channelPosts.filter(p => p.live_status === 'draft').length, [channelPosts])
+  /** what the grids draw: Ready to post, Booked in, Posted — off the stage (`showsOnSchedule`) */
+  const planned = useMemo(() => channelPosts.filter(p => showsOnSchedule(p.stage)), [channelPosts])
   const inWeek = useMemo(
     () => planned.filter(p => onOneOfDays(p.scheduled_for, tz, weekKeys)),
     [planned, weekKeys, tz])
-  /** the week's posts AND the ones with no time yet: the List has a "No time
-   *  yet" group for exactly those, and the week filter used to keep every
-   *  one of them out of it — "a draft nobody can find is a draft nobody
-   *  finishes" (the owner, 9 Sep 2026: "saving as draft doesn't tell the
-   *  user"). Only the List draws them; a grid has no cell for no-time. */
-  /** a draft thrown away from the List (the server refuses anything booked) */
-  const deleteDraft = useCallback(async (post: SchedulePostRow) => {
-    const res = await fetch(`/api/social/schedule/${post.id}`, { method: 'DELETE' })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) { toast.error(String(json?.error ?? 'Could not delete that draft')); return }
-    toast.success('Draft deleted')
-  }, [])
-  const inWeekOrUntimed = useMemo(
-    () => channelPosts.filter(p => belongsInList(p, onOneOfDays(p.scheduled_for, tz, weekKeys))),
-    [channelPosts, weekKeys, tz])
-  /** the List narrowed to the posts waiting on an approval, any week —
-   *  pressed from the rail's "Waiting for approval · N" */
-  const [onlyWaiting, setOnlyWaiting] = useState(false)
-  const listPosts = useMemo(
-    () => (onlyWaiting ? channelPosts.filter(p => p.live_status === 'pending') : inWeekOrUntimed),
-    [onlyWaiting, channelPosts, inWeekOrUntimed])
-  const listNote = onlyWaiting ? (
-    <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[13px] text-muted-foreground">
-      Showing the {listPosts.length === 1 ? 'post' : `${listPosts.length} posts`} waiting for approval.
-      <button type="button" onClick={() => setOnlyWaiting(false)} className="min-h-11 font-semibold underline underline-offset-4">Show all</button>
+
+  /** the numbers above the calendar, each counted off the stage (audit B12) */
+  const counts = useMemo(() => scheduleCounts(channelPosts), [channelPosts])
+
+  /**
+   * THE BIN, from a List row: whatever `postActions` put there. "Delete draft"
+   * really deletes a draft that was never sent (T23); anywhere else it is
+   * "Cancel post" (T20), and the post goes to the Cancelled list with a way
+   * back (Re-book). The answer, or the refusal, is the server's.
+   */
+  const binPost: BinHandler = useCallback(async (post) => {
+    if (!post.bin) return 'There is nothing to remove here.'
+    const r = await act(post, { action: post.bin.action, confirm: true })
+    if (!r.ok) return r.reason
+    toast.success(r.words)
+    return null
+  }, [act])
+
+  /** THE LIST'S FILTER — one of the counts above, pressed */
+  const [listFilter, setListFilter] = useState<ListFilter>('all')
+  useEffect(() => { setListFilter('all') }, [clientId])
+  const showList = (f: ListFilter) => { setListFilter(f); setView('List') }
+
+  /** the missed times, whatever week they are in: the first thing the List shows */
+  const missed = useMemo(
+    () => channelPosts.filter(p => matchesListFilter(p, 'missed')), [channelPosts])
+  const listPosts = useMemo(() => {
+    if (listFilter !== 'all') return channelPosts.filter(p => matchesListFilter(p, listFilter))
+    // the week's posts on the schedule, and any with no time yet; the missed
+    // ones lead the list on their own, so they are not listed twice
+    return planned.filter(p => !p.facts.missed && (!p.scheduled_for || onOneOfDays(p.scheduled_for, tz, weekKeys)))
+  }, [listFilter, channelPosts, planned, tz, weekKeys])
+  const listPinned = listFilter === 'all' ? { label: MISSED_LABEL, posts: missed } : null
+  const listEmpty = listFilter === 'all'
+    ? 'Nothing on the schedule this week.'
+    : listFilter === 'drafts'
+      ? 'No drafts. A new post starts as a draft, then goes to quality check.'
+      : `Nothing in ${LIST_FILTER_LABEL[listFilter]}.`
+  const listNote = listFilter !== 'all' ? (
+    <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pb-2 text-[13px] text-muted-foreground">
+      Showing {LIST_FILTER_LABEL[listFilter]} · {listPosts.length}.
+      {listFilter === 'drafts' && (
+        <Link href={POST_APPROVAL_BOARD} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+          Drafts are sent for quality check on Post approval
+        </Link>
+      )}
+      <button type="button" onClick={() => setListFilter('all')} className="min-h-11 font-semibold underline underline-offset-4">Show the schedule</button>
     </p>
   ) : null
 
@@ -435,8 +517,9 @@ export default function SchedulePage() {
     () => data.notes.filter(n => onOneOfDays(n.at, tz, weekKeys)),
     [data.notes, weekKeys, tz])
 
-  const stories = useMemo(
-    () => inWeek.filter(p => String(p.item_type ?? '').toLowerCase() === 'story'), [inWeek])
+  /** a story is set per NETWORK on the post (`per_channel[…].kind`), not on the
+   *  edit card — the old filter read the card and found none (audit S3) */
+  const stories = useMemo(() => inWeek.filter(p => p.facts.story), [inWeek])
 
   /** a slot is a hint about an EMPTY time — one within the hour of a post
    *  already there is noise */
@@ -561,18 +644,15 @@ export default function SchedulePage() {
   const rail = (
     <MediaRail
       media={ownerMedia}
-      // THE POSTS WAITING ON A YES — the same ones the count opens (28 Sep 2026: it counted cards at the editing
-      // stages, so Jordan Wilson's four posts waiting on approval were not in the number)
-      waiting={channelPosts.filter(p => p.live_status === 'pending').length}
-      drafts={draftCount}
-      onDrafts={() => { setOnlyWaiting(false); setView('List') }}
-      onWaiting={() => { setOnlyWaiting(true); setView('List') }}
+      // POSTS STILL BEING APPROVED are counted here and live on Post approval
+      waiting={counts.beingApproved}
+      drafts={counts.drafts}
+      onDrafts={() => showList('drafts')}
       loading={data.loading}
       role={me?.role ?? null}
       postWithoutApproval={data.postWithoutApproval}
       onNew={() => flow.openAt(weekSlots[0]?.iso ?? null)}
       onPick={(m, slides) => flow.openNew(m, null, slides ?? null)}
-      onApprove={flow.approve}
       onRemove={async m => {
         const res = await fetch(`/api/production/items/${m.itemId}`, { method: 'DELETE' })
         const json = await res.json().catch(() => ({}))
@@ -755,6 +835,43 @@ export default function SchedulePage() {
             </div>
           </div>
 
+          {/* WHERE THINGS STAND, counted off the stage. Each count opens the
+              List on just those posts. Nothing here approves anything. */}
+          {!data.loading && !data.error && (
+            <div role="group" aria-label="Where the posts stand" className="flex flex-wrap items-center gap-1.5 pb-2">
+              {SUMMARY.map(({ key, tone }) => {
+                const n = counts[key]
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={view === 'List' && listFilter === key}
+                    onClick={() => showList(key)}
+                    className={cn(
+                      'flex min-h-11 items-center gap-2 rounded-full border border-border px-3.5 text-[13px] font-semibold hover:bg-muted',
+                      view === 'List' && listFilter === key ? 'bg-foreground text-background hover:bg-foreground' : 'bg-surface',
+                      key === 'missed' && n === 0 && 'text-muted-foreground',
+                    )}
+                  >
+                    <StageDot tone={tone} className="border-0" />
+                    {LIST_FILTER_LABEL[key]}
+                    <span className="tabular-nums">{n}</span>
+                  </button>
+                )
+              })}
+              {counts.cancelled > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={view === 'List' && listFilter === 'cancelled'}
+                  onClick={() => showList('cancelled')}
+                  className="min-h-11 px-2 text-[13px] font-semibold text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  {STAGE_LABEL.cancelled} · {counts.cancelled}
+                </button>
+              )}
+            </div>
+          )}
+
           {data.error ? (
             <p className="rounded-inner border border-border bg-surface p-6 text-[15px] text-muted-foreground">
               {loadFailedMessage('the schedule')}
@@ -777,7 +894,7 @@ export default function SchedulePage() {
                   todayKey={todayKey}
                   nowTop={nowTop}
                   onSlot={flow.openAt}
-                  onOpen={flow.openPost}
+                  onOpen={openPost}
                   onDropItem={(itemId, iso) => {
                     const media = data.media.find(m => m.itemId === itemId)
                     if (media) flow.openNew(media, iso)
@@ -809,7 +926,7 @@ export default function SchedulePage() {
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
                 {listNote}
-                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
+                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -818,7 +935,7 @@ export default function SchedulePage() {
               posts={planned}
               tz={tz}
               todayKey={todayKey}
-              onOpen={flow.openPost}
+              onOpen={openPost}
               drag={drag}
               defaultTime={defaultPostTime}
               onDropItem={(itemId, iso) => {
@@ -830,19 +947,20 @@ export default function SchedulePage() {
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {listNote}
-                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onDelete={deleteDraft} />
+              <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {/* DRAFTS BELONG IN THE FEED (24 Sep 2026): the grids still hide them, but the Preview is where
-                  you look at the feed before committing, so it gets every post on the channel and marks the drafts */}
-              <PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost}
+              {/* THE FEED AS IT WILL LOOK: `PreviewGrid` keeps only Instagram posts that are going out — Ready
+                  to post and Booked in — and draws what already went out once, from the feed (audit S8) */}
+              <PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost}
+                instagramIds={instagramIds}
                 accountId={(selected?.platform === 'instagram' ? selected.id : data.accounts.find(a => a.platform === 'instagram')?.id) ?? null}
                 handle={(selected?.platform === 'instagram' ? selected.username : data.accounts.find(a => a.platform === 'instagram')?.username) ?? null} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <StoriesView posts={stories} tz={tz} onOpen={flow.openPost} />
+              <StoriesView posts={stories} tz={tz} onOpen={openPost} onBin={binPost} />
             </div>
           )}
         </main>

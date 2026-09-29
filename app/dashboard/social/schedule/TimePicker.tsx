@@ -7,8 +7,9 @@ import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   calendarDateToDayKey, clockPillLabel, dayKeyToCalendarDate, joinClock, splitClock, to12, to24,
-  HOURS_12, MINUTE_STEPS, type ClockValue, type Meridiem,
+  HOURS_12, type ClockValue, type Meridiem,
 } from '@/app/lib/schedule-compose-core'
+import { defaultPostTime, hourIsPast, minuteIsPast, minuteOptions } from '@/app/lib/post-window-core'
 import { dayKeyInZone, formatInZone, zoneLabel } from '@/app/lib/timezone-core'
 
 /**
@@ -49,7 +50,7 @@ const dayOf = dayKeyToCalendarDate
 const keyOf = calendarDateToDayKey
 
 export default function TimePicker({
-  value, tz, onChange, disabled,
+  value, tz, onChange, disabled, now: nowChip,
 }: {
   /** the instant the post goes out, or null */
   value: string | null
@@ -57,6 +58,13 @@ export default function TimePicker({
   tz: string
   onChange: (iso: string | null) => void
   disabled?: boolean
+  /**
+   * THE "NOW" CHIP (audit W3, 29 Sep 2026). It is Post now, for a post that
+   * is approved and may be booked; anywhere else it is drawn disabled with
+   * the reason on it ("Approve first") — never missing while a refusal tells
+   * someone to choose it. Leave it out where "now" means nothing.
+   */
+  now?: { enabled: boolean; reason: string | null; onNow: () => void } | null
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -118,10 +126,13 @@ export default function TimePicker({
     }
   }, [open])
 
-  const today = dayKeyInZone(Date.now(), tz) ?? ''
-  // no time chosen yet: the fields have to show something, and the client's
-  // today at 6 pm is a better guess than an empty box nobody can act on
+  const nowMs = Date.now()
+  const today = dayKeyInZone(nowMs, tz) ?? ''
+  // no time chosen yet: the fields start on the next quarter-hour at least 15
+  // minutes out. "Today at 6 pm" was already gone for anyone after 6 pm, and
+  // the button was then refused (audit W9, 29 Sep 2026).
   const current: ClockValue = splitClock(value, tz)
+    ?? splitClock(defaultPostTime(nowMs), tz)
     ?? { dayKey: today, hour12: 6, minute: 0, meridiem: 'pm' }
 
   const set = (patch: Partial<ClockValue>) => {
@@ -203,17 +214,20 @@ export default function TimePicker({
           />
 
           <div className="mt-2 flex items-center gap-1.5 border-t border-border pt-3">
+            {/* An hour that has gone is not offered. The minute box comes in
+                five-minute steps and always holds the post's own minute, so
+                the pill and the box never disagree (audit W9). */}
             <Field
               label="Hour"
               value={String(current.hour12)}
-              options={HOURS_12.map(h => [String(h), String(h)])}
+              options={HOURS_12.map(h => [String(h), String(h), hourIsPast(current, h, tz, nowMs)])}
               onChange={v => set({ hour12: Number(v) })}
             />
             <span className="text-[15px] font-semibold">:</span>
             <Field
               label="Minute"
               value={String(current.minute)}
-              options={MINUTE_STEPS.map(m => [String(m), String(m).padStart(2, '0')])}
+              options={minuteOptions(current.minute).map(m => [String(m), String(m).padStart(2, '0'), minuteIsPast(current, m, tz, nowMs)])}
               onChange={v => set({ minute: Number(v) })}
             />
             <Field
@@ -231,6 +245,23 @@ export default function TimePicker({
             </button>
           </div>
 
+          {nowChip && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+              <button
+                type="button"
+                disabled={!nowChip.enabled}
+                title={nowChip.reason ?? 'Post it now'}
+                onClick={() => { setOpen(false); nowChip.onNow() }}
+                className="flex min-h-11 items-center rounded-full border border-border px-4 text-[13px] font-semibold hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Now
+              </button>
+              {!nowChip.enabled && nowChip.reason && (
+                <span className="text-[12px] text-muted-foreground">{nowChip.reason}</span>
+              )}
+            </div>
+          )}
+
           <p className="pt-2 text-[12px] text-muted-foreground">
             {/* the sentence that stops the whole class of "it went out at 4am"
                 surprises: this is the CLIENT's clock, not yours — and for a
@@ -247,11 +278,12 @@ export default function TimePicker({
   )
 }
 
-/** A labelled select, 44px, no invented styling. */
+/** A labelled select, 44px, no invented styling. An option may be marked
+ *  gone (a time that has passed) — never the one the post already holds. */
 function Field({ label, value, options, onChange }: {
   label: string
   value: string
-  options: [string, string][]
+  options: [string, string, boolean?][]
   onChange: (v: string) => void
 }) {
   return (
@@ -262,7 +294,7 @@ function Field({ label, value, options, onChange }: {
         onChange={e => onChange(e.target.value)}
         className="min-h-11 rounded-full border border-border bg-surface px-2.5 text-[13px] font-semibold text-foreground"
       >
-        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        {options.map(([v, l, gone]) => <option key={v} value={v} disabled={gone === true && v !== value}>{l}</option>)}
       </select>
     </label>
   )

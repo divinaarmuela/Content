@@ -1,40 +1,48 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, ClientContact, ContentItem, SocialPost, TeamUser } from '@/lib/db-types'
+import type { Client, ClientContact, ContentItem } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
-import {
-  clientRecipients, itemApprovalLink, pickRecipients, sendKey, sendOutcomeWords, sendStage,
-} from '../../../../../lib/post-to-client-core'
+import { parsePostActRequest, refusalStatus } from '../../../../../lib/post-act-contract'
+import { actOnPost, loadPostState } from '../../../../../lib/post-stage'
+import { clientFacingSender } from '../../../../../lib/post-notify'
+import { clientRecipients, pickRecipients } from '../../../../../lib/client-recipients-core'
 
 /**
- * SEND TO CLIENT (the owner, 28 Sep 2026: "at With client it should be sent to the client — confirming the emails
- * that will receive it; an AM or super admin can do it; once approved it goes Ready to post, from the client, or we
- * can log it ourselves").
+ * SEND TO CLIENT — two different things, kept apart (the posting rebuild, 29 Sep 2026).
  *
- * GET  → who this client can be sent to (the client's own address, then its people), for the person to confirm.
- * POST { emails, note? } → emails each chosen address a link to this card on the client's portal, where they see
- *      the post and press Approve or Ask for a change. The card must be With client; only an account manager or a
- *      super admin may send; only addresses on the client's own list are accepted. Nothing moves on its own: the
- *      client's Approve (or "Log the client's approval") is what takes it to Ready to post.
+ *   THE EDIT (the card at With client, `client_review`): the client is emailed a link to the CARD on
+ *   their portal, to approve the edit. Unchanged, and still sent only by a person pressing Send.
+ *
+ *   A POST: this route is only a door onto the one writer. `{ post_id, expect_rev, version, emails }`
+ *   becomes the post's own move — "Passed — send to client" from the quality check (T4), or "Send to
+ *   client" from Ready to post (T2b) — through app/lib/post-stage.ts, which freezes the version, emails
+ *   it, and moves the post only once something reached the client (audit P9, V9, V10, W10). The new
+ *   pages call `POST /api/posts/<id>/act` directly; this door is kept until nothing calls it, then goes.
+ *
+ * GET  → who this client can be sent to, for the person to tick.
+ * POST → the send. Only an account manager or a super admin; only addresses on the client's own list.
  */
 export const dynamic = 'force-dynamic'
 
-/**
- * WHO THE CLIENT HEARS FROM (the owner, 28 Sep 2026: "it should be from Divina"). Every client approval email goes out
- * in Divina's name, and a reply reaches her — whoever pressed Send. The four sent at 12:40 pm that day said "Akmal
- * Ashwin" because they were pressed from his login. CLIENT_EMAIL_SENDER_ID overrides; an inactive sender falls back to
- * whoever pressed Send, so a client email never goes out in the name of somebody who has left.
- */
-const CLIENT_EMAIL_SENDER_ID = process.env.CLIENT_EMAIL_SENDER_ID || '54926a48-335e-46e9-a080-df8c1ad42ac9'
+/** The edit's review page on the portal — the card, not a post. */
+function cardApprovalLink(base: string, shareToken: string, itemId: string): string {
+  return `${base.replace(/\/+$/, '')}/portal/${encodeURIComponent(shareToken)}/approve/${encodeURIComponent(itemId)}`
+}
 
-async function clientFacingSender(fallback: { name?: string | null; email: string }): Promise<{ name: string; email: string }> {
-  const u = await table<TeamUser>('team_users').get(CLIENT_EMAIL_SENDER_ID).catch(() => null)
-  if (u && u.active_status && u.email) return { name: u.name || u.email, email: u.email }
-  return { name: fallback.name || fallback.email, email: fallback.email }
+/** One send per card, per address, per press — the stamp is the press. */
+const sendKey = (itemId: string, email: string, stamp: string) => `${itemId}#post-to-client#${email}#${stamp}`
+
+/** What the person who pressed Send is told, from what actually happened to each address. */
+function sendOutcomeWords(results: readonly { email: string; result: string }[]): string {
+  const sent = results.filter(r => r.result === 'sent' || r.result === 'duplicate').map(r => r.email)
+  const failed = results.filter(r => r.result !== 'sent' && r.result !== 'duplicate').map(r => r.email)
+  if (sent.length === 0) return `Nothing was sent — ${failed.join(', ')} could not be emailed. Try again, or send them the link yourself.`
+  return `Emailed ${sent.join(', ')} the link to view and approve it.`
+    + (failed.length ? ` Could not email ${failed.join(', ')} — send them the link yourself.` : '')
 }
 
 async function context(id: string) {
@@ -56,8 +64,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({
         recipients,
         client_name: client.name,
-        sendable: sendStage(item as never) !== null,
-        stage: sendStage(item as never),
+        // the edit is sendable at With client; a post is sent from its own window
+        sendable: item.status === 'client_review',
+        stage: item.status === 'client_review' ? 'card' : null,
         has_portal: !!client.share_token,
       })
     } catch (e) {
@@ -72,57 +81,57 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     try {
       const { id } = await params
       const { user, item, client, recipients } = await context(id)
-      const stage = sendStage(item as never)
-      if (!stage) {
-        return NextResponse.json({ error: 'This can be sent to the client once it is With client, or once its post is waiting on approval' }, { status: 409 })
+      const body = await req.json().catch(() => ({})) as {
+        emails?: unknown; note?: unknown; test?: unknown; copy?: unknown
+        post_id?: unknown; expect_rev?: unknown; version?: unknown
+      }
+
+      // ── A POST: the one writer does it ──
+      if (typeof body.post_id === 'string' && body.post_id) {
+        const { post } = await loadPostState(body.post_id)
+        if (!post || post.source_item_id !== item.id) return NextResponse.json({ error: 'That post is not on this card' }, { status: 404 })
+        const action = post.stage === 'quality_check' ? 'pass_send_client' : post.stage === 'ready' ? 'send_to_client' : null
+        if (!action) {
+          return NextResponse.json({ error: 'A post goes to the client from its quality check, or once it has passed — open it on Post approval.' }, { status: 409 })
+        }
+        const parsed = parsePostActRequest({
+          action, expect_rev: body.expect_rev, version: body.version,
+          note: typeof body.note === 'string' ? body.note : undefined,
+          send_to: Array.isArray(body.emails) ? body.emails : [],
+          via: body.copy === true ? 'link' : 'email',
+        })
+        if (!parsed.ok) return NextResponse.json({ error: parsed.reason }, { status: 400 })
+        const result = await actOnPost(user, post.id, parsed.request)
+        if (!result.ok) return NextResponse.json({ error: result.reason, code: result.code, post: result.post }, { status: refusalStatus(result.code) })
+        return NextResponse.json({ post: result.post, words: result.words, link: result.link ?? null, message: result.words })
+      }
+
+      // ── THE EDIT (the card at With client) ──
+      if (item.status !== 'client_review') {
+        return NextResponse.json({ error: 'The card can be sent to the client once it is With client. A post is sent from its own window.' }, { status: 409 })
       }
       if (!client.share_token) {
         return NextResponse.json({ error: 'This client has no portal link yet — make one on the client first' }, { status: 409 })
       }
-      const body = await req.json().catch(() => ({})) as { emails?: unknown; note?: unknown; test?: unknown; copy?: unknown }
       const note = String(body.note ?? '').trim().slice(0, 1000)
-      // SEND ME A TEST FIRST (the owner, 28 Sep 2026: "send a test link to me, I want to see how you plan to send"): the
-      // exact email the client would get, to the person pressing it, with the page in preview — nothing on the post moves
+      // SEND ME A TEST FIRST (the owner, 28 Sep 2026): the email the client would get, to the person
+      // pressing it — nothing on the card moves. Its button opens the CARD on the dashboard (behind the
+      // team sign-in), never the client's Approve page: that page has no preview any more (audit P4), and
+      // a test link to it would let the team member approve for the client by mistake (review fix)
       const test = body.test === true
-      // COPY THE LINK (the owner, 28 Sep 2026: "make sure I can copy the link to send it to them — not just send"):
-      // no email — the link is theirs to send by hand. It opens the approval exactly as an email would.
+      // COPY THE LINK (the owner, 28 Sep 2026): no email — the link is theirs to send by hand
       if (body.copy === true) {
-        if (stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
-          const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
-            cur && String((cur as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
-              ? { ...cur, posting_client_required: true } as ContentItem
-              : null)
-          if (!taken.claimed) return NextResponse.json({ error: 'Somebody answered this post while you were copying it — refresh to see where it stands' }, { status: 409 })
-        }
-        const copyPosts = stage === 'post' ? await table<SocialPost>('social_posts').list({ by: { item_id: item.id } }).catch(() => [] as SocialPost[]) : []
-        const copyPost = copyPosts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
-        const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id)
-        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: new Date().toISOString(), to: [], stage, via: 'link', for_time: stage === 'post' ? (copyPost?.scheduled_for ?? null) : null } } as never).catch(() => undefined)
+        const link = cardApprovalLink(DASHBOARD_URL, client.share_token, item.id)
         await logActivity({ actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id, action: 'sent_to_client', detail: 'Copied the approval link to send by hand' }).catch(() => undefined)
-        return NextResponse.json({ link, message: 'Link ready — paste it to the client. It opens this post for them to approve.' })
+        return NextResponse.json({ link, message: 'Link ready — paste it to the client. It opens this card for them to approve.' })
       }
       const picked = test ? { ok: true as const, emails: [String(user.email).toLowerCase()] } : pickRecipients(body.emails, recipients)
       if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
-      // THE FINAL POST: marked as the client's to answer, so their page (and the portal's list) offers it to them — the
-      // same flag the composer's old "Send to client" set, without which nobody was ever asked (24 Sep 2026)
-      if (!test && stage === 'post' && (item as { posting_client_required?: unknown }).posting_client_required !== true) {
-        const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
-          cur && String((cur as { posting_approval_state?: unknown }).posting_approval_state ?? '') === 'pending'
-            ? { ...cur, posting_client_required: true } as ContentItem
-            : null)
-        if (!taken.claimed) return NextResponse.json({ error: 'Somebody answered this post while you were sending it — refresh to see where it stands' }, { status: 409 })
-      }
-      const link = itemApprovalLink(DASHBOARD_URL, client.share_token, item.id) + (test ? '?preview=1' : '')
-      const title = String(item.title ?? 'Your post')
-      // the words the client will be approving: the post's own caption once there is a post
-      const posts = stage === 'post'
-        ? await table<SocialPost>('social_posts').list({ by: { item_id: item.id } }).catch(() => [] as SocialPost[])
-        : []
-      const post = posts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
-      const caption = String(post?.caption ?? (item as { caption?: string | null }).caption ?? '').trim()
-      // a test goes out as it will for real — from the client-facing sender — so what you see is what they get
+      const link = test
+        ? `${DASHBOARD_URL.replace(/\/+$/, '')}/dashboard/production/${encodeURIComponent(item.id)}`
+        : cardApprovalLink(DASHBOARD_URL, client.share_token, item.id)
+      const title = String(item.title ?? 'Your work')
       const sender = await clientFacingSender(user)
-      const from = sender.name
       const stamp = new Date().toISOString()
 
       const results: { email: string; result: string }[] = []
@@ -134,15 +143,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           entityId: sendKey(item.id, email, stamp),
           recipientEmail: email, toClient: !test, deliberateClientSend: !test,
           actorName: sender.name, actorEmail: sender.email,
-          subject: (test ? `[Test — what ${client.name} gets] ` : '') + (stage === 'post' ? `Your post is ready to approve: ${title}` : `Ready for your approval: ${title}`),
+          subject: (test ? `[Test — what ${client.name} gets] ` : '') + `Ready for your approval: ${title}`,
           bodyHtml: renderEmail(
             `Ready for your approval: ${escapeHtml(title)}`,
-            (test ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;"><em>A test copy for you — exactly what ${escapeHtml(client.name)} receives. The link opens in preview, so nothing changes on the post.</em></p>` : '') +
+            (test ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;"><em>A test copy for you — the words ${escapeHtml(client.name)} receives. Its button opens the card on the dashboard, not the client's page, so nothing is approved from this email.</em></p>` : '') +
             `<p>Hi ${escapeHtml(hello)},</p>` +
-            `<p>${escapeHtml(from)} has sent you <strong>${escapeHtml(title)}</strong> to look over before it goes out.</p>` +
+            `<p>${escapeHtml(sender.name)} has sent you <strong>${escapeHtml(title)}</strong> to look over.</p>` +
             (note ? `<p style="border-left:3px solid #e4e4e7;padding-left:12px;">${escapeHtml(note)}</p>` : '') +
-            (caption ? `<p><strong>Caption:</strong><br>${escapeHtml(caption).replace(/\n/g, '<br>')}</p>` : '') +
-            `<p>Open it to see the post, then press <strong>Approve</strong> — or <strong>Ask for a change</strong> and tell us what to change.</p>`,
+            `<p>Open it to see it, then press <strong>Approve</strong> — or <strong>Ask for a change</strong> and tell us what to change.</p>`,
             'View and approve',
             link,
           ),
@@ -151,10 +159,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       const delivered = results.filter(r => r.result === 'sent' || r.result === 'duplicate').map(r => r.email)
-      // STAMPED ON THE CARD, so the button says it went (28 Sep 2026) — only for a real send that reached someone
-      if (!test && delivered.length > 0) {
-        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: stamp, to: delivered, stage, for_time: stage === 'post' ? (post?.scheduled_for ?? null) : null } } as never).catch(() => undefined)
-      }
+      // THE EDIT'S SEND IS ITS HISTORY LINE, NOT A FIELD (the posting rebuild, 29 Sep 2026): the card's old
+      // `client_sent` stamp is what the posting pages misread as "the POST was sent to the client". Posts keep
+      // their own `client_send`; the edit keeps the `sent_to_client` line below and its `client_rounds`.
       if (!test) await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
         action: 'sent_to_client',

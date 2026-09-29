@@ -62,6 +62,9 @@ export type TableName =
   | 'newsletter_subscribers'
   | 'notification_log'
   | 'post_analytics'
+  | 'post_comments'
+  | 'post_events'
+  | 'post_versions'
   | 'projects'
   | 'prospect_events'
   | 'prospects'
@@ -636,6 +639,7 @@ export interface ContentItem {
   change_assets: unknown | null
   client_round: number | null
   client_rounds: unknown | null
+  client_frozen: unknown | null
   share_token: string | null
   accepted_at: string | null
   accepted_round: number | null
@@ -1067,6 +1071,58 @@ export interface PostAnalytic {
   interactors: unknown | null
 }
 
+export interface PostComment {
+  id: string
+  post_id: string
+  client_id: string
+  version: number | null
+  file_url: string | null
+  slide_index: number | null
+  visibility: string
+  author_id: string | null
+  author_name: string
+  author_role: string
+  body: string
+  assigned_to: string | null
+  resolved_at: string | null
+  resolved_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PostEvent {
+  id: string
+  post_id: string
+  client_id: string
+  rev: number
+  from: string | null
+  to: string | null
+  action: string
+  actor_id: string | null
+  hat: string | null
+  on_behalf_of_client: boolean | null
+  version: number | null
+  note: string | null
+  at: string
+}
+
+export interface PostVersion {
+  id: string
+  post_id: string
+  client_id: string
+  n: number
+  slides: unknown
+  per_channel: unknown
+  channels: unknown
+  caption: string | null
+  scheduled_for: string | null
+  timezone: string
+  frozen_for: string
+  frozen_by: string | null
+  frozen_at: string
+  from_migration: boolean | null
+}
+
 export interface Project {
   gallery_urls: string | null
   website_url: string | null
@@ -1339,6 +1395,25 @@ export interface SocialPost {
   approved_by: string | null
   approval_mode: string | null
   note: string | null
+  stage: string | null
+  rev: number | null
+  stage_at: string | null
+  draft_version: number | null
+  sent_version: number | null
+  approval_steps: string | null
+  approval: unknown | null
+  qc_pass: unknown | null
+  changes_asked: unknown | null
+  client_send: unknown | null
+  last_client_send: unknown | null
+  booking: unknown | null
+  outcomes: unknown | null
+  problem: string | null
+  cancelled: unknown | null
+  assigned_to: string | null
+  source_item_id: string | null
+  source_deleted: boolean | null
+  sending: unknown | null
 }
 
 export interface TeamBoardComment {
@@ -1531,7 +1606,7 @@ export const TABLE_COLUMNS = {
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
-  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
@@ -1557,6 +1632,9 @@ export const TABLE_COLUMNS = {
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
   notification_log: ['id', 'created_at', 'dedupe_key', 'event_type', 'recipient_id', 'recipient_email', 'subject', 'body_html', 'entity_type', 'entity_id', 'channel', 'status', 'sent_at', 'error', 'retry_count', 'read_at', 'claimed_at'],
   post_analytics: ['id', 'item_id', 'publish_job_id', 'provider_post_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'synced_at', 'raw', 'source', 'performance', 'interactors'],
+  post_comments: ['id', 'post_id', 'client_id', 'version', 'file_url', 'slide_index', 'visibility', 'author_id', 'author_name', 'author_role', 'body', 'assigned_to', 'resolved_at', 'resolved_by', 'created_at', 'updated_at'],
+  post_events: ['id', 'post_id', 'client_id', 'rev', 'from', 'to', 'action', 'actor_id', 'hat', 'on_behalf_of_client', 'version', 'note', 'at'],
+  post_versions: ['id', 'post_id', 'client_id', 'n', 'slides', 'per_channel', 'channels', 'caption', 'scheduled_for', 'timezone', 'frozen_for', 'frozen_by', 'frozen_at', 'from_migration'],
   projects: ['gallery_urls', 'website_url', 'id', 'created_at', 'updated_at', 'client_id', 'slug', 'name', 'industry', 'tag', 'services', 'description', 'card_media_url', 'hero_media_url', 'result', 'challenge', 'approach', 'outcome', 'sort_order', 'published'],
   prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['id', 'business', 'lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
@@ -1571,7 +1649,7 @@ export const TABLE_COLUMNS = {
   schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health', 'contact_id'],
-  social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
+  social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending'],
   team_board_comments: ['id', 'board_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved', 'created_at'],
   team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
@@ -1620,7 +1698,7 @@ export const NULLABLE_COLUMNS = {
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
-  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
@@ -1646,6 +1724,9 @@ export const NULLABLE_COLUMNS = {
   newsletter_subscribers: [],
   notification_log: ['recipient_id', 'entity_type', 'entity_id', 'sent_at', 'error', 'read_at', 'claimed_at'],
   post_analytics: ['item_id', 'publish_job_id', 'platform', 'platform_post_url', 'views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'engagement_rate', 'sync_status', 'published_at', 'source', 'performance', 'interactors'],
+  post_comments: ['version', 'file_url', 'slide_index', 'author_id', 'assigned_to', 'resolved_at', 'resolved_by'],
+  post_events: ['from', 'to', 'actor_id', 'hat', 'on_behalf_of_client', 'version', 'note'],
+  post_versions: ['caption', 'scheduled_for', 'frozen_by', 'from_migration'],
   projects: ['gallery_urls', 'website_url', 'client_id', 'result'],
   prospect_events: ['by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
@@ -1660,7 +1741,7 @@ export const NULLABLE_COLUMNS = {
   schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health', 'contact_id'],
-  social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note'],
+  social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending'],
   team_board_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
   team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
@@ -1716,7 +1797,7 @@ export const JSON_COLUMNS = {
   clients: ['brand_profile', 'default_scheduler_ids', 'instagram_locations'],
   content_applications: [],
   content_assets: [],
-  content_items: ['link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'client_rounds', 'posted_slides', 'asked_ids'],
+  content_items: ['link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'client_rounds', 'client_frozen', 'posted_slides', 'asked_ids'],
   deliverable_groups: ['planned'],
   drive_connection: [],
   drive_files: [],
@@ -1742,6 +1823,9 @@ export const JSON_COLUMNS = {
   newsletter_subscribers: [],
   notification_log: [],
   post_analytics: ['raw', 'performance', 'interactors'],
+  post_comments: [],
+  post_events: [],
+  post_versions: ['slides', 'per_channel', 'channels'],
   projects: [],
   prospect_events: [],
   prospects: ['weakness_tags'],
@@ -1756,7 +1840,7 @@ export const JSON_COLUMNS = {
   schedule_notes: [],
   shoot_proposals: [],
   social_accounts: ['health'],
-  social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids'],
+  social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending'],
   team_board_comments: [],
   team_boards: ['canvas_cards'],
   team_invites: [],
@@ -1837,6 +1921,9 @@ export const JSON_ARRAY_COLUMNS = {
   newsletter_subscribers: [],
   notification_log: [],
   post_analytics: [],
+  post_comments: [],
+  post_events: [],
+  post_versions: ['slides', 'channels'],
   projects: [],
   prospect_events: [],
   prospects: [],
@@ -1866,7 +1953,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todos'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'content_items', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'follower_snapshots', 'followers', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todos'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

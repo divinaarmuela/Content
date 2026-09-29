@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   contentTypeForFiles, firstSource, isFileDrag, MAX_ITEM_TITLE, newPostSources,
-  refusedFilesLine, titleForUpload, uploadOutcomeLine, usableUploadFiles,
+  refusedFilesLine, titleForUpload, UPLOAD_OUTCOME_LINE, usableUploadFiles,
 } from '@/app/lib/schedule-upload-core'
 
 /**
@@ -77,15 +77,10 @@ describe('what the piece behind the post is called', () => {
   })
 })
 
-describe('what a person is told before they press anything', () => {
-  it('an account manager is told nothing waits for approval', () => {
-    expect(uploadOutcomeLine(true)).toContain('Nothing waits for approval')
-  })
-
-  it('everybody else is told who checks it — and it is not a refusal', () => {
-    const line = uploadOutcomeLine(false)
-    expect(line).toContain('account manager checks it')
-    expect(line.toLowerCase()).not.toContain('cannot')
+describe('what a person is told before they press anything (29 Sep 2026)', () => {
+  it('everyone, managers too, is told the post goes to the quality check — never "nothing waits for approval"', () => {
+    expect(UPLOAD_OUTCOME_LINE).toContain('quality check')
+    expect(UPLOAD_OUTCOME_LINE).not.toMatch(/nothing waits/i)
   })
 })
 

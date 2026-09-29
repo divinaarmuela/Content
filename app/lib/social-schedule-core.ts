@@ -12,11 +12,12 @@
  *   1. ONLY APPROVED WORK GETS POSTED. Eligibility is `content_items.status`
  *      (workflow-core) plus real slides (`postSlides`, version-files-core).
  *      Nothing here decides what a slide is.
- *   2. THE POST'S APPROVAL IS THE ITEM'S. `social_posts.status` MIRRORS
- *      `content_items.posting_approval_state` (posting-approval-core) and adds
- *      the publish lifecycle on top of it, read off `publish_jobs`. There is
- *      no second state machine, and `mirrorStatus` is a projection, never a
- *      source of truth.
+ *   2. A POST'S STAGE IS ITS OWN. Where a post stands is `social_posts.stage`,
+ *      and the rules for it live in `post-stage-core` (the posting rebuild,
+ *      29 Sep 2026). Nothing here works a post's state out of its edit card
+ *      or its jobs any more: the old `mirrorStatus` did, and drew a draft
+ *      nobody had approved as green "Approved" (audit S2). What the Schedule
+ *      page shows per stage is `schedule-stage-core`.
  *   3. A POSTING TIME BELONGS TO THE CLIENT'S ZONE. Which column a tile sits
  *      in is a fact about the audience, so every day key here comes from
  *      `dayKeyInZone`/`wallTimeIn` and every wall time goes back through
@@ -27,9 +28,8 @@
  * clocks change still has seven days in it, each of them once.
  */
 
-import { publishBlockReason, parseApprovalState } from './posting-approval-core'
 import {
-  LIVE_JOB_STATUSES, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
+  NETWORK_LABEL, optionProblems, PLATFORM_RULES,
   type Platform, type PostKind, type PostOptions,
 } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
@@ -41,26 +41,18 @@ import type { ItemStatus } from './workflow-core'
 
 /* ── the post ───────────────────────────────────────────────────────────── */
 
-/** What a planned post can be. The first four MIRROR the item's posting
- *  approval state; the last four are the publish lifecycle underneath it. */
+/**
+ * LEGACY: the old `social_posts.status` words. A post's stage is now
+ * `social_posts.stage` (`post-stage-core`'s POST_STAGES), and no Schedule
+ * page reads these. They stay only while other files (the server, P1, and
+ * `post-page-core`) still name them; the migration's `--drop-legacy` pass removes the
+ * column, and these go with it.
+ */
 export const SOCIAL_POST_STATUSES = [
   'draft', 'pending', 'approved', 'changes',
   'scheduled', 'published', 'failed', 'cancelled',
 ] as const
 export type SocialPostStatus = (typeof SOCIAL_POST_STATUSES)[number]
-
-/**
- * A post still BEING WRITTEN — the one the piece's next press should open
- * rather than start beside. Draft, waiting on approval, approved but not
- * yet booked, or sent back for changes. The server's one-open-post-per-
- * piece gate and the window's "open the existing one" read THIS list; they
- * used to keep their own, and the window's forgot `changes`, so a post sent
- * back for changes looked post-free to the window and the server refused
- * the second one it then started (the owner, 9 Sep 2026: "I can't post it").
- */
-export const OPEN_POST_STATUSES: readonly SocialPostStatus[] = ['draft', 'pending', 'approved', 'changes']
-export const isOpenPost = (status: unknown) =>
-  (OPEN_POST_STATUSES as readonly string[]).includes(String(status ?? ''))
 
 /** The tones the restyle draws a tile in. */
 export type TileTone = 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'muted' | 'red-outline'
@@ -69,7 +61,6 @@ export type TileTone = 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'muted' | 'r
 export type ScheduleItem = {
   status?: string | null
   content_type?: string | null
-  posting_approval_state?: unknown
   /** a files card's hand-in — when present, THIS is the approved media (24 Sep 2026) */
   final_files?: unknown
   edit_round?: unknown
@@ -98,8 +89,6 @@ export type ScheduleVersion = VersionLike & {
   id?: string
   version_number?: number | null
 }
-export type SchedulePost = { status?: string | null }
-export type ScheduleJob = { status?: string | null }
 
 /* ── eligibility ────────────────────────────────────────────────────────── */
 
@@ -224,9 +213,6 @@ export function clientSignsOffEveryPost(
 ): boolean {
   return client?.client_approval_required === true
 }
-
-/** The line under the button on such a client. */
-export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 
 /**
  * THE PIECES CAME THROUGH THE BOARD AND WERE SIGNED OFF THERE.
@@ -486,78 +472,7 @@ export function coverForSlide(
   return null
 }
 
-/* ── the status a tile wears ────────────────────────────────────────────── */
-
-/**
- * What the post IS right now, from the item's approval state and its jobs.
- *
- * A post's OWN status is read first when it is terminal: 'cancelled' is
- * something a person did to this post directly, and it must win even with
- * no jobs behind it — `canReschedule` already refuses to move a cancelled
- * post, and mirroring the item's approval state instead here would make the
- * tile claim it could still be moved when the drag handler would refuse it.
- *
- * Otherwise the jobs win when there are any, because a queued post has moved
- * past the approval question. Their order of precedence, in the
- * multi-channel case:
- *
- *   still going out  → 'scheduled'  — one channel left to go means the post
- *                                     as a whole has not happened yet
- *   anything failed  → 'failed'     — a failure needs a person more than a
- *                                     success needs applause
- *   anything posted  → 'published'
- *   all cancelled    → 'cancelled'
- *
- * With no jobs it is a straight mirror of `posting_approval_state`; an item
- * the gate never touched reads as a draft, which is what it is.
- */
-export function mirrorStatus(
-  item: ScheduleItem | null | undefined,
-  post: SchedulePost | null | undefined,
-  jobs: readonly ScheduleJob[] | null | undefined,
-): SocialPostStatus {
-  if (String(post?.status ?? '') === 'cancelled') return 'cancelled'
-
-  const list = (Array.isArray(jobs) ? jobs : []).map(j => String(j?.status ?? ''))
-  if (list.some(s => LIVE_JOB_STATUSES.includes(s))) return 'scheduled'
-  if (list.includes('failed')) return 'failed'
-  if (list.includes('published')) return 'published'
-  if (list.length > 0 && list.every(s => s === 'cancelled')) return 'cancelled'
-
-  const state = parseApprovalState(item?.posting_approval_state)
-  if (state) return state
-  // the gate was never used on this item: whatever the row calls itself, the
-  // post has not been sent anywhere, and that is a draft
-  return 'draft'
-}
-
-/**
- * Why this post cannot go out yet, in the one sentence the server would
- * refuse with — or null when nothing is in the way.
- *
- * A thin read of `publishBlockReason`, so the tile's tooltip, the composer
- * footer and `/api/social/publish` cannot drift into three different reasons.
- */
-export function blockReason(item: ScheduleItem | null | undefined): string | null {
-  return publishBlockReason(item?.posting_approval_state)
-}
-
-const TONES: Record<SocialPostStatus, TileTone> = {
-  pending: 'amber',
-  changes: 'red',
-  approved: 'green',
-  scheduled: 'blue',
-  published: 'ink',
-  draft: 'muted',
-  failed: 'red-outline',
-  cancelled: 'muted',
-}
-
-/** The tone a tile is drawn in. Anything unrecognised is muted — a tile whose
- *  state we cannot name must not shout. */
-export function tileTone(status: string | null | undefined): TileTone {
-  return TONES[String(status ?? '') as SocialPostStatus] ?? 'muted'
-}
+/* ── LEGACY: the tone of an old status word ─────────────────────────────── */
 
 /* ── the week grid ──────────────────────────────────────────────────────── */
 
@@ -775,33 +690,6 @@ export function monthCells(
       inMonth: d.getUTCMonth() + 1 === m && d.getUTCFullYear() === y,
     }
   })
-}
-
-/* ── moving a post ──────────────────────────────────────────────────────── */
-
-export type Reschedule =
-  | { ok: true; mode: 'move' | 'requeue' }
-  | { ok: false; reason: string }
-
-const NO_MOVE: Record<string, string> = {
-  published: 'This post has already gone out, so it cannot be moved',
-  failed: 'This post did not go out — start a new one at the time you want',
-  cancelled: 'This post was cancelled, so it cannot be moved',
-}
-
-/**
- * May this tile be dragged, and what does dropping it cost?
- *
- * 'move' is a write of `scheduled_for` and nothing more. 'requeue' means the
- * provider is already holding the post: the existing job has to be cancelled
- * and a new one queued, so the caller has to be ready for that to fail and to
- * snap the tile back. Anything finished does not move at all.
- */
-export function canReschedule(post: SchedulePost | null | undefined): Reschedule {
-  const status = String(post?.status ?? '')
-  if (status === 'scheduled') return { ok: true, mode: 'requeue' }
-  const stop = NO_MOVE[status]
-  return stop ? { ok: false, reason: stop } : { ok: true, mode: 'move' }
 }
 
 /* ── suggested times ────────────────────────────────────────────────────── */
@@ -1054,16 +942,6 @@ export function applySlideLimit(
 
 /* ── one tile, joined ───────────────────────────────────────────────────── */
 
-/** Only what the join reads off a `social_posts` row. */
-export type TilePost = {
-  item_id?: string | null
-  channels?: unknown
-  publish_job_ids?: unknown
-  scheduled_for?: string | null
-  status?: string | null
-}
-/** A `publish_jobs` row, as the join needs it: its id and its status. */
-export type TileJob = ScheduleJob & { id?: string | null }
 /** A `social_accounts` row, as the join needs it. */
 export type TileAccount = {
   id?: string | null
@@ -1074,43 +952,8 @@ export type TileAccount = {
   active?: boolean | null
 }
 
-/** What a tile is drawn from, once the post, its item and its jobs are read
- *  together. Everything here is DERIVED — none of it is stored on the post. */
-export type PostTileFacts = {
-  /** the status the tile wears, from `mirrorStatus` */
-  live_status: SocialPostStatus
-  /** the colour that status is drawn in */
-  tone: TileTone
-  /** the NETWORKS this post goes to — never the account ids the row stores */
-  platforms: string[]
-  /** the one sentence the server would refuse to post with, or null */
-  block_reason: string | null
-}
-
 const asStrings = (v: unknown): string[] =>
   (Array.isArray(v) ? v : []).map(x => String(x ?? '')).filter(Boolean)
-
-/**
- * THIS POST'S jobs — matched only by the ids the post itself carries.
- *
- * Never by item. An item can carry a second post after the first was
- * cancelled, and matching by item makes the OLD post's cancelled job speak
- * for the new one: `mirrorStatus` sees "every job cancelled" and marks a
- * brand-new draft `cancelled` without anybody cancelling it. The server
- * (`social-schedule.ts`'s `jobsOf`) matches the same way, so the calendar and
- * the API cannot tell a person two different stories about one post.
- */
-export function jobsForPost(
-  post: TilePost | null | undefined,
-  jobsById: ReadonlyMap<string, TileJob>,
-): TileJob[] {
-  const out: TileJob[] = []
-  for (const id of asStrings(post?.publish_job_ids)) {
-    const job = jobsById.get(id)
-    if (job) out.push(job)
-  }
-  return out
-}
 
 /**
  * The networks a post goes to.
@@ -1176,57 +1019,15 @@ export function channelBlockReason(
     : `${dropped.length} of this post’s channels need reconnecting — it is on hold until somebody reconnects them`
 }
 
-/**
- * One tile's facts: what this post IS right now, in what colour, on which
- * networks, and what is standing in its way.
- *
- * Pure and separate from the page on purpose — this join is where a calendar
- * quietly starts disagreeing with the API, so it is the part that gets tests.
- */
-export function postTileFacts(
-  post: TilePost | null | undefined,
-  item: ScheduleItem | null | undefined,
-  jobsById: ReadonlyMap<string, TileJob>,
-  accounts: readonly TileAccount[] | null | undefined,
-): PostTileFacts {
-  const live = mirrorStatus(item, post as SchedulePost, jobsForPost(post, jobsById))
-  return {
-    live_status: live,
-    tone: tileTone(live),
-    platforms: postPlatforms(post?.channels, accounts),
-    // the SERVER's reason, read the server's way — `publishBlockReason` on the
-    // item's approval state, not a second opinion assembled here. The
-    // approval gate comes first when both apply: an unapproved post is not
-    // going out whatever its channels are doing.
-    block_reason: blockReason(item) ?? channelBlockReason(post?.channels, accounts),
-  }
-}
-
 /* ── what is on screen ──────────────────────────────────────────────────── */
 
-/**
- * A DRAFT IS NOT A PLAN. A file somebody uploaded and walked away from is
- * saved as a draft with a default time, and drawn on the week grid it
- * looked like something booked for that hour (the owner, 10 Sep 2026: "if
- * an admin or AM uploaded a file and just leaves it, don't show it on the
- * calendar… we have yet to schedule that"). So the grids — week, month,
- * preview, stories — draw only posts somebody has moved past draft:
- * waiting for approval, approved, scheduled, posted, did not go out. The
- * List still shows drafts, wherever their time is, and the rail counts them,
- * so a draft nobody can find is still a draft somebody can finish.
+/*
+ * WHICH POSTS THE GRIDS DRAW is `showsOnSchedule` in `schedule-stage-core`:
+ * Ready to post, Booked in and Posted, off the post's own stage (the owner's
+ * decision 1). Drafts and cancelled posts are lists of their own, never a
+ * tile — a deleted draft landing on the week as a "Cancelled" tile was
+ * audit S1.
  */
-export function showsOnGrid(post: { live_status: SocialPostStatus }): boolean {
-  return post.live_status !== 'draft'
-}
-
-/** Belongs in this week's List: on one of its days, or with no time yet, or
- *  a draft (which the grids never show, so the List is where it lives). */
-export function belongsInList(
-  post: { live_status: SocialPostStatus; scheduled_for: string | null },
-  onTheseDays: boolean,
-): boolean {
-  return !post.scheduled_for || post.live_status === 'draft' || onTheseDays
-}
 
 /** Does this instant fall on one of these days, in the client's zone? */
 export function onOneOfDays(
@@ -1278,10 +1079,7 @@ export function nowLineTop(
 
 /* ── the list view ──────────────────────────────────────────────────────── */
 
-export type ListablePost = { scheduled_for?: string | null; live_status?: string | null }
-
-/** the List's first heading: the drafts, which no grid draws (10 Sep 2026) */
-export const DRAFTS_GROUP_LABEL = 'Drafts — not on the calendar until scheduled'
+export type ListablePost = { scheduled_for?: string | null }
 
 export type ListGroup<T extends ListablePost> = {
   /** the client's day key, or '' for posts with no time yet */
@@ -1308,20 +1106,14 @@ export function groupForList<T extends ListablePost>(
 ): ListGroup<T>[] {
   const zone = safeZone(tz)
   const groups = new Map<string, T[]>()
-  const drafts: T[] = []
   for (const post of Array.isArray(posts) ? posts : []) {
-    // drafts first, together: they are the one kind of post no grid shows,
-    // so the List is where somebody comes to find them
-    if (post?.live_status === 'draft') { drafts.push(post); continue }
     const key = dayKeyInZone(post?.scheduled_for ?? null, zone) ?? ''
     const list = groups.get(key) ?? []
     list.push(post)
     groups.set(key, list)
   }
   const byTime = (a: T, b: T) => String(a?.scheduled_for ?? '').localeCompare(String(b?.scheduled_for ?? ''))
-  const out: ListGroup<T>[] = drafts.length
-    ? [{ dayKey: 'drafts', label: DRAFTS_GROUP_LABEL, posts: drafts.sort(byTime) }]
-    : []
+  const out: ListGroup<T>[] = []
   for (const dayKey of [...groups.keys()].sort()) {
     out.push({
       dayKey,
@@ -1514,7 +1306,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     } else if (Number.isFinite(now) && when <= now) {
       problems.push('That time has already gone — pick a later one')
     } else if (Number.isFinite(now) && when > now + POST_NOW_WINDOW_MS && when < now + MIN_LEAD_MS) {
-      problems.push(TOO_SOON)
+      problems.push(TIME_TOO_SOON_OR_NOW)
     }
   }
 
@@ -1534,7 +1326,9 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
  */
 export const MIN_LEAD_MS = 15 * 60_000
 export const POST_NOW_WINDOW_MS = 2 * 60_000
-export const TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle. To send it straight away, choose Post now.'
+/** The one "too soon" sentence — the composition check, the post window and the engine all say it. */
+export const TIME_TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle.'
+export const TIME_TOO_SOON_OR_NOW = `${TIME_TOO_SOON} To send it straight away, choose Post now.`
 
 /**
  * WHEN ARE TWO POSTS THE SAME POST? (the owner, 15 Sep 2026: "the Story
@@ -1559,35 +1353,3 @@ export function samePostKey(
     .map(c => `${c}:${String(perChannel?.[c]?.kind ?? '')}`).join(',')
   return `${files}#${where}`
 }
-
-/* ── the words of a booked post ─────────────────────────────────────────── */
-
-/**
- * WHAT A CHANGE TO A BOOKED POST IS (Raina, 22 Sep 2026: "I wanted to edit the
- * caption of a scheduled post but I'm not able to — do I have to discard it
- * first and create a new one?"). The words may change: the booking is pulled
- * back and made again with the new words, same time, same channels. The
- * media, the channels, their settings and the time may not — those are the
- * cancel-and-remake the server has always asked for. Nothing changed is
- * nothing to do.
- */
-export type BookedChange = 'none' | 'caption' | 'settings' | 'other'
-export function bookedChange(
-  post: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
-  input: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
-): BookedChange {
-  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-  const other = (input.slides !== undefined && !same(input.slides, post.slides))
-    || (input.channels !== undefined && !same(input.channels, post.channels))
-    || (input.scheduled_for !== undefined && String(input.scheduled_for ?? '') !== String(post.scheduled_for ?? ''))
-  if (other) return 'other'
-  // A CHANNEL'S OWN SETTINGS — the cover photo above all (the owner, 22 Sep 2026: "cover photo, like
-  // Instagram — same thing") — are re-booked the same way as the words
-  if (input.per_channel !== undefined && !same(input.per_channel, post.per_channel)) return 'settings'
-  const words = input.caption === undefined ? null : String(input.caption ?? '')
-  return words !== null && words !== String(post.caption ?? '') ? 'caption' : 'none'
-}
-
-/** how soon before it goes out the words may still change: the same minute the composer calls "now" */
-export const REWORD_LEAD_MS = 60_000
-export const TOO_LATE_TO_REWORD = 'It goes out within the minute — too late to change the words. Cancel it instead.'

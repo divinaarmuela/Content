@@ -5,8 +5,8 @@ import { Check, FolderOpen, Search, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import {
-  CLIENT_SIGNS_OFF_UPLOAD_NOTE, firstSource, newPostSources, refusedFilesLine,
-  uploadOutcomeLine, UPLOAD_ACCEPT, usableUploadFiles,
+  UPLOAD_OUTCOME_LINE, firstSource, newPostSources, refusedFilesLine,
+  UPLOAD_ACCEPT, usableUploadFiles,
   type NewPostSourceKey, type UploadedPostSummary,
 } from '@/app/lib/schedule-upload-core'
 import { friendlyError } from '@/app/lib/support-core'
@@ -503,12 +503,7 @@ export default function NewPostSources({
         </div>
 
         <p className="text-[12px] text-muted-foreground">
-          {/* a manager's upload clears itself whatever the client's switch
-              says (the owner, 9 Sep 2026); the "goes to them first" note is
-              for the people it is still true of */}
-          {clientSignsOff && !postWithoutApproval
-            ? CLIENT_SIGNS_OFF_UPLOAD_NOTE
-            : uploadOutcomeLine(postWithoutApproval)}
+          {UPLOAD_OUTCOME_LINE}
         </p>
 
         {source !== 'approved' && (

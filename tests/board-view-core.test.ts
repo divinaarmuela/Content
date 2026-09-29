@@ -4,12 +4,11 @@ import {
   COLUMN_EMPTY, LANE_EMPTY, OLDER_POSTS_NOTE, POSTED_DAYS,
   applyShow, boardHref, cardActions, cardLines, dropAction, dropOnLane, groupByLane, handedOver, handedToWords, initialsOf, isAssignedTo, needsWorkFirst, UPLOAD_FIRST,
   laneOf, moveTargets, overviewTiles, pageCards, pageLanes, reachableLanes, recentlyPosted, shortDate,
-  postApprovalOffer, postWaitingLine,
-  POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE, POST_WAITING_MANAGER,
   type BoardPage, type BoardViewCard, type BoardViewer,
 } from '../app/lib/board-view-core'
 import { BOARD_COLUMNS, columnOf, type BoardColumnKey } from '../app/lib/board-core'
 import { ITEM_STATUSES, TRANSITIONS, type ItemStatus } from '../app/lib/workflow-core'
+import { readPostState } from '../app/lib/post-stage-core'
 
 /**
  * What a card shows, what a card offers, what the Overview counts — the pure
@@ -304,10 +303,10 @@ describe('what each page shows', () => {
     expect(pageCards('editor', rows, manager).map(c => c.id)).toEqual(['a', 'b', 'c', 'd', 't', 'u'])
   })
 
-  it('Post approval is the end of the edit: only approved, booked and posted cards (13 Sep 2026)', () => {
-    // …plus the card handed to THIS scheduler ('t'), whatever column it sits in
-    expect(pageCards('scheduler', rows, scheduler).map(c => c.id)).toEqual(['c', 'd', 't'])
-    expect(pageLanes('scheduler').map(l => l.key)).toEqual(BOARD_COLUMNS.map(c => c.key))
+  it('Post approval draws no edit cards: its board is posts (the posting rebuild, 29 Sep 2026)', () => {
+    // it used to put edit cards on its lanes by a guess from the edit's status
+    // (audit B1, B3, L5); a post's place is its own stage, drawn by post-board-core
+    for (const v of [scheduler, manager, admin, editor]) expect(pageCards('scheduler', rows, v)).toEqual([])
   })
 
   it('a tagged question counts as assignment', () => {
@@ -318,7 +317,7 @@ describe('what each page shows', () => {
 })
 
 describe('the lanes each page arranges the eight columns into', () => {
-  const PAGES: BoardPage[] = ['production', 'editor', 'scheduler']
+  const PAGES: BoardPage[] = ['production', 'editor']
 
   it('Production is eight lanes, one column each, none folded', () => {
     const lanes = pageLanes('production')
@@ -327,13 +326,13 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(lanes.map(l => l.label)).toEqual(BOARD_COLUMNS.map(c => c.label))
   })
 
-  it('Production and Post approval have the same eight lanes — one column each', () => {
+  it('Production has the eight lanes — one column each', () => {
     // the owner's standing rule: work needs an internal check and the client's
     // word whoever is looking, so no page hides a stage. What differs is which
     // CARDS are shown and which button each role gets. Booked in is its own
     // column (11 Sep 2026): a post the channel holds is not yet posted.
     const keys = BOARD_COLUMNS.map(c => c.key)
-    for (const page of ['production', 'scheduler'] as const) {
+    for (const page of ['production'] as const) {
       const lanes = pageLanes(page)
       expect(lanes.map(l => l.key)).toEqual(keys)
       expect(lanes.every(l => l.columns.length === 1)).toBe(true)
@@ -361,9 +360,6 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(laneOf('editor', 'ready_to_post')).toBe('for_handoff')
     expect(laneOf('editor', 'draft')).toBe('in_progress')
     expect(laneOf('editor', 'quality_check')).toBe('quality_check')
-    expect(laneOf('scheduler', 'draft')).toBe('draft')
-    expect(laneOf('scheduler', 'with_client')).toBe('with_client')
-    expect(laneOf('scheduler', 'ready_to_post')).toBe('ready_to_post')
   })
 
   it('every lane has an empty sentence, and the columns keep theirs', () => {
@@ -377,8 +373,9 @@ describe('the lanes each page arranges the eight columns into', () => {
       card({ id: 'a', status: 'draft_uploaded' }),
       card({ id: 'b', status: 'published' }),
       card({ id: 'c', status: 'revision_required' }),
-      // its POST approved, so Ready to post on every page (28 Sep 2026: an approved edit alone is the scheduler's Draft)
-      card({ id: 'd', status: 'approved_for_scheduling', posting_approval_state: 'approved' } as never),
+      // an approved edit is in Ready to post on every board of cards: nothing
+      // about a post moves it (the posting rebuild, 29 Sep 2026)
+      card({ id: 'd', status: 'approved_for_scheduling' }),
       card({ id: 'e', status: 'scheduled' }),
       card({ id: 'f', status: 'client_review' }),
     ]
@@ -408,7 +405,7 @@ describe('the lanes each page arranges the eight columns into', () => {
     })
 
     it('lists every lane, empty ones included, and never loses a card', () => {
-      expect(groupByLane(pageLanes('scheduler'), []).map(x => x.cards)).toEqual(BOARD_COLUMNS.map(() => []))
+      expect(groupByLane(pageLanes('production'), []).map(x => x.cards)).toEqual(BOARD_COLUMNS.map(() => []))
       for (const page of PAGES) {
         const total = groupByLane(pageLanes(page), rows).reduce((n, x) => n + x.cards.length, 0)
         expect(total, page).toBe(rows.length)
@@ -433,7 +430,7 @@ describe('the lanes each page arranges the eight columns into', () => {
       const free = dropOnLane(card({ status: 'quality_check', client_approval_required: false }), lane('editor', 'for_handoff'), joy)
       expect(free.ok && free.column).toBe('ready_to_post')
       expect(free.ok && free.action.to).toBe('approved_for_scheduling')
-      const back = dropOnLane(card({ status: 'client_review' }), lane('scheduler', 'draft'), manager)
+      const back = dropOnLane(card({ status: 'client_review' }), lane('production', 'draft'), manager)
       expect(back.ok && back.column).toBe('draft')
     })
 
@@ -454,7 +451,7 @@ describe('the lanes each page arranges the eight columns into', () => {
       // the editor's Posted lane is called Done, so the refusal says so
       const same = dropOnLane(card({ status: 'published' }), lane('editor', 'done'), scheduler)
       expect(same).toEqual({ ok: false, reason: 'Already in Done' })
-      expect(dropOnLane(card({ status: 'published' }), pageLanes('scheduler').find(l => l.key === 'posted')!, scheduler))
+      expect(dropOnLane(card({ status: 'published' }), pageLanes('production').find(l => l.key === 'posted')!, scheduler))
         .toEqual({ ok: false, reason: 'Already in Posted' })
       expect(dropOnLane(card(), lane('editor', 'in_progress'), editor)).toEqual({ ok: false, reason: 'Already in In Progress' })
       expect(dropOnLane(card(), lane('production', 'draft'), editor)).toEqual({ ok: false, reason: 'Already in Draft' })
@@ -498,14 +495,13 @@ describe('Posted keeps the last two weeks', () => {
     expect(recentlyPosted(card({ status: 'approved_for_scheduling', updated_at: '2025-01-01' }), TODAY)).toBe(true)
   })
 
-  it('pageCards applies the cut on all three pages, and only with a date', () => {
+  it('pageCards applies the cut on both boards of cards, and only with a date', () => {
     const rows = [
       card({ id: 'old', owner_id: 'ed', status: 'published', updated_at: '2026-07-01T00:00:00Z' }),
       card({ id: 'new', owner_id: 'ed', status: 'scheduled', updated_at: '2026-09-05T00:00:00Z' }),
       card({ id: 'ready', owner_id: 'ed', status: 'approved_for_scheduling', updated_at: '2026-07-01T00:00:00Z' }),
     ]
     expect(pageCards('production', rows, manager, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
-    expect(pageCards('scheduler', rows, scheduler, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
     expect(pageCards('editor', rows, editor, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
     // a manager sees every lane, with the same cut on old posted cards
     expect(pageCards('editor', rows, manager, TODAY).map(c => c.id)).toEqual(['new', 'ready'])
@@ -571,30 +567,42 @@ describe('each role\'s Overview', () => {
     expect(tiles[2].href).toBe('/dashboard/editor?show=back')
   })
 
-  it('a scheduler: ready, going out today, waiting on an account', () => {
+  it('a scheduler: ready, going out today, waiting on an account — counted from POSTS (audit B12)', () => {
+    const post = (id: string, stage: string, client_id = 'c1', scheduled_for: string | null = null) =>
+      readPostState({ id, client_id, stage, rev: 1, stage_at: '2026-09-05T00:00:00Z', created_by: 'x', scheduled_for, timezone: 'Australia/Melbourne' })!
     const tiles = overviewTiles({
       viewer: scheduler, cards: rows, today: TODAY,
       postingToday: new Set(['f']), connectedClientIds: new Set(['c1']),
+      // going out today is a BOOKED POST whose time is today — p5 is booked for another day
+      posts: [post('p1', 'ready', 'c9'), post('p2', 'ready'), post('p3', 'with_client'),
+        post('p4', 'booked', 'c1', `${TODAY}T02:00:00.000Z`), post('p5', 'booked', 'c1', '2030-01-01T02:00:00.000Z')],
     })
-    expect(tiles.map(t => t.key)).toEqual(['ready', 'today', 'account'])
-    expect(tiles[0].stats[0].value).toBe(1)
-    expect(tiles[0].href).toBe('/dashboard/scheduler?column=ready_to_post')
+    expect(tiles.map(t => t.key)).toEqual(['ready', 'today', 'account', 'posts'])
+    // two posts approved and not booked — whatever the edit cards say
+    expect(tiles[0].stats[0].value).toBe(2)
+    // approved posts are booked on the Schedule page (the owner's decision 1)
+    expect(tiles[0].href).toBe('/dashboard/social/schedule')
     expect(tiles[1].stats[0].value).toBe(1)
-    expect(tiles[2].stats[0].value).toBe(1)          // e — client c9 has no channel
+    expect(tiles[2].stats[0].value).toBe(1)          // p1 — client c9 has no channel
+    expect(tiles[3].href).toBe('/dashboard/scheduler')
+    expect(tiles[3].stats.find(s => s.label === 'with a client')?.value).toBe(1)
   })
 
   it('an account manager: their clients, what needs their decision, what is with clients', () => {
     const tiles = overviewTiles({ viewer: manager, cards: rows, today: TODAY, clientCount: 4 })
-    expect(tiles.map(t => t.key)).toEqual(['clients', 'decide', 'quality', 'with_client'])
+    expect(tiles.map(t => t.key)).toEqual(['clients', 'decide', 'quality', 'with_client', 'posts'])
     expect(tiles[0].stats[0].value).toBe(4)
     // c is a check nobody was asked for: not "waiting on you", but on its own line
     expect(tiles[1].stats).toEqual([{ value: 0, label: 'waiting on you' }, { value: 1, label: 'nobody asked yet' }])
-    expect(tiles[1].href).toBe('/dashboard/scheduler?show=decide')
+    // edit decisions live on the Editor board — Post approval holds posts only
+    expect(tiles[1].href).toBe('/dashboard/editor?show=decide')
     expect(tiles[2].key).toBe('quality')
     // the checker's desk is the Editor page's Quality check lane (14 Sep 2026)
     expect(tiles[2].href).toBe('/dashboard/editor?column=quality_check')
-    expect(tiles[3].stats[0].value).toBe(1)          // d
-    expect(tiles[3].href).toBe('/dashboard/scheduler?column=with_client')
+    expect(tiles[3].stats[0].value).toBe(1)          // d — an EDIT with the client
+    expect(tiles[3].href).toBe('/dashboard/editor?column=with_client')
+    // posts with a client are the posts tile's, on Post approval
+    expect(tiles[4].href).toBe('/dashboard/scheduler')
   })
 
   it('a super admin: the agency at a glance, plus Leads', () => {
@@ -623,85 +631,31 @@ describe('a post made on the Schedule page is not production work', () => {
     { id: 'work', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1', title: 'Work', client_id: 'c1', due_date: null },
     { id: 'adhoc', status: 'draft_uploaded' as ItemStatus, owner_id: 'u1', title: 'Post', client_id: 'c1', due_date: null, adhoc_post: true },
   ]
-  it('keeps its card, stays off Production and Editor, and lives on Post approval (8 Sep 2026)', () => {
+  it('keeps its card, and stays off every board of cards — its POST is on Post approval (audit V13)', () => {
     for (const page of ['production', 'editor'] as const) {
       const ids = pageCards(page, rows, viewer).map(c => c.id)
       expect(ids, page).toEqual(['work'])
     }
-    // Post approval is the END of the edit (13 Sep 2026): a card being
-    // made or checked is not there; it arrives once approved and ready to post
-    expect(pageCards('scheduler', rows, viewer).map(c => c.id)).toEqual(['adhoc'])
-    const checking = { ...rows[0], status: 'quality_check' as ItemStatus }
-    expect(pageCards('scheduler', [checking, rows[1]], viewer).map(c => c.id)).toEqual(['adhoc'])
-    const ready = { ...rows[0], status: 'approved_for_scheduling' as ItemStatus }
-    expect(pageCards('scheduler', [ready, rows[1]], viewer).map(c => c.id)).toEqual(['work', 'adhoc'])
+    expect(pageCards('scheduler', rows, viewer)).toEqual([])
   })
 })
 
-/* ── a post waiting on somebody ─────────────────────────────────── */
+/* ── a post is not answered on a card (the posting rebuild, 29 Sep 2026) ── */
 
-/**
- * `posting_approval_state === 'pending'` used to be reachable from the bell
- * and the email and nowhere else — the card drew nothing and the side panel
- * deliberately drew nothing. An account manager who works from the board was
- * holding somebody up with nothing on any screen to press.
- */
-describe('a post waiting on somebody, said on the card', () => {
-  const waiting = (over: Partial<BoardViewCard> = {}) => card({
-    status: 'approved_for_scheduling', posting_approval_state: 'pending', ...over,
+describe('a post is not answered on an edit card', () => {
+  it('the card offers only the edit\u2019s own moves, whatever a post made from it is doing', () => {
+    // it used to put "Approve the post" first, even while the post was with the client (audit B7)
+    for (const v of [manager, admin, scheduler]) {
+      const { primary, more } = cardActions(card({ status: 'approved_for_scheduling' }), v)
+      for (const a of [primary, ...more].filter(Boolean)) expect(['transition', 'send_back']).toContain(a!.kind)
+    }
   })
 
-  it('says nothing at all when no post is waiting', () => {
-    expect(postWaitingLine(card(), manager)).toBeNull()
-    expect(postApprovalOffer(card(), manager)).toBeNull()
-    expect(postWaitingLine(waiting({ posting_approval_state: 'approved' }), manager)).toBeNull()
-  })
-
-  it('tells the person who can answer that it is theirs, and offers the two answers', () => {
-    expect(postWaitingLine(waiting(), manager)).toBe(POST_WAITING_LINE)
-    expect(POST_WAITING_LINE).toBe('A post is waiting on your OK')
-    const offer = postApprovalOffer(waiting(), manager)
-    expect(offer?.primary).toEqual({ kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL })
-    expect(offer?.changes).toEqual({ kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL })
-    expect(postApprovalOffer(waiting(), admin)).not.toBeNull()
-  })
-
-  it('tells everybody else whose wait it is, and offers them nothing to press', () => {
-    expect(postWaitingLine(waiting(), scheduler)).toBe(POST_WAITING_MANAGER)
-    expect(postApprovalOffer(waiting(), scheduler)).toBeNull()
-    const withClient = waiting({ posting_client_required: true })
-    expect(postWaitingLine(withClient, scheduler)).toBe(POST_WAITING_CLIENT)
-    expect(POST_WAITING_CLIENT).toBe('A post is waiting on the client')
-  })
-
-  it('is the card\'s primary action for the person who may answer, with the ordinary move behind it', () => {
-    const { primary, more } = cardActions(waiting(), manager)
-    expect(primary).toEqual({ kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL })
-    expect(more).toContainEqual({ kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL })
-    // nothing is taken away: the move the card had is still offered
-    const plain = cardActions(card({ status: 'approved_for_scheduling' }), manager)
-    if (plain.primary) expect(more).toContainEqual(plain.primary)
-  })
-
-  it('changes nobody else\'s card', () => {
-    expect(cardActions(waiting(), scheduler))
-      .toEqual(cardActions(card({ status: 'approved_for_scheduling' }), scheduler))
-  })
-
-  /**
-   * Media uploaded straight onto the Schedule page keeps its card off all
-   * three boards (`adhoc_post`). A post on such a card waiting on THIS
-   * person is the one exception, and only on the Scheduler board — nobody
-   * should be asked for an answer they have no way to give.
-   */
-  it('keeps an ad-hoc piece on the Post approval board, every column, and off the other two (8 Sep 2026)', () => {
-    const adhoc = waiting({ id: 'ad1', adhoc_post: true })
-    expect(pageCards('scheduler', [adhoc], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
-    expect(pageCards('scheduler', [adhoc], scheduler, TODAY).map(c => c.id)).toEqual(['ad1'])
-    expect(pageCards('production', [adhoc], manager, TODAY)).toEqual([])
-    expect(pageCards('editor', [adhoc], manager, TODAY)).toEqual([])
-    const answered = waiting({ id: 'ad1', adhoc_post: true, posting_approval_state: 'approved' })
-    expect(pageCards('scheduler', [answered], manager, TODAY).map(c => c.id)).toEqual(['ad1'])
+  it('board-view-core reads no post-approval field and imports no posting-approval rule', () => {
+    const src = readFileSync('app/lib/board-view-core.ts', 'utf8')
+    expect(src).not.toMatch(/posting_approval_state|posting_client_required|client_sent\b/)
+    expect(src).not.toContain('posting-approval-core')
+    expect(src).not.toMatch(/postingColumn|postWaitingLine|postApprovalOffer|POST_APPROVAL_FROM/)
   })
 })
 
@@ -738,7 +692,7 @@ describe('the card menu on a settled card', () => {
   const src = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
   it('hides Hand to and Change the kind of work once a card is booked or posted', () => {
     expect(src).toContain("const settled = card.status === 'scheduled' || card.status === 'published'")
-    expect(src).toContain('{!settled && !adhocPost && !editorFace && !schedulerFace && (')
+    expect(src).toContain('{!settled && !adhocPost && !editorFace && (')
     expect(src).toContain('{onHandTo && !settled && (')
   })
 })
@@ -767,7 +721,7 @@ describe('a general user\u2019s Overview and an empty card', () => {
   it('gives a general user their own tiles, never the manager\u2019s decision tiles', () => {
     const general = { id: 'u-general', role: 'general' as const }
     const tiles = overviewTiles({ viewer: general, cards: [], today: TODAY })
-    expect(tiles.map(t => t.key)).toEqual(['assigned', 'due', 'ready'])
+    expect(tiles.map(t => t.key)).toEqual(['assigned', 'due', 'ready', 'posts'])
     expect(tiles.some(t => /decision|quality/i.test(t.title))).toBe(false)
   })
   it('says an empty card needs the final before it goes for checking', () => {
@@ -793,7 +747,7 @@ describe('the quality reviewer’s "Ask for changes" asks for the words (14 Sep 
 })
 
 describe('handed to a scheduler — the editor\u2019s road ends in Done (17 Sep 2026)', () => {
-  it('a card with schedulers sits in Done on the Editor page whatever its status, and stays put on pages without a Done lane', () => {
+  it('a card with schedulers sits in Done on the Editor page whatever its status, and stays put on a board without a Done lane', () => {
     const rows = [
       { id: 'h', status: 'draft_uploaded', scheduler_ids: ['s1'] },
       { id: 'e', status: 'draft_uploaded' },
@@ -802,8 +756,8 @@ describe('handed to a scheduler — the editor\u2019s road ends in Done (17 Sep 
     const editor = groupByLane(pageLanes('editor'), rows)
     expect(editor.find(x => x.lane.key === 'done')!.cards.map(c => (c as { id: string }).id)).toEqual(['h'])
     expect(editor.find(x => x.lane.key === 'in_progress')!.cards.map(c => (c as { id: string }).id)).toEqual(['e', 'p'])
-    const scheduler = groupByLane(pageLanes('scheduler'), rows)
-    expect(scheduler.find(x => x.lane.key === 'draft')!.cards.length).toBe(3)
+    const production = groupByLane(pageLanes('production'), rows)
+    expect(production.find(x => x.lane.key === 'draft')!.cards.length).toBe(3)
     expect(handedOver({ scheduler_ids: ['s1'] })).toBe(true)
     // the owner, 24 Sep 2026: handed over is Done on the Editor page whatever the client is doing
     expect(handedOver({ scheduler_ids: ['s1'], status: 'client_review' })).toBe(true)

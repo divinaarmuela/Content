@@ -2,20 +2,24 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
-  Batch, Client, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow, WorkKind,
+  Batch, Client, PostComment, PostVersion, TeamUser as TeamUserRow, TeamUserClient, ContentItem as ContentItemRow, WorkKind,
 } from '@/lib/db-types'
 import { performTransition, logActivity, type ContentItem } from '../../../lib/workflow'
 import { itemPath, type ItemStatus } from '../../../lib/workflow-core'
-import { NOT_WITH_YOU, planDecidable, portalActions } from '../../../lib/portal-core'
+import {
+  NOT_WITH_YOU, clientMayNote, clientPostView, planDecidable, portalActions, readFrozenPost, reviewFiles,
+} from '../../../lib/portal-core'
 import { notify, renderEmail, escapeHtml } from '../../../lib/mailer'
 import { announceBatchChange, announceItemChange } from '../../../lib/production-live'
-import { actOnPostingApproval } from '../../../lib/posting-approval'
 import { AuthzError, requireRole, type TeamUser } from '../../../lib/authz'
 import { clientDecisionOpen, clientDecisionPatch } from '../../../lib/shoot-sop-core'
 import { notifyClientPlanDecision } from '../../../lib/shoot-sop-notify'
 import { DASHBOARD_URL } from '../../../lib/app-url'
-import { clientByPortalToken } from '../../../lib/portal-owner'
-import { slotMissed, slotWords } from '../../../lib/post-to-client-core'
+import { portalOwnerByToken } from '../../../lib/portal-owner'
+import { belongsToPortal, type PortalScope } from '../../../lib/portal-owner-core'
+import { postVersionId, readPostState, type PostState } from '../../../lib/post-stage-core'
+import { refusalStatus, type PostActRefused } from '../../../lib/post-act-contract'
+import { clientActOnPost } from '../../../lib/post-stage'
 
 
 /**
@@ -78,46 +82,106 @@ async function notifyManagers(clientId: string, item: { id: string; adhoc_post?:
   }
 }
 
-/**
- * APPROVED AFTER ITS TIME (the owner, 28 Sep 2026: "what happens to the 6 pm one"). The client's yes books the post
- * in — unless its time has gone, when the booking is refused and the post sat approved with nobody told. Now the
- * client's account managers and whoever built the post are emailed: approved, needs a new time. Best effort.
+/* ── THE CLIENT AND A POST (the posting rebuild, 29 Sep 2026) ──────────────
+ *
+ * Three things a client may do to a post, and only while it is WITH THEM, for
+ * the version they were sent, before its approve-by time (SPEC §4.4, audit
+ * V5, P3, P9): approve it, ask for a change (with words), or leave a note on
+ * one of its files or on the whole post (decision 9). The decisions go to the
+ * one writer (`clientActOnPost`, package P1), which runs the same rules inside
+ * a claim — this route asks first only so the client reads plain words, never
+ * a stage name. A note is written only once the move it came with landed, so
+ * a refused answer never leaves a note behind claiming it happened.
  */
-async function tellTeamApprovedLate(clientId: string, item: { id: string; title?: string | null; adhoc_post?: unknown }, clientName: string): Promise<void> {
-  const posts = await table<{ id: string; item_id: string; status: string; scheduled_for: string | null; timezone?: string | null; created_by?: string | null }>('social_posts')
-    .list({ by: { item_id: item.id } as never }).catch(() => [])
-  // a time that had gone, or no time at all (approval asked without one — 28 Sep 2026): either way it needs a time now
-  const late = posts.filter(p => p.status === 'approved' && (!p.scheduled_for || slotMissed(p.scheduled_for)))
-  if (late.length === 0) return
-  const when = late[0].scheduled_for ? slotWords(String(late[0].scheduled_for), String(late[0].timezone ?? 'Australia/Melbourne')) : null
-  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
-  const data = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
-  const people = new Map<string, { id: string; email: string; role: string }>()
-  for (const r of data) {
-    const u = r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null
-    if (u && u.active_status && (u.role === 'account_manager' || u.role === 'super_admin')) people.set(u.id, u)
+
+type PostBody = Record<string, unknown>
+
+/** The client's words for a refusal. A stage name or a hat is the team's language, not theirs. */
+function refusalForClient(r: PostActRefused): { error: string; status: number } {
+  const status = refusalStatus(r.code)
+  if (r.code === 'missed' || r.code === 'version' || r.code === 'note') return { error: r.reason, status }
+  if (r.code === 'not_found' || r.code === 'wrong_stage' || r.code === 'not_allowed') return { error: NOT_WITH_YOU, status }
+  return { error: 'That did not go through — reload the page and try again.', status }
+}
+
+/** Is this post on THIS portal? A person's portal holds only their own pieces' posts. */
+async function postOnPortal(post: PostState, scope: PortalScope): Promise<boolean> {
+  if (!post.source_item_id) return scope.kind === 'business'
+  const item = await table<ContentItemRow>('content_items').get(post.source_item_id).catch(() => null)
+  // the piece was deleted: the post stays the business's (audit S9)
+  if (!item) return scope.kind === 'business'
+  return belongsToPortal(item as { for_contact_id?: string | null }, scope)
+}
+
+async function actOnClientPost(body: PostBody, client: Client, scope: PortalScope): Promise<NextResponse> {
+  const postId = String(body.post_id ?? '')
+  const action = String(body.action ?? '')
+  if (action !== 'client_approve' && action !== 'client_ask_change' && action !== 'post_note') {
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   }
-  for (const p of late) {
-    if (!p.created_by || people.has(p.created_by)) continue
-    const u = await table<{ id: string; email: string; role: string; active_status: boolean }>('team_users').get(p.created_by).catch(() => null)
-    if (u && u.active_status) people.set(u.id, u)
+  const version = typeof body.version === 'number' ? body.version : Number(body.version)
+  if (!Number.isInteger(version) || version < 1) {
+    return NextResponse.json({ error: 'This page did not say which version you saw — reload it and try again.' }, { status: 400 })
   }
-  const title = String(item.title ?? 'A post')
-  for (const m of people.values()) {
-    await notify({
-      actorName: clientName, actorEmail: 'portal+client@mdmmarketing.com.au',
-      eventType: 'client_approved_late', entityType: 'content_item', entityId: `${item.id}#approved-late`,
-      recipientId: m.id, recipientEmail: m.email,
-      subject: when ? `${clientName} approved ${title} — it needs a new time` : `${clientName} approved ${title} — pick a time to book it`,
-      bodyHtml: renderEmail(
-        when ? `${escapeHtml(clientName)} approved ${escapeHtml(title)} — it needs a new time` : `${escapeHtml(clientName)} approved ${escapeHtml(title)} — pick a time to book it`,
-        when
-          ? `<p>${escapeHtml(clientName)} approved it, but its time (${escapeHtml(when)}) had already passed, so it could not be booked. Pick a new time on the Schedule and it goes out then.</p>`
-          : `<p>${escapeHtml(clientName)} approved it. It was sent without a time, so it is not booked yet — pick a time on the Schedule and it goes out then.</p>`,
-        'Open it', `${DASHBOARD_URL}${itemPath(item as never, m.role)}`,
-      ),
-    }).catch(e => console.error('approved-late notify failed:', e))
+  const note = String(body.note ?? body.comment ?? '').trim().slice(0, 2000)
+  const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
+
+  const row = await table('social_posts').get(postId, { fresh: true }).catch(() => null)
+  const post = readPostState(row as Record<string, unknown> | null)
+  if (!post || post.client_id !== client.id || !(await postOnPortal(post, scope))) {
+    return NextResponse.json({ error: NOT_WITH_YOU }, { status: 404 })
   }
+  const now = new Date()
+  const view = clientPostView(post, now)
+  // asked here in the client's words; the writer asks again inside its claim
+  if (!view || view.state === 'missed' || !view.canAnswer) {
+    return NextResponse.json({ error: view?.state === 'missed' ? view.headline : NOT_WITH_YOU }, { status: 409 })
+  }
+  if (view.version !== version) {
+    return NextResponse.json({ error: 'This is not the version you looked at — it has changed since. Reload and look again.' }, { status: 409 })
+  }
+  const actor = await portalActor(client.id, client.name)
+  const speaker = authorName || client.name
+  const at = now.toISOString()
+  const noteRow = (fileUrl: string | null, slideIndex: number | null, bodyText: string, id?: string): Omit<PostComment, 'id'> & { id?: string } => ({
+    ...(id ? { id } : {}),
+    post_id: post.id, client_id: client.id, version,
+    file_url: fileUrl, slide_index: slideIndex,
+    // the client's words are the Client thread by definition (decision 9)
+    visibility: 'client',
+    author_id: actor.id, author_name: speaker, author_role: 'client',
+    body: bodyText, assigned_to: null, resolved_at: null, resolved_by: null,
+    created_at: at, updated_at: at,
+  })
+
+  if (action === 'post_note') {
+    if (!note) return NextResponse.json({ error: 'Write a note first' }, { status: 400 })
+    const fileUrl = typeof body.file_url === 'string' && body.file_url ? body.file_url : null
+    const frozen = readFrozenPost(await table<PostVersion>('post_versions').get(postVersionId(post.id, version)).catch(() => null) as Record<string, unknown> | null)
+    const files = frozen ? reviewFiles(frozen) : []
+    if (!clientMayNote(view, files, fileUrl)) {
+      return NextResponse.json({ error: 'That file is not on this version — reload the page and try again.' }, { status: 409 })
+    }
+    const index = fileUrl ? files.findIndex(f => f.url === fileUrl) : -1
+    const saved = await table<PostComment>('post_comments').insert(noteRow(fileUrl, index >= 0 ? index : null, note))
+    return NextResponse.json({ ok: true, note_id: saved.id })
+  }
+
+  if (action === 'client_ask_change' && !note) {
+    return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
+  }
+  const result = await clientActOnPost(client.id, post.id, { action, version, note: note || null })
+  if (!result.ok) {
+    const { error, status } = refusalForClient(result)
+    return NextResponse.json({ error, code: result.code }, { status })
+  }
+  // their words also sit in the post's Client thread, on the whole post, for this version
+  if (note) {
+    await table<PostComment>('post_comments')
+      .insert(noteRow(null, null, note, `${post.id}_r${result.post.rev}_client`))
+      .catch(e => console.error('portal post note:', e))
+  }
+  return NextResponse.json({ ok: true, stage: result.stage })
 }
 
 export async function POST(req: Request) {
@@ -127,9 +191,13 @@ export async function POST(req: Request) {
     const rawToken = String(body.token ?? '')
     const token = rawToken.split('--').pop() ?? rawToken
     let client: Client | null = null
+    // whose portal: the business's, or one person's (a person sees only their own pieces' posts)
+    let scope: PortalScope = { kind: 'business' }
     if (/^[0-9a-f-]{36}$/i.test(token)) {
-      client = await clientByPortalToken(token)
-    } else if (body.shoot_id) {
+      const owner = await portalOwnerByToken(token)
+      client = owner?.client ?? null
+      if (owner) scope = owner.scope
+    } else if (body.shoot_id || body.post_id) {
       // the signed-in portal has no token: the client's own login is the authority
       try {
         const me = await requireRole('client')
@@ -170,6 +238,10 @@ export async function POST(req: Request) {
       announceBatchChange({ batch_id: shootId, client_id: client.id, status: done.row.status ?? 'brief', kind: 'updated' })
       return NextResponse.json({ ok: true, decision })
     }
+
+    // ── A POST (the posting rebuild, 29 Sep 2026): its own branch, its own
+    //    rules. Never the edit card's fields; the one writer decides. ──
+    if (body.post_id) return await actOnClientPost(body, client, scope)
 
     const itemId = String(body.item_id ?? '')
     const found = await table<ContentItemRow>('content_items').get(itemId)
@@ -218,60 +290,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
     }
 
-    // ── the FINAL POST — the caption and timing, distinct from the asset
-    //    the client approved earlier. Their yes (or their note) lands on the
-    //    same columns the dashboard's gate uses, through the same function,
-    //    wearing the client hat. ──
+    // THE OLD POST DOORS ARE SHUT (the posting rebuild): a post is answered by
+    // its own id and the version the client saw, never by its edit card's id —
+    // that is how an internal-only post was approved from a guessed id (audit V5).
     if (action === 'approve_post' || action === 'request_post_changes') {
-      if (action === 'request_post_changes' && !comment) {
-        return NextResponse.json({ error: 'Tell us what to change — a short note is enough' }, { status: 400 })
-      }
-      // A YES AFTER ITS TIME IS CLOSED (the owner, 28 Sep 2026: "schedule a new time and go through approval again"):
-      // the post is re-timed by the team and sent again; a note asking for a change is still welcome
-      if (action === 'approve_post') {
-        const itemPosts = await table<{ id: string; status: string; scheduled_for: string | null }>('social_posts').list({ by: { item_id: item.id } as never }).catch(() => [])
-        const live = itemPosts.filter(p => p.status !== 'cancelled' && p.status !== 'published' && p.scheduled_for)
-        if (live.length > 0 && live.every(p => slotMissed(p.scheduled_for))) {
-          return NextResponse.json({ error: 'The time for this post has passed, so this approval has closed — we’ll send it to you again with a new time.' }, { status: 409 })
-        }
-      }
-      try {
-        await actOnPostingApproval(actor, item as never, {
-          action: action === 'approve_post' ? 'approve' : 'request_changes',
-          note: comment || undefined,
-        })
-      } catch (err) {
-        if (err instanceof AuthzError) {
-          return NextResponse.json({ error: err.message }, { status: err.status })
-        }
-        throw err
-      }
-      // the client's answer is the calendar's answer too — and their yes
-      // books the post in, in the name of whoever built it
-      const { syncFromItem, bookApprovedPosts } = await import('../../../lib/social-schedule')
-      await syncFromItem(item.id).catch(e =>
-        console.error('schedule mirror failed:', (e as Error).message))
-      if (action === 'approve_post') {
-        await bookApprovedPosts(item.id, null).catch(e =>
-          console.error('booking after the client approved failed:', (e as Error).message))
-        // …and a post whose time had gone could not be booked: the team hears it needs a new one
-        await tellTeamApprovedLate(client.id, item as never, speaker).catch(e =>
-          console.error('approved-late check failed:', (e as Error).message))
-      }
-      // whatever they wrote also reaches the thread, client-visible, and the
-      // client's managers — the same promise every portal note gets
-      if (comment) {
-        await table('item_comments').insert({
-          item_id: item.id,
-          author_id: actor.id,
-          visibility: 'client',
-          body: authorName ? `${comment}\n— ${authorName}` : comment,
-          resolved: false,
-        })
-        await notifyManagers(client.id, item, item.title, speaker, comment).catch(e =>
-          console.error('portal manager notify error:', e))
-      }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ error: 'This page is out of date — reload it and try again.' }, { status: 409 })
     }
 
     // for approve/request_changes, validate the transition FIRST: a refused

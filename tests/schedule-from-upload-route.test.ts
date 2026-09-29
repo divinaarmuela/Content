@@ -10,12 +10,11 @@ import type { Row } from '@/lib/db-types'
  * they should simply be here upload media, upload drive files any media" —
  * over the real `@/lib/db` on an in-memory Realtime Database:
  *
- *   an account manager uploads → the piece is made for them, at the state a
- *   post can go out from, with the sign-off recorded → the post is composed
- *   and booked in (dry run);
+ *   anybody uploads → the piece is made as the holder of the files, left at
+ *   draft, and the post is a DRAFT (the owner's decision 7) → the post is
+ *   composed, sent for quality check, passed and booked in (dry run);
  *
- *   a scheduler uploads the same file → the same piece, the same post, and
- *   the short cut is REFUSED: their post still waits for the manager's check;
+ *   a scheduler cannot pass their own post: it waits for the quality check;
  *
  *   a client who signs off every post changes nothing for a manager (the
  *   owner, 9 Sep 2026) — the switch is a note, not a gate.
@@ -83,8 +82,8 @@ vi.mock('../app/lib/storage', () => ({
 
 const fromUpload = await import('../app/api/social/schedule/from-upload/route')
 const one = await import('../app/api/social/schedule/[id]/route')
-const send = await import('../app/api/social/schedule/[id]/send/route')
-const book = await import('../app/api/social/schedule/[id]/schedule/route')
+// every move of a post goes through the one route (the posting rebuild, 29 Sep 2026)
+const actRoute = await import('../app/api/posts/[id]/act/route')
 
 /* ── the cast ───────────────────────────────────────────────────────────── */
 
@@ -159,13 +158,14 @@ const compose = (id: string, body: Record<string, unknown>) => json(
     method: 'PATCH', body: JSON.stringify(body),
   }), params(id)))
 
-const sendIt = (id: string, body: Record<string, unknown> = {}) => json(
-  send.POST(new Request('https://x.test/send', {
-    method: 'POST', body: JSON.stringify(body),
+/** one move on the post, with the rev (and version) the page would have drawn */
+const act = async (id: string, action: string, extra: Record<string, unknown> = {}) => {
+  const row = fake.rows('social_posts').find(p => p.id === id) as any
+  return json(actRoute.POST(new Request('https://x.test/act', {
+    method: 'POST',
+    body: JSON.stringify({ action, expect_rev: row?.rev ?? 0, version: row?.sent_version ?? undefined, ...extra }),
   }), params(id)))
-
-const bookIn = (id: string) => json(
-  book.POST(new Request('https://x.test/schedule', { method: 'POST' }), params(id)))
+}
 
 const items = () => fake.rows('content_items') as any[]
 const versions = () => fake.rows('asset_versions') as any[]
@@ -186,26 +186,25 @@ afterEach(() => {
 /* ── the account manager ────────────────────────────────────────────────── */
 
 describe('an account manager posts a file with no piece behind it', () => {
-  // THE QUALITY CHECK (Abby, 11 Sep 2026): a manager's upload is checked by
-  // the quality reviewer before it is scheduled, like everything else
-  it('sends the piece for quality check — the manager is not the last word any more', async () => {
+  // THE UPLOAD IS A POST (the owner's decision 7; review fix, 29 Sep 2026): the card is only the
+  // holder of its files and is moved through NO edit approval; the post is a Draft, and its own
+  // quality check is its approval
+  it('makes a draft post; the card is only its file holder and moves nowhere', async () => {
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(true)
-    expect(items()[0].status).toBe('quality_check')
-    expect(made.body.message).toContain('quality check')
-    // it went the ordinary way: straight to the gate, in this person's name (Abby's rule)
+    expect(items()[0].status).toBe('draft_uploaded')
+    expect(made.body.post.stage).toBe('draft')
+    expect(made.body.message).toContain('send it for quality check')
     const trail = (fake.rows('workflow_activity') as any[]).map(a => `${a.action}:${a.new_value ?? ''}`)
-    expect(trail).not.toContain('status_change:internal_review')
-    expect(trail).toContain('status_change:quality_check')
-    expect(trail.some(t => t.includes('approved_for_scheduling'))).toBe(false)
+    expect(trail.some(t => t.startsWith('status_change'))).toBe(false)
   })
 
-  it('makes the piece, the version and the post — and, as the quality reviewer, needs nobody', async () => {
+  it('makes the piece, the version and the post — even the quality reviewer’s upload is a draft', async () => {
     as(QA)
     const made = await upload()
     expect(made.status).toBe(200)
-    expect(made.body.needs_approval).toBe(false)
+    expect(made.body.needs_approval).toBe(true)
 
     // an ORDINARY item: a work kind, no shoot, owned by whoever uploaded it
     expect(items()).toHaveLength(1)
@@ -215,8 +214,8 @@ describe('an account manager posts a file with no piece behind it', () => {
     expect(item.work_kind_id).toBe('k-edit')
     expect(item.batch_id ?? null).toBeNull()
     expect(item.owner_id).toBe(AM.id)
-    // …already at the state a post can go out from
-    expect(item.status).toBe('approved_for_scheduling')
+    // …left at draft: its status is never read by a posting page (SPEC §2.5)
+    expect(item.status).toBe('draft_uploaded')
 
     // …with an ordinary version 1
     expect(versions()).toHaveLength(1)
@@ -228,24 +227,22 @@ describe('an account manager posts a file with no piece behind it', () => {
     expect(isAdHocUploadVersion(versions()[0])).toBe(true)
 
     // …and the post, as a draft, holding the file
-    expect(made.body.post.status).toBe('draft')
+    expect(made.body.post.stage).toBe('draft')
     expect(made.body.post.slides[0].url).toBe(FILE.url)
     expect(made.body.post.item_id).toBe(item.id)
   })
 
-  it('records the sign-off as this person’s own, on the ordinary edge', async () => {
+  it('records the upload as this person’s own, and approves nothing on the card', async () => {
     as(QA)
     await upload()
     const log = fake.rows('workflow_activity') as any[]
     const trail = log.map(a => `${a.action}:${a.new_value ?? ''}`)
     expect(trail.some(t => t.startsWith('created'))).toBe(true)
-    expect(trail.some(t => t.includes('approved_for_scheduling'))).toBe(true)
-    // the sign-off is THIS person's, never the app's — the app's own line is
-    // "Told: …", who the move reached (14 Sep 2026), and that one is nobody's
+    expect(trail.some(t => t.includes('approved_for_scheduling') || t.includes('quality_check'))).toBe(false)
     expect(log.filter(a => a.action !== 'notified').every(a => a.actor_id === AM.id)).toBe(true)
   })
 
-  it('composes and books the post in, with no approval step in the way', async () => {
+  it('composes the post, and — as the quality reviewer — sends, passes and books it, each its own step', async () => {
     as(QA)
     const made = await upload()
     const id = made.body.post.id as string
@@ -255,12 +252,17 @@ describe('an account manager posts a file with no piece behind it', () => {
     })
     expect(composed.status).toBe(200)
 
-    // 'direct': the post's own send-and-approve, performed for them
-    const sent = await sendIt(id, { mode: 'direct' })
-    expect(sent.status).toBe(200)
-    expect(sent.body.post.status).toBe('scheduled')
-    expect(sent.body.post.approval_mode).toBe('self')
-    expect(sent.body.post.approved_by).toBe(AM.id)
+    // the upload IS the post (decision 7): its own quality check is its approval
+    const sent = await act(id, 'send_to_qc')
+    expect(sent.status, JSON.stringify(sent.body)).toBe(200)
+    expect(sent.body.post.stage).toBe('quality_check')
+    const passed = await act(id, 'pass')
+    expect(passed.status, JSON.stringify(passed.body)).toBe(200)
+    expect(passed.body.post.stage).toBe('ready')
+    expect(passed.body.post.approval).toMatchObject({ by: AM.id, hat: 'quality_reviewer' })
+    const booked = await act(id, 'book')
+    expect(booked.status, JSON.stringify(booked.body)).toBe(200)
+    expect(booked.body.post.stage).toBe('booked')
     expect(jobs()).toHaveLength(1)
   })
 })
@@ -274,13 +276,11 @@ describe('a scheduler uploads the same file', () => {
     const made = await upload()
     expect(made.status).toBe(200)
     expect(made.body.needs_approval).toBe(true)
-    // 8 Sep 2026: the upload lands in Draft on the Post approval page and
-    // stays there until the scheduler presses "Send for approval" — it is not
-    // put in front of a manager by the upload itself
-    expect(made.body.message).toContain('send it to your account manager')
+    // the upload lands in Draft and stays there until the scheduler presses Send for quality check
+    expect(made.body.message).toContain('send it for quality check')
     expect(items()[0].status).toBe('draft_uploaded')
     expect(items()[0].owner_id).toBe(SCHEDULER.id)
-    expect(made.body.post.status).toBe('draft')
+    expect(made.body.post.stage).toBe('draft')
   })
 
   it('may still write the caption and the channels on the draft', async () => {
@@ -297,13 +297,16 @@ describe('a scheduler uploads the same file', () => {
     const id = made.body.post.id as string
     await compose(id, { caption: 'Doors open at six', channels: ['acc-1'] })
 
-    const sent = await sendIt(id, { mode: 'direct' })
-    expect(sent.status).toBe(403)
-    expect(String(sent.body.error)).toContain('account manager')
+    // it cannot be booked in behind the quality check's back
+    expect((await act(id, 'book')).status).toBe(409)
     expect(jobs()).toHaveLength(0)
-
-    // …and it cannot be booked in behind the approval's back either
-    expect((await bookIn(id)).status).toBe(409)
+    // …and once it is at the quality check, a scheduler cannot pass their own post
+    await compose(id, { scheduled_for: IN_TWO_DAYS() })
+    const sent = await act(id, 'send_to_qc')
+    expect(sent.status, JSON.stringify(sent.body)).toBe(200)
+    const passed = await act(id, 'pass')
+    expect(passed.status).toBe(403)
+    expect(passed.body.code).toBe('not_allowed')
     expect(jobs()).toHaveLength(0)
   })
 })
@@ -320,18 +323,22 @@ describe('a client who signs off every post', () => {
   // the owner, 9 Sep 2026: an account manager's upload clears itself and
   // schedules straight out, "even when the client has that lock" — the
   // switch is the line under the button, not a second person to wait on
-  it('does not slow the quality reviewer down', async () => {
+  it('sends the reviewer’s pass on to the client by default', async () => {
     as(QA)
     const made = await upload()
     expect(made.status).toBe(200)
-    expect(made.body.needs_approval).toBe(false)
-    expect(items()[0].status).toBe('approved_for_scheduling')
+    expect(made.body.needs_approval).toBe(true)
+    expect(items()[0].status).toBe('draft_uploaded')
 
     const id = made.body.post.id as string
-    await compose(id, { caption: 'Doors open at six', channels: ['acc-1'] })
-    const sent = await sendIt(id, { mode: 'direct' })
-    expect(sent.status).toBe(200)
-    expect(jobs()).toHaveLength(1)
+    await compose(id, { caption: 'Doors open at six', channels: ['acc-1'], scheduled_for: IN_TWO_DAYS() })
+    // a client who signs every post off is "team then client" by default: the quality reviewer's
+    // main button is "Passed — send to client", and a plain pass is refused for them (decision 13)
+    expect((await act(id, 'send_to_qc')).status).toBe(200)
+    const passed = await act(id, 'pass')
+    expect(passed.status).toBe(409)
+    expect(passed.body.code).toBe('steps')
+    expect(jobs()).toHaveLength(0)
   })
 })
 
@@ -409,75 +416,33 @@ describe('the files are checked before anything is written', () => {
   })
 })
 
-/* ── the Post approval page's one window (8 Sep 2026): the upload decides ── */
+/* ── an upload decides nothing about approval (review fix, 29 Sep 2026) ─── */
 
-describe('an upload that carries its decision', () => {
-  it('a scheduler asks a named manager: the card goes to the quality check, and they are named on it', async () => {
-    as(SCHEDULER)
-    const made = await upload({ decision: 'ask', reviewer_ids: [AM.id], note: 'Two options, pick one' })
-    expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('quality_check')
-    expect(items()[0].asked_ids).toEqual([AM.id])
-    expect(made.body.message).toContain('Sent for approval')
-  })
-  it('a scheduler asking nobody is told to pick someone', async () => {
-    as(SCHEDULER)
-    const made = await upload({ decision: 'ask', reviewer_ids: [] })
-    expect(made.status).toBe(400)
-    expect(String(made.body.error)).toContain('Pick who')
-  })
-  it('a scheduler cannot approve it or send it to the client here', async () => {
-    as(SCHEDULER)
-    expect((await upload({ decision: 'approve' })).status).toBe(403)
-    expect((await upload({ decision: 'client' })).status).toBe(403)
-    expect(items()).toHaveLength(0)
-  })
-  it('a manager approving on the spot sends it to the quality check first', async () => {
-    as(AM)
-    const made = await upload({ decision: 'approve', title: 'Doors' })
-    expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('quality_check')
-    expect(made.body.message).toContain('quality check')
-  })
-  it('the quality reviewer approves on the spot: Ready to post', async () => {
-    as(QA)
-    const made = await upload({ decision: 'approve', title: 'Doors' })
-    expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('approved_for_scheduling')
-    expect(made.body.message).toContain('Schedule page')
-  })
-  it('a manager sending it to the client sends it to the quality check first', async () => {
-    as(AM)
-    const made = await upload({ decision: 'client', note: 'Have a look' })
-    expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('quality_check')
-  })
-  it('the quality reviewer sends it to the client: With client', async () => {
-    as(QA)
-    const made = await upload({ decision: 'client', note: 'Have a look' })
-    expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('client_review')
-    expect(made.body.message).toContain('With client')
+describe('an upload that carries an old "decision"', () => {
+  it('is a draft post all the same — the card is not moved and nobody is asked', async () => {
+    for (const who of [SCHEDULER, AM, QA]) {
+      fake.restore()
+      fake = seed()
+      as(who)
+      const made = await upload({ decision: 'approve', reviewer_ids: [AM.id], note: 'Have a look' })
+      expect(made.status).toBe(200)
+      expect(items()[0].status).toBe('draft_uploaded')
+      expect(made.body.post.stage).toBe('draft')
+      expect(made.body.needs_approval).toBe(true)
+    }
   })
 })
 
-describe('their own post, cleared by themselves, is nobody’s email (the owner, 15 Sep 2026)', () => {
-  it('a manager’s direct upload records the quality check and the approval on the card, and notifies nobody', async () => {
+describe('an upload emails nobody (the owner, 15 Sep 2026; audit V12)', () => {
+  it('no "ready for quality check" about a card nobody will see on Post approval', async () => {
     const { notify } = await import('../app/lib/mailer')
     vi.mocked(notify).mockClear()
-    as(QA)
+    as(AM)
     const made = await upload()
     expect(made.status).toBe(200)
-    expect(items()[0].status).toBe('approved_for_scheduling')
     await new Promise(r => setTimeout(r, 60))
-    // no "now Quality check", no "passed in your place", no "needs a posting date"
     expect(vi.mocked(notify).mock.calls).toHaveLength(0)
     const log = fake.rows('workflow_activity') as any[]
-    // the card's history still says so, honestly
-    const toldLines = log.filter(a => a.action === 'notified')
-    expect(toldLines.length).toBeGreaterThan(0)
-    expect(toldLines.every(a => a.detail === 'Told nobody — their own post, cleared by themselves')).toBe(true)
-    expect(log.map(a => a.new_value)).toContain('quality_check')
-    expect(log.map(a => a.new_value)).toContain('approved_for_scheduling')
+    expect(log.map(a => a.new_value)).not.toContain('quality_check')
   })
 })

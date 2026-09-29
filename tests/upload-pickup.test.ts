@@ -16,9 +16,10 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  * Read off the source, because the rule is a shape: no unmount clear, a
  * pick-up of landed rows, and a clear only when the post is made.
  */
+// Post approval's New post runs the same NewPostSources since the posting
+// rebuild (29 Sep 2026) — one window uploads files for a post, everywhere
 const WINDOWS = [
   'app/dashboard/social/schedule/NewPostSources.tsx',
-  'app/dashboard/scheduler/SendForApprovalDialog.tsx',
 ]
 
 describe('an upload outlives the window that started it', () => {

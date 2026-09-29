@@ -25,13 +25,14 @@ import {
 } from '../../../../lib/followers-core'
 import {
   analyticsForPost, channelExtraLines, clientTone, inboxHref, likedLine, networkName,
-  NAMES_PENDING_LINE, NO_COMMENTS_LINE, peopleFrom, postStatusWords, PRIVATE_ACCOUNT_NOTE,
+  NAMES_PENDING_LINE, NO_COMMENTS_LINE, peopleFrom, postPageStatus, PRIVATE_ACCOUNT_NOTE,
   whoLikedNote,
 } from '../../../../lib/post-page-core'
 import { formatWithZone } from '../../../../lib/timezone-core'
 import { jobWords } from '../../../../lib/publish-activity-core'
 import type { PublishJob } from '../../../../lib/publish-activity-core'
 import DayGraph from './DayGraph'
+import { postedAt } from '../../../../lib/portal-core'
 
 /**
  * ONE POST, ON ITS OWN PAGE.
@@ -78,15 +79,17 @@ export default function PostView({ data }: { data: PostPageData }) {
 
   const failed = jobs.find(j => j.status === 'failed') ?? null
   const failure = failed ? jobWords(failed as unknown as PublishJob).detail : null
-  const wentOut = main?.published_at ?? jobs.find(j => j.published_at)?.published_at ?? post.sent_at ?? null
+  // when it went out: the analytics, the job, or the post's own per-network record — never `sent_at`,
+  // which the new engine does not write (review fix, 29 Sep 2026)
+  const st = post.state
+  const outAt = st && (st.stage === 'posted' || Object.keys(st.outcomes).length > 0) ? postedAt(st) : null
+  const wentOut = main?.published_at ?? jobs.find(j => j.published_at)?.published_at ?? outAt ?? null
   const dueAt = post.scheduled_for ?? null
   const whenLabel = wentOut
     ? formatWithZone(wentOut, tz, 'long')
     : dueAt ? formatWithZone(dueAt, tz, 'long') : null
-  const status = postStatusWords(
-    failed ? 'failed' : rows.length > 0 || wentOut ? 'published' : post.status,
-    { whenLabel, failure },
-  )
+  // the words come from the post's STAGE (decision 12) — no old status word is read or made
+  const status = postPageStatus(st, { whenLabel, failure, wentOut: !!wentOut || rows.length > 0 })
   const links = [
     ...rows.map(r => r.platform_post_url).filter((u): u is string => Boolean(u)),
     ...jobs.map(j => j.permalink).filter((u): u is string => Boolean(u)),

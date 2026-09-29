@@ -17,9 +17,7 @@ import { editorScope, schedulerScope, isBriefTask, type ScopeMode, type WorkItem
 import { CLAIMABLE_SCHEDULING_STATUSES, EDITING_CLOSED_STATUSES } from '../../app/lib/claim-core'
 import { openTaggedIds, taggedItemIds } from '../../app/lib/production-access'
 import { notifyTagged, resolveTags, settleTagNotifications, taggableTeam } from '../../app/lib/comment-tags'
-import { actOnPostingApproval } from '../../app/lib/posting-approval'
 import { planItemPublish } from '../../app/lib/production-publish'
-import { stateAfterPostEdit } from '../../app/lib/posting-approval-core'
 import { notificationHref } from '../../app/lib/notification-words'
 
 /**
@@ -791,105 +789,9 @@ describe('any team role creates work — the owner\'s rule, on real rows', () =>
   })
 })
 
-describe('final-post approval: the caption gets its own yes before anything queues', () => {
-  type Item = Parameters<typeof actOnPostingApproval>[1]
-
-  it('scheduler sends → queue refused → AM approves → queue opens', async () => {
-    const id = await makeItem({ owner_id: editor.id, caption: 'E2E final caption — exactly as it will post' })
-    await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'quality_check')
-    await gatePass(id)
-    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
-    await upsertScheduleEntry(scheduler, await fresh(id), {
-      platform: 'instagram',
-      scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
-    })
-
-    // (an account manager MAY send a post on — `maySendPostApproval`, since
-    // the client_too flow of 8 Sep 2026 — so that refusal is no longer a rule)
-
-    // the scheduler HOLDING the item sends the post for approval
-    const sent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
-    expect(sent.posting_approval_state).toBe('pending')
-
-    // the queue is refused while the answer is out — the same plan
-    // queueItemPublish and the publish route build from
-    const blocked = await planItemPublish(id)
-    expect(blocked.blocked).toMatch(/final approval/i)
-
-    // the scheduler cannot answer their own question
-    await expect(actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'approve' }))
-      .rejects.toThrow(/account manager|client/i)
-
-    // the AM approves the post — who and when are recorded
-    const approved = await actOnPostingApproval(am, await fresh(id) as unknown as Item, { action: 'approve' })
-    expect(approved.posting_approval_state).toBe('approved')
-    expect(approved.posting_approved_by).toBe(am.id)
-    expect(approved.posting_approved_at).toBeTruthy()
-
-    // …and the approval gate no longer stands in the plan's way (whatever it
-    // may still say about connected accounts, which are not this rule's)
-    const open = await planItemPublish(id)
-    expect(open.blocked ?? '').not.toMatch(/final approval/i)
-
-    // an approved post whose caption then changes must be re-approved — the
-    // pure rule the PATCH route applies
-    expect(stateAfterPostEdit(approved.posting_approval_state)).toBe('pending')
-  })
-
-  it('request changes sends it back with the note; a fresh send re-opens the loop', async () => {
-    const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption, first attempt' })
-    await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'quality_check')
-    await gatePass(id)
-    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
-
-    await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
-
-    // a request for changes without the note is refused — the note IS the ask
-    await expect(actOnPostingApproval(am, await fresh(id) as unknown as Item, { action: 'request_changes' }))
-      .rejects.toThrow(/what should change/i)
-
-    const changed = await actOnPostingApproval(am, await fresh(id) as unknown as Item, {
-      action: 'request_changes', note: 'Drop the second hashtag',
-    })
-    expect(changed.posting_approval_state).toBe('changes')
-    expect(changed.posting_approval_note).toBe('Drop the second hashtag')
-
-    // still refused at the queue
-    expect((await planItemPublish(id)).blocked).toMatch(/changes/i)
-
-    // the scheduler re-sends after fixing — pending again, the old note wiped
-    const resent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, { action: 'send' })
-    expect(resent.posting_approval_state).toBe('pending')
-    // a cleared note is absent on the row (the store keeps no nulls)
-    expect(resent.posting_approval_note ?? null).toBeNull()
-  })
-
-  it('client_too routes it to the portal pile; approval empties it', async () => {
-    const id = await makeItem({ owner_id: editor.id, caption: 'E2E caption for the client' })
-    await addVersion(editor, id, v(1))
-    await performTransition(editor, await fresh(id), 'quality_check')
-    await gatePass(id)
-    await table('content_items').update(id, { scheduler_ids: [scheduler.id] })
-
-    const sent = await actOnPostingApproval(scheduler, await fresh(id) as unknown as Item, {
-      action: 'send', client_too: true,
-    })
-    expect(sent.posting_client_required).toBe(true)
-
-    // the same predicate portal-data uses to build "Ready to post"
-    const { awaitsClientPostApproval } = await import('../../app/lib/posting-approval-core')
-    expect(awaitsClientPostApproval(await fresh(id) as unknown as {
-      status: string; posting_approval_state?: unknown; posting_client_required?: unknown
-    })).toBe(true)
-
-    await actOnPostingApproval(am, await fresh(id) as unknown as Item, { action: 'approve' })
-    expect(awaitsClientPostApproval(await fresh(id) as unknown as {
-      status: string; posting_approval_state?: unknown; posting_client_required?: unknown
-    })).toBe(false)
-  })
-})
+// 'final-post approval: the caption gets its own yes before anything queues' — REMOVED with the item-wide
+// post gate it tested (the posting rebuild, 29 Sep 2026; audit V1, V4). A post's approval is its own now:
+// tests/post-stage.test.ts, and package P9's Playwright journeys.
 
 describe('no real person was notified', () => {
   it('every notification these items produced went to a .invalid test address', async () => {

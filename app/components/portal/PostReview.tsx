@@ -34,7 +34,8 @@ export default function PostReview({
   whereLine: string | null
   missed: boolean
   state: 'waiting' | 'approved' | 'changes' | 'not_ready'
-  kind: 'card' | 'post'
+  /** the edit; a post has its own page since the posting rebuild (PortalPostReview) */
+  kind: 'card'
   preview: boolean
   clientName: string
   comments: Note[]
@@ -125,7 +126,7 @@ export default function PostReview({
           )}
           {caption && (
             <div className="mt-3 border-t border-border pt-3">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Caption, exactly as it will post</p>
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">Caption</p>
               <p className={`mt-1 whitespace-pre-line text-[14px] leading-relaxed ${showCaption ? '' : 'line-clamp-6'}`}>{caption}</p>
               {caption.split('\n').length > 6 || caption.length > 360 ? (
                 <button type="button" onClick={() => setShowCaption(v => !v)} className="mt-1 min-h-9 text-[13px] font-semibold underline underline-offset-2">

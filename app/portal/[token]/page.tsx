@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
-import { getPortalDataByToken, type PortalCard } from '../../lib/portal-data'
+import { getPortalDataByToken, portalViewData, type PortalData } from '../../lib/portal-data'
 import { archivo, sometype } from '../../components/lama/fonts'
 import Reveal from '../../components/lama/Reveal'
 import Rule from '../../components/lama/Rule'
@@ -31,9 +31,15 @@ export const dynamic = 'force-dynamic'
  * page keeps itself current.
  */
 
-/** The most recent piece with visible media — the hero backdrop. */
-function heroMedia(cards: PortalCard[]): string | null {
-  for (const c of cards) if (c.preview_url) return c.preview_url
+/**
+ * The hero backdrop: a picture from something ON the page — a post waiting on
+ * them, then the cards in the sections they can see. Never from the full
+ * payload, where an upload nobody sent them used to be picked (audit P7).
+ * `data` here is already `portalViewData`: only what the page draws.
+ */
+function heroMedia(data: PortalData): string | null {
+  for (const p of data.post_approvals) if (p.cover) return p.cover.url
+  for (const c of data.cards) if (c.preview_url) return c.preview_url
   return null
 }
 
@@ -49,13 +55,15 @@ export default async function SharedPortalPage({ params, searchParams }: {
 }) {
   const { token: raw } = await params
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
-  const data = await getPortalDataByToken(token)
-  if (!data) notFound()
+  const full = await getPortalDataByToken(token)
+  if (!full) notFound()
+  // only what the page draws reaches the browser (audit P8)
+  const data = portalViewData(full)
   const sp = (await searchParams) ?? {}
   const initialCard = typeof sp.card === 'string' ? sp.card : null
 
   const counts = heroCounts(data.cards, data.post_approvals)
-  const hero = heroMedia(data.cards)
+  const hero = heroMedia(data)
   const words = data.client.name.trim().split(/\s+/)
   const lastWord = words.length > 1 ? words.pop()! : null
   const firstWords = words.join(' ')

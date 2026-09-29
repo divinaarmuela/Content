@@ -40,7 +40,7 @@ vi.stubGlobal('fetch', async (input: string | URL | Request) =>
     headers: { 'content-type': 'video/mp4', 'content-length': '10' },
     ...(String(input) ? {} : {}),
   }))
-vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => {}) }))
+vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => {}), recordPostOutcome: vi.fn(async () => ({ job_id: '', posts: [], schedule_rows: 0 })) }))
 
 /** The master, as the storage host describes it: too big for Instagram. */
 vi.mock('../app/lib/storage', async () => {

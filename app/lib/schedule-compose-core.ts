@@ -33,11 +33,9 @@ import {
   type LinkedInPoll, type Platform, type PollDuration, type PostKind, type PostOptions,
   type TikTokPrivacy, type TrialGraduation, type UserTag, type YoutubeVisibility,
 } from './publish-core'
-import {
-  postingEligibility, NETWORK_LABEL, type SocialPostStatus,
-} from './social-schedule-core'
+import { NETWORK_LABEL } from './publish-core'
 import { reorder, type Slide, type SlideSource } from './version-files-core'
-import { formatInZone, fromZonedInput, wallTimeIn } from './timezone-core'
+import { fromZonedInput, wallTimeIn } from './timezone-core'
 
 /* ── the composition being edited ───────────────────────────────────────── */
 
@@ -1100,8 +1098,6 @@ export type ClockValue = {
   meridiem: Meridiem
 }
 
-/** Quarter hours: nobody schedules a post for 6:07. */
-export const MINUTE_STEPS = [0, 15, 30, 45]
 export const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -1250,11 +1246,12 @@ export function replaceInPost(
   return elsewhere >= 0 ? list.filter((_, i) => i !== elsewhere) : list
 }
 
-/** The sentence in the picker's footer. The whole new-version rule, said the
- *  way the mockup says it. */
-export const NEW_VERSION_NOTICE =
-  'Uploads and Drive files are added to this item as a new version and need '
-  + "the client's approval before the post can be sent."
+/** The sentence in the picker's footer (29 Sep 2026). The post is its own
+ *  thing: a file added here belongs to THIS post, and the quality check sees
+ *  it before anyone else does. It no longer makes a new version of the edit
+ *  card or sends anything to the client (audit V7, V13). */
+export const POST_MEDIA_NOTICE =
+  'Files you add here belong to this post only. The quality check sees them before the client does.'
 
 /** …and the one over the tray. */
 export const PICKER_HELP = 'Drag files from the library into the post. Drag to reorder.'
@@ -1263,344 +1260,15 @@ export const PICKER_HELP = 'Drag files from the library into the post. Drag to r
 export const PICKER_LIBRARY_HELP =
   'Faded ones are already in the post. Drag a file to the right to add it.'
 
-/* ── the footer ─────────────────────────────────────────────────────────── */
-
-/** The plain sentence on the footer's state pill. */
-export const APPROVAL_LINE: Record<SocialPostStatus, string> = {
-  draft: 'Needs approval before it can post',
-  /* ^ TRUE FOR MOST PEOPLE, AND A FLAT CONTRADICTION FOR THE ONES WHO CAN
-   * POST. Read `approvalLine` below rather than this map directly: an
-   * account manager or super admin on a client who does not sign every post
-   * off was being shown "Needs approval before it can post" beside a button
-   * reading "Schedule" — the pill said no while the button said yes, in the
-   * same six inches of screen. The pill was keyed on the post's status alone
-   * and never asked WHO was looking at it. */
-  pending: 'Waiting for approval',
-  approved: 'Approved — ready to go out',
-  changes: 'Changes asked for',
-  scheduled: 'Booked in with the channel',
-  published: 'Posted',
-  failed: 'Did not go out',
-  cancelled: 'Cancelled',
-}
-
-/**
- * The one button that hands the post to the people who answer for it.
- *
- * "Review", not "approval": what is being sent is the POST — the pictures,
- * the words, the hour — as the preview shows it, and the person receiving it
- * may say yes or ask for a change. It is offered to everybody: somebody who
- * could post straight out still gets it under the arrow, because wanting a
- * second pair of eyes is not the same as needing permission.
+/*
+ * THE OLD FOOTER IS GONE (29 Sep 2026). `footerActions`, `approvalLine`,
+ * `composerWait`, `mediaApprovalBadge`, `APPROVAL_LINE`, `SEND_FOR_REVIEW`,
+ * `sentForReviewLine` and `outcomeWords` read the post's old `status` and the
+ * edit card's approval, which is how one window said "waiting on you" while
+ * the client had the post and offered no way back from a cancelled one (audit
+ * W2, W5, B5). The post window's buttons are `postActions` (post-stage-core)
+ * and its words are post-window-core's, read from `social_posts.stage`.
  */
-export const SEND_FOR_REVIEW = 'Send for approval'
-
-/**
- * The footer pill, for the person actually looking at it.
- *
- * A draft means "nobody has signed this off yet". What that MEANS depends on
- * who is reading: for somebody who cannot approve it, it is a thing waiting
- * on someone else; for somebody who can, there is nothing in the way at all
- * and saying "needs approval" is simply false. Every other status says the
- * same thing to everybody, so only the draft line moves.
- */
-export function approvalLine(
-  status: SocialPostStatus,
-  input: { mayApprove?: boolean; clientSignsOff?: boolean } = {},
-): string {
-  if (status === 'draft' && input.mayApprove === true) {
-    return 'Not sent to anyone — yours to post'
-  }
-  return APPROVAL_LINE[status]
-}
-
-/**
- * What a person is told once it has gone — who has it, and what happens next.
- * No mechanism, no state name: two facts and a promise.
- */
-/**
- * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026: "once scheduled
- * make sure the popup is showing correctly, then show a different popup").
- *
- * One sentence for what happened, one for where it is, and the two things
- * left to do. Said from the outcome and the clock, not from the composer's
- * state — the composer has closed.
- */
-export type OutcomeKind = 'draft' | 'sent' | 'booked' | 'now'
-
-export function outcomeWords(input: {
-  kind: OutcomeKind
-  at: string | null
-  tz: string
-  /** the networks it goes to, already named ("Instagram, TikTok") */
-  networks: readonly string[]
-  who?: string | null
-}): { title: string; body: string; showOnCalendar: boolean } {
-  const when = input.at ? formatInZone(input.at, input.tz, 'full') : null
-  const where = input.networks.length > 0 ? input.networks.join(', ') : 'no channel yet'
-  switch (input.kind) {
-    case 'draft':
-      // a draft is not on the calendar grids (10 Sep 2026): it lives in the
-      // rail's Drafts count and at the top of the List until it is sent or
-      // scheduled
-      return {
-        title: 'Saved as a draft',
-        body: when
-          ? `Nothing goes out. It is kept for ${when} but stays off the calendar until you send or schedule it — find it under Drafts in the left rail, or at the top of the List.`
-          : 'Nothing goes out. It has no time yet. Find it under Drafts in the left rail, or at the top of the List, and give it one.',
-        showOnCalendar: false,
-      }
-    case 'sent':
-      return {
-        title: input.who ? `Sent to ${input.who} for approval` : 'Sent for approval',
-        body: when
-          ? `Once they approve it, it is booked in for ${when} on ${where} — nothing else to press. You will be told when they answer.`
-          : `Once they approve it, it can be booked in on ${where}. You will be told when they answer.`,
-        showOnCalendar: !!when,
-      }
-    case 'now':
-      return {
-        title: 'Posting now',
-        body: `It is on its way to ${where}. The tile changes when each network confirms it — a slow one can take a few minutes.`,
-        showOnCalendar: true,
-      }
-    case 'booked':
-    default:
-      return {
-        title: when ? `Booked in for ${when}` : 'Booked in',
-        body: `It goes out on ${where} at that time by itself. Nothing else to press; the tile says when it is live.`,
-        showOnCalendar: true,
-      }
-  }
-}
-
-export function sentForReviewLine(clientName: string | null | undefined): string {
-  const who = String(clientName ?? '').trim()
-  return who
-    ? `Sent to the account manager and ${who}. You will be told when they answer.`
-    : 'Sent to the account manager. You will be told when they answer.'
-}
-
-/* ── waiting on somebody else ─────────────────────────────────── */
-
-/**
- * THE CALM TRUTH, INSTEAD OF A DEAD BUTTON.
- *
- * A scheduler who drops their own file on the calendar has the piece moved
- * to `internal_review` and the account manager told, by the upload itself
- * (`schedule-upload`). The composer then opened on a piece it judged
- * unpostable and said so in red — "Still being made" — over media the person
- * had uploaded thirty seconds earlier, under a "Send for review" button that
- * `!check.ok` had already disabled. Nothing was wrong, nothing could be
- * pressed, and the one fact that mattered (somebody has been told) was the
- * one thing not said.
- *
- * So the window has a THIRD state beside "ready" and "wrong": waiting on
- * somebody else. It is not an error, it draws no red, and the footer offers
- * only what is actually possible — save the draft, or close.
- */
-export const WAITING_ON_MANAGER =
-  'Waiting on an account manager’s check — they have been told.'
-
-export type ComposerWait = {
-  /** the quiet line the window shows in place of the red box */
-  line: string
-  /** the composition problem this wait REPLACES — the same sentence
-   *  `validateComposition` states, so the window drops exactly that one and
-   *  keeps every other thing that is genuinely wrong */
-  replaces: string
-}
-
-/**
- * Is this window waiting on somebody else's check?
- *
- * Only `internal_review`, and only for somebody who cannot end that wait
- * themselves. A manager (on a client who does not sign every post off) is
- * the person being waited ON — their window is unchanged. A piece still
- * being MADE, or one in front of the client right now, is not this: those
- * are said as they always were.
- */
-export function composerWait(input: {
-  itemStatus: string
-  /** may this person approve the final post */
-  mayApprove: boolean
-  /** this client signs every post off — a note to the manager, not a gate on them (the owner, 9 Sep 2026) */
-  clientSignsOff?: boolean
-}): ComposerWait | null {
-  if (input.itemStatus !== 'internal_review' && input.itemStatus !== 'quality_check') return null
-  if (input.mayApprove) return null
-  const elig = postingEligibility({ status: input.itemStatus }, [], false)
-  if (elig.ok) return null
-  return { line: WAITING_ON_MANAGER, replaces: elig.reason }
-}
-
-/* ── the media badge ────────────────────────────────────────── */
-
-/**
- * WHO ACTUALLY SIGNED THIS MEDIA OFF.
- *
- * The badge over the picture used to read "Client approved" whenever every
- * slide belonged to the approved version — which is version membership, not
- * consent. A piece a manager cleared with "Approve without client" wore the
- * client's name on somebody else's decision, in the one window where the
- * irreversible press happens.
- *
- * `clientApproved` is the field that means what the badge says (the rail
- * computes it, `useSchedulePosts`), and a post carrying a file from outside
- * the approved version is not covered by any sign-off at all.
- */
-export const CLIENT_APPROVED_BADGE = 'Client approved'
-export const TEAM_APPROVED_BADGE = 'Approved by the team'
-export const NOT_CLIENT_SIGNED_BADGE = 'Not signed off by the client'
-export const NEW_MEDIA_BADGE = 'New media — not signed off'
-
-/** The statuses that mean somebody has signed the WORK off. */
-const SIGNED_OFF: string[] = ['approved_for_scheduling', 'scheduled', 'published']
-
-export function mediaApprovalBadge(input: {
-  /** the client said yes to this piece's approved media */
-  clientApproved: boolean
-  /** every file in the post comes from that approved version */
-  allFromApprovedVersion: boolean
-  /** where the piece is in the funnel */
-  itemStatus: string
-}): { label: string; tone: 'green' | 'amber' } {
-  if (!input.allFromApprovedVersion) return { label: NEW_MEDIA_BADGE, tone: 'amber' }
-  if (input.clientApproved) return { label: CLIENT_APPROVED_BADGE, tone: 'green' }
-  if (SIGNED_OFF.includes(input.itemStatus)) {
-    return { label: TEAM_APPROVED_BADGE, tone: 'amber' }
-  }
-  return { label: NOT_CLIENT_SIGNED_BADGE, tone: 'amber' }
-}
-
-export type FooterActionKey = 'send' | 'draft' | 'direct' | 'schedule' | 'now' | 'move' | 'none'
-
-export type FooterAction = { key: FooterActionKey; label: string }
-
-/**
- * What the button at the bottom of the window does next.
- *
- * The split button, exactly as the owner ruled it:
- *
- *  before approval  → "Send for review", with "Save as draft" in the menu,
- *                     and "Schedule without approval" ONLY for somebody who
- *                     could have approved it (the client's account manager, a
- *                     super admin). A scheduler never sees an option they
- *                     would be refused.
- *  after approval   → "Schedule", with "Post now" in the menu, and only for
- *                     the people who may publish.
- *  once it is booked in or finished → nothing to press.
- *
- * …and the owner's ruling of 5 September, which turns that first line around
- * for the two roles it was always asking to answer their own question: an
- * account manager on the client, or a super admin, gets "Schedule" (or "Post
- * now" when the time they picked is now) as the ONE press, and
- * "Send for review" moves under the arrow for the times they do want the
- * client to see it first. Nobody else's window changes. A client who signs
- * every post off (`clientSignsOff`) used to put the manager back on the full
- * flow; since 9 Sep 2026 it is a note under the button and nothing more.
- *
- * Hiding the option is presentation; the refusal itself lives in
- * `scheduleWithoutApproval` and `assertMayPublish` on the server.
- */
-export function footerActions(input: {
-  status: SocialPostStatus
-  /** may this person approve the final post (account manager, super admin) */
-  mayApprove: boolean
-  /** may this person book a post in with the channel at all */
-  mayPublish: boolean
-  /** this client signs every post off — the one exception to the ruling */
-  clientSignsOff?: boolean
-  /** the time on the post is now, so "Schedule" would read as a lie */
-  postingNow?: boolean
-  /** the piece is waiting on somebody else's check (`composerWait`) — there
-   *  is nothing here for this person to send, and a disabled "Send for
-   *  review" over a red box was the whole of the dead end */
-  waiting?: boolean
-  /** THE APPROVAL STEP. The Scheduler page's window puts a piece up for a
-   *  decision and offers one press that sends it — never one that posts.
-   *  When it goes out is chosen afterwards, on the Schedule page. */
-  reviewOnly?: boolean
-}): { primary: FooterAction; menu: FooterAction[] } {
-  if (input.reviewOnly === true) {
-    if (input.status === 'pending') {
-      return { primary: { key: 'none', label: 'Sent — waiting on a decision' }, menu: [] }
-    }
-    if (input.status === 'approved' || input.status === 'scheduled' || input.status === 'published') {
-      return { primary: { key: 'none', label: 'Approved — book it in on Schedule' }, menu: [] }
-    }
-    return {
-      primary: { key: 'send', label: SEND_FOR_REVIEW },
-      menu: [{ key: 'draft', label: 'Save as draft' }],
-    }
-  }
-  const { status, mayApprove, mayPublish } = input
-  // `input.clientSignsOff` is deliberately not read here: the owner ruled (9 Sep
-  // 2026) that a manager schedules or posts straight out EVEN on a client
-  // who signs every post off — the lock is the line under the button, a
-  // reminder to ask when they mean to, never a second person to wait on
-  const straightOut = mayApprove
-
-  if (status === 'approved') {
-    return mayPublish
-      ? { primary: { key: 'schedule', label: 'Schedule' }, menu: [{ key: 'now', label: 'Post now' }] }
-      : { primary: { key: 'none', label: 'Approved — a scheduler books it in' }, menu: [] }
-  }
-  // A BOOKED POST CAN BE MOVED (the owner, 9 Sep 2026: "I accidentally
-  // scheduled it for tomorrow… it should be easy for me to reschedule").
-  // The window keeps the words and the files locked and opens the clock:
-  // the press pulls the booking back and books it again at the new time.
-  if (status === 'scheduled' && mayPublish) {
-    return { primary: { key: 'move', label: 'Move to this time' }, menu: [{ key: 'now', label: 'Post now' }] }
-  }
-  if (status === 'scheduled' || status === 'published'
-    || status === 'failed' || status === 'cancelled') {
-    return { primary: { key: 'none', label: APPROVAL_LINE[status] }, menu: [] }
-  }
-
-  // waiting on somebody else: the only thing this person can do is keep
-  // their work, so that is the only thing offered
-  if (input.waiting === true) {
-    return { primary: { key: 'draft', label: 'Save as draft' }, menu: [] }
-  }
-
-  const send: FooterAction = {
-    key: 'send', label: status === 'pending' ? 'Send again' : SEND_FOR_REVIEW,
-  }
-  if (straightOut) {
-    return {
-      primary: {
-        key: 'direct',
-        label: input.postingNow === true ? 'Post now' : 'Schedule',
-      },
-      menu: [send, { key: 'draft', label: 'Save as draft' }],
-    }
-  }
-  // only somebody who may NOT approve reaches here now, so there is no
-  // "Schedule without approval" to tuck under the arrow — that was the
-  // manager's short cut on a locked client, and the manager gets the button
-  return { primary: send, menu: [{ key: 'draft', label: 'Save as draft' }] }
-}
-
-/**
- * Is the time on this post "now"?
- *
- * Two minutes' grace: somebody who picked the next round minute and then took
- * a moment over the caption still means now, and the button must not read
- * "Schedule" over a post that goes out before they can put the kettle on.
- *
- * A time already GONE is not "now" — it is a problem the composer states
- * plainly ("That time has already gone") and the button stays disabled
- * behind it, rather than quietly posting at a time nobody chose.
- */
-export function isPostingNow(
-  iso: string | null | undefined, now: number,
-): boolean {
-  if (!iso) return false
-  const at = Date.parse(iso)
-  if (!Number.isFinite(at)) return false
-  return at > now && at <= now + 2 * 60_000
-}
 
 /** "1 hour 30 minutes", "10 minutes", "45 seconds" — for a limit a person
  *  holds a file up against, so a half hour must not vanish. */
@@ -1614,8 +1282,3 @@ export function durationWords(seconds: number): string {
   if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`)
   return parts.join(' ')
 }
-
-/** What the server says when a manager's one-press Schedule sent the piece
- *  to the quality reviewer instead: a green outcome, not a refusal. The
- *  window matches this sentence and closes with it as the note. */
-export const QUALITY_GATE_LINE = 'Sent for quality check — the post can be scheduled once the quality reviewer passes it'

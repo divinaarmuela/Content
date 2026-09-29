@@ -29,7 +29,8 @@ describe('itemPath — the reader’s own board, with the card open (14 Sep 2026
     expect(itemPath({ id: 'x' })).not.toContain('/dashboard/production/')
     for (const f of [
       'app/lib/workflow.ts', 'app/lib/due-reminders.ts', 'app/lib/editor-sop-notify.ts', 'app/lib/booked-notify.ts',
-      'app/lib/posting-approval.ts', 'app/lib/notification-words.ts',
+      // app/lib/posting-approval.ts is gone (the posting rebuild, 29 Sep 2026)
+      'app/lib/notification-words.ts',
       'app/api/production/items/[id]/send-back/route.ts', 'app/api/production/items/[id]/flag/route.ts',
       'app/api/portal/act/route.ts', 'app/api/portal/comment/route.ts',
     ]) {
@@ -55,7 +56,8 @@ describe('the Production card page sends an uploaded post to the Post approval b
     expect(src).not.toMatch(/'use client'/)
   })
   it('the approval and portal-comment mails use the rule too', () => {
-    for (const f of ['app/lib/posting-approval.ts', 'app/api/portal/comment/route.ts']) {
+    // the posting emails left with app/lib/posting-approval.ts (the posting rebuild, 29 Sep 2026)
+    for (const f of ['app/api/portal/comment/route.ts']) {
       const src = readFileSync(join(process.cwd(), f), 'utf8')
       expect(src, f).not.toMatch(/dashboard\/production\/\$\{item\.id\}/)
       expect(src, f).toMatch(/itemPath\(item[,)]/)
@@ -64,17 +66,20 @@ describe('the Production card page sends an uploaded post to the Post approval b
 })
 
 describe('the Post approval board opens the card the address names', () => {
-  it('reads ?item= once the cards have arrived', () => {
+  it('reads ?item= once the posts have arrived: outlines the posts made from it, or opens the edit', () => {
     const src = readFileSync(join(process.cwd(), 'app/dashboard/scheduler/page.tsx'), 'utf8')
     expect(src).toContain(".get('item')")
-    expect(src).toMatch(/sheet\.open\(wanted\)/)
+    expect(src).toMatch(/bp\.post\.source_item_id === itemId/)
+    expect(src).toMatch(/sheet\.open\(itemId\)/)
   })
 })
 
 describe('the plain drawer (9 Sep 2026)', () => {
   it('opens for every uploaded post, and for every card on the Editor page', () => {
     const sheet = readFileSync(join(process.cwd(), 'app/dashboard/board/CardSheet.tsx'), 'utf8')
-    expect(sheet).toMatch(/adhoc \|\| simple/)
+    // an upload's file holder gets the plain drawer; a post opens the post window (29 Sep 2026)
+    expect(sheet).toMatch(/: adhoc\s+\? <PostApprovalDetail/)
+    expect(sheet).not.toMatch(/simple/)
     const editor = readFileSync(join(process.cwd(), 'app/dashboard/editor/page.tsx'), 'utf8')
     // the Editor page turns ?card= into the card's own page (15 Sep 2026)
     expect(editor).toContain('router.replace(`/dashboard/editor/${id}`)')

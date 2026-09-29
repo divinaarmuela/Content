@@ -4,9 +4,10 @@ import { join } from 'node:path'
 import { seedDb } from './helpers/fake-db'
 import {
   analyticsForPost, channelExtraLines, chartLabel, dayChart, likedLine, networkName,
-  peopleFrom, portalPostHref, postPageHref, postStatusWords, shortDate, whoLikedNote,
+  peopleFrom, portalPostHref, postPageHref, postPageStatus, shortDate, whoLikedNote,
 } from '../app/lib/post-page-core'
 import { CHANNEL_EXTRA_KEYS, extraLabel, extraValueWords } from '../app/lib/schedule-compose-core'
+import { STAGE_LABEL, STAGE_MEANING } from '../app/lib/post-stage-core'
 
 /**
  * A PAGE FOR EVERY POST.
@@ -170,16 +171,22 @@ describe('a channel’s settings are read back in the words they were set in', (
 /* ── the words ─────────────────────────────────────────────────────────── */
 
 describe('where the post got to, and the four kinds of nothing', () => {
-  it('the three the owner named have their own headline', () => {
-    expect(postStatusWords('published', { whenLabel: 'Fri 5 Sep, 9:00 am' }).headline).toBe('Posted')
-    expect(postStatusWords('scheduled', { whenLabel: 'Fri 5 Sep, 9:00 am' }).headline).toBe('Booked in')
-    const failed = postStatusWords('failed', { failure: 'Instagram refused the caption' })
-    expect(failed.headline).toBe('Failed')
-    expect(failed.detail).toBe('Instagram refused the caption')
-  })
-
-  it('a failure with no reason still says something', () => {
-    expect(postStatusWords('failed').detail).toBeTruthy()
+  it('B4: the header reads the post STAGE in the words of the one list — never an old status word', () => {
+    const st = (stage: string, over: Record<string, unknown> = {}) => ({ stage, outcomes: {}, problem: null, ...over }) as never
+    expect(postPageStatus(st('booked'), { whenLabel: 'Fri 5 Sep, 9:00 am' })).toMatchObject({ headline: STAGE_LABEL.booked, tone: 'blue' })
+    expect(postPageStatus(st('with_client'))).toEqual({ headline: STAGE_LABEL.with_client, detail: STAGE_MEANING.with_client, tone: 'amber' })
+    expect(postPageStatus(st('quality_check'))).toEqual({ headline: STAGE_LABEL.quality_check, detail: STAGE_MEANING.quality_check, tone: 'muted' })
+    // posted in part says so, by postedWords
+    const partial = st('posted', { outcomes: { instagram: { status: 'published' }, linkedin: { status: 'failed' } } })
+    expect(postPageStatus(partial, { whenLabel: 'Fri 5 Sep, 9:00 am' })).toMatchObject({ headline: 'Posted on 1 of 2 — LinkedIn did not go out', detail: 'Went out Fri 5 Sep, 9:00 am.', tone: 'ink' })
+    // a booking that failed is back in Ready to post, and says why
+    expect(postPageStatus(st('ready', { problem: 'Instagram refused the caption' }))).toEqual({ headline: STAGE_LABEL.ready, detail: 'Instagram refused the caption', tone: 'red' })
+    // a row not moved across yet: Posted when something went out, else Draft
+    expect(postPageStatus(null, { wentOut: true }).headline).toBe(STAGE_LABEL.posted)
+    expect(postPageStatus(null).headline).toBe(STAGE_LABEL.draft)
+    const view = readFileSync('app/dashboard/social/posts/[id]/PostView.tsx', 'utf8')
+    expect(view).toContain('postPageStatus(')
+    expect(view).not.toMatch(/'published'|'scheduled'|postStatusWords/)
   })
 
   it('who liked is an Instagram-only question, said so by name', () => {
@@ -282,9 +289,12 @@ describe('the client’s copy of the page', () => {
     }],
     content_items: [{ id: 'i1', client_id: 'c1', title: 'Hero reel', status: 'published' }],
     social_posts: [{
-      id: 'p1', client_id: 'c1', item_id: 'i1', caption: 'Morning',
+      id: 'p1', client_id: 'c1', item_id: 'i1', source_item_id: 'i1', caption: 'Morning',
       publish_job_ids: ['j1'], channels: [], per_channel: {}, slides: [],
       status: 'published', timezone: 'Australia/Melbourne',
+      // the posting rebuild: the post's own stage and its booking's jobs are what the portal reads
+      stage: 'posted', rev: 4, booking: { job_ids: ['j1'], pending: false, at: '2026-09-04T00:00:00Z', for_time: '2026-09-04T00:00:00Z' },
+      outcomes: { instagram: { status: 'published', url: null, at: '2026-09-04T00:00:00Z', error: null } },
     }],
     post_analytics: [{
       id: 'a1', item_id: 'i1', publish_job_id: 'j1', provider_post_id: 'z1',

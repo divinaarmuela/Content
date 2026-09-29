@@ -7,15 +7,19 @@ import { Check, MessageSquare } from 'lucide-react'
 const NAME_KEY = 'mdm-portal-name'
 
 /**
- * THE CLIENT'S ANSWER, ON ITS OWN (the owner, 28 Sep 2026: "the portal is for the approved post, not the boards").
- * One big Approve; "Ask for a change" opens a box for what to change. The same /api/portal/act the board uses, so
- * the server's rules (only a card With client, only this client's) decide — this only asks.
+ * THE CLIENT'S ANSWER ON AN EDIT, ON ITS OWN (the owner, 28 Sep 2026: "the portal is for the approved post, not the
+ * boards"). One big Approve; "Ask for a change" opens a box for what to change. The same /api/portal/act the board
+ * uses, so the server's rules (only a card With client, only this client's) decide — this only asks.
+ *
+ * A POST is answered on its own page since the posting rebuild (PortalPostReview), by its id and the version the
+ * client was sent. `kind`, `missed` and `preview` stay only so an older caller still compiles; a post is never
+ * answered here.
  */
-export default function ApprovePanel({ token, itemId, state, clientName, kind = 'card', preview = false, missed = false }: {
-  /** the post's planned time has gone — their yes still counts, and we book a new time */
+export default function ApprovePanel({ token, itemId, state, clientName, preview = false }: {
+  /** no longer used: a post's missed time is said on the post's own page */
   missed?: boolean
-  /** card = the edit (approve / request_changes); post = the final post (approve_post / request_post_changes) */
-  kind?: 'card' | 'post'
+  /** always the edit now */
+  kind?: 'card'
   /** the team's preview: shown exactly, answered never */
   preview?: boolean
   token: string
@@ -44,7 +48,7 @@ export default function ApprovePanel({ token, itemId, state, clientName, kind = 
     try {
       const res = await fetch('/api/portal/act', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, item_id: itemId, action: kind === 'post' ? (action === 'approve' ? 'approve_post' : 'request_post_changes') : action, comment: text, author_name: who }),
+        body: JSON.stringify({ token, item_id: itemId, action, comment: text, author_name: who }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(j?.error ?? 'That did not go through — try again in a moment'))
@@ -65,20 +69,13 @@ export default function ApprovePanel({ token, itemId, state, clientName, kind = 
           {shown === 'approved' ? <Check className="h-5 w-5" strokeWidth={2.6} aria-hidden /> : <MessageSquare className="h-5 w-5" aria-hidden />}
         </span>
         <div>
-          <p className="text-[17px] font-semibold">{shown === 'approved' ? 'Approved — thank you' : 'Thanks — we have your note'}</p>
+          {/* true whatever happens next: nothing here promises a booking (audit P5) */}
+          <p className="text-[17px] font-semibold">{shown === 'approved' ? (answered ? 'Approved — thank you' : 'You approved this') : 'Thanks — we have your note'}</p>
           <p className="mt-0.5 text-[14px] text-muted-foreground">
-            {shown === 'approved' ? 'We’ll book it in to go out. Nothing else to do.' : 'We’ll make the change and send it back to you.'}
+            {shown === 'approved' ? 'The team takes it from here. Nothing else to do.' : 'We’ll make the change and send it back to you.'}
           </p>
         </div>
       </div>
-    )
-  }
-  // its time went before anyone answered: nothing to press — a new time comes to them as a new request (28 Sep 2026)
-  if (missed && state === 'waiting' && !answered) {
-    return (
-      <p className="rounded-card border border-border bg-card p-5 text-[15px] text-muted-foreground">
-        This approval has closed because its time passed. We’ll send it to you again with a new time.
-      </p>
     )
   }
   if (state === 'not_ready') {
@@ -93,7 +90,7 @@ export default function ApprovePanel({ token, itemId, state, clientName, kind = 
     <div className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
       <div>
         <p className="text-[17px] font-semibold">Happy with this?</p>
-        <p className="mt-0.5 text-[14px] text-muted-foreground">Approve it and we’ll book it in, or tell us what to change.</p>
+        <p className="mt-0.5 text-[14px] text-muted-foreground">Approve it, or tell us what to change.</p>
       </div>
       <label className="flex flex-col gap-1 text-[13px] font-medium text-muted-foreground">
         Your name (optional)

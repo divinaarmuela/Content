@@ -16,8 +16,7 @@ import {
 } from '../../lib/board-view-core'
 import { useTable } from '@/lib/db-client'
 import type { CardView, PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
-import { cardBookingLine, type OutcomeJob } from '../../lib/post-outcome-core'
-import { approvalTimeLine } from '../../lib/post-to-client-core'
+import { cardBookingLine, jobIdsOfPost, type OutcomeJob, type PostJobsLike } from '../../lib/post-outcome-core'
 import { readPostedSlides } from '../../lib/posted-slides-core'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { readInteractors, withFromThisPost } from '../../lib/followers-core'
@@ -190,16 +189,17 @@ export function Board({
       if (!['approved_for_scheduling', 'scheduled', 'published'].includes(String(c.status))) continue
       const mine = postRows.filter(p => p.item_id === c.id)
       const progress = readPostedSlides((c as { posted_slides?: unknown }).posted_slides)
-      // a time that went before the client said yes, or a new time not yet sent to them, says so first (28 Sep 2026)
-      const line = approvalTimeLine(c as never, mine) ?? cardBookingLine(mine, jobsById, progress ? { posted: progress.posted, total: progress.total } : null, fmt)
+      // a post's own wait (a missed time, a send to the client) is the post's, said on Post approval — not on the card
+      const line = cardBookingLine(mine, jobsById, progress ? { posted: progress.posted, total: progress.total } : null, fmt)
       if (line) out.set(c.id, line)
     }
     return out
   }, [cards, postRows, jobRows, hasBooked])
   const postByItem = useMemo(() => {
     const out = new Map<string, string>()
+    // a post that was booked: its booking's jobs (the new engine), or the old list on an unmigrated row
     const sent = [...postRows]
-      .filter(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length : 0) > 0)
+      .filter(p => jobIdsOfPost(p as unknown as PostJobsLike).length > 0)
       .sort((a, b) => (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))
     for (const p of sent) if (p.item_id && !out.has(p.item_id)) out.set(p.item_id, p.id)
     return out
@@ -309,7 +309,6 @@ export function Board({
                 viewer={viewer}
                 names={names}
                 managers={managersOf?.(c.client_id) ?? []}
-                kinds={kinds}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}

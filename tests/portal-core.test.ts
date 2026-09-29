@@ -3,7 +3,7 @@ import {
   ALL_STATUSES, CLIENT_FACING_STATUSES, EMPTY_BOARD_LINE, NOT_WITH_YOU, PORTAL_COLUMNS,
   actedLine, brandLogoUrl, cardLine, columnCounts, isClientFacing, kindWord, linkFor,
   planDecidable, planPdfHref, portalActions, portalCardTone, portalColumnFor, shootDayLabel,
-  shootStanding, sortForColumn, swipeOffset, swipeToApprove, toPortalComment, waitingOnYou,
+  shootStanding, swipeOffset, swipeToApprove, toPortalComment, waitingOnYou,
 } from '../app/lib/portal-core'
 import type { ItemStatus } from '../app/lib/workflow-core'
 
@@ -171,17 +171,6 @@ describe('comments pinned to a card', () => {
 })
 
 describe('ordering and counting', () => {
-  const card = (id: string, status: ItemStatus, updated_at: string) => ({ id, status, updated_at })
-
-  it('puts the card waiting on the client first, then newest first', () => {
-    const sorted = sortForColumn([
-      card('old', 'client_changes_requested', '2026-09-01'),
-      card('new', 'client_changes_requested', '2026-09-05'),
-      card('wait', 'client_review', '2026-08-01'),
-    ])
-    expect(sorted.map(c => c.id)).toEqual(['wait', 'new', 'old'])
-  })
-
   it('counts by column and says how many are waiting — a shoot counts like a piece', () => {
     const asCard = (status: ItemStatus) => ({ column: portalColumnFor(status), actions: portalActions(status) })
     const cards = [

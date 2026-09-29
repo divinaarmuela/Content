@@ -22,7 +22,6 @@ import { readFileSync } from 'node:fs'
  */
 
 const BUTTON = 'app/dashboard/scheduler/NewPostButton.tsx'
-const COMPOSE = 'app/dashboard/scheduler/SendForApprovalDialog.tsx'
 const LAYOUT = 'app/dashboard/scheduler/layout.tsx'
 const BOARD = 'app/dashboard/scheduler/page.tsx'
 const FLOW = 'app/dashboard/social/schedule/useComposeFlow.tsx'
@@ -40,47 +39,38 @@ function code(path: string): string {
 
 describe('the Scheduler page never sends anybody to the Schedule page to post', () => {
   it('the button navigates nowhere', () => {
-    const src = code(BUTTON)
+    // module paths are not navigation: the button imports the Schedule page's
+    // own flow (29 Sep 2026), which is the point
+    const src = code(BUTTON).replace(/^import .*$/gm, '')
     expect(src).not.toMatch(/useRouter|router\.push|redirect\(/)
     expect(src).not.toMatch(/SCHEDULE_PAGE|social\/schedule/)
     expect(src).not.toMatch(/new=1/)
   })
 
   it('nothing on the page routes to the Schedule page for a new post', () => {
-    for (const path of [BUTTON, COMPOSE, BOARD]) {
+    for (const path of [BUTTON, BOARD]) {
       expect(code(path)).not.toMatch(/\?new=1/)
     }
   })
 
-  it('the button opens the one window in place instead', () => {
+  it('the button opens the same flow in place instead (29 Sep 2026)', () => {
     const src = code(BUTTON)
-    expect(src).toMatch(/import SendForApprovalDialog from '\.\/SendForApprovalDialog'/)
-    // managers get the card popup from the same button (13 Sep 2026); the
-    // upload-and-send window is still the one place everyone else lands
-    expect(src).toMatch(/<SendForApprovalDialog onClose=\{\(\) => setOpen\(false\)\} \/>/)
+    expect(src).toMatch(/useComposeFlow\(\{/)
+    expect(src).toMatch(/flow\.windows/)
+    expect(src).not.toMatch(/SendForApprovalDialog|NewCardDialog/)
   })
 })
 
-describe('the one window: the files and the decision, nothing else (8 Sep 2026)', () => {
-  const src = code(COMPOSE)
-
-  it('is NOT the composer: no caption, no channels, no network options, no time', () => {
-    expect(src).not.toMatch(/useComposeFlow|NewPostDialog|NewPostSources|per_channel|scheduled_for/)
-    expect(src).toMatch(/\/api\/social\/schedule\/from-upload/)
-    expect(src).toMatch(/decision/)
-  })
-
-  it('offers the three decisions to the right people', () => {
-    // somebody who needs an approval picks who — and a manager may ask
-    // somebody else to check it too (10 Sep 2026)
-    expect(src).toMatch(/Who checks it\?/)
-    expect(src).toMatch(/Ask somebody to check it/)
-    expect(src).toMatch(/send\('ask'\)/)
-    // a manager approves, or sends it to the client — the "send to client thing"
-    expect(src).toMatch(/send\('approve'\)/)
-    expect(src).toMatch(/send\('client'\)/)
-    expect(src).toMatch(/Send to \$\{client\?\.name/)
-  })
+/**
+ * THE POSTING REBUILD (29 Sep 2026, the owner's decision 2): the post window
+ * is the same wherever it opens. Post approval's New post used to open a
+ * second small window with its own approve and send buttons, which wrote to
+ * the edit card rather than the post (audit V13, W10). It now asks which
+ * client, then runs the Schedule page's own flow: the files, then the one
+ * post window, whose main button is "Send for quality check".
+ */
+describe('New post on Post approval: which client, then the one flow', () => {
+  const src = code(BUTTON)
 
   it('asks which client first, in the same window', () => {
     expect(src).toMatch(/Who is this post for\?/)
@@ -92,6 +82,10 @@ describe('the one window: the files and the decision, nothing else (8 Sep 2026)'
   it('has the client list it needs, live, rather than a second fetch', () => {
     expect(src).toMatch(/useSchedulePosts\(viewer, clientId\)/)
   })
+
+  it('makes no decision of its own — the post window\'s buttons do', () => {
+    expect(src).not.toMatch(/from-upload|decision|approve|send\('client'\)/)
+  })
 })
 
 describe('one flow, not two', () => {
@@ -99,7 +93,8 @@ describe('one flow, not two', () => {
 
   it('the flow is where the chooser, the composer and the editor are drawn', () => {
     expect(flow).toMatch(/import NewPostSources from '\.\/NewPostSources'/)
-    expect(flow).toMatch(/import NewPostDialog/)
+    expect(flow).toMatch(/import PostWindow/)
+    expect(flow).not.toMatch(/NewPostDialog/)
     expect(flow).toMatch(/import ImageEditor/)
   })
 
@@ -108,13 +103,13 @@ describe('one flow, not two', () => {
     expect(page).toMatch(/useComposeFlow/)
     expect(page).toMatch(/\{flow\.windows\}/)
     // the windows themselves live in ONE file now
-    expect(page).not.toMatch(/<NewPostSources|<NewPostDialog|<ImageEditor/)
+    expect(page).not.toMatch(/<NewPostSources|<NewPostDialog|<PostWindow|<ImageEditor/)
   })
 
   it('neither page keeps a second composer, preview or approval route', () => {
-    for (const path of [BUTTON, COMPOSE, BOARD]) {
+    for (const path of [BUTTON, BOARD]) {
       const src = code(path)
-      expect(src).not.toMatch(/<NewPostDialog|<NewPostSources/)
+      expect(src).not.toMatch(/<NewPostDialog|<NewPostSources|<PostWindow\b/)
       expect(src).not.toMatch(/PostPreview/)
       expect(src).not.toMatch(/mode: ?'approval'/)
     }

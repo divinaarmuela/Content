@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  TOO_SOON, eligibility, mirrorStatus, tileTone, scheduleWeekGrid, monthCells, canReschedule,
+  TIME_TOO_SOON_OR_NOW, eligibility, scheduleWeekGrid, monthCells,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
-  blockReason, approveWithoutClientQuestion, mayApproveWithoutClient,
+  approveWithoutClientQuestion, mayApproveWithoutClient,
   assetsApprovedOnBoard, mayPostPiece, mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
-  NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE, WITH_THE_CLIENT_NOW,
+  NOT_CLIENT_APPROVED, WITH_THE_CLIENT_NOW,
   APPROVE_WITHOUT_CLIENT_STATUSES, APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES,
-  channelBlockReason, coverForSlide, mayEditNote, postTileFacts,
-  type SocialPostStatus, type TileJob,
+  channelBlockReason, coverForSlide, mayEditNote,
 } from '@/app/lib/social-schedule-core'
 import { fromZonedInput, toZonedInput, dayKeyInZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -100,95 +99,16 @@ describe('eligibility', () => {
   })
 })
 
-/* ── mirrorStatus ───────────────────────────────────────────────────────── */
+/* ── no status worked out of the edit card (posting rebuild, 29 Sep 2026) ── */
 
-describe('mirrorStatus', () => {
-  const post = { status: 'draft' }
-
-  it('mirrors the item approval state when nothing is queued', () => {
-    for (const [state, want] of [
-      ['pending', 'pending'], ['approved', 'approved'], ['changes', 'changes'], ['draft', 'draft'],
-    ] as const) {
-      expect(mirrorStatus({ posting_approval_state: state }, post, [])).toBe(want)
+describe('the post’s state is its own stage, never the edit card’s', () => {
+  it('the core no longer exports anything that reads posting_approval_state to say where a post is', async () => {
+    const core = await import('@/app/lib/social-schedule-core') as Record<string, unknown>
+    // mirrorStatus drew a draft nobody approved as green "Approved" (audit S2);
+    // postTileFacts and blockReason were its two readers
+    for (const gone of ['mirrorStatus', 'postTileFacts', 'blockReason', 'showsOnGrid', 'belongsInList']) {
+      expect(core[gone], gone).toBeUndefined()
     }
-  })
-
-  it('an item the gate never touched reads as a draft', () => {
-    expect(mirrorStatus({ posting_approval_state: null }, post, [])).toBe('draft')
-    expect(mirrorStatus(null, null, [])).toBe('draft')
-  })
-
-  it('a live job outranks the approval state', () => {
-    for (const s of ['queued', 'publishing', 'scheduled']) {
-      expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [{ status: s }]))
-        .toBe('scheduled')
-    }
-  })
-
-  it('reads published, failed and cancelled off the jobs', () => {
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [{ status: 'published' }]))
-      .toBe('published')
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [{ status: 'failed' }]))
-      .toBe('failed')
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [{ status: 'cancelled' }]))
-      .toBe('cancelled')
-  })
-
-  it('one channel still to go out keeps the whole post scheduled', () => {
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [
-      { status: 'published' }, { status: 'queued' },
-    ])).toBe('scheduled')
-  })
-
-  it('a failure on any channel is louder than a success on another', () => {
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, post, [
-      { status: 'published' }, { status: 'failed' },
-    ])).toBe('failed')
-  })
-
-  it('ignores a job status it does not know', () => {
-    expect(mirrorStatus({ posting_approval_state: 'pending' }, post, [{ status: 'weird' }]))
-      .toBe('pending')
-  })
-
-  it('agrees with canReschedule on a cancelled post with no jobs', () => {
-    // the item still reads 'approved' — only the post itself was cancelled —
-    // and that must still win, or the tile would claim it could be dragged
-    // when canReschedule would refuse the drop
-    const cancelled = { status: 'cancelled' }
-    expect(mirrorStatus({ posting_approval_state: 'approved' }, cancelled, [])).toBe('cancelled')
-    expect(canReschedule(cancelled).ok).toBe(false)
-  })
-})
-
-describe('blockReason', () => {
-  it('gives back the sentence the server would refuse with', () => {
-    expect(blockReason({ posting_approval_state: 'approved' })).toBeNull()
-    expect(blockReason({ posting_approval_state: null })).toBeNull()
-    expect(blockReason({ posting_approval_state: 'pending' }))
-      .toMatch(/Waiting on final approval/)
-    expect(blockReason({ posting_approval_state: 'changes' }))
-      .toMatch(/^Changes were asked for/)
-    expect(blockReason({ posting_approval_state: 'draft' }))
-      .toBe('Send the post for approval first')
-  })
-})
-
-/* ── tileTone ───────────────────────────────────────────────────────────── */
-
-describe('tileTone', () => {
-  it('gives every status its tone', () => {
-    const want: Record<SocialPostStatus, string> = {
-      pending: 'amber', changes: 'red', approved: 'green', scheduled: 'blue',
-      published: 'ink', draft: 'muted', failed: 'red-outline', cancelled: 'muted',
-    }
-    for (const [status, tone] of Object.entries(want)) {
-      expect(tileTone(status as SocialPostStatus)).toBe(tone)
-    }
-  })
-  it('falls back to muted for anything unknown', () => {
-    expect(tileTone('nonsense')).toBe('muted')
-    expect(tileTone(null)).toBe('muted')
   })
 })
 
@@ -328,36 +248,6 @@ describe('monthCells', () => {
     const june = monthCells('2026-06', TZ)
     expect(june[0].key).toBe('2026-06-01')
     expect(june[0].inMonth).toBe(true)
-  })
-})
-
-/* ── canReschedule ──────────────────────────────────────────────────────── */
-
-describe('canReschedule', () => {
-  it('moves a post that has not been queued yet', () => {
-    for (const status of ['draft', 'pending', 'approved', 'changes']) {
-      expect(canReschedule({ status })).toEqual({ ok: true, mode: 'move' })
-    }
-  })
-  it('re-queues a post the provider is already holding', () => {
-    expect(canReschedule({ status: 'scheduled' })).toEqual({ ok: true, mode: 'requeue' })
-  })
-  it('refuses in plain words once the post is done with', () => {
-    for (const status of ['published', 'failed', 'cancelled']) {
-      const r = canReschedule({ status })
-      expect(r.ok).toBe(false)
-      if (!r.ok) {
-        expect(r.reason.length).toBeGreaterThan(10)
-        expect(r.reason).not.toMatch(/[_A-Z]{4,}/)
-      }
-    }
-    expect(canReschedule({ status: 'published' })).toEqual({
-      ok: false, reason: 'This post has already gone out, so it cannot be moved',
-    })
-  })
-  it('treats an unknown status as a draft that can be moved', () => {
-    expect(canReschedule({ status: 'wat' })).toEqual({ ok: true, mode: 'move' })
-    expect(canReschedule(null)).toEqual({ ok: true, mode: 'move' })
   })
 })
 
@@ -755,12 +645,9 @@ describe('who may post without approval', () => {
     expect(clientSignsOffEveryPost(null)).toBe(false)
   })
 
-  it('says its two sentences in plain words', () => {
-    expect(CLIENT_SIGNS_OFF_NOTE).toBe('This client signs off every post.')
+  it('says its sentence in plain words', () => {
     expect(NOT_CLIENT_APPROVED).toBe('Not yet approved by the client')
-    for (const line of [CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED]) {
-      expect(line.toLowerCase()).not.toContain('graphic')
-    }
+    expect(NOT_CLIENT_APPROVED.toLowerCase()).not.toContain('graphic')
   })
 })
 
@@ -943,28 +830,6 @@ describe('a channel that stopped working blocks its post', () => {
     ])).toBeNull()
   })
 
-  it('is not what a tile says when the APPROVAL is what is standing in the way', () => {
-    const item = { status: 'approved_for_scheduling', posting_approval_state: 'pending' }
-    const facts = postTileFacts(
-      { item_id: 'i1', channels: ['a1'], publish_job_ids: [], status: 'pending' },
-      item,
-      new Map<string, TileJob>(),
-      [acc({ active: false })],
-    )
-    // an unapproved post is not going out whatever its channels are doing
-    expect(facts.block_reason).toMatch(/final approval/)
-  })
-
-  it('is what a tile says once the approval is in', () => {
-    const item = { status: 'scheduled', posting_approval_state: 'approved' }
-    const facts = postTileFacts(
-      { item_id: 'i1', channels: ['a1'], publish_job_ids: [], status: 'scheduled' },
-      item,
-      new Map<string, TileJob>(),
-      [acc({ active: false, name: 'Acme main' })],
-    )
-    expect(facts.block_reason).toMatch(/^Acme main needs reconnecting/)
-  })
 })
 
 describe('who may change a note', () => {
@@ -1033,23 +898,11 @@ describe('a booked time needs a lead', () => {
     now: '2026-09-09T09:00:00Z',
   })
   it('refuses a time five minutes away', () => {
-    expect(check(at(5)).problems).toContain(TOO_SOON)
+    expect(check(at(5)).problems).toContain(TIME_TOO_SOON_OR_NOW)
   })
   it('accepts Post now (inside two minutes) and anything fifteen minutes out', () => {
-    expect(check(at(1)).problems).not.toContain(TOO_SOON)
-    expect(check(at(15)).problems).not.toContain(TOO_SOON)
-    expect(check(at(60)).problems).not.toContain(TOO_SOON)
-  })
-})
-
-describe('one open post per piece — the window and the server read one list', () => {
-  it('a post sent back for changes is still OPEN: the next press reopens it, the server would refuse a second', async () => {
-    const { isOpenPost, OPEN_POST_STATUSES, SOCIAL_POST_STATUSES } = await import('../app/lib/social-schedule-core')
-    expect([...OPEN_POST_STATUSES]).toEqual(['draft', 'pending', 'approved', 'changes'])
-    // the complement is exactly what the server's gate used to spell out
-    const settled = SOCIAL_POST_STATUSES.filter(s => !isOpenPost(s))
-    expect(settled).toEqual(['scheduled', 'published', 'failed', 'cancelled'])
-    expect(isOpenPost('changes')).toBe(true)
-    expect(isOpenPost(undefined)).toBe(false)
+    expect(check(at(1)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
+    expect(check(at(15)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
+    expect(check(at(60)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
   })
 })

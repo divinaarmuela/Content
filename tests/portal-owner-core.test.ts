@@ -61,7 +61,8 @@ describe('the doors and the pages (source pins)', () => {
     expect(src('app/lib/portal-data.ts')).toContain("return owner ? getPortalData(owner.client.id, owner.scope) : null")
     expect(src('app/lib/portal-thread.ts')).toContain('const owner = await portalOwnerByToken(rawToken)')
     for (const p of ['app/api/portal/act/route.ts', 'app/api/portal/comment/route.ts', 'app/api/portal/shoot-pdf/route.ts', 'app/api/instagram-video/route.ts']) {
-      expect(src(p), p).toContain('await clientByPortalToken(token)')
+      // the act route needs WHOSE portal too (a person's sees only their pieces' posts), so it takes the owner
+      expect(src(p), p).toMatch(/await (clientByPortalToken|portalOwnerByToken)\(token\)/)
     }
   })
   it('the portal reads filter by whose portal it is — shoots and pieces alike', () => {

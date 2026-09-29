@@ -1,161 +1,106 @@
 'use client'
 
-import { managesClients, personLabel } from '../../lib/identity-core'
-
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useTable } from '@/lib/db-client'
-import type { ScheduleEntry } from '@/lib/db-types'
-import { pageCards, type BoardViewer } from '../../lib/board-view-core'
-import { dayKeyInZone, DEFAULT_TZ } from '../../lib/timezone-core'
-import { useWorkRows } from '../useLiveWork'
+import type { ScopeViewer } from '../../lib/production-access-core'
+import { laneFromAddress } from '../../lib/post-board-core'
+import { postWaitingRows } from '../../lib/post-waiting-core'
 import { useRole } from '../useRole'
-import { todayKey } from '../ui/tone'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
-import { Board, useBoardParams, type BoardCardRow } from '../board/Board'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
-import { BoardFilters } from '../board/BoardFilters'
-import { useBoardFilters } from '../board/useBoardFilters'
-import {
-  applyFilters, clientsOnCards, filterWords, filteredEmpty, mayFilterPeople, peopleOnCards, validChoice,
-} from '../../lib/people-filter-core'
 import WaitingOnYou from './WaitingOnYou'
+import PostWindowFromAddress from './PostWindowFromAddress'
+import ClientRound from './board/ClientRound'
+import { PostBoard } from './board/PostBoard'
+import SourceTray from './board/SourceTray'
+import { usePostActs } from './board/usePostActs'
+import { usePostBoard } from './board/usePostBoard'
 
 /**
- * THE SCHEDULER PAGE: links and what needs doing, on the whole board.
+ * POST APPROVAL (/dashboard/scheduler) — getting a post approved.
  *
- * Every content card for the clients the person holds, on the one board.
- * The two stages a scheduler works — Ready to post, Posted — get full
- * lanes; everything before them (Draft, Quality check, With client) is
- * folded into one narrow "Coming up" lane, so what is coming is visible
- * before it is ready without three columns sitting empty. Each card
- * carries the link to the work and what needs doing. Back here the card just
- * moves, Ready to post → Posted; it never asks for a channel, a time or a
- * live link.
+ * The owner's decision 1 (29 Sep 2026): two pages, two jobs. This page takes
+ * a post from Draft through the quality check and, when it goes to them, the
+ * client, to Approved. The Schedule page books approved posts in. Both read
+ * the one field, `social_posts.stage`; nothing here reads the edit card's
+ * status to decide where a post is (docs/posting-rebuild/SPEC.md §4.2).
  *
- * Writing the post itself is the ONE button in the header (`NewPostButton`),
- * and it happens HERE: files or the client's Drive folder, the preview, and
- * "Send for approval" — the Schedule page's own flow (`useComposeFlow`),
- * opened over this board rather than on another page.
+ * Top to bottom:
+ *   1. Waiting on you — the posts somebody is held up by (`post-waiting-core`).
+ *   2. Edits ready to become posts — a tray, not a lane (`SourceTray`).
+ *   3. The board — Draft · Quality check · With client · Approved, and the
+ *      cancelled posts folded under it (`PostBoard`).
  *
- * Above the board sits "Waiting on you" (`WaitingOnYou` / `waiting-core`):
- * every one of those cards that somebody is actually held up by — a post
- * sent for its final sign-off, a piece waiting on this manager's check, a
- * piece sitting with the client, anything this person was asked for — with
- * the two answers on the row. It reads the same cards the board does and
- * offers only what the same rules already allow.
+ * Every button on all three is from `boardActions` (post-board-core, which
+ * narrows `postActions` to this page's moves) and is sent by `usePostActs` to
+ * the one act route. A card opens the post window.
  *
- * The two fetches below feed the Overview's lenses only — "Going out today"
- * (`?show=today`) and "Waiting on an account" (`?show=account`) — and the
- * board works without either.
+ * Addresses: `?lane=` (or the old `?column=`) opens a lane on a phone;
+ * `?post=<id>` opens that post's window HERE (every card, list row and
+ * Waiting row links to it — the quality checker has no Schedule page) and
+ * outlines its card; `?item=<id>` / `?card=<id>` (the bell and older emails)
+ * outline the posts made from that edit, or open the edit when it has none
+ * yet.
  */
-export default function SchedulerPage() {
+export default function PostApprovalPage() {
   const { me, noAccount } = useRole()
-  const viewer = useMemo<BoardViewer | null>(
+  const viewer = useMemo<ScopeViewer | null>(
     () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
-  // schedulerPostFilter off: the board shows the whole scoped list and the
-  // columns say what each card is
-  const live = useWorkRows(viewer, { schedulerPostFilter: false })
-  const { column, show, clearShow } = useBoardParams()
-  const [today, setToday] = useState<string | null>(null)
-  useEffect(() => { setToday(todayKey()) }, [])
-  // the card that is open beside the board, named in the address
+  const data = usePostBoard(viewer)
+  const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf, clientOf: data.clientOf })
   const sheet = useCardSheet()
-  // (trend research, a caption pass) is a card like any other
-  /** clients with at least one connected channel — for "Waiting on an account" */
-  const [connectedClientIds, setConnectedClientIds] = useState<ReadonlySet<string>>(() => new Set())
+
+  /* ── narrowing to one client, for people who look across many ── */
+  const [clientId, setClientId] = useState<string>('')
+  const clientsOnBoard = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const bp of [...data.onLanes, ...data.cancelled]) seen.set(bp.post.client_id, bp.face.client)
+    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [data.onLanes, data.cancelled])
+  const lanes = useMemo(
+    () => (clientId ? data.onLanes.filter(bp => bp.post.client_id === clientId) : data.onLanes),
+    [data.onLanes, clientId])
+  const cancelled = useMemo(
+    () => (clientId ? data.cancelled.filter(bp => bp.post.client_id === clientId) : data.cancelled),
+    [data.cancelled, clientId])
+  const sources = useMemo(
+    () => (clientId ? data.sources.filter(i => i.client_id === clientId) : data.sources),
+    [data.sources, clientId])
+
+  const waiting = useMemo(() => {
+    if (!viewer) return []
+    const byId = new Map(lanes.map(bp => [bp.post.id, bp]))
+    return postWaitingRows(lanes.map(bp => bp.post), viewer, data.clock.now,
+      post => ({ face: byId.get(post.id)!.face, ctx: byId.get(post.id)!.ctx }))
+  }, [lanes, viewer, data.clock.now])
+
+  /* ── what the address names ── */
+  const [initialLane, setInitialLane] = useState<string | null>(null)
+  const [focus, setFocus] = useState<ReadonlySet<string>>(() => new Set())
+  const ready = viewer !== null && !data.loading
+  const handledAddress = useRef(false)
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/social/accounts', { cache: 'no-store' })
-        if (!res.ok) return
-        const json = await res.json()
-        const ids = new Set<string>()
-        for (const a of (json.accounts ?? []) as { client_id: string | null; platform: string; active: boolean }[]) {
-          if (a.active && a.client_id) ids.add(a.client_id)
-        }
-        if (!cancelled) setConnectedClientIds(ids)
-      } catch { /* no channels known — the lens shows every ready card */ }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
-  /** the posts booked for today — for "Going out today" */
-  const { rows: entries } = useTable<ScheduleEntry>('schedule_entries', { enabled: viewer !== null })
-  const zone = me?.timezone || DEFAULT_TZ
-  const postingToday = useMemo(() => {
-    const out = new Set<string>()
-    if (!today) return out
-    for (const e of entries) {
-      if (e.scheduled_at && dayKeyInZone(e.scheduled_at, zone) === today) out.add(e.item_id)
+    if (!ready || handledAddress.current) return
+    handledAddress.current = true
+    let p: URLSearchParams
+    try { p = new URLSearchParams(window.location.search) } catch { return }
+    setInitialLane(laneFromAddress(p.get('lane') ?? p.get('column')))
+    const postId = p.get('post')
+    const itemId = p.get('item') ?? p.get('card')
+    const all = [...data.onLanes, ...data.cancelled]
+    if (postId) {
+      // the window opens from the address (PostWindowFromAddress); the card is outlined when it is here
+      if (all.some(bp => bp.post.id === postId)) setFocus(new Set([postId]))
+      return
     }
-    return out
-  }, [entries, today, zone])
-
-  const names = useMemo(
-    () => new Map(live.tables.team.rows.map(u => [u.id, personLabel(u.name, u.email)])),
-    [live.tables.team.rows])
-  /** the account managers on each client, for the card face */
-  const managersOf = useMemo(() => {
-    const byClient = new Map<string, string[]>()
-    const role = new Map(live.tables.team.rows.map(u => [u.id, u.role]))
-    for (const a of live.tables.assignments.rows) {
-      if (!managesClients(role.get(a.team_user_id))) continue   // a super admin on the client is its AM too (15 Sep 2026)
-      const name = names.get(a.team_user_id)
-      if (name) byClient.set(a.client_id, [...(byClient.get(a.client_id) ?? []), name])
+    if (itemId) {
+      const made = all.filter(bp => bp.post.source_item_id === itemId).map(bp => bp.post.id)
+      if (made.length > 0) setFocus(new Set(made))
+      else sheet.open(itemId)
     }
-    return (clientId: string) => byClient.get(clientId) ?? []
-  }, [live.tables.assignments.rows, live.tables.team.rows, names])
-
-  const allCards = useMemo(() => {
-    if (!viewer) return [] as BoardCardRow[]
-    // the same cards Production shows, minus shoot briefs — those are plans
-    // for a shoot, not something to post
-    const rows = (live.items as unknown as BoardCardRow[]).filter(c => (c.work_kinds?.slug ?? '') !== 'shoot_brief')
-    return pageCards('scheduler', rows, viewer, today)
-  }, [live.items, viewer, today])
-  /* ── who is doing what: the Client and People filters, for the people whose
-        job is to look across everyone's work (the owner, 11 Sep 2026) ── */
-  const mayFilter = viewer !== null && mayFilterPeople(viewer)
-  const filter = useBoardFilters('scheduler')
-  const who = useMemo(
-    () => new Map(live.tables.team.rows.map(u => [u.id, { name: personLabel(u.name, u.email), role: String(u.role ?? '') }])),
-    [live.tables.team.rows])
-  const clientNames = useMemo(() => new Map(live.tables.clients.rows.map(c => [c.id, c.name])), [live.tables.clients.rows])
-  const clientRows = useMemo(() => clientsOnCards(allCards, clientNames), [allCards, clientNames])
-  const peopleRows = useMemo(() => peopleOnCards(allCards, who), [allCards, who])
-  // a remembered or linked id that is not on the board is nobody
-  const chosen = useMemo(() => ({
-    client: mayFilter ? validChoice(filter.client, clientRows) : null,
-    person: mayFilter ? validChoice(filter.person, peopleRows) : null,
-  }), [mayFilter, filter.client, filter.person, clientRows, peopleRows])
-  const filterNames = {
-    person: chosen.person ? (who.get(chosen.person)?.name ?? null) : null,
-    client: chosen.client ? (clientNames.get(chosen.client) ?? null) : null,
-  }
-  const cards = useMemo(() => applyFilters(allCards, chosen), [allCards, chosen])
-  const ready = viewer !== null && !live.loading && today !== null
-
-  /**
-   * `?item=<id>` — the card an email or the bell points at. Opened once the
-   * cards have arrived, and only once: closing it must not reopen it. The
-   * owner, 8 Sep 2026: "the email when a scheduler sends is wrong — make sure
-   * it takes them to the right place." The right place is the card, open.
-   */
-  const openedFromAddress = useRef(false)
-  useEffect(() => {
-    if (!ready || openedFromAddress.current) return
-    let wanted: string | null = null
-    try { wanted = new URLSearchParams(window.location.search).get('item') } catch { /* no address */ }
-    if (!wanted) return
-    openedFromAddress.current = true
-    if (cards.some(c => c.id === wanted)) sheet.open(wanted)
-    else toast.error('That piece is not on this board any more — it may have been deleted.')
-  }, [ready, cards, sheet])
+  }, [ready, data.onLanes, data.cancelled, sheet])
 
   if (noAccount) return <AccountUnavailable />
 
@@ -164,10 +109,18 @@ export default function SchedulerPage() {
       {ready && <GettingStarted role={viewer.role} page="scheduler" />}
       {ready && <NoReviewerBanner me={me} />}
 
-      {/* everything stuck on a decision, before the board that holds it —
-          hidden entirely when nothing is waiting */}
       {ready && (
-        <WaitingOnYou cards={cards} viewer={viewer} today={today} onOpenCard={sheet.open} />
+        <WaitingOnYou rows={waiting} busyId={acts.busyId} errorFor={acts.errorFor} onPress={acts.press} />
+      )}
+
+      {ready && <SourceTray items={sources} onOpenEdit={sheet.open} nameOf={data.nameOf} />}
+
+      {ready && <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />}
+
+      {ready && data.unstaged > 0 && (
+        <p className="rounded-inner border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
+          {data.unstaged === 1 ? '1 older post has' : `${data.unstaged} older posts have`} not been moved to the new stages yet. {data.unstaged === 1 ? 'It shows' : 'They show'} here once the move has run.
+        </p>
       )}
 
       {!ready ? (
@@ -175,35 +128,34 @@ export default function SchedulerPage() {
           {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-card" />)}
         </div>
       ) : (
-        <Board
-          cards={cards}
-          viewer={viewer}
-          page="scheduler"
-          names={names}
-          managersOf={managersOf}
-          kinds={live.tables.workKinds.rows}
-          today={today}
-          onOpen={c => sheet.open(c.id)}
-          initialColumn={column}
-          show={show}
-          onClearShow={clearShow}
-          postingToday={postingToday}
-          connectedClientIds={connectedClientIds}
-          ariaLabel="Every card, by stage"
-          filters={mayFilter ? (
-            <BoardFilters clients={clientRows} people={peopleRows} value={chosen}
-              onClient={filter.setClient} onPerson={filter.setPerson} onClear={filter.clear} />
-          ) : undefined}
-          filterNote={filterWords(chosen, filterNames, cards.length, allCards.length)}
-          laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
-        />
+        <>
+          {clientsOnBoard.length > 1 && (
+            <label className="inline-flex h-11 w-fit items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted-foreground">
+              Client
+              <select aria-label="Show one client" value={clientId} onChange={e => setClientId(e.target.value)}
+                className="h-9 bg-transparent text-[13px] font-semibold text-foreground outline-none">
+                <option value="">Every client</option>
+                {clientsOnBoard.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          )}
+          <PostBoard
+            posts={lanes}
+            cancelled={cancelled}
+            now={data.clock.now}
+            busyId={acts.busyId}
+            errorFor={acts.errorFor}
+            onPress={acts.press}
+            initialLane={initialLane}
+            focus={focus}
+          />
+        </>
       )}
-      {/* the card, beside the board — the board stays live behind it */}
-      {/* ONE drawer for every card (the render audit of 11 Sep 2026): a card
-          from a shoot used to open the old production drawer here, without
-          the delivery date, Files to work from, the account manager line or
-          the editor's tools. The full card page is one press away inside. */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} simple />
+
+      {acts.dialogs}
+      <Suspense fallback={null}><PostWindowFromAddress /></Suspense>
+      {/* an edit from the tray, opened beside the board — the edit's own card */}
+      <CardSheet id={sheet.cardId} onClose={sheet.close} />
     </div>
   )
 }

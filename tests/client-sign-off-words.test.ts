@@ -24,7 +24,7 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8')
 
 // the card's body — the page route is a thin wrapper around CardDetail
 const ITEM_PAGE = 'app/dashboard/production/[id]/CardDetail.tsx'
-const COMPOSER = 'app/dashboard/social/schedule/NewPostDialog.tsx'
+const COMPOSER = 'app/dashboard/social/schedule/PostWindow.tsx'
 const RAIL = 'app/dashboard/social/schedule/MediaRail.tsx'
 const PICKER = 'app/dashboard/social/schedule/NewPostSources.tsx'
 const CLIENT_SOCIAL = 'app/dashboard/clients/[id]/social/page.tsx'
@@ -82,11 +82,18 @@ describe('the two markers stay two different sentences', () => {
    * rail onto a time showed the words for the half second it was under the
    * cursor and never again.
    */
-  it('the post window shows the marker too, and judges the REAL status', () => {
+  /**
+   * THE POSTING REBUILD (29 Sep 2026, the owner's decision 7): the edit's
+   * approval never moves or labels a post. The post window reads the post's
+   * own stage and judges the post with the stage rules — it reads no edit
+   * status at all, so it cannot wear the edit's sign-off as the post's.
+   */
+  it('the post window judges the POST, never the edit card\'s status', () => {
     const source = read(COMPOSER)
-    expect(source).toContain('NOT_CLIENT_APPROVED')
-    expect(source).toContain('item: { status: target.itemStatus')
+    expect(source).not.toContain('itemStatus')
+    expect(source).not.toContain('NOT_CLIENT_APPROVED')
     expect(source).not.toContain("item: { status: 'approved_for_scheduling'")
+    expect(source).toContain('compositionProblems(post, accountRefs, nowMs)')
   })
 
   /**
@@ -94,10 +101,17 @@ describe('the two markers stay two different sentences', () => {
    * `client_review` from the one-press set is exactly what brings it back to
    * life, and it is now the only way past a review that is happening.
    */
-  it('the deliberate "Approve without client" button is still drawn', () => {
-    for (const file of [RAIL, PICKER]) {
-      expect(read(file), file).toContain('Approve without client')
-      expect(read(file), file).toContain('mayApproveWithoutClient')
-    }
+  it('the deliberate "Approve without client" button is still drawn in the media chooser', () => {
+    expect(read(PICKER), PICKER).toContain('Approve without client')
+    expect(read(PICKER), PICKER).toContain('mayApproveWithoutClient')
+  })
+
+  /**
+   * THE POSTING REBUILD (29 Sep 2026, the owner's decision 1): nothing is
+   * approved on the Schedule page. Its rail used to carry the button too.
+   */
+  it('the Schedule page’s rail approves nothing', () => {
+    expect(read(RAIL)).not.toContain('Approve without client')
+    expect(read(RAIL)).not.toContain('mayApproveWithoutClient')
   })
 })

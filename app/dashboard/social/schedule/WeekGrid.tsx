@@ -6,8 +6,7 @@ import { cn } from '@/lib/utils'
 import type { ScheduleWeekGrid, SuggestedTime } from '@/app/lib/social-schedule-core'
 import { dropIntent, dropLabelAt, LONG_PRESS_MS } from '@/app/lib/schedule-drag-core'
 import type { ScheduleNote } from '@/lib/db-types'
-import PlatformIcon from '../PlatformIcon'
-import { STATUS_WORDS, StatusDot, Thumb, TONE_DIM, clockLabel } from './tiles'
+import { AlertMark, NetworkLogos, STAGE_DIM, STAGE_RING, StageDot, Thumb, clockLabel } from './tiles'
 import { isFileDrag } from '@/app/lib/schedule-upload-core'
 import { RAIL_DRAG_TYPE } from './MediaRail'
 import { POST_ID_ATTR, TILE_DRAG_TYPE, type DragSchedule } from './useDragSchedule'
@@ -55,7 +54,7 @@ export function StoriesStrip({ stories, tz }: { stories: SchedulePostRow[]; tz: 
         <span className="flex items-center gap-1.5 normal-case tracking-normal">
           {stories.slice(0, 6).map(s => (
             <span key={s.id} className="inline-flex items-center gap-1">
-              <StatusDot tone={s.tone} className="border-0" />
+              <StageDot tone={s.facts.tone} className="border-0" />
               {clockLabel(s.scheduled_for, tz)}
             </span>
           ))}
@@ -66,8 +65,9 @@ export function StoriesStrip({ stories, tz }: { stories: SchedulePostRow[]; tz: 
   )
 }
 
-/** One post on the grid: its media, when it goes out, where to, and the dot
- *  that says where it stands. */
+/** One post on the grid: its media, when it goes out, every network it goes
+ *  to, the dot that says where it stands, and a "!" when something is wrong.
+ *  Every word is the post's own stage words (`scheduleFacts`). */
 export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: {
   post: SchedulePostRow
   tz: string
@@ -85,12 +85,13 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: 
   const stuck = drag.blockedReason(post)
   const lifted = drag.moving?.postId === post.id
   const saving = drag.saving.has(post.id)
+  const f = post.facts
+  const warn = f.alert ?? (f.missed ? f.label : null)
   const title = [
     post.item_title ?? 'Post',
-    STATUS_WORDS[post.live_status],
-    // the same sentence the server would refuse with, so the tile and the API
-    // never explain the same block two different ways
-    post.block_reason,
+    f.label,
+    f.alert,
+    post.source_deleted ? 'Its card was deleted' : null,
     offGrid ? 'Outside the hours shown' : null,
     stuck ?? 'Drag to move it, or press Space and use the arrow keys',
   ].filter(Boolean).join(' · ')
@@ -131,7 +132,8 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: 
       }}
       className={cn(
         'absolute overflow-hidden rounded-tile border border-border bg-foreground/[0.06] transition-shadow hover:z-10 hover:shadow-md focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue',
-        TONE_DIM[post.tone],
+        STAGE_DIM[f.tone],
+        STAGE_RING[f.tone],
         offGrid && 'border-dashed',
         // NO `touch-action` here: the week is scrolled with a finger, and
         // most of a busy column is tiles. A press that turns into a drag stops
@@ -144,17 +146,14 @@ export function PostTile({ post, tz, top, offGrid, lane, lanes, onOpen, drag }: 
       )}
     >
       <Thumb slide={post.slides[0] ?? null} label={post.item_title ?? 'Post'} className="h-full w-full" />
-      <StatusDot tone={post.tone} className="absolute left-1.5 top-1.5" />
+      <StageDot tone={f.tone} className="absolute left-1.5 top-1.5" />
+      {warn && <AlertMark label={warn} className="absolute right-1.5 top-1.5" />}
       {when && (
         <span className="absolute bottom-1.5 left-1.5 rounded-full bg-ink/70 px-1.5 py-0.5 text-[10px] font-bold text-cream">
           {when}
         </span>
       )}
-      {post.platforms[0] && (
-        <span className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink">
-          <PlatformIcon platform={post.platforms[0]} size={14} className="rounded-full" />
-        </span>
-      )}
+      <NetworkLogos platforms={post.platforms} size={12} max={lanes > 1 ? 1 : 3} className="absolute bottom-1.5 right-1.5" />
       <span className="sr-only">{title}</span>
     </button>
   )
@@ -554,11 +553,11 @@ export default function WeekGrid({
                             <span className="flex min-w-0 flex-1 flex-col">
                               <span className="truncate text-[12px] font-semibold">{p.item_title ?? 'Post'}</span>
                               <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                <StatusDot tone={p.tone} className="h-1.5 w-1.5" />
-                                {clockLabel(p.scheduled_for, tz)} · {p.waiting_on ?? STATUS_WORDS[p.live_status]}
+                                <StageDot tone={p.facts.tone} className="h-1.5 w-1.5" />
+                                {clockLabel(p.scheduled_for, tz)} · {p.facts.label}
                               </span>
                             </span>
-                            {p.platforms[0] && <PlatformIcon platform={p.platforms[0]} size={14} className="shrink-0 rounded-full" />}
+                            <NetworkLogos platforms={p.platforms} size={12} className="shrink-0" />
                           </button>
                         ))}
                       </div>

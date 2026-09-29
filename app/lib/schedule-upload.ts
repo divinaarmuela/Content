@@ -4,15 +4,13 @@ import { table } from '@/lib/db'
 import type { AssetVersion, Client, ContentItem } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { announceItemChange } from './production-live'
-import { mayPostStraightOut } from './social-schedule'
 import { onItemsCreated } from './gdrive-hooks'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { previewVideos } from './stream'
-import { addVersion, logActivity, performTransition } from './workflow'
-import { actingRoles } from './workflow-core'
+import { addVersion, logActivity } from './workflow'
 import { resolveKindForWrite, type WorkKind } from './work-kinds-core'
 import {
-  clientSignsOffEveryPost, mayPostWithoutApproval, CLIENT_POLICY_UNREADABLE,
+  clientSignsOffEveryPost, CLIENT_POLICY_UNREADABLE,
 } from './social-schedule-core'
 import {
   assertClientAccess, ComposeError, startPostOnItem, type PlannedPost,
@@ -36,24 +34,13 @@ import { UPLOAD_ADHOC_REASON, contentTypeForFiles, titleForUpload } from './sche
  * THEM, out of the file they picked, and they never see the word.
  *
  * What lands is an ordinary item: the same work kind, the same ad-hoc
- * (no-shoot) shape with its reason recorded, `draft_uploaded` at birth and
- * then moved forward on the ORDINARY edges, as this person. Opened in
+ * (no-shoot) shape with its reason recorded, `draft_uploaded` at birth. Opened in
  * Production later it is indistinguishable from one somebody typed in — that
  * is the test this file is written to pass.
  *
- * The approval question is answered by the same machinery as everywhere else
- * (`mayPostWithoutApproval` + `performTransition`), never by a second rule
- * living here:
- *
- *   • an account manager or a super admin — on any client, lock or no lock
- *     (the owner, 9 Sep 2026) — gets the piece carried to `approved_for_scheduling` on
- *     the ordinary "Approve without client" edge, recorded against them. Their
- *     post can go out at once, and `scheduleWithoutApproval` has nothing left
- *     to do for the media;
- *   • everybody else gets the piece left at `internal_review`, which is what
- *     "waiting for the manager's check" already means. The post exists, holds
- *     the media and cannot be sent — exactly the position an uploaded file was
- *     in before this change, minus the dead end.
+ * The card is only the holder of the files (SPEC §2.5): it stays at `draft_uploaded` and is never
+ * moved through the edit's approval (review fix, 29 Sep 2026). The POST is born a Draft, and its own
+ * Send for quality check and the reviewer's Pass are its approval (the owner's decisions 3 and 7).
  */
 
 /* ── what a caller may hand over ────────────────────────────────────────── */
@@ -70,27 +57,13 @@ export type UploadPostInput = {
   timezone?: string | null
   /** what to call the piece; derived from the file name when absent */
   title?: string | null
-  /**
-   * WHAT HAPPENS TO THE PIECE THE MOMENT IT IS UPLOADED (Post approval page,
-   * 8 Sep 2026 — "make it simple"):
-   *   'ask'     → Internal check, the named people are asked (anybody)
-   *   'approve' → Ready to post, in this person's name (managers only)
-   *   'client'  → With client (managers only)
-   *   absent    → a manager's is approved as before; anybody else's waits in
-   *               Draft for them to send it from the composer
-   */
-  decision?: 'ask' | 'approve' | 'client' | null
-  /** who is asked, for 'ask' */
-  reviewer_ids?: unknown
-  /** a line for whoever is asked, or for the client */
-  note?: string | null
 }
 
 export type UploadPostResult = {
   post: PlannedPost
   item: ContentItem
   version_number: number
-  /** does this post still need somebody's approval before it can go out? */
+  /** always true: an upload is a DRAFT post, and every post passes the quality check (decision 3) */
   needs_approval: boolean
   /** the one sentence to show */
   message: string
@@ -262,17 +235,6 @@ export async function createPostFromFiles(
   const shapeProblem = slidesSatisfyType(contentType, slides)
   if (shapeProblem) throw new ComposeError([shapeProblem])
 
-  // a decision this person may not make is refused before a single row is
-  // written — a piece nobody wanted is worse than a refusal
-  if (input.decision === 'approve' || input.decision === 'client') {
-    if (!await mayPostStraightOut(user, { client_id: clientId } as ContentItem)) {
-      throw new AuthzError('Only an account manager or a super admin can approve a piece here — send it to one instead', 403)
-    }
-  }
-  if (input.decision === 'ask' && !(Array.isArray(input.reviewer_ids) && input.reviewer_ids.length > 0)) {
-    throw new ComposeError(['Pick who should approve it'])
-  }
-
   const title = titleForUpload({
     fileName: slides[0]?.name ?? null,
     caption: input.title ? String(input.title) : (input.caption ?? null),
@@ -301,95 +263,14 @@ export async function createPostFromFiles(
   previewVideos(slides.map(s => s.url))
 
   /**
-   * FORWARD ON THE ORDINARY EDGES, NEVER AROUND THEM.
-   *
-   * `draft_uploaded → internal_review` is "Submit for review", and it needs a
-   * reviewable asset — which the version above is. The person uploading owns
-   * the item, so they wear the editor hat on it and may make the move whatever
-   * their job title is.
+   * THE UPLOAD IS A POST, AND ONLY A POST (the owner's decision 7; SPEC §1.3, §2.5 — review fix,
+   * 29 Sep 2026). The card made above is only the holder of the files. It is NOT moved through the
+   * edit's own approval any more: that sent the edit workflow's "ready for quality check" notices about
+   * a card nobody would ever see on Post approval, and answered "Approved — ready to book in" for a post
+   * that was a Draft. The post is born a Draft; its own Send for quality check, and the reviewer's Pass,
+   * are its approval.
    */
-  let current = item
-  /* THE PROPER FLOW (8 Sep 2026, final). A manager's upload clears itself
-   * below. A scheduler's stays at `draft_uploaded` — NOT submitted here —
-   * because the submit is theirs to make from the composer: "Send for
-   * approval", to the account manager THEY pick. Submitting it here would
-   * fan the "ready for review" note out to every manager before the
-   * scheduler had chosen one. */
-  const straightOut = mayPostWithoutApproval(
-    actingRoles({ id: user.id, role: user.role }, current), signsOff)
-  const reviewerIds = (Array.isArray(input.reviewer_ids) ? input.reviewer_ids : [])
-    .map(x => String(x ?? '')).filter(Boolean).slice(0, 20)
-  const note = String(input.note ?? '').trim().slice(0, 2000) || undefined
-  const decision = input.decision ?? (straightOut ? 'approve' : null)
-  /**
-   * THE QUALITY CHECK (Abby, 11 Sep 2026, as written): maker → Joy →
-   * scheduler. An upload that is submitted goes STRAIGHT to the quality
-   * reviewer — there is no manager's check in front of her. A manager who
-   * IS a quality reviewer (or a super admin) holds the edges straight
-   * through and answers it themselves below.
-   */
-  const throughGate = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, current)
-  const passesQuality = throughGate.includes('quality_reviewer') || throughGate.includes('super_admin')
-  /**
-   * THEIR OWN POST, CLEARED BY THEMSELVES (the owner, 15 Sep 2026: "I'm a
-   * super admin and an AM — when I upload content to post directly on the
-   * Schedule page, it triggers 'now ready for quality check', which is
-   * wrong"). A manager who passes the quality check is not asking anyone: the
-   * quality-check hop and the approval that follows are recorded on the card
-   * and emailed to nobody — no reviewer, no "passed in your place", no
-   * "needs a posting date" to the schedulers. They are on the Schedule page
-   * booking it themselves. Asking a named person ('ask') is still a real ask.
-   */
-  const ownPost = passesQuality && decision !== 'ask'
-  if (decision) {
-    try {
-      current = await performTransition(user, item as never, 'quality_check', {
-        note: decision === 'ask' ? note : UPLOAD_ADHOC_REASON,
-        // 'ask': the note goes to the people named as well as the reviewers
-        reviewerIds: decision === 'ask' ? reviewerIds : undefined,
-        // a reviewer answering it themselves in the next line does not need
-        // the managers told twice
-        skipAudiences: decision === 'ask' || !passesQuality ? undefined : ['account_managers'],
-        quiet: ownPost,
-      }) as unknown as ContentItem
-    } catch (e) {
-      // the media is saved either way; a piece that stayed at draft is a piece
-      // somebody can still submit by hand, and losing the upload would not be
-      // recoverable
-      console.error('upload post — could not submit the new piece for the quality check:', e)
-    }
-  }
-  if (decision === 'client' && passesQuality && String(current.status) === 'quality_check') {
-    try {
-      current = await performTransition(user, current as never, 'client_review', { note }) as unknown as ContentItem
-    } catch (e) {
-      console.error('upload post — could not send the new piece to the client:', e)
-    }
-  }
-
-  /**
-   * …and the manager's own sign-off, performed rather than asked for.
-   *
-   * The same edge the "Approve without client" button presses, recorded
-   * against this person, so the item page's history and the client portal see
-   * an ordinary approval. A scheduler or an editor never reaches this: their
-   * piece waits at `internal_review` for the manager's check, which is what it
-   * did before this change too.
-   */
-  if (decision === 'approve' && passesQuality && String(current.status) === 'quality_check') {
-    try {
-      current = await performTransition(user, current as never, 'approved_for_scheduling', {
-        note: note ?? UPLOAD_ADHOC_REASON,
-        // the "ready for review" note went to the same people one line ago,
-        // about a piece this person has just signed off themselves
-        skipAudiences: ['account_managers'],
-        quiet: ownPost,
-      }) as unknown as ContentItem
-    } catch (e) {
-      console.error('upload post — could not record the self-approval:', e)
-    }
-  }
-
+  const current = item
   const post = await startPostOnItem(user, current, {
     slides,
     version,
@@ -398,22 +279,11 @@ export async function createPostFromFiles(
     timezone: input.timezone ?? null,
   })
 
-  const needsApproval = String(current.status) !== 'approved_for_scheduling'
   return {
     post,
     item: current,
     version_number: versionNumber,
-    needs_approval: needsApproval,
-    message: !needsApproval
-      ? 'Approved — it is on the Schedule page, ready to book in.'
-      : decision === 'ask'
-        ? 'Sent for approval. It is in Internal check until they answer.'
-        : String(current.status) === 'quality_check'
-          ? 'Sent for quality check — it goes to the client or the scheduler once the quality reviewer passes it.'
-        : decision === 'client'
-          ? `Sent to ${client.name} — it is in With client until they answer.`
-          : signsOff
-            ? 'Saved. Write the caption, pick the time, then send it to the client — they sign off every post.'
-            : 'Saved. Write the caption, pick the time, then send it to your account manager to approve.',
+    needs_approval: true,
+    message: 'Saved as a draft post. Write the caption and pick the time, then send it for quality check.',
   }
 }

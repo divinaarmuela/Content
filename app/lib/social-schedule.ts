@@ -1,89 +1,76 @@
+import 'server-only'
 import { deliverOnlyFor, selfPostingClientIds } from './deliver-only'
 import { DELIVER_ONLY_REASON } from './deliver-only-core'
-import 'server-only'
-import { readPlatformResults } from './post-outcome-core'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
-  AssetVersion, Batch, Client, ContentItem, EncodeJob, FollowerSnapshot, PublishJob as PublishJobRow,
-  ScheduleEntry, ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
+  AssetVersion, Batch, Client, ContentItem, EncodeJob, FollowerSnapshot, PublishJob,
+  ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
 import { AuthzError, authzErrorResponse, type TeamUser } from './authz'
-import { mayPublish } from './identity-core'
 import { accessibleClientIds, createdItemIds, loadItemForUser, reviewedItemIds, taggedBatchIds, taggedItemIds } from './production-access'
 import { scopeContextOf, visibleItems } from './scope-client'
 import { actingRoles } from './workflow-core'
-import { actOnPostingApproval } from './posting-approval'
-import { notifyManagersBooked, notifyTeamOfNote } from './booked-notify'
-import {
-  mayApprovePost, maySendPostApproval, publishBlockReason, stateAfterPostEdit,
-} from './posting-approval-core'
+import { notifyTeamOfNote } from './booked-notify'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
-import { LIVE_JOB_STATUSES, jobLockKey, queuePublishJob } from './publish'
-import { getPublisher } from './publisher'
 import {
   isPlatform, validatePost,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
 } from './publish-core'
 import {
-  isPostingNow, optionsFromExtras, readChannelExtras, type ChannelExtras, QUALITY_GATE_LINE } from './schedule-compose-core'
+  optionsFromExtras, readChannelExtras, type ChannelExtras } from './schedule-compose-core'
 import {
-  applySlideLimit, canReschedule, channelBlockReason,
-  coverForSlide, eligibility, MIN_LEAD_MS, POST_NOW_WINDOW_MS, TOO_SOON,
-  assetsApprovedOnBoard, isOpenPost, mayEditNote, mayPostPiece, mayPostWithoutApproval, mirrorStatus, postingEligibility, samePostKey, validateComposition,
-  type CoverSource, type Eligibility, type SocialPostStatus, bookedChange, REWORD_LEAD_MS, TOO_LATE_TO_REWORD, approvedFilesVersion } from './social-schedule-core'
+  applySlideLimit, channelBlockReason, coverForSlide, eligibility,
+  mayEditNote, mayPostPiece, postingEligibility, samePostKey, validateComposition,
+  type CoverSource, type Eligibility } from './social-schedule-core'
 import {
   normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
 } from './version-files-core'
-import { addVersion, logActivity, notifyPublishQueued, performTransition } from './workflow'
-import { markScheduledAfterQueue } from './production-publish'
-import { readPostedSlides, takenSlideUrls } from './posted-slides-core'
+import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { askForCopiesAhead } from './encode-ahead'
 import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
 import { formatInZone, safeZone } from './timezone-core'
 import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-core'
-import { isTrialTarget, latestFollowerCount, postTrial, trialFollowersProblem, trialWords } from './trial-reel-core'
+import { isTrialTarget, latestFollowerCount, trialFollowersProblem } from './trial-reel-core'
 import { networkName } from './publish-core'
-import { inngest } from '../inngest/client'
+import {
+  insertDraftPost, loadPostState, mayActOn, postLockKey, saveWorkingCopy, teamActorFor,
+  type PostActResult,
+} from './post-stage'
+import { STAGE_LABEL, readPostState, type PostStage, type PostState } from './post-stage-core'
+import { jobIdsOfPost, type PostJobsLike } from './post-outcome-core'
 
 /**
- * The planned post, server side.
+ * The planned post, server side — the calendar's reads, the composer's working copy, and the media.
  *
- * A post exists BEFORE it is handed to the provider, because the owner's rule
- * is that nothing goes out unapproved: the composition sits in `social_posts`,
- * its approval IS the item's `posting_approval_state` (never a second state
- * machine beside it), and only an approved post may be booked.
+ * WHERE A POST IS lives in ONE field, `social_posts.stage`, written only by app/lib/post-stage.ts
+ * (the posting rebuild, 29 Sep 2026; docs/posting-rebuild/SPEC.md). Nothing here reads the item's
+ * approval, the jobs or a stored status to decide where a post is, and nothing here moves a stage:
  *
- * Everything here is a thin, testable wrapper over machinery that already
- * exists: `eligibility` and `validateComposition` (pure rules),
- * `actOnPostingApproval` (the approval and its notifications),
- * `queuePublishJob` (the provider hand-off and its one-live-job claim). The
- * only new invariants are stated as claims, never as check-then-write:
+ *   • a new post is born a draft through `insertDraftPost` — and tells nobody (audit V12);
+ *   • the working copy is saved through the rules' `save`, so it changes only in Draft;
+ *   • every other move is `POST /api/posts/<id>/act` — the calendar's drag (Change time) and its bin
+ *     (Cancel post, Delete draft) included.
  *
- *   • one live post per item      — a claim lock keyed by the item
- *   • one hand-over per post      — a claim on the post's own status
- *   • one winner on a reschedule  — the same claim, again
+ * The one invariant that is still this module's is a claim, never check-then-write:
+ *
+ *   • one open post per item with the same files — a claim lock keyed by the item (`postLockKey`)
  */
 
 /* ── plumbing ───────────────────────────────────────────────────────────── */
 
 const posts = () => table<SocialPost>('social_posts')
 const notes = () => table<ScheduleNote>('schedule_notes')
-const jobs = () => table<PublishJobRow>('publish_jobs')
 
-/** One live post per content item — the relationship the design calls "one
- *  post ↔ one item", which spans rows and so cannot be a compare-and-set. */
-const postLockKey = (itemId: string) => `social_post__${itemId}`
+/** The stages in which a post still holds its files against a second post of the same files. */
+const OPEN_STAGES: readonly PostStage[] = ['draft', 'quality_check', 'with_client', 'ready']
 
 /** A refusal that carries every problem at once, so the composer can list
  *  them rather than revealing them one at a time. */
-/** what a manager is told when their Schedule press sent the piece to the gate */
-export { QUALITY_GATE_LINE }
-
 export class ComposeError extends AuthzError {
   problems: string[]
   constructor(problems: string[], status = 400) {
@@ -109,13 +96,6 @@ export class DuplicatePostError extends AuthzError {
 }
 
 const nowIso = () => new Date().toISOString()
-
-/** A column the generator does not know about yet, read tolerantly — the same
- *  posture `readPostingApproval` takes on the item page. */
-const readStamp = (row: object, key: string): string | null => {
-  const v = (row as Record<string, unknown>)[key]
-  return typeof v === 'string' ? v : null
-}
 
 const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
 const asObject = (v: unknown): Record<string, unknown> =>
@@ -153,6 +133,8 @@ export type PlannedPost = SocialPost & {
   channels: string[]
   per_channel: PerChannel
   publish_job_ids: string[]
+  /** the post as the stage rules read it — null only for a row the migration has not reached */
+  state: PostState | null
 }
 
 const shape = (row: SocialPost): PlannedPost => ({
@@ -160,7 +142,10 @@ const shape = (row: SocialPost): PlannedPost => ({
   slides: asArray<Slide>(row.slides),
   channels: asArray<string>(row.channels).map(String),
   per_channel: readPerChannel(row.per_channel),
-  publish_job_ids: asArray<string>(row.publish_job_ids).map(String),
+  // the booking's jobs, re-sends included — the new engine writes only `booking.job_ids`; the old
+  // `publish_job_ids` is read only for a row the migration has not reached (audit V11, review fix)
+  publish_job_ids: jobIdsOfPost(row as unknown as PostJobsLike),
+  state: readPostState(row as unknown as Record<string, unknown>),
 })
 
 /* ── who may do what ────────────────────────────────────────────────────── */
@@ -169,13 +154,15 @@ const shape = (row: SocialPost): PlannedPost => ({
  * May this person compose — create, edit, send for approval?
  *
  * The scheduling hats plus the account manager, and an EDITOR only on an item
- * that is theirs. `actingRoles` is what decides "theirs", so the answer here
- * and the answer `actOnPostingApproval` gives cannot drift apart.
+ * that is theirs (`actingRoles` decides "theirs"). This gates the MEDIA (the image editor, new files);
+ * who may MOVE a post is the stage rules' hats (app/lib/post-stage-core.ts), and editors wear none.
  */
 export function mayCompose(user: TeamUser, item: { owner_id?: string | null; scheduler_ids?: unknown }): boolean {
   if (user.role === 'super_admin' || user.role === 'account_manager' || user.role === 'scheduler' || user.role === 'general') return true
   if (user.role === 'client') return false
-  return maySendPostApproval(actingRoles({ id: user.id, role: user.role }, item))
+  const hats = actingRoles({ id: user.id, role: user.role }, item)
+  return hats.includes('scheduler') || hats.includes('editor')
+    || hats.includes('account_manager') || hats.includes('super_admin')
 }
 
 function assertCompose(user: TeamUser, item: ContentItem): void {
@@ -213,12 +200,6 @@ async function eligibleFor(
   // never booked here, whoever is asking
   if (await deliverOnlyFor(item)) return { ok: false, reason: DELIVER_ONLY_REASON }
   return postingEligibility(item, versions, await mayPostStraightOut(user, item))
-}
-
-function assertMayPublish(user: TeamUser): void {
-  if (!mayPublish(user.role)) {
-    throw new AuthzError('Only a scheduler or an account manager can book a post to go out', 403)
-  }
 }
 
 /**
@@ -267,15 +248,40 @@ export function scheduleErrorResponse(e: unknown): NextResponse {
 
 /* ── loading ────────────────────────────────────────────────────────────── */
 
-/** One post, with the item it belongs to — scoped by the item's own access
- *  rules, so a post can never be a way around them. */
+/**
+ * One post, with the edit card its files came from.
+ *
+ * WHO MAY OPEN IT IS THE POST'S QUESTION, NOT THE CARD'S (review fix, 29 Sep 2026; SPEC §1.3). The
+ * old gate was the card's visibility, so a scheduler could see a post on Post approval, press Edit on
+ * it, and then be told "Item not found" when saving it — the card was another scheduler's upload, or
+ * still at Draft. Now the gate is the one every posting surface uses (`mayActOn`: the person's clients,
+ * a post they made or are named on, the reviewer's desk). The card is only a title and a file source;
+ * when it has been deleted, a stand-in marked `adhoc_post` takes its place, so a cancelled post from a
+ * deleted card can still be re-booked, given a time, and sent (audit W2).
+ */
 export async function loadPostForUser(
   user: TeamUser, id: string,
-): Promise<{ post: PlannedPost; item: ContentItem }> {
+): Promise<{ post: PlannedPost; item: ContentItem; cardGone: boolean }> {
   const row = await posts().get(id)
   if (!row) throw new AuthzError('That post no longer exists', 404)
-  const item = await loadItemForUser(user, row.item_id)
-  return { post: shape(row), item }
+  const state = readPostState(row as unknown as Record<string, unknown>)
+  if (state) {
+    if (!(await mayActOn(user, state))) throw new AuthzError('That client is not one of yours', 403)
+  } else {
+    await assertClientAccess(user, row.client_id)
+  }
+  const sourceId = String((row as { source_item_id?: string | null }).source_item_id ?? row.item_id ?? '')
+  const card = sourceId ? await table<ContentItem>('content_items').get(sourceId).catch(() => null) : null
+  if (card) return { post: shape(row), item: card, cardGone: false }
+  return { post: shape(row), item: standInCard(row), cardGone: true }
+}
+
+/** The card a post whose card was deleted stands on: its title from the caption, nothing to move. */
+function standInCard(row: SocialPost): ContentItem {
+  return {
+    id: row.item_id, client_id: row.client_id, title: String(row.caption ?? '').trim().split(/\r?\n/)[0].slice(0, 80) || 'Post',
+    status: 'published', adhoc_post: true, owner_id: null, scheduler_ids: [],
+  } as unknown as ContentItem
 }
 
 /**
@@ -303,57 +309,11 @@ export async function loadPostOrRecordForUser(
     throw new AuthzError('Item not found', 404)
   }
   await assertClientAccess(user, row.client_id)
-  const item = {
-    id: row.item_id, client_id: row.client_id, title: String(row.caption ?? '').trim().slice(0, 80) || 'Post',
-    status: 'published', adhoc_post: true, owner_id: null, scheduler_ids: [],
-  } as unknown as ContentItem
-  return { post: shape(row), item, cardGone: true }
+  return { post: shape(row), item: standInCard(row), cardGone: true }
 }
 
 async function versionsOf(itemId: string): Promise<AssetVersion[]> {
   return table<AssetVersion>('asset_versions').list({ where: v => v.item_id === itemId })
-}
-
-/**
- * THIS post's jobs -- the ones it queued itself, named in `publish_job_ids`.
- *
- * Never "every job on the item". An item can carry a second post after the
- * first was cancelled (cancelling releases the one-post-per-item lock), and
- * matching by item made the old post's cancelled job speak for the new one:
- * `mirrorStatus` reads "every job cancelled" and marks a brand-new draft
- * `cancelled` without anybody cancelling it. The id list is written on every
- * queue and emptied whenever a hand-over is rolled back, so it is the honest
- * answer to "what is out there for this post".
- */
-async function jobsOf(post: { publish_job_ids?: unknown }): Promise<PublishJobRow[]> {
-  const ids = asArray<string>(post.publish_job_ids).map(String)
-  if (ids.length === 0) return []
-  return jobs().list({ where: j => ids.includes(j.id) })
-}
-
-/**
- * The status a post really wears, from the item, its own jobs, and two facts
- * `mirrorStatus` cannot see because they are about THIS post rather than the
- * item's approval:
- *
- *   • A post nobody has SENT is a draft, whatever the item's gate says. The
- *     gate is shared with whatever was sent before — cancel an approved post,
- *     start a new one on the same item, and the item still reads 'approved'.
- *     Mirroring that onto the new composition would hand it an approval
- *     nobody gave for these words and these pictures, and let it be booked in
- *     without anybody looking at it.
- *   • A post somebody CANCELLED stays cancelled. It has been taken off the
- *     calendar by a person; an approval arriving on the item afterwards must
- *     not raise it from the dead.
- */
-function statusOf(
-  item: ContentItem | null,
-  post: { status?: string | null; sent_at?: string | null },
-  ownJobs: readonly PublishJobRow[],
-): SocialPostStatus {
-  if (post.status === 'cancelled') return 'cancelled'
-  if (!post.sent_at && ownJobs.length === 0) return 'draft'
-  return mirrorStatus(item, post, ownJobs)
 }
 
 async function zoneOf(clientId: string, given?: string | null): Promise<string> {
@@ -655,7 +615,8 @@ async function insertPost(
   const gate = await takeClaimLock(postLockKey(item.id), id, async holder => {
     const held = await posts().get(holder)
     if (!held) return false                       // not written yet, or gone — the lock's age decides
-    if (!isOpenPost(held.status)) return 'free'   // booked, out, or cancelled: decisively not held
+    // booked, out, or cancelled: decisively not held — read off the post's own stage
+    if (!OPEN_STAGES.includes(String(held.stage ?? '') as PostStage)) return 'free'
     const theirFiles = asArray<Slide>(held.slides)
     if (theirFiles.length === 0) return true       // not written yet: the lock's age decides
     const theirs = samePostKey(theirFiles, asArray<string>(held.channels), (held.per_channel ?? null) as never)
@@ -664,12 +625,13 @@ async function insertPost(
   })
   if (!gate.ok) throw new DuplicatePostError(gate.holder, item.id)
 
-  const stamp = nowIso()
   try {
-    const row = await posts().insert({
+    // born a DRAFT through the one writer of a stage
+    const row = await insertDraftPost({
       id,
       client_id: item.client_id,
       item_id: item.id,
+      created_by: user.id,
       version_id: input.version?.id ?? null,
       version_number: input.version?.version_number ?? null,
       slides: input.slides,
@@ -678,16 +640,7 @@ async function insertPost(
       channels: input.channels,
       scheduled_for: input.scheduledFor,
       timezone: await zoneOf(item.client_id, input.timezone),
-      status: 'draft' satisfies SocialPostStatus,
-      publish_job_ids: [],
-      created_by: user.id,
-      created_at: stamp,
-      updated_at: stamp,
-      sent_at: null,
-      approved_at: null,
-      approved_by: null,
-      note: null,
-    } as unknown as SocialPost)
+    })
     // A big video's copy is made NOW, not when the post is due. Fire and
     // forget: nothing about this save waits on it, and the publish job still
     // asks for itself if this never happened.
@@ -698,9 +651,8 @@ async function insertPost(
       perChannel: input.perChannel,
     })
     announceAfter('schedule', { client_id: item.client_id, post_id: row.id, kind: 'created' })
-    // …and the client's account managers hear it is booked (22 Sep 2026: a post booked here told no one —
-    // only the card's own Publish button did). Best effort, after the answer, never the person who booked it.
-    notifyPublishQueued(user, item as never, { jobId: row.id, publishNow: !input.scheduledFor, scheduledFor: input.scheduledFor ?? null, timezone: (input as { timezone?: string | null }).timezone ?? null })
+    // NOBODY is emailed about a draft (audit V12: saving one told the managers it was "being published
+    // now"). The first notice goes when it is sent for quality check.
     return shape(row)
   } catch (e) {
     await releaseClaimLock(postLockKey(item.id), id).catch(() => {})
@@ -751,7 +703,7 @@ export async function startPostOnItem(
   })
 }
 
-/* ── edit ───────────────────────────────────────────────────────────────── */
+/* ── edit: the working copy, in Draft only ──────────────────────────────── */
 
 export type UpdatePostInput = {
   slides?: unknown
@@ -760,61 +712,42 @@ export type UpdatePostInput = {
   per_channel?: unknown
   scheduled_for?: string | null
   note?: string | null
+  /** the rev the page drew; a stale page is refused rather than overwriting someone else's save */
+  expect_rev?: number | null
 }
 
-const SETTLED: string[] = ['published', 'failed', 'cancelled']
-
 /**
- * Change a post that has not gone out.
+ * SAVE THE COMPOSER'S WORK — the working copy of a post in DRAFT (the owner's decision 8).
  *
- * A change to the WORDS OR MEDIA of an APPROVED post takes the approval
- * back: the yes was given to something that no longer exists, so it has to be
- * asked for again. `stateAfterPostEdit` is the one place that rule lives, and
- * the item's own state is what moves — the post only ever mirrors it.
+ * A post that has been sent is frozen: what the quality check or the client is looking at does not
+ * change under them. To change one, the person presses Edit (T19), which makes it a draft of the next
+ * version and takes the earlier approvals back — in the open, with the words saying so, never silently
+ * the way `stateAfterPostEdit` did it on the ITEM. A new time on a post that is Ready to post or Booked
+ * in keeps its approval: it is the act route's Change time, not a save.
  *
- * Moving the TIME is not a content change and keeps the approval, which is
- * what makes dragging an approved tile on the calendar sane.
+ * Saving a draft never asks for a time and never emails anybody.
  */
 export async function updatePost(
   user: TeamUser, id: string, input: UpdatePostInput,
 ): Promise<PlannedPost> {
   const { post, item } = await loadPostForUser(user, id)
   assertCompose(user, item)
+  const state = post.state
+  if (!state) throw new AuthzError('This post is from before the new stages and cannot change until it is moved across', 409)
 
-  if (SETTLED.includes(post.status)) {
-    throw new AuthzError('This post is finished — start a new one instead of changing it', 409)
-  }
-  if (post.status === 'scheduled') {
-    // THE WORDS MAY CHANGE (Raina, 22 Sep 2026): the booking is pulled back and made again with the new
-    // words; anything else is still cancel-and-remake (social-schedule-core.bookedChange)
-    const change = bookedChange(post, input)
-    if (change === 'none') return shape(post)
-    if (change === 'caption' || change === 'settings') {
-      return rewordBooked(user, post, item,
-        input.caption === undefined ? String(post.caption ?? '') : String(input.caption ?? ''),
-        input.per_channel === undefined ? post.per_channel : readPerChannel(input.per_channel))
-    }
+  if (state.stage !== 'draft') {
     throw new AuthzError(
-      'This post is already booked with the channel — cancel it first, then change it', 409,
+      `This post is in ${STAGE_LABEL[state.stage]}, so what was sent is kept as it is. Press Edit to change it — that makes version ${state.draft_version}.`,
+      409,
     )
   }
 
   /**
    * A DRAFT MAY BE WRITTEN WHILE THE PIECE IS STILL BEING CHECKED.
    *
-   * `postingEligibility` answers "may this go OUT". Asked here, it also stopped
-   * somebody typing a caption while a manager looked at the media — and that
-   * is exactly where a post made from a fresh upload starts life: the file is
-   * saved as version 1 and the piece is waiting for the manager's check. A
-   * composer that refuses to keep the words somebody just typed is how an
-   * upload gets lost.
-   *
-   * So the answer is used for ONE thing — which files may be named on the post
-   * — and the item's latest version stands in when the client has not signed
-   * anything off yet. Nothing about publishing moves: `sendForApproval`,
-   * `scheduleWithoutApproval` and `publishBlockReason` all ask the same
-   * questions they always did, and a piece nobody has approved still cannot go
-   * out.
+   * `postingEligibility` answers "may this go OUT". The answer is used for ONE thing here — which files
+   * may be named on the post — and the item's latest version stands in when the client has not signed
+   * anything off yet, so a composer never refuses to keep the words somebody just typed.
    */
   const versions = await versionsOf(item.id)
   const elig = await eligibleFor(user, item, versions)
@@ -824,13 +757,16 @@ export async function updatePost(
   const editableSlides = elig.ok
     ? elig.slides
     : postSlides(item.content_type as string, slidesOf(latest))
-  if (editableSlides.length === 0) {
+
+  // the files already on the post may stay on it (a Schedule upload, a picked Drive file) — only a
+  // NEW file has to come from the piece
+  const onPost = post.slides
+  const allowed = [...editableSlides, ...onPost.filter(s => !editableSlides.some(e => e.url === s.url))]
+  if (input.slides !== undefined && allowed.length === 0) {
     throw new ComposeError([elig.ok ? 'No media yet' : elig.reason])
   }
 
-  const slides = input.slides === undefined
-    ? post.slides
-    : chooseSlides(editableSlides, input.slides)
+  const slides = input.slides === undefined ? post.slides : chooseSlides(allowed, input.slides)
   const caption = input.caption === undefined ? String(post.caption ?? '') : String(input.caption ?? '')
   const channelIds = input.channels === undefined
     ? post.channels
@@ -845,65 +781,24 @@ export async function updatePost(
     const problems = problemsWith({
       item, version: editableVersion,
       slides, caption, accounts, perChannel, scheduledFor,
-      // media this person may post before the client has seen it is not a
-      // problem to hand back to them — the sign-off travels with the post,
-      // and saving a draft is never the moment to argue about it
-      withoutApproval: elig.ok ? elig.needsClientApproval : true,
+      // saving a draft is never the moment to argue about the sign-off — the quality check is
+      withoutApproval: true,
       saving: true,
       draft: true,
     })
     if (problems.length > 0) throw new ComposeError(problems)
   }
 
-  // WHAT AN APPROVAL COVERS: the files, the words and where it goes — the
-  // three things the approver was shown. A channel's own settings (a cover
-  // frame, tagged people, a Trial Reel, comments off) are the scheduler's to
-  // set on an approved post without sending it round again (the owner, 10
-  // Sep 2026: "the scheduler can do all this without approval… they can do
-  // whatever they want with the approved").
-  const contentChanged =
-    JSON.stringify(slides) !== JSON.stringify(post.slides)
-    || caption !== String(post.caption ?? '')
-    || JSON.stringify(channelIds) !== JSON.stringify(post.channels)
-
-  // the approval moves FIRST: the item is the record, and a post claiming
-  // "waiting on approval" over an item still marked approved would be a lie
-  // the publish gate believes.
-  let state = item.posting_approval_state
-  if (contentChanged) {
-    const revert = stateAfterPostEdit(item.posting_approval_state)
-    if (revert) {
-      const taken = await table<ContentItem>('content_items').claim(item.id, cur =>
-        cur && cur.posting_approval_state === 'approved'
-          ? {
-            ...cur, posting_approval_state: revert,
-            posting_approved_by: null, posting_approved_at: null,
-          }
-          : null)
-      if (taken.claimed) state = revert
-      else state = taken.current?.posting_approval_state ?? state
-    }
-  }
-
-  const next = statusOf({ ...item, posting_approval_state: state } as ContentItem, post, [])
-  const patch: Partial<SocialPost> = {
-    slides: slides as unknown as SocialPost['slides'],
+  const saved = await saveWorkingCopy(id, teamActorFor(user, state), {
+    slides,
     caption,
-    channels: channelIds as unknown as SocialPost['channels'],
-    per_channel: perChannel as unknown as SocialPost['per_channel'],
+    channels: channelIds,
+    per_channel: perChannel,
     scheduled_for: scheduledFor,
-    status: next,
-    updated_at: nowIso(),
     ...(input.note === undefined ? {} : { note: input.note ? String(input.note) : null }),
-  }
+  }, input.expect_rev ?? null)
+  if (!saved.ok) throwRefusal(saved)
 
-  // only a post still sitting where this person saw it is written: two
-  // editors saving at once resolve to one answer, not a silent overwrite
-  const saved = await posts().claim(id, cur =>
-    cur && cur.status === post.status ? { ...cur, ...patch } as SocialPost : null)
-  if (!saved.claimed) {
-    throw new AuthzError('Somebody changed this post while you were editing — refresh to see it', 409)
-  }
   // media replaced, or a channel added to a post that already had media —
   // either way the copy is asked for here rather than at the posting time
   askForCopiesAhead({
@@ -912,9 +807,9 @@ export async function updatePost(
     channels: channelIds,
     perChannel,
   })
-  announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'updated' })
-  return shape(saved.row)
+  return shape((await posts().get(id, { fresh: true }))!)
 }
+
 
 /* ── media the client has not seen yet ──────────────────────────────────── */
 
@@ -974,12 +869,22 @@ export async function addMediaVersion(
   // A FILE THE CHANNEL HOLDS, OR THAT HAS GONE OUT, STAYS: a version that
   // drops or swaps it would leave the booking pointing at a file the card no
   // longer shows. Only the UI stopped this (the audit of 9 Sep 2026).
-  const held = (await posts().list({ by: { item_id: item.id } }))
-    .filter(p => ['scheduled', 'published'].includes(String(p.status)))
+  const itemPosts = await posts().list({ by: { item_id: item.id } })
+  const held = itemPosts
+    .filter(p => ['booked', 'posted'].includes(String(p.stage ?? '')))
     .flatMap(p => asArray<{ url?: unknown }>(p.slides).map(s => String(s?.url ?? '')))
   const keeping = new Set(slides.map(s => s.url))
   if (held.some(u => u && !keeping.has(u))) {
-    throw new AuthzError('A file that is booked in or already posted cannot be replaced or removed — cancel the booking first', 409)
+    throw new AuthzError('A file that is booked in or already posted cannot be replaced or removed — take the booking off first', 409)
+  }
+  // new files go on a post only while it is a DRAFT: what was sent stays what was sent (decision 8)
+  if (input.post_id) {
+    const target = itemPosts.find(p => p.id === String(input.post_id))
+    const stage = String(target?.stage ?? '')
+    if (!target) throw new AuthzError('That post no longer exists', 404)
+    if (stage !== 'draft') {
+      throw new AuthzError(`This post is in ${STAGE_LABEL[stage as PostStage] ?? 'another stage'}, so what was sent is kept as it is. Press Edit first, then change its files.`, 409)
+    }
   }
 
   /**
@@ -1081,11 +986,10 @@ async function writeMediaVersion(
   }
 
   const postId = input.post_id ? String(input.post_id) : null
-  const stamp = nowIso()
 
   // -- nothing new: this is an edit of the post, not a version --
   if (fresh.length === 0) {
-    if (postId) await claimPostSlides(postId, item.id, slides, null, null, stamp)
+    if (postId) await claimPostSlides(user, postId, item.id, slides, null, null)
     announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
     const current = versions.reduce((n, v) => Math.max(n, Number(v.version_number ?? 0)), 0)
     return {
@@ -1102,44 +1006,14 @@ async function writeMediaVersion(
   mirrorVersionSlides(item.id, number, slides)
   previewVideos(slides.map(s => s.url))
 
-  // back to the client. Best-effort and never fatal: the version is saved
-  // either way, and a piece that stayed put is a piece somebody can still
-  // send by hand — losing the upload would not be recoverable.
-  //
-  // Unless this person may post without any approval step in the way (an
-  // account manager on the client, or a super admin — the same rule as the
-  // composer's "Schedule" button). For them the client's old yes is simply
-  // no longer the point: the new version is recorded, the post is un-sent
-  // below, and whether it goes out is decided where it always was — in the
-  // schedule window, by them. Sending the piece to the client would only
-  // have parked it where the one-press path refuses to pick it up ("With
-  // the client now").
-  //
-  // THE PROPER FLOW (8 Sep 2026) DOES NOT BOUNCE THE PIECE TO THE CLIENT.
-  // New media on a post is a change to the POST, and the post's own gate
-  // handles it: `stateAfterPostEdit` below takes an approved post back to
-  // pending, so it goes through the manager again, and the manager decides
-  // whether the client is asked. Sending the ITEM to `client_review` here
-  // put it in front of the client before the manager had looked — the one
-  // order of events the owner ruled out ("scheduler sends to AM; AM reviews
-  // and sends to client"). `performTransition` and `mayPostStraightOut`
-  // stay imported for the other edges in this file.
+  // THE EDIT CARD DOES NOT MOVE, AND NEITHER DOES ANY OTHER POST (the posting rebuild, 29 Sep 2026: the
+  // edit's approval and the post's are independent — SPEC §1.3). New files on a post are a change to
+  // THAT post's working copy, which is a draft; its own quality check is what looks at them next. The
+  // item's `posting_approval_state` used to be reset here, which quietly un-approved every sibling post.
   const status = String(item.status)
   void performTransition; void mayPostStraightOut
 
-  // the final-post sign-off was given to media that is no longer the media
-  const resetTo = stateAfterPostEdit(
-    (item as unknown as Record<string, unknown>).posting_approval_state)
-  if (resetTo) {
-    await table<ContentItem>('content_items').claim(item.id, cur =>
-      cur?.posting_approval_state === 'approved'
-        ? { ...cur, posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null }
-        : null).catch(() => ({ claimed: false }))
-  }
-
-  if (postId) {
-    await claimPostSlides(postId, item.id, slides, version.id ?? null, number, stamp)
-  }
+  if (postId) await claimPostSlides(user, postId, item.id, slides, version.id ?? null, number)
 
   announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
 
@@ -1148,357 +1022,75 @@ async function writeMediaVersion(
     slides,
     status,
     created: true,
-    message: status === 'client_review'
-      ? `Saved as version ${number}. The client has to approve it before this post can be sent.`
-      : `Saved as version ${number}.`,
+    message: `Saved as version ${number} of the piece.`,
   }
 }
 
-/** The post keeps the arrangement. Claimed rather than read-then-written, and
- *  only while the post is still something a person could change. */
+/** The post keeps the arrangement — a save of its working copy, through the one writer, so it lands only
+ *  while the post is a draft and never over somebody else's newer save. */
 async function claimPostSlides(
-  postId: string, itemId: string, slides: Slide[],
-  versionId: string | null, versionNumber: number | null, stamp: string,
+  user: TeamUser, postId: string, itemId: string, slides: Slide[],
+  versionId: string | null, versionNumber: number | null,
 ): Promise<void> {
-  const saved = await posts().claim(postId, cur =>
-    cur && cur.item_id === itemId
-      && !SETTLED.includes(String(cur.status)) && cur.status !== 'scheduled'
-      ? {
-        ...cur,
-        slides,
-        ...(versionId === null ? {} : { version_id: versionId }),
-        ...(versionNumber === null ? {} : { version_number: versionNumber }),
-        // a NEW version un-sends the post; a reorder leaves it where it stood
-        ...(versionNumber === null ? {} : { status: 'draft', sent_at: null }),
-        updated_at: stamp,
-      } as unknown as SocialPost
-      : null)
+  const { post } = await loadPostState(postId)
+  if (!post || post.source_item_id !== itemId) throw new AuthzError('That post is not on this piece', 404)
+  const saved = await saveWorkingCopy(postId, teamActorFor(user, post), {
+    slides,
+    ...(versionId === null ? {} : { version_id: versionId }),
+    ...(versionNumber === null ? {} : { version_number: versionNumber }),
+  }, post.rev)
+  if (!saved.ok) throwRefusal(saved)
   // the media on the post just changed — ask for the copy of it now, while
   // the posting time is still days away
-  if (saved.claimed) {
-    const row = shape(saved.row)
-    askForCopiesAhead({
-      clientId: String(row.client_id),
-      slides,
-      channels: row.channels,
-      perChannel: row.per_channel,
-    })
-  }
-}
-
-/* ── approval ───────────────────────────────────────────────────────────── */
-
-/**
- * Send the post for its final sign-off.
- *
- * The approval itself is `actOnPostingApproval` — the same call the item page
- * makes, with the same hat checks, the same emails and the same portal
- * behaviour. This adds the composition check in front of it (nobody should be
- * asked to approve a post that could not go out anyway) and mirrors the
- * answer onto the post.
- */
-export async function sendForApproval(
-  user: TeamUser, id: string,
-  opts: { note?: string; client_too?: boolean; mode?: 'approval' | 'direct'; reviewer_ids?: string[] } = {},
-): Promise<PlannedPost> {
-  if (opts.mode === 'direct') return scheduleWithoutApproval(user, id, opts.note)
-  const { post, item } = await loadPostForUser(user, id)
-  assertCompose(user, item)
-  if (SETTLED.includes(post.status) || post.status === 'scheduled') {
-    throw new AuthzError('This post has already been dealt with', 409)
-  }
-
-  const elig = eligibility(item, await versionsOf(item.id))
-  if (!elig.ok) throw new ComposeError([elig.reason])
-  const accounts = await channelsFor(item.client_id, post.channels)
-  const problems = problemsWith({
-    item, version: (elig.version as AssetVersion) ?? null,
-    slides: post.slides, caption: String(post.caption ?? ''), accounts,
-    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
-    // asking for a yes owes the networks nothing yet — the time is chosen
-    // when it is booked (the audit of 9 Sep 2026: a timeless send was refused)
-    saving: true,
+  askForCopiesAhead({
+    clientId: saved.post.client_id,
+    slides,
+    channels: saved.post.channels,
+    perChannel: saved.post.per_channel,
   })
-  if (problems.length > 0) throw new ComposeError(problems)
-
-  await actOnPostingApproval(user, item as never, {
-    action: 'send',
-    note: opts.note,
-    client_too: opts.client_too,
-    reviewer_ids: opts.reviewer_ids,
-  })
-
-  // ONLY a post still sitting where this person saw it. The condition used to
-  // be "anything that is not already pending", which let a post somebody else
-  // had just BOOKED IN be dragged back to pending -- item and post both saying
-  // "waiting on approval" over a job the provider was already holding, which
-  // is the one outcome this whole gate exists to prevent.
-  const stamp = nowIso()
-  const saved = await posts().claim(id, cur =>
-    cur && cur.status === post.status && cur.status !== 'pending'
-      ? {
-        ...cur, status: 'pending', sent_at: stamp,
-        approval_mode: 'client', updated_at: stamp,
-      } as SocialPost
-      : null)
-  if (!saved.claimed) {
-    // a second click landing on an already-pending post is not an error: the
-    // ask has been made, which is what the caller wanted
-    const live = saved.current ?? await posts().get(id)
-    if (live?.status !== 'pending') {
-      throw new AuthzError(
-        'This post moved on while you were sending it -- refresh to see where it got to', 409,
-      )
-    }
-    announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'sent' })
-    return shape(live)
-  }
-  announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'sent' })
-  return shape(saved.row)
 }
 
+
+/* ── moving and stopping: through the one writer ────────────────────────── */
+
 /**
- * Schedule a post without sending it out for final approval — the owner's
- * decision of 3 September.
+ * WHAT USED TO LIVE HERE, AND WHY IT IS GONE (the posting rebuild, 29 Sep 2026).
  *
- * Only somebody who could have APPROVED it may skip the asking: the client's
- * account manager or a super admin, the same check `actOnPostingApproval`
- * makes on 'approve'. A scheduler or an editor gets the same refusal they
- * would get for approving.
+ * `sendForApproval`, `scheduleWithoutApproval`, `syncFromItem`, `bookApprovedPosts`, `schedulePost`,
+ * `reschedule`, `rewordBooked` and `cancelPost` each worked out where a post was from the ITEM's
+ * approval, the jobs and the stored status, and each wrote it in its own way. That is how one approval
+ * gated every post of a card (V1), a cancel wiped its siblings (V2), the booking email went before the
+ * booking (V14) and a thrown queue left a post booked with no job (V15). Every one of those moves is
+ * now a row of POST_TRANSITIONS, made by app/lib/post-stage.ts through `POST /api/posts/<id>/act`.
  *
- * It goes THROUGH the state machine, never around it: send, then approve, as
- * this person — so the item page, the client portal, the publish lock and the
- * activity trail all see an ordinary approved post. The only thing suppressed
- * is the "please approve this" email, which would be this person asking
- * themselves. The post records how it was cleared (`approval_mode: 'self'`)
- * and who cleared it, so nobody has to guess later.
- *
- * The MEDIA's own sign-off travels with it (ruled 5 Sep 2026): a piece still
- * waiting on a signature is approved without the client here, on the ordinary
- * workflow edge and recorded against this person, so the two presses that used
- * to be asked for are one request. A piece still being MADE is not rescued by
- * anything — there is no edge, and the post refuses with the plain reason.
+ * Two doors stay, because the calendar uses them: a drag to a new time, and the post window's bin.
+ * Both are thin: they pick the move the rules name and hand it to the one writer.
  */
-export async function scheduleWithoutApproval(
-  user: TeamUser, id: string, note?: string,
-): Promise<PlannedPost> {
-  const { post, item: loaded } = await loadPostForUser(user, id)
-  let item = loaded
-  assertCompose(user, item)
-  const hats = actingRoles({ id: user.id, role: user.role, quality_reviewer: user.quality_reviewer === true }, item)
-  /* TWO WAYS THROUGH THIS DOOR. A manager's, which performs the post's own
-   * sign-off in their name below; and the board's — the pieces were approved
-   * on the board, so a scheduler posts them with no second approval at all.
-   * On that path the posting gate is simply not consulted: nobody is asked,
-   * nobody answers, the post is marked cleared by the assets' approval. */
-  const viaBoard = assetsApprovedOnBoard(item) && !mayApprovePost(hats)
-  if (!mayApprovePost(hats) && !viaBoard) {
-    throw new AuthzError('Only an account manager (or the client) can approve the final post', 403)
-  }
-  // The client's own "signs off every post" switch used to refuse this path
-  // to a manager. The owner ruled otherwise (9 Sep 2026): an account manager
-  // or a super admin schedules or posts straight out, "no approval or accept
-  // feature, even when the client has that lock". The switch is still read
-  // — it is the line under the composer's button — but it no longer stands
-  // between a manager and the Schedule press.
-  if (SETTLED.includes(post.status) || post.status === 'scheduled') {
-    throw new AuthzError('This post has already been dealt with', 409)
-  }
 
-  /**
-   * EVERYTHING THAT CAN REFUSE, BEFORE ANYTHING IS WRITTEN.
-   *
-   * The order here is the whole point. The media's own sign-off used to run
-   * FIRST — a real transition, an activity line, an `approvals` row and a
-   * notification fan-out — and only then was the composition checked. So a
-   * caption one letter too long for LinkedIn, or a channel list that had
-   * emptied since the window opened, left the piece signed off in the
-   * manager's name, the team emailed, and no post: the person pressed
-   * Schedule, saw an error, and reasonably believed nothing had happened.
-   *
-   * Judged with this person's own rights (`withoutApproval`), so "waiting on
-   * your check" is not handed back to them as a problem — it is the thing
-   * they are about to fix.
-   */
-  const versions = await versionsOf(item.id)
-  const usable = postingEligibility(item, versions, true)
-  if (!usable.ok) throw new ComposeError([usable.reason])
-
-  const accounts = await channelsFor(item.client_id, post.channels)
-  const problems = problemsWith({
-    item, version: (usable.version as AssetVersion) ?? null,
-    slides: post.slides, caption: String(post.caption ?? ''), accounts,
-    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
-    withoutApproval: true,
-  })
-  if (problems.length > 0) throw new ComposeError(problems)
-
-  /**
-   * THE MEDIA'S OWN SIGN-OFF, PERFORMED RATHER THAN ASKED FOR.
-   *
-   * A manager posting a piece the client has not signed off used to press
-   * "Approve without client" on the rail first. That press was this: the
-   * ordinary `internal_review → approved_for_scheduling` edge, through
-   * `performTransition`, recorded against them. Nothing is bypassed — the
-   * edge, its role check, the client's policy and the activity line are all
-   * the ones the button went through.
-   *
-   * A piece the client is looking at RIGHT NOW never arrives here: it is not
-   * usable media on this path at all (`APPROVE_WITHOUT_CLIENT_STATUSES`), so
-   * the check above has already refused it with "With the client now".
-   */
-  if (!viaBoard && usable.needsClientApproval) {
-    /**
-     * THE QUALITY CHECK STANDS BETWEEN A MANAGER AND THE SCHEDULE PRESS
-     * (Abby, 11 Sep 2026: everything goes through Joy BEFORE scheduling). A
-     * manager who is not a quality reviewer sends the piece to the gate
-     * here, and is told so in plain words rather than refused; a quality
-     * reviewer or a super admin holds the edge and goes straight through.
-     */
-    const passesQuality = hats.includes('quality_reviewer') || hats.includes('super_admin')
-    if (!passesQuality && item.status !== 'quality_check') {
-      await performTransition(user, item as never, 'quality_check', { note }).catch(e => {
-        console.error('schedule — could not send the piece for quality check:', e)
-      })
-      throw new ComposeError([QUALITY_GATE_LINE], 409)
-    }
-    item = await performTransition(
-      user, item as never, 'approved_for_scheduling', { note },
-    ) as unknown as ContentItem
-  }
-
-  if (!viaBoard) {
-    // the ask — written and logged, but nobody is emailed to answer a
-    // question that is being answered in the same breath
-    const asked = await actOnPostingApproval(user, item as never, {
-      action: 'send', client_too: false, self_approved: true,
-    })
-    // …and the answer, from the person entitled to give it
-    await actOnPostingApproval(user, { ...item, ...asked } as never, {
-      action: 'approve', note,
-    })
-  } else {
-    // The board's yes IS the post's yes. The item's gate is written as
-    // approved — by the board, in this person's name, saying so — because
-    // every other screen (the calendar mirror, `publishBlockReason`) reads
-    // the item, and a gate reading "never asked" would flip the post back to
-    // draft the moment it was booked. Written directly: the gate's own
-    // `approve` insists on a manager answering a question, and here nobody
-    // asked one.
-    const stampNow = nowIso()
-    await table<ContentItem>('content_items').update(item.id, {
-      posting_approval_state: 'approved',
-      posting_approved_by: user.id,
-      posting_approved_at: stampNow,
-      posting_approval_note: 'Cleared by the board: the pieces were approved there, so the post needed no second approval.',
-      posting_client_required: false,
-    } as never)
-    item = { ...item, posting_approval_state: 'approved' } as ContentItem
-  }
-
-  const stamp = nowIso()
-  const cleared = await posts().claim(id, cur =>
-    cur && cur.status === post.status
-      ? {
-        ...cur, status: 'approved', sent_at: cur.sent_at ?? stamp,
-        // 'assets': cleared by the board's approval of the pieces, not by a
-        // person answering for this post
-        approval_mode: viaBoard ? 'assets' : 'self', approved_by: user.id, approved_at: stamp,
-        updated_at: stamp,
-      } as SocialPost
-      : null)
-  // losing here and carrying on would leave a post that WAS cleared by a
-  // person with `approval_mode` and `approved_by` unset, and the whole point
-  // of those two columns is that nobody has to guess later who cleared it
-  if (!cleared.claimed) {
-    throw new AuthzError(
-      'Somebody else was already dealing with this post -- refresh to see where it got to', 409,
-    )
-  }
-
-  return schedulePost(user, id)
+/** Refuse a booking the provider could not keep: a video's copies not ready by then, or a Trial Reel
+ *  on an account under Instagram's floor. Null when there is nothing in the way. */
+export async function bookingProblem(
+  copy: { slides: Slide[]; per_channel: Record<string, ChannelExtras>; timezone: string | null },
+  accounts: readonly SocialAccount[],
+  whenMs: number,
+): Promise<string | null> {
+  const late = await copiesNotReadyBy({ slides: copy.slides, timezone: copy.timezone ?? 'Australia/Melbourne' } as never, accounts, whenMs)
+  if (late) return late
+  return trialReelProblem({ per_channel: copy.per_channel } as never, accounts)
 }
 
-/**
- * Mirror an item's approval onto its post(s).
- *
- * Called after every approval action, wherever it came from: the item page,
- * the client portal, or this module. The post never holds an opinion of its
- * own — `mirrorStatus` reads the item and its jobs and says what the tile is.
- */
-export async function syncFromItem(itemId: string): Promise<void> {
-  const item = await table<ContentItem>('content_items').get(itemId).catch(() => null)
-  if (!item) return
-  const rows = await posts().list({ where: p => p.item_id === itemId }).catch(() => [])
-  if (rows.length === 0) return
-
-  for (const row of rows) {
-    if (row.status === 'cancelled') continue
-    const next = statusOf(item, row, await jobsOf(row))
-    if (next === row.status) continue
-    const stamp = nowIso()
-    await posts().claim(row.id, cur =>
-      cur && cur.status === row.status
-        ? {
-          ...cur,
-          status: next,
-          ...(next === 'approved'
-            ? {
-              approved_at: readStamp(item, 'posting_approved_at') ?? stamp,
-              approved_by: readStamp(item, 'posting_approved_by'),
-            }
-            : {}),
-          updated_at: stamp,
-        } as SocialPost
-        : null)
-  }
-  announceAfter('schedule', { client_id: item.client_id, item_id: itemId, kind: 'approval' })
-}
-
-/* ── booking it in ──────────────────────────────────────────────────────── */
-
-/**
- * AN APPROVAL BOOKS THE POST IN — nothing else to press.
- *
- * The owner's words, 8 Sep 2026: "once AM or super admin approves, it will
- * appear in Schedule under there." Before this, a yes moved the post to
- * `approved` and it then sat until somebody found it and pressed Schedule —
- * the second press nobody knew they owed.
- *
- * So after a yes (a manager's on the dashboard, or the client's on the
- * portal) every post on the item that carries a time is handed to the
- * provider at that time. The person the booking is recorded against is the
- * approver when they may publish; a client cannot, so their yes is booked in
- * the name of whoever built the post. A booking that fails leaves the post
- * at `approved` — exactly where it was — and is logged, never thrown: the
- * approval already happened and must not be undone by a provider hiccup.
- */
-export async function bookApprovedPosts(itemId: string, actor: TeamUser | null): Promise<string[]> {
-  await syncFromItem(itemId).catch(() => {})
-  const rows = await posts().list({ where: p => p.item_id === itemId && p.status === 'approved' }).catch(() => [])
-  const booked: string[] = []
-  for (const row of rows) {
-    if (!row.scheduled_for) continue
-    let as: TeamUser | null = actor && mayPublish(actor.role) ? actor : null
-    if (!as && row.created_by) {
-      const u = await table<TeamUser>('team_users').get(String(row.created_by)).catch(() => null)
-      if (u && u.active_status && mayPublish(u.role)) as = u
-    }
-    if (!as) continue
-    try {
-      await schedulePost(as, row.id)
-      booked.push(row.id)
-    } catch (e) {
-      console.error(`bookApprovedPosts ${row.id}:`, e instanceof Error ? e.message : e)
-    }
-  }
-  return booked
+/** A refusal from the one writer, as the error this module's routes answer with. */
+export function throwRefusal(r: PostActResult): never {
+  if (r.ok) throw new Error('not a refusal')
+  const status = r.code === 'not_allowed' ? 403 : r.code === 'not_found' ? 404 : r.code === 'bad_request' ? 400 : 409
+  if (r.problems && r.problems.length > 0) throw new ComposeError(r.problems, status)
+  throw new AuthzError(r.reason, status)
 }
 
 /** The provider payload for one post: one target per channel, each carrying
  *  its own caption, kind and slides where the composer set them. */
 export function targetsFor(
-  post: PlannedPost,
+  post: Pick<PlannedPost, 'slides' | 'per_channel'>,
   accounts: SocialAccount[],
   /** the item's versions, so a video whose cover somebody chose in the editor
    *  posts with that cover. Empty is not an error: a post with no cover
@@ -1546,463 +1138,33 @@ export function targetsFor(
   return out
 }
 
-/**
- * Hand an approved post to the provider.
- *
- * Three gates, in the order they matter: this person may publish, the ITEM is
- * signed off (`publishBlockReason`, the same sentence every other path uses),
- * and the post is still sitting at `approved` when the write lands. That last
- * one is a claim, so two clicks — or two people — produce exactly one set of
- * jobs.
- */
-export async function schedulePost(user: TeamUser, id: string): Promise<PlannedPost> {
-  assertMayPublish(user)
-  // the tile may be looking at an approval that arrived elsewhere
-  await syncFromItem((await posts().get(id))?.item_id ?? '').catch(() => {})
-  const { post, item } = await loadPostForUser(user, id)
-
-  const blocked = publishBlockReason(item.posting_approval_state)
-  if (blocked) throw new AuthzError(blocked, 409)
-  if (post.status !== 'approved') {
-    throw new AuthzError(
-      post.status === 'scheduled'
-        ? 'This post is already booked to go out'
-        : 'Send the post for approval first',
-      409,
-    )
-  }
-
-  const accounts = await channelsFor(item.client_id, post.channels)
-  if (accounts.length === 0) throw new ComposeError(['Choose at least one channel'])
-  const versions = await versionsOf(item.id)
-  const elig = eligibility(item, versions)
-  if (!elig.ok) throw new ComposeError([elig.reason])
-  const problems = problemsWith({
-    item, version: (elig.version as AssetVersion) ?? null,
-    slides: post.slides, caption: String(post.caption ?? ''), accounts,
-    perChannel: post.per_channel, scheduledFor: post.scheduled_for,
-  })
-  if (problems.length > 0) throw new ComposeError(problems)
-  // the copies have to be done before the time booked (10 Sep 2026)
-  const whenMs = new Date(String(post.scheduled_for ?? '')).getTime()
-  const late = Number.isFinite(whenMs) ? await copiesNotReadyBy(post, accounts, whenMs) : null
-  if (late) throw new ComposeError([late])
-  // a Trial Reel on an account under Instagram's floor is refused HERE, with
-  // the reason, rather than by Instagram at posting time (12:45 pm, 10 Sep 2026)
-  const trialWhy = await trialReelProblem(post, accounts)
-  if (trialWhy) throw new ComposeError([trialWhy])
-
-  // ── the one winner ───────────────────────────────────────────────────
-  const stamp = nowIso()
-  const taken = await posts().claim(id, cur =>
-    cur && cur.status === 'approved'
-      ? { ...cur, status: 'scheduled', publish_job_ids: [], updated_at: stamp } as SocialPost
-      : null)
-  if (!taken.claimed) {
-    throw new AuthzError('This post is already on its way out — refresh to see where it got to', 409)
-  }
-
-  /**
-   * "POST NOW" HAS TO POST NOW.
-   *
-   * The composer labels the button "Post now" when the chosen time is within
-   * two minutes, and the "Post now" menu item books a post for a minute's
-   * time. Both then handed the provider a `scheduledFor` — a time that has
-   * usually gone by the time the job is picked up — instead of saying
-   * "publish". `buildPostBody` sends `publishNow: true` for a job with no
-   * time on it, so the honest thing is to send no time.
-   *
-   * Only for a time that is genuinely NOW: a post booked for Thursday keeps
-   * its Thursday, held by the provider's own scheduler exactly as before.
-   */
-  const rightNow = isPostingNow(post.scheduled_for, Date.now())
-  const targets = targetsFor(post, accounts, versions)
-
-  // the managers hear it is booked (9 Sep 2026) — after the claim, so a
-  // press that lost the race tells nobody
-  void notifyManagersBooked(user, item, post, accounts.map(a => String(a.platform)),
-    trialWords(postTrial(post.per_channel as Parameters<typeof postTrial>[0], accounts.map(a => ({ id: a.id, platform: String(a.platform) })))))
-
-  const queued = await queuePublishJob({
-    clientId: item.client_id,
-    contentItemId: item.id,
-    caption: String(post.caption ?? ''),
-    media: mediaOf(post.slides),
-    targets,
-    scheduledFor: rightNow ? null : post.scheduled_for,
-    timezone: post.timezone,
-    createdBy: user.email,
-  })
-
-  if ('error' in queued) {
-    // put it back where it was: an approved post that could not be booked is
-    // still an approved post, and the person is told why
-    await posts().claim(id, cur =>
-      cur && cur.status === 'scheduled'
-        ? { ...cur, status: 'approved', publish_job_ids: [], updated_at: nowIso() } as SocialPost
-        : null)
-    throw new ComposeError([queued.error, ...(queued.issues ?? [])], queued.blocked ? 409 : 400)
-  }
-
-  const saved = await posts().update(id, {
-    publish_job_ids: [queued.id] as unknown as SocialPost['publish_job_ids'],
-    updated_at: nowIso(),
-  })
-
-  /**
-   * BOOKING A POST IS SCHEDULING THE PIECE.
-   *
-   * The tile said "scheduled" while the piece itself stayed at "Approved" with
-   * no schedule row, so every screen that reads those two — the board, and the
-   * client's own card, which went on saying "we'll book a posting time" until
-   * the post appeared live — was told nothing. The older publish route already
-   * writes both; this is the same call, not a second copy of it, so a schedule
-   * row and the status move exactly once (both are claims: a platform that
-   * already carries a time keeps it, and an item already past "Approved"
-   * moves nowhere). Best-effort, like the route's: a booked post is booked
-   * whether or not the bookkeeping lands.
-   */
-  /* …ONLY ONCE EVERY FILE OF THE PIECE IS BOOKED OR OUT (the owner, 9 Sep
-   * 2026: "when one file was scheduled, why did the whole card show as
-   * posted?"). A piece posted in parts stays in Ready to post — saying
-   * "2 of 4 posted" — until the last of its files is in a booked post; the
-   * schedule row is still written, so the client's card shows the time. */
-  const allBooked = await everyFileBooked(item, versions)
-  await markScheduledAfterQueue(user, item as never, {
-    targets, scheduledFor: post.scheduled_for,
-  }, rightNow, { moveItem: allBooked }).catch(e =>
-    console.error('could not record the schedule for a booked post:', (e as Error).message))
-  // the provider holds the schedule; the event only makes the hand-over
-  // immediate, and a dropped one is picked up by the next dispatcher pass
-  await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
-    .catch(e => console.error('schedule dispatch failed:', (e as Error).message))
-  announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'scheduled' })
-  return shape(saved ?? (await posts().get(id))!)
-}
-
-/* ── moving and stopping ────────────────────────────────────────────────── */
-
-/**
- * Pull one job back from the provider.
- *
- * The same order the job-keyed cancel route uses: the provider FIRST, because
- * a row that says "cancelled" over a post the provider will still publish is
- * the one outcome worth avoiding, and only then our own row — conditionally,
- * so a job that went out while we were asking is not overwritten.
- */
-async function cancelJob(job: PublishJobRow): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (job.status === 'publishing') {
-    return { ok: false, error: 'It is being sent right now — wait for it to finish, then delete the post at the channel' }
-  }
-  if (!['queued', 'scheduled'].includes(job.status)) return { ok: true }
-
-  if (job.status === 'scheduled' && job.provider_post_id) {
-    try {
-      await getPublisher().deletePost(String(job.provider_post_id))
-    } catch (e) {
-      const why = e instanceof Error ? e.message : 'the channel would not cancel it'
-      return { ok: false, error: `The channel would not let go of this post: ${why}. Open it at the channel and delete it there.` }
-    }
-  }
-  const cancelled = await jobs().claim(job.id, cur =>
-    cur && cur.status === job.status
-      ? { ...cur, status: 'cancelled', error: null, updated_at: nowIso() } as PublishJobRow
-      : null)
-  if (!cancelled.claimed) {
-    return { ok: false, error: 'It moved on while you were cancelling — refresh to see where it got to' }
-  }
-  if (job.content_item_id) {
-    await releaseClaimLock(jobLockKey(job), job.id).catch(() => {})
-  }
-  return { ok: true }
-}
-
-async function liveJobsOf(post: PlannedPost): Promise<PublishJobRow[]> {
-  return (await jobsOf(post)).filter(j => LIVE_JOB_STATUSES.includes(j.status))
-}
-
-/**
- * NEW WORDS ON A BOOKED POST (Raina, 22 Sep 2026: "I wanted to edit the caption
- * of a scheduled post but I'm not able to — do I have to discard it first?").
- *
- * The provider is holding the post, so the booking is pulled back the way a
- * reschedule pulls it back, and made again with the new words at the same
- * time to the same channels — without a second approval (the owner, 22 Sep
- * 2026: "can they just change the caption without going through approval").
- * Too close to the time, nothing is touched — cancelling is the honest move
- * then.
- */
-async function rewordBooked(user: TeamUser, post: PlannedPost, item: ContentItem, caption: string, perChannel: PlannedPost['per_channel'] = post.per_channel): Promise<PlannedPost> {
-  assertMayPublish(user)
-  const when = new Date(String(post.scheduled_for ?? '')).getTime()
-  if (!Number.isFinite(when) || when <= Date.now() + REWORD_LEAD_MS) throw new AuthzError(TOO_LATE_TO_REWORD, 409)
-
-  for (const job of await liveJobsOf(post)) {
-    const pulled = await cancelJob(job)
-    if (!pulled.ok) throw new AuthzError(pulled.error, 409)
-  }
-
-  // THE OWNER'S RULE (22 Sep 2026: "can they just change the caption without going through approval"):
-  // the words are re-booked at once; the client's yes stands. Nothing here touches the item's approval.
-  const [accounts, versions] = await Promise.all([
-    channelsFor(item.client_id, post.channels),
-    versionsOf(item.id),
-  ])
-  const next = { ...post, caption, per_channel: perChannel }
-  const queued = await queuePublishJob({
-    clientId: item.client_id,
-    contentItemId: item.id,
-    caption,
-    media: mediaOf(post.slides),
-    targets: targetsFor(next, accounts, versions),
-    scheduledFor: post.scheduled_for,
-    timezone: post.timezone,
-    createdBy: user.email,
-  })
-  if ('error' in queued) {
-    // the old booking is gone and the new one would not take: say so plainly and leave the post
-    // approved with the new words, so it can be booked again
-    await posts().claim(post.id, cur =>
-      cur ? { ...cur, caption, per_channel: perChannel as unknown as SocialPost['per_channel'], status: 'approved', publish_job_ids: [], updated_at: nowIso() } as SocialPost : null)
-    throw new AuthzError(queued.error, 409)
-  }
-  const saved = await posts().claim(post.id, cur =>
-    cur && cur.status === 'scheduled'
-      ? { ...cur, caption, per_channel: perChannel as unknown as SocialPost['per_channel'], publish_job_ids: [queued.id], updated_at: nowIso() } as SocialPost
-      : null)
-  if (!saved.claimed) throw new AuthzError('This post changed while its words were being saved — refresh to see where it got to', 409)
-  await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
-    .catch(e => console.error('reword dispatch failed:', (e as Error).message))
-  await logActivity({
-    actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
-    action: 'post_reworded', detail: `${caption !== String(post.caption ?? '') ? 'Words' : 'Cover or settings'} changed on a booked post — booked again with the new words, same time, same channels`,
-  }).catch(() => {})
-  announceAfter('schedule', { client_id: item.client_id, post_id: post.id, kind: 'updated' })
-  return shape(saved.row)
-}
-
-export type RescheduleResult =
-  | { ok: true; post: PlannedPost; mode: 'move' | 'requeue' }
-  /** `status` is the code the route should answer with; 409 unless it says */
-  | { ok: false; error: string; status?: number }
-
-/**
- * Move a post to another time.
- *
- * Two costs, and the caller is told which one it paid. A post nobody has
- * handed over yet is a write of one field. A post the provider is HOLDING has
- * to be pulled back and booked again — and when the provider will not let go,
- * the old time stands and the message says so rather than leaving a booking
- * nobody can see.
- */
-export async function reschedule(user: TeamUser, id: string, iso: string): Promise<RescheduleResult> {
-  const { post, item } = await loadPostForUser(user, id)
-  const when = new Date(String(iso)).getTime()
-  if (!Number.isFinite(when)) {
-    // nothing is in conflict here: what arrived simply is not a time
-    return {
-      ok: false, status: 400,
-      error: 'That is not a time we can read — pick one from the calendar',
-    }
-  }
-  if (when <= Date.now()) return { ok: false, error: 'That time has already gone — pick a later one' }
-  // the same lead the composer asks for: inside the "post now" window is
-  // fine (that is what Post now sends), anything else needs the fifteen
-  // minutes the copies and the ten-minute cycle need (the owner, 9 Sep
-  // 2026: "make sure when rescheduling it's a safe time too")
-  if (when > Date.now() + POST_NOW_WINDOW_MS && when < Date.now() + MIN_LEAD_MS) {
-    return { ok: false, error: TOO_SOON }
-  }
-  const at = new Date(when).toISOString()
-
-  const move = canReschedule(post)
-  if (!move.ok) return { ok: false, error: move.reason }
-
-  // a drag or a typed time lands here too: the copies have to be done by
-  // then, whether the post is a draft being moved or a booking being
-  // re-queued (the owner, 10 Sep 2026: "make sure rescheduling works great too")
-  if (post.status === 'approved' || post.status === 'scheduled') {
-    const late = await copiesNotReadyBy(post, await channelsFor(item.client_id, post.channels), when)
-    if (late) return { ok: false, error: late }
-  }
-
-  if (move.mode === 'move') {
-    assertCompose(user, item)
-    const saved = await posts().claim(id, cur =>
-      cur && cur.status === post.status
-        ? { ...cur, scheduled_for: at, updated_at: nowIso() } as SocialPost
-        : null)
-    if (!saved.claimed) return { ok: false, error: 'Somebody moved this post while you were dragging it — refresh to see it' }
-    announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'moved' })
-    return { ok: true, post: shape(saved.row), mode: 'move' }
-  }
-
-  // requeue: the provider is holding this post
-  assertMayPublish(user)
-  const live = await liveJobsOf(post)
-  for (const job of live) {
-    const pulled = await cancelJob(job)
-    if (!pulled.ok) return { ok: false, error: pulled.error }
-  }
-
-  const [accounts, versions] = await Promise.all([
-    channelsFor(item.client_id, post.channels),
-    versionsOf(item.id),
-  ])
-  const queued = await queuePublishJob({
-    clientId: item.client_id,
-    contentItemId: item.id,
-    caption: String(post.caption ?? ''),
-    media: mediaOf(post.slides),
-    targets: targetsFor(post, accounts, versions),
-    scheduledFor: at,
-    timezone: post.timezone,
-    createdBy: user.email,
-  })
-  if ('error' in queued) {
-    // the old booking is gone and the new one would not take: say so plainly
-    // and leave the post approved, so it can be booked again
-    await posts().claim(id, cur =>
-      cur ? { ...cur, status: 'approved', publish_job_ids: [], updated_at: nowIso() } as SocialPost : null)
-    return { ok: false, error: queued.error }
-  }
-
-  // the same one-winner rule the cancel step used: a `cancelPost` landing
-  // between the queue and this write must not be overwritten by 'scheduled'
-  const saved = await posts().claim(id, cur =>
-    cur && cur.status === 'scheduled'
-      ? {
-        ...cur,
-        scheduled_for: at,
-        publish_job_ids: [queued.id],
-        updated_at: nowIso(),
-      } as SocialPost
-      : null)
-  if (!saved.claimed) {
-    return {
-      ok: false,
-      error: 'This post changed while it was being moved — refresh to see where it got to',
-    }
-  }
-  await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
-    .catch(e => console.error('reschedule dispatch failed:', (e as Error).message))
-  // THE CARD FOLLOWS THE MOVE (the owner, 9 Sep 2026: "make sure the cards
-  // in post approval get updated too if we move around"): the schedule
-  // rows the board, the Overview and the portal read carry the new time,
-  // and the card's own log says who moved it and to when
-  await moveScheduleRows(item.id, post.scheduled_for ?? null, at)
-  await logActivity({
-    actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
-    action: 'post_rescheduled', oldValue: post.scheduled_for ?? undefined, newValue: at,
-    detail: `Moved to ${new Date(at).toLocaleString('en-AU', { timeZone: post.timezone || 'Australia/Melbourne', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`,
-  }).catch(() => {})
-  announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'moved' })
-  return { ok: true, post: shape(saved.row), mode: 'requeue' }
-}
-
-/** the item's schedule rows that carried the old time now carry the new
- *  one — a published row is left alone */
-async function moveScheduleRows(itemId: string, from: string | null, to: string): Promise<void> {
-  try {
-    const rows = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: itemId } })
-    await Promise.all(rows
-      .filter(r => r.publish_status !== 'published' && (!from || !r.scheduled_at || r.scheduled_at === from))
-      .map(r => table('schedule_entries').update(r.id, { scheduled_at: to })))
-  } catch (e) {
-    console.error('could not move the schedule rows', itemId, e instanceof Error ? e.message : e)
-  }
-}
-
-/**
- * Take a post off the calendar.
- *
- * Anything the provider is holding is pulled back first, for the same reason
- * a reschedule does it: a cancelled tile over a live booking is worse than a
- * refusal. Cancelling frees the item to carry a new post.
- */
-export async function cancelPost(user: TeamUser, id: string): Promise<PlannedPost> {
-  const { post, item } = await loadPostForUser(user, id)
-  assertCompose(user, item)
-  // GONE OUT is read off the jobs: nothing writes `published` on the post
-  // row itself, so the row's status alone let a live post be marked
-  // cancelled and its item's approval reset (the audit of 9 Sep 2026)
-  const all = await jobsOf(post)
-  // …and off the per-channel record: a job the reconciler keeps at
-  // 'scheduled' while TikTok finishes still has a live Instagram Reel on it
-  const anyChannelLive = all.some(j =>
-    (readPlatformResults((j as { platform_results?: unknown }).platform_results) ?? []).some(o => o.status === 'published'))
-  if (post.status === 'published' || anyChannelLive || all.some(j => j.status === 'published' || j.status === 'duplicate')) {
-    throw new AuthzError('This post has already gone out — delete it at the channel instead', 409)
-  }
-
-  const live = await liveJobsOf(post)
-  if (live.length > 0) assertMayPublish(user)
-  for (const job of live) {
-    const pulled = await cancelJob(job)
-    if (!pulled.ok) throw new AuthzError(pulled.error, 409)
-  }
-
-  const stamp = nowIso()
-  const saved = await posts().claim(id, cur =>
-    cur && cur.status !== 'cancelled'
-      ? { ...cur, status: 'cancelled', updated_at: stamp } as SocialPost
-      : null)
-
-  // The approval belonged to THIS post, so it goes with it. Without this the
-  // item is left saying 'approved' over a post nobody will ever send: the
-  // next post on the item would inherit a yes given to different words, and
-  // the ad-hoc composer would find the gate open for an item whose only
-  // approved post was cancelled. Only when this post ever ASKED — cancelling
-  // a draft nobody sent has no answer to take back.
-  if (saved.claimed && post.sent_at) {
-    await actOnPostingApproval(user, item as never, { action: 'reset' })
-      .catch(e => console.error('approval reset failed:', (e as Error).message))
-  }
-  await releaseClaimLock(postLockKey(item.id), id).catch(() => {})
-  // THE CARD FOLLOWS: a card in Booked in whose only booking was just pulled
-  // back goes back to Ready to post, and its schedule rows stop promising
-  // the time — it sat in Booked in with no way out (the audit of 9 Sep 2026)
-  if (saved.claimed && item.status === 'scheduled') {
-    const others = (await posts().list({ by: { item_id: item.id } }))
-      .filter(p => p.id !== id && ['scheduled', 'published'].includes(String(p.status)))
-    if (others.length === 0) {
-      await table('content_items').update(item.id, { status: 'approved_for_scheduling', updated_at: stamp }).catch(() => {})
-      const rows = await table<ScheduleEntry>('schedule_entries').list({ by: { item_id: item.id } }).catch(() => [] as ScheduleEntry[])
-      await Promise.all(rows.filter(r => r.publish_status !== 'published')
-        .map(r => table('schedule_entries').update(r.id, { scheduled_at: null }).catch(() => {})))
-      await logActivity({
-        actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
-        action: 'post_cancelled', oldValue: 'scheduled', newValue: 'approved_for_scheduling',
-        detail: 'Booking cancelled — back in Ready to post',
-      }).catch(() => {})
-    }
-  }
-  announceAfter('schedule', { client_id: item.client_id, post_id: id, kind: 'cancelled' })
-  return saved.claimed ? shape(saved.row) : shape(saved.current ?? (await posts().get(id))!)
-}
 
 /* ── reading the calendar ───────────────────────────────────────────────── */
 
 export type ListedPost = PlannedPost & {
-  /** what the tile actually says, item and jobs included */
-  live_status: SocialPostStatus
+  /** the post's stage — the ONE answer to where it is (null only before the migration reaches it) */
+  stage: PostStage | null
   item_title: string | null
+  /** why it cannot go out as it stands: a channel that is not connected any more (audit S13) */
   block_reason: string | null
+  /** the piece it came from was deleted; the post stays visible (audit S9, L6) */
+  source_deleted: boolean
 }
 
 /**
- * Every post for one client in a date range, each carrying the status the
- * calendar should draw — never the stored one on its own, because an approval
- * or a job may have moved since it was written.
+ * Every post for one client in a date range, each carrying its own STAGE — never a status worked out
+ * from the item's approval or the jobs (audit S2, S5, S15). A post whose piece was deleted stays on the
+ * list, marked, instead of vanishing (audit S9); a post whose piece this person may not see is left
+ * out, the same rule the page and the items API apply.
  */
 export async function listPosts(input: {
   clientId: string
   from?: string | null
   to?: string | null
   /**
-   * Who is asking. Optional only so the two internal callers that have already
-   * proved access (and the tests) need not invent one; every ROUTE passes it,
-   * and without it this returns the client's whole calendar.
+   * Who is asking. Optional only so the internal callers that have already proved access (and the
+   * tests) need not invent one; every ROUTE passes it, and without it this returns the client's whole
+   * calendar.
    */
   viewer?: TeamUser | null
 }): Promise<ListedPost[]> {
@@ -2015,45 +1177,34 @@ export async function listPosts(input: {
   })
   if (inRange.length === 0) return []
 
-  const itemIds = [...new Set(inRange.map(p => p.item_id))]
-  const [items, allJobs, accounts] = await Promise.all([
+  const itemIds = [...new Set(inRange.map(p => p.source_item_id ?? p.item_id))]
+  const [items, accounts] = await Promise.all([
     table<ContentItem>('content_items').list({ where: i => itemIds.includes(i.id) }),
-    jobs().list({ where: j => j.content_item_id != null && itemIds.includes(String(j.content_item_id)) }),
-    // the channels, because a post whose account has been revoked is blocked
-    // by a fact about the ACCOUNT, not about the item — and the calendar and
-    // this list have to give the same reason
     table<SocialAccount>('social_accounts').list({ where: a => a.client_id === input.clientId }),
   ])
-
-  /**
-   * A POST WHOSE ITEM THIS PERSON MAY NOT SEE IS NOT ON THEIR CALENDAR.
-   *
-   * The page has always done this (`useSchedulePosts`'s `scopedItems`) and the
-   * server did not, so the API was the wider of the two surfaces: the title
-   * and the caption of an item somebody was not on, to anybody else on that
-   * client. Same rule, same helpers — `visibleItems` with `scopeContextOf`,
-   * exactly as the items API and the page both call it — so the browser and
-   * the route cannot come to different answers about the same row.
-   */
-  const visible = input.viewer
-    ? await scopeItemsFor(input.viewer, items)
-    : items
+  const existing = new Set(items.map(i => i.id))
+  const visible = input.viewer ? await scopeItemsFor(input.viewer, items) : items
   const itemById = new Map(visible.map(i => [i.id, i]))
+  // a post whose piece is GONE is a record in its own right: shown to a manager on this client (the
+  // same rule `loadPostOrRecordForUser` follows), marked, never silently dropped
+  const seesOrphans = !input.viewer || ['account_manager', 'super_admin', 'scheduler', 'general'].includes(String(input.viewer.role))
 
-  return inRange.filter(row => itemById.has(row.item_id)).map(row => {
+  return inRange.flatMap(row => {
+    const itemId = row.source_item_id ?? row.item_id
+    const item = itemById.get(itemId) ?? null
+    const gone = !existing.has(itemId) || row.source_deleted === true
+    if (!item && !(gone && seesOrphans)) return []
     const post = shape(row)
-    const item = itemById.get(post.item_id) ?? null
-    // this post's own jobs only -- see jobsOf
-    const mine = allJobs.filter(j => post.publish_job_ids.includes(j.id))
-    return {
+    return [{
       ...post,
-      live_status: statusOf(item, post, mine),
+      stage: post.state?.stage ?? null,
       item_title: (item?.title as string | null) ?? null,
-      block_reason: publishBlockReason(item?.posting_approval_state)
-        ?? channelBlockReason(post.channels, accounts),
-    }
+      block_reason: channelBlockReason(post.channels, accounts),
+      source_deleted: gone,
+    }]
   })
 }
+
 
 /**
  * The items this person may actually see, out of the ones in hand.
@@ -2196,7 +1347,7 @@ export async function editNote(
 export async function analyticsForClient(clientId: string): Promise<Record<string, unknown>[]> {
   const [items, clientJobs] = await Promise.all([
     table<ContentItem>('content_items').list({ where: i => i.client_id === clientId }),
-    jobs().list({ where: j => j.client_id === clientId }),
+    table<PublishJob>('publish_jobs').list({ where: j => j.client_id === clientId }),
   ])
   const itemIds = new Set(items.map(i => i.id))
   const jobIds = new Set(clientJobs.map(j => j.id))
@@ -2209,16 +1360,3 @@ export async function analyticsForClient(clientId: string): Promise<Record<strin
   return rows as unknown as Record<string, unknown>[]
 }
 
-/** every file of the piece's latest version sits in a booked or live post,
- *  or was marked posted by hand (posted-slides-core) */
-async function everyFileBooked(item: ContentItem, versions: AssetVersion[]): Promise<boolean> {
-  // a files card counts its APPROVED FILES (24 Sep 2026: with no upload version, posting one clip of two read as
-  // "every file booked" and the second could never be posted)
-  const latest = approvedFilesVersion(item as never) ?? [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
-  const files = slidesOf(latest as never)
-  if (files.length === 0) return true
-  const own = await posts().list({ by: { item_id: item.id } as Partial<SocialPost> }).catch(() => [] as SocialPost[])
-  const gone = takenSlideUrls(own)
-  for (const u of readPostedSlides((item as { posted_slides?: unknown }).posted_slides)?.urls ?? []) gone.add(u)
-  return files.every(f => gone.has(f.url))
-}

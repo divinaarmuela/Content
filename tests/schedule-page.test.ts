@@ -6,12 +6,12 @@ import { filterMedia, RAIL_FILTERS, type RailFilter } from '@/app/dashboard/soci
 import {
   initialsOf, NETWORK_ORDER, profileSlots, PUBLISHABLE_NETWORKS, VIEWS,
 } from '@/app/dashboard/social/schedule/ProfilesBar'
-import { STATUS_WORDS } from '@/app/dashboard/social/schedule/tiles'
+import { STAGE_DOT } from '@/app/dashboard/social/schedule/tiles'
 import {
-  jobsForPost, matchesChannel, nowLineTop, onOneOfDays, postPlatforms,
-  postTileFacts, scheduleWeekGrid, SOCIAL_POST_STATUSES, tileTone,
-  type TileJob,
+  matchesChannel, nowLineTop, onOneOfDays, postPlatforms,
+  scheduleWeekGrid,
 } from '@/app/lib/social-schedule-core'
+import { POST_STAGES, STAGE_WORDS } from '@/app/lib/post-stage-core'
 import type { RailMedia } from '@/app/dashboard/social/schedule/useSchedulePosts'
 import type { SocialAccount } from '@/lib/db-types'
 
@@ -121,25 +121,20 @@ describe('the media rail filters', () => {
 })
 
 describe('what a person is told', () => {
-  it('gives every status a post can be in plain words', () => {
-    for (const status of SOCIAL_POST_STATUSES) {
-      expect(STATUS_WORDS[status], status).toBeTruthy()
-      expect(STATUS_WORDS[status], status).not.toMatch(/_/)
+  it('gives every stage a post can be in plain words — from the one list', () => {
+    for (const stage of POST_STAGES) {
+      expect(STAGE_WORDS[stage].label, stage).toBeTruthy()
+      expect(STAGE_WORDS[stage].label, stage).not.toMatch(/_/)
+      expect(STAGE_WORDS[stage].label.toLowerCase()).not.toContain('graphic')
     }
   })
 
-  it('never says "graphic" — a video is not a graphic', () => {
-    for (const status of SOCIAL_POST_STATUSES) {
-      expect(STATUS_WORDS[status].toLowerCase()).not.toContain('graphic')
-    }
-  })
-
-  it('has a tone for every status, so no tile is drawn colourless by accident', () => {
-    for (const status of SOCIAL_POST_STATUSES) {
-      expect(tileTone(status), status).toBeTruthy()
+  it('draws every stage tone, so no tile is drawn colourless by accident', () => {
+    for (const stage of POST_STAGES) {
+      expect(STAGE_DOT[STAGE_WORDS[stage].tone], stage).toBeTruthy()
     }
     // cancelled is deliberately quiet: it is history, not work
-    expect(tileTone('cancelled')).toBe('muted')
+    expect(STAGE_WORDS.cancelled.tone).toBe('muted')
   })
 
   it('offers the five views the design named, week among them', () => {
@@ -150,73 +145,6 @@ describe('what a person is told', () => {
     expect(initialsOf('Sui Kitchen')).toBe('SK')
     expect(initialsOf('  divina ')).toBe('D')
     expect(initialsOf('')).toBe('—')
-  })
-})
-
-/* ── the join: post + item + jobs → one tile ────────────────────────────── */
-
-describe('a tile is joined from the post, its item and ITS OWN jobs', () => {
-  const approved = { status: 'approved_for_scheduling', posting_approval_state: 'approved' }
-  const jobs = (...list: [string, string][]) =>
-    new Map<string, TileJob>(list.map(([id, status]) => [id, { id, status }]))
-
-  it('mirrors the item when the post has no jobs behind it', () => {
-    const facts = postTileFacts(
-      { item_id: 'i1', publish_job_ids: [] }, approved, jobs(), [])
-    expect(facts.live_status).toBe('approved')
-    expect(facts.tone).toBe('green')
-  })
-
-  it('follows the precedence table once there are jobs', () => {
-    const table: [string[], string][] = [
-      // still going out wins: one channel left to go means it has not happened
-      [['queued', 'published'], 'scheduled'],
-      [['failed', 'published'], 'failed'],
-      [['published', 'published'], 'published'],
-      [['cancelled', 'cancelled'], 'cancelled'],
-    ]
-    for (const [statuses, expected] of table) {
-      const ids = statuses.map((_, i) => `j${i}`)
-      const facts = postTileFacts(
-        { item_id: 'i1', publish_job_ids: ids },
-        approved,
-        jobs(...statuses.map((s, i) => [`j${i}`, s] as [string, string])),
-        [],
-      )
-      expect(facts.live_status, statuses.join('+')).toBe(expected)
-    }
-  })
-
-  it('a post cancelled by a person reads cancelled even with no jobs', () => {
-    const facts = postTileFacts(
-      { item_id: 'i1', status: 'cancelled', publish_job_ids: [] }, approved, jobs(), [])
-    expect(facts.live_status).toBe('cancelled')
-    expect(facts.tone).toBe('muted')
-  })
-
-  it('THE CANCELLED-THEN-REMADE CASE: the old job never speaks for the new post', () => {
-    // Tuesday's post was cancelled — its publish job is `cancelled` and still
-    // sits on the same item. Thursday's replacement carries no jobs at all.
-    // Matching jobs by ITEM would read "every job cancelled" and draw a
-    // brand-new draft as cancelled, which is the bug `jobsOf` was written to
-    // kill on the server.
-    const oldJob = jobs(['old-job', 'cancelled'])
-    const remade = { item_id: 'i1', publish_job_ids: [] as string[] }
-    expect(jobsForPost(remade, oldJob)).toEqual([])
-    expect(postTileFacts(remade, approved, oldJob, []).live_status).toBe('approved')
-    // and the post that DID own that job still reads cancelled
-    const cancelled = { item_id: 'i1', publish_job_ids: ['old-job'] }
-    expect(postTileFacts(cancelled, approved, oldJob, []).live_status).toBe('cancelled')
-  })
-
-  it('ignores a job id it cannot find rather than inventing a status', () => {
-    expect(jobsForPost({ publish_job_ids: ['gone'] }, jobs(['other', 'failed']))).toEqual([])
-  })
-
-  it('carries the block reason the server would refuse with', () => {
-    const waiting = { status: 'approved_for_scheduling', posting_approval_state: 'pending' }
-    expect(postTileFacts({ item_id: 'i1' }, waiting, jobs(), []).block_reason).toBeTruthy()
-    expect(postTileFacts({ item_id: 'i1' }, approved, jobs(), []).block_reason).toBeNull()
   })
 })
 
@@ -412,19 +340,12 @@ describe('Month view pages by month', () => {
   })
 })
 
-/* ── a draft is not a plan: off the grids, in the List (10 Sep 2026) ────── */
+/* ── the schedule draws what is going out (the owner's decision 1, 29 Sep 2026) ── */
 
-describe('drafts stay off the calendar grids', () => {
-  it('the grids draw everything past draft; the List keeps drafts wherever their time is', async () => {
-    const { showsOnGrid, belongsInList } = await import('@/app/lib/social-schedule-core')
-    expect(showsOnGrid({ live_status: 'draft' })).toBe(false)
-    for (const s of ['pending', 'approved', 'scheduled', 'published', 'failed', 'changes'] as const) {
-      expect(showsOnGrid({ live_status: s })).toBe(true)
-    }
-    // a draft with a time in another week still belongs in this week's List
-    expect(belongsInList({ live_status: 'draft', scheduled_for: '2026-09-20T02:00:00Z' }, false)).toBe(true)
-    expect(belongsInList({ live_status: 'scheduled', scheduled_for: '2026-09-20T02:00:00Z' }, false)).toBe(false)
-    expect(belongsInList({ live_status: 'approved', scheduled_for: null }, false)).toBe(true)
-    expect(belongsInList({ live_status: 'scheduled', scheduled_for: '2026-09-08T02:00:00Z' }, true)).toBe(true)
+describe('the grids draw Ready to post, Booked in and Posted only', () => {
+  it('reads the stage — drafts, posts being approved and cancelled posts are not tiles', async () => {
+    const { showsOnSchedule } = await import('@/app/lib/schedule-stage-core')
+    for (const s of ['ready', 'booked', 'posted'] as const) expect(showsOnSchedule(s), s).toBe(true)
+    for (const s of ['draft', 'quality_check', 'with_client', 'cancelled'] as const) expect(showsOnSchedule(s), s).toBe(false)
   })
 })

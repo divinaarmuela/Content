@@ -97,7 +97,9 @@ describe('no page can reach a Drive write', () => {
   })
 
   it('sends no confirmation flag, because there is nothing to confirm', () => {
-    expect(paths(pages.filter(f => /confirm:\s*true/.test(f.text)))).toEqual([])
+    // only pages that talk to Drive: the Schedule page's bin sends confirm:true to the post act route (the posting rebuild), not to Drive
+    const driveCallers = pages.filter(f => f.path.startsWith('app/dashboard/files') || /\/api\/drive/.test(f.text))
+    expect(paths(driveCallers.filter(f => /confirm:\s*true/.test(f.text)))).toEqual([])
   })
 
   it('the Files page keeps only the two read actions it can honour', () => {

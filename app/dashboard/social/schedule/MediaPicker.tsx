@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, ArrowRight, Check, FolderOpen, Upload, Wand2, X,
+  ArrowLeft, ArrowRight, FolderOpen, Layers, Upload, Wand2, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Thumb } from './tiles'
@@ -10,9 +10,10 @@ import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
 import { UploadRows, useUploadGroup } from '../../UploadRows'
 import {
   addToPost, inPost, limitsLine, moveInPost, removeFromPost, replaceInPost,
-  NEW_VERSION_NOTICE, PICKER_HELP, PICKER_LIBRARY_HELP,
+  POST_MEDIA_NOTICE, PICKER_HELP, PICKER_LIBRARY_HELP,
   type MediaSource, type PickerFile,
 } from '@/app/lib/schedule-compose-core'
+import { INSTAGRAM_MAX } from '@/app/lib/post-stage-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
 
@@ -22,12 +23,13 @@ import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
  * The composer stays behind it, dimmed, because what is being arranged only
  * makes sense next to the caption and the channels it belongs to.
  *
- * The rule the whole window is built around: **only media the client approved
- * gets posted**. The Approved tab is the item's approved version and nothing
- * else. A Drive file or an upload is not refused — that would send people
- * back to email — but it is not slipped in either: it becomes a new version
- * of the piece, the client is asked, and the footer says so before anybody
- * clicks anything.
+ * THE POST IS ITS OWN THING (the posting rebuild, 29 Sep 2026). The first tab
+ * is the files of the piece this post was made from; Drive and Upload add
+ * files of this post's own. None of them makes a new version of the edit card
+ * or goes to the client from here: the post is checked as a whole at the
+ * quality check, from the version frozen when it is sent (decisions 7 and 8;
+ * audit V7, V13). The green "client approved" tick is gone too — it was the
+ * EDIT's approval, worn by a post nobody had approved.
  *
  * Drag a file across onto the dashed "Drop here" slot to add it; drop it on a
  * FILLED slot to replace what is in that slot; drag inside the tray to
@@ -37,7 +39,7 @@ import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
  */
 
 const SOURCES: { key: MediaSource; label: string }[] = [
-  { key: 'approved', label: 'Approved' },
+  { key: 'approved', label: 'This piece' },
   { key: 'drive', label: 'Google Drive' },
   { key: 'upload', label: 'Upload' },
 ]
@@ -51,12 +53,13 @@ export default function MediaPicker({
   open, onClose, itemId, approved, versionLabel, slides, platforms, onSave,
   onEditSlide, saving, allowUploads = true, saveProblems = [],
 }: {
-  /** why the last Save was refused — shown HERE, not behind this window (28 Sep 2026) */
+  /** why the last Save was refused — shown HERE, not behind this window (28 Sep 2026), and only after a
+   *  Save pressed in THIS opening: an older refusal from the post window is not this window's (audit W7) */
   saveProblems?: readonly string[]
   open: boolean
   onClose: () => void
   itemId: string
-  /** the APPROVED version's files — the only ones that need no new approval */
+  /** the files of the piece this post was made from */
   approved: Slide[]
   /** "Menu carousel · version 3" */
   versionLabel: string
@@ -68,9 +71,7 @@ export default function MediaPicker({
   /** open the page's image editor on the file in this slot of the post */
   onEditSlide: (index: number) => void
   saving: boolean
-  /** may this person add files that were never approved (Drive, Upload)? A
-   *  scheduler may not: "we only want the ones that are approved for
-   *  schedulers" (the owner, 9 Sep 2026) */
+  /** may this person bring files from Drive or their computer? */
   allowUploads?: boolean
 }) {
   const [tray, setTray] = useState<Slide[]>(slides)
@@ -87,6 +88,8 @@ export default function MediaPicker({
   /** what the tray was seeded from, so a listener cannot reseed it */
   const seeded = useRef(false)
   const [confirm, setConfirm] = useState(false)
+  /** a Save was pressed in this opening — only then is a refusal this window's to show (audit W7) */
+  const [triedSave, setTriedSave] = useState(false)
 
   const uploadGroup = useMemo(() => `schedule-media:${itemId}`, [itemId])
   const uploads = useUploadGroup(uploadGroup)
@@ -107,6 +110,7 @@ export default function MediaPicker({
       // marks, or its Upload tab
       setBrought([])
       setConfirm(false)
+      setTriedSave(false)
       return
     }
     if (seeded.current) return
@@ -116,9 +120,6 @@ export default function MediaPicker({
   }, [open, slides])
 
   const approvedUrls = useMemo(() => new Set(approved.map(s => s.url)), [approved])
-  /** what is in the tray that the client has never seen */
-  const unapproved = useMemo(
-    () => tray.filter(s => !approvedUrls.has(s.url)), [tray, approvedUrls])
 
   const library: Slide[] = useMemo(() => {
     if (source === 'approved') return approved
@@ -287,6 +288,8 @@ export default function MediaPicker({
   }
 
   const limits = limitsLine(platforms, tray)
+  /** Instagram takes ten through the API (decision 10) — said here, where the files are arranged */
+  const instagramOver = platforms.includes('instagram') && tray.length > INSTAGRAM_MAX
 
   return (
     <div
@@ -314,7 +317,7 @@ export default function MediaPicker({
                     : 'border-border bg-surface hover:bg-muted',
                 )}
               >
-                {s.key === 'approved' && <Check className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />}
+                {s.key === 'approved' && <Layers className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.key === 'drive' && <FolderOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.key === 'upload' && <Upload className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />}
                 {s.label}
@@ -355,8 +358,7 @@ export default function MediaPicker({
                 inTray={url => inPost(tray, url)}
                 onAdd={s => setTray(t => addToPost(t, s))}
                 onDragStart={dragOut}
-                empty="Nothing approved on this piece yet."
-                approved
+                empty="This piece has no files yet."
               />
             )}
           </div>
@@ -364,7 +366,7 @@ export default function MediaPicker({
           {source !== 'drive' && (
             <p className="text-[12px] text-muted-foreground">{PICKER_LIBRARY_HELP}</p>
           )}
-          <p className="text-[12px] text-muted-foreground">{NEW_VERSION_NOTICE}</p>
+          <p className="text-[12px] text-muted-foreground">{POST_MEDIA_NOTICE}</p>
         </div>
 
         {/* ── right: the post ── */}
@@ -418,20 +420,16 @@ export default function MediaPicker({
                 <LibraryGrid
                   files={library} inTray={url => inPost(tray, url)}
                   onAdd={s => setTray(t => addToPost(t, s))} onDragStart={dragOut}
-                  empty="Nothing approved on this piece yet."
-                  approved
+                  empty="This piece has no files yet."
                 />
               )}
             </div>
-            {/* Both sentences belong here too. They used to live only in the
-                380px column, which is `hidden` below `md` — so on a phone
-                somebody uploaded from their camera roll and pressed Save with
-                nothing on screen saying that this makes a new version and
-                puts the piece back in front of the client. */}
+            {/* Both sentences belong here too: the 380px column is `hidden`
+                below `md`, and a phone needs to be told the same things. */}
             {source !== 'drive' && (
               <p className="pt-2 text-[12px] text-muted-foreground">{PICKER_LIBRARY_HELP}</p>
             )}
-            <p className="pt-1 text-[12px] text-muted-foreground">{NEW_VERSION_NOTICE}</p>
+            <p className="pt-1 text-[12px] text-muted-foreground">{POST_MEDIA_NOTICE}</p>
           </div>
 
           <div
@@ -528,16 +526,14 @@ export default function MediaPicker({
 
             <div className="mt-auto">
               {limits && <p className="text-[12px] text-muted-foreground">{limits}</p>}
+              {instagramOver && (
+                <p className="mt-1 text-[12px] font-semibold text-foreground">
+                  Instagram {tray.length} of {INSTAGRAM_MAX}. You can still save — the post window then asks what to do with the extra {tray.length - INSTAGRAM_MAX === 1 ? 'file' : 'files'}.
+                </p>
+              )}
             </div>
           </div>
 
-          {unapproved.length > 0 && (
-            <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[12px] font-medium">
-              {unapproved.length === 1 ? 'One file here has' : `${unapproved.length} files here have`}
-              {' '}not been approved by the client. Saving adds
-              {unapproved.length === 1 ? ' it' : ' them'} as a new version and asks them.
-            </p>
-          )}
           {problem && (
             <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
               {problem}
@@ -570,7 +566,7 @@ export default function MediaPicker({
 
           {/* WHY THE SAVE DID NOT GO THROUGH, here where the person is looking (the owner's video, 28 Sep 2026: the
               refusal sat in the post window behind this one, so Save looked like it did nothing) */}
-          {saveProblems.length > 0 && !saving && (
+          {triedSave && saveProblems.length > 0 && !saving && (
             <div role="alert" className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[13px] text-foreground">
               <p className="font-semibold">Not saved yet:</p>
               <ul className="mt-1 list-disc pl-5">
@@ -594,7 +590,7 @@ export default function MediaPicker({
             <button
               type="button"
               disabled={saving || busy}
-              onClick={() => void onSave(tray)}
+              onClick={() => { setTriedSave(true); void onSave(tray) }}
               className="flex min-h-11 items-center rounded-full bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-60"
             >
               {saving ? 'Saving…' : 'Save'}
@@ -607,17 +603,12 @@ export default function MediaPicker({
 }
 
 /** The grid of files on the left. Faded once they are in the post. */
-function LibraryGrid({ files, inTray, onAdd, onDragStart, empty, approved }: {
+function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
   files: Slide[]
   inTray: (url: string) => boolean
   onAdd: (slide: Slide) => void
   onDragStart: (e: React.DragEvent, slide: Slide, from: number | null) => void
   empty: string
-  /** a green tick means THE CLIENT SAID YES to this file. Drawing it on
-   *  something uploaded thirty seconds ago — directly under the notice saying
-   *  it is not approved — is the badge lying about the one fact it exists to
-   *  carry. */
-  approved: boolean
 }) {
   if (files.length === 0) {
     return <p className="px-0.5 text-[13px] text-muted-foreground">{empty}</p>
@@ -634,21 +625,13 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty, approved }: {
             onDragStart={e => onDragStart(e, slide, null)}
             onClick={() => onAdd(slide)}
             title={used ? `${slide.name} — already in the post` : `Add ${slide.name}`}
+            aria-label={used ? `${slide.name} — already in the post` : `Add ${slide.name}`}
             className={cn(
               'relative aspect-square overflow-hidden rounded-tile border border-border bg-foreground/[0.06]',
               used && 'opacity-40',
             )}
           >
             <Thumb slide={slide} label={slide.name} className="h-full w-full" />
-            {approved && (
-              <span
-                title="The client approved this"
-                className="absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent-green text-ink"
-              >
-                <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
-                <span className="sr-only">Approved by the client</span>
-              </span>
-            )}
           </button>
         )
       })}
@@ -748,7 +731,6 @@ function UploadTab({ uploads, onFiles, files, onAdd, inTray, onDragStart }: {
         onAdd={onAdd}
         onDragStart={onDragStart}
         empty="Nothing uploaded here yet."
-        approved={false}
       />
     </div>
   )

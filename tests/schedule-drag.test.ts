@@ -176,21 +176,18 @@ describe('dropping a post on another day in the month', () => {
 })
 
 describe('what may be picked up', () => {
-  it('lets a post that has not gone out move', () => {
-    for (const status of ['draft', 'pending', 'approved', 'changes', 'scheduled']) {
-      expect(mayDragTile({ status }), status).toBe(true)
-      expect(dragBlockReason({ status })).toBeNull()
-    }
+  // the sentence is worked out once per post, from `postActions`, by
+  // `moveBlockReason` (tests/schedule-stage-core.test.ts); the tile only carries it
+  it('lifts a tile that carries no block', () => {
+    expect(mayDragTile({ move_block: null })).toBe(true)
+    expect(dragBlockReason({ move_block: null })).toBeNull()
+    expect(dragBlockReason({})).toBeNull()
   })
 
-  it('holds a finished post still, and says why in plain words', () => {
-    for (const status of ['published', 'failed', 'cancelled']) {
-      expect(mayDragTile({ status }), status).toBe(false)
-      const why = dragBlockReason({ status })!
-      expect(why).toMatch(/[a-z]/)
-      expect(why).not.toMatch(/error|invalid|null|undefined/i)
-    }
-    expect(dragBlockReason({ status: 'published' })).toMatch(/already gone out/)
+  it('holds a tile still, and says the tile’s own sentence', () => {
+    expect(mayDragTile({ move_block: 'This post has already gone out, so it cannot be moved' })).toBe(false)
+    expect(dragBlockReason({ move_block: 'This post has already gone out, so it cannot be moved' })).toMatch(/already gone out/)
+    expect(dragBlockReason(null)).toMatch(/cannot be moved/)
   })
 })
 

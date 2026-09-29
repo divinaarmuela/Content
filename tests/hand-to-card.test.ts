@@ -9,6 +9,7 @@ import {
 } from '../app/lib/hand-over-core'
 import { eventWords } from '../app/lib/notification-words'
 import { pageCards } from '../app/lib/board-view-core'
+import { readyToBecomePosts } from '../app/lib/post-board-core'
 
 /**
  * HAND TO… — a card given to somebody on purpose.
@@ -148,16 +149,22 @@ describe('handing a card to a scheduler puts it in front of them', () => {
     brief: 'Original brief.\n\n— Handed over by Divina, 7 Sep 2026: cut a 30s version for Reels',
   }) as never
 
-  it('shows on their board whatever column it sits in', () => {
-    const cards = ['draft_uploaded', 'internal_review', 'client_review', 'approved_for_scheduling', 'scheduled']
-      .map(card)
-    const shown = pageCards('scheduler', cards, viewer, '2026-09-07')
-    expect(shown).toHaveLength(cards.length)
+  // POST APPROVAL DRAWS POSTS, NOT CARDS (the posting rebuild, 29 Sep 2026):
+  // a handed edit waits in the "Edits ready to become posts" tray until the
+  // scheduler makes a post from it (post-board-core.readyToBecomePosts)
+  it('waits in their tray on Post approval until a post is made from it', () => {
+    expect(pageCards('scheduler', ['draft_uploaded', 'approved_for_scheduling'].map(card), viewer, '2026-09-07')).toEqual([])
+    const handed = [
+      { id: 'h1', client_id: 'c1', status: 'draft_uploaded', scheduler_ids: ['u-sc'] },
+      { id: 'h2', client_id: 'c1', status: 'approved_for_scheduling', scheduler_ids: ['u-sc'] },
+    ]
+    expect(readyToBecomePosts(handed, new Set()).map(i => i.id)).toEqual(['h1', 'h2'])
+    expect(readyToBecomePosts(handed, new Set(['h1']))).toHaveLength(1)
   })
 
   it('and the words handed with it travel on the card itself', () => {
-    const [one] = pageCards('scheduler', [card('draft_uploaded')], viewer, '2026-09-07')
-    expect((one as { brief?: string }).brief).toContain('cut a 30s version for Reels')
+    const one = card('draft_uploaded') as unknown as { brief?: string }
+    expect(one.brief).toContain('cut a 30s version for Reels')
   })
 })
 

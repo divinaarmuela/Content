@@ -1,0 +1,3014 @@
+{
+ "_about": "Scrubbed snapshot of the live rows SPEC §6 cites, read 29 Sep 2026 by scripts/migrate-post-stage.mjs. Ids kept; captions, file links, emails, names and link paths replaced.",
+ "social_posts": [
+  {
+   "caption": "Caption 008f0eeb",
+   "channels": [
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-08T04:47:15.721Z",
+   "created_by": "c3e52e7e-c91e-42e8-8765-ad6fb2ae3273",
+   "id": "008f0eeb-c632-4c1a-8ff8-0fe07e61e4ff",
+   "item_id": "2333a9ac-0035-4c17-a5d1-f98a22ef5a79",
+   "per_channel": {
+    "61f2393e-f337-4de6-9ed0-c89672a7e075": {
+     "shareToFeed": false
+    }
+   },
+   "scheduled_for": "2026-09-08T05:15:00.000Z",
+   "slides": [
+    {
+     "bytes": 1006836733,
+     "name": "file",
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f1.MP4"
+    }
+   ],
+   "status": "draft",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-08T04:49:07.085Z",
+   "version_id": "2333a9ac-0035-4c17-a5d1-f98a22ef5a79__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-09T12:42:27.499Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption 01444e51",
+   "channels": [
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8",
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-09T12:41:21.539Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "01444e51-5855-45a8-96e2-981e53f82483",
+   "item_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "per_channel": {
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8": {
+     "tiktokConsent": true
+    }
+   },
+   "publish_job_ids": [
+    "eea21e74-873c-4f49-a453-c29146bab036"
+   ],
+   "scheduled_for": "2026-09-09T13:45:00.000Z",
+   "sent_at": "2026-09-09T12:42:27.499Z",
+   "slides": [
+    {
+     "bytes": 669738323,
+     "height": 2160,
+     "name": "file",
+     "seconds": 107.95,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f2.mov",
+     "width": 3840
+    }
+   ],
+   "status": "published",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T13:49:35.201Z",
+   "version_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-08T07:41:08.222Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption 0d892f0f",
+   "channels": [
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-08T07:34:24.249Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "0d892f0f-e3f8-4fb5-be3d-a1928a79f4ee",
+   "item_id": "79b5e35c-0c83-4435-9241-4127cc2612ba",
+   "per_channel": {
+    "61f2393e-f337-4de6-9ed0-c89672a7e075": {
+     "shareToFeed": true
+    }
+   },
+   "publish_job_ids": [
+    "dd4f5b9b-2656-451b-a8d5-b8b6d7c7f610"
+   ],
+   "scheduled_for": "2026-09-08T08:00:00.000Z",
+   "sent_at": "2026-09-08T07:41:08.222Z",
+   "slides": [
+    {
+     "bytes": 1006836733,
+     "name": "file",
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f3.MP4"
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-08T07:41:08.716Z",
+   "version_id": "79b5e35c-0c83-4435-9241-4127cc2612ba__1",
+   "version_number": 1
+  },
+  {
+   "caption": "Caption 11b9a6cc",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-27T14:14:23.203Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "11b9a6cc-ecbc-4b72-9667-b196c4372e7b",
+   "item_id": "f5a79c72-89b7-4045-a170-77c9c147569c",
+   "scheduled_for": "2026-09-27T22:30:00.000Z",
+   "slides": [
+    {
+     "bytes": 1965165,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f4.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2519485,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f5.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2176020,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f6.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1628311,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f7.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2668052,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f8.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1932796,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f9.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1863707,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f10.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2286619,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f11.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2694888,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f12.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1766687,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f13.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2604846,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f14.png",
+     "width": 1080
+    }
+   ],
+   "status": "cancelled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-27T14:14:53.030Z",
+   "version_id": "f5a79c72-89b7-4045-a170-77c9c147569c__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-07T06:30:14.688Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption 1a78c21a",
+   "channels": [
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-07T06:28:50.709Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "1a78c21a-f9ce-4c9c-9119-7218abfb806d",
+   "item_id": "ec896a69-4a37-4fb0-bba6-a93ddb091dcd",
+   "per_channel": {
+    "61f2393e-f337-4de6-9ed0-c89672a7e075": {
+     "shareToFeed": true
+    }
+   },
+   "publish_job_ids": [
+    "36edc904-55d9-4a01-8713-cd48d2ebdbe6"
+   ],
+   "scheduled_for": "2026-09-07T06:45:00.000Z",
+   "sent_at": "2026-09-07T06:30:14.688Z",
+   "slides": [
+    {
+     "bytes": 1006836733,
+     "name": "file",
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f15.MP4"
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-07T06:30:15.108Z",
+   "version_id": "ec896a69-4a37-4fb0-bba6-a93ddb091dcd__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "assets",
+   "approved_at": "2026-09-22T09:25:16.218Z",
+   "approved_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "caption": "Caption 1c6d107e",
+   "channels": [
+    "4b985194-e5e5-4cef-9f5b-fe208c02b24e"
+   ],
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "created_at": "2026-09-18T09:33:11.717Z",
+   "created_by": "51abfcae-784d-4145-a3d5-de16a09371bd",
+   "id": "1c6d107e-da78-402b-a7db-62b43ae1b69a",
+   "item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "per_channel": {
+    "4b985194-e5e5-4cef-9f5b-fe208c02b24e": {
+     "isAiGenerated": false,
+     "shareToFeed": true,
+     "thumbnailUrl": "https://files.example.test/f1001.jpg"
+    }
+   },
+   "publish_job_ids": [
+    "3d2e8537-dae3-47ce-893f-49022af1e4a4"
+   ],
+   "scheduled_for": "2026-09-22T09:45:00.000Z",
+   "sent_at": "2026-09-22T01:10:06.632Z",
+   "slides": [
+    {
+     "bytes": 66744561,
+     "name": "file",
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f16.mp4"
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T09:25:16.860Z",
+   "version_id": "789e612c-3d12-410d-8438-8ba8fd6024f1__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "caption": "Caption 2a74c976",
+   "channels": [
+    "75e0ba46-4e88-4920-af02-6392092ebe76",
+    "7b7e4c1a-d0f5-493b-8920-20a7c5e83e26"
+   ],
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-28T01:45:41.471Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "2a74c976-05ac-4682-b1e9-d71fbe3c574a",
+   "item_id": "0fc6b6a0-ba49-4a1c-bf08-3d8af7a544e8",
+   "scheduled_for": "2026-10-05T06:30:00.000Z",
+   "sent_at": "2026-09-28T02:01:29.760Z",
+   "slides": [
+    {
+     "bytes": 4547814,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f17.png",
+     "width": 2160
+    },
+    {
+     "bytes": 212509,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f18.png",
+     "width": 2160
+    },
+    {
+     "bytes": 220975,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f19.png",
+     "width": 2160
+    },
+    {
+     "bytes": 189379,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f20.png",
+     "width": 2160
+    },
+    {
+     "bytes": 213568,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f21.png",
+     "width": 2160
+    },
+    {
+     "bytes": 221429,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f22.png",
+     "width": 2160
+    },
+    {
+     "bytes": 188023,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f23.png",
+     "width": 2160
+    },
+    {
+     "bytes": 5286436,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f24.png",
+     "width": 2160
+    }
+   ],
+   "status": "pending",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T02:01:29.830Z",
+   "version_id": "0fc6b6a0-ba49-4a1c-bf08-3d8af7a544e8__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-25T09:24:33.030Z",
+   "approved_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "caption": "Caption 3192d68f",
+   "channels": [
+    "23bf2259-626b-4249-8ce2-35e28d8fb37a",
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf",
+    "52436972-b93c-40b6-91c3-01c101659179"
+   ],
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "created_at": "2026-09-24T08:32:40.007Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "3192d68f-98d9-4018-993b-22bb448b6084",
+   "item_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "per_channel": {
+    "23bf2259-626b-4249-8ce2-35e28d8fb37a": {
+     "tiktokConsent": true,
+     "videoCoverImageUrl": "https://files.example.test/f1002.jpg",
+     "videoCoverTimestampMs": 58000
+    },
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf": {
+     "collaborators": [
+      "someone"
+     ],
+     "shareToFeed": true
+    }
+   },
+   "publish_job_ids": [
+    "1cbe45ea-67cc-484e-8a2e-59f41cdb7da6"
+   ],
+   "scheduled_for": "2026-09-25T09:45:00.000Z",
+   "sent_at": "2026-09-24T08:41:09.560Z",
+   "slides": [
+    {
+     "bytes": 654974924,
+     "height": 1920,
+     "name": "file",
+     "seconds": 104.38,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f25.mov",
+     "width": 1080
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-25T09:24:33.563Z",
+   "version_id": "84793a75-7b0c-49af-a329-c794d7f31996__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-09T14:54:21.421Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption 34adf560",
+   "channels": [
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8",
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-09T14:52:10.018Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "34adf560-9eb7-483c-b527-cdbe0d401b79",
+   "item_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "per_channel": {
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8": {
+     "tiktokConsent": true
+    }
+   },
+   "publish_job_ids": [
+    "9bdf3ad3-35d8-4f15-bbc2-4dd7e5cdb3a2"
+   ],
+   "scheduled_for": "2026-09-09T15:15:00.000Z",
+   "sent_at": "2026-09-09T14:54:21.421Z",
+   "slides": [
+    {
+     "bytes": 669738323,
+     "height": 2160,
+     "name": "file",
+     "seconds": 107.95,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f26.mov",
+     "width": 3840
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T14:54:21.911Z",
+   "version_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-09T05:23:39.692Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption 4e742215",
+   "channels": [
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8",
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-09T05:22:54.537Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "4e742215-e46e-42aa-a870-2ad69335628a",
+   "item_id": "d4907f7f-4e5b-4255-be04-f2f626c89c07",
+   "per_channel": {
+    "5850d7d3-9480-4ae3-86e6-e56b1e4d37a8": {
+     "tiktokConsent": true
+    }
+   },
+   "publish_job_ids": [
+    "8e93a785-3561-4e7d-9738-07020cd76f84"
+   ],
+   "scheduled_for": "2026-09-09T05:45:00.000Z",
+   "sent_at": "2026-09-09T05:23:39.692Z",
+   "slides": [
+    {
+     "bytes": 1477002316,
+     "height": 2160,
+     "name": "file",
+     "seconds": 110.88,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f27.MP4",
+     "width": 3840
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T05:23:40.166Z",
+   "version_id": "d4907f7f-4e5b-4255-be04-f2f626c89c07__1",
+   "version_number": 1
+  },
+  {
+   "caption": "Caption 7bc2f99b",
+   "channels": [
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf",
+    "52436972-b93c-40b6-91c3-01c101659179"
+   ],
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "created_at": "2026-09-27T14:18:19.206Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "7bc2f99b-1dd7-4fa7-9811-b544a88fdfa2",
+   "item_id": "663216ad-d004-4356-9ea0-8051fe074749",
+   "scheduled_for": "2026-09-28T02:00:00.000Z",
+   "slides": [
+    {
+     "bytes": 1965165,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f28.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2519485,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f29.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2668052,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f30.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2176020,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f31.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1628311,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f32.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1932796,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f33.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1863707,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f34.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2286619,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f35.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2694888,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f36.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1766687,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f37.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2604846,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f38.png",
+     "width": 1080
+    }
+   ],
+   "status": "draft",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-27T14:20:57.844Z",
+   "version_id": "663216ad-d004-4356-9ea0-8051fe074749__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-14T07:25:12.208Z",
+   "approved_by": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "caption": "Caption 84f9420e",
+   "channels": [
+    "cc0593a3-64ba-4cf6-b900-454036429604",
+    "d6fd5644-d0ad-4a6c-9253-5b6e667c1e72"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-14T07:19:31.833Z",
+   "created_by": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "id": "84f9420e-1172-4d14-844a-296da0f20fe8",
+   "item_id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "per_channel": {
+    "cc0593a3-64ba-4cf6-b900-454036429604": {
+     "tiktokConsent": true
+    }
+   },
+   "publish_job_ids": [
+    "015597d5-fb78-4d78-90bc-36aecc55f17a"
+   ],
+   "scheduled_for": "2026-09-14T07:45:00.000Z",
+   "sent_at": "2026-09-14T07:25:12.208Z",
+   "slides": [
+    {
+     "bytes": 50262,
+     "height": 737,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f39.jpg",
+     "width": 416
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-14T07:25:12.672Z",
+   "version_id": "f7690995-9859-4446-ae66-98c421b2cda8__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "approved_at": "2026-09-28T10:28:40.163Z",
+   "approved_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "caption": "Caption 9024fe1c",
+   "channels": [
+    "75e0ba46-4e88-4920-af02-6392092ebe76",
+    "7b7e4c1a-d0f5-493b-8920-20a7c5e83e26"
+   ],
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-27T14:59:45.285Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "9024fe1c-8c10-47b1-b65e-4d1ca55da336",
+   "item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "publish_job_ids": [
+    "d74690f7-e09f-478d-8550-ed8d1f34f3fb"
+   ],
+   "scheduled_for": "2026-09-28T11:00:00.000Z",
+   "sent_at": "2026-09-28T01:59:17.019Z",
+   "slides": [
+    {
+     "bytes": 5676946,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f40.png"
+    },
+    {
+     "bytes": 7600772,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f41.png"
+    },
+    {
+     "bytes": 269923,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f42.png"
+    },
+    {
+     "bytes": 261044,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f43.png"
+    },
+    {
+     "bytes": 5533786,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f44.png"
+    },
+    {
+     "bytes": 7135401,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f45.png"
+    },
+    {
+     "bytes": 8440362,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f46.png"
+    },
+    {
+     "bytes": 8092024,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f47.png"
+    },
+    {
+     "bytes": 283619,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f48.png"
+    },
+    {
+     "bytes": 8205226,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f49.png",
+     "width": 2160
+    },
+    {
+     "bytes": 8431338,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f50.png"
+    },
+    {
+     "bytes": 7191299,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f51.png"
+    },
+    {
+     "bytes": 236735,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f52.png"
+    },
+    {
+     "bytes": 7602143,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f53.png"
+    }
+   ],
+   "status": "cancelled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T10:57:53.292Z",
+   "version_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4__2",
+   "version_number": 2
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-28T11:22:32.296Z",
+   "approved_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "caption": "Caption a7a5f0de",
+   "channels": [
+    "75e0ba46-4e88-4920-af02-6392092ebe76"
+   ],
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-28T11:22:31.458Z",
+   "created_by": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "id": "a7a5f0de-2d44-42ee-a6b3-9901c85dd1be",
+   "item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "publish_job_ids": [
+    "e50887a2-4c2e-4af6-a294-af8afc51e48a"
+   ],
+   "scheduled_for": "2026-09-28T11:45:00.000Z",
+   "sent_at": "2026-09-28T11:22:32.296Z",
+   "slides": [
+    {
+     "bytes": 5676946,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f54.png"
+    },
+    {
+     "bytes": 7600772,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f55.png"
+    },
+    {
+     "bytes": 269923,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f56.png"
+    },
+    {
+     "bytes": 261044,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f57.png"
+    },
+    {
+     "bytes": 5533786,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f58.png"
+    },
+    {
+     "bytes": 7135401,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f59.png"
+    },
+    {
+     "bytes": 8440362,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f60.png"
+    },
+    {
+     "bytes": 8092024,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f61.png"
+    },
+    {
+     "bytes": 283619,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f62.png"
+    },
+    {
+     "bytes": 8205226,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f63.png",
+     "width": 2160
+    },
+    {
+     "bytes": 8431338,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f64.png"
+    },
+    {
+     "bytes": 7191299,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f65.png"
+    },
+    {
+     "bytes": 236735,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f66.png"
+    },
+    {
+     "bytes": 7602143,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f67.png"
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T11:22:32.774Z",
+   "version_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4__15",
+   "version_number": 15
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-28T09:17:25.498Z",
+   "approved_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "caption": "Caption bbf70b79",
+   "channels": [
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf",
+    "52436972-b93c-40b6-91c3-01c101659179"
+   ],
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "created_at": "2026-09-28T09:15:29.194Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "bbf70b79-0bff-49ec-88fe-9213a69d8dd5",
+   "item_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "publish_job_ids": [
+    "7f7567e3-43b3-47cb-b9d7-b158243cd5f2"
+   ],
+   "scheduled_for": "2026-09-28T09:45:00.000Z",
+   "sent_at": "2026-09-28T09:17:25.498Z",
+   "slides": [
+    {
+     "bytes": 2091359,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f68.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2526256,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f69.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1993005,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f70.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2446155,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f71.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2512981,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f72.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1972799,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f73.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2497593,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f74.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2672997,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f75.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2023604,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f76.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1394093,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f77.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2533139,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f78.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2664595,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f79.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2074895,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f80.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1910198,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f81.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1548366,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f82.png",
+     "width": 1080
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T09:17:25.946Z",
+   "version_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "assets",
+   "approved_at": "2026-09-08T14:11:04.339Z",
+   "approved_by": "c3e52e7e-c91e-42e8-8765-ad6fb2ae3273",
+   "caption": "Caption d5830a61",
+   "channels": [
+    "61f2393e-f337-4de6-9ed0-c89672a7e075"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-08T13:41:12.299Z",
+   "created_by": "c3e52e7e-c91e-42e8-8765-ad6fb2ae3273",
+   "id": "d5830a61-d6f6-452a-8a5b-7cb877d04afe",
+   "item_id": "2c068e45-8b64-4202-a9d7-2d0a89e94397",
+   "publish_job_ids": [
+    "c69941ad-fd28-497c-a39b-8da717583fbe"
+   ],
+   "scheduled_for": "2026-09-08T14:15:00.000Z",
+   "sent_at": "2026-09-08T14:11:04.339Z",
+   "slides": [
+    {
+     "bytes": 1230190,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f83.png"
+    },
+    {
+     "bytes": 129527,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f84.png"
+    },
+    {
+     "bytes": 1052475,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f85.png"
+    },
+    {
+     "bytes": 1096905,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f86.png"
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-08T14:11:04.746Z",
+   "version_id": "2c068e45-8b64-4202-a9d7-2d0a89e94397__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "caption": "Caption e2d47057",
+   "channels": [
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf",
+    "52436972-b93c-40b6-91c3-01c101659179"
+   ],
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "created_at": "2026-09-27T11:23:54.435Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "e2d47057-b021-4d63-a6cc-2faf40464862",
+   "item_id": "f0d2ff1f-1cd5-4470-b3b7-27084719a1ab",
+   "scheduled_for": "2026-09-28T08:00:00.000Z",
+   "sent_at": "2026-09-28T02:02:41.582Z",
+   "slides": [
+    {
+     "bytes": 2091359,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f87.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2526256,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f88.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1993038,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f89.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2446155,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f90.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2512981,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f91.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1972799,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f92.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2497593,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f93.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2671955,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f94.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2023604,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f95.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1394093,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f96.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2533139,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f97.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2664595,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f98.png",
+     "width": 1080
+    },
+    {
+     "bytes": 2074895,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f99.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1910198,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f100.png",
+     "width": 1080
+    },
+    {
+     "bytes": 1548366,
+     "height": 1350,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f101.png",
+     "width": 1080
+    }
+   ],
+   "status": "changes",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T08:58:17.720Z",
+   "version_id": "f0d2ff1f-1cd5-4470-b3b7-27084719a1ab__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "caption": "Caption e410ee80",
+   "channels": [
+    "23bf2259-626b-4249-8ce2-35e28d8fb37a",
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf",
+    "52436972-b93c-40b6-91c3-01c101659179"
+   ],
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "created_at": "2026-09-28T05:45:26.176Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "e410ee80-d911-482b-af02-3a9d07a7b17f",
+   "item_id": "da697908-5e69-4bdd-8969-71b375921859",
+   "per_channel": {
+    "23bf2259-626b-4249-8ce2-35e28d8fb37a": {
+     "tiktokConsent": true,
+     "videoCoverImageUrl": "https://files.example.test/f1003.jpg"
+    },
+    "4068eef1-05cd-4221-833e-e5350cd3a4bf": {
+     "thumbnailUrl": "https://files.example.test/f1004.jpg"
+    }
+   },
+   "scheduled_for": "2026-09-30T08:00:00.000Z",
+   "sent_at": "2026-09-28T05:49:35.580Z",
+   "slides": [
+    {
+     "bytes": 506523707,
+     "height": 1920,
+     "name": "file",
+     "seconds": 80.6,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f102.mov",
+     "width": 1080
+    }
+   ],
+   "status": "pending",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T05:49:35.645Z",
+   "version_id": "da697908-5e69-4bdd-8969-71b375921859__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "caption": "Caption e7f0e7a3",
+   "channels": [
+    "75e0ba46-4e88-4920-af02-6392092ebe76",
+    "7b7e4c1a-d0f5-493b-8920-20a7c5e83e26"
+   ],
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-28T01:51:58.738Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "e7f0e7a3-3a54-458f-ab20-57acb64af93b",
+   "item_id": "7f199b2a-aaff-4a9b-8571-da6de82da779",
+   "scheduled_for": "2026-10-12T01:30:00.000Z",
+   "sent_at": "2026-09-28T02:01:10.511Z",
+   "slides": [
+    {
+     "bytes": 5597107,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f103.png",
+     "width": 2160
+    },
+    {
+     "bytes": 190424,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f104.png",
+     "width": 2160
+    },
+    {
+     "bytes": 257402,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f105.png",
+     "width": 2160
+    },
+    {
+     "bytes": 200664,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f106.png",
+     "width": 2160
+    },
+    {
+     "bytes": 233750,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f107.png",
+     "width": 2160
+    },
+    {
+     "bytes": 206541,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f108.png",
+     "width": 2160
+    },
+    {
+     "bytes": 199067,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f109.png",
+     "width": 2160
+    },
+    {
+     "bytes": 4891975,
+     "height": 2700,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f110.png",
+     "width": 2160
+    }
+   ],
+   "status": "pending",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T02:01:10.587Z",
+   "version_id": "7f199b2a-aaff-4a9b-8571-da6de82da779__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "self",
+   "approved_at": "2026-09-24T06:13:57.331Z",
+   "approved_by": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "caption": "Caption fc3ee75b",
+   "channels": [
+    "11ef0a41-31e7-483f-8b72-af256b9d70d7"
+   ],
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-09-24T06:12:46.011Z",
+   "created_by": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "id": "fc3ee75b-dfae-4a09-9e17-0516d8fd6214",
+   "item_id": "1a6d55e1-f892-4a91-86a4-f5924789627f",
+   "publish_job_ids": [
+    "082a60f5-d423-4823-ac02-3f0398ab2882"
+   ],
+   "scheduled_for": "2026-09-24T06:30:00.000Z",
+   "sent_at": "2026-09-24T06:13:57.331Z",
+   "slides": [
+    {
+     "bytes": 31739,
+     "height": 678,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f111.jpg",
+     "width": 452
+    },
+    {
+     "bytes": 17506,
+     "height": 619,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f112.jpg",
+     "width": 495
+    },
+    {
+     "bytes": 20666,
+     "height": 303,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f113.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 4196,
+     "height": 164,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f114.jpg",
+     "width": 246
+    },
+    {
+     "bytes": 17255,
+     "height": 324,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f115.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 23540,
+     "height": 678,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f116.jpg",
+     "width": 452
+    },
+    {
+     "bytes": 153544,
+     "height": 1061,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f117.webp",
+     "width": 1500
+    },
+    {
+     "bytes": 23096,
+     "height": 739,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f118.jpg",
+     "width": 415
+    },
+    {
+     "bytes": 20038,
+     "height": 384,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f119.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 11649,
+     "height": 384,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f120.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 14270,
+     "height": 342,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f121.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 18974,
+     "height": 324,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f122.jpg",
+     "width": 576
+    },
+    {
+     "bytes": 17577,
+     "height": 554,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f123.jpg",
+     "width": 554
+    },
+    {
+     "bytes": 19833,
+     "height": 594,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f124.jpg",
+     "width": 516
+    },
+    {
+     "bytes": 15328,
+     "height": 327,
+     "name": "file",
+     "source": "upload",
+     "type": "image",
+     "url": "https://files.example.test/f125.jpg",
+     "width": 576
+    }
+   ],
+   "status": "scheduled",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-24T06:13:57.807Z",
+   "version_id": "1a6d55e1-f892-4a91-86a4-f5924789627f__1",
+   "version_number": 1
+  },
+  {
+   "approval_mode": "client",
+   "approved_at": "2026-09-24T08:58:45.874Z",
+   "approved_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "caption": "Caption ff85fac3",
+   "channels": [
+    "75e0ba46-4e88-4920-af02-6392092ebe76",
+    "7b7e4c1a-d0f5-493b-8920-20a7c5e83e26",
+    "830b8d1f-85ac-4656-bb56-54aa392048de"
+   ],
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "created_at": "2026-09-24T08:10:11.721Z",
+   "created_by": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "id": "ff85fac3-8635-46b2-9df1-c8cb9f5a4756",
+   "item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "per_channel": {
+    "7b7e4c1a-d0f5-493b-8920-20a7c5e83e26": {
+     "collaborators": [
+      "someone"
+     ],
+     "shareToFeed": true,
+     "thumbnailUrl": "https://files.example.test/f1005.jpg"
+    },
+    "830b8d1f-85ac-4656-bb56-54aa392048de": {
+     "allowComment": false,
+     "allowDuet": false,
+     "allowStitch": false,
+     "privacyLevel": "PUBLIC_TO_EVERYONE",
+     "tiktokConsent": true,
+     "videoCoverImageUrl": "https://files.example.test/f1006.jpg",
+     "videoCoverTimestampMs": 26000
+    }
+   },
+   "publish_job_ids": [
+    "a8854fc7-b353-4737-a72c-1eab32f163c7"
+   ],
+   "published_at": "2026-09-24T09:00:30.264Z",
+   "scheduled_for": "2026-09-24T09:00:00.000Z",
+   "sent_at": "2026-09-24T08:21:12.306Z",
+   "slides": [
+    {
+     "bytes": 365196271,
+     "height": 1920,
+     "name": "file",
+     "seconds": 58.52,
+     "source": "upload",
+     "type": "video",
+     "url": "https://files.example.test/f126.mov",
+     "width": 1080
+    }
+   ],
+   "status": "published",
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-24T10:42:44.419Z",
+   "version_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef__1",
+   "version_number": 1
+  }
+ ],
+ "content_items": [
+  {
+   "id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "title": "Card 054e0959",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-27T14:59:44.347Z",
+   "updated_at": "2026-09-28T23:10:04.883Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-27T14:59:45.031Z",
+   "client_sent": {
+    "at": "2026-09-28T02:40:20.297Z",
+    "stage": "post",
+    "to": [
+     "client@example.invalid"
+    ]
+   }
+  },
+  {
+   "id": "0fc6b6a0-ba49-4a1c-bf08-3d8af7a544e8",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "title": "Card 0fc6b6a0",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-28T01:45:40.461Z",
+   "updated_at": "2026-09-28T02:40:47.545Z",
+   "posting_approval_state": "pending",
+   "posting_client_required": true,
+   "delivered_at": "2026-09-28T01:45:41.235Z",
+   "client_sent": {
+    "at": "2026-09-28T02:40:47.610Z",
+    "stage": "post",
+    "to": [
+     "client@example.invalid"
+    ]
+   }
+  },
+  {
+   "id": "370209f1-855d-4c1e-8779-a31651db50d8",
+   "client_id": "726a3875-40af-4bf9-9074-499f8a80c435",
+   "title": "Card 370209f1",
+   "status": "client_review",
+   "created_at": "2026-09-19T11:38:40.890Z",
+   "updated_at": "2026-09-19T14:17:01.351Z",
+   "delivered_at": "2026-09-19T14:17:01.351Z"
+  },
+  {
+   "id": "411da9a1-1cca-49db-8c9c-40457ff87953",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card 411da9a1",
+   "status": "client_review",
+   "created_at": "2026-09-15T11:51:54.987Z",
+   "updated_at": "2026-09-24T14:55:05.547Z",
+   "client_round": 1,
+   "client_rounds": [
+    1
+   ],
+   "delivered_at": "2026-09-23T16:18:29.090Z"
+  },
+  {
+   "id": "663216ad-d004-4356-9ea0-8051fe074749",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card 663216ad",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-27T14:18:18.367Z",
+   "updated_at": "2026-09-27T14:18:19.034Z",
+   "delivered_at": "2026-09-27T14:18:19.001Z"
+  },
+  {
+   "id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "title": "Card 744146b1",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-09T14:52:09.345Z",
+   "updated_at": "2026-09-23T14:50:05.386Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false
+  },
+  {
+   "id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "title": "Card 789e612c",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-18T09:33:11.063Z",
+   "updated_at": "2026-09-28T23:10:02.788Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-21T07:26:28.645Z"
+  },
+  {
+   "id": "7f199b2a-aaff-4a9b-8571-da6de82da779",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "title": "Card 7f199b2a",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-28T01:51:57.940Z",
+   "updated_at": "2026-09-28T02:40:49.613Z",
+   "posting_approval_state": "pending",
+   "posting_client_required": true,
+   "delivered_at": "2026-09-28T01:51:58.517Z",
+   "client_sent": {
+    "at": "2026-09-28T02:40:49.677Z",
+    "stage": "post",
+    "to": [
+     "client@example.invalid"
+    ]
+   }
+  },
+  {
+   "id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card 84793a75",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-24T08:32:39.337Z",
+   "updated_at": "2026-09-28T23:10:02.222Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-24T08:32:39.810Z"
+  },
+  {
+   "id": "9169e122-d270-46e6-a129-6106decd8ece",
+   "client_id": "ae74e1e2-fc2d-48ab-948d-3d3e38aa628d",
+   "title": "Card 9169e122",
+   "status": "client_review",
+   "created_at": "2026-09-18T13:38:43.233Z",
+   "updated_at": "2026-09-25T10:27:01.748Z",
+   "client_round": 2,
+   "delivered_at": "2026-09-18T13:59:10.738Z"
+  },
+  {
+   "id": "b98b07a3-7959-4971-bbe4-33d358f58f9e",
+   "client_id": "726a3875-40af-4bf9-9074-499f8a80c435",
+   "title": "Card b98b07a3",
+   "status": "client_review",
+   "created_at": "2026-09-18T08:15:03.738Z",
+   "updated_at": "2026-09-21T13:09:05.731Z",
+   "delivered_at": "2026-09-21T13:09:05.731Z"
+  },
+  {
+   "id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "title": "Card bc8ab921",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-24T08:10:11.052Z",
+   "updated_at": "2026-09-24T10:10:16.303Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": true,
+   "delivered_at": "2026-09-24T08:10:11.522Z"
+  },
+  {
+   "id": "da697908-5e69-4bdd-8969-71b375921859",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card da697908",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-28T05:45:25.326Z",
+   "updated_at": "2026-09-28T05:49:35.507Z",
+   "posting_approval_state": "pending",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-28T05:45:25.967Z"
+  },
+  {
+   "id": "f0d2ff1f-1cd5-4470-b3b7-27084719a1ab",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card f0d2ff1f",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-27T11:23:53.570Z",
+   "updated_at": "2026-09-28T09:04:40.977Z",
+   "posting_approval_state": "changes",
+   "posting_client_required": true,
+   "delivered_at": "2026-09-27T11:23:54.232Z",
+   "client_sent": {
+    "at": "2026-09-28T02:40:50.947Z",
+    "stage": "post",
+    "to": [
+     "client@example.invalid"
+    ]
+   }
+  },
+  {
+   "id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "title": "Card f1bdd5d0",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-28T09:15:28.342Z",
+   "updated_at": "2026-09-28T23:10:03.624Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-28T09:15:28.966Z"
+  },
+  {
+   "id": "f5a79c72-89b7-4045-a170-77c9c147569c",
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "title": "Card f5a79c72",
+   "status": "approved_for_scheduling",
+   "adhoc_post": true,
+   "created_at": "2026-09-27T14:14:22.088Z",
+   "updated_at": "2026-09-27T14:14:22.993Z",
+   "delivered_at": "2026-09-27T14:14:22.960Z"
+  },
+  {
+   "id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "title": "Card f7690995",
+   "status": "published",
+   "adhoc_post": true,
+   "created_at": "2026-09-14T07:19:31.061Z",
+   "updated_at": "2026-09-28T07:20:02.672Z",
+   "posting_approval_state": "approved",
+   "posting_client_required": false,
+   "delivered_at": "2026-09-14T07:19:31.634Z"
+  }
+ ],
+ "publish_jobs": [
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "created_at": "2026-09-14T07:25:12.600Z",
+   "created_by": "team@example.invalid",
+   "id": "015597d5-fb78-4d78-90bc-36aecc55f17a",
+   "permalink": "https://www.tiktok.com/p/l127",
+   "platform_results": [
+    {
+     "at": "2026-09-14T07:47:16.048Z",
+     "kind": "Feed post",
+     "platform": "tiktok",
+     "status": "published",
+     "url": "https://www.tiktok.com/p/l128"
+    },
+    {
+     "at": "2026-09-14T07:47:16.048Z",
+     "kind": "Feed post",
+     "platform": "instagram",
+     "status": "published"
+    }
+   ],
+   "provider_post_id": "6aa7a15ccfce6aa838204a5c",
+   "published_at": "2026-09-14T07:47:16.048Z",
+   "scheduled_for": "2026-09-14T07:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-14T07:47:16.048Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "1a6d55e1-f892-4a91-86a4-f5924789627f",
+   "created_at": "2026-09-24T06:13:57.737Z",
+   "created_by": "team@example.invalid",
+   "error": "Instagram Image 7: Unsupported image format: webp. Instagram only supports JPG and PNG.",
+   "id": "082a60f5-d423-4823-ac02-3f0398ab2882",
+   "platform_results": [
+    {
+     "at": "2026-09-24T06:14:20.229Z",
+     "kind": "Carousel",
+     "platform": "instagram",
+     "reason": "Instagram Image 7: Unsupported image format: webp. Instagram only supports JPG and PNG.",
+     "status": "failed"
+    }
+   ],
+   "scheduled_for": "2026-09-24T06:30:00.000Z",
+   "status": "failed",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-24T06:14:20.229Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "content_item_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "created_at": "2026-09-25T09:24:33.494Z",
+   "created_by": "team@example.invalid",
+   "id": "1cbe45ea-67cc-484e-8a2e-59f41cdb7da6",
+   "permalink": "https://www.tiktok.com/p/l129",
+   "platform_results": [
+    {
+     "at": "2026-09-25T09:47:20.182Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "published",
+     "url": "https://www.tiktok.com/p/l130"
+    },
+    {
+     "at": "2026-09-25T09:47:20.182Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "published",
+     "url": "https://www.instagram.com/p/l131"
+    },
+    {
+     "at": "2026-09-25T09:47:20.182Z",
+     "kind": "Video",
+     "platform": "linkedin",
+     "status": "published",
+     "url": "https://www.linkedin.com/p/l132"
+    }
+   ],
+   "provider_post_id": "6ab63f06943aaf94e3cf1df4",
+   "published_at": "2026-09-25T09:47:20.182Z",
+   "scheduled_for": "2026-09-25T09:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    },
+    {
+     "platform": "linkedin"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-25T09:47:20.182Z"
+  },
+  {
+   "attempts": 0,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "ec896a69-4a37-4fb0-bba6-a93ddb091dcd",
+   "created_at": "2026-09-07T06:30:15.042Z",
+   "created_by": "team@example.invalid",
+   "error": "Making a clean copy for Instagram — usually a few minutes",
+   "id": "36edc904-55d9-4a01-8713-cd48d2ebdbe6",
+   "scheduled_for": "2026-09-07T06:45:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-07T06:30:17.057Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "content_item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T09:25:16.796Z",
+   "created_by": "team@example.invalid",
+   "id": "3d2e8537-dae3-47ce-893f-49022af1e4a4",
+   "permalink": "https://www.instagram.com/p/l133",
+   "platform_results": [
+    {
+     "at": "2026-09-22T09:46:36.437Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "published",
+     "url": "https://www.instagram.com/p/l134"
+    }
+   ],
+   "provider_post_id": "6ab2498437b61185f12aaaef",
+   "published_at": "2026-09-22T09:46:36.437Z",
+   "scheduled_for": "2026-09-22T09:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T09:46:36.437Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "content_item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T07:45:59.224Z",
+   "created_by": "team@example.invalid",
+   "id": "3d409e65-bca2-4174-8ef1-1c7f6c21ded2",
+   "platform_results": [
+    {
+     "at": "2026-09-22T11:15:00.000Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6ab2324128a9ee8f636cf731",
+   "scheduled_for": "2026-09-22T11:15:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T08:33:07.683Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "content_item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T08:33:07.945Z",
+   "created_by": "team@example.invalid",
+   "id": "41ee4e5d-7577-4c33-bb13-cc0fcc4c9345",
+   "platform_results": [
+    {
+     "at": "2026-09-22T08:34:06.642Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6ab23d4dd60e785c4f797af9",
+   "scheduled_for": "2026-09-22T08:34:06.642Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T08:34:03.896Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "created_at": "2026-09-09T12:42:27.870Z",
+   "created_by": "team@example.invalid",
+   "id": "50888a24-d550-4ee8-bec5-1aea355fb729",
+   "platform_results": [
+    {
+     "at": "2026-09-10T02:00:00.000Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "scheduled"
+    },
+    {
+     "at": "2026-09-10T02:00:00.000Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6aa156d06dd72077e7409e49",
+   "scheduled_for": "2026-09-10T02:00:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T13:26:48.975Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "content_item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "created_at": "2026-09-24T10:10:07.575Z",
+   "created_by": "team@example.invalid",
+   "error": "Cancelled 24 Sep 2026 20:13 — a re-send of a post already out by hand",
+   "id": "54f9c381-f6c5-4f06-a30e-d00594ee929b",
+   "platform_results": [
+    {
+     "at": "2026-09-24T10:10:46.427Z",
+     "kind": "Video",
+     "platform": "linkedin",
+     "reason": "Provider error 500",
+     "status": "queued"
+    }
+   ],
+   "resend_of": "a8854fc7-b353-4737-a72c-1eab32f163c7",
+   "scheduled_for": "2026-09-24T10:10:07.575Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "linkedin"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-24T10:12:54.202Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "content_item_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "created_at": "2026-09-28T09:17:25.883Z",
+   "created_by": "team@example.invalid",
+   "id": "7f7567e3-43b3-47cb-b9d7-b158243cd5f2",
+   "permalink": "https://www.instagram.com/p/l135",
+   "platform_results": [
+    {
+     "at": "2026-09-28T09:47:33.156Z",
+     "kind": "Carousel",
+     "platform": "instagram",
+     "status": "published",
+     "url": "https://www.instagram.com/p/l136"
+    },
+    {
+     "at": "2026-09-28T09:47:33.156Z",
+     "kind": "Carousel",
+     "platform": "linkedin",
+     "status": "published",
+     "url": "https://www.linkedin.com/p/l137"
+    }
+   ],
+   "provider_post_id": "6aba30c8e0927ec38bc7d744",
+   "published_at": "2026-09-28T09:47:33.156Z",
+   "scheduled_for": "2026-09-28T09:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "instagram"
+    },
+    {
+     "platform": "linkedin"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T09:47:33.156Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "content_item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T08:36:45.906Z",
+   "created_by": "team@example.invalid",
+   "id": "89d5133a-1796-4865-8b7a-95671c6734ef",
+   "platform_results": [
+    {
+     "at": "2026-09-22T09:15:00.000Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6ab23e265a9341df732438d3",
+   "scheduled_for": "2026-09-22T09:15:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T08:37:16.434Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "d4907f7f-4e5b-4255-be04-f2f626c89c07",
+   "created_at": "2026-09-09T05:23:40.095Z",
+   "created_by": "team@example.invalid",
+   "error": "This file is too big to send as it is — a copy is being made",
+   "id": "8e93a785-3561-4e7d-9738-07020cd76f84",
+   "scheduled_for": "2026-09-09T05:45:00.000Z",
+   "status": "failed",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T05:30:02.196Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "created_at": "2026-09-09T14:54:21.841Z",
+   "created_by": "team@example.invalid",
+   "id": "9bdf3ad3-35d8-4f15-bbc2-4dd7e5cdb3a2",
+   "permalink": "https://www.instagram.com/p/l138",
+   "platform_results": [
+    {
+     "at": "2026-09-09T15:20:08.254Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "published"
+    },
+    {
+     "at": "2026-09-09T15:20:08.254Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "published",
+     "url": "https://www.instagram.com/p/l139"
+    }
+   ],
+   "provider_post_id": "6aa176eb5e7e523fab08bb77",
+   "published_at": "2026-09-09T15:20:08.254Z",
+   "scheduled_for": "2026-09-09T15:15:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T15:40:06.579Z"
+  },
+  {
+   "attempts": 2,
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "content_item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "created_at": "2026-09-24T08:58:46.499Z",
+   "created_by": "team@example.invalid",
+   "id": "a8854fc7-b353-4737-a72c-1eab32f163c7",
+   "permalink": "https://www.instagram.com/p/l140",
+   "platform_results": [
+    {
+     "at": "2026-09-24T09:17:59.000Z",
+     "kind": "Video",
+     "platform": "linkedin",
+     "status": "published",
+     "url": "https://www.linkedin.com/p/l141"
+    },
+    {
+     "at": "2026-09-24T09:00:30.264Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "published",
+     "url": "https://www.instagram.com/p/l142"
+    },
+    {
+     "at": "2026-09-24T09:29:14.059Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "published"
+    }
+   ],
+   "provider_post_id": "6ab4e67d5d04b8881764a720",
+   "published_at": "2026-09-24T09:00:30.264Z",
+   "resent_as": [
+    "6ab4eaae6e1ac0e4f7d54c16",
+    "6ab4ed5cab1fcd50b93274bf"
+   ],
+   "resent_platforms": [
+    "linkedin",
+    "tiktok"
+   ],
+   "status": "published",
+   "targets": [
+    {
+     "platform": "linkedin"
+    },
+    {
+     "platform": "instagram"
+    },
+    {
+     "platform": "tiktok"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T23:10:04.032Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "2c068e45-8b64-4202-a9d7-2d0a89e94397",
+   "created_at": "2026-09-08T14:11:04.676Z",
+   "created_by": "team@example.invalid",
+   "id": "c69941ad-fd28-497c-a39b-8da717583fbe",
+   "permalink": "https://www.instagram.com/p/l143",
+   "provider_post_id": "6aa01787a5aaadb3ae5d7d1b",
+   "published_at": "2026-09-08T14:16:36.005Z",
+   "scheduled_for": "2026-09-08T14:15:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-08T14:16:36.005Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "content_item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "created_at": "2026-09-28T10:28:40.762Z",
+   "created_by": "team@example.invalid",
+   "id": "d74690f7-e09f-478d-8550-ed8d1f34f3fb",
+   "platform_results": [
+    {
+     "at": "2026-09-28T11:00:00.000Z",
+     "kind": "Carousel",
+     "platform": "linkedin",
+     "status": "scheduled"
+    },
+    {
+     "at": "2026-09-28T11:00:00.000Z",
+     "kind": "Carousel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6aba418069832fa3c8b10710",
+   "scheduled_for": "2026-09-28T11:00:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "linkedin"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T10:57:53.188Z"
+  },
+  {
+   "attempts": 0,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "79b5e35c-0c83-4435-9241-4127cc2612ba",
+   "created_at": "2026-09-08T07:41:08.640Z",
+   "created_by": "team@example.invalid",
+   "id": "dd4f5b9b-2656-451b-a8d5-b8b6d7c7f610",
+   "scheduled_for": "2026-09-08T08:00:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-08T08:30:51.885Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "content_item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "created_at": "2026-09-28T11:22:32.709Z",
+   "created_by": "team@example.invalid",
+   "id": "e50887a2-4c2e-4af6-a294-af8afc51e48a",
+   "permalink": "https://www.linkedin.com/p/l144",
+   "platform_results": [
+    {
+     "at": "2026-09-28T11:46:32.431Z",
+     "kind": "Carousel",
+     "platform": "linkedin",
+     "status": "published",
+     "url": "https://www.linkedin.com/p/l145"
+    }
+   ],
+   "provider_post_id": "6aba4e16ff0da00bb50d0577",
+   "published_at": "2026-09-28T11:46:32.431Z",
+   "scheduled_for": "2026-09-28T11:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "linkedin"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-28T11:46:32.431Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "created_at": "2026-08-31T07:11:50.459524+00:00",
+   "created_by": "team@example.invalid",
+   "error": "Went out on instagram, tiktok, youtube. Did not go out on linkedin: Publishing timed out during platform API call. The post may have been published externally. Check the platform before retrying..",
+   "id": "e63c744f-94e0-4e4b-b578-a6ec6d634d94",
+   "permalink": "https://www.tiktok.com/p/l146",
+   "provider_post_id": "6a95299fbe6af9f120dc16b2",
+   "published_at": "2026-08-31T07:20:11.592+00:00",
+   "scheduled_for": "2026-08-31T07:14:00+00:00",
+   "status": "failed",
+   "targets": [
+    {
+     "platform": "instagram"
+    },
+    {
+     "platform": "linkedin"
+    },
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "youtube"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-08-31T10:50:05.427+00:00"
+  },
+  {
+   "attempts": 1,
+   "client_id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "content_item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T01:10:07.035Z",
+   "created_by": "team@example.invalid",
+   "id": "e75d3d31-3dad-4deb-bed2-4a279144c3c5",
+   "platform_results": [
+    {
+     "at": "2026-09-22T11:15:00.000Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "scheduled"
+    }
+   ],
+   "provider_post_id": "6ab1d5799bcd25c9c23e64f9",
+   "scheduled_for": "2026-09-22T11:15:00.000Z",
+   "status": "cancelled",
+   "targets": [
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-22T07:45:58.944Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "content_item_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "created_at": "2026-09-09T13:26:49.261Z",
+   "created_by": "team@example.invalid",
+   "id": "eea21e74-873c-4f49-a453-c29146bab036",
+   "permalink": "https://www.tiktok.com/p/l147",
+   "platform_results": [
+    {
+     "at": "2026-09-10T01:40:08.456Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "published",
+     "url": "https://www.tiktok.com/p/l148"
+    },
+    {
+     "at": "2026-09-10T01:40:08.456Z",
+     "kind": "Reel",
+     "platform": "instagram",
+     "status": "published"
+    }
+   ],
+   "provider_post_id": "6aa15ec8339fcedfd8f360b4",
+   "published_at": "2026-09-09T13:46:51.501Z",
+   "scheduled_for": "2026-09-09T13:45:00.000Z",
+   "status": "published",
+   "targets": [
+    {
+     "platform": "tiktok"
+    },
+    {
+     "platform": "instagram"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-09T13:46:51.501Z"
+  },
+  {
+   "attempts": 1,
+   "client_id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "content_item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "created_at": "2026-09-24T10:10:07.575Z",
+   "created_by": "team@example.invalid",
+   "error": "Provider reported an identical post already exists",
+   "id": "fdb70988-031a-4d88-8eac-e11df93123a4",
+   "platform_results": [
+    {
+     "at": "2026-09-24T10:10:15.914Z",
+     "kind": "Video",
+     "platform": "tiktok",
+     "status": "published"
+    }
+   ],
+   "published_at": "2026-09-24T10:10:15.914Z",
+   "resend_of": "a8854fc7-b353-4737-a72c-1eab32f163c7",
+   "scheduled_for": "2026-09-24T10:13:07.575Z",
+   "status": "duplicate",
+   "targets": [
+    {
+     "platform": "tiktok"
+    }
+   ],
+   "timezone": "Australia/Melbourne",
+   "updated_at": "2026-09-24T10:10:15.914Z"
+  }
+ ],
+ "schedule_entries": [
+  {
+   "created_at": "2026-09-11T06:47:58.655Z",
+   "id": "034bda63-9c0f-4208-82e9-d68b0e6d9fb8",
+   "item_id": "aa31a87b-e6c7-442c-b1b9-ea8f3e575c24",
+   "platform": "instagram",
+   "publish_status": "scheduled"
+  },
+  {
+   "created_at": "2026-09-25T09:24:33.633Z",
+   "id": "184c7b4b-7b42-4ba0-8205-a4789251f80a",
+   "item_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "live_url": "https://www.tiktok.com/p/l149",
+   "platform": "tiktok",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:01.955Z",
+   "scheduled_at": "2026-09-25T09:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-09T15:00:06.659Z",
+   "id": "214fa176-2f35-409a-baa9-f00c14ff398b",
+   "item_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "live_url": "https://www.tiktok.com/p/l150",
+   "platform": "tiktok",
+   "publish_status": "published",
+   "published_at": "2026-09-10T01:40:08.554Z",
+   "scheduled_at": "2026-09-09T13:45:57.356Z"
+  },
+  {
+   "created_at": "2026-09-14T07:25:12.779Z",
+   "id": "2f178d68-1c68-41bb-84dd-8d86c124788b",
+   "item_id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "live_url": "https://www.tiktok.com/p/l151",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-28T07:20:02.359Z",
+   "scheduled_at": "2026-09-14T07:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-22T01:10:07.204Z",
+   "id": "48f70493-bf37-4b3c-b5ca-76201907f12d",
+   "item_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "live_url": "https://www.instagram.com/p/l152",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:02.557Z",
+   "scheduled_at": "2026-09-22T08:34:06.642Z"
+  },
+  {
+   "created_at": "2026-09-14T07:25:12.747Z",
+   "id": "55432108-5317-44c3-bc3b-538f8e64711b",
+   "item_id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "live_url": "https://www.tiktok.com/p/l153",
+   "platform": "tiktok",
+   "publish_status": "published",
+   "published_at": "2026-09-28T07:20:02.359Z",
+   "scheduled_at": "2026-09-14T07:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-25T09:24:33.702Z",
+   "id": "664bc5e9-2b91-4e1d-95ff-6a900be7eb92",
+   "item_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "live_url": "https://www.tiktok.com/p/l154",
+   "platform": "linkedin",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:01.955Z",
+   "scheduled_at": "2026-09-25T09:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-09T14:54:22.018Z",
+   "id": "73144da3-0fa0-43c6-8443-991c44f7ce86",
+   "item_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "live_url": "https://www.instagram.com/p/l155",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-23T14:50:05.192Z",
+   "scheduled_at": "2026-09-09T15:15:00.000Z"
+  },
+  {
+   "created_at": "2026-09-24T08:58:46.635Z",
+   "id": "8f3a9862-e80c-47a6-b607-577c48243baa",
+   "item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "live_url": "https://www.instagram.com/p/l156",
+   "platform": "linkedin",
+   "publish_status": "published",
+   "published_at": "2026-09-24T10:10:16.057Z",
+   "scheduled_at": "2026-09-24T08:58:46.635Z"
+  },
+  {
+   "created_at": "2026-09-28T09:17:26.008Z",
+   "id": "91183196-962f-4cc8-930b-bdc4d33f4d8b",
+   "item_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "live_url": "https://www.instagram.com/p/l157",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:03.387Z",
+   "scheduled_at": "2026-09-28T09:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-09T14:54:21.984Z",
+   "id": "93ebe5c9-9960-4d61-acdf-48f1e9b9d25a",
+   "item_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "live_url": "https://www.instagram.com/p/l158",
+   "platform": "tiktok",
+   "publish_status": "published",
+   "published_at": "2026-09-23T14:50:05.192Z",
+   "scheduled_at": "2026-09-09T15:15:00.000Z"
+  },
+  {
+   "created_at": "2026-09-28T09:17:26.040Z",
+   "id": "ade9808c-6869-4575-b165-c175339e5ef6",
+   "item_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "live_url": "https://www.instagram.com/p/l159",
+   "platform": "linkedin",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:03.387Z",
+   "scheduled_at": "2026-09-28T09:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-28T10:28:40.958Z",
+   "id": "c8fd52cf-69ec-458c-87e6-d70d4f80d1cd",
+   "item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "live_url": "https://www.linkedin.com/p/l160",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:04.652Z"
+  },
+  {
+   "created_at": "2026-09-24T08:58:46.703Z",
+   "id": "d6cd38f7-5f78-410d-b5f8-af58e81859f6",
+   "item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "live_url": "https://www.instagram.com/p/l161",
+   "platform": "tiktok",
+   "publish_status": "published",
+   "published_at": "2026-09-24T10:10:16.057Z",
+   "scheduled_at": "2026-09-24T08:58:46.635Z"
+  },
+  {
+   "created_at": "2026-09-25T09:24:33.666Z",
+   "id": "db43d45c-1aee-47d9-afcf-f389ea184c99",
+   "item_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "live_url": "https://www.tiktok.com/p/l162",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:01.955Z",
+   "scheduled_at": "2026-09-25T09:45:00.000Z"
+  },
+  {
+   "created_at": "2026-09-24T08:58:46.669Z",
+   "id": "e1e6c11d-126f-4fc6-8e69-d9209aa80001",
+   "item_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "live_url": "https://www.instagram.com/p/l163",
+   "platform": "instagram",
+   "publish_status": "published",
+   "published_at": "2026-09-24T10:10:16.057Z",
+   "scheduled_at": "2026-09-24T08:58:46.635Z"
+  },
+  {
+   "created_at": "2026-09-28T10:28:40.927Z",
+   "id": "e77d655b-c40a-47c1-9896-ffc2e9aba715",
+   "item_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "live_url": "https://www.linkedin.com/p/l164",
+   "platform": "linkedin",
+   "publish_status": "published",
+   "published_at": "2026-09-28T23:10:04.652Z",
+   "scheduled_at": "2026-09-28T11:45:00.000Z"
+  }
+ ],
+ "workflow_activity": [
+  {
+   "id": "12e5b66d-c042-4228-a456-e23768dea269",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T09:25:16.252Z"
+  },
+  {
+   "id": "1819badc-d77d-4d88-ad19-9ea90ac72d59",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "created_at": "2026-09-28T10:25:44.299Z"
+  },
+  {
+   "id": "200e1396-044a-4a41-9a4f-2a29462ae403",
+   "action": "status_change",
+   "actor_id": "b8c097aa-3bf9-4a95-85de-4a13452ac78e",
+   "entity_type": "content_item",
+   "entity_id": "2c068e45-8b64-4202-a9d7-2d0a89e94397",
+   "created_at": "2026-09-08T13:43:01.874Z",
+   "new_value": "client_review",
+   "old_value": "internal_review",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "2c9136ef-d0ee-4217-875e-48f2bbbdb88c",
+   "action": "status_change",
+   "actor_id": "4e4ea4eb-71f6-4925-bca7-930a9d7223e5",
+   "entity_type": "content_item",
+   "entity_id": "411da9a1-1cca-49db-8c9c-40457ff87953",
+   "created_at": "2026-09-23T16:18:29.125Z",
+   "new_value": "client_review",
+   "old_value": "quality_check",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "38d8766e-c9f5-4f58-8a21-42a5d69df3c2",
+   "action": "status_change",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "9169e122-d270-46e6-a129-6106decd8ece",
+   "created_at": "2026-09-22T00:01:16.696Z",
+   "new_value": "client_review",
+   "old_value": "quality_check",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "5610e3de-60e0-4d54-a252-c5655209de85",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "f1bdd5d0-74d3-4152-a712-0afb958581c2",
+   "created_at": "2026-09-28T09:17:25.461Z"
+  },
+  {
+   "id": "5bc14ab5-bb58-4c12-bd2a-ff74a1466808",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "created_at": "2026-09-25T09:24:32.989Z"
+  },
+  {
+   "id": "63bb4cca-afb5-477c-976c-23c605375965",
+   "action": "posting_changes_requested",
+   "actor_id": "20e16098-17b6-4673-b29e-f16be3317ccb",
+   "entity_type": "content_item",
+   "entity_id": "f0d2ff1f-1cd5-4470-b3b7-27084719a1ab",
+   "created_at": "2026-09-28T08:58:17.388Z",
+   "detail": "A note from the asker"
+  },
+  {
+   "id": "872a07ba-dd90-4206-bd89-5d18183bab04",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "bc8ab921-9d10-4b55-9fb4-05cceae531ef",
+   "created_at": "2026-09-24T08:58:45.911Z"
+  },
+  {
+   "id": "8c9c67f6-c223-4bf8-83c2-ff852269ab1a",
+   "action": "status_change",
+   "actor_id": "4e4ea4eb-71f6-4925-bca7-930a9d7223e5",
+   "entity_type": "content_item",
+   "entity_id": "b98b07a3-7959-4971-bbe4-33d358f58f9e",
+   "created_at": "2026-09-21T13:09:05.766Z",
+   "new_value": "client_review",
+   "old_value": "quality_check",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "8d63ca74-bf75-4032-a261-07097935869a",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "789e612c-3d12-410d-8438-8ba8fd6024f1",
+   "created_at": "2026-09-22T08:36:45.303Z"
+  },
+  {
+   "id": "92334d29-ef44-402c-8e9e-6c6c0a24c23c",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "created_at": "2026-09-28T11:22:32.259Z"
+  },
+  {
+   "id": "9530214d-d41d-402c-9287-49b9fa9ffda1",
+   "action": "posting_approved",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "054e0959-801e-4efa-9bcd-3e6aa16c9ab4",
+   "created_at": "2026-09-28T10:28:40.196Z"
+  },
+  {
+   "id": "96a495fb-2835-4098-a887-91d4d2860c1d",
+   "action": "posting_approved",
+   "actor_id": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "entity_type": "content_item",
+   "entity_id": "f7690995-9859-4446-ae66-98c421b2cda8",
+   "created_at": "2026-09-14T07:25:12.163Z"
+  },
+  {
+   "id": "a30314db-399d-493e-ac69-5c41d538d0b0",
+   "action": "posting_changes_requested",
+   "actor_id": "20e16098-17b6-4673-b29e-f16be3317ccb",
+   "entity_type": "content_item",
+   "entity_id": "84793a75-7b0c-49af-a329-c794d7f31996",
+   "created_at": "2026-09-24T22:40:55.176Z",
+   "detail": "A note from the asker"
+  },
+  {
+   "id": "b34c8dbd-964e-4b40-9b26-840e4e32497b",
+   "action": "status_change",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "9169e122-d270-46e6-a129-6106decd8ece",
+   "created_at": "2026-09-18T13:59:10.772Z",
+   "new_value": "client_review",
+   "old_value": "quality_check",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "c3fc7ebd-93e6-40a2-b894-151d4629981b",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "created_at": "2026-09-09T12:42:27.464Z"
+  },
+  {
+   "id": "cab5643e-cc6d-48f2-8925-2c0f379cf89e",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "616ea0e5-09a7-4e4a-adfe-35fa5c78783c",
+   "created_at": "2026-09-09T13:49:34.814Z"
+  },
+  {
+   "id": "d6cd54ad-109e-4c98-b583-a1df7c94fe31",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "79b5e35c-0c83-4435-9241-4127cc2612ba",
+   "created_at": "2026-09-08T07:41:08.179Z"
+  },
+  {
+   "id": "e28754ef-97e9-4214-989d-5e8a21df3603",
+   "action": "status_change",
+   "actor_id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "entity_type": "content_item",
+   "entity_id": "370209f1-855d-4c1e-8779-a31651db50d8",
+   "created_at": "2026-09-19T14:17:01.388Z",
+   "new_value": "client_review",
+   "old_value": "quality_check",
+   "detail": "A note from someone"
+  },
+  {
+   "id": "e32d7450-4c89-4955-ac0e-140742392d9c",
+   "action": "posting_approved",
+   "actor_id": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "entity_type": "content_item",
+   "entity_id": "1a6d55e1-f892-4a91-86a4-f5924789627f",
+   "created_at": "2026-09-24T06:13:57.290Z"
+  },
+  {
+   "id": "e6b4b57d-99af-48eb-a1c9-34907bd91787",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "ec896a69-4a37-4fb0-bba6-a93ddb091dcd",
+   "created_at": "2026-09-07T06:30:14.654Z"
+  },
+  {
+   "id": "f74df1a2-afc8-4dd2-bd03-6124c1cee3e8",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "d4907f7f-4e5b-4255-be04-f2f626c89c07",
+   "created_at": "2026-09-09T05:23:39.652Z"
+  },
+  {
+   "id": "f86ded72-a28c-40d8-84fd-4bab79174846",
+   "action": "posting_approved",
+   "actor_id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "entity_type": "content_item",
+   "entity_id": "744146b1-4c35-4bff-8c72-bd76c87cb7b9",
+   "created_at": "2026-09-09T14:54:21.381Z"
+  }
+ ],
+ "team_users": [
+  {
+   "id": "01450dc3-0393-4d7c-906a-ff4c8851cf27",
+   "role": "super_admin"
+  },
+  {
+   "id": "20e16098-17b6-4673-b29e-f16be3317ccb",
+   "role": "client"
+  },
+  {
+   "id": "330fdbdb-fc65-4383-b989-07f79095a414",
+   "role": "super_admin"
+  },
+  {
+   "id": "4e4ea4eb-71f6-4925-bca7-930a9d7223e5",
+   "role": "quality_checker",
+   "quality_reviewer": true
+  },
+  {
+   "id": "51abfcae-784d-4145-a3d5-de16a09371bd",
+   "role": "general"
+  },
+  {
+   "id": "b8c097aa-3bf9-4a95-85de-4a13452ac78e",
+   "role": "account_manager"
+  },
+  {
+   "id": "b9be2fe1-6eb3-4e4f-8358-033e9679bc5e",
+   "role": "super_admin"
+  },
+  {
+   "id": "c3e52e7e-c91e-42e8-8765-ad6fb2ae3273",
+   "role": "scheduler"
+  }
+ ],
+ "clients": [
+  {
+   "id": "2e27f9e4-9cb5-43a6-a06b-f317f207a1e8",
+   "name": "Client A"
+  },
+  {
+   "id": "459e2564-1089-45ed-abd7-56d5f53c2cf6",
+   "name": "Client B"
+  },
+  {
+   "id": "4801dfab-1843-4e78-9638-3284c37a2418",
+   "name": "Client C"
+  },
+  {
+   "id": "eb550318-b5a4-4dd6-81ea-9310588a55bb",
+   "name": "Client D"
+  }
+ ]
+}

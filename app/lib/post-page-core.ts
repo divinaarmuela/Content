@@ -23,7 +23,8 @@
  *      for a post with no data at all.
  */
 import { NETWORK_LABEL } from './social-schedule-core'
-import type { SocialPostStatus, TileTone } from './social-schedule-core'
+import type { TileTone } from './social-schedule-core'
+import { STAGE_LABEL, STAGE_MEANING, STAGE_TONE, postedWords, type PostStage, type PostState } from './post-stage-core'
 import { extraLabel, extraValueWords, type ChannelExtras } from './schedule-compose-core'
 import type { Interactor, Interactors } from './followers-core'
 import type { SparkPoint } from './post-performance-core'
@@ -59,8 +60,8 @@ export type AnalyticsRowRef = {
 /**
  * The rows the sweeps wrote for one post, newest first.
  *
- * Matched on the post's OWN job ids first — the same rule `jobsForPost` uses
- * on the calendar, and for the same reason: a card can carry a second post
+ * Matched on the post's OWN job ids first (`jobIdsOfPost`), for a reason:
+ * a card can carry a second post
  * after the first was cancelled, and matching by card alone lets the old
  * post's numbers speak for the new one. The card is the fallback only for a
  * post with no jobs of its own to disagree with (a post matched to something
@@ -100,42 +101,27 @@ export function clientTone(seed: string | null | undefined): ClientChipTone {
 export type PostStatusWords = { headline: string; detail: string | null; tone: TileTone }
 
 /**
- * The header's status, in three words and a sentence.
- *
- * Only the three the owner named get their own headline — booked in, posted,
- * failed — because those are the three a person opening this page is asking
- * about. Everything before sending keeps the composer's own words.
+ * THE HEADER'S STATUS, from the post's STAGE (decision 12) in the one list's
+ * words — STAGE_LABEL, STAGE_MEANING, and `postedWords` for a post that went
+ * out ("Posted on 1 of 2 — LinkedIn did not go out"). No old status word is
+ * read or made. A post back in Ready to post after a failed booking says why.
+ * A row not yet moved across to stages (`state` null) is Posted when
+ * something went out, else Draft.
  */
-export function postStatusWords(
-  status: SocialPostStatus | string | null | undefined,
-  opts: { whenLabel?: string | null; failure?: string | null } = {},
+export function postPageStatus(
+  state: Pick<PostState, 'stage' | 'outcomes' | 'problem'> | null,
+  opts: { whenLabel?: string | null; failure?: string | null; wentOut?: boolean } = {},
 ): PostStatusWords {
   const when = opts.whenLabel?.trim() || null
-  switch (String(status ?? '')) {
-    case 'published':
-      return { headline: 'Posted', detail: when ? `Went out ${when}.` : null, tone: 'ink' }
-    case 'scheduled':
-      return {
-        headline: 'Booked in',
-        detail: when ? `Goes out ${when}. Nothing to do — it leaves by itself.` : 'It leaves by itself.',
-        tone: 'blue',
-      }
-    case 'failed':
-      return {
-        headline: 'Failed',
-        detail: opts.failure?.trim() || 'The platform refused it and did not say why.',
-        tone: 'red',
-      }
-    case 'cancelled':
-      return { headline: 'Cancelled', detail: 'Somebody pulled it back. It did not go out.', tone: 'muted' }
-    case 'approved':
-      return { headline: 'Ready to post', detail: 'Signed off — a scheduler books it in.', tone: 'green' }
-    case 'pending':
-      return { headline: 'With the client', detail: 'Waiting on their sign-off.', tone: 'amber' }
-    case 'changes':
-      return { headline: 'Changes asked for', detail: 'The client wants something different.', tone: 'red' }
-    default:
-      return { headline: 'Draft', detail: 'Not sent anywhere yet.', tone: 'muted' }
+  const stage: PostStage = state?.stage ?? (opts.wentOut ? 'posted' : 'draft')
+  const problem = stage === 'ready' ? (state?.problem?.trim() || opts.failure?.trim() || null) : null
+  const tone = STAGE_TONE[stage]
+  return {
+    headline: stage === 'posted' && state ? postedWords(state) : STAGE_LABEL[stage],
+    detail: stage === 'posted' ? (when ? `Went out ${when}.` : STAGE_MEANING.posted)
+      : stage === 'booked' ? (when ? `Goes out ${when}. Nothing to do — it leaves by itself.` : STAGE_MEANING.booked)
+      : problem ?? STAGE_MEANING[stage],
+    tone: problem ? 'red' : tone === 'surface' ? 'muted' : tone,
   }
 }
 

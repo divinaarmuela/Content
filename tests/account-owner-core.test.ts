@@ -77,13 +77,14 @@ describe('the route and the page (source pins)', () => {
     expect(p).toContain('contact_id: contactIdOf(owner)')
   })
   it('the composer groups the channel picker by whom the post is for — the business, then each person (15 Sep 2026)', () => {
-    const d = src('app/dashboard/social/schedule/NewPostDialog.tsx')
-    expect(d).toContain("accountSections(clientName || 'The business', accounts, contacts).filter(s => s.accounts.length > 0).map(section => (")
+    // the one post window since the posting rebuild (29 Sep 2026)
+    const d = src('app/dashboard/social/schedule/PostWindow.tsx')
+    expect(d).toContain("accountSections(context.client?.name || 'The business', accounts, contacts).filter(s => s.accounts.length > 0).map(section => (")
     expect(d).toContain('role="group" aria-label={section.title}')
-    expect(d).toContain("title={ownerLabel(a, clientName || 'The business', contacts)}")
+    expect(d).toContain("title={ownerLabel(a, context.client?.name || 'The business', contacts)}")
     const h = src('app/dashboard/social/schedule/useSchedulePosts.ts')
     expect(h).toContain("const contacts = useTable<ClientContact>('client_contacts', { by: byClient, enabled: on })")
-    expect(src('app/dashboard/social/schedule/useComposeFlow.tsx')).toContain('contacts={data.contacts}')
+    expect(src('app/dashboard/social/schedule/useComposeFlow.tsx')).toContain('contacts: data.contacts,')
   })
   it('the Social channels card draws the business first, then each person; the connect-link box can add a person on the spot', () => {
     const c = src('app/dashboard/clients/SocialChannels.tsx')
@@ -123,15 +124,15 @@ describe('whom the post is for, from the New post window to the Schedule window 
     expect(p).toContain('forContact: ownerContact,')
     expect(src('app/dashboard/social/schedule/useComposeFlow.tsx')).toContain('forContact={forContact}')
     expect(src('app/dashboard/social/schedule/NewPostSources.tsx')).toContain('for_contact_id: forContact ?? null')
-    // Post approval's window asks too, and the upload route writes it on the card
-    expect(src('app/dashboard/scheduler/SendForApprovalDialog.tsx')).toContain('for_contact_id: contactIdOf(postFor),')
+    // Post approval's New post asks too, and runs the same flow (29 Sep 2026)
+    expect(src('app/dashboard/scheduler/NewPostButton.tsx')).toContain('forContact: contactIdOf(postFor),')
     const u = src('app/lib/schedule-upload.ts')
     expect(u).toContain("if (!person || person.client_id !== clientId) throw new ComposeError(['That person is not on this client'])")
     expect(u).toContain('for_contact_id: forContact,')
   })
   it('the Schedule window opens a new post on that person’s channels; the post’s card says whom it is for', () => {
-    const w = src('app/dashboard/social/schedule/NewPostDialog.tsx')
-    expect(w).toContain("const { row: itemRow } = useRow<ContentItem>('content_items', target.itemId)")
+    const w = src('app/dashboard/social/schedule/PostWindow.tsx')
+    expect(w).toContain("const { row: itemRow } = useRow<ContentItem>('content_items', itemId)")
     expect(w).toContain('const theirs = accounts.filter(a => a.contact_id === who).map(a => a.id)')
     expect(w).toContain('if (seededFor.current || state.postId || !itemRow) return')
     // never the wrong account (15 Sep 2026): a person's post with no account

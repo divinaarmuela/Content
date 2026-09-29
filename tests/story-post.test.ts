@@ -42,7 +42,7 @@ describe('the gate and the composer (source pins)', () => {
     expect(s).toContain('if (theirs === wanted) return true')
   })
   it('the composer hides the caption box when every chosen channel is getting a Story', () => {
-    const d = src('app/dashboard/social/schedule/NewPostDialog.tsx')
+    const d = src('app/dashboard/social/schedule/PostWindow.tsx')
     expect(d).toContain('const allStory = chosen.length > 0 && chosen.every(a => {')
     expect(d).toContain("return k === 'story'")
     expect(d).toContain('A Story has no caption — put any words into the picture or video itself.')

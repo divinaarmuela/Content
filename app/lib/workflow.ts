@@ -33,6 +33,7 @@ import {
 } from './workflow-core'
 import { editingPortalPath, portalHasWork } from './editing-portal-core'
 import { finalFilesOf, hasFinishedWork, liveFilesAt } from './final-files-core'
+import { clientFrozenFor } from './edit-freeze-core'
 import { withClientRound } from './editing-portal-core'
 import { handInRound, roundOf } from './edit-round-core'
 import type { Role } from './identity-core'
@@ -950,8 +951,16 @@ export async function performTransition(
   try {
     // ONE WINNER (trap 11, the audit of 25 Sep 2026): the move lands only on a row still at `from`. The re-read above
     // is a courtesy; this is the guarantee — two presses at once (a pass and a send-back), one of them is refused.
+    // WHAT THE CLIENT IS GIVEN IS FROZEN IN THIS SAME WRITE (the posting rebuild, 29 Sep 2026; SPEC §2.6, audit P1):
+    // built from the row the claim read (movePatch touches no file or round field), so the files frozen are the
+    // files the move saw. The portal's edit page reads these and never the live final_files, so a file added after
+    // the send cannot reach the client. Only the move to With client writes it, and only for a piece of work.
+    const frozenAt = new Date().toISOString()
+    const freezing = to === 'client_review' && !isBriefTask && !isInternal
+    const withFreeze = (row: ContentItemRow): ContentItemRow =>
+      (freezing ? { ...row, client_frozen: clientFrozenFor(row as never, frozenAt) } as ContentItemRow : row)
     const taken = await table<ContentItemRow>('content_items').claim(item.id, cur =>
-      (cur && cur.status === from ? { ...cur, ...movePatch } as ContentItemRow : null))
+      (cur && cur.status === from ? withFreeze({ ...cur, ...movePatch } as ContentItemRow) : null))
     updated = taken.claimed ? taken.row : null
   } catch (e) {
     throw new AuthzError(e instanceof Error ? e.message : 'Could not update the item', 500)

@@ -78,8 +78,7 @@ import { activityLines, type ActivityRow } from '../../../lib/activity-core'
 import { backLinkFor, canClaimEditor } from '../../../lib/work-pages-core'
 import { ClaimButton } from '../ClaimButton'
 import {
-  actionFor, initialsOf, moveTargets, postApprovalOffer, postWaitingLine,
-  POST_APPROVE_LABEL, POST_CHANGES_LABEL,
+  actionFor, initialsOf, moveTargets,
   type BoardViewCard, type CardAction,
 } from '../../../lib/board-view-core'
 import { BOARD_COLUMNS, columnOf } from '../../../lib/board-core'
@@ -187,7 +186,6 @@ type Detail = {
   /** still loaded with the card, as before — nothing on this page draws them
    *  now that posting lives on the Schedule page */
   posting?: unknown
-  posting_approval?: unknown
 }
 
 const STATUS_TINT: Record<string, string> = {
@@ -279,11 +277,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   /** hand this card to somebody, with what you want them to do */
   const [handToOpen, setHandToOpen] = useState(false)
 
-  /** the FINAL POST's gate, answered here — the same route the composer uses */
-  const [postAsking, setPostAsking] = useState(false)
-  const [postNote, setPostNote] = useState('')
-  const [postBusy, setPostBusy] = useState(false)
-
   // type-to-confirm for deletion — a destructive click must be deliberate
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -359,7 +352,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     },
     d => setExtras({
       posting: d.posting,
-      posting_approval: d.posting_approval,
       drive_mirror: d.drive_mirror,
       activity: d.activity,
     }),
@@ -640,10 +632,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   // where you actually came from wins over where the status files it
   const back = cameFrom ?? backLinkFor(workItem)
 
-  /** the FINAL POST's gate, as the detail payload sends it (`readPostingApproval`) */
-  const postingApproval = (detail.posting_approval ?? null) as
-    { state?: string | null; client_required?: boolean } | null
-
   /** the card as the board's dialogs read it */
   const boardCard: BoardViewCard = {
     id: detail.id,
@@ -663,85 +651,13 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     current_version_number: detail.current_version_number,
     change_note: detail.change_note ?? null,
     client_approval_required: detail.client_approval_required !== false,
-    posting_approval_state: postingApproval?.state ?? null,
-    posting_client_required: postingApproval?.client_required ?? false,
   }
 
-  /** a post built from this piece waiting on somebody — one line for
-   *  everybody, and the two answers for the person who may give them */
-  const postWaiting = postWaitingLine(boardCard, viewer)
-  const postOffer = postApprovalOffer(boardCard, viewer)
-
-  /** the answer, on the SAME route the composer and the board press */
-  const answerPost = async (action: 'approve' | 'request_changes') => {
-    const words = postNote.trim()
-    if (action === 'request_changes' && !words) {
-      toast.error('Say what should change — a short note is enough')
-      return
-    }
-    setPostBusy(true)
-    try {
-      const res = await fetch(`/api/production/items/${detail.id}/posting-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ...(words ? { note: words } : {}) }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(body.error ?? 'Could not send your answer')
-      }
-      setPostNote('')
-      setPostAsking(false)
-      toast.success(action === 'approve'
-        ? 'Approved — whoever built this post has been told, and it can be booked in now'
-        : 'Sent back with your note — whoever built this post has been told')
-      await load()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not send your answer')
-    } finally {
-      setPostBusy(false)
-    }
-  }
-
-  /** the small section that says it, above the fold in both layouts */
-  const postGate = postWaiting ? (
-    <div className="flex flex-col gap-2.5 rounded-inner border border-accent-amber/50 bg-tint-amber p-3">
-      <p className="text-body-15 font-medium text-foreground">{postWaiting}</p>
-      {postOffer && (postAsking ? (
-        <>
-          <Textarea
-            rows={3}
-            value={postNote}
-            onChange={e => setPostNote(e.target.value)}
-            placeholder="What should change?"
-            className="bg-surface"
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" className="min-h-11 rounded-full px-4 md:min-h-9"
-              disabled={postBusy || !postNote.trim()}
-              onClick={() => void answerPost('request_changes')}>
-              {postBusy ? 'Sending…' : 'Send it back'}
-            </Button>
-            <Button size="sm" variant="outline" className="min-h-11 rounded-full px-4 md:min-h-9"
-              onClick={() => { setPostAsking(false); setPostNote('') }}>
-              Never mind
-            </Button>
-          </div>
-        </>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="min-h-11 rounded-full px-4 md:min-h-9"
-            disabled={postBusy} onClick={() => void answerPost('approve')}>
-            {postBusy ? 'Working…' : POST_APPROVE_LABEL}
-          </Button>
-          <Button size="sm" variant="outline" className="min-h-11 rounded-full px-4 md:min-h-9"
-            onClick={() => setPostAsking(true)}>
-            {POST_CHANGES_LABEL}
-          </Button>
-        </div>
-      ))}
-    </div>
-  ) : null
+  /* A POST made from this piece is not answered here: its stage, its waits and
+   * its buttons are its own, on Post approval (the posting rebuild, 29 Sep
+   * 2026). This panel used to read the item's post-approval field and offer
+   * "Approve the post" — which was offered while the post was with the client
+   * (audit B7). */
 
   const latest = detail.versions[0]
   /** the link's own history — "Link added", "Link updated to version 3" */
@@ -1513,10 +1429,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
             </div>
           )}
 
-          {/* 2a — A POST WAITING ON SOMEBODY. Above the fold, because the
-              bell used to be the only place it was ever said. */}
-          {isTeam && postGate}
-
           {/* 2b — HOW IT DID. Only a posted piece has an answer. */}
           {isTeam && isAsset && detail.status === 'published' && (
             <HowItDid itemId={detail.id} platformHint={detail.platform_targets?.[0] ?? detail.schedule[0]?.platform ?? null} compact />
@@ -1718,7 +1630,7 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
 
       {/* 2 — WHAT TO DO NOW. One sentence, one button in the board's words,
           the reason it is grey if it is grey. */}
-      {isTeam && (primaryMove || moreMoves.length > 0 || turns[detail.status] !== null || openForMe || postGate) && (
+      {isTeam && (primaryMove || moreMoves.length > 0 || turns[detail.status] !== null || openForMe) && (
         <Card id="next" className="scroll-mt-4 border-border">
           <CardContent className="flex flex-col gap-2.5 p-4">
             {openForMe && (
@@ -1735,7 +1647,6 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
                   : <span className="text-muted-foreground">Waiting on {turnText()}.</span>
               )}
             </p>
-            {postGate}
             {detail.change_note && (detail.status === 'revision_required' || detail.status === 'client_changes_requested') && (
               <p className="rounded-tile bg-tint-amber px-3 py-2 text-body-15 text-foreground">
                 <span className="font-medium">Change:</span> {detail.change_note}

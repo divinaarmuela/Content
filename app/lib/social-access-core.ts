@@ -12,9 +12,8 @@
  */
 
 import { normaliseFolderName } from './gdrive-core'
-import { ROLE_LABEL, TEAM_ROLES, mayPublish, type Role } from './identity-core'
-import { mayApprovePost, maySendPostApproval } from './posting-approval-core'
-import { actingRoles } from './workflow-core'
+import { ROLE_LABEL, TEAM_ROLES, type Role } from './identity-core'
+import { roleMayAct } from './post-stage-core'
 import {
   saysAutoRenews, timeLeftWords, tokenNotice, type TokenStatus,
 } from './token-health-core'
@@ -35,33 +34,26 @@ export const RIGHT_LABEL: Record<Right, string> = {
  * The rights a role carries on Schedule — ASKED OF THE RULES, not listed here.
  *
  * This used to be a hand-written table that happened to agree with the server.
- * That is the worst kind of correct: change `MAY_PUBLISH` or `mayApprovePost`
- * tomorrow and the page carries on telling the team who can post, wrongly,
- * with every test still green. So each chip is one call to the function that
- * actually gates the server:
+ * That is the worst kind of correct: change who may pass or book tomorrow and
+ * the page carries on telling the team who can post, wrongly, with every test
+ * still green. So each chip is one question to the posting rules' own table
+ * (`POST_TRANSITIONS`, through `roleMayAct`) — the table the server acts on:
  *
- *   plan    → `maySendPostApproval` — who may put a post together and send it
- *   approve → `mayApprovePost`      — who may sign it off
- *   post    → `mayPublish`          — who may put it out
- *
- * The first two are asked in terms of HATS, not titles, so they are asked the
- * way the item page asks them: `actingRoles` for this person on a piece of
- * this client that nobody has been handed yet — which is what a page about a
- * CLIENT rather than about one piece is describing.
+ *   plan    → may send a post for the quality check
+ *   approve → may pass it at the quality check, or approve it for the client
+ *   post    → may book it in
  *
  * A client is not on this list at all: they approve in the portal, wearing the
- * client hat, and are never a team member on a client's access list.
+ * client hat, and are never a team member on a client's access list. Editors
+ * and designers make the edit, not the post (the owner's decision 7), so they
+ * carry none of the three.
  */
 export function rightsForRole(role: string): Right[] {
   if (!(TEAM_ROLES as readonly string[]).includes(role)) return []
-  const hats = actingRoles(
-    { id: 'whoever', role: role as Role },
-    { owner_id: null, scheduler_ids: [] },
-  )
   const out: Right[] = []
-  if (maySendPostApproval(hats)) out.push('plan')
-  if (mayApprovePost(hats)) out.push('approve')
-  if (mayPublish(role)) out.push('post')
+  if (roleMayAct(role, 'send_to_qc')) out.push('plan')
+  if (roleMayAct(role, 'pass') || roleMayAct(role, 'approve_for_client')) out.push('approve')
+  if (roleMayAct(role, 'book')) out.push('post')
   return out
 }
 

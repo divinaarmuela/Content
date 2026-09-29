@@ -4,56 +4,96 @@ import { useState } from 'react'
 import { Film, ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePlayable } from '../usePlayable'
-import type { SocialPostStatus, TileTone } from '@/app/lib/social-schedule-core'
+import PlatformIcon from '../PlatformIcon'
+import type { StageTone } from '@/app/lib/post-stage-core'
 import type { Slide } from '@/app/lib/version-files-core'
 
 /**
  * The small parts every view of the calendar shares: the thumbnail, the
- * status dot and the words for a status.
+ * stage dot, the "!" that says something is wrong, and the network logos.
  *
- * The TONE is `tileTone()` from the core — this file only says what each tone
+ * The WORDS and the TONE of a post come from `post-stage-core`'s one list
+ * (STAGE_WORDS), through `scheduleFacts` — this file only says what each tone
  * looks like, so the week grid, the month and the list cannot end up drawing
- * the same post three different colours.
+ * the same post three different colours or calling it two different things.
  */
 
-/** What a post's status is called on screen. Plain words, not the enum. */
-export const STATUS_WORDS: Record<SocialPostStatus, string> = {
-  draft: 'Draft',
-  pending: 'Waiting for approval',
-  approved: 'Approved',
-  changes: 'Changes asked for',
-  scheduled: 'Scheduled',
-  published: 'Posted',
-  failed: 'Did not go out',
-  cancelled: 'Cancelled',
-}
-
-/** The dot in the corner of a tile — the one bit of colour a thumbnail leaves
- *  room for, so the tone has to read at 10px. */
-export const DOT_CLASS: Record<TileTone, string> = {
+/** What each stage tone looks like as a 10px dot. */
+export const STAGE_DOT: Record<StageTone, string> = {
+  ink: 'bg-foreground',
+  surface: 'bg-surface ring-1 ring-inset ring-foreground/40',
+  blue: 'bg-accent-blue',
+  green: 'bg-accent-green',
   amber: 'bg-accent-amber',
   red: 'bg-accent-red',
-  green: 'bg-accent-green',
-  blue: 'bg-accent-blue',
-  ink: 'bg-foreground',
   muted: 'bg-foreground/30',
-  'red-outline': 'bg-surface ring-2 ring-inset ring-accent-red',
 }
 
-/** A cancelled or draft post is still on the calendar, but it must not shout
- *  as loudly as the work that is actually going out. */
-export const TONE_DIM: Record<TileTone, string> = {
-  amber: '', red: '', green: '', blue: '', ink: '', muted: 'opacity-60', 'red-outline': '',
+/** A cancelled post is still listed, but it must not shout as loudly as the
+ *  work that is actually going out. */
+export const STAGE_DIM: Record<StageTone, string> = {
+  ink: '', surface: '', blue: '', green: '', amber: '', red: '', muted: 'opacity-60',
 }
 
-export function StatusDot({ tone, className }: { tone: TileTone; className?: string }) {
+/** The ring a tile wears when something is wrong with it — a tile that will
+ *  not go out never looks like one that will (audit S13). */
+export const STAGE_RING: Record<StageTone, string> = {
+  ink: '', surface: '', blue: '', green: '', amber: 'ring-2 ring-inset ring-accent-amber', red: 'ring-2 ring-inset ring-accent-red', muted: '',
+}
+
+export function StageDot({ tone, className }: { tone: StageTone; className?: string }) {
   return (
     <span
-      className={cn(
-        'inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-surface',
-        DOT_CLASS[tone], className,
-      )}
+      aria-hidden
+      className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-surface', STAGE_DOT[tone], className)}
     />
+  )
+}
+
+/**
+ * THE "!" ON A TILE: something stops this post going out, or its time has
+ * passed. Visible on a phone and in the list, not only in a hover title
+ * (audit S13). The sentence is beside it in the List and in its label here.
+ */
+export function AlertMark({ label, className }: { label: string; className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn('flex h-4 w-4 items-center justify-center rounded-full bg-accent-red text-[11px] font-bold leading-none text-cream', className)}
+    >
+      !
+    </span>
+  )
+}
+
+/**
+ * EVERY NETWORK A POST GOES TO, not only the first (audit S14): a post for
+ * Instagram and TikTok must not read as Instagram-only. `max` logos, then "+n".
+ */
+export function NetworkLogos({ platforms, size = 14, max = 3, className }: {
+  platforms: readonly string[]
+  size?: number
+  max?: number
+  className?: string
+}) {
+  if (platforms.length === 0) return null
+  const shown = platforms.slice(0, max)
+  const more = platforms.length - shown.length
+  return (
+    <span className={cn('flex items-center -space-x-1', className)}>
+      {shown.map(p => (
+        <span key={p} className="flex items-center justify-center rounded-full bg-ink ring-1 ring-surface" style={{ height: size + 4, width: size + 4 }}>
+          <PlatformIcon platform={p} size={size} className="rounded-full" />
+        </span>
+      ))}
+      {more > 0 && (
+        <span className="flex items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-cream ring-1 ring-surface" style={{ height: size + 4 }}>
+          +{more}
+        </span>
+      )}
+    </span>
   )
 }
 

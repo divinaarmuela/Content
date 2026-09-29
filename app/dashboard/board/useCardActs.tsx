@@ -5,20 +5,15 @@ import { toast } from 'sonner'
 import { BOARD_COLUMNS, columnOf } from '../../lib/board-core'
 import type { BoardViewCard, BoardViewer, CardAction } from '../../lib/board-view-core'
 import { friendlyError } from '../../lib/support-core'
-import { HandToDialog, PostChangesDialog, PostedElsewhereDialog, SendBackDialog } from './BoardDialogs'
+import { HandToDialog, PostedElsewhereDialog, SendBackDialog } from './BoardDialogs'
 
 /**
  * ANSWERING A CARD — the one place the three answers are performed.
  *
  * A plain move goes through the ordinary transition route; sending a card
- * back asks for the words first (`SendBackDialog`); the post's own gate is
- * approved outright or sent back with a note (`PostChangesDialog`), through
- * the same `posting-approval` route the composer and the item page use.
- *
- * The board owned all of this. The "Waiting on you" list above the Scheduler
- * board gives the same two answers, so it lives here instead of being written
- * a second time — one route, one toast, one dialog, whichever surface pressed
- * the button.
+ * back asks for the words first (`SendBackDialog`). A POST is not answered on
+ * a card: its moves are its own, on Post approval (the posting rebuild,
+ * 29 Sep 2026 — scheduler/board/usePostActs).
  */
 export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone?: () => void): {
   /** the card being written right now, so its buttons can wait */
@@ -30,7 +25,6 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
 } {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [sendBackFor, setSendBackFor] = useState<T | null>(null)
-  const [postChangesFor, setPostChangesFor] = useState<T | null>(null)
   const [postedFor, setPostedFor] = useState<T | null>(null)
   /** the card waiting for the scheduler it goes to — `approve`: it is not
    *  approved yet; the hand-over approves it and lands it in their Draft */
@@ -57,37 +51,9 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
     }
   }, [onDone])
 
-  /** the yes on a post that was waiting — nothing to type, so no dialog */
-  const approvePost = useCallback(async (card: T) => {
-    setBusyId(card.id)
-    try {
-      const res = await fetch(`/api/production/items/${card.id}/posting-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve' }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        throw new Error(friendlyError(body.error ?? 'Could not approve the post', 'this page'))
-      }
-      toast.success('Approved — whoever built this post has been told, and it can be booked in now')
-      onDone?.()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not approve the post')
-    } finally {
-      setBusyId(null)
-    }
-  }, [onDone])
-
   const act = useCallback((card: T, action: CardAction) => {
     switch (action.kind) {
       case 'send_back': setSendBackFor(card); return
-      // the post's own gate — the same route the composer and the item page
-      // use, never a second one
-      case 'post_approval':
-        if (action.to === 'request_changes') setPostChangesFor(card)
-        else void approvePost(card)
-        return
       case 'transition':
         // "Posted" needs to know where it went out before the machine will
         // take the move — asked in a dialog, then moved (see BoardDialogs)
@@ -108,12 +74,11 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
         }
         void transition(card, action.to, action.label)
     }
-  }, [transition, approvePost, viewer.role])
+  }, [transition, viewer.role])
 
   const dialogs = (
     <>
       <SendBackDialog card={sendBackFor} viewer={viewer} onClose={() => setSendBackFor(null)} onSent={onDone} />
-      <PostChangesDialog card={postChangesFor} onClose={() => setPostChangesFor(null)} />
       <PostedElsewhereDialog card={postedFor} onClose={() => setPostedFor(null)} onPosted={onDone} />
       <HandToDialog card={handFor?.card ?? null} approve={handFor?.approve === true} viewer={viewer} onClose={() => setHandFor(null)} onHanded={onDone} />
     </>

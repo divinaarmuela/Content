@@ -8,7 +8,7 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
   AssetVersion, Batch, BatchComment, Client, ContentItem, IntakeForm, ItemComment,
-  MonthlyCommitment, PublishJob, ScheduleEntry, SocialAccount, SocialPost, TeamUserClient, WorkflowActivity,
+  MonthlyCommitment, PostVersion, PublishJob, ScheduleEntry, SocialAccount, SocialPost, TeamUser, TeamUserClient, WorkflowActivity,
 } from '@/lib/db-types'
 import { portalChannelLines, portalChannelWords, type PortalChannelLine } from './portal-channels-core'
 import type { OutcomeJob } from './post-outcome-core'
@@ -32,18 +32,21 @@ import {
 } from './post-analytics-core'
 import { monthInZone, safeZone } from './timezone-core'
 import { normaliseProfile, toScanShape } from './brand-profile-core'
-import { awaitsClientPostApproval } from './posting-approval-core'
-import { normaliseSlides } from './version-files-core'
 import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
+import { postVersionId, readPostState, type PostState } from './post-stage-core'
 import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
 import { portalIntakeForms, type PortalIntakeForm } from './intake-portal-core'
 import { loadPortalFollowers } from './portal-followers'
 import type { PortalFollowers } from './followers-core'
 import {
-  brandLogoUrl, cardLine, isClientFacing, kindWord, linkFor, portalActions, portalCardTone,
-  portalColumnFor, portalColumnForPost, postingCardFace, shootDayLabel, shootStanding, toPortalComment,
-  type PortalActions, type PortalCardComment, type PortalCardTone, type PortalColumnKey, type PortalLink,
+  brandLogoUrl, cardLine, clientPostView, isClientFacing, kindWord, linkFor, pieceFace, pieceReachedClient,
+  portalActions, portalCardTone,
+  portalColumnFor, portalSections, postLiveLinks, postTypeLine, postedAt, postsMissedByClient, postsWaitingOnClient,
+  readFrozenPost, reviewFiles, shootDayLabel, shootStanding, toPortalComment,
+  type ClientPostState, type ClientPostView, type FrozenPost, type PortalActions, type PortalCardComment, type PortalCardTone,
+  type PortalColumnKey, type PortalLink,
 } from './portal-core'
+import { networkName } from './publish-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
 import { portalOwnerByToken } from './portal-owner'
@@ -152,8 +155,9 @@ export type PortalShoot = {
  * server will accept.
  */
 export type PortalCard = {
-  kind: 'work' | 'shoot'
-  /** the item id, or the shoot's batch id */
+  /** a piece of work (the edit), a shoot, or — since the posting rebuild — a POST */
+  kind: 'work' | 'shoot' | 'post'
+  /** the item id, the shoot's batch id, or the post's id */
   id: string
   title: string
   /** the kind of work in the team's own word ("Reel", "Menu carousel"), the
@@ -211,8 +215,10 @@ export type PortalCard = {
   /** where a comment on this card is filed: the item's thread, or the shoot's */
   comment_target: { kind: 'item'; id: string } | { kind: 'shoot'; id: string } | null
   comments: PortalCardComment[]
-  /** the item's own status — null on a shoot */
+  /** the item's own status — null on a shoot and on a post */
   status: ItemStatus | null
+  /** a post card only: what the client sees of it, from its stage (portal-core `clientPostView`) */
+  post?: PortalPostFace
   /** the plan, on the same card */
   shoot?: {
     date_label: string | null
@@ -234,6 +240,48 @@ export type PortalCard = {
   }
 }
 
+/**
+ * A POST CARD'S FACE — what the portal home draws for one post, read from the
+ * post's stage and its FROZEN version only (SPEC §4.4). No account id, no
+ * job, no problem text, nothing from the edit card.
+ */
+export type PortalPostFace = {
+  state: ClientPostState
+  version: number | null
+  headline: string
+  line: string | null
+  /** "Instagram", "LinkedIn" — where it goes */
+  networks: string[]
+  /** where it went, one link per network (posted only) */
+  links: { platform: string; network: string; url: string }[]
+  /** the cover: the first file of the version the client is shown */
+  cover: { url: string; type: 'image' | 'video' } | null
+  /** how many files */
+  files: number
+}
+
+/**
+ * ONE POST WAITING ON THE CLIENT — the list at the top of their page, and the
+ * one link that lists them all (decision 15). Built from the version they
+ * were SENT, never the live post (audit P2).
+ */
+export type PortalWaitingPost = {
+  id: string
+  title: string
+  /** the version they were sent — the act route refuses any other */
+  version: number
+  type_line: string
+  networks: string[]
+  /** when it goes out, and when their answer is needed by, in their words */
+  when: string | null
+  approve_by: string | null
+  cover: { url: string; type: 'image' | 'video' } | null
+  files: number
+  caption: string
+  /** the post as each network will show it, stripped for the client */
+  preview?: ClientPreview[]
+}
+
 export type PortalData = {
   /** `timezone` is the client's own — every posting time on the portal is
    *  rendered in it, and "this month" is counted by its calendar. */
@@ -252,10 +300,14 @@ export type PortalData = {
     quotas: { type: string; quota: number; published: number }[]
   } | null
   needs_review: PortalItem[]
-  /** approved pieces whose FINAL POST — the caption and the timing — is
-   *  waiting on the client's sign-off. Distinct from needs_review: the work
-   *  was approved earlier; this is the post as it will actually appear. */
-  post_approvals: PortalItem[]
+  /** THE POSTS WAITING ON THE CLIENT (the posting rebuild, 29 Sep 2026):
+   *  every post at With client that reached them and is still open, the
+   *  soonest deadline first — from `social_posts.stage`, never the edit's
+   *  fields (audit P9). Not among `cards`: drawn in their own section. */
+  post_approvals: PortalWaitingPost[]
+  /** posts that were with them whose approve-by time went — the page says
+   *  the team will send new times (decision 11) */
+  posts_missed: number
   /** shoot plans sitting with the client for approval — they need reviewing
    *  too, and the hero counter counts both */
   plans_awaiting: number
@@ -414,13 +466,12 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
           limit: 500,
         })
       : Promise.resolve([] as WorkflowActivity[]),
-    // the compositions behind these pieces — each one that actually went out
-    // has a page of its own, and the client's Published card links to it
-    ids.length
-      ? table<SocialPost>('social_posts')
-          .list({ where: r => ids.includes(r.item_id) })
-          .catch(() => [] as SocialPost[])
-      : Promise.resolve([] as SocialPost[]),
+    // THE CLIENT'S POSTS (the posting rebuild): read by client, so a post
+    // whose card was deleted is still theirs (audit S9), then kept to this
+    // portal's own pieces below
+    table<SocialPost>('social_posts')
+      .list({ by: { client_id: clientId } })
+      .catch(() => [] as SocialPost[]),
     // the per-channel record behind each piece's posts
     ids.length
       ? table<PublishJob>('publish_jobs')
@@ -435,17 +486,25 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     jobsByItem.set(key, [...(jobsByItem.get(key) ?? []), j as unknown as OutcomeJob])
   }
 
-  /** the post that went out for each piece — the newest, when there were two */
+  // ── the posts, by their ONE stage (SPEC §1.1) ──────────────────────────
+  // A row the migration has not given a stage yet is not shown (readPostState
+  // returns null), and a post is on this portal only when its piece is: a
+  // person's portal never shows the business's posts, nor the reverse.
+  const itemIdSet = new Set(ids)
+  const knownItemIds = new Set(itemRows.map(i => i.id))
+  const inScope = (p: PostState) => p.source_item_id
+    ? (itemIdSet.has(p.source_item_id) || (!knownItemIds.has(p.source_item_id) && scope.kind === 'business'))
+    : scope.kind === 'business'
+  const posts: PostState[] = postRows
+    .map(r => readPostState(r as unknown as Record<string, unknown>))
+    .filter((p): p is PostState => !!p && p.client_id === clientId && inScope(p))
+  /** the newest post that went out for each piece — its page is the Published card's "How this post did" */
   const postByItem = new Map<string, string>()
-  /** …and the newest COMPOSITION, gone out or not: what the client is being
-   *  asked to look at is a post that has not gone anywhere yet */
-  const compositionByItem = new Map<string, SocialPost>()
-  for (const p of [...postRows].sort((a, b) =>
-    (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))) {
-    const sent = Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length > 0 : false
-    if (sent && p.item_id && !postByItem.has(p.item_id)) postByItem.set(p.item_id, p.id)
-    if (p.item_id && !compositionByItem.has(p.item_id)) compositionByItem.set(p.item_id, p)
+  for (const p of [...posts].filter(x => x.stage === 'posted').sort((a, b) => String(b.stage_at ?? '').localeCompare(String(a.stage_at ?? '')))) {
+    if (p.source_item_id && !postByItem.has(p.source_item_id)) postByItem.set(p.source_item_id, p.id)
   }
+  /** does this piece have a post at all — then its posts speak for it past the edit */
+  const itemsWithPosts = new Set(posts.map(p => p.source_item_id).filter((x): x is string => !!x))
 
   // latest version per item (rows are ordered desc — first wins)
   const latestByItem = new Map<string, { file_url: string; files?: unknown; drive_url: string }>()
@@ -469,8 +528,11 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
   const toPortal = (i: (typeof items)[number]): PortalItem => {
     const status = i.status as ItemStatus
     const latest = latestByItem.get(i.id)
-    // clients only get preview media once the item has reached client review
-    const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check'].includes(status)
+    // clients only get preview media once the piece has actually reached THEM:
+    // at their review, after their notes, once they had a round of it, or live.
+    // An approved piece nobody sent them carries no media at all — not in the
+    // payload, not as the hero (audit P7, P8)
+    const clientFacing = pieceReachedClient(i)
     const a = status === 'published' ? analyticsByItem.get(i.id) ?? null : null
     // the whole carousel, so the card can show it is one — three thumbnails
     // and a count is enough; the rest is what opening it is for
@@ -559,82 +621,171 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     }
   })
 
-  // ── posts waiting on the client's FINAL sign-off (caption + timing) ──
-  // Read on its own so the page never depends on fields that may not exist
-  // yet: an item that has never been through final-post approval simply has
-  // no posting_approval_state written, and this pile stays empty for it.
-  const approvalCandidates = items
-    .filter(i => ['approved_for_scheduling', 'scheduled'].includes(i.status as string))
-    .map(i => i.id)
-  const captionByAwaiting = new Map<string, string | null>()
-  if (approvalCandidates.length > 0) {
-    try {
-      const gateRows = await table<ContentItem>('content_items')
-        .list({ where: r => approvalCandidates.includes(r.id) })
-      for (const r of gateRows) {
-        if (awaitsClientPostApproval(r as unknown as Record<string, unknown>)) {
-          captionByAwaiting.set(r.id, r.caption ?? null)
-        }
-      }
-    } catch { /* the gate is not set up on this database — the pile stays empty */ }
+  // ── THE POSTS, AS THE CLIENT SEES THEM (the posting rebuild) ─────────────
+  // Every word comes from `clientPostView` (the post's stage), every picture
+  // from the version they were SENT (`post_versions`), never the working copy
+  // (audit P2, P11). A live post that was never frozen shows as it went out.
+  type Visible = { p: PostState; view: ClientPostView }
+  const visible: Visible[] = posts.flatMap(p => {
+    const view = clientPostView(p, now)
+    return view ? [{ p, view }] : []
+  })
+  const versionIds = [...new Set(visible.filter(x => x.view.version != null).map(x => postVersionId(x.p.id, x.view.version!)))]
+  const approverIds = [...new Set(visible.map(x => (x.p.approval?.on_behalf_of_client ? x.p.approval.by : null)).filter((x): x is string => !!x))]
+  const [versionRowsForPosts, approverRows, accountRows] = await Promise.all([
+    versionIds.length
+      ? table<PostVersion>('post_versions').list({ where: r => versionIds.includes(r.id) }).catch(() => [] as PostVersion[])
+      : Promise.resolve([] as PostVersion[]),
+    // the names behind "Approved by Divina for you" — only those
+    approverIds.length
+      ? table<TeamUser>('team_users').list({ where: r => approverIds.includes(r.id) }).catch(() => [] as TeamUser[])
+      : Promise.resolve([] as TeamUser[]),
+    visible.length
+      ? table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } }).catch(() => [] as SocialAccount[])
+      : Promise.resolve([] as SocialAccount[]),
+  ])
+  const versionById = new Map(versionRowsForPosts.map(v => [v.id, v]))
+  const nameById = new Map(approverRows.map(u => [u.id, u.name]))
+  const accountById = new Map(accountRows.map(a => [a.id, a]))
+  const when = (iso: string | null | undefined) => scheduledWhen(iso ?? null, tz)
+  // the words again, now that the names and the client's clock are known
+  for (const x of visible) {
+    x.view = clientPostView(x.p, now, { when, nameOf: id => (id ? nameById.get(id) ?? null : null) }) ?? x.view
   }
-  /**
-   * THE POST, AS THE CLIENT WILL SEE IT ON EACH NETWORK.
-   *
-   * Read on its own, tolerantly, and only for the handful of pieces actually
-   * waiting on the client: a portal that cannot read the channels is a portal
-   * with no picture frames, never a portal that will not load. The frames
-   * themselves are `buildPostPreview` — the composer's own function — put
-   * through `clientPreviews`, which is the ONLY way a preview leaves the
-   * building and is what drops the account ids and the refusals.
-   */
-  const previewByItem = new Map<string, ClientPreview[]>()
-  if (captionByAwaiting.size > 0) {
+  /** the version the client is shown: the frozen one, or — only for a live post never frozen — what went out */
+  const shownVersion = (p: PostState, version: number | null): FrozenPost | null => {
+    const row = version != null ? versionById.get(postVersionId(p.id, version)) : null
+    if (row) return readFrozenPost(row as unknown as Record<string, unknown>)
+    if (p.stage === 'posted') {
+      return readFrozenPost({
+        n: version ?? 0, slides: p.slides, per_channel: p.per_channel, channels: p.channels,
+        caption: p.caption, scheduled_for: p.scheduled_for, timezone: p.timezone,
+      })
+    }
+    return null
+  }
+  const titleOf = (p: PostState) => {
+    const item = p.source_item_id ? items.find(i => i.id === p.source_item_id) : null
+    return String(item?.title ?? '').trim() || 'Your post'
+  }
+  const networksOf = (v: FrozenPost) =>
+    [...new Set(v.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkName(String(a.platform))] : [] }))]
+  const coverOf = (v: FrozenPost) => {
+    const f = reviewFiles(v)[0]
+    return f ? { url: f.url, type: f.type === 'video' ? 'video' as const : 'image' as const } : null
+  }
+  /** the post as each network will show it — the composer's own frames, stripped for a client */
+  const previewOf = (v: FrozenPost, raw: Record<string, unknown> | null): ClientPreview[] | undefined => {
     try {
-      const accounts = await table<SocialAccount>('social_accounts')
-        .list({ by: { client_id: clientId } })
-      for (const itemId of captionByAwaiting.keys()) {
-        const composed = compositionByItem.get(itemId)
-        if (!composed) continue
-        const perChannel = readPerChannel(composed.per_channel)
-        const channelIds = Array.isArray(composed.channels) ? composed.channels.map(String) : []
-        const built = buildPostPreview({
-          caption: String(composed.caption ?? ''),
-          media: normaliseSlides(composed.slides)
-            .map(sl => ({ url: sl.url, type: sl.type, name: sl.name })),
-          channels: channelIds.flatMap(id => {
-            const account = accounts.find(a => a.id === id)
-            if (!account) return []
-            const extras = perChannel[id]
-            return [{
-              id: account.id,
-              platform: String(account.platform),
-              handle: account.username,
-              name: account.name,
-              avatarUrl: account.avatar_url,
-              options: optionsFromExtras(extras),
-              media: extras?.slides?.length
-                ? extras.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name }))
-                : null,
-              // a place is shown to a client BY NAME or not at all, and the
-              // portal has no list of the client's saved places to look one
-              // up in — so no place is shown here rather than a page id
-              placeName: null,
-            }]
-          }),
-        })
-        if (built.networks.length > 0) previewByItem.set(itemId, clientPreviews(built))
-      }
-    } catch { /* the channels are unreadable — the cards go out without frames */ }
+      const perChannel = readPerChannel(raw?.per_channel)
+      const built = buildPostPreview({
+        caption: v.caption,
+        media: v.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name })),
+        channels: v.channels.flatMap(id => {
+          const account = accountById.get(id)
+          if (!account) return []
+          const own = v.per_channel[id]?.slides ?? []
+          return [{
+            id: account.id,
+            platform: String(account.platform),
+            handle: account.username,
+            name: account.name,
+            avatarUrl: account.avatar_url,
+            options: optionsFromExtras(perChannel[id]),
+            media: own.length ? own.map(sl => ({ url: sl.url, type: sl.type, name: sl.name })) : null,
+            // a place is shown to a client BY NAME or not at all
+            placeName: null,
+          }]
+        }),
+      })
+      return built.networks.length > 0 ? clientPreviews(built) : undefined
+    } catch { return undefined }
   }
 
-  const post_approvals: PortalItem[] = items
-    .filter(i => captionByAwaiting.has(i.id))
-    .map(i => ({
-      ...toPortal(i),
-      caption: captionByAwaiting.get(i.id) ?? null,
-      ...(previewByItem.has(i.id) ? { preview: previewByItem.get(i.id) } : {}),
-    }))
+  const waiting = postsWaitingOnClient(visible.map(x => x.p), now)
+  const post_approvals: PortalWaitingPost[] = waiting.flatMap(p => {
+    const view = visible.find(x => x.p.id === p.id)!.view
+    const v = shownVersion(p, view.version)
+    // nothing frozen to show: never fall back to the live post (audit P2)
+    if (!v || view.version == null) return []
+    const files = reviewFiles(v)
+    const preview = previewOf(v, (versionById.get(postVersionId(p.id, view.version)) ?? null) as unknown as Record<string, unknown> | null)
+    return [{
+      id: p.id,
+      title: titleOf(p),
+      version: view.version,
+      type_line: postTypeLine(files, v.channels.map(id => v.per_channel[id]?.kind ?? null)),
+      networks: networksOf(v),
+      when: when(v.scheduled_for),
+      approve_by: view.line,
+      cover: coverOf(v),
+      files: files.length,
+      caption: v.caption,
+      ...(preview ? { preview } : {}),
+    }]
+  })
+  const waitingIds = new Set(post_approvals.map(p => p.id))
+  const posts_missed = postsMissedByClient(visible.map(x => x.p), now).length
+
+  /** a posted post's numbers: its piece's, when it is that piece's newest post out */
+  const postMetrics = (p: PostState): PortalItemMetrics | null => {
+    if (!p.source_item_id || postByItem.get(p.source_item_id) !== p.id) return null
+    const a = analyticsByItem.get(p.source_item_id) ?? null
+    return a ? {
+      views: a.views, reach: a.reach, impressions: a.impressions, likes: a.likes,
+      comments: a.comments, shares: a.shares, saves: a.saves,
+      engagement_rate: a.engagement_rate, sync_status: a.sync_status, synced_at: a.synced_at,
+      post_url: a.platform_post_url, published_at: a.published_at,
+      performance: portalPerformance(readPerformance(a.performance)),
+    } : null
+  }
+  /** how many of each piece's posts the client can see */
+  const visibleByItem = new Map<string, number>()
+  for (const x of visible) if (x.p.source_item_id) visibleByItem.set(x.p.source_item_id, (visibleByItem.get(x.p.source_item_id) ?? 0) + 1)
+  const postCards: PortalCard[] = visible
+    // the waiting ones are drawn once, in their own section; the ones the team
+    // has back (thanks, updating, cancelled, missed) are said on their own page
+    .filter(x => !waitingIds.has(x.p.id) && x.view.column !== 'checking' && x.view.column !== 'your_review')
+    .flatMap(({ p, view }) => {
+      const v = shownVersion(p, view.version)
+      if (!v) return []
+      const files = reviewFiles(v)
+      const links = view.state === 'posted' ? postLiveLinks(p) : []
+      const face: PortalPostFace = {
+        state: view.state, version: view.version, headline: view.headline, line: view.line,
+        networks: networksOf(v), links, cover: coverOf(v), files: files.length,
+      }
+      const card: PortalCard = {
+        kind: 'post',
+        id: p.id,
+        title: titleOf(p),
+        word: postTypeLine(files, v.channels.map(id => v.per_channel[id]?.kind ?? null)),
+        caption: null,
+        column: view.column,
+        tone: view.tone,
+        line: view.line ? `${view.headline}. ${view.line}` : view.headline,
+        deliver_only: false,
+        link: null,
+        pdf: false,
+        preview_url: face.cover?.url ?? null,
+        slides: [],
+        adhoc_post: false,
+        parts: null,
+        updated_at: p.stage_at ?? '',
+        posted_when: view.state === 'posted' ? when(postedAt(p)) : null,
+        live_url: links[0]?.url ?? null,
+        channels: [],
+        post_id: p.id,
+        metrics: view.state === 'posted' ? postMetrics(p) : null,
+        actions: { approve: false, askForChange: false, comment: false },
+        act_item_id: null,
+        comment_target: null,
+        comments: [],
+        status: null,
+        post: face,
+      }
+      return [card]
+    })
 
   const published = bucket(['published'])
   // published_at comes from the POST, not the item: an item's updated_at moves
@@ -701,15 +852,12 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
 
   const workCards: PortalCard[] = items.map(i => {
     const p = toPortal(i)
-    // the post's own approval, not only the edit's status (28 Sep 2026)
-    const posting = {
-      state: (i as { posting_approval_state?: unknown }).posting_approval_state,
-      clientRequired: (i as { posting_client_required?: unknown }).posting_client_required,
-      // did the client ever say yes to this piece themselves — the edit on their portal
-      clientSaw: !!((i as { client_round?: unknown }).client_round || (Array.isArray((i as { client_rounds?: unknown }).client_rounds) && ((i as { client_rounds: unknown[] }).client_rounds).length > 0)),
-    }
-    const face = postingCardFace(p.status, posting)
-    const facing = isClientFacing(p.status)
+    // THE EDIT'S CARD (the posting rebuild): the piece as the client reviews
+    // it. Past the edit, its POSTS speak for it — each by its own stage — so a
+    // piece is never drawn from the edit's fields as if it were the post
+    // (audit P12). The posting fields on the edit card are not read at all.
+    const face = pieceFace(i, p.status, visibleByItem.get(i.id) ?? 0, itemsWithPosts.has(i.id))
+    const facing = isClientFacing(p.status) && pieceReachedClient(i)
     const booked = p.schedule.find(s => s.scheduled_at && !s.live_url)
     const live = p.schedule.find(s => s.live_url)?.live_url ?? p.metrics?.post_url ?? null
     const postedWhen = booked ? scheduledWhen(booked.scheduled_at, tz) : null
@@ -729,9 +877,9 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       // was filed under
       word: p.adhoc_post ? 'Post' : (row.work_kinds?.name?.trim() || kindWord(p.content_type)),
       caption: facing && typeof row.caption === 'string' && row.caption.trim() ? row.caption.trim() : null,
-      column: portalColumnForPost(p.status, posting),
+      column: face ? face.column : portalColumnFor(p.status),
       tone: face ? face.tone : portalCardTone(p.status),
-      line: face ? face.line : cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
+      line: face?.line ?? cardLine(p.status, { postedWhen, progress: p.progress_line, selfPosts }),
       deliver_only: selfPosts,
       link: linkFor(url, kind),
       clips: facing ? liveFilesAt(i as never, roundOf(i as never)).length : 0,
@@ -816,9 +964,9 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       },
     }
   })
-  // the card waiting on the client first, then newest first — the same order
-  // sortForColumn gives pieces, said in terms a shoot card shares
-  const cards = [...workCards, ...shootCards].sort((a, b) =>
+  // the card waiting on the client first, then newest first, in terms a piece,
+  // a post and a shoot card all share
+  const cards = [...workCards, ...postCards, ...shootCards].sort((a, b) =>
     (Number(b.actions.approve) - Number(a.actions.approve)) || b.updated_at.localeCompare(a.updated_at))
 
   // freshen anything stale once the response is out — never before it
@@ -838,6 +986,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     commitment,
     needs_review: bucket(['client_review']),
     post_approvals,
+    posts_missed,
     // a shoot plan waiting on the client is a thing waiting on the client. The
     // hero counter read "NEEDS YOUR REVIEW 00" over a plan asking them to
     // approve it, which is the page contradicting itself.
@@ -880,4 +1029,21 @@ function partsOf(item: { id: string; posted_slides?: unknown }, total: number, p
   const posted = readPostedSlides(item.posted_slides)?.posted ?? 0
   if (booked === 0 && posted === 0) return null
   return { booked: Math.min(total, Math.max(booked, posted)), posted: Math.min(total, posted), total }
+}
+
+/**
+ * WHAT THE BROWSER IS GIVEN (audit P8): only the cards the page draws — the
+ * three sections and the shoots — and none of the lists behind them. The full
+ * payload named drafts and carried the media of posts nobody had sent; a card
+ * the page does not draw is not in its source either.
+ */
+export function portalViewData(data: PortalData): PortalData {
+  const work = data.cards.filter(c => c.kind !== 'shoot')
+  const drawn = new Set(portalSections(work).flatMap(s => s.cards).map(c => `${c.kind}-${c.id}`))
+  return {
+    ...data,
+    cards: data.cards.filter(c => c.kind === 'shoot' || drawn.has(`${c.kind}-${c.id}`)),
+    needs_review: [], changes_requested: [], in_production: [], approved: [], scheduled: [], published: [],
+    shoots: [],
+  }
 }

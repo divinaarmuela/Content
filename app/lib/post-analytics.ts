@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { table } from '@/lib/db'
 import type { PostAnalytic, PublishJob, ScheduleEntry } from '@/lib/db-types'
 import { getPublisher } from './publisher'
+import { urlBelongsTo } from './post-outcome-core'
 import {
   isStale, shapePostAnalytics,
   type PostAnalyticsRow,
@@ -204,52 +205,40 @@ export async function refreshOnePost(
     linked = true
   }
 
-  if (job.content_item_id) {
-    // the client-facing link. Only a row with no link is written, so this is a
-    // back-fill rather than an overwrite, and the common case (already linked)
-    // writes nothing at all.
+  // THE LINK GOES ON ITS OWN NETWORK'S ROW, AND NOWHERE ELSE (audit L1). This
+  // filled every blank row of the card with the one URL, so a post to
+  // LinkedIn and Instagram had Instagram's link on LinkedIn's row. The
+  // analytics row names its platform; a job to one network is that network.
+  const targets = platformsOf(job.targets).map(p => p.toLowerCase())
+  const platform = (row.platform ? String(row.platform).toLowerCase() : null) ?? (targets.length === 1 ? targets[0] : null)
+  if (job.content_item_id && platform && urlBelongsTo(platform, url, targets.length === 1)) {
+    // only a blank row (or one holding another network's link) is written, so
+    // this is a back-fill, and the common case (already linked) writes nothing
     const entries = table<ScheduleEntry>('schedule_entries')
-    const onItem = await entries.list({ by: { item_id: job.content_item_id } })
-    const filled = onItem.filter(e => e.live_url == null)
-    await Promise.all(filled.map(e => entries.update(e.id, { live_url: url })))
-    if (filled.length === 0) {
-      // Nothing matched. Either every row already carries a link — the happy
-      // case — or the item has NO schedule row at all, which is the one way a
-      // live post ends up with nowhere to put its URL and therefore no link in
-      // the client's portal. recordQueuedSchedule normally creates the row at
-      // queue time; a post that reached the provider by some other path never
-      // got one.
-      if (onItem.length === 0) {
-        const platform = row.platform ?? platformsOf(job.targets)[0] ?? null
-        if (platform) {
-          // (item_id, platform) was a composite unique key; find-then-write is
-          // what enforces it now
-          const patch = {
-            item_id: job.content_item_id,
-            platform,
-            scheduled_at: row.published_at ?? job.published_at ?? null,
-            live_url: url,
-            publish_status: 'published',
-            published_at: row.published_at ?? job.published_at ?? new Date().toISOString(),
-          }
-          const held = (await entries.list({ by: { item_id: job.content_item_id, platform } }))[0]
-          if (held) await entries.update(held.id, patch as Partial<ScheduleEntry>)
-          else await table('schedule_entries').insert(patch)
-          linked = true
-        }
-      }
-    } else {
+    const held = (await entries.list({ by: { item_id: job.content_item_id, platform } }))[0]
+    if (!held) {
+      // no row at all for this network: a post that reached the provider by
+      // some other path never got one, and would have no link in the portal
+      await table('schedule_entries').insert({
+        item_id: job.content_item_id,
+        platform,
+        scheduled_at: row.published_at ?? job.published_at ?? null,
+        live_url: url,
+        publish_status: 'published',
+        published_at: row.published_at ?? job.published_at ?? new Date().toISOString(),
+      })
+      linked = true
+    } else if (!held.live_url || !urlBelongsTo(platform, held.live_url, true)) {
+      await entries.update(held.id, { live_url: url } as Partial<ScheduleEntry>)
       linked = true
     }
-
-    if (linked) {
-      // A live post whose link never reached the schedule row was also a post
-      // that may never have been recorded as published — the two are written
-      // together by recordPublishOnItem and they go missing together.
-      // Idempotent: an item already published moves nothing.
-      const { recordPublishOnItem } = await import('./production-publish')
-      await recordPublishOnItem(job.content_item_id, url, platformsOf(job.targets))
-    }
+  }
+  if (linked) {
+    // A live post whose link never reached its row may never have been
+    // recorded either — the publish recorder writes the post (T16/T17), its
+    // rows and the edit card together, and a second telling changes nothing.
+    const { tellThePost } = await import('./publish')
+    await tellThePost(job.id)
   }
   return { updated: true, linked }
 }

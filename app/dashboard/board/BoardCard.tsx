@@ -2,8 +2,6 @@
 
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
-import SendToClientDialog from './SendToClientDialog'
-import { sendStage, sentForStage } from '../../lib/post-to-client-core'
 import Link from 'next/link'
 import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,7 +12,7 @@ import {
 import { statusesIn, columnOf } from '../../lib/board-core'
 import { approvedFilesVersion } from '../../lib/social-schedule-core'
 import {
-  cardActions, cardLines, initialsOf, moveTargets, postWaitingLine,
+  cardActions, cardLines, initialsOf, moveTargets,
   type BoardViewCard, type BoardViewer, type CardAction, handedOver, handedToWords, needsWorkFirst, UPLOAD_FIRST } from '../../lib/board-view-core'
 import Chip from '../ui/Chip'
 import { priorityChip } from '../../lib/priority-core'
@@ -22,7 +20,6 @@ import WorkCard from '../ui/WorkCard'
 import { cardTone, kindTone } from '../ui/tone'
 import { riskChip } from '../../lib/card-flag-core'
 import { footageAfterWords } from '../../lib/shoot-sop-core'
-import { isInternalKind } from '../../lib/task-kind-core'
 import { reviewWords } from '../../lib/editor-sop-core'
 
 /**
@@ -93,15 +90,13 @@ export function CompactCard({ card, today, onOpen, names }: {
 }
 export function BoardCard({
   card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
-  statsHref, booking, tour, onAcknowledge, page, managers = [], kinds = [],
+  statsHref, booking, tour, onAcknowledge, page, managers = [],
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
   viewer: BoardViewer
   names: Map<string, string>
-  /** the client's account managers — named on the editor's and scheduler's cards */
+  /** the client's account managers — named on the editor's cards */
   managers?: readonly string[]
-  /** the kinds of work, so Post approval can tell a piece to post from an internal task */
-  kinds?: readonly { id: string; slug?: string | null; uses_media?: boolean | null }[]
   today: string
   /** something is being saved on this card — the buttons wait */
   busy?: boolean
@@ -141,8 +136,9 @@ export function BoardCard({
    *  acknowledged; the page records it. */
   onAcknowledge?: (card: BoardViewCard) => void
   /** the Editor page draws the SOP's face: no kind of work, "3 of 6 finals
-   *  in", who has it inside For Review, and a blocked line */
-  page?: 'production' | 'editor' | 'scheduler'
+   *  in", who has it inside For Review, and a blocked line. Post approval
+   *  draws POSTS, not these cards (scheduler/board/PostCard). */
+  page?: 'production' | 'editor'
 }) {
   const lines = cardLines(card, { names, today, viewerId: viewer.id })
   // a risk flagged while the card was being made is over once it is booked or posted
@@ -165,9 +161,6 @@ export function BoardCard({
   const toggleBrief = () => { if (briefOpen) setBriefOpen(false); else { setBriefClamped(false); setBriefOpen(true) } }
   const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
   const { primary, more } = cardActions(card, viewer)
-  /** a post built from this piece is waiting on somebody — said on the card,
-   *  because the bell was the only place it was ever said */
-  const postWaiting = postWaitingLine(card, viewer)
   const targets = moveTargets(card, viewer)
   const column = columnOf(card.status)
   // the column already names the stage; the chip earns its place only where
@@ -175,18 +168,11 @@ export function BoardCard({
   // the Editor page shows the editor's face to EVERYONE — a manager's tools
   // live on Post approval (the owner, 12 Sep 2026: "too many options")
   const editorFace = page === 'editor'
-  const [sendOpen, setSendOpen] = useState(false)
   // a files card shows its files, never the Drive link it was handed in by (24 Sep 2026)
   const approvedFiles = approvedFilesVersion(card as never)
   const approvedCount = Array.isArray(approvedFiles?.files) ? approvedFiles!.files!.length : 0
   const approvedRound = approvedFiles?.version_number ?? 1
-  // POST APPROVAL IS ASSETS ONLY (the owner, 13 Sep 2026: "what is this video
-  // edit tag under post approval"): every card here is a piece to post, so
-  // the kind of work says nothing — except an internal TASK, which is not
-  const schedulerFace = page === 'scheduler'
-  const kindRow = kinds.find(k => k.id === (card as { work_kind_id?: string | null }).work_kind_id) ?? null
-  const internalTask = kindRow ? isInternalKind(kindRow) : false
-  const kindChip = editorFace ? null : schedulerFace ? (internalTask ? 'Task' : null) : lines.kind
+  const kindChip = editorFace ? null : lines.kind
   const showStage = !editorFace && statusesIn(column).length > 1
   const review = editorFace ? reviewWords(card.status, (card as { reviewer_name?: string | null }).reviewer_name ?? null) : null
   // the maker's submit lives behind the seven-point quality check in the
@@ -198,18 +184,11 @@ export function BoardCard({
   const handed = editorFace && handedOver(card as never) ? handedToWords(card as never, names) : null
   const tone = cardTone({
     status: card.status,
-    // a handed-over card on Post approval is not late on the EDITING date (24 Sep 2026)
-    due: page === 'scheduler' && handedOver(card as never) ? null : card.due_date,
+    due: card.due_date,
     changesRequested: card.status === 'client_changes_requested',
     today,
   })
-  // ON POST APPROVAL A HANDED-OVER CARD IS THE SCHEDULER'S (the owner, 24 Sep 2026: "it should have Cath's circle, not
-  // TA", "this card is also out of date"): their circle, and no editing due date — the post has its own time
-  const schedulerIds = Array.isArray((card as { scheduler_ids?: unknown }).scheduler_ids) ? ((card as unknown as { scheduler_ids: unknown[] }).scheduler_ids).map(String) : []
-  const theirs = page === 'scheduler' && (card as { adhoc_post?: unknown }).adhoc_post !== true && schedulerIds.length > 0
-  const people = theirs
-    ? schedulerIds.map(id => ({ id, initials: initialsOf(names.get(id) ?? ''), name: names.get(id) ?? 'Scheduler' }))
-    : card.owner_id
+  const people = card.owner_id
     ? [{ id: card.owner_id, initials: initialsOf(names.get(card.owner_id) ?? (lines.assignee === 'You' ? 'You' : '')), name: names.get(card.owner_id) ?? lines.assignee }]
     : []
   const mayDelete = Boolean(canDelete && onDelete)
@@ -219,7 +198,6 @@ export function BoardCard({
 
   return (
     <>
-    {sendOpen && <SendToClientDialog itemId={card.id} onClose={() => setSendOpen(false)} />}
     <WorkCard
       onOpen={() => onOpen(card)}
       client={lines.client}
@@ -232,9 +210,9 @@ export function BoardCard({
         {!folded && review && <Chip tone={tone ? 'surface' : 'muted'}>{review}</Chip>}
         {!folded && finals && <Chip tone="green">{finals}</Chip>}
         {handed && <Chip tone="green">{handed}</Chip>}
-        {!theirs && (!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
+        {(!folded || lines.dueNow) && lines.due && <Chip tone={lines.dueNow ? (tone === 'amber' ? 'surface' : 'amber') : 'muted'}>{lines.due}</Chip>}
         {!folded && lines.posted && <Chip tone="green">{lines.posted}</Chip>}
-        {!folded && !theirs && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
+        {!folded && lines.delivered && <Chip tone="blue">{lines.delivered}</Chip>}
         {/* the made date shows on a folded card as well (the owner, 21 Sep 2026: "create date is not shown on the congested cards") */}
         {lines.made && <Chip tone="muted">{lines.made}</Chip>}
         {priorityChip(card) && <Chip tone={priorityChip(card)!.tone}>{priorityChip(card)!.label}</Chip>}
@@ -251,13 +229,13 @@ export function BoardCard({
         )}
         {/* who to ask (the owner, 13 Sep 2026: "make sure on each task card
             of editor and scheduler that the AM name is there") */}
-        {(page === 'editor' || page === 'scheduler') && (
+        {page === 'editor' && (
           <span className="mb-1 block text-muted-foreground [[data-tone=ink]_&]:text-cream/80">Account manager: <span className="font-medium text-foreground [[data-tone=ink]_&]:text-cream">{managers.length > 0 ? managers.join(', ') : 'none on this client yet'}</span></span>
         )}
         {askAck && (
           <span className="mb-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">New — press Acknowledge so the team knows you are on it.</span>
         )}
-        {lines.brief && !theirs && (
+        {lines.brief && (
           <span
             className={`mb-1 overflow-hidden whitespace-pre-line text-foreground transition-[max-height] duration-500 ease-in-out motion-reduce:transition-none [[data-tone=ink]_&]:text-cream ${briefOpen ? 'block max-h-[200rem]' : 'max-h-[3em]'} ${briefClamped && !briefOpen ? 'line-clamp-2' : briefOpen ? '' : 'block'}`}
             title={briefOpen ? undefined : lines.brief}
@@ -268,9 +246,7 @@ export function BoardCard({
         )}
         {/* who holds it, and — beside it, never instead of it — who was
             actually asked for the next thing on it */}
-        {theirs
-          ? <span>With {schedulerIds.map(s => names.get(s) ?? 'the scheduler').join(', ')}</span>
-          : <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>}
+        <span>{lines.assignee} · {lines.version}{lines.asked ? ` · ${lines.asked}` : ''}</span>
         {booking && (
           <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{booking}</span>
         )}
@@ -288,9 +264,6 @@ export function BoardCard({
           ) : (
             <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{stats}</span>
           )
-        )}
-        {postWaiting && (
-          <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{postWaiting}</span>
         )}
         {lines.changeNote && (
           <span className="mt-1 block font-medium text-foreground">Change: {lines.changeNote}</span>
@@ -329,15 +302,7 @@ export function BoardCard({
           </span>
         ))}
 
-        {/* SEND TO CLIENT, on the card itself (28 Sep 2026): With client, a manager, on Post approval */}
-        {!folded && page === 'scheduler' && sendStage(card as never) !== null && (viewer.role === 'account_manager' || viewer.role === 'super_admin') && (
-          <Button variant="outline"
-            onClick={e => { e.preventDefault(); e.stopPropagation(); setSendOpen(true) }}
-            className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
-            {sentForStage(card as never) ? (sentForStage(card as never)?.via === 'link' ? '✓ Link sent to client · Send again' : '✓ Emailed to client · Send again') : 'Send to client'}
-          </Button>
-        )}
-        {!folded && briefFolds && !theirs && (
+        {!folded && briefFolds && (
           <Button variant="outline" aria-expanded={briefOpen}
             onClick={e => { e.preventDefault(); toggleBrief() }}
             className="h-11 rounded-full border-border bg-surface px-3.5 text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
@@ -432,7 +397,7 @@ export function BoardCard({
                       posted card") */}
                   {/* the kind of work is the Editor page's business; on Post
                       approval every card is a piece to post (13 Sep 2026) */}
-                  {!settled && !adhocPost && !editorFace && !schedulerFace && (
+                  {!settled && !adhocPost && !editorFace && (
                     <DropdownMenuItem className="min-h-11" onClick={() => onKind(card)}>
                       Change the kind of work
                     </DropdownMenuItem>

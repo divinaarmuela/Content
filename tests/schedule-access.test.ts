@@ -7,9 +7,8 @@ import {
   signedUrlExpired,
 } from '@/app/lib/social-access-core'
 import { channelBlockReason } from '@/app/lib/social-schedule-core'
-import { TEAM_ROLES, mayPublish, type Role } from '@/app/lib/identity-core'
-import { mayApprovePost, maySendPostApproval } from '@/app/lib/posting-approval-core'
-import { actingRoles } from '@/app/lib/workflow-core'
+import { TEAM_ROLES } from '@/app/lib/identity-core'
+import { POST_TRANSITIONS, hatsFor } from '@/app/lib/post-stage-core'
 
 /**
  * THE ACCESS PAGE'S WORDS, AND THE PROVIDER REQUESTS BEHIND ITS ONE WRITE.
@@ -39,11 +38,15 @@ describe('what a person may do, in the words on the chips', () => {
     expect(rightsForRole('scheduler')).not.toContain('approve')
   })
 
-  it('an editor drafts and nothing else — the trap this page must not fall into', () => {
+  it('an editor makes the edit, not the post: none of the three (the owner, decision 7, 29 Sep 2026)', () => {
     // an editor sits ABOVE a scheduler in the role ladder because they do more
     // of the work, which is exactly why posting is a named set and not a rung
-    expect(rightsForRole('editor')).toEqual(['plan'])
-    expect(rightsWords('editor')).toEqual([RIGHT_LABEL.plan])
+    expect(rightsForRole('editor')).toEqual([])
+    expect(rightsWords('editor')).toEqual([])
+  })
+
+  it('the quality checker approves — the pass at the quality check — and nothing else (decision 3)', () => {
+    expect(rightsForRole('quality_checker')).toEqual(['approve'])
   })
 
   it('a client has no rights on this page at all', () => {
@@ -63,9 +66,9 @@ describe('what a person may do, in the words on the chips', () => {
    * THE DRIFT THIS PREVENTS.
    *
    * The chips used to be a hand-written table that happened to agree with the
-   * server. Change `MAY_PUBLISH` or `mayApprovePost` tomorrow and the page
+   * server. Change who may pass or book tomorrow and the page
    * would carry on telling the team who can post, wrongly, with every test
-   * still green. So the page asks the same three functions the server does,
+   * still green. So the page asks the same transition table the server does,
    * and this walks every role to prove it — including roles added later.
    */
   it('says exactly what the rules say, for every role there is', () => {
@@ -75,15 +78,12 @@ describe('what a person may do, in the words on the chips', () => {
         expect(rights, role).toEqual([])
         continue
       }
-      // the hats this person wears on a piece of this client that nobody has
-      // been handed — which is what a page about a CLIENT describes
-      const hats = actingRoles(
-        { id: 'whoever', role: role as Role },
-        { owner_id: null, scheduler_ids: [] },
-      )
-      expect(rights.includes('plan'), `${role} plan`).toBe(maySendPostApproval(hats))
-      expect(rights.includes('approve'), `${role} approve`).toBe(mayApprovePost(hats))
-      expect(rights.includes('post'), `${role} post`).toBe(mayPublish(role))
+      // asked straight of the table the server acts on, never of a copy
+      const hats = hatsFor({ id: '', role }, null)
+      const may = (...actions: string[]) => POST_TRANSITIONS.some(r => actions.includes(r.action) && r.who.some(h => hats.includes(h)))
+      expect(rights.includes('plan'), `${role} plan`).toBe(may('send_to_qc'))
+      expect(rights.includes('approve'), `${role} approve`).toBe(may('pass', 'approve_for_client'))
+      expect(rights.includes('post'), `${role} post`).toBe(may('book'))
     }
   })
 
@@ -108,7 +108,8 @@ describe('the people list, straight from team_user_clients', () => {
       [{ team_user_id: 'u1' }, { team_user_id: 'u2' }, { team_user_id: 'u3' }], users)
     expect(people.map(p => p.name)).toEqual(['Al Manager', 'Sam Scheduler', 'Zoe Editor'])
     expect(people[0].rights).toContain('Can approve')
-    expect(people[2].rights).toEqual(['Can plan'])
+    // the editor makes the edit, not the post (decision 7)
+    expect(people[2].rights).toEqual([])
     expect(people[0].roleLabel).toBe('Account manager')
   })
 

@@ -63,12 +63,16 @@ import { visibleItems } from '../../app/lib/scope-client'
 import { cardActions, cardLines, overviewTiles, pageCards, EDITOR_LANE_LABELS } from '../../app/lib/board-view-core'
 import { boardColumn, columnOf } from '../../app/lib/board-core'
 import { whoseTurn, CLIENT_LABELS, type ItemStatus } from '../../app/lib/workflow-core'
-import { UNASKED_LINE } from '../../app/lib/waiting-core'
 import {
   briefChecklist, ackState, goReady, shootStage, STAGE_LABEL, clockWords, canSeeShoot, hasAcknowledged, type SopShoot,
 } from '../../app/lib/shoot-sop-core'
 import { flagsOf } from '../../app/lib/card-flag-core'
-import { createPost, sendForApproval } from '../../app/lib/social-schedule'
+import { createPost } from '../../app/lib/social-schedule'
+// RETIRED by the posting rebuild (29 Sep 2026): the one-press "send for approval / book" doors are gone. A post's
+// own moves go through POST /api/posts/<id>/act (app/lib/post-stage.ts), and its quality check is required. The
+// steps that pressed the old doors are skipped below; the new journeys are package P9's Playwright specs (e2e/).
+const retired = (..._: unknown[]): Promise<any> => { throw new Error('retired by the posting rebuild — see docs/posting-rebuild/SPEC.md') }
+const sendForApproval = retired
 import { postingEligibility } from '../../app/lib/social-schedule-core'
 import { recordPublishOnItem } from '../../app/lib/production-publish'
 import { getPortalData } from '../../app/lib/portal-data'
@@ -190,7 +194,7 @@ const noLeak = (told: { recipient_email: string; status: string }[]) =>
 function turnWords(card: ContentItem, who: TeamUser): string {
   const t = whoseTurn(card.status as ItemStatus, card as never, viewerOf(who))
   if (t.hat === null) return 'no chip'
-  if (t.unassigned) return t.hat === 'editor' ? 'Nobody on it — anyone can take it' : t.hat === 'scheduler' ? 'Nobody on it — any scheduler can take it' : UNASKED_LINE
+  if (t.unassigned) return t.hat === 'editor' ? 'Nobody on it — anyone can take it' : t.hat === 'scheduler' ? 'Nobody on it — any scheduler can take it' : 'Needs a check — nobody asked yet'
   if (t.mine) return 'Your turn'
   return `Waiting on the ${String(t.hat).replace('_', ' ')}`
 }
@@ -558,7 +562,7 @@ describe('the playbook, start to finish, live', () => {
     expect([superHats.primary, ...superHats.more].some(a => a?.kind === 'transition' && a.to === 'client_review')).toBe(true)
   })
 
-  it('9. the scheduler books it (dry run); it goes out; everybody sees it Posted', async () => {
+  it.skip('9. the scheduler books it (dry run); it goes out; everybody sees it Posted', async () => {
     as(scheduler)
     // the approved media, as the picker offers it: a static post is its first file
     const versions = await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })

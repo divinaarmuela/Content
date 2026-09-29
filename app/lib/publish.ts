@@ -2,9 +2,9 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import type {
-  ContentAsset, ContentItem, PublishJob as PublishJobRow, SocialAccount,
+  ContentAsset, PublishJob as PublishJobRow, SocialAccount, SocialPost,
 } from '@/lib/db-types'
-import { publishBlockReason } from './posting-approval-core'
+import { readPostState } from './post-stage-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { encoderConfigured } from './encoder'
@@ -12,15 +12,14 @@ import { measuredDurationOf, smallerCopyOf } from './stream'
 import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
-import { keepLive, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
+import { keepLive, providerTiming, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
-  resendPlanFor, childJobFor, resendWords,
+  resendPlanFor, childJobFor, resendWords, publishDoorRefusal,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
   type RemotePlatformRow,
 } from './publish-core'
 import type { PlatformOutcome } from './post-outcome-core'
-export { LIVE_JOB_STATUSES }
 
 /**
  * Publishing a client's post is the least reversible thing this system does —
@@ -93,6 +92,9 @@ function platformsOf(targets: unknown): string[] {
 export async function queuePublishJob(input: {
   clientId?: string | null
   contentItemId?: string | null
+  /** THE POST this job books (`social_posts.id`). Required for a card's files:
+   *  the door asks the post, not the card (publish-core.publishDoorRefusal). */
+  postId?: string | null
   scheduleEntryId?: string | null
   caption: string
   media: MediaItem[]
@@ -138,18 +140,17 @@ export async function queuePublishJob(input: {
   }
 
   // ── the approval gate ────────────────────────────────────────────────
-  // Nothing reaches a client's real account without their sign-off, on EVERY
-  // path — this one included. The ad-hoc composer used to walk straight past
-  // the gate the item page enforces, which made "the post is locked until it
-  // is approved" true of one screen and false of the system.
-  //
-  // Tolerant by design: no item link, no row, or a database without the
-  // column all read as "the gate is not in use", which is exactly how this
-  // behaved before the gate existed.
-  if (input.contentItemId) {
-    const item = await table<ContentItem>('content_items')
-      .get(input.contentItemId).catch(() => null)
-    const blocked = publishBlockReason(item?.posting_approval_state)
+  // Nothing reaches a client's real account without sign-off, on EVERY path
+  // — this one included. The gate asks the POST (the posting rebuild, 29 Sep
+  // 2026): Booked in, holding an approval of the version it is sending. A
+  // card's files with no post behind them are refused — the item page and
+  // the old composer cannot walk round the post's own approval. Read fresh:
+  // a guard must see the network, not the request cache (CLAUDE.md trap 11).
+  {
+    const row = input.postId
+      ? await table<SocialPost>('social_posts').get(input.postId, { fresh: true }).catch(() => null)
+      : null
+    const blocked = publishDoorRefusal(input, readPostState(row as never))
     if (blocked) return { error: blocked, blocked: true }
   }
 
@@ -279,10 +280,43 @@ async function healthAfterFailure(clientId: string | null | undefined): Promise<
 }
 
 /**
+ * How many times a job is tried before it is written down as not posted. It
+ * used to stop being dispatched at this count and stay 'queued' for ever —
+ * a post that looked booked and never went, with nobody told (the silent
+ * failure CLAUDE.md trap 5b describes, by another road).
+ */
+export const MAX_PUBLISH_ATTEMPTS = 5
+
+/**
+ * Tell the post what its job came to — the publish recorder
+ * (production-publish.recordPostOutcome), called after every settle. Lazily
+ * imported so this module does not load the workflow machine; best effort,
+ * because a bookkeeping failure must never make a publish look failed.
+ */
+export async function tellThePost(jobId: string, opts: { lost?: boolean } = {}): Promise<void> {
+  try {
+    const { recordPostOutcome } = await import('./production-publish')
+    await recordPostOutcome(jobId, opts)
+  } catch (e) {
+    console.error('[publish] could not record the outcome on its post', jobId, e instanceof Error ? e.message : e)
+  }
+}
+
+/**
  * Attempt one job. Safe to call concurrently and safe to retry.
  * Returns the terminal status, or null if another worker held the claim.
+ *
+ * Whatever it settles to — posted, held by the provider, not posted — the
+ * post hears it at once (T16–T18), not at the next sweep. A job going back
+ * on the queue tells nobody: nothing has happened yet.
  */
 export async function runPublishJob(jobId: string): Promise<string | null> {
+  const status = await attemptPublishJob(jobId)
+  if (status !== null && status !== 'queued') await tellThePost(jobId)
+  return status
+}
+
+async function attemptPublishJob(jobId: string): Promise<string | null> {
   // ── layer 1: claim it ────────────────────────────────────────────────
   // queued → publishing as ONE conditional write. Reading the status and
   // then writing it is two, and two workers can both pass the read — which
@@ -320,7 +354,33 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     }
   }
 
+  /** Back on the queue for another go — or, on the last try, written down as
+   *  not posted, so the post comes back to Ready to post with the reason
+   *  instead of sitting booked for a job nobody will send. */
+  const tryAgain = async (message: string) => {
+    if (job.attempts + 1 >= MAX_PUBLISH_ATTEMPTS) {
+      const reason = `Could not reach the publishing service after ${MAX_PUBLISH_ATTEMPTS} tries (${message}). Check the network before booking it again.`
+      await settle({ status: 'failed', attempts: job.attempts + 1, error: reason, platform_results: perChannel('failed', { reason }) })
+      return 'failed'
+    }
+    await settle({ status: 'queued', attempts: job.attempts + 1, error: message, platform_results: perChannel('queued', { reason: message }) })
+    return 'queued'
+  }
+
+  /** NEVER A TIME THAT HAS PASSED (the owner's decision 11): the provider posts
+   *  a past time at once, so a booking whose time is long gone is not sent at
+   *  all — the post comes back to Ready to post to be given a new time. */
+  const timeRefused = async (): Promise<string | null> => {
+    const timing = providerTiming(claimed as { scheduled_for?: string | null; resend_of?: string | null })
+    if (timing.send !== 'refuse') return null
+    await settle({ status: 'failed', attempts: job.attempts + 1, error: timing.reason, platform_results: perChannel('failed', { reason: timing.reason }) })
+    return 'failed'
+  }
+
   try {
+    const late = await timeRefused()
+    if (late) return late
+
     /**
      * Wait, if a channel is still having its clean copy made.
      *
@@ -387,11 +447,18 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
     }
     if (targetsChanged) await settle({ targets })
 
+    // asked again at the last moment: the copy and the relay above can take
+    // minutes, and a time that passed meanwhile must not reach the provider
+    const lateNow = await timeRefused()
+    if (lateNow) return lateNow
+    const timing = providerTiming(claimed as { scheduled_for?: string | null; resend_of?: string | null })
+
     const outcome = await publisher.createPost({
       caption: job.caption,
       media,
       targets,
-      scheduledFor: job.scheduled_for,
+      // a time still ahead, or none at all (= post now) — never one gone by
+      scheduledFor: timing.send === 'at' ? timing.at : null,
       timezone: job.timezone,
       requestId: job.request_id,   // ← layer 2, stable across retries
     })
@@ -401,9 +468,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
         // A future-dated post is accepted by the provider and held by their
         // scheduler — it is handed over, not live yet. Saying "published"
         // would be a lie the operator acts on.
-        const isFuture = Boolean(
-          job.scheduled_for && new Date(job.scheduled_for).getTime() > Date.now()
-        )
+        const isFuture = timing.send === 'at'
         // a 207 "partial": some channels live, some refused, in this very
         // body — say which, the way the reconcile does, rather than "posted"
         const rows = outcome.platforms ?? []
@@ -455,19 +520,9 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
               ? resultsFromRemote(job as unknown as OutcomeJob, rows, 'published', new Date().toISOString())
               : perChannel('published'),
         })
-        if (isFuture) return 'scheduled'
-        // close the loop back into production: the board and the scheduler
-        // must reflect that this actually went out
-        if (claimed.content_item_id) {
-          const { recordPublishOnItem } = await import('./production-publish')
-          // the platforms travel with it so the audit trail can say WHO posted
-          // it — "Posted by Instagram", not "the system"
-          await recordPublishOnItem(
-            claimed.content_item_id as string, null,
-            (job.targets ?? []).map(t => t.platform),
-          )
-        }
-        return 'published'
+        // the post, its schedule rows and the edit card hear it from
+        // runPublishJob (tellThePost), per network
+        return isFuture ? 'scheduled' : 'published'
       }
 
       case 'duplicate':
@@ -481,26 +536,14 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
           error: 'Provider reported an identical post already exists',
           platform_results: perChannel('published'),
         })
-        // …and it must close the loop back into production exactly as
-        // 'published' does. It did not, which meant a duplicate left the post
-        // LIVE on the platform while the board and the client's portal both
-        // still said "Scheduled" — and nothing ever corrected it, because
-        // reconcilePublishedJobs does not look at duplicates either. The
-        // posting card has always called this state "Posted"; now every other
-        // screen agrees with it.
-        if (claimed.content_item_id) {
-          const { recordPublishOnItem } = await import('./production-publish')
-          await recordPublishOnItem(
-            claimed.content_item_id as string, null,
-            (job.targets ?? []).map(t => t.platform),
-          )
-        }
+        // …and it closes the loop exactly as 'published' does: the post is
+        // LIVE, and the recorder counts a duplicate as gone out (audit S5).
+        // It is told by runPublishJob, like every other settle.
         return 'duplicate'
 
       case 'retryable':
-        // back to queued so the scheduler picks it up again
-        await settle({ status: 'queued', attempts: job.attempts + 1, error: outcome.message, platform_results: perChannel('queued', { reason: outcome.message }) })
-        return 'queued'
+        // back to queued so the scheduler picks it up again — until the last try
+        return tryAgain(outcome.message)
 
       case 'permanent':
         await settle({
@@ -529,8 +572,7 @@ export async function runPublishJob(jobId: string): Promise<string | null> {
       return 'failed'
     }
     // never leave a job stuck in 'publishing' — that would be invisible forever
-    await settle({ status: 'queued', attempts: job.attempts + 1, error: message, platform_results: perChannel('queued', { reason: message }) })
-    return 'queued'
+    return tryAgain(message)
   }
 }
 
@@ -882,6 +924,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
           job.status === 'scheduled' ? 'scheduled' : 'published', now),
         updated_at: now,
       })
+      // the networks already up get their own links on their own rows; the
+      // post stays booked until the rest answer
+      await tellThePost(job.id)
       continue
     }
 
@@ -899,10 +944,8 @@ export async function reconcilePublishedJobs(): Promise<number> {
           updated_at: now,
         })
       }
-      if (job.content_item_id) {
-        const { recordPublishOnItem } = await import('./production-publish')
-        await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
-      }
+      // the post, each network's row with its own link, and the edit card (T16)
+      await tellThePost(job.id)
       changed++
       continue
     }
@@ -932,6 +975,7 @@ export async function reconcilePublishedJobs(): Promise<number> {
       const recorded = keepLive(readPlatformResults(job.platform_results), resultsFromRemote(job as unknown as OutcomeJob, remote.platforms, 'failed', now))
       if (!recorded.some(o => o.status === 'failed')) {
         await table('publish_jobs').update(job.id, { platform_results: recorded, updated_at: now })
+        await tellThePost(job.id)
         continue
       }
       await table('publish_jobs').update(job.id, {
@@ -944,6 +988,9 @@ export async function reconcilePublishedJobs(): Promise<number> {
       changed++
       // a timeout is re-sent by the app, one network at a time (24 Sep 2026)
       await resendTimedOut(job, recorded).catch(e => console.error('[publish] re-send failed to queue:', e instanceof Error ? e.message : e))
+      // AFTER the re-sends are queued: a network being re-sent is still going
+      // out, so the post stays booked for it instead of coming back as failed
+      await tellThePost(job.id)
       await healthAfterFailure((job as { client_id?: string | null }).client_id ?? null)
     } else {
       // capture the permalink once the platform assigns one
@@ -964,14 +1011,10 @@ export async function reconcilePublishedJobs(): Promise<number> {
         })
         await Promise.all(assets.map(a =>
           table<ContentAsset>('content_assets').update(a.id, { post_url: url })))
-        // the platform assigns the permalink after the fact; push it through
-        // to the schedule entry so the client-facing live link is populated
-        // — for a job that IS published; a booked one is not posted because
-        // one channel has a link
-        if (job.content_item_id && job.status === 'published') {
-          const { recordPublishOnItem } = await import('./production-publish')
-          await recordPublishOnItem(job.content_item_id as string, url, platformsOf(job.targets))
-        }
+        // the platform assigns the permalink after the fact; the recorder puts
+        // each network's link on that network's row and on the post — a
+        // booked job is not posted because one channel has a link
+        await tellThePost(job.id)
       }
     }
   }
@@ -993,7 +1036,8 @@ export async function reconcilePublishedJobs(): Promise<number> {
 export async function dueJobIds(): Promise<string[]> {
   const rows = await table<PublishJobRow>('publish_jobs').list({
     by: { status: 'queued' },
-    where: j => j.attempts < 5,      // stop hammering a job that keeps failing
+    // stop hammering a job that keeps failing (the last try settles it as not posted)
+    where: j => j.attempts < MAX_PUBLISH_ATTEMPTS,
     orderBy: [['created_at', 'asc']],
     limit: 50,
   })

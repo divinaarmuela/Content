@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { AssetVersion, ContentItem, PublishJob, SocialPost } from '@/lib/db-types'
-import { byHandRows } from '../../../lib/post-outcome-core'
+import { byHandRows, jobIdsOfPost, type PostJobsLike } from '../../../lib/post-outcome-core'
 import { slidesOf } from '../../../lib/version-files-core'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { mayPublish } from '../../../lib/identity-core'
@@ -149,20 +149,17 @@ export async function GET(req: Request) {
     })
     // WHICH COMPOSITION EACH JOB CAME FROM, so the row can offer the post's
     // own page. The job does not carry the link — the post carries the job's
-    // id — so it is read back the way `jobsForPost` reads it, from the post's
-    // own list. A job made outside the composer (the ad-hoc door) simply has
+    // id — so it is read back from the post's own list (`jobIdsOfPost`). A job made outside the composer (the ad-hoc door) simply has
     // no post, and the row shows no link rather than a wrong one.
     const jobIds = new Set(rows.map(j => j.id))
+    // the post's booking holds its jobs (`booking.job_ids`, re-sends included); `jobIdsOfPost` reads
+    // the old `publish_job_ids` only for a row the migration has not reached
     const compositions = await table<SocialPost>('social_posts')
-      .list({
-        where: p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
-          .some(id => jobIds.has(String(id ?? ''))),
-      })
+      .list({ where: p => jobIdsOfPost(p as unknown as PostJobsLike).some(id => jobIds.has(id)) })
       .catch(() => [] as SocialPost[])
     const postByJob = new Map<string, string>()
     for (const p of compositions) {
-      for (const id of Array.isArray(p.publish_job_ids) ? p.publish_job_ids : []) {
-        const key = String(id ?? '')
+      for (const key of jobIdsOfPost(p as unknown as PostJobsLike)) {
         if (key && !postByJob.has(key)) postByJob.set(key, p.id)
       }
     }

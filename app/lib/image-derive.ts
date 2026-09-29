@@ -5,6 +5,8 @@ import type { AssetVersion, ContentItem, SocialPost } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { loadItemForUser } from './production-access'
 import { mayCompose } from './social-schedule'
+import { saveWorkingCopy, teamActorFor } from './post-stage'
+import { readPostState } from './post-stage-core'
 import { slidesOf, type Slide } from './version-files-core'
 import { mirrorVersionSlides } from './gdrive-mirror'
 import { ourStorageUrl, storedFileIsUsable } from './storage-core'
@@ -35,10 +37,6 @@ import { MAX_DERIVED_BYTES, deleteStoredObject, headStoredObject, publicBase } f
 
 export type DeriveKind = 'crop' | 'video'
 
-/** A post whose media can still change — the same split `updatePost` enforces
- *  (`SETTLED` there), read from the one list of post statuses. */
-const STILL_CHANGEABLE: string[] = ['draft', 'pending', 'approved', 'changes', 'scheduled']
-
 export type DeriveInput = {
   item_id: string
   /** which version to write into. Omitted = whichever one holds `from_url`. */
@@ -52,6 +50,8 @@ export type DeriveInput = {
   trim_start?: number | null
   trim_end?: number | null
   kind: DeriveKind
+  /** the post the person opened the editor from — a crop follows into that post only (audit S10) */
+  post_id?: string | null
 }
 
 export type DeriveResult = {
@@ -217,7 +217,7 @@ async function write(user: TeamUser, input: DeriveInput, orphan: Orphan): Promis
 
     const slides = slidesOf(taken.row)
     mirrorVersionSlides(item.id, number, slides)
-    await repointPosts(item.id, from, to)
+    await repointPosts(user, item.id, from, to, input.post_id ?? null)
     announceAfter('schedule', { client_id: item.client_id, item_id: item.id, kind: 'media' })
 
     return {
@@ -267,35 +267,34 @@ async function write(user: TeamUser, input: DeriveInput, orphan: Orphan): Promis
 }
 
 /**
- * A post already holding the old file follows the crop.
+ * A DRAFT post holding the old file follows the crop — through the one writer.
  *
- * Without this, the version says "cropped" and the post that was built from
- * it still points at the uncropped file — and the uncropped one is what would
- * be published. The claim only fires on a post that is still holding the old
- * url, so a post somebody has since re-picked media on is left alone.
+ * Only a post whose stage is Draft is a plan that may still change (SPEC §2.1: the working copy is
+ * editable only in draft). A post at the quality check, with the client, approved, booked or posted
+ * holds a FROZEN version somebody checked or approved, and a crop nobody checked must never slip into
+ * it (review fix, 29 Sep 2026: this used to read the old `status` column, so new posts never took the
+ * crop while migrated Ready and Booked posts had their slides rewritten outside the writer, with no
+ * rev, and the next Change time froze that unchecked picture). To crop one of those, press Edit on the
+ * post first — that makes a new draft version.
  *
- * A post that has ALREADY GONE OUT is left alone too, and that is the more
- * important half. `social_posts.slides` is the record of what was published;
- * rewriting it because somebody cropped the same picture for reuse next month
- * makes the Preview grid and the post detail show history that did not
- * happen. Only a post that can still change is still a plan.
+ * When the editor was opened from one post (`postId`), only that post follows (audit S10).
  */
-async function repointPosts(itemId: string, from: string, to: string): Promise<void> {
-  const rows = await table<SocialPost>('social_posts').list({ where: p => p.item_id === itemId })
+async function repointPosts(user: TeamUser, itemId: string, from: string, to: string, postId: string | null): Promise<void> {
+  const rows = await table<SocialPost>('social_posts')
+    .list({ where: p => ((p as { source_item_id?: string | null }).source_item_id ?? p.item_id) === itemId, fresh: true })
+  const swap = (list: readonly Slide[] | null | undefined) =>
+    (list ?? []).map(s => (s?.url === from ? { ...s, url: to } : s))
   for (const row of rows) {
-    if (!STILL_CHANGEABLE.includes(String(row.status))) continue
-    const slides = Array.isArray(row.slides) ? (row.slides as unknown as Slide[]) : []
-    if (!slides.some(s => s?.url === from)) continue
-    await table<SocialPost>('social_posts').claim(row.id, cur => {
-      if (!cur) return null
-      if (!STILL_CHANGEABLE.includes(String(cur.status))) return null
-      const live = Array.isArray(cur.slides) ? (cur.slides as unknown as Slide[]) : []
-      if (!live.some(s => s?.url === from)) return null
-      return {
-        ...cur,
-        slides: live.map(s =>
-          (s?.url === from ? { ...s, url: to } : s)) as unknown as SocialPost['slides'],
-      }
-    }).catch(() => ({ claimed: false }))
+    if (postId && row.id !== postId) continue
+    const state = readPostState(row as unknown as Record<string, unknown>)
+    if (!state || state.stage !== 'draft') continue
+    const perChannelHolds = Object.values(state.per_channel).some(x => (x.slides ?? []).some(s => s.url === from))
+    if (!state.slides.some(s => s.url === from) && !perChannelHolds) continue
+    const perChannel = Object.fromEntries(Object.entries(state.per_channel)
+      .map(([k, x]) => [k, x.slides ? { ...x, slides: swap(x.slides) } : x]))
+    const saved = await saveWorkingCopy(row.id, teamActorFor(user, state), {
+      slides: swap(state.slides), per_channel: perChannel,
+    }, state.rev).catch(e => ({ ok: false as const, reason: e instanceof Error ? e.message : String(e) }))
+    if (!saved.ok) console.error('crop: the draft post did not take the new picture', row.id, saved.reason)
   }
 }

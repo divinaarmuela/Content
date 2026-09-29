@@ -217,7 +217,7 @@ export function useDragSchedule({ tz, onMove, hours = GRID_HOURS }: {
   }, [cancel, commit])
 
   const blockedReason = useCallback(
-    (post: SchedulePostRow) => dragBlockReason({ status: post.live_status }), [])
+    (post: SchedulePostRow) => dragBlockReason(post), [])
 
   const lift = useCallback((post: SchedulePostRow, mode: MoveMode) => {
     setMoving({
@@ -230,7 +230,7 @@ export function useDragSchedule({ tz, onMove, hours = GRID_HOURS }: {
   }, [])
 
   const startMouse = useCallback((post: SchedulePostRow, dataTransfer: DataTransfer) => {
-    const stop = dragBlockReason({ status: post.live_status })
+    const stop = dragBlockReason(post)
     if (stop) { setState(s => ({ ...s, message: stop })); return false }
     try {
       dataTransfer.setData(TILE_DRAG_TYPE, post.id)
@@ -243,7 +243,7 @@ export function useDragSchedule({ tz, onMove, hours = GRID_HOURS }: {
 
   /** a finger has come down on a tile: lift it if it stays put long enough */
   const startTouch = useCallback((post: SchedulePostRow, point: { x: number; y: number }) => {
-    if (dragBlockReason({ status: post.live_status })) return
+    if (dragBlockReason(post)) return
     if (longPress.current !== null) window.clearTimeout(longPress.current)
     setPress({ postId: post.id, x: point.x, y: point.y })
     longPress.current = window.setTimeout(() => {
@@ -266,7 +266,7 @@ export function useDragSchedule({ tz, onMove, hours = GRID_HOURS }: {
       // Enter on a tile that is NOT being moved still opens it — only Space
       // picks a post up cold, so the common action keeps the common key
       if (e.key !== ' ') return
-      const stop = dragBlockReason({ status: post.live_status })
+      const stop = dragBlockReason(post)
       e.preventDefault()
       if (stop) { setState(s => ({ ...s, message: stop })); return }
       setState(s => ({

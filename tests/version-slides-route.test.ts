@@ -212,8 +212,8 @@ describe('POST /api/production/items/:id/versions — saving one while the clien
   })
 })
 
-describe('POST /api/production/items/:id/versions — new pictures after the post was signed off', () => {
-  it('puts the final-post approval back to pending', async () => {
+describe('POST /api/production/items/:id/versions — a new cut of the EDIT never touches a post (decision 7)', () => {
+  it('leaves the old item-wide posting gate alone and writes no "needs approving again" line', async () => {
     item.posting_approval_state = 'approved'
     fake.restore()
     fake = seedDb({
@@ -226,10 +226,9 @@ describe('POST /api/production/items/:id/versions — new pictures after the pos
     const { status } = await post({ files: [{ url: u('a.jpg') }, { url: u('b.jpg') }] })
     expect(status).toBe(201)
     const saved = fake.rows('content_items')[0] as Record<string, unknown>
-    expect(saved.posting_approval_state).toBe('pending')
-    expect(saved.posting_approved_by).toBeUndefined()
-    // the History says why the badge changed
-    expect(logActivity).toHaveBeenCalledWith(
+    // a post's approval lives on the post; the edit's upload says nothing about any post
+    expect(saved.posting_approval_state).toBe('approved')
+    expect(logActivity).not.toHaveBeenCalledWith(
       expect.objectContaining({ action: 'posting_approval_reset' }),
     )
   })
