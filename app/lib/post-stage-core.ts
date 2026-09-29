@@ -233,6 +233,16 @@ export function mayWorkOnPost(
   return clientIds.includes(post.client_id)
 }
 
+/**
+ * MAY THIS ROLE EVER DO THIS MOVE? Asked of the one transition table, for pages that describe a role rather
+ * than act on a post (the client's access page: "Can plan · Can approve · Can post"). The creator hat is left
+ * out on purpose — it belongs to one person on one post, not to a role.
+ */
+export function roleMayAct(role: string, action: string, qualityReviewer = false): boolean {
+  const hats = hatsFor({ id: '', role, quality_reviewer: qualityReviewer }, null)
+  return POST_TRANSITIONS.some(r => r.action === action && r.who.some(h => hats.includes(h)))
+}
+
 /* ── approval steps, per client and per post ────────────────────────────── */
 
 /**

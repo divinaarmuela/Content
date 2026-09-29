@@ -132,7 +132,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // COPY THE LINK (the owner, 28 Sep 2026): no email — the link is theirs to send by hand
       if (body.copy === true) {
         const link = cardApprovalLink(DASHBOARD_URL, client.share_token, item.id)
-        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: new Date().toISOString(), to: [], stage: 'card', via: 'link', for_time: null } } as never).catch(() => undefined)
         await logActivity({ actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id, action: 'sent_to_client', detail: 'Copied the approval link to send by hand' }).catch(() => undefined)
         return NextResponse.json({ link, message: 'Link ready — paste it to the client. It opens this card for them to approve.' })
       }
@@ -170,10 +169,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       const delivered = results.filter(r => r.result === 'sent' || r.result === 'duplicate').map(r => r.email)
-      // stamped on the card only for a real send that reached someone
-      if (!test && delivered.length > 0) {
-        await table<ContentItem>('content_items').update(item.id, { client_sent: { at: stamp, to: delivered, stage: 'card', for_time: null } } as never).catch(() => undefined)
-      }
+      // THE EDIT'S SEND IS ITS HISTORY LINE, NOT A FIELD (the posting rebuild, 29 Sep 2026): the card's old
+      // `client_sent` stamp is what the posting pages misread as "the POST was sent to the client". Posts keep
+      // their own `client_send`; the edit keeps the `sent_to_client` line below and its `client_rounds`.
       if (!test) await logActivity({
         actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
         action: 'sent_to_client',

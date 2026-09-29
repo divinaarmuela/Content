@@ -69,15 +69,3 @@ export const KIND_TONE: Record<string, ChipTone> = {
 export function kindTone(color: string | null | undefined): ChipTone {
   return KIND_TONE[color ?? 'zinc'] ?? 'muted'
 }
-
-/**
- * Where the final post stands, as a chip tone.
- *
- * The keys are exactly what `approvalChip()` returns — `waiting | approved |
- * changes`. It used to carry a `pending` key that nothing could ever look up,
- * which meant "waiting on approval" fell through to the plain muted grey and
- * the blue that was written down was never seen.
- */
-export const GATE_TONE: Record<'waiting' | 'approved' | 'changes', ChipTone> = {
-  waiting: 'blue', approved: 'green', changes: 'red',
-}
