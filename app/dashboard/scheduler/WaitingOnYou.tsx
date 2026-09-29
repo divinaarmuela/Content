@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { clientTone } from '../../lib/post-page-core'
-import { postWindowHref } from '../../lib/post-board-core'
-import { SCHEDULE_PAGE } from '../../lib/page-access-core'
+import { postApprovalWindowHref } from '../../lib/post-board-core'
 import {
   postOthersLabel, postWaitingTitle, type PostWaitingRow,
 } from '../../lib/post-waiting-core'
@@ -69,7 +68,7 @@ function WaitingItem({ row, busy, error, onPress }: {
   const blocked = row.actions[0]?.blocked ?? null
   return (
     <div className="flex flex-col gap-2.5 rounded-inner border border-border bg-surface p-3 sm:flex-row sm:items-center sm:gap-3">
-      <Link href={postWindowHref(row.post, SCHEDULE_PAGE)}
+      <Link href={postApprovalWindowHref(row.post)}
         className="flex min-w-0 flex-1 flex-col gap-1.5 text-left underline-offset-4 hover:underline">
         <span className="flex flex-wrap items-center gap-2">
           <Chip tone={clientTone(face.clientId)}>{face.client}</Chip>

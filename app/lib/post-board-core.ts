@@ -220,6 +220,15 @@ export function postWindowHref(
     : `${schedulePage}?client=${encodeURIComponent(post.client_id)}&post=${encodeURIComponent(post.id)}`
 }
 
+/**
+ * THE WINDOW OPENS WHERE YOU ARE (the owner, 29 Sep 2026: "how about the sudden navigation to the Post approval
+ * page"). A card, list row or waiting row on Post approval opens the post's window on Post approval, whatever its
+ * stage. Only a link the person chooses ("See it on Schedule") takes them to the other page.
+ */
+export function postApprovalWindowHref(post: Pick<PostState, 'id'>): string {
+  return `${POST_APPROVAL_BOARD}?post=${encodeURIComponent(post.id)}`
+}
+
 /* ── ?client= on Post approval (live test, 29 Sep 2026: the parameter was ignored) ── */
 
 /** The client a Post approval address names (`?client=<id>`) — '' (every client) when it names none. */

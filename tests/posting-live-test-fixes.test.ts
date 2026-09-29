@@ -465,3 +465,17 @@ describe('closing the post window (the owner, 29 Sep 2026: "now I cannot close t
     expect(src).not.toContain("STAGE_PAGE[row.stage] === 'post_approval'")
   })
 })
+
+describe('no sudden jump to the other page (the owner, 29 Sep 2026)', () => {
+  it('Post approval opens every post in place and never bounces an approved post to Schedule', async () => {
+    const { readFileSync } = await import('node:fs')
+    const addr = readFileSync('app/dashboard/scheduler/PostWindowFromAddress.tsx', 'utf8')
+    expect(addr).not.toContain('belongsToSchedule')
+    expect(addr).not.toContain('SCHEDULE_PAGE')
+    const board = readFileSync('app/dashboard/scheduler/board/PostBoard.tsx', 'utf8')
+    expect(board).toContain('windowHref={postApprovalWindowHref(bp.post)}')
+    expect(readFileSync('app/dashboard/scheduler/WaitingOnYou.tsx', 'utf8')).toContain('postApprovalWindowHref(row.post)')
+    const { postApprovalWindowHref } = await import('../app/lib/post-board-core')
+    expect(postApprovalWindowHref({ id: 'p1' })).toBe('/dashboard/scheduler?post=p1')
+  })
+})

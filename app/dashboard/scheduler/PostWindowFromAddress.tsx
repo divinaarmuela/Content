@@ -5,10 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import type { SocialPost } from '@/lib/db-types'
-import { STAGE_PAGE, readPostState, type PostStage } from '../../lib/post-stage-core'
-import { postApprovalHref, postWindowHref } from '../../lib/post-board-core'
+import { postApprovalHref } from '../../lib/post-board-core'
 import { POST_APPROVAL_BOARD } from '../../lib/overview-links-core'
-import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostWindow'
 
 /**
@@ -36,18 +34,6 @@ export default function PostWindowFromAddress({ clientId = '' }: {
   // a row from the post the address named a moment ago is not this post's
   const row = live.row && live.row.id === postId ? live.row : null
   const loading = live.loading || (!!live.row && !row)
-  const firstStage = useRef<{ id: string; stage: PostStage | null } | null>(null)
-
-  const stage = row ? readPostState(row as unknown as Record<string, unknown>)?.stage ?? null : null
-  if (postId && row && firstStage.current?.id !== postId) firstStage.current = { id: postId, stage }
-  const belongsToSchedule = !!firstStage.current && firstStage.current.id === postId
-    && firstStage.current.stage !== null && STAGE_PAGE[firstStage.current.stage] === 'schedule'
-
-  useEffect(() => {
-    if (!postId || !row || !belongsToSchedule || !stage) return
-    router.replace(postWindowHref({ id: row.id, client_id: row.client_id, stage }, SCHEDULE_PAGE, 'schedule'))
-  }, [postId, row, stage, belongsToSchedule, router])
-
   // A POST IS ONLY "GONE" ONCE THE DATABASE HAS ANSWERED FOR IT (29 Sep 2026: a With-client card opened with
   // "That post is not there any more" — the check ran in the render before the row was even asked for, when
   // `loading` was still the previous address's `false`)
@@ -60,7 +46,7 @@ export default function PostWindowFromAddress({ clientId = '' }: {
     toast.error('That post is not there any more. It may have been deleted.')
   }, [postId, loading, row])
 
-  if (!postId || !row || belongsToSchedule) return null
+  if (!postId || !row) return null
 
   const close = () => router.replace(postApprovalHref(clientId), { scroll: false })
   const done = (outcome: PostWindowOutcome) => {

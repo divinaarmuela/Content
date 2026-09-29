@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { LayoutGrid, List as ListIcon } from 'lucide-react'
 import { STAGE_MEANING, type OfferedAction, type PostState } from '../../../lib/post-stage-core'
 import {
-  boardActions, dropOnPostLane, groupPosts, postMoveTargets, postWindowHref, scheduleLink,
+  boardActions, dropOnPostLane, groupPosts, postMoveTargets, postApprovalWindowHref, scheduleLink,
 } from '../../../lib/post-board-core'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { usePersistedChoice } from '../../production/workHooks'
@@ -99,7 +99,7 @@ export function PostBoard({
         moves={postMoveTargets(bp.post, bp.hats, now, bp.ctx)}
         busy={busyId === bp.post.id}
         error={errorFor(bp.post.id)}
-        windowHref={postWindowHref(bp.post, SCHEDULE_PAGE)}
+        windowHref={postApprovalWindowHref(bp.post)}
         schedule={scheduleLink(bp.post, SCHEDULE_PAGE)}
         onPress={onPress}
         tour={bp.post.id === firstId}
@@ -224,7 +224,7 @@ function PostList({ groups }: { groups: { label: string; posts: BoardPost[] }[] 
           {rows.map(bp => (
             <tr key={bp.post.id} className="border-b border-border last:border-0">
               <td className="px-3 py-2.5">
-                <Link href={postWindowHref(bp.post, SCHEDULE_PAGE)} className="flex min-h-11 flex-col justify-center underline-offset-4 hover:underline">
+                <Link href={postApprovalWindowHref(bp.post)} className="flex min-h-11 flex-col justify-center underline-offset-4 hover:underline">
                   <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">{bp.face.client}</span>
                   <span className="font-semibold">{bp.face.title}</span>
                 </Link>
