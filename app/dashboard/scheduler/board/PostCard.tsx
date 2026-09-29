@@ -79,6 +79,7 @@ export function PostCard({
         </span>
         {face.changes && <span className="mt-1 block text-foreground [[data-tone=ink]_&]:text-cream">{face.changes}</span>}
         {face.sent && <span className="mt-1 block">{face.sent}</span>}
+        {face.answerBy && <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream" data-answer-by>{face.answerBy}</span>}
         {face.approval && <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{face.approval}</span>}
         {face.posted && <span className="mt-1 block">{face.posted}</span>}
         {face.when && <span className="mt-1 block">Goes out {face.when}</span>}

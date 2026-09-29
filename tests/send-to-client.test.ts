@@ -146,12 +146,17 @@ describe('the EDIT card: POST /api/production/items/:id/send-to-client', () => {
     expect(String(r.json.message)).toMatch(/^Nothing was sent/)
   })
 
-  it('a test goes only to the person pressing it, in preview, and stamps nothing', async () => {
+  it('a test goes only to the person pressing it, opens the card on the dashboard, and stamps nothing', async () => {
     fake = seed('client_review')
     const r = await call('POST', { test: true })
     expect(r.status).toBe(200)
     expect(notify.mock.calls[0][0]).toMatchObject({ recipientEmail: 'manal@mdmmarketing.com.au', toClient: false, deliberateClientSend: false })
-    expect(String(notify.mock.calls[0][0].bodyHtml)).toContain('/portal/tok-1/approve/item-1?preview=1')
+    // never the client's live Approve page — it has no preview, so a press there would be the client's
+    // answer (review fix of audit P4, 29 Sep 2026)
+    const body = String(notify.mock.calls[0][0].bodyHtml)
+    expect(body).toContain('/dashboard/production/item-1')
+    expect(body).not.toContain('/portal/')
+    expect(body).not.toContain('opens in preview')
     expect((fake.rows('content_items')[0] as unknown as { client_sent?: unknown }).client_sent).toBeUndefined()
   })
 

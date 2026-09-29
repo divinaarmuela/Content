@@ -227,9 +227,13 @@ describe('schedule rows, one per network (L1, L2, L8)', () => {
     expect(w.after.scheduled_at).toBe(job.scheduled_for)
   })
 
-  it('leaves the rows of deleted cards alone', () => {
+  it('settles the rows of deleted cards from their jobs: a "scheduled" row that never went is cancelled (audit L6)', () => {
     expect(p.orphanScheduleRows.some((id: string) => id.startsWith('034bda63'))).toBe(true)
-    expect(find('034bda63')).toBeUndefined()
+    const w = find('034bda63')
+    expect(w?.orphan).toBe(true)
+    expect(w?.patch).toEqual({ publish_status: 'cancelled' })
+    // nothing still reads "scheduled" for a card that is gone and a network that never went
+    for (const x of p.scheduleWrites.filter((r: Row) => r.orphan)) expect(['published', 'cancelled']).toContain(x.after.publish_status)
   })
 })
 

@@ -73,10 +73,14 @@ function goodCase(action: PostAction, stage: PostStage): { p: PostState; input: 
       input.note = 'Slide 2 has the old logo'; break
     case 'approve_for_client':
       input.agreed_via = 'call'; break
+    case 'team_decides':
+      input.note = 'The launch cannot wait'; break
     case 'change_time':
       input.scheduled_for = at(96); break
     case 'set_steps':
-      input.steps = 'team_then_client'; break
+      // on a Ready post the team already approved, "team then the client" is refused (the way to show
+      // the client is Send to client); "team only" is the good case there
+      input.steps = stage === 'ready' ? 'team' : 'team_then_client'; break
     case 'cancel':
       if (stage === 'draft') p = post('draft', { sent_version: 1, draft_version: 2 }); break
     case 'missing_networks':
@@ -724,7 +728,7 @@ describe('postActions', () => {
   it('with the client, a manager never gets Approve as the main button (audit B7)', () => {
     const list = postActions(post('with_client'), viewerHats('account_manager'), NOW, CTX)
     expect(list.primary).toBeNull()
-    expect(list.secondary.map(a => a.action)).toEqual(['resend_new_time', 'approve_for_client', 'take_back'])
+    expect(list.secondary.map(a => a.action)).toEqual(['resend_new_time', 'approve_for_client', 'team_decides', 'take_back'])
     expect(list.secondary.find(a => a.action === 'approve_for_client')?.needs).toEqual(['agreed_via', 'note'])
     expect(list.danger?.action).toBe('cancel')
   })

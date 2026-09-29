@@ -147,6 +147,10 @@ const GHOST_TABLES = {
     //   assigned_to    the one person who has to act next, when it is one person
     //   source_item_id the edit card the media came from — informational only
     //   source_deleted that card was deleted; the post stays visible
+    //   sending        {token, action, by, at} — a send to the client in flight (review fix, 29 Sep
+    //                  2026). Claimed BEFORE the email goes and cleared by the claim that moves the
+    //                  post, so an email only ever goes for a post that holds the send; while it is
+    //                  fresh (3 minutes) every other move is refused
     ['stage', col('string', true)],
     ['rev', col('number', true)],
     ['stage_at', col('string', true)],
@@ -165,6 +169,7 @@ const GHOST_TABLES = {
     ['assigned_to', col('string', true)],
     ['source_item_id', col('string', true)],
     ['source_deleted', col('boolean', true)],
+    ['sending', col('unknown', true, true)],
   ],
   // post_versions — A FROZEN POST (SPEC §2.2). Written once, never changed:
   //   id `<post_id>_v<n>`, claimed against a null current so the first writer

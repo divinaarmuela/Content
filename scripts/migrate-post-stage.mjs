@@ -363,7 +363,42 @@ export function planMigration(snap, cores, { now }) {
       scheduleWrites.push({ table: 'schedule_entries', id: row.id, before: row, after, patch, item_id: itemId })
     }
   }
+  // ROWS WHOSE CARD WAS DELETED (audit L6, review fix 29 Sep 2026): no longer left as they were. Each
+  // says what its card's own jobs say for its network — published (with that network's link) where it
+  // went out, cancelled where it was still "scheduled" and never went. Anything reading the table directly
+  // then stops counting a phantom booking.
   const orphanScheduleRows = snap.schedule_entries.filter(r => !items.has(r.item_id)).map(r => r.id)
+  const orphanByItem = new Map()
+  for (const r of snap.schedule_entries) {
+    if (items.has(r.item_id)) continue
+    if (!orphanByItem.has(r.item_id)) orphanByItem.set(r.item_id, [])
+    orphanByItem.get(r.item_id).push(r)
+  }
+  for (const [itemId, rows] of orphanByItem) {
+    const went = new Map()   // platform → url
+    for (const j of jobs.filter(x => x.content_item_id === itemId)) {
+      for (const o of O.outcomesForJob(j)) {
+        if (o.status !== 'published') continue
+        if (!went.has(o.platform) || (!went.get(o.platform) && o.url)) went.set(o.platform, o.url ?? null)
+      }
+    }
+    for (const row of rows) {
+      const platform = String(row.platform ?? '').toLowerCase()
+      const patch = {}
+      if (went.has(platform)) {
+        if (row.publish_status !== 'published') patch.publish_status = 'published'
+        const keep = row.live_url && O.urlBelongsTo(platform, row.live_url, true)
+        const url = keep ? row.live_url : (went.get(platform) ?? null)
+        if ((row.live_url ?? null) !== url) patch.live_url = url
+      } else if (row.publish_status === 'scheduled' || row.publish_status === 'queued') {
+        patch.publish_status = 'cancelled'
+      }
+      if (Object.keys(patch).length === 0) continue
+      const after = { ...row, ...patch }
+      for (const [k, v] of Object.entries(patch)) if (v === null) delete after[k]
+      scheduleWrites.push({ table: 'schedule_entries', id: row.id, before: row, after, patch, item_id: itemId, orphan: true })
+    }
+  }
 
   // ── the edit side (L4): cards the client got before the round stamp existed ──
   const itemWrites = []
@@ -571,7 +606,8 @@ export function renderReport(plan, meta = {}) {
     for (const w of plan.scheduleWrites) L.push(`| ${short(w.id)} | ${short(w.item_id)} | ${w.before.platform} | ${show(w.before)} | ${show(w.after)} |`)
   }
   for (const n of plan.scheduleNotes) L.push(`- Card ${short(n.item_id)}: ${n.text}`)
-  L.push(`- Rows whose card was deleted are left as they are: ${plan.orphanScheduleRows.length} (${plan.orphanScheduleRows.map(short).join(', ') || 'none'}).`)
+  const orphanFixed = plan.scheduleWrites.filter(w => w.orphan)
+  L.push(`- Rows whose card was deleted: ${plan.orphanScheduleRows.length} (${plan.orphanScheduleRows.map(short).join(', ') || 'none'}). Each is set to what its card's jobs say: published where it went out, cancelled where it was still "scheduled" and never went. ${orphanFixed.length} of them change (in the table above); the rest already say the right thing.`)
   L.push('')
 
   L.push('## Edit cards (the client-round stamp)')

@@ -9,7 +9,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, ROW_OF,
+  AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, ROW_OF, approvalStepsOf, defaultApproveBy,
   type AgreedVia, type ApprovalSteps, type OfferedAction, type PostState,
 } from '../../../lib/post-stage-core'
 import { postActPath, type PostActRequest, type PostActResponse } from '../../../lib/post-act-contract'
@@ -43,6 +43,8 @@ export type PostActDeps = {
   assignees: readonly Assignee[]
   /** the name of a person, for the dialog's default */
   nameOf: (id: string | null | undefined) => string | null
+  /** the client's own approval setting — the steps dialog opens on what the card says (review fix) */
+  clientOf?: (post: PostState) => { client_approval_required?: boolean | null } | null
 }
 
 type Pending = { post: PostState; action: OfferedAction } | null
@@ -85,8 +87,14 @@ export function usePostActs(deps: PostActDeps): {
       if (json && 'ok' in json && json.ok) {
         // back to Draft to be changed: the change is made in the post window
         const reopen = (action.action === 'edit' || action.action === 'rebook') && json.stage === 'draft'
+        if (json.link) {
+          // a send by link: the link is theirs to paste — shown, and copied when the browser allows it
+          void navigator.clipboard?.writeText(json.link).catch(() => {})
+          toast.success(`${json.words}. The link is copied — paste it to the client.`, { description: json.link, duration: 20_000 })
+          return null
+        }
         toast.success(json.words, reopen ? {
-          action: { label: 'Open it', onClick: () => { window.location.assign(postWindowHref(post, SCHEDULE_PAGE)) } },
+          action: { label: 'Open it', onClick: () => { window.location.assign(postWindowHref(json.post ?? post, SCHEDULE_PAGE)) } },
         } : undefined)
         return null
       }
@@ -154,6 +162,8 @@ const DIALOG_WORDS: Partial<Record<string, string>> = {
   send_to_client: 'This emails the client a link to this version. It moves only once an email has gone out.',
   resend_new_time: 'Pick the new time. The client is emailed this version again, with the new time.',
   set_steps: 'Choose who approves this post. The client’s usual setting is the default.',
+  team_decides: 'The team approves this version without waiting for the client. The client’s page will say the team decided it — never that they approved it.',
+  change_time: 'Pick the new time. The files and words stay as they are, so nothing is checked again.',
 }
 
 /**
@@ -182,6 +192,8 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
   const [picks, setPicks] = useState<string[]>([])
   const [when, setWhen] = useState('')
   const [steps, setSteps] = useState<ApprovalSteps>('team')
+  const [byLink, setByLink] = useState(false)
+  const [answerBy, setAnswerBy] = useState('')
   const [local, setLocal] = useState<string | null>(null)
 
   // a fresh question each time the dialog opens — and only then, so what the
@@ -194,7 +206,13 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
     setAgreed('')
     setPicks(pending.action.needs.includes('recipients') ? defaultPicks(choicesFor(p)) : [])
     setWhen(p.scheduled_for ? toZonedInput(p.scheduled_for, p.timezone || DEFAULT_TZ) : '')
-    setSteps(p.approval_steps ?? 'team')
+    // what the card's chip says: this post's own choice, else the client's default — never "team" by guess
+    setSteps(approvalStepsOf(p, deps.clientOf?.(p) ?? null))
+    setByLink(false)
+    // a resend picks a new posting time, so its answer-by starts empty: the server then takes the
+    // default from the NEW time
+    const by = pending.action.action === 'resend_new_time' ? null : defaultApproveBy(p.scheduled_for, new Date())
+    setAnswerBy(by ? toZonedInput(by, p.timezone || DEFAULT_TZ) : '')
     setLocal(null)
   }, [pending]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -206,7 +224,11 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
     if (needs.has('note')) {
       const n = note.trim()
       const noteRequired = action.action !== 'approve_for_client' || agreed === 'other'
-      if (!n && noteRequired) { setLocal(action.action === 'approve_for_client' ? 'Say how the client agreed.' : 'Say what needs changing.'); return }
+      if (!n && noteRequired) {
+        setLocal(action.action === 'approve_for_client' ? 'Say how the client agreed.'
+          : action.action === 'team_decides' ? 'Say why the team is deciding without the client.' : 'Say what needs changing.')
+        return
+      }
       if (n) extra.note = n
     }
     if (needs.has('assign_to')) {
@@ -218,10 +240,19 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
       extra.agreed_via = agreed
     }
     if (needs.has('recipients')) {
-      if (choices.length === 0) { setLocal('This client has nobody to email — add a contact on the client’s page first.'); return }
-      if (picks.length === 0) { setLocal('Tick at least one person to send it to.'); return }
-      extra.send_to = picks
-      extra.via = 'email'
+      if (byLink) {
+        extra.via = 'link'
+      } else {
+        if (choices.length === 0) { setLocal('This client has nobody to email. Copy the link instead, or add a contact on the client’s page first.'); return }
+        if (picks.length === 0) { setLocal('Tick at least one person to send it to.'); return }
+        extra.send_to = picks
+        extra.via = 'email'
+      }
+      if (answerBy) {
+        const iso = fromZonedInput(answerBy, zone)
+        if (!iso) { setLocal('Pick when the client should answer by.'); return }
+        extra.approve_by = iso
+      }
     }
     if (needs.has('time')) {
       const iso = fromZonedInput(when, zone)
@@ -264,10 +295,10 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-1 text-[13px] font-semibold">Email it to</legend>
               {choices.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground">This client has no email address yet. Add one on the client’s page first.</p>
+                <p className="text-[13px] text-muted-foreground">This client has no email address yet. Copy the link instead, or add one on the client’s page.</p>
               ) : choices.map(c => (
                 <label key={c.email} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-inner border border-border bg-surface px-3">
-                  <input type="checkbox" className="h-4 w-4 accent-foreground" checked={picks.includes(c.email)}
+                  <input type="checkbox" className="h-4 w-4 accent-foreground" checked={picks.includes(c.email)} disabled={byLink}
                     onChange={e => setPicks(p => (e.target.checked ? [...p, c.email] : p.filter(x => x !== c.email)))} />
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-[14px] font-medium">{c.name}</span>
@@ -275,7 +306,20 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
                   </span>
                 </label>
               ))}
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-[14px]">
+                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={byLink} onChange={e => setByLink(e.target.checked)} />
+                Copy the link instead — I will send it myself
+              </label>
             </fieldset>
+          )}
+
+          {needs.has('recipients') && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="post-act-answer-by">The client answers by</Label>
+              <input id="post-act-answer-by" type="datetime-local" value={answerBy} onChange={e => setAnswerBy(e.target.value)}
+                className="min-h-11 rounded-inner border border-border bg-surface px-3 text-[14px]" />
+              <p className="text-[12px] text-muted-foreground">After this, the client can no longer approve it, and the post shows it needs a new time. Reminders go to the account manager 24 hours and 1 hour before. Left empty, it is two hours before the posting time.</p>
+            </div>
           )}
 
           {needs.has('time') && (
@@ -320,7 +364,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
               <Label htmlFor="post-act-note">
                 {action.action === 'approve_for_client'
                   ? agreed === 'other' ? 'How the client agreed' : 'A note (optional)'
-                  : 'What needs changing'}
+                  : action.action === 'team_decides' ? 'Why the team is deciding' : 'What needs changing'}
               </Label>
               <Textarea id="post-act-note" rows={3} value={note} onChange={e => setNote(e.target.value)}
                 autoFocus={!needs.has('agreed_via')} className="rounded-inner border-border bg-surface" />

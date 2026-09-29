@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import Sparkline from '../../../components/Sparkline'
 import Chip from '../../ui/Chip'
 import { compactCount, metricsPending, updatedAgo } from '../../../lib/post-analytics-core'
+import { jobIdsOfPost, type PostJobsLike } from '../../../lib/post-outcome-core'
 import {
   followersLine, followersNote, hasNumbers, noNumbersLine, readPerformance, shownFollowers,
   type PostPerformance,
@@ -53,7 +54,8 @@ export default function HowItDid({ itemId, platformHint, compact = false }: {
   const { rows: postRows } = useTable<SocialPost>('social_posts', { by: byItem })
   const sentPosts = useMemo(
     () => [...postRows]
-      .filter(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length : 0) > 0)
+      // booked posts: the booking's jobs, or the old list on a row the migration has not reached
+      .filter(p => jobIdsOfPost(p as unknown as PostJobsLike).length > 0)
       .sort((a, b) => (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? '')),
     [postRows],
   )

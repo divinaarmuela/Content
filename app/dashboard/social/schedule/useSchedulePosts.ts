@@ -323,15 +323,16 @@ export function useSchedulePosts(
       // one from its old columns is the bug this rebuild removes
       const state = readPostState(row as unknown as Record<string, unknown>)
       if (!state) continue
-      const source = state.source_item_id
-      // the edit card exists but this person may not see it: not drawn. A
-      // DELETED card hides nothing — posting history and failures stay on
-      // the calendar (audit S9)
-      if (source && clientItemIds.has(source) && !itemById.has(source)) continue
+      // A POST IS SCOPED BY ITS OWN CLIENT, never by whether its edit card is
+      // visible to this person (review fix, 29 Sep 2026; SPEC §1.3): the client
+      // picker already holds only this person's clients, and the server asks the
+      // same question (`mayActOn`). The card is a title and a file source — a
+      // scheduler's upload is still on the calendar for the next scheduler, and a
+      // deleted card hides nothing (audit S9)
       out.push({ row, state })
     }
     return out
-  }, [posts.rows, clientId, clientItemIds, itemById])
+  }, [posts.rows, clientId])
 
   /**
    * The rows handed out last time, by post id. The clock ticks every minute,

@@ -38,10 +38,11 @@ import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-c
 import { isTrialTarget, latestFollowerCount, trialFollowersProblem } from './trial-reel-core'
 import { networkName } from './publish-core'
 import {
-  insertDraftPost, loadPostState, performPostTransition, postLockKey, saveWorkingCopy, teamActorFor,
+  insertDraftPost, loadPostState, mayActOn, performPostTransition, postLockKey, saveWorkingCopy, teamActorFor,
   type PostActResult,
 } from './post-stage'
 import { STAGE_LABEL, readPostState, type PostStage, type PostState } from './post-stage-core'
+import { jobIdsOfPost, type PostJobsLike } from './post-outcome-core'
 
 /**
  * The planned post, server side — the calendar's reads, the composer's working copy, and the media.
@@ -144,7 +145,9 @@ const shape = (row: SocialPost): PlannedPost => ({
   slides: asArray<Slide>(row.slides),
   channels: asArray<string>(row.channels).map(String),
   per_channel: readPerChannel(row.per_channel),
-  publish_job_ids: asArray<string>(row.publish_job_ids).map(String),
+  // the booking's jobs, re-sends included — the new engine writes only `booking.job_ids`; the old
+  // `publish_job_ids` is read only for a row the migration has not reached (audit V11, review fix)
+  publish_job_ids: jobIdsOfPost(row as unknown as PostJobsLike),
   state: readPostState(row as unknown as Record<string, unknown>),
 })
 
@@ -248,15 +251,40 @@ export function scheduleErrorResponse(e: unknown): NextResponse {
 
 /* ── loading ────────────────────────────────────────────────────────────── */
 
-/** One post, with the item it belongs to — scoped by the item's own access
- *  rules, so a post can never be a way around them. */
+/**
+ * One post, with the edit card its files came from.
+ *
+ * WHO MAY OPEN IT IS THE POST'S QUESTION, NOT THE CARD'S (review fix, 29 Sep 2026; SPEC §1.3). The
+ * old gate was the card's visibility, so a scheduler could see a post on Post approval, press Edit on
+ * it, and then be told "Item not found" when saving it — the card was another scheduler's upload, or
+ * still at Draft. Now the gate is the one every posting surface uses (`mayActOn`: the person's clients,
+ * a post they made or are named on, the reviewer's desk). The card is only a title and a file source;
+ * when it has been deleted, a stand-in marked `adhoc_post` takes its place, so a cancelled post from a
+ * deleted card can still be re-booked, given a time, and sent (audit W2).
+ */
 export async function loadPostForUser(
   user: TeamUser, id: string,
-): Promise<{ post: PlannedPost; item: ContentItem }> {
+): Promise<{ post: PlannedPost; item: ContentItem; cardGone: boolean }> {
   const row = await posts().get(id)
   if (!row) throw new AuthzError('That post no longer exists', 404)
-  const item = await loadItemForUser(user, row.item_id)
-  return { post: shape(row), item }
+  const state = readPostState(row as unknown as Record<string, unknown>)
+  if (state) {
+    if (!(await mayActOn(user, state))) throw new AuthzError('That client is not one of yours', 403)
+  } else {
+    await assertClientAccess(user, row.client_id)
+  }
+  const sourceId = String((row as { source_item_id?: string | null }).source_item_id ?? row.item_id ?? '')
+  const card = sourceId ? await table<ContentItem>('content_items').get(sourceId).catch(() => null) : null
+  if (card) return { post: shape(row), item: card, cardGone: false }
+  return { post: shape(row), item: standInCard(row), cardGone: true }
+}
+
+/** The card a post whose card was deleted stands on: its title from the caption, nothing to move. */
+function standInCard(row: SocialPost): ContentItem {
+  return {
+    id: row.item_id, client_id: row.client_id, title: String(row.caption ?? '').trim().split(/\r?\n/)[0].slice(0, 80) || 'Post',
+    status: 'published', adhoc_post: true, owner_id: null, scheduler_ids: [],
+  } as unknown as ContentItem
 }
 
 /**
@@ -284,11 +312,7 @@ export async function loadPostOrRecordForUser(
     throw new AuthzError('Item not found', 404)
   }
   await assertClientAccess(user, row.client_id)
-  const item = {
-    id: row.item_id, client_id: row.client_id, title: String(row.caption ?? '').trim().slice(0, 80) || 'Post',
-    status: 'published', adhoc_post: true, owner_id: null, scheduler_ids: [],
-  } as unknown as ContentItem
-  return { post: shape(row), item, cardGone: true }
+  return { post: shape(row), item: standInCard(row), cardGone: true }
 }
 
 async function versionsOf(itemId: string): Promise<AssetVersion[]> {

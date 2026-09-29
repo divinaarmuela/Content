@@ -26,9 +26,9 @@
  */
 
 import {
-  APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL,
+  APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
   STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine,
-  laneOf, pageLaneOf, postActions, postTone, postedWords, slotMissed, waitingOn,
+  STAGE_PAGE, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
 } from './post-stage-core'
@@ -57,19 +57,19 @@ export const POSTED_DAYS_ON_BOARD = 14
  *   quality checker — every post waiting on the quality check, whoever's
  *   client it is (the reviewer's desk), plus their own clients.
  *   account manager, anyone else — the clients they look after.
- *   Everyone — a post they made, or one waiting on them by name.
+ * The act route asks the very same question (`mayWorkOnPost`).
  */
 export function postVisibleTo(
   post: Pick<PostState, 'client_id' | 'stage' | 'created_by' | 'assigned_to' | 'changes_asked'>,
   person: BoardPerson,
   assignments: readonly ClientAssignment[],
 ): boolean {
-  if (person.role === 'client') return false
-  if (['super_admin', 'scheduler', 'general'].includes(person.role)) return true
-  if (post.created_by === person.id || post.assigned_to === person.id || post.changes_asked?.to === person.id) return true
-  const reviewer = person.role === 'quality_checker' || person.quality_reviewer === true
-  if (reviewer && post.stage === 'quality_check') return true
-  return assignments.some(a => a.team_user_id === person.id && a.client_id === post.client_id)
+  // the SAME rule the act route checks (`mayWorkOnPost`), so a card never
+  // offers a press the server refuses with "That client is not one of yours"
+  const clientIds = ['super_admin', 'scheduler', 'general'].includes(person.role)
+    ? null
+    : assignments.filter(a => a.team_user_id === person.id).map(a => a.client_id)
+  return mayWorkOnPost(person, post, clientIds)
 }
 
 const ms = (t: NowLike | null | undefined): number => {
@@ -145,7 +145,7 @@ export function laneFromAddress(value: string | null | undefined): string | null
 export const PAGE_ACTIONS: Readonly<Partial<Record<PostStage, readonly PostAction[]>>> = {
   draft: ['send_to_qc', 'set_steps', 'delete_draft', 'cancel'],
   quality_check: ['pass', 'pass_send_client', 'ask_change', 'edit', 'set_steps', 'cancel'],
-  with_client: ['resend_new_time', 'approve_for_client', 'take_back', 'cancel'],
+  with_client: ['resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['send_to_client', 'edit', 'set_steps', 'cancel'],
   cancelled: ['rebook', 'duplicate'],
 }
@@ -196,17 +196,59 @@ export function scheduleLink(post: Pick<PostState, 'id' | 'client_id' | 'stage'>
   return { label, href: postWindowHref(post, schedulePage) }
 }
 
+/** Post approval's own address. */
+export const POST_APPROVAL_PAGE = '/dashboard/scheduler'
+
 /**
- * THE POST WINDOW'S ADDRESS for one post. The window is the Schedule page's
- * (package P3); a card here opens the same window every other surface opens.
+ * THE POST WINDOW'S ADDRESS for one post — on the page that owns the post's
+ * stage (the owner's decision 1). Draft, Quality check and With client open it
+ * on Post approval, so nobody approves on Schedule and the quality checker
+ * (who has no Schedule page) can always open what they are asked to pass.
+ * Ready to post, Booked in and Posted open it on Schedule. A cancelled post
+ * belongs to both, and opens where the person already is (`here`).
+ * The window is the same one wherever it opens (decision 2).
  */
-export function postWindowHref(post: Pick<PostState, 'id' | 'client_id'>, schedulePage: string): string {
-  return `${schedulePage}?client=${encodeURIComponent(post.client_id)}&post=${encodeURIComponent(post.id)}`
+export function postWindowHref(
+  post: Pick<PostState, 'id' | 'client_id'> & { stage?: PostStage | null },
+  schedulePage: string,
+  here: 'post_approval' | 'schedule' = 'post_approval',
+): string {
+  const owner = post.stage ? STAGE_PAGE[post.stage] : 'schedule'
+  const page = owner === 'both' ? here : owner
+  return page === 'post_approval'
+    ? `${POST_APPROVAL_PAGE}?post=${encodeURIComponent(post.id)}`
+    : `${schedulePage}?client=${encodeURIComponent(post.client_id)}&post=${encodeURIComponent(post.id)}`
 }
 
 /** "Make a post" from an edit that is ready to become one — the Schedule page opens its composer on the piece. */
 export function makePostHref(item: { id: string; client_id: string }, schedulePage: string): string {
   return `${schedulePage}?client=${encodeURIComponent(item.client_id)}&item=${encodeURIComponent(item.id)}`
+}
+
+/* ── a round: several posts to one client, in one email ─────────────── */
+
+/** The moves a round makes: a pass at the quality check, or a send once passed (decision 15). */
+export const ROUND_ACTIONS: readonly PostAction[] = ['pass_send_client', 'send_to_client']
+
+/**
+ * THE POSTS THAT CAN GO TO THEIR CLIENT RIGHT NOW, by client — each with the
+ * move it would make, read from the same button list the card draws
+ * (`boardActions`). A post whose send is stopped by a rule is left out, so the
+ * round never offers what the server would refuse.
+ */
+export function roundCandidates<B extends { post: PostState; hats: readonly PostHat[]; ctx: Omit<TransitionContext, 'now'>; face: { client: string } }>(
+  posts: readonly B[], now: NowLike,
+): { clientId: string; clientName: string; posts: { bp: B; label: string }[] }[] {
+  const byClient = new Map<string, { clientId: string; clientName: string; posts: { bp: B; label: string }[] }>()
+  for (const bp of posts) {
+    const move = offeredList(boardActions(bp.post, bp.hats, now, bp.ctx))
+      .find(a => ROUND_ACTIONS.includes(a.action) && !a.blocked)
+    if (!move) continue
+    const g = byClient.get(bp.post.client_id) ?? { clientId: bp.post.client_id, clientName: bp.face.client, posts: [] }
+    g.posts.push({ bp, label: move.label })
+    byClient.set(bp.post.client_id, g)
+  }
+  return [...byClient.values()].sort((a, b) => a.clientName.localeCompare(b.clientName))
 }
 
 /* ── a drop onto a lane ─────────────────────────────────────────────────── */
@@ -311,6 +353,8 @@ export type PostCardFace = {
   changes: string | null
   /** "Emailed to jordan@acme.com · 28 Sep" — only from a send of THIS version (audit B4, B16) */
   sent: string | null
+  /** "Answer needed by Tue 29 Sep, 3:00 pm" — while the client has it and the time is open (decision 11) */
+  answerBy: string | null
   /** "Approved by Akmal for the client — on WhatsApp" — only for this version (decision 5, audit P6) */
   approval: string | null
   /** when it goes out, in the post's own zone */
@@ -392,6 +436,8 @@ export function postCardFace(
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
     sent: sentLine && post.stage === 'with_client' ? (sentDay ? `${sentLine} · ${sentDay}` : sentLine) : null,
+    answerBy: post.stage === 'with_client' && send && !slotMissed(post, opts.now) && approveByOf(post)
+      ? `Answer needed by ${formatInZone(approveByOf(post)!, zone, 'full')}` : null,
     approval: ['ready', 'booked', 'posted'].includes(post.stage) ? approvalLine(approval, nameOf) : null,
     when: post.scheduled_for ? formatInZone(post.scheduled_for, zone, 'full') : null,
     version: current != null && post.stage !== 'draft' ? `Version ${current}` : null,

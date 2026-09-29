@@ -568,12 +568,14 @@ describe('each role\'s Overview', () => {
   })
 
   it('a scheduler: ready, going out today, waiting on an account — counted from POSTS (audit B12)', () => {
-    const post = (id: string, stage: string, client_id = 'c1') =>
-      readPostState({ id, client_id, stage, rev: 1, stage_at: '2026-09-05T00:00:00Z', created_by: 'x' })!
+    const post = (id: string, stage: string, client_id = 'c1', scheduled_for: string | null = null) =>
+      readPostState({ id, client_id, stage, rev: 1, stage_at: '2026-09-05T00:00:00Z', created_by: 'x', scheduled_for, timezone: 'Australia/Melbourne' })!
     const tiles = overviewTiles({
       viewer: scheduler, cards: rows, today: TODAY,
       postingToday: new Set(['f']), connectedClientIds: new Set(['c1']),
-      posts: [post('p1', 'ready', 'c9'), post('p2', 'ready'), post('p3', 'with_client'), post('p4', 'booked')],
+      // going out today is a BOOKED POST whose time is today — p5 is booked for another day
+      posts: [post('p1', 'ready', 'c9'), post('p2', 'ready'), post('p3', 'with_client'),
+        post('p4', 'booked', 'c1', `${TODAY}T02:00:00.000Z`), post('p5', 'booked', 'c1', '2030-01-01T02:00:00.000Z')],
     })
     expect(tiles.map(t => t.key)).toEqual(['ready', 'today', 'account', 'posts'])
     // two posts approved and not booked — whatever the edit cards say

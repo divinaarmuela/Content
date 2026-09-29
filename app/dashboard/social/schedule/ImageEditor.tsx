@@ -441,6 +441,8 @@ function PicturePanel({ target, slide, mayApprove, busy, setBusy, setProblem, on
             from_url: slide.url,
             to_url: url,
             kind: 'crop',
+            // the post this editor was opened from: only that draft follows the crop (audit S10)
+            post_id: target.postId,
           }),
         })
         : fetch('/api/social/schedule/media', {

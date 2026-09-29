@@ -220,13 +220,25 @@ describe('a crop', () => {
           channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
           status: 'published', publish_job_ids: [], created_by: SCHEDULER.id,
           created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+          stage: 'posted', rev: 4, sent_version: 1, draft_version: 2,
+        },
+        {
+          // a migrated Ready post that still carries its old status 'approved': FROZEN, never rewritten
+          // by a crop (review fix, 29 Sep 2026 — the old code read `status` and rewrote it)
+          id: 'post-ready', client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
+          version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
+          channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
+          status: 'approved', publish_job_ids: [], created_by: SCHEDULER.id,
+          created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+          stage: 'ready', rev: 2, sent_version: 1, draft_version: 2,
         },
         {
           id: 'post-plan', client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
           version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
           channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
-          status: 'draft', publish_job_ids: [], created_by: SCHEDULER.id,
+          publish_job_ids: [], created_by: SCHEDULER.id,
           created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+          stage: 'draft', rev: 0, draft_version: 1,
         },
       ] as unknown as Row[],
     })
@@ -238,8 +250,11 @@ describe('a crop', () => {
     // because somebody cropped the same picture for reuse would make the
     // preview grid show history that did not happen
     expect(out.slides.map((s: any) => s.url)).toEqual([ONE, TWO])
-    // a post that can still change is still a plan, and follows the crop
+    // an approved post holds a checked version: it does not take a picture nobody checked
+    expect(posts().find((p: any) => p.id === 'post-ready').slides.map((s: any) => s.url)).toEqual([ONE, TWO])
+    // a DRAFT is still a plan, and follows the crop — through the one writer, which bumps its rev
     expect(plan.slides.map((s: any) => s.url)).toEqual([CROPPED, TWO])
+    expect(plan.rev).toBe(1)
   })
 
   it('is followed by a post already built from the old file', async () => {
@@ -249,14 +264,31 @@ describe('a crop', () => {
         id: 'post-1', client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
         version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
         channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
-        status: 'draft', publish_job_ids: [], created_by: SCHEDULER.id,
+        publish_job_ids: [], created_by: SCHEDULER.id,
         created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+        stage: 'draft', rev: 0, draft_version: 1,
       }] as unknown as Row[],
     })
     await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop' })
     // without this the version says "cropped" and the UNCROPPED file is what
     // would actually be published
     expect(posts()[0].slides.map((s: any) => s.url)).toEqual([CROPPED, TWO])
+  })
+
+  it('opened from one post, the crop follows that post only (audit S10)', async () => {
+    fake.restore()
+    const draft = (id: string) => ({
+      id, client_id: CLIENT, item_id: ITEM, version_id: `${ITEM}__1`,
+      version_number: 1, slides: APPROVED, caption: 'Hello', per_channel: {},
+      channels: ['acc-1'], scheduled_for: null, timezone: 'Australia/Melbourne',
+      publish_job_ids: [], created_by: SCHEDULER.id,
+      created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
+      stage: 'draft', rev: 0, draft_version: 1,
+    })
+    fake = seed({ posts: [draft('post-a'), draft('post-b')] as unknown as Row[] })
+    await derive({ item_id: ITEM, from_url: ONE, to_url: CROPPED, kind: 'crop', post_id: 'post-b' })
+    expect(posts().find((p: any) => p.id === 'post-a').slides.map((s: any) => s.url)).toEqual([ONE, TWO])
+    expect(posts().find((p: any) => p.id === 'post-b').slides.map((s: any) => s.url)).toEqual([CROPPED, TWO])
   })
 
   it('refuses a file that is not part of this piece', async () => {

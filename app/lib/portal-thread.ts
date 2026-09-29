@@ -16,7 +16,7 @@ import { clientStatusWord, planState, progressLine, shootStatusLabel } from './p
 import { slidesOf } from './version-files-core'
 import {
   clientHadEdit, clientPostNotes, clientPostView, networkLabel, pieceReachedClient, postLiveLinks, postTypeLine,
-  postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
+  instagramGrid, postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
 } from './portal-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
 import { frozenFilesForClient } from './edit-freeze-core'
@@ -446,27 +446,13 @@ export async function getPortalPostPage(
   // how it sits on their Instagram: the first picture Instagram gets, before
   // the newest posts already live there (what is live is public)
   let grid: PortalPostPage['grid'] = null
-  const igOf = (channels: readonly string[]) => channels.find(acc => String(accountById.get(acc)?.platform ?? '') === 'instagram') ?? null
-  const ig = igOf(frozen.channels)
-  if (ig && !posted) {
-    const own = frozen.per_channel[ig]?.slides ?? []
-    const first = (own.length ? own : frozen.slides)[0]
-    if (first) {
-      const others = await table<SocialPost>('social_posts').list({ by: { client_id: client.id } }).catch(() => [] as SocialPost[])
-      const live = others
-        .map(r => readPostState(r as unknown as Record<string, unknown>))
-        .filter((p): p is PostState => !!p && p.id !== post.id && p.stage === 'posted'
-          && ['published', 'duplicate'].includes(p.outcomes.instagram?.status ?? ''))
-        .sort((a, b) => String(postedAt(b) ?? '').localeCompare(String(postedAt(a) ?? '')))
-        .slice(0, 8)
-        .flatMap(p => {
-          const acc = igOf(p.channels)
-          const ownSlides = acc ? readFrozenPost({ slides: [], per_channel: { [acc]: p.per_channel[acc] ?? {} }, channels: [acc] })?.per_channel[acc]?.slides ?? [] : []
-          const cover = (ownSlides.length ? ownSlides : p.slides)[0]
-          return cover ? [{ url: cover.url, type: cover.type === 'video' ? 'video' as const : 'image' as const }] : []
-        })
-      grid = [{ url: first.url, type: first.type === 'video' ? 'video' : 'image' }, ...live]
-    }
+  if (!posted && frozen.channels.some(acc => String(accountById.get(acc)?.platform ?? '') === 'instagram')) {
+    const others = await table<SocialPost>('social_posts').list({ by: { client_id: client.id } }).catch(() => [] as SocialPost[])
+    grid = instagramGrid(
+      { id: post.id, channels: frozen.channels, slides: frozen.slides, per_channel: frozen.per_channel },
+      others.map(r => readPostState(r as unknown as Record<string, unknown>)).filter((p): p is PostState => !!p),
+      acc => accountById.get(acc)?.platform ?? null,
+    )
   }
   return {
     client: { id: client.id, name: client.name, timezone: tz },

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
 import type { PostComment, SocialPost } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
-import { accessibleClientIds } from '@/app/lib/production-access'
+import { mayActOnRow } from '@/app/lib/post-stage'
 import { parseNoteInput } from '@/app/lib/post-window-core'
 
 /**
@@ -26,8 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const { id } = await params
       const post = await table<SocialPost>('social_posts').get(id)
       if (!post) return NextResponse.json({ error: 'That post no longer exists' }, { status: 404 })
-      const clients = await accessibleClientIds(user)
-      if (clients !== null && !clients.includes(post.client_id)) {
+      // the same rule the act route and the boards use: the quality reviewer may note any post
+      // waiting on the check, whoever's client it is
+      if (!(await mayActOnRow(user, post as never))) {
         return NextResponse.json({ error: 'That client is not one of yours' }, { status: 403 })
       }
       const parsed = parseNoteInput(await req.json().catch(() => null))

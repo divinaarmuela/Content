@@ -8,7 +8,7 @@ import type {
 import type { TeamUser } from './authz'
 import {
   CLIENT_ACTIONS, ROW_OF, SYSTEM_ACTIONS, anyNetworkLive, defaultApproveBy, failedNetworks, hatsFor,
-  isPostAction, outcomeAction, planPostTransition, postVersionId, readPostState,
+  isPostAction, mayWorkOnPost, outcomeAction, planPostTransition, postVersionId, readPostState,
   type AccountRef, type NetworkOutcome, type NotifyTarget, type Plan, type PostAction, type PostActor,
   type PostEventRow, type PostHat, type PostStage, type PostState, type Refusal, type RefusalCode,
   type TransitionContext, type TransitionInput,
@@ -141,6 +141,15 @@ export type DeliveryInput = {
   note: string | null
 }
 
+/** A round: the posts at the versions being sent, to addresses already checked against the client's list. */
+export type RoundDelivery = {
+  clientId: string
+  posts: { post_id: string; version: number; approve_by: string | null }[]
+  emails: string[]
+  note: string | null
+  actor: EngineActor
+}
+
 /**
  * A notice for the team (or the client) that something HAPPENED. Handed over after the claim landed, so
  * a press that lost the race tells nobody. P7 turns these into emails and bells.
@@ -158,10 +167,18 @@ export type PostEngineDeps = {
   now: () => Date
   /** Hand the frozen copy to the provider. May throw; the engine treats a throw like a refusal. */
   queuePublish: (input: QueueInput) => Promise<{ id: string } | { error: string; issues?: string[] }>
-  /** Pull one job back from the provider, then mark it cancelled. ok for a job that is not live. */
-  cancelJob: (jobId: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  /**
+   * Pull one job back from the provider, then mark it cancelled. ok for a job that never went anywhere;
+   * NOT ok (`live`) for a job that says a network already went out — a "cancelled" row over a live post
+   * is how a second booking double-posts (review fix, 29 Sep 2026).
+   */
+  cancelJob: (jobId: string) => Promise<{ ok: true } | { ok: false; error: string; live?: boolean }>
+  /** The networks these jobs (and every re-send of them) say already went out. */
+  liveOnJobs: (jobIds: readonly string[]) => Promise<string[]>
   /** Email the client the link to the frozen version (or only build the link, for 'link'). */
   deliverToClient: (input: DeliveryInput) => Promise<{ delivered: string[]; failed: string[]; link: string }>
+  /** One email per person listing several posts (decision 15). */
+  deliverRound: (input: RoundDelivery) => Promise<{ delivered: string[]; message: string }>
   notify: (notice: PostNotice) => Promise<void>
   /** "Something changed" for the open pages — a hint, never data. */
   announce: (post: Pick<PostState, 'id' | 'client_id'>, kind: string) => void
@@ -173,7 +190,17 @@ const defaultDeps: PostEngineDeps = {
   now: () => new Date(),
   queuePublish: input => defaultQueuePublish(input),
   cancelJob: jobId => defaultCancelJob(jobId),
+  liveOnJobs: jobIds => defaultLiveOnJobs(jobIds),
   deliverToClient: input => defaultDeliver(input),
+  deliverRound: async input => {
+    const { sendClientRound } = await import('./post-notify')
+    const sent = await sendClientRound({
+      clientId: input.clientId, posts: input.posts, emails: input.emails, note: input.note,
+      pressedBy: { id: String(input.actor.id ?? ''), name: input.actor.name ?? null, email: String(input.actor.email ?? '') },
+    })
+    if (!sent.ok) { console.error('client round refused:', sent.error); return { delivered: [], message: sent.error } }
+    return { delivered: sent.delivered, message: sent.message }
+  },
   // Team emails are package P7's (app/lib/post-notify.ts). It checks the fact against the landed post
   // before anyone is emailed: never BEFORE the fact it reports, never for a draft (audit V12, V14).
   notify: async notice => { const { sendPostNotice } = await import('./post-notify'); await sendPostNotice(notice) },
@@ -285,7 +312,14 @@ export async function freezeVersion(
   post: PostState, frozenFor: FreezeFor, frozenBy: string | null, time: string | null | undefined, at: string,
 ): Promise<{ ok: true; n: number } | { ok: false; skipped: boolean }> {
   const n = post.draft_version
-  const copy = copyOfPost(post, time === undefined ? post.scheduled_for : time)
+  const when = time === undefined ? post.scheduled_for : time
+  // A NEW TIME IS NOT NEW CONTENT (review fix, 29 Sep 2026): a retime copies the version that was checked
+  // or approved, with only the time replaced — never the working copy, which something outside the
+  // writer (a crop) may have changed, and whose picture nobody checked
+  const base = frozenFor === 'retime' && post.sent_version != null
+    ? copyOfVersion(await loadFrozenVersion(post.id, post.sent_version))
+    : null
+  const copy: FrozenCopy = base ? { ...base, n: null, scheduled_for: when } : copyOfPost(post, when)
   const next: PostVersion = {
     id: postVersionId(post.id, n),
     post_id: post.id,
@@ -401,6 +435,31 @@ function contextOf(loaded: Loaded, now: Date, via: 'email' | 'link'): Transition
 
 const CLIENT_SENDS: readonly PostAction[] = ['pass_send_client', 'send_to_client', 'resend_new_time']
 
+/** Moves that take a booked post off the provider — refused once any network went out (audit V11, S5). */
+const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel']
+
+/**
+ * How long a claimed client send holds the post (review fix, 29 Sep 2026). The email goes while the
+ * post says `sending`; any other move is refused until the send finishes or this runs out, so a press
+ * that died halfway never locks a post for good.
+ */
+export const SENDING_HOLD_MS = 3 * 60_000
+const SENDING_NOW = 'This post is being sent to the client right now. Wait a moment, then look again.'
+
+type SendingMark = { token: string; action: string; by: string | null; at: string }
+function sendingOf(row: unknown): SendingMark | null {
+  const s = isObj(row) ? row.sending : null
+  if (!isObj(s) || typeof s.token !== 'string' || typeof s.at !== 'string') return null
+  return { token: s.token, action: String(s.action ?? ''), by: typeof s.by === 'string' ? s.by : null, at: s.at }
+}
+/** A send somebody else holds, still fresh — every other move waits for it. */
+function heldByOtherSend(row: unknown, now: Date, token: string | null): boolean {
+  const mark = sendingOf(row)
+  if (!mark || mark.token === token) return false
+  const at = Date.parse(mark.at)
+  return Number.isFinite(at) && now.getTime() - at < SENDING_HOLD_MS
+}
+
 /** What a move asks for beyond the rules: who to email, and the working-copy fields of a save. */
 export type MoveInput = TransitionInput & {
   send_to?: readonly string[] | null
@@ -430,7 +489,8 @@ export type WorkingCopy = Partial<{
  *   2. check the move against the rules (a refusal comes back with the fresh post, nothing touched);
  *   3. the BEFORE steps: freeze the version; pull the provider's jobs back (a take-off, an edit or a
  *      cancel of a booked post; a new time on a booked post). A step that fails refuses the move;
- *   4. a send to the client: the email goes (or the link is made); nothing reached anyone → refused;
+ *   4. a send to the client: the post is CLAIMED for the send first (`sending`), then the email goes
+ *      (or the link is made); nothing reached anyone → the claim is let go and nothing changed;
  *   5. ONE claim on the post: the rules run again, inside it, against the row as it now is — with the
  *      rev the page drew, so a stale page is refused rather than applied;
  *   6. the event, then the AFTER steps: queue the booking (§3.1), make the new post, delete a never-sent
@@ -450,6 +510,38 @@ export async function performPostTransition(
   return refusal('stale', STALE, post)
 }
 
+/** A client send that holds its post: checked, frozen, claimed — waiting for the email. */
+type PreparedSend = {
+  postId: string
+  action: PostAction
+  actor: EngineActor
+  input: MoveInput
+  post: PostState
+  loaded: Loaded
+  ctx: TransitionContext
+  via: 'email' | 'link'
+  emails: string[]
+  frozenN: number | null
+  token: string
+  at: string
+  /** the version that goes to the client, and when it is for */
+  version: number
+  forTime: string | null
+  approveBy: string | null
+}
+
+/** The live networks the booking's jobs report — the check the recorder's silence would otherwise skip. */
+async function liveOnBooking(post: PostState): Promise<string[]> {
+  const ids = post.booking?.job_ids ?? []
+  if (ids.length === 0) return []
+  try {
+    return await deps.liveOnJobs(ids)
+  } catch (e) {
+    console.error('could not read the booking jobs', post.id, e instanceof Error ? e.message : e)
+    return []
+  }
+}
+
 async function attemptMove(
   postId: string, action: PostAction | string, actor: EngineActor, input: MoveInput,
 ): Promise<PostActResult | 'again'> {
@@ -459,41 +551,32 @@ async function attemptMove(
   if (!row) return refusal('not_found', NOT_FOUND, null)
   if (!post) return refusal('wrong_stage', NOT_MIGRATED, null)
   if (!isPostAction(action)) return refusal('unknown_action', 'That is not something a post can do.', post)
+  if (heldByOtherSend(row, now, null)) return refusal('stale', SENDING_NOW, post)
 
-  const isSystem = SYSTEM_ACTIONS.includes(action)
-  const via: 'email' | 'link' = input.via === 'link' ? 'link' : 'email'
-  const loaded = await loadAround(post)
-  const ctx = contextOf(loaded, now, via)
-  const clientSend = CLIENT_SENDS.includes(action)
-
-  // 2. the dry run — a client send is checked as if it had reached someone, since that comes later
-  const dry = planPostTransition(post, action, actor, clientSend ? { ...input, delivered_to: ['(checking)'] } : input, ctx)
-  if (!dry.ok) return fromRefusal(dry, post)
-
-  // a send to the client needs a portal link and real addresses on the client's own list
-  let emails: string[] = []
-  if (clientSend) {
-    if (!loaded.client?.share_token) return refusal('contact', 'This client has no portal link yet — make one on the client first.', post)
-    if (via === 'email') {
-      const picked = pickRecipients(input.send_to ?? [], loaded.recipients)
-      if (!picked.ok) return refusal('contact', picked.error, post)
-      emails = picked.emails
-    }
+  // a send to the client has its own order: claim, email, then move
+  if (CLIENT_SENDS.includes(action)) {
+    const prepared = await prepareClientSend(postId, action, actor, input, now)
+    if (prepared === 'again') return 'again'
+    if (!prepared.ok) return prepared.result
+    const delivery = await deliverOne(prepared.prep)
+    return finishClientSend(prepared.prep, delivery.delivered, delivery.link)
   }
+
+  const loaded = await loadAround(post)
+  const ctx: TransitionContext = contextOf(loaded, now, 'email')
+  // a booked post live somewhere, by its jobs, even before the recorder has written it (audit V11, S5)
+  if (TAKES_OFF.includes(action)) ctx.liveOnJobs = await liveOnBooking(post)
+
+  // 2. the dry run
+  const dry = planPostTransition(post, action, actor, input, ctx)
+  if (!dry.ok) return fromRefusal(dry, post)
 
   // 3. the before steps — the freeze FIRST (it can still be refused, and nothing is undone by it), then
   // the provider's jobs, which cannot be taken back once pulled
-  let frozenN: number | null = null
-  for (const effect of dry.effects) {
-    if (effect.when !== 'before' || effect.kind !== 'freeze') continue
-    const time = effect.frozen_for === 'retime' ? (input.scheduled_for ?? post.scheduled_for) : post.scheduled_for
-    const f = await freezeVersion(post, effect.frozen_for, actor.id, time, at)
-    if (!f.ok) {
-      if (f.skipped) return 'again'
-      return refusal('stale', STALE, (await loadPostState(postId)).post)
-    }
-    frozenN = f.n
-  }
+  const frozen = await runFreezes(post, dry, actor, input, at)
+  if (frozen === 'again') return 'again'
+  if (!frozen.ok) return refusal('stale', STALE, (await loadPostState(postId)).post)
+  const frozenN = frozen.n
   let pulledJobs = false
   for (const effect of dry.effects) {
     if (effect.when !== 'before' || (effect.kind !== 'cancel_jobs' && effect.kind !== 'reschedule_jobs')) continue
@@ -505,35 +588,10 @@ async function attemptMove(
         if (pulledJobs) {
           await performSystemTransition(postId, 'booking_failed', { problem: `Part of the booking was taken off, and the rest would not come off: ${pulled.error}` })
         }
-        return refusal('jobs', pulled.error, (await loadPostState(postId)).post ?? post)
+        return refusal(pulled.live ? 'live' : 'jobs', pulled.error, (await loadPostState(postId)).post ?? post)
       }
       pulledJobs = true
     }
-  }
-
-  // 4. the send to the client: something has to reach them before the post moves (audit P9)
-  let delivered: string[] = []
-  let link: string | null = null
-  let moveInput: MoveInput = input
-  if (clientSend) {
-    const version = action === 'resend_new_time' ? (frozenN ?? post.draft_version) : (post.sent_version ?? 0)
-    const forTime = action === 'resend_new_time' ? (input.scheduled_for ?? null) : post.scheduled_for
-    try {
-      const sent = await deps.deliverToClient({
-        post, version, client: loaded.client!, emails, via,
-        approveBy: input.approve_by ?? defaultApproveBy(forTime, now), forTime,
-        actor, note: String(input.note ?? '').trim() || null,
-      })
-      delivered = sent.delivered
-      link = sent.link
-    } catch (e) {
-      console.error('client send failed', postId, e instanceof Error ? e.message : e)
-      delivered = []
-    }
-    if (via === 'email' && delivered.length === 0) {
-      return refusal('delivery', `Nothing reached the client, so nothing has changed. ${emails.join(', ')} could not be emailed — check the address and try again, or copy the link instead.`, post)
-    }
-    moveInput = { ...input, delivered_to: delivered }
   }
 
   // 5. the one claim
@@ -543,7 +601,8 @@ async function attemptMove(
     box.plan = null
     const cp = readPostState(cur as unknown as Record<string, unknown>)
     if (!cp) { box.refused = { ok: false, code: 'wrong_stage', reason: cur ? NOT_MIGRATED : NOT_FOUND }; return null }
-    const p = planPostTransition(cp, action, actor, moveInput, ctx)
+    if (heldByOtherSend(cur, now, null)) { box.refused = { ok: false, code: 'stale', reason: SENDING_NOW }; return null }
+    const p = planPostTransition(cp, action, actor, input, ctx)
     if (!p.ok) { box.refused = p; return null }
     // the version frozen above is the one this claim adopts, or nobody's
     if (frozenN != null && cp.draft_version !== frozenN) { box.refused = { ok: false, code: 'stale', reason: STALE }; return null }
@@ -566,11 +625,155 @@ async function attemptMove(
     return box.refused ? fromRefusal(box.refused, after) : refusal('stale', STALE, after)
   }
 
-  const done: Plan = box.plan
-  const landed = readPostState(claimed.row as unknown as Record<string, unknown>)!
+  return afterLanded(box.plan, claimed.row, actor, input, loaded, at, null)
+}
+
+/** Every freeze a move plans, in order, before its claim. */
+async function runFreezes(
+  post: PostState, dry: Plan, actor: EngineActor, input: MoveInput, at: string,
+): Promise<{ ok: true; n: number | null } | { ok: false } | 'again'> {
+  let frozenN: number | null = null
+  for (const effect of dry.effects) {
+    if (effect.when !== 'before' || effect.kind !== 'freeze') continue
+    const time = effect.frozen_for === 'retime' ? (input.scheduled_for ?? post.scheduled_for) : post.scheduled_for
+    const f = await freezeVersion(post, effect.frozen_for, actor.id, time, at)
+    if (!f.ok) return f.skipped ? 'again' : { ok: false }
+    frozenN = f.n
+  }
+  return { ok: true, n: frozenN }
+}
+
+/**
+ * STEP ONE OF A SEND TO THE CLIENT: check it, freeze what a new time needs, and CLAIM the post for the
+ * send — the rules run inside that claim, so the email only ever goes for a post that holds the send
+ * (review fix, 29 Sep 2026: the email used to go first, and a claim refused afterwards left the client
+ * holding a link to a page that said Not found).
+ */
+async function prepareClientSend(
+  postId: string, action: PostAction, actor: EngineActor, input: MoveInput, now: Date,
+): Promise<{ ok: true; prep: PreparedSend } | { ok: false; result: PostActRefused } | 'again'> {
+  const at = now.toISOString()
+  const { row, post } = await loadPostState(postId)
+  if (!row) return { ok: false, result: refusal('not_found', NOT_FOUND, null) }
+  if (!post) return { ok: false, result: refusal('wrong_stage', NOT_MIGRATED, null) }
+  if (heldByOtherSend(row, now, null)) return { ok: false, result: refusal('stale', SENDING_NOW, post) }
+  const via: 'email' | 'link' = input.via === 'link' ? 'link' : 'email'
+  const loaded = await loadAround(post)
+  const ctx = contextOf(loaded, now, via)
+  // checked as if it had reached someone, since that comes later
+  const checking: MoveInput = { ...input, delivered_to: ['(checking)'] }
+  const dry = planPostTransition(post, action, actor, checking, ctx)
+  if (!dry.ok) return { ok: false, result: fromRefusal(dry, post) }
+
+  // a send to the client needs a portal link and real addresses on the client's own list
+  if (!loaded.client?.share_token) return { ok: false, result: refusal('contact', 'This client has no portal link yet — make one on the client first.', post) }
+  let emails: string[] = []
+  if (via === 'email') {
+    const picked = pickRecipients(input.send_to ?? [], loaded.recipients)
+    if (!picked.ok) return { ok: false, result: refusal('contact', picked.error, post) }
+    emails = picked.emails
+  }
+
+  const frozen = await runFreezes(post, dry, actor, input, at)
+  if (frozen === 'again') return 'again'
+  if (!frozen.ok) return { ok: false, result: refusal('stale', STALE, (await loadPostState(postId)).post) }
+  const frozenN = frozen.n
+
+  const token = randomUUID()
+  const box: { refused: Refusal | null } = { refused: null }
+  const held = await posts().claim(postId, cur => {
+    box.refused = null
+    const cp = readPostState(cur as unknown as Record<string, unknown>)
+    if (!cp) { box.refused = { ok: false, code: 'wrong_stage', reason: cur ? NOT_MIGRATED : NOT_FOUND }; return null }
+    if (heldByOtherSend(cur, now, null)) { box.refused = { ok: false, code: 'stale', reason: SENDING_NOW }; return null }
+    const p = planPostTransition(cp, action, actor, checking, ctx)
+    if (!p.ok) { box.refused = p; return null }
+    if (frozenN != null && cp.draft_version !== frozenN) { box.refused = { ok: false, code: 'stale', reason: STALE }; return null }
+    return { ...cur!, sending: { token, action, by: actor.id, at } } as SocialPost
+  })
+  if (!held.claimed) {
+    const fresh = readPostState((held.current ?? null) as unknown as Record<string, unknown>)
+    return { ok: false, result: box.refused ? fromRefusal(box.refused, fresh) : refusal('stale', STALE, fresh) }
+  }
+  const version = action === 'resend_new_time' ? (frozenN ?? post.draft_version) : (post.sent_version ?? 0)
+  const forTime = action === 'resend_new_time' ? (input.scheduled_for ?? null) : post.scheduled_for
+  return {
+    ok: true,
+    prep: {
+      postId, action, actor, input, post, loaded, ctx, via, emails, frozenN, token, at,
+      version, forTime, approveBy: input.approve_by ?? defaultApproveBy(forTime, now),
+    },
+  }
+}
+
+/** STEP TWO, for one post: the email (or only the link). Never throws. */
+async function deliverOne(prep: PreparedSend): Promise<{ delivered: string[]; link: string | null }> {
+  try {
+    const sent = await deps.deliverToClient({
+      post: prep.post, version: prep.version, client: prep.loaded.client!, emails: prep.emails, via: prep.via,
+      approveBy: prep.approveBy, forTime: prep.forTime,
+      actor: prep.actor, note: String(prep.input.note ?? '').trim() || null,
+    })
+    return { delivered: sent.delivered, link: sent.link }
+  } catch (e) {
+    console.error('client send failed', prep.postId, e instanceof Error ? e.message : e)
+    return { delivered: [], link: null }
+  }
+}
+
+/** Let go of a send's hold, when the post still carries it. */
+async function releaseSend(prep: Pick<PreparedSend, 'postId' | 'token'>): Promise<void> {
+  await posts().claim(prep.postId, cur => {
+    if (!cur || sendingOf(cur)?.token !== prep.token) return null
+    return { ...cur, sending: null } as SocialPost
+  }).catch(e => console.error('could not let go of a send', prep.postId, e instanceof Error ? e.message : e))
+}
+
+/**
+ * STEP THREE: the post moves — only if the send still holds it, and only when something reached the
+ * client (audit P9). A refusal here after an email went is said plainly to the person who pressed.
+ */
+async function finishClientSend(prep: PreparedSend, delivered: readonly string[], link: string | null): Promise<PostActResult> {
+  const { postId, action, actor, input, token, at, ctx } = prep
+  if (prep.via === 'email' && delivered.length === 0) {
+    await releaseSend(prep)
+    return refusal('delivery', `Nothing reached the client, so nothing has changed. ${prep.emails.join(', ')} could not be emailed — check the address and try again, or copy the link instead.`, (await loadPostState(postId)).post ?? prep.post)
+  }
+  const moveInput: MoveInput = { ...input, delivered_to: [...delivered] }
+  const box: { plan: Plan | null; refused: Refusal | null } = { plan: null, refused: null }
+  const claimed = await posts().claim(postId, cur => {
+    box.refused = null
+    box.plan = null
+    const cp = readPostState(cur as unknown as Record<string, unknown>)
+    if (!cp) { box.refused = { ok: false, code: 'wrong_stage', reason: cur ? NOT_MIGRATED : NOT_FOUND }; return null }
+    if (sendingOf(cur)?.token !== token) { box.refused = { ok: false, code: 'stale', reason: STALE }; return null }
+    const p = planPostTransition(cp, action, actor, moveInput, ctx)
+    if (!p.ok) { box.refused = p; return null }
+    if (prep.frozenN != null && cp.draft_version !== prep.frozenN) { box.refused = { ok: false, code: 'stale', reason: STALE }; return null }
+    box.plan = p
+    return rowAfter(cur!, p, at, action, cp, null)
+  })
+  if (!claimed.claimed || !box.plan) {
+    await releaseSend(prep)
+    const fresh = (await loadPostState(postId)).post
+    const why = box.refused?.reason ?? STALE
+    if (delivered.length > 0) {
+      console.error('client send: the email went but the post did not move', postId, action, why)
+      return refusal(box.refused?.code ?? 'stale',
+        `The email went to ${delivered.join(', ')}, but the post did not move: ${why} Look at it again — the client's link shows what the post says now.`, fresh)
+    }
+    return box.refused ? fromRefusal(box.refused, fresh) : refusal('stale', STALE, fresh)
+  }
+  return afterLanded(box.plan, claimed.row, actor, input, prep.loaded, at, prep.via === 'link' ? link : null)
+}
+
+/** The event, the after steps and the notices of a move that has landed; the answer the page draws from. */
+async function afterLanded(
+  done: Plan, row: SocialPost, actor: EngineActor, input: MoveInput, loaded: Loaded, at: string, link: string | null,
+): Promise<PostActResult> {
+  const landed = readPostState(row as unknown as Record<string, unknown>)!
   await writeEvent(done.event)
 
-  // 6. the after steps
   let final: PostState = landed
   let createdId: string | null = null
   let bookingProblem: string | null = null
@@ -609,19 +812,20 @@ async function attemptMove(
   return {
     ...answer,
     ...(createdId ? { created_post_id: createdId } : {}),
-    ...(link && via === 'link' ? { link } : {}),
+    ...(link ? { link } : {}),
   }
 }
 
 /**
  * The row after a move: the rules' patch, plus — for a save — the working-copy fields, and for a
  * cancel the booking's pending flag cleared. A new time on a booked post starts a fresh pending booking;
- * its jobs are queued after the claim (the old ones were pulled before it).
+ * its jobs are queued after the claim (the old ones were pulled before it). A send's hold is always let
+ * go: a move that landed holds nothing.
  */
 function rowAfter(
   cur: SocialPost, plan: Plan, at: string, action: PostAction, before: PostState, working: WorkingCopy | null,
 ): SocialPost {
-  const next: Record<string, unknown> = { ...cur, ...plan.patch, updated_at: at }
+  const next: Record<string, unknown> = { ...cur, ...plan.patch, updated_at: at, sending: null }
   if (action === 'save' && working) {
     for (const [k, v] of Object.entries(working)) if (v !== undefined) next[k] = v
   }
@@ -634,6 +838,95 @@ function rowAfter(
     next.cancelled = { by: plan.event.actor_id, at, from_stage: before.stage, reason: 'Draft deleted' }
   }
   return next as unknown as SocialPost
+}
+
+/* ── a round: several posts to one client, in one email (decision 15) ───── */
+
+export type RoundRequest = {
+  client_id: string
+  posts: readonly { post_id: string; expect_rev: number; version?: number | null }[]
+  send_to: readonly string[]
+  note?: string | null
+  approve_by?: string | null
+}
+
+export type RoundResult =
+  | { ok: true; delivered: string[]; message: string; results: { post_id: string; ok: boolean; words: string }[] }
+  | { ok: false; code: PostActRefused['code']; reason: string; post_id: string | null }
+
+/** Which send a post in a round makes: a pass from the quality check, or a send after it passed. */
+function roundAction(post: PostState): PostAction | null {
+  return post.stage === 'quality_check' ? 'pass_send_client' : post.stage === 'ready' ? 'send_to_client' : null
+}
+
+/**
+ * SEND SEVERAL POSTS TO THE CLIENT IN ONE EMAIL (the owner's decision 15: "one batched email per round,
+ * not one per post"). Every post is checked and claimed for the send first — each by its own rules and
+ * its own rev — and if ANY of them cannot go, none is sent and every claim is let go. Then ONE email per
+ * person lists them all and opens on the client's one link (`sendClientRound`). Then each post moves,
+ * with the addresses the email actually reached.
+ */
+export async function sendRoundToClient(user: TeamUser, request: RoundRequest): Promise<RoundResult> {
+  if (user.role === 'client') return { ok: false, code: 'not_allowed', reason: 'Clients answer posts on their own page, not here.', post_id: null }
+  const wanted = [...new Map(request.posts.map(p => [p.post_id, p])).values()]
+  if (wanted.length === 0) return { ok: false, code: 'bad_request', reason: 'Tick at least one post to send.', post_id: null }
+  if (wanted.length > 30) return { ok: false, code: 'bad_request', reason: 'Send 30 posts at most in one email.', post_id: null }
+  const now = deps.now()
+  const prepared: PreparedSend[] = []
+  const letGo = async () => { for (const p of prepared) await releaseSend(p) }
+  for (const want of wanted) {
+    const { post } = await loadPostState(want.post_id)
+    if (!post || post.client_id !== request.client_id) {
+      await letGo()
+      return { ok: false, code: 'not_found', reason: 'One of these posts is not on this client any more. Nothing was sent.', post_id: want.post_id }
+    }
+    if (!(await mayActOn(user, post))) {
+      await letGo()
+      return { ok: false, code: 'not_allowed', reason: 'That client is not one of yours. Nothing was sent.', post_id: want.post_id }
+    }
+    const action = roundAction(post)
+    if (!action) {
+      await letGo()
+      return { ok: false, code: 'wrong_stage', reason: `A post in ${post.stage === 'with_client' ? 'With client' : 'this stage'} cannot join this email. Nothing was sent.`, post_id: post.id }
+    }
+    const prep = await prepareClientSend(post.id, action, teamActorFor(user, post), {
+      expect_rev: want.expect_rev, version: want.version ?? post.sent_version,
+      note: request.note ?? null, approve_by: request.approve_by ?? null,
+      send_to: request.send_to, via: 'email',
+    }, now)
+    if (prep === 'again' || !prep.ok) {
+      await letGo()
+      const reason = prep === 'again' ? STALE : prep.result.reason
+      return { ok: false, code: prep === 'again' ? 'stale' : prep.result.code, reason: `${reason} Nothing was sent.`, post_id: post.id }
+    }
+    prepared.push(prep.prep)
+  }
+
+  let delivered: string[] = []
+  let message = ''
+  try {
+    const sent = await deps.deliverRound({
+      clientId: request.client_id,
+      posts: prepared.map(p => ({ post_id: p.postId, version: p.version, approve_by: p.approveBy })),
+      emails: prepared[0].emails,
+      note: String(request.note ?? '').trim() || null,
+      actor: prepared[0].actor,
+    })
+    delivered = sent.delivered
+    message = sent.message
+  } catch (e) {
+    console.error('client round failed', e instanceof Error ? e.message : e)
+  }
+
+  const results: { post_id: string; ok: boolean; words: string }[] = []
+  for (const prep of prepared) {
+    const r = await finishClientSend(prep, delivered, null)
+    results.push({ post_id: prep.postId, ok: r.ok, words: r.ok ? r.words : r.reason })
+  }
+  if (delivered.length === 0) {
+    return { ok: false, code: 'delivery', reason: 'Nothing reached the client, so nothing has changed. Check the addresses and try again.', post_id: null }
+  }
+  return { ok: true, delivered, message: message || `Emailed ${delivered.join(', ')}.`, results }
 }
 
 /* ── system moves (the booking steps, the recorder, resends) ───────────── */
@@ -699,7 +992,8 @@ async function runBooking(
   post: PostState, forTime: string | null, now: boolean, actor: EngineActor, loaded: Loaded,
 ): Promise<{ post: PostState | null; problem: string | null }> {
   const version = copyOfVersion(await loadFrozenVersion(post.id, post.sent_version)) ?? copyOfPost(post)
-  const copy: FrozenCopy = { ...version, scheduled_for: forTime, channels: post.channels.length ? post.channels : version.channels }
+  // the frozen version is what was approved — its channels too, never the working copy's
+  const copy: FrozenCopy = { ...version, scheduled_for: forTime, channels: version.channels.length ? version.channels : post.channels }
   const accounts = loaded.accounts.filter(a => copy.channels.includes(a.id))
   let queued: { id: string } | { error: string; issues?: string[] }
   try {
@@ -725,7 +1019,7 @@ async function runBooking(
   return { post: back.post, problem: reason }
 }
 
-async function safeCancel(jobId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function safeCancel(jobId: string): Promise<{ ok: true } | { ok: false; error: string; live?: boolean }> {
   try {
     return await deps.cancelJob(jobId)
   } catch (e) {
@@ -831,6 +1125,25 @@ async function sendNotice(
 /* ── the team's entry: the act route ───────────────────────────────────── */
 
 /**
+ * MAY THIS PERSON WORK ON THIS POST? The same rule the boards draw by (`mayWorkOnPost`): their clients,
+ * a post they made or are named on, and — for the quality reviewer — every post waiting on the check,
+ * whoever's client it is (decision 3; the edit card has the same desk exception).
+ */
+export async function mayActOn(user: TeamUser, post: PostState): Promise<boolean> {
+  if (user.role === 'client') return false
+  if (mayWorkOnPost(user, post, [])) return true
+  return deps.mayActOnClient(user, post.client_id)
+}
+
+/** The same, for a raw row — one the migration has not reached is judged by its client alone. */
+export async function mayActOnRow(user: TeamUser, row: Pick<SocialPost, 'client_id'> & Record<string, unknown>): Promise<boolean> {
+  const state = readPostState(row as unknown as Record<string, unknown>)
+  if (state) return mayActOn(user, state)
+  if (user.role === 'client') return false
+  return deps.mayActOnClient(user, row.client_id)
+}
+
+/**
  * A SIGNED-IN TEAM MEMBER PRESSES A BUTTON (`POST /api/posts/<id>/act`). Authorization is here, on the
  * server: the person must be on the post's client, and the move must be one their hats allow on this
  * post (the rules say which). A client account is refused outright — the client acts through the portal.
@@ -840,7 +1153,7 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
   if (!row) return refusal('not_found', NOT_FOUND, null)
   if (!post) return refusal('wrong_stage', NOT_MIGRATED, null)
   if (user.role === 'client') return refusal('not_allowed', 'Clients answer posts on their own page, not here.', null)
-  if (!(await deps.mayActOnClient(user, post.client_id))) return refusal('not_allowed', 'That client is not one of yours.', null)
+  if (!(await mayActOn(user, post))) return refusal('not_allowed', 'That client is not one of yours.', null)
   if (SYSTEM_ACTIONS.includes(request.action) || CLIENT_ACTIONS.includes(request.action)) {
     return refusal('not_allowed', `Only ${ROW_OF[request.action].who.includes('client') ? 'the client' : 'the app'} can do that.`, post)
   }
@@ -1049,10 +1362,18 @@ async function defaultQueuePublish(input: QueueInput): Promise<{ id: string } | 
  * Pull one job back: the provider FIRST (a row saying "cancelled" over a post the provider will still
  * publish is the one outcome worth avoiding), then our own row, conditionally.
  */
-async function defaultCancelJob(jobId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function defaultCancelJob(jobId: string): Promise<{ ok: true } | { ok: false; error: string; live?: boolean }> {
   const jobs = table<PublishJobRow>('publish_jobs')
   const job = await jobs.get(jobId, { fresh: true })
   if (!job) return { ok: true }
+  // a job that says a network went out is NOT pulled back, whatever its own status (a failed parent of
+  // a re-send, a published job the recorder has not reached yet)
+  const [{ outcomesForJob }, { networkName }] = await Promise.all([import('./post-outcome-core'), import('./publish-core')])
+  const live = [...new Set(outcomesForJob(job as never).filter(o => o.status === 'published').map(o => o.platform))]
+  if (live.length > 0 || job.status === 'published') {
+    const names = live.length > 0 ? live.map(networkName).join(' and ') : 'its networks'
+    return { ok: false, live: true, error: `It has already gone out on ${names} — it cannot come off the schedule.` }
+  }
   if (job.status === 'publishing') {
     return { ok: false, error: 'It is being sent right now — wait for it to finish, then look again.' }
   }
@@ -1074,6 +1395,15 @@ async function defaultCancelJob(jobId: string): Promise<{ ok: true } | { ok: fal
     await releaseClaimLock(jobLockKey(job), job.id).catch(() => {})
   }
   return { ok: true }
+}
+
+/** The networks a booking's jobs — and every re-send of them — already went out on. */
+async function defaultLiveOnJobs(jobIds: readonly string[]): Promise<string[]> {
+  if (jobIds.length === 0) return []
+  const { bookingJobs, outcomesForJob } = await import('./post-outcome-core')
+  const all = await table<PublishJobRow>('publish_jobs').list({ fresh: true })
+  const mine = bookingJobs(jobIds, all)
+  return [...new Set(mine.flatMap(j => outcomesForJob(j as never).filter(o => o.status === 'published').map(o => o.platform)))]
 }
 
 /**

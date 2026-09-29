@@ -32,6 +32,15 @@ import { formatWithZone } from '../../../../lib/timezone-core'
 import { jobWords } from '../../../../lib/publish-activity-core'
 import type { PublishJob } from '../../../../lib/publish-activity-core'
 import DayGraph from './DayGraph'
+import { STAGE_LABEL, STAGE_MEANING, STAGE_TONE, type PostStage } from '../../../../lib/post-stage-core'
+import { postedAt } from '../../../../lib/portal-core'
+import type { TileTone } from '../../../../lib/social-schedule-core'
+
+/** A stage's tone as this page's chip takes it. */
+function stageTileTone(stage: PostStage): TileTone {
+  const t = STAGE_TONE[stage]
+  return t === 'surface' ? 'muted' : t
+}
 
 /**
  * ONE POST, ON ITS OWN PAGE.
@@ -78,15 +87,19 @@ export default function PostView({ data }: { data: PostPageData }) {
 
   const failed = jobs.find(j => j.status === 'failed') ?? null
   const failure = failed ? jobWords(failed as unknown as PublishJob).detail : null
-  const wentOut = main?.published_at ?? jobs.find(j => j.published_at)?.published_at ?? post.sent_at ?? null
+  // when it went out: the analytics, the job, or the post's own per-network record — never `sent_at`,
+  // which the new engine does not write (review fix, 29 Sep 2026)
+  const st = post.state
+  const outAt = st && (st.stage === 'posted' || Object.keys(st.outcomes).length > 0) ? postedAt(st) : null
+  const wentOut = main?.published_at ?? jobs.find(j => j.published_at)?.published_at ?? outAt ?? null
   const dueAt = post.scheduled_for ?? null
   const whenLabel = wentOut
     ? formatWithZone(wentOut, tz, 'long')
     : dueAt ? formatWithZone(dueAt, tz, 'long') : null
-  const status = postStatusWords(
-    failed ? 'failed' : rows.length > 0 || wentOut ? 'published' : post.status,
-    { whenLabel, failure },
-  )
+  // the words come from the post's STAGE (decision 12) — the old stored status is not read
+  const status = failed || rows.length > 0 || wentOut || !st || st.stage === 'booked'
+    ? postStatusWords(failed ? 'failed' : rows.length > 0 || wentOut ? 'published' : st?.stage === 'booked' ? 'scheduled' : 'draft', { whenLabel, failure })
+    : { headline: STAGE_LABEL[st.stage], detail: STAGE_MEANING[st.stage], tone: stageTileTone(st.stage) }
   const links = [
     ...rows.map(r => r.platform_post_url).filter((u): u is string => Boolean(u)),
     ...jobs.map(j => j.permalink).filter((u): u is string => Boolean(u)),

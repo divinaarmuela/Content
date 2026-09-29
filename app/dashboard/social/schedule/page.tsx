@@ -13,7 +13,10 @@ import {
 import {
   LIST_FILTER_LABEL, POST_APPROVAL_HREF, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
 } from '@/app/lib/schedule-stage-core'
-import { MISSED_LABEL, STAGE_LABEL, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
+import { MISSED_LABEL, STAGE_LABEL, STAGE_PAGE, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
+import { postWindowHref } from '@/app/lib/post-board-core'
+import { SCHEDULE_PAGE } from '@/app/lib/page-access-core'
+import { useRouter } from 'next/navigation'
 import { postActPath, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
@@ -168,14 +171,28 @@ export default function SchedulePage() {
     typeof window === 'undefined'
       ? null
       : new URLSearchParams(window.location.search).get('post'))
+  /**
+   * OPEN A POST ON THE PAGE THAT OWNS ITS STAGE (the owner's decision 1). A
+   * post still being approved — a draft, one at the quality check, one with
+   * the client — opens its window on Post approval, so nothing is approved on
+   * this page. Ready, booked, posted and cancelled posts open here.
+   */
+  const router = useRouter()
+  const openPost = useCallback((row: SchedulePostRow) => {
+    if (STAGE_PAGE[row.stage] === 'post_approval') {
+      router.push(postWindowHref({ id: row.id, client_id: row.client_id, stage: row.stage }, SCHEDULE_PAGE, 'schedule'))
+      return
+    }
+    flow.openPost(row)
+  }, [flow.openPost, router])
   useEffect(() => {
     const postId = arrivedPost.current
     if (!postId) return
     const row = data.posts.find(p => p.id === postId)
     if (!row) return
     arrivedPost.current = null
-    flow.openPost(row)
-  }, [data.posts, flow.openPost])
+    openPost(row)
+  }, [data.posts, openPost])
   useEffect(() => {
     const itemId = arrivedOn.current
     if (!itemId) return
@@ -889,7 +906,7 @@ export default function SchedulePage() {
                   todayKey={todayKey}
                   nowTop={nowTop}
                   onSlot={flow.openAt}
-                  onOpen={flow.openPost}
+                  onOpen={openPost}
                   onDropItem={(itemId, iso) => {
                     const media = data.media.find(m => m.itemId === itemId)
                     if (media) flow.openNew(media, iso)
@@ -921,7 +938,7 @@ export default function SchedulePage() {
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto md:hidden">
                 {listNote}
-                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
+                <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
               </div>
             </>
           ) : view === 'Month' ? (
@@ -930,7 +947,7 @@ export default function SchedulePage() {
               posts={planned}
               tz={tz}
               todayKey={todayKey}
-              onOpen={flow.openPost}
+              onOpen={openPost}
               drag={drag}
               defaultTime={defaultPostTime}
               onDropItem={(itemId, iso) => {
@@ -942,20 +959,20 @@ export default function SchedulePage() {
           ) : view === 'List' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {listNote}
-              <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={flow.openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
+              <ListView posts={listPosts} tz={tz} todayKey={todayKey} onOpen={openPost} onBin={binPost} pinned={listPinned} empty={listEmpty} />
             </div>
           ) : view === 'Preview' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
               {/* THE FEED AS IT WILL LOOK: `PreviewGrid` keeps only Instagram posts that are going out — Ready
                   to post and Booked in — and draws what already went out once, from the feed (audit S8) */}
-              <PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost}
+              <PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost}
                 instagramIds={instagramIds}
                 accountId={(selected?.platform === 'instagram' ? selected.id : data.accounts.find(a => a.platform === 'instagram')?.id) ?? null}
                 handle={(selected?.platform === 'instagram' ? selected.username : data.accounts.find(a => a.platform === 'instagram')?.username) ?? null} />
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <StoriesView posts={stories} tz={tz} onOpen={flow.openPost} onBin={binPost} />
+              <StoriesView posts={stories} tz={tz} onOpen={openPost} onBin={binPost} />
             </div>
           )}
         </main>

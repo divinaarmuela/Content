@@ -372,11 +372,13 @@ describe('who sees a post on the board', () => {
   it('schedulers, general users and super admins see every client', () => {
     for (const role of ['scheduler', 'general', 'super_admin']) expect(postVisibleTo(post('draft', { client_id: 'other' }), { id: 'x', role }, assignments)).toBe(true)
   })
-  it('an account manager sees their clients, and what they made or were asked for', () => {
+  it('an account manager sees their clients — and only them, as the act route allows (review fix)', () => {
     const am = { id: 'u-am', role: 'account_manager' }
     expect(postVisibleTo(post('draft'), am, assignments)).toBe(true)
     expect(postVisibleTo(post('draft', { client_id: 'other' }), am, assignments)).toBe(false)
-    expect(postVisibleTo(post('draft', { client_id: 'other', assigned_to: 'u-am' }), am, assignments)).toBe(true)
+    // named on a post of a client they are not on: the server refuses every press, so the board does
+    // not draw it either (a card that offers what the server refuses is the bug being fixed)
+    expect(postVisibleTo(post('draft', { client_id: 'other', assigned_to: 'u-am' }), am, assignments)).toBe(false)
   })
   it('the quality checker sees every post waiting on the check, whoever’s client', () => {
     const joy = { id: 'u-joy', role: 'editor', quality_reviewer: true }

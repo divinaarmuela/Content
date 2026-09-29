@@ -37,6 +37,9 @@ import CardTabs, { tabPanel, useCardTab } from './CardTabs'
 import FilesToWorkFrom from './FilesToWorkFrom'
 import { finishedEditOf } from '../../lib/card-link-core'
 import { cardPeople } from '../../lib/card-people-core'
+import { STAGE_WORDS, readPostState, waitingOn, type PostState } from '../../lib/post-stage-core'
+import { postWindowHref } from '../../lib/post-board-core'
+import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -124,6 +127,14 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
   // or "Went out on Instagram" — the owner, 9 Sep 2026: "in schedule to
   // show that it's scheduled and in post approval page"
   const { rows: filePosts } = useTable<SocialPost>('social_posts', { by: byItem })
+  /** an upload's own post — the newest one still going, else the newest — whose stage the header says */
+  const uploadPost = useMemo(() => {
+    const states = filePosts
+      .map(r => readPostState(r as unknown as Record<string, unknown>))
+      .filter((p): p is PostState => !!p)
+      .sort((a, b) => String(b.stage_at ?? '').localeCompare(String(a.stage_at ?? '')))
+    return states.find(p => p.stage !== 'cancelled') ?? states[0] ?? null
+  }, [filePosts])
   const byContentItem = useMemo(() => ({ content_item_id: id }), [id])
   const { rows: fileJobs } = useTable<PublishJob>('publish_jobs', { by: byContentItem })
   // a re-send is the same post: its outcome replaces the parent's failed network, so the card reads
@@ -581,6 +592,22 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
               </p>
             </div>
           )}
+          {adhoc ? (
+            // AN UPLOAD FROM SCHEDULE IS A POST (the owner's decision 7): its words are the POST's stage,
+            // never the file holder's status — which read "Ready to post · Signed off" over a post that
+            // was still a draft (audit B5, review fix 29 Sep 2026)
+            <div className="mt-2 flex flex-wrap items-center gap-2" data-post-stage-header>
+              {uploadPost ? (
+                <>
+                  <Chip tone={STAGE_WORDS[uploadPost.stage].tone}>{STAGE_WORDS[uploadPost.stage].label}</Chip>
+                  <span className="text-[13px] text-muted-foreground">{waitingOn(uploadPost, new Date()).line}</span>
+                  <a href={postWindowHref(uploadPost, SCHEDULE_PAGE)} className="inline-flex min-h-11 items-center text-[13px] font-semibold underline underline-offset-4">Open the post</a>
+                </>
+              ) : (
+                <span className="text-[13px] text-muted-foreground">Uploaded files. No post has been made from them yet.</span>
+              )}
+            </div>
+          ) : (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Chip tone={status === 'approved_for_scheduling' || status === 'scheduled' ? 'green' : status === 'published' ? 'ink' : status === 'client_review' ? 'blue' : 'amber'}>
               {STATUS_LABELS[status] ?? status}
@@ -593,6 +620,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
                   : whatHappensNext(status)}
             </span>
           </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {/* the manager sees what the client sees — the owner, 9 Sep 2026:

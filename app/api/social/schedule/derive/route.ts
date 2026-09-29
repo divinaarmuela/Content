@@ -32,6 +32,7 @@ export async function POST(req: Request) {
         trim_start: body.trim_start ?? null,
         trim_end: body.trim_end ?? null,
         kind: body.kind === 'video' ? 'video' : 'crop',
+        post_id: typeof body.post_id === 'string' && body.post_id ? body.post_id : null,
       })
       return NextResponse.json(result)
     } catch (e) {

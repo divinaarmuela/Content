@@ -99,7 +99,7 @@ describe('what the client sees of a post — from its stage, nothing else', () =
     const pass = { version: 2, by: 'joy', hat: 'quality_reviewer', on_behalf_of_client: false, agreed_via: null, note: null, at: NOW }
     expect(clientPostView(post({ stage: 'ready', sent_version: 2, approval: pass }), NOW)).toBeNull()
     expect(clientPostView(post({ stage: 'ready', sent_version: 2, approval: pass, last_client_send: send(1) }), NOW))
-      .toMatchObject({ state: 'team_decided', headline: 'The team approved this one', version: 2 })
+      .toMatchObject({ state: 'team_decided', headline: 'The team decided this one', version: 2 })
   })
 
   it('posted: live on each network, with that network\'s own link; a network that failed is said plainly (P5, L1)', () => {

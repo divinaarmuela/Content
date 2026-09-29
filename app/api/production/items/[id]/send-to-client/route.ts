@@ -124,8 +124,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'This client has no portal link yet — make one on the client first' }, { status: 409 })
       }
       const note = String(body.note ?? '').trim().slice(0, 1000)
-      // SEND ME A TEST FIRST (the owner, 28 Sep 2026): the exact email the client would get, to the person
-      // pressing it, with the page in preview — nothing on the card moves
+      // SEND ME A TEST FIRST (the owner, 28 Sep 2026): the email the client would get, to the person
+      // pressing it — nothing on the card moves. Its button opens the CARD on the dashboard (behind the
+      // team sign-in), never the client's Approve page: that page has no preview any more (audit P4), and
+      // a test link to it would let the team member approve for the client by mistake (review fix)
       const test = body.test === true
       // COPY THE LINK (the owner, 28 Sep 2026): no email — the link is theirs to send by hand
       if (body.copy === true) {
@@ -136,7 +138,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       const picked = test ? { ok: true as const, emails: [String(user.email).toLowerCase()] } : pickRecipients(body.emails, recipients)
       if (!picked.ok) return NextResponse.json({ error: picked.error }, { status: 400 })
-      const link = cardApprovalLink(DASHBOARD_URL, client.share_token, item.id) + (test ? '?preview=1' : '')
+      const link = test
+        ? `${DASHBOARD_URL.replace(/\/+$/, '')}/dashboard/production/${encodeURIComponent(item.id)}`
+        : cardApprovalLink(DASHBOARD_URL, client.share_token, item.id)
       const title = String(item.title ?? 'Your work')
       const sender = await clientFacingSender(user)
       const stamp = new Date().toISOString()
@@ -153,7 +157,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           subject: (test ? `[Test — what ${client.name} gets] ` : '') + `Ready for your approval: ${title}`,
           bodyHtml: renderEmail(
             `Ready for your approval: ${escapeHtml(title)}`,
-            (test ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;"><em>A test copy for you — exactly what ${escapeHtml(client.name)} receives. The link opens in preview, so nothing changes.</em></p>` : '') +
+            (test ? `<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;"><em>A test copy for you — the words ${escapeHtml(client.name)} receives. Its button opens the card on the dashboard, not the client's page, so nothing is approved from this email.</em></p>` : '') +
             `<p>Hi ${escapeHtml(hello)},</p>` +
             `<p>${escapeHtml(sender.name)} has sent you <strong>${escapeHtml(title)}</strong> to look over.</p>` +
             (note ? `<p style="border-left:3px solid #e4e4e7;padding-left:12px;">${escapeHtml(note)}</p>` : '') +

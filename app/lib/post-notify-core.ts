@@ -149,6 +149,8 @@ export function factProblem(action: PostAction | string, post: PostState, versio
       return at('ready') ?? (post.approval?.hat === 'client' && post.approval.version === post.sent_version ? null : 'The client has not approved this version')
     case 'approve_for_client':
       return at('ready') ?? (post.approval?.on_behalf_of_client === true && post.approval.version === post.sent_version ? null : 'Nobody approved this version for the client')
+    case 'team_decides':
+      return at('ready') ?? (post.approval != null && post.approval.hat !== 'client' && !post.approval.on_behalf_of_client && post.approval.version === post.sent_version ? null : 'The team did not decide this version')
     case 'book':
     case 'post_now':
       // the press is not the booking: "Booked in" waits for booking_done (audit V14)
@@ -327,6 +329,12 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
       return {
         subject: `The client approved: ${title}`,
         lines: [`The client approved ${title}.`, `Book it in${atWhen(when)}.`],
+        cta: 'Book it in',
+      }
+    case 'team_decides':
+      return {
+        subject: `The team approved: ${title}`,
+        lines: [`${actor} approved ${title} without waiting for the client${post.approval?.note ? `: ${post.approval.note}` : '.'}`, `Book it in${atWhen(when)}.`],
         cta: 'Book it in',
       }
     case 'approve_for_client':

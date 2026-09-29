@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ScopeViewer } from '../../lib/production-access-core'
 import { laneFromAddress } from '../../lib/post-board-core'
@@ -12,6 +11,8 @@ import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
 import { CardSheet, useCardSheet } from '../board/CardSheet'
 import WaitingOnYou from './WaitingOnYou'
+import PostWindowFromAddress from './PostWindowFromAddress'
+import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
 import SourceTray from './board/SourceTray'
 import { usePostActs } from './board/usePostActs'
@@ -37,16 +38,18 @@ import { usePostBoard } from './board/usePostBoard'
  * the one act route. A card opens the post window.
  *
  * Addresses: `?lane=` (or the old `?column=`) opens a lane on a phone;
- * `?post=<id>` outlines that post; `?item=<id>` / `?card=<id>` (the bell and
- * older emails) outline the posts made from that edit, or open the edit when
- * it has none yet.
+ * `?post=<id>` opens that post's window HERE (every card, list row and
+ * Waiting row links to it — the quality checker has no Schedule page) and
+ * outlines its card; `?item=<id>` / `?card=<id>` (the bell and older emails)
+ * outline the posts made from that edit, or open the edit when it has none
+ * yet.
  */
 export default function PostApprovalPage() {
   const { me, noAccount } = useRole()
   const viewer = useMemo<ScopeViewer | null>(
     () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
   const data = usePostBoard(viewer)
-  const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf })
+  const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf, clientOf: data.clientOf })
   const sheet = useCardSheet()
 
   /* ── narrowing to one client, for people who look across many ── */
@@ -88,8 +91,8 @@ export default function PostApprovalPage() {
     const itemId = p.get('item') ?? p.get('card')
     const all = [...data.onLanes, ...data.cancelled]
     if (postId) {
+      // the window opens from the address (PostWindowFromAddress); the card is outlined when it is here
       if (all.some(bp => bp.post.id === postId)) setFocus(new Set([postId]))
-      else toast.error('That post is not on this board. It may have gone out more than two weeks ago, or been deleted.')
       return
     }
     if (itemId) {
@@ -111,6 +114,8 @@ export default function PostApprovalPage() {
       )}
 
       {ready && <SourceTray items={sources} onOpenEdit={sheet.open} nameOf={data.nameOf} />}
+
+      {ready && <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />}
 
       {ready && data.unstaged > 0 && (
         <p className="rounded-inner border border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
@@ -148,6 +153,7 @@ export default function PostApprovalPage() {
       )}
 
       {acts.dialogs}
+      <Suspense fallback={null}><PostWindowFromAddress /></Suspense>
       {/* an edit from the tray, opened beside the board — the edit's own card */}
       <CardSheet id={sheet.cardId} onClose={sheet.close} />
     </div>

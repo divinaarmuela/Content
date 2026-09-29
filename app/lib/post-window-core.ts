@@ -25,7 +25,7 @@
 
 import {
   ACTION_LABEL, AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, ROW_OF, STAGE_WORDS,
-  approvalLine, bookableTimeProblem, changesAskedLine, clientSendLine, instagramOverflow,
+  approvalLine, approveByOf, bookableTimeProblem, changesAskedLine, clientSendLine, instagramOverflow,
   readPostState, waitingOn, INSTAGRAM_MAX, MISSED_LABEL,
   type AccountRef, type AgreedVia, type ApprovalSteps, type CommentVisibility, type InputNeed,
   type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostStage,
@@ -172,6 +172,8 @@ export type WindowHeader = {
   approvalLine: string | null
   /** "Emailed to jordan@…" — only from a send that happened */
   sendLine: string | null
+  /** "Answer needed by Tue 29 Sep, 3:00 pm" — while the client has it and the time is still open (decision 11) */
+  answerByLine: string | null
   /** "The client asked for a change" with the note */
   changeLine: string | null
   changeNote: string | null
@@ -215,6 +217,7 @@ export function windowHeader(
     versionLine,
     approvalLine: showApproval ? approvalLine(post.approval, nameOf) : null,
     sendLine: showSend ? clientSendLine(post.client_send) : null,
+    answerByLine: showSend && !wait.missed && when(approveByOf(post)) ? `Answer needed by ${when(approveByOf(post))}` : null,
     changeLine: ca ? changesAskedLine(ca, nameOf) : null,
     changeNote: ca?.note?.trim() ? ca.note.trim() : null,
     problem: post.problem && post.stage !== 'cancelled' ? post.problem : null,
@@ -233,6 +236,8 @@ export type Answers = {
   steps?: ApprovalSteps | null
   send_to?: string[] | null
   via?: 'email' | 'link' | null
+  /** when the client's answer closes — shown with its default, and changeable (decision 11) */
+  approve_by?: string | null
 }
 
 export type Question = {
@@ -254,6 +259,7 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   resend_new_time: { prompt: 'Pick the new posting time, then who gets it.', go: 'Resend' },
   ask_change: { prompt: 'What needs changing, and who should change it?', go: 'Ask for the change' },
   approve_for_client: { prompt: 'How did the client say yes? It is saved as your approval, for the client.', go: 'Approve for the client' },
+  team_decides: { prompt: 'Why is the team deciding without the client? Their page will say the team decided it.', go: 'Approve without the client' },
   change_time: { prompt: 'Pick the new posting time.', go: 'Move it' },
   post_now: { prompt: 'This goes out on the client\'s accounts now.', go: 'Post now', stay: 'Not yet' },
   edit_booked: { prompt: 'This takes it off the schedule. It needs checking again after the change.', go: 'Take it off and edit', stay: 'Keep it booked' },
@@ -331,6 +337,7 @@ export function answerProblem(
         break
       case 'note':
         // on "Approve for the client" the note is only owed for "another way"
+        if (q.action === 'team_decides' && !note) return 'Say why the team is deciding without the client.'
         if (q.action !== 'approve_for_client' && !note) return 'Say what needs changing — a short note is enough.'
         break
       case 'recipients':
@@ -370,6 +377,7 @@ export function buildActRequest(post: Pick<PostState, 'rev' | 'sent_version' | '
   if (needs.includes('recipients')) {
     if (a.via === 'link') req.via = 'link'
     else { req.via = 'email'; req.send_to = [...new Set((a.send_to ?? []).map(x => x.trim()).filter(Boolean))] }
+    if (a.approve_by) req.approve_by = a.approve_by
   }
   return req
 }

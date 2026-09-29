@@ -18,7 +18,7 @@ import {
   type ChannelExtras, type SavedLocation,
 } from '@/app/lib/schedule-compose-core'
 import {
-  AGREED_VIA, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, approvalStepsOf, compositionProblems,
+  AGREED_VIA, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, approvalStepsOf, compositionProblems, defaultApproveBy,
   hatsFor, lostChannels, postActions, postVersionId, readPostState,
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
@@ -43,6 +43,7 @@ import AssetCheck from '../AssetCheck'
 import { usePlayable } from '../usePlayable'
 import { buildPostPreview, POST_KIND_WORD, PREVIEW_INTRO } from '@/app/lib/post-preview-core'
 import PostPreviewPane from '@/app/components/social/PostPreview'
+import { instagramGrid } from '@/app/lib/portal-core'
 import type { ChannelOptions } from '@/app/lib/publisher'
 import { formatInZone, safeZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -464,6 +465,25 @@ export default function PostWindow({
     }),
   }), [shown.slides, shown.caption, shown.perChannel, chosen, locations])
 
+  /** HOW IT SITS ON THE CLIENT'S INSTAGRAM (the owner's decision 16): the same
+   *  grid the client's review page shows — this post first, then the newest
+   *  posts already live there. Only when Instagram is one of its channels. */
+  const clientPostsKey = useMemo(() => ({ client_id: context.clientId }), [context.clientId])
+  const clientPosts = useTable<SocialPost>('social_posts', { by: clientPostsKey, enabled: pane === 'preview' })
+  const grid = useMemo(() => {
+    const all = context.allAccounts ?? accounts
+    const platformOf = (acc: string) => all.find(a => a.id === acc)?.platform ?? null
+    if (!shown.channels.some(acc => String(platformOf(acc) ?? '') === 'instagram')) return null
+    const others = clientPosts.rows
+      .filter(r => r.client_id === context.clientId)
+      .map(r => readPostState(r as unknown as Record<string, unknown>))
+      .filter((p): p is PostState => !!p)
+    return instagramGrid(
+      { id: id ?? '', channels: shown.channels, slides: shown.slides, per_channel: shown.perChannel },
+      others, platformOf,
+    )
+  }, [context.allAccounts, context.clientId, accounts, shown.channels, shown.slides, shown.perChannel, clientPosts.rows, id])
+
   /* ── what is wrong with the draft on screen — the same rule the server runs ── */
 
   const composition = useMemo(
@@ -502,6 +522,11 @@ export default function PostWindow({
     steps: post ? approvalStepsOf(post, context.client) : null,
     send_to: defaultRecipients(recipients),
     via: recipients.length > 0 ? 'email' : 'link',
+    // decision 11: the client's answer-by, shown with its default so the person can move it. A resend
+    // picks a new posting time, so its default comes from that time on the server.
+    approve_by: q.needs.includes('recipients') && q.action !== 'resend_new_time' && post
+      ? defaultApproveBy(post.scheduled_for, nowMs)
+      : null,
   })
 
   const go = async (action: PostAction, answers: Answers) => {
@@ -694,6 +719,7 @@ export default function PostWindow({
               {header.problem && <p className="font-medium text-accent-red-deep">{header.problem}</p>}
               {header.approvalLine && <p className="text-muted-foreground">{header.approvalLine}</p>}
               {header.sendLine && <p className="text-muted-foreground">{header.sendLine}</p>}
+              {header.answerByLine && <p className="font-medium" data-answer-by>{header.answerByLine}</p>}
               {header.versionLine && <p className="text-[12px] text-muted-foreground" data-version-line>{header.versionLine}{frozen?.fromMigration ? ' · frozen at migration, not at send' : ''}</p>}
             </div>
           )}
@@ -981,6 +1007,22 @@ export default function PostWindow({
               <PostPreviewPane playable={playable} previews={preview.networks} intro={PREVIEW_INTRO}
                 empty="Pick a channel and the post appears here as that network will show it." />
             )}
+            {pane === 'preview' && grid && grid.length > 0 && (
+              <div className="mt-3 flex flex-col gap-2" data-instagram-grid>
+                <p className="text-[13px] font-semibold">How it sits on the client&rsquo;s Instagram</p>
+                <ul className="grid max-w-[300px] grid-cols-3 gap-0.5">
+                  {grid.slice(0, 9).map((g, i) => (
+                    <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
+                      {g.type === 'video'
+                        ? <video src={g.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[12px] text-muted-foreground">This post is outlined, before the newest posts already live.</p>
+              </div>
+            )}
 
             {pane === 'write' && (
               <>
@@ -1226,7 +1268,8 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
 
       {q.needs.includes('note') && (
         <label className="flex flex-col gap-1 text-[12px] font-semibold">
-          {q.action === 'approve_for_client' ? 'Anything to add (needed for "another way")' : 'What needs changing'}
+          {q.action === 'approve_for_client' ? 'Anything to add (needed for "another way")'
+            : q.action === 'team_decides' ? 'Why the team is deciding' : 'What needs changing'}
           <textarea value={a.note ?? ''} onChange={e => set({ note: e.target.value })} rows={2}
             className="w-full resize-y rounded-inner border border-border bg-surface p-2 text-[13px] font-normal outline-none" />
         </label>
@@ -1249,6 +1292,17 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
             Copy the link instead — I will send it myself
           </label>
         </fieldset>
+      )}
+
+      {q.needs.includes('recipients') && (
+        <div className="flex flex-col gap-1" data-answer-by-question>
+          <p className="text-[12px] font-semibold">The client answers by</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <TimePicker value={a.approve_by ?? null} tz={tz} onChange={iso => set({ approve_by: iso })} now={null} />
+            <span className="text-[12px] text-muted-foreground">{a.approve_by ? formatInZone(a.approve_by, tz, 'full') : 'Two hours before the posting time'}</span>
+          </div>
+          <p className="text-[12px] text-muted-foreground">After this the client can no longer approve it, and the post shows it needs a new time. The account manager is reminded 24 hours and 1 hour before.</p>
+        </div>
       )}
 
       {q.needs.includes('steps') && (

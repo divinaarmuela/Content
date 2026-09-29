@@ -28,7 +28,8 @@ import { hasFinishedWork } from './final-files-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import type { Role } from './identity-core'
-import { hatsFor, waitingOnViewer as postWaitingOnViewer, type NowLike, type PostState } from './post-stage-core'
+import { STAGE_LABEL, STAGE_TONE, hatsFor, waitingOnViewer as postWaitingOnViewer, type NowLike, type PostState } from './post-stage-core'
+import { DEFAULT_TZ, dayKeyInZone } from './timezone-core'
 import { SCHEDULE_PAGE } from './page-access-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
@@ -825,6 +826,11 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   const posts = input.posts ?? []
   const now = input.now ?? `${today}T12:00:00.000Z`
   const postsAt = (stage: PostState['stage']) => posts.filter(p => p.stage === stage)
+  /** booked posts whose time is today — POSTS, by their own stage and time, never edit cards (decision 12) */
+  const bookedToday = posts.filter(p => p.stage === 'booked' && !!p.scheduled_for
+    && dayKeyInZone(p.scheduled_for, p.timezone || DEFAULT_TZ) === today).length
+  /** the stage's own words and colour: one list, every page (decision 12) */
+  const readyTone = STAGE_TONE.ready as OverviewTile['tone']
   /** THE POSTS, on Post approval: what waits on this person, and what is out with somebody else */
   const postTile: OverviewTile = {
     key: 'posts', title: 'Posts to approve', tone: 'amber',
@@ -875,7 +881,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
         stats: [{ value: count(mine, c => matchesShow(c, 'due', ctx)), label: 'due today or overdue' }],
       },
       {
-        key: 'ready', title: 'Ready to post', tone: 'blue',
+        key: 'ready', title: STAGE_LABEL.ready, tone: readyTone,
         // approved posts are booked on the Schedule page (the owner's decision 1)
         href: SCHEDULE_PAGE, actionLabel: 'Schedule',
         stats: [{ value: postsAt('ready').length, label: 'approved, not yet booked' }],
@@ -887,7 +893,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   if (viewer.role === 'scheduler') {
     return [
       {
-        key: 'ready', title: 'Ready to post', tone: 'green',
+        key: 'ready', title: STAGE_LABEL.ready, tone: readyTone,
         // approved posts, booked on the Schedule page (the owner's decision 1)
         href: SCHEDULE_PAGE, actionLabel: 'Schedule',
         stats: [{ value: postsAt('ready').length, label: 'to book in' }],
@@ -895,7 +901,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
       {
         key: 'today', title: 'Going out today', tone: 'blue',
         href: SCHEDULE_PAGE, actionLabel: 'See them',
-        stats: [{ value: count(cards, c => matchesShow(c, 'today', ctx)), label: 'posting today' }],
+        stats: [{ value: bookedToday, label: 'booked in for today' }],
       },
       {
         key: 'account', title: 'Waiting on an account', tone: 'amber',

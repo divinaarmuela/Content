@@ -139,7 +139,11 @@ export function postWindow(page: Page): Locator {
   return page.locator('[data-post-window]')
 }
 
-/** Open the one post window on Schedule, straight from the address (postWindowHref). */
+/**
+ * Open the one post window, straight from the address. Schedule opens a Ready, Booked or Posted post
+ * itself, and hands a post still being approved to Post approval (`postWindowHref`, the owner's
+ * decision 1) — the window there is the same one, so the journeys read it the same way.
+ */
 export async function openWindow(page: Page, postId: string): Promise<Locator> {
   await page.goto(`${SCHEDULE}?client=${E2E.clientId}&post=${encodeURIComponent(postId)}`)
   const win = postWindow(page)

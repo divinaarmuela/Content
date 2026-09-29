@@ -89,6 +89,12 @@ export function usePostBoard(person: ScopeViewer | null) {
   }, [accounts])
   const itemTitle = useMemo(() => new Map(live.tables.items.rows.map(i => [i.id, i.title])), [live.tables.items.rows])
 
+  /** the client's own approval setting, for the steps a post starts from */
+  const clientOf = useCallback((post: Pick<PostState, 'client_id'>) => {
+    const c = clientById.get(post.client_id)
+    return c ? { client_approval_required: c.client_approval_required } : null
+  }, [clientById])
+
   const choicesFor = useCallback((post: Pick<PostState, 'client_id'>): SendChoice[] => {
     const c = clientById.get(post.client_id)
     return sendChoices(c ?? null, contacts.filter(x => x.client_id === post.client_id))
@@ -167,6 +173,7 @@ export function usePostBoard(person: ScopeViewer | null) {
     nameOf,
     assignees,
     choicesFor,
+    clientOf,
     accountsLoaded: accounts !== null,
   }
 }

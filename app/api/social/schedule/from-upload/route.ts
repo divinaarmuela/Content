@@ -16,9 +16,8 @@ export const maxDuration = 300
  * The one door for "I have this photo and I want it up": the files are checked
  * against our own storage, the piece behind the post is created silently, the
  * upload becomes version 1, and the post comes back as a draft ready for the
- * composer. Who may skip the approval — and who is left waiting for the
- * manager's check — is decided in `createPostFromFiles`, off the same rule
- * every other surface asks (`mayPostWithoutApproval`).
+ * composer. Nobody skips the approval: every post is a Draft until it is sent
+ * for quality check and passed (the owner's decisions 3 and 7).
  *
  * `requireRole('scheduler')` is the whole team floor, as everywhere else in
  * this feature; what a person may actually DO is decided per client and per
@@ -36,9 +35,6 @@ export async function POST(req: Request) {
         scheduled_for: body.scheduled_for ?? null,
         timezone: body.timezone ?? null,
         title: body.title ?? null,
-        decision: body.decision === 'ask' || body.decision === 'approve' || body.decision === 'client' ? body.decision : null,
-        reviewer_ids: body.reviewer_ids,
-        note: body.note ?? null,
       })
       return NextResponse.json({
         post: result.post,

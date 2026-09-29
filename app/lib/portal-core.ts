@@ -643,7 +643,7 @@ export function clientPostView(post: PostState, now: NowLike, w: ClientPostWords
       }
       // they had an earlier version; the team decided this one (decision 6)
       if (post.last_client_send) {
-        return view('team_decided', version, 'The team approved this one', `Nothing for you to do. ${goingOutLine(post, w)}`, tone)
+        return view('team_decided', version, 'The team decided this one', `Nothing for you to do. ${goingOutLine(post, w)}`, tone)
       }
       // approved by the team and never sent: not the client's (SPEC §4.4)
       return null
@@ -676,6 +676,47 @@ export function postedAt(post: Pick<PostState, 'outcomes' | 'booking' | 'schedul
     .map(o => o.at!)
     .sort()
   return times[0] ?? post.booking?.for_time ?? post.scheduled_for ?? null
+}
+
+/** One square of an Instagram grid preview. */
+export type GridTile = { url: string; type: 'image' | 'video' }
+
+type GridPost = {
+  id: string
+  channels: readonly string[]
+  slides: readonly { url: string; type?: string | null }[]
+  per_channel: Record<string, { slides?: readonly { url: string; type?: string | null }[] | null } | undefined>
+}
+
+/**
+ * HOW IT SITS ON THEIR INSTAGRAM (the owner's decision 16): this post's first
+ * Instagram picture, then the covers of the eight newest posts already live
+ * on Instagram. One builder for the client's review page and the post window.
+ * Null when Instagram is not one of the post's channels.
+ */
+export function instagramGrid(
+  post: GridPost,
+  others: readonly PostState[],
+  platformOf: (accountId: string) => string | null | undefined,
+): GridTile[] | null {
+  const igOf = (channels: readonly string[]) => channels.find(acc => String(platformOf(acc) ?? '').toLowerCase() === 'instagram') ?? null
+  const ig = igOf(post.channels)
+  if (!ig) return null
+  const own = post.per_channel[ig]?.slides ?? []
+  const first = (own.length ? own : post.slides)[0]
+  if (!first) return null
+  const tile = (s: { url: string; type?: string | null }): GridTile => ({ url: s.url, type: s.type === 'video' ? 'video' : 'image' })
+  const live = others
+    .filter(p => p.id !== post.id && p.stage === 'posted' && ['published', 'duplicate'].includes(p.outcomes.instagram?.status ?? ''))
+    .sort((a, b) => String(postedAt(b) ?? '').localeCompare(String(postedAt(a) ?? '')))
+    .slice(0, 8)
+    .flatMap(p => {
+      const acc = igOf(p.channels)
+      const ownSlides = acc ? p.per_channel[acc]?.slides ?? [] : []
+      const cover = (ownSlides.length ? ownSlides : p.slides)[0]
+      return cover ? [tile(cover)] : []
+    })
+  return [tile(first), ...live]
 }
 
 /**

@@ -16,7 +16,7 @@ import {
 } from '../../lib/board-view-core'
 import { useTable } from '@/lib/db-client'
 import type { CardView, PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
-import { cardBookingLine, type OutcomeJob } from '../../lib/post-outcome-core'
+import { cardBookingLine, jobIdsOfPost, type OutcomeJob, type PostJobsLike } from '../../lib/post-outcome-core'
 import { readPostedSlides } from '../../lib/posted-slides-core'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { readInteractors, withFromThisPost } from '../../lib/followers-core'
@@ -197,8 +197,9 @@ export function Board({
   }, [cards, postRows, jobRows, hasBooked])
   const postByItem = useMemo(() => {
     const out = new Map<string, string>()
+    // a post that was booked: its booking's jobs (the new engine), or the old list on an unmigrated row
     const sent = [...postRows]
-      .filter(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids.length : 0) > 0)
+      .filter(p => jobIdsOfPost(p as unknown as PostJobsLike).length > 0)
       .sort((a, b) => (b.scheduled_for ?? b.created_at ?? '').localeCompare(a.scheduled_for ?? a.created_at ?? ''))
     for (const p of sent) if (p.item_id && !out.has(p.item_id)) out.set(p.item_id, p.id)
     return out

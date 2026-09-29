@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireSignedIn, authzErrorResponse } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
-import { addVersion, logActivity, performTransition, type ContentItem } from '../../../../../lib/workflow'
+import { addVersion, performTransition, type ContentItem } from '../../../../../lib/workflow'
 import { table, withRequestCache } from '@/lib/db'
-import type { ContentItem as ContentItemRow } from '@/lib/db-types'
-import { stateAfterPostEdit } from '../../../../../lib/posting-approval-core'
 import { announceItemChange } from '../../../../../lib/production-live'
 import { actingRoles, versionSatisfiesSubmission } from '../../../../../lib/workflow-core'
 import { mirrorVersionSlides } from '../../../../../lib/gdrive-mirror'
@@ -73,31 +71,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // opens it.
     previewVideos(slides.map(s => s.url))
 
-    // ── the media changed after the POST was approved ──
-    //
-    // The final-post sign-off was given to pictures that no longer exist: a
-    // new version on an approved post flips the gate back to pending, exactly
-    // as editing the caption does. Tolerant and best-effort — an item that
-    // never had the gate carries no key at all, and a failure here must never
-    // lose the upload.
-    const resetTo = 'posting_approval_state' in item
-      ? stateAfterPostEdit((item as Record<string, unknown>).posting_approval_state)
-      : null
-    if (resetTo) {
-      // re-read the gate: an approval that arrived (or was withdrawn) while
-      // this upload was in flight decides, not the copy read at the top
-      const reset = await table<ContentItemRow>('content_items').claim(id, cur =>
-        cur?.posting_approval_state === 'approved'
-          ? { ...cur, posting_approval_state: resetTo, posting_approved_by: null, posting_approved_at: null }
-          : null)
-      if (reset.claimed) {
-        await logActivity({
-          actor: user, clientId: item.client_id,
-          entityType: 'content_item', entityId: id,
-          action: 'posting_approval_reset', detail: `new version v${version.version_number} after approval`,
-        })
-      }
-    }
+    // A new cut of the EDIT never touches a post (the owner's decision 7; SPEC §1.3): a post's approval
+    // lives on the post, and a post's working copy changes only through its own Edit. The item-wide
+    // posting gate this used to reset (and its "it needs approving again" history line) is gone.
 
     // ── a new cut while the piece is WITH THE CLIENT ──
     //

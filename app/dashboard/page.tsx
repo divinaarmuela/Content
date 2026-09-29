@@ -986,9 +986,11 @@ export default function OverviewPage() {
 
           {role === 'scheduler' && data?.scheduler && (
             <>
-              <Section title="Ready to post" action={actionFor(role as Role | null, 'Open the board', boardHref('scheduler', { column: 'ready_to_post' }))}>
+              {/* EDIT CARDS signed off for posting — the source tray on Post approval, not posts. "Ready to
+                  post" is a POST's stage (decision 12), and these are not posts yet (review fix, 29 Sep 2026) */}
+              <Section title="Edits ready to become posts" action={actionFor(role as Role | null, 'Make the posts', '/dashboard/scheduler')}>
                 <ItemRows items={data.scheduler.queue} todayKey={todayKey} role={role as Role | null}
-                  empty="Nothing waiting — a card lands here the moment it is signed off." />
+                  empty="Nothing waiting — an edit lands here the moment it is signed off, ready to become a post." />
               </Section>
               <Section title="Going out next" action={actionFor(role as Role | null, 'Calendar', CALENDAR_PAGE)}>
                 {data.scheduler.upcoming.length === 0 ? (

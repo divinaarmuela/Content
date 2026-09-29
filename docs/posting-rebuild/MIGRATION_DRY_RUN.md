@@ -1,6 +1,6 @@
 # Post stage migration — dry run
 
-Run dry run at 2026-09-29T01:58:05.000Z. Read from the live database (NEXT_PUBLIC_FIREBASE_DATABASE_URL), /mdm/tables.
+Run dry run at 2026-09-29T02:57:52.441Z. Read from the live database (NEXT_PUBLIC_FIREBASE_DATABASE_URL), /mdm/tables.
 
 Nothing was written to the database. This is what `--write` would do, row by row. It was made by `scripts/migrate-post-stage.mjs` from a read of the live tables.
 
@@ -9,7 +9,7 @@ Nothing was written to the database. This is what `--write` would do, row by row
 - Posts read: 68. Mapped: 68. Not mapped: 0.
 - New stages: cancelled 39, posted 19, draft 7, with_client 2, quality_check 1.
 - Posts whose card was deleted (source_deleted): 46.
-- Rows --write would write: 68 posts, 23 frozen versions (v1, from migration), 68 events, 9 schedule rows, 6 edit cards.
+- Rows --write would write: 68 posts, 23 frozen versions (v1, from migration), 68 events, 17 schedule rows, 6 edit cards.
 - Rules used: M1 20, M11 21, M2 19, M5 2, M6 2, M7 2, M8 1, M9 1.
 
 ## Choices the migration makes that SPEC §6 does not spell out
@@ -133,8 +133,16 @@ Old = what the row and its card say today. New = what `--write` gives it. "v1" m
 | d6cd38f7 | bc8ab921 | tiktok | published, www.instagram.com, 2026-09-24T08:58 | published, no link, 2026-09-24T08:58 |
 | ade9808c | f1bdd5d0 | linkedin | published, www.instagram.com, 2026-09-28T09:45 | published, www.linkedin.com, 2026-09-28T09:45 |
 | c8fd52cf | 054e0959 | instagram | published, www.linkedin.com, no time | no status, no link, no time |
+| 034bda63 | aa31a87b | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| 36f7f8cb | 04c7f8d5 | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| 53a8b364 | 238b832b | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| 9f470f30 | 6b14eaa5 | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| c6d30ab8 | d678e70e | instagram | scheduled, no link, 2026-09-17T06:36 | cancelled, no link, 2026-09-17T06:36 |
+| dc0e4210 | 5f94ee44 | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| e0f7bd43 | d2737ec0 | instagram | scheduled, no link, no time | cancelled, no link, no time |
+| f251779a | aba7d734 | instagram | scheduled, no link, 2026-09-15T06:17 | cancelled, no link, 2026-09-15T06:17 |
 - Card 054e0959: Instagram never went out for this card — it is still owed.
-- Rows whose card was deleted are left as they are: 14 (034bda63, 0b2d3af7, 214fa176, 285f5dae, 36f7f8cb, 53a8b364, 614fd459, 9f470f30, b70f85a9, c6d30ab8, d84e55f5, dc0e4210, e0f7bd43, f251779a).
+- Rows whose card was deleted: 14 (034bda63, 0b2d3af7, 214fa176, 285f5dae, 36f7f8cb, 53a8b364, 614fd459, 9f470f30, b70f85a9, c6d30ab8, d84e55f5, dc0e4210, e0f7bd43, f251779a). Each is set to what its card's jobs say: published where it went out, cancelled where it was still "scheduled" and never went. 8 of them change (in the table above); the rest already say the right thing.
 
 ## Edit cards (the client-round stamp)
 

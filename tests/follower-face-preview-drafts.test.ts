@@ -62,7 +62,8 @@ describe('drafts in the feed preview', () => {
   // The preview also stopped drawing cancelled posts, other networks, and posted ones twice (audit S8).
   it('the Preview is given the channel’s posts and keeps only what is going out on Instagram', () => {
     const page = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
-    expect(page).toContain('<PreviewGrid posts={channelPosts} tz={tz} onOpen={flow.openPost}')
+    // a tile opens on the page that owns its stage (`openPost`, review fix 29 Sep 2026)
+    expect(page).toContain('<PreviewGrid posts={channelPosts} tz={tz} onOpen={openPost}')
     expect(page).toContain('const planned = useMemo(() => channelPosts.filter(p => showsOnSchedule(p.stage)), [channelPosts])')
     const views = readFileSync('app/dashboard/social/schedule/views.tsx', 'utf8')
     expect(views).toContain('previewOrder(previewPosts(posts, instagramIds, feedShown))')

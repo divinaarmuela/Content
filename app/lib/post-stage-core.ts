@@ -206,6 +206,33 @@ export function hatsFor(viewer: Viewer | null | undefined, post: { created_by?: 
   return POST_HATS.filter(h => hats.has(h))
 }
 
+/**
+ * MAY THIS TEAM MEMBER WORK ON THIS POST AT ALL? One rule for what the boards
+ * show and what the server lets them press (review, 29 Sep 2026: the board
+ * showed the quality checker every post waiting on the check while the act
+ * route refused them on clients they were not on).
+ *
+ *   `clientIds` — the clients they are on (`accessibleClientIds`); null means
+ *   every client (super admin, scheduler, general).
+ *   The quality reviewer's desk: every post waiting on the quality check,
+ *   whoever's client it is (the same exception the edit card has,
+ *   production-access.ts `loadItemForUser`).
+ * Nothing else widens it — not having made the post, not being named on it:
+ * a person taken off a client is off its posts. Which buttons they then get
+ * is still the stage rules' hats, per post.
+ */
+export function mayWorkOnPost(
+  person: { id: string; role?: string | null; quality_reviewer?: boolean | null },
+  post: { client_id: string; stage: PostStage; created_by?: string | null; assigned_to?: string | null; changes_asked?: { to?: string | null } | null },
+  clientIds: readonly string[] | null,
+): boolean {
+  if (!person || person.role === 'client') return false
+  if (clientIds === null) return true
+  const reviewer = person.role === 'quality_checker' || person.quality_reviewer === true
+  if (reviewer && post.stage === 'quality_check') return true
+  return clientIds.includes(post.client_id)
+}
+
 /* ── approval steps, per client and per post ────────────────────────────── */
 
 /**
@@ -647,7 +674,7 @@ export function postedWords(post: Pick<PostState, 'outcomes'>): string {
 
 export const POST_ACTIONS = [
   'save', 'send_to_qc', 'pass', 'pass_send_client', 'ask_change',
-  'client_approve', 'client_ask_change', 'approve_for_client', 'take_back', 'resend_new_time',
+  'client_approve', 'client_ask_change', 'approve_for_client', 'team_decides', 'take_back', 'resend_new_time',
   'send_to_client', 'book', 'post_now', 'change_time', 'unbook',
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
@@ -705,12 +732,16 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'client_approve', spec: 'T6', from: ['with_client'], to: 'ready', who: ['client'], label: 'Approve', versioned: true },
   { action: 'client_ask_change', spec: 'T8', from: ['with_client'], to: 'draft', who: ['client'], label: 'Ask for a change', versioned: true, needs: ['note'] },
   { action: 'approve_for_client', spec: 'T7', from: ['with_client'], to: 'ready', who: MANAGERS, label: 'Approve for the client', versioned: true, needs: ['agreed_via', 'note'] },
+  // decision 6: the team may decide without waiting for the client. Recorded as the TEAM's decision,
+  // never as the client agreeing, and the client's page says the team decided it.
+  { action: 'team_decides', spec: 'decision 6', from: ['with_client'], to: 'ready', who: MANAGERS, label: 'Approve without the client', versioned: true, needs: ['note'] },
   { action: 'take_back', spec: 'T9', from: ['with_client'], to: 'draft', who: BOOKERS, label: 'Take back' },
   { action: 'resend_new_time', spec: 'T10', from: ['with_client'], to: 'with_client', who: MANAGERS, label: 'New time and resend', needs: ['time', 'recipients'] },
   { action: 'send_to_client', spec: 'T2b', from: ['ready'], to: 'with_client', who: MANAGERS, label: 'Send to client', versioned: true, needs: ['recipients'] },
   { action: 'book', spec: 'T11', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Book in' },
   { action: 'post_now', spec: 'T12', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Post now', needs: ['confirm'], confirm:'This goes out on the client\'s accounts now.' },
-  { action: 'change_time', spec: 'T13/T15', from: ['ready', 'booked'], to: 'same', who: BOOKERS, label: 'Change time', needs: ['time'] },
+  // …and from the quality check: a time that has passed (or will) is fixed there, without a full re-check
+  { action: 'change_time', spec: 'T13/T15', from: ['quality_check', 'ready', 'booked'], to: 'same', who: BOOKERS, label: 'Change time', needs: ['time'] },
   { action: 'unbook', spec: 'T14', from: ['booked'], to: 'ready', who: BOOKERS, label: 'Take off the schedule' },
   { action: 'edit', spec: 'T19', from: ['quality_check', 'with_client', 'ready'], to: 'draft', who: TEAM_BUILD, label: 'Edit' },
   { action: 'edit_booked', spec: 'T19b', from: ['booked'], to: 'draft', who: BOOKERS, label: 'Edit', needs: ['confirm'], confirm: 'This takes it off the schedule.' },
@@ -778,6 +809,13 @@ export type TransitionContext = {
   clientHasContact?: boolean | null
   /** the client's own default (clients.client_approval_required) */
   client?: { client_approval_required?: boolean | null } | null
+  /**
+   * The networks the booking's publish jobs (re-sends included) say already went out, read by the
+   * writer from `publish_jobs` BEFORE the move. The recorder writes `outcomes` only once every network
+   * has answered, so a post live on Instagram with a LinkedIn re-send still queued is `booked` with no
+   * outcomes; without this it could be taken off, cancelled or edited, then booked again (a double post).
+   */
+  liveOnJobs?: readonly string[] | null
 }
 
 export type RefusalCode =
@@ -852,7 +890,8 @@ export function checkPostTransition(
   }
   const clientSendProblem = (when: string | null): Refusal | null => {
     const t = bookableTimeProblem(when, now)
-    if (t) return refuse('time', t)
+    // at the quality check nobody here can book: say who can fix the time, and how
+    if (t) return refuse('time', post.stage === 'quality_check' ? `${t} A scheduler or account manager can press Change time on this post.` : t)
     const by = input.approve_by ?? defaultApproveBy(when, now)
     if (!by || ms(by) <= ms(now)) return refuse('time', 'The client would have no time to answer — pick a later posting time or a later "approve by".')
     if (ms(by) >= ms(when)) return refuse('time', 'The "approve by" time has to come before the posting time.')
@@ -860,6 +899,7 @@ export function checkPostTransition(
     return null
   }
   const approvedNow = post.approval != null && post.approval.version === post.sent_version
+  const liveNow = () => [...new Set([...liveNetworks(post), ...(ctx.liveOnJobs ?? [])])]
 
   switch (action) {
     case 'save':
@@ -917,6 +957,10 @@ export function checkPostTransition(
       if (slotMissed(post, now)) return refuse('missed', MISSED_FOR_CLIENT)
       break
 
+    case 'team_decides':
+      if (!note) return refuse('note', 'Say why the team is deciding without the client. The client sees that the team decided.')
+      break
+
     case 'approve_for_client':
       if (!isAgreedVia(input.agreed_via)) return refuse('agreed_via', 'Say how the client agreed — on a call, by email, on WhatsApp, in person, or another way.')
       if (input.agreed_via === 'other' && !note) return refuse('note', 'Say how the client agreed.')
@@ -948,7 +992,7 @@ export function checkPostTransition(
 
     case 'unbook':
     case 'edit_booked': {
-      const live = liveNetworks(post)
+      const live = liveNow()
       if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkWord))} — it cannot come off the schedule.`)
       if (action === 'edit_booked' && input.confirm !== true) return refuse('confirm', 'This takes it off the schedule — confirm to go on.')
       break
@@ -958,7 +1002,7 @@ export function checkPostTransition(
       if (post.stage === 'draft' && post.sent_version == null && post.booking == null) {
         return refuse('use_delete', 'This draft was never sent — delete it instead.')
       }
-      const live = liveNetworks(post)
+      const live = liveNow()
       if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkWord))} — it cannot be cancelled.`)
       if (input.confirm !== true) return refuse('confirm', 'Confirm to cancel this post.')
       break
@@ -975,6 +1019,12 @@ export function checkPostTransition(
 
     case 'set_steps':
       if (!isApprovalSteps(input.steps)) return refuse('steps', 'Choose team only, or team then the client.')
+      // a Ready post the TEAM approved could still be booked without the client, so "team, then the
+      // client" would be a label that is not true. The way to show it to the client is Send to client.
+      if (post.stage === 'ready' && input.steps === 'team_then_client'
+        && !(post.approval && (post.approval.hat === 'client' || post.approval.on_behalf_of_client))) {
+        return refuse('steps', 'The team has already approved this post, so it could be booked without the client. To show it to the client first, press Send to client.')
+      }
       break
 
     case 'booking_done':
@@ -1149,11 +1199,14 @@ export function planPostTransition(
       patch.client_send = sendRecord(post.sent_version!, post.scheduled_for)
       patch.assigned_to = null
       break
-    case 'resend_new_time':
+    case 'resend_new_time': {
       patch.scheduled_for = input.scheduled_for!
-      freeze('retime')
+      const n = freeze('retime')
+      // a new time is not new content: the pass of the version it re-times carries to it, as Change time does
+      if (post.qc_pass && post.qc_pass.version === post.sent_version) patch.qc_pass = { ...post.qc_pass, version: n }
       patch.client_send = sendRecord(version!, input.scheduled_for!)
       break
+    }
     case 'ask_change':
     case 'client_ask_change': {
       const who = act === 'client_ask_change' ? 'client' : 'team'
@@ -1177,6 +1230,13 @@ export function planPostTransition(
       patch.assigned_to = null
       notify('schedulers')
       if (act === 'client_approve') notify('account_managers')
+      break
+    case 'team_decides':
+      patch.approval = { version: post.sent_version!, by: actor.id, hat: APPROVAL_HAT[hat]!, on_behalf_of_client: false, agreed_via: null, note, at }
+      patch.changes_asked = null
+      leaveClient()
+      patch.assigned_to = null
+      notify('schedulers')
       break
     case 'take_back':
       leaveClient()
@@ -1319,8 +1379,8 @@ const DANGER: readonly PostAction[] = ['cancel', 'delete_draft']
 /** The order a stage's buttons are listed in; the first unblocked entry of `PRIMARY` is the main button. */
 const ORDER: Record<PostStage, readonly PostAction[]> = {
   draft: ['send_to_qc', 'save', 'set_steps', 'delete_draft', 'cancel'],
-  quality_check: ['pass', 'pass_send_client', 'ask_change', 'edit', 'set_steps', 'cancel'],
-  with_client: ['client_approve', 'client_ask_change', 'resend_new_time', 'approve_for_client', 'take_back', 'cancel'],
+  quality_check: ['pass', 'pass_send_client', 'ask_change', 'change_time', 'edit', 'set_steps', 'cancel'],
+  with_client: ['client_approve', 'client_ask_change', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['book', 'change_time', 'post_now', 'send_to_client', 'edit', 'set_steps', 'cancel'],
   booked: ['change_time', 'unbook', 'edit_booked', 'cancel'],
   posted: ['missing_networks', 'duplicate'],
@@ -1465,10 +1525,12 @@ export function waitingOn(post: PostState, now: NowLike, nameOf: NameOf = () => 
 export function waitingOnViewer(post: PostState, viewer: { id: string | null; hats: readonly PostHat[] }, now: NowLike): boolean {
   const wait = waitingOn(post, now)
   if (wait.person_id) return wait.person_id === viewer.id
+  // a super admin may do what each of these may (REVIEWERS and MANAGERS include sa), so it waits on them too
+  const has = (...hats: PostHat[]) => hats.some(h => viewer.hats.includes(h))
   switch (wait.who) {
-    case 'quality_check': return viewer.hats.includes('qr')
-    case 'account_manager': return viewer.hats.includes('am')
-    case 'scheduler': return viewer.hats.includes('scheduler') || viewer.hats.includes('am')
+    case 'quality_check': return has('qr', 'sa')
+    case 'account_manager': return has('am', 'sa')
+    case 'scheduler': return has('scheduler', 'am', 'sa')
     default: return false
   }
 }
