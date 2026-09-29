@@ -213,7 +213,7 @@ export type ComposerAction =
   /** `quiet`: a default being set for the person, not a change they made —
    *  the window does not become "unsaved" over it */
   | { type: 'time'; iso: string | null; quiet?: boolean }
-  | { type: 'extra'; channel: string; patch: ChannelExtras }
+  | { type: 'extra'; channel: string; patch: ChannelExtras; seeded?: boolean }
   | { type: 'saved'; postId?: string | null }
   /** the post's comment-to-DM automation, edited in the window like the caption */
   | { type: 'automation'; automation: PostAutomation | null }
@@ -521,7 +521,9 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
       return {
         ...state,
         perChannel: { ...state.perChannel, [action.channel]: { ...before, ...action.patch } },
-        dirty: true,
+        // a value the window fills in by itself (the account's own comment/duet/stitch settings) is not a
+        // change the person made — it must not make closing ask "Save your changes?" (29 Sep 2026)
+        dirty: action.seeded ? state.dirty : true,
       }
     }
     case 'automation':

@@ -13,11 +13,8 @@ import {
 import {
   LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
 } from '@/app/lib/schedule-stage-core'
-import { MISSED_LABEL, STAGE_LABEL, STAGE_PAGE, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
-import { postWindowHref } from '@/app/lib/post-board-core'
-import { SCHEDULE_PAGE } from '@/app/lib/page-access-core'
+import { MISSED_LABEL, STAGE_LABEL, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
 import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
-import { useRouter } from 'next/navigation'
 import { postAct, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
@@ -173,19 +170,12 @@ export default function SchedulePage() {
       ? null
       : new URLSearchParams(window.location.search).get('post'))
   /**
-   * OPEN A POST ON THE PAGE THAT OWNS ITS STAGE (the owner's decision 1). A
-   * post still being approved — a draft, one at the quality check, one with
-   * the client — opens its window on Post approval, so nothing is approved on
-   * this page. Ready, booked, posted and cancelled posts open here.
+   * THE WINDOW OPENS WHERE YOU ARE (the owner, 29 Sep 2026: "why did it bring me to the Post approval page …
+   * BUT I AM SUPER ADMIN"). A post opened on this page opens here, whatever its stage — the window's buttons
+   * are the post's own rules for this person either way, so nothing is approved that the rules would not
+   * allow. It used to send a draft, a quality-check or a with-client post off to Post approval mid-task.
    */
-  const router = useRouter()
-  const openPost = useCallback((row: SchedulePostRow) => {
-    if (STAGE_PAGE[row.stage] === 'post_approval') {
-      router.push(postWindowHref({ id: row.id, client_id: row.client_id, stage: row.stage }, SCHEDULE_PAGE, 'schedule'))
-      return
-    }
-    flow.openPost(row)
-  }, [flow.openPost, router])
+  const openPost = useCallback((row: SchedulePostRow) => { flow.openPost(row) }, [flow.openPost])
   useEffect(() => {
     const postId = arrivedPost.current
     if (!postId) return

@@ -433,7 +433,7 @@ export default function PostWindow({
           if (!seedI.allowComment) patch.allowComment = false
           if (!seedI.allowDuet) patch.allowDuet = false
           if (!seedI.allowStitch) patch.allowStitch = false
-          if (Object.keys(patch).length > 0) dispatch({ type: 'extra', channel: account.id, patch })
+          if (Object.keys(patch).length > 0) dispatch({ type: 'extra', channel: account.id, patch, seeded: true })
         })
         .catch(() => { /* an unreadable list is a box to type in, not a failure */ })
     }
@@ -744,6 +744,24 @@ export default function PostWindow({
               <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
             </button>
           </div>
+          {/* THE CLOSE QUESTION SITS UNDER THE X THAT ASKED IT (29 Sep 2026: at the footer it was out of sight,
+              and the X looked dead) */}
+          {closing && changed && (
+              <div role="alertdialog" aria-label={CLOSE_QUESTION} data-close-question className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+                <span className="text-[13px] font-semibold">{CLOSE_QUESTION}</span>
+                <span className="ml-auto flex flex-wrap gap-2">
+                  {closeWith.map(c => (
+                    <button key={c.key} type="button" data-close-choice={c.key} disabled={busy && c.key !== 'keep'}
+                      onClick={() => (c.key === 'save' ? void saveAndClose() : c.key === 'discard' ? onClose() : setClosing(false))}
+                      className={cn('min-h-11 rounded-full px-4 text-[13px] font-semibold disabled:opacity-60',
+                        c.key === 'save' ? 'bg-foreground text-background' : 'border border-border bg-surface')}>
+                      {c.key === 'save' && busy ? 'Saving…' : c.label}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            )}
+
           {header && (
             <div className="flex flex-col gap-0.5 text-[13px]">
               <p className="font-medium" data-waiting-line>{header.line}</p>
@@ -1172,21 +1190,6 @@ export default function PostWindow({
                 {reply.problems.length > 0 && (
                   <ul className="mt-1 list-disc pl-5 text-[12px]">{reply.problems.map(p => <li key={p}>{p}</li>)}</ul>
                 )}
-              </div>
-            )}
-            {closing && changed && (
-              <div role="alertdialog" aria-label={CLOSE_QUESTION} data-close-question className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
-                <span className="text-[13px] font-semibold">{CLOSE_QUESTION}</span>
-                <span className="ml-auto flex flex-wrap gap-2">
-                  {closeWith.map(c => (
-                    <button key={c.key} type="button" data-close-choice={c.key} disabled={busy && c.key !== 'keep'}
-                      onClick={() => (c.key === 'save' ? void saveAndClose() : c.key === 'discard' ? onClose() : setClosing(false))}
-                      className={cn('min-h-11 rounded-full px-4 text-[13px] font-semibold disabled:opacity-60',
-                        c.key === 'save' ? 'bg-foreground text-background' : 'border border-border bg-surface')}>
-                      {c.key === 'save' && busy ? 'Saving…' : c.label}
-                    </button>
-                  ))}
-                </span>
               </div>
             )}
             {asking && (

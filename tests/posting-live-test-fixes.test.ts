@@ -441,3 +441,27 @@ describe('the post window shows a scrollbar (the owner, 29 Sep 2026)', () => {
     expect(css).toContain('.dbx [data-window-scroll] { scrollbar-width: thin;')
   })
 })
+
+describe('closing the post window (the owner, 29 Sep 2026: "now I cannot close the modal with X")', () => {
+  it('values the window fills in by itself are not the person\'s changes', async () => {
+    const { composerReducer, initialComposer } = await import('../app/lib/schedule-compose-core')
+    const s0 = initialComposer({ itemId: 'i', postId: 'p', slides: [], scheduledFor: null, channels: ['a'] })
+    const seeded = composerReducer(s0, { type: 'extra', channel: 'a', patch: { allowComment: false }, seeded: true })
+    expect(seeded.dirty).toBe(false)
+    const typed = composerReducer(s0, { type: 'extra', channel: 'a', patch: { allowComment: false } })
+    expect(typed.dirty).toBe(true)
+  })
+  it('the "Save your changes?" question sits under the X, not at the footer', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(src.indexOf('data-close-question')).toBeGreaterThan(src.indexOf('aria-label="Close"'))
+    expect(src.indexOf('data-close-question')).toBeLessThan(src.indexOf('{/* ── MIDDLE') === -1 ? src.indexOf('data-stage-chip') + 4000 : src.indexOf('{/* ── MIDDLE'))
+    expect(src).toContain("dispatch({ type: 'extra', channel: account.id, patch, seeded: true })")
+  })
+  it('a post opened on Schedule opens there, whatever its stage', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/social/schedule/page.tsx', 'utf8')
+    expect(src).toContain('const openPost = useCallback((row: SchedulePostRow) => { flow.openPost(row) }, [flow.openPost])')
+    expect(src).not.toContain("STAGE_PAGE[row.stage] === 'post_approval'")
+  })
+})
