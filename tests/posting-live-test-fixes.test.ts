@@ -422,3 +422,12 @@ describe('a page tour never covers an open post window (live test, 29 Sep 2026)'
     expect(src).toContain('if (windowOpen()) return')
   })
 })
+
+describe('opening a post never flashes "That post is not there any more" (29 Sep 2026)', () => {
+  it('warns only after the database answered for that post', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/scheduler/PostWindowFromAddress.tsx', 'utf8')
+    expect(src).toContain('if (postId && live.loading) asked.current = postId')
+    expect(src).toContain('asked.current !== postId')
+  })
+})

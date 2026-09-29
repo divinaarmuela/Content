@@ -48,9 +48,14 @@ export default function PostWindowFromAddress({ clientId = '' }: {
     router.replace(postWindowHref({ id: row.id, client_id: row.client_id, stage }, SCHEDULE_PAGE, 'schedule'))
   }, [postId, row, stage, belongsToSchedule, router])
 
+  // A POST IS ONLY "GONE" ONCE THE DATABASE HAS ANSWERED FOR IT (29 Sep 2026: a With-client card opened with
+  // "That post is not there any more" — the check ran in the render before the row was even asked for, when
+  // `loading` was still the previous address's `false`)
+  const asked = useRef<string | null>(null)
+  if (postId && live.loading) asked.current = postId
   const warned = useRef<string | null>(null)
   useEffect(() => {
-    if (!postId || loading || row || warned.current === postId) return
+    if (!postId || loading || row || asked.current !== postId || warned.current === postId) return
     warned.current = postId
     toast.error('That post is not there any more. It may have been deleted.')
   }, [postId, loading, row])
