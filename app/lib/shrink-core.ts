@@ -32,8 +32,16 @@ const MB = 1024 * 1024
  * 3:26 pm master went live on TikTok 63 minutes after it was scheduled. Slow
  * is not broken, and sending TikTok a 0.85 Mbps copy to avoid a wait was
  * the wrong trade. TikTok and YouTube keep the full file.
+ *
+ * 350, not 500, since 30 Sep 2026. 350 MB is what our relay carries onto the
+ * provider (`RELAY_MAX_MB`); past it the provider fetches the master off our
+ * storage itself, a path LinkedIn had never been sent down. The biggest file
+ * LinkedIn has ever taken through the provider is 365 MB (Jordan, 24 Sep);
+ * Justin's 507 MB .mov booked for 1 Oct would have been the first, and it got
+ * no copy because 507 000 000 bytes is under 500 × 1024 × 1024. LinkedIn
+ * re-encodes everything it is given, so its copy costs nothing it would keep.
  */
-export const PRACTICAL_RELAY_MB = 500
+export const PRACTICAL_RELAY_MB = 350
 
 /** Channels that have taken a 2 GB master, end to end, today. */
 const TAKES_THE_MASTER: readonly Platform[] = ['youtube', 'tiktok']

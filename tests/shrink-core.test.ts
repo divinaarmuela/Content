@@ -41,9 +41,20 @@ describe('which channels get the smaller copy', () => {
 
   it('does not bother LinkedIn with a copy of a file the provider can move', () => {
     expect(channelsNeedingCopy({
-      probes: [{ ...master, bytes: 400 * MB }],
+      probes: [{ ...master, bytes: 340 * MB }],
       platforms: ['instagram', 'tiktok', 'linkedin', 'youtube'],
     })).toEqual(['instagram', 'tiktok'])
+  })
+
+  // 30 Sep 2026: Justin's 507 MB .mov was booked for LinkedIn as it was — under
+  // 500 MiB, so no copy — though nothing over 365 MB had ever reached LinkedIn
+  // through the provider. Past what our relay carries (350), LinkedIn gets a copy.
+  it('gives LinkedIn a copy of anything past what the relay carries', () => {
+    expect(channelsNeedingCopy({
+      probes: [{ ...master, bytes: 506_523_707 }],
+      platforms: ['instagram', 'tiktok', 'linkedin'],
+      kinds: { instagram: 'reel' },
+    })).toEqual(['instagram', 'tiktok', 'linkedin'])
   })
 
   it('leaves a channel alone once it has a file of its own', () => {
