@@ -412,3 +412,13 @@ describe('moving a booked post books it again (live test, 29 Sep 2026)', () => {
     expect(src).toMatch(/limit: 1,[\s\S]{0,400}fresh: true,/)
   })
 })
+
+describe('a page tour never covers an open post window (live test, 29 Sep 2026)', () => {
+  it('waits while ?post= or a dialog is open, except the window\'s own tour', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/social/schedule/Tour.tsx', 'utf8')
+    expect(src).toContain("tourId !== 'post-window'")
+    expect(src).toContain("new URLSearchParams(window.location.search).has('post') || !!document.querySelector('[role=\"dialog\"]')")
+    expect(src).toContain('if (windowOpen()) return')
+  })
+})

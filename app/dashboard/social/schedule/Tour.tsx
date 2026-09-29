@@ -272,8 +272,14 @@ export function useTourOnce(
     let seen = true
     try { seen = window.localStorage.getItem(tourKey(userId, tourId)) === '1' } catch { seen = true }
     if (!shouldRunTour(role, seen, tourRoles(tourId))) return
+    // A PAGE'S TOUR NEVER COVERS AN OPEN POST WINDOW (live test, 29 Sep 2026): opened straight into a post
+    // (`?post=`), the Schedule tour sat on the window and swallowed its Cancel post. The page's tour waits for
+    // another visit; the window's own tour is the one that belongs there.
+    const windowOpen = () => tourId !== 'post-window'
+      && (new URLSearchParams(window.location.search).has('post') || !!document.querySelector('[role="dialog"]'))
+    if (windowOpen()) return
     // one beat, so the page has drawn the things being pointed at
-    const t = window.setTimeout(() => setOpen(true), 450)
+    const t = window.setTimeout(() => { if (!windowOpen()) setOpen(true) }, 450)
     return () => window.clearTimeout(t)
     // `open` is deliberately out: closing the tour must not re-open it
     // eslint-disable-next-line react-hooks/exhaustive-deps
