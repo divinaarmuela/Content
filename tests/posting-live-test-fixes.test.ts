@@ -403,3 +403,12 @@ describe('our own save is never "someone else changed this post" (live test, 29 
     expect(src).toContain('// the server took it against the rev we held, so nobody else moved it under us')
   })
 })
+
+describe('moving a booked post books it again (live test, 29 Sep 2026)', () => {
+  it('the one-live-job guard reads the jobs fresh, not the request cache that still holds the pulled job', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/lib/publish.ts', 'utf8')
+    expect(src).toContain("const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })")
+    expect(src).toMatch(/limit: 1,[\s\S]{0,400}fresh: true,/)
+  })
+})

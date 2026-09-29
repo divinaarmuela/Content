@@ -180,13 +180,17 @@ export async function queuePublishJob(input: {
         // recorded) still holds the whole card
         && (mine.size === 0 || jobMediaUrls(j).length === 0 || jobMediaUrls(j).some(u => mine.has(u))),
       limit: 1,
+      // FRESH, NOT THE REQUEST CACHE (live test, 29 Sep 2026; CLAUDE.md trap 11): moving a booked post pulls its
+      // old job and books the new one in ONE request, and the cached read still saw the pulled job as live —
+      // "This content item is already queued to publish", and the moved post fell back to Ready unbooked
+      fresh: true,
     })
     if (live.length > 0) return { error: 'These files are already queued to publish on this card' }
 
     const gate = await takeClaimLock(
       publishLockKey(input.contentItemId, mediaKeyOf([...mine])), jobId,
       async holder => {
-        const held = await table<PublishJobRow>('publish_jobs').get(holder)
+        const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })
         return !!held && LIVE_JOB_STATUSES.includes(held.status)
       },
     )
