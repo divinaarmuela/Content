@@ -481,3 +481,12 @@ describe('a crop never rewrites a frozen post (review: S10, V10)', () => {
     expect(src).toMatch(/saveWorkingCopy/)
   })
 })
+
+describe('the time picker saves the time it shows (live test, 29 Sep 2026)', () => {
+  it('Done on a post with no time saves the suggested time; re-pressing the ringed day keeps it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/social/schedule/TimePicker.tsx', 'utf8')
+    expect(src).toContain('onClick={() => { if (!value) onChange(joinClock(current, tz)); setOpen(false) }}')
+    expect(src).toContain('onSelect={d => set({ dayKey: d ? keyOf(d) : current.dayKey })}')
+  })
+})

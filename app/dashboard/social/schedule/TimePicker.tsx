@@ -171,7 +171,9 @@ export default function TimePicker({
             mode="single"
             selected={dayOf(current.dayKey)}
             defaultMonth={dayOf(current.dayKey)}
-            onSelect={d => { if (d) set({ dayKey: keyOf(d) }) }}
+            // a press on the day already ringed un-selects it in react-day-picker: keep that day and SAVE it,
+            // so the suggested day is never only drawn as chosen (29 Sep 2026)
+            onSelect={d => set({ dayKey: d ? keyOf(d) : current.dayKey })}
             // "today" is the CLIENT's today, not the browser's: an overseas
             // scheduler booking a Melbourne client sees Melbourne's day ringed
             today={dayOf(today)}
@@ -238,7 +240,9 @@ export default function TimePicker({
             />
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              // DONE KEEPS WHAT IS SHOWN (29 Sep 2026, live test): with no time yet the fields show a suggested
+              // time that was never saved, so Done closed the panel and the post still had none
+              onClick={() => { if (!value) onChange(joinClock(current, tz)); setOpen(false) }}
               className="ml-auto flex min-h-11 items-center rounded-full bg-foreground px-4 text-[13px] font-semibold text-background"
             >
               Done
