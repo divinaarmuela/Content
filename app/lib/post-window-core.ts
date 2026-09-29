@@ -36,6 +36,7 @@ import { joinClock, type ChannelExtras, type ClockValue } from './schedule-compo
 import { formatInZone } from './timezone-core'
 import { cleanEmail } from './client-recipients-core'
 import type { Slide } from './version-files-core'
+import type { PostAutomation } from './comment-automation-core'
 
 const ms = (t: NowLike | null | undefined): number => {
   if (t == null) return NaN
@@ -51,6 +52,8 @@ export type WorkingCopy = {
   channels: string[]
   perChannel: Record<string, ChannelExtras>
   scheduledFor: string | null
+  /** the comment-to-DM automation, set up while scheduling (comment-automation-core) */
+  automation?: PostAutomation | null
 }
 
 /**
@@ -81,6 +84,7 @@ export function unsavedPost(input: {
     slides: [...input.working.slides],
     caption: input.working.caption,
     per_channel: { ...input.working.perChannel },
+    ...(input.working.automation ? { automation: input.working.automation } : {}),
     approval_steps: null,
     approval: null,
     qc_pass: null,
@@ -112,6 +116,7 @@ export function withWorkingCopy(post: PostState, working: WorkingCopy): PostStat
     channels: working.channels,
     per_channel: working.perChannel,
     scheduled_for: working.scheduledFor,
+    automation: working.automation ?? null,
   }
 }
 
@@ -133,6 +138,7 @@ function workingKey(w: WorkingCopy): string {
   return stableJson({
     slides: w.slides ?? [], caption: (w.caption ?? '').replace(/\s+$/, ''), channels: w.channels ?? [],
     perChannel: w.perChannel ?? {}, scheduledFor: t != null && Number.isFinite(t) ? t : null,
+    automation: w.automation ?? null,
   })
 }
 
@@ -161,13 +167,15 @@ export function closeChoices(list: PostActionList): CloseChoice[] {
 }
 
 /** The working copy a post holds, for the window to start from. */
-export function workingCopyOf(post: Pick<PostState, 'slides' | 'caption' | 'channels' | 'per_channel' | 'scheduled_for'>): WorkingCopy {
+export function workingCopyOf(post: Pick<PostState, 'slides' | 'caption' | 'channels' | 'per_channel' | 'scheduled_for' | 'automation'>): WorkingCopy {
   return {
     slides: post.slides,
     caption: post.caption,
     channels: post.channels,
     perChannel: post.per_channel,
     scheduledFor: post.scheduled_for,
+    // only when there is one, so a post without an automation reads exactly as it always did
+    ...(post.automation ? { automation: post.automation } : {}),
   }
 }
 
@@ -649,12 +657,14 @@ export type WorkingBody = {
   per_channel: Record<string, ChannelExtras>
   scheduled_for: string | null
   timezone: string | null
+  automation?: PostAutomation | null
 }
 
 export function workingBody(w: WorkingCopy, timezone: string | null): WorkingBody {
   return {
     slides: w.slides, caption: w.caption, channels: w.channels,
     per_channel: w.perChannel, scheduled_for: w.scheduledFor, timezone,
+    ...(w.automation !== undefined ? { automation: w.automation } : {}),
   }
 }
 

@@ -43,6 +43,12 @@ export const BUTTON_TITLE_LIMIT = 20
 export const COMMENT_REPLY_LIMIT = 300
 export const MAX_KEYWORDS = 10
 export const DEFAULT_KEYWORD = 'BOOK'
+/**
+ * Other DM texts / other public replies, picked at random with the main one (Zernio's
+ * `dmMessageVariations` / `commentReplyVariations`, OpenAPI v1.151.0: string arrays, maxItems 5, on POST
+ * and PATCH; PATCH [] clears). The owner's form offers four beside the main one.
+ */
+export const MAX_VARIATIONS = 4
 
 /** A Zernio post id: a 24-character hex ObjectId (the docs: "platform IDs return 400"). */
 export const isZernioPostId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{24}$/i.test(v)
@@ -334,7 +340,30 @@ export type AutomationInput = {
   /** the link as typed; the UTM tags are added by withUtm */
   link: string | null
   comment_reply: string | null
+  /** other DM texts, one picked at random with dm_message */
+  dm_variations: string[]
+  /** other public replies, one picked at random with comment_reply */
+  reply_variations: string[]
   name: string | null
+}
+
+/**
+ * Variations as typed: an array, or one per line. Blank lines dropped, repeats (and a repeat of the
+ * main text) dropped. Too many, or one too long, is refused with the reason.
+ */
+export function readVariations(raw: unknown, opts: { what: string; max: number; main?: string | null }):
+  { ok: true; list: string[] } | { ok: false; error: string } {
+  const items = Array.isArray(raw) ? raw.map(v => String(v ?? '')) : typeof raw === 'string' ? raw.split(/\r?\n/) : []
+  const out: string[] = []
+  const main = String(opts.main ?? '').trim().toLowerCase()
+  for (const item of items) {
+    const t = item.trim()
+    if (!t || t.toLowerCase() === main || out.some(x => x.toLowerCase() === t.toLowerCase())) continue
+    if (t.length > opts.max) return { ok: false, error: `Each of the other ${opts.what} must be ${opts.max} characters or fewer` }
+    out.push(t)
+  }
+  if (out.length > MAX_VARIATIONS) return { ok: false, error: `Up to ${MAX_VARIATIONS} other ${opts.what} — there are ${out.length}` }
+  return { ok: true, list: out }
 }
 
 /** Keywords as an array or a comma-separated string, trimmed, deduped case-insensitively. Empty → BOOK. */
@@ -382,17 +411,32 @@ export function parseAutomationInput(raw: unknown): { ok: true; value: Automatio
   if (comment_reply && comment_reply.length > COMMENT_REPLY_LIMIT) {
     return { ok: false, error: `The public reply must be ${COMMENT_REPLY_LIMIT} characters or fewer` }
   }
+  const dmVar = readVariations(r.dm_variations, { what: 'DM texts', max: button_title ? BUTTON_DM_LIMIT : DM_LIMIT, main: dm_message })
+  if (!dmVar.ok) return dmVar
+  const replyVar = readVariations(r.reply_variations, { what: 'public replies', max: COMMENT_REPLY_LIMIT, main: comment_reply })
+  if (!replyVar.ok) return replyVar
+  // Zernio picks from [commentReply, ...variations]: others with no main reply would never be said
+  if (replyVar.list.length > 0 && !comment_reply) return { ok: false, error: 'Write the public reply first — the other replies are picked at random with it' }
   const name = s(r.name).slice(0, 80) || null
-  return { ok: true, value: { client_id, social_account_id, post_key, keywords, match_mode, dm_message, button_title, link, comment_reply, name } }
+  return {
+    ok: true,
+    value: {
+      client_id, social_account_id, post_key, keywords, match_mode, dm_message, button_title, link, comment_reply,
+      dm_variations: dmVar.list, reply_variations: replyVar.list, name,
+    },
+  }
 }
 
 /** The link tagged, and the DM checked against its limit once the link is in the text. */
-export function finalLink(input: Pick<AutomationInput, 'link' | 'keywords' | 'dm_message' | 'button_title'>, clientSlug: string):
-  { ok: true; link: string | null } | { ok: false; error: string } {
+export function finalLink(
+  input: Pick<AutomationInput, 'link' | 'keywords' | 'dm_message' | 'button_title'> & { dm_variations?: readonly string[] },
+  clientSlug: string,
+): { ok: true; link: string | null } | { ok: false; error: string } {
   if (!input.link) return { ok: true, link: null }
   const tagged = withUtm(input.link, { clientSlug, keyword: input.keywords[0] ?? DEFAULT_KEYWORD })
   if (!tagged.ok) return tagged
-  if (!input.button_title && dmText(input.dm_message, tagged.url, false).length > DM_LIMIT) {
+  // with no button the link rides at the end of EVERY text, the variations too
+  if (!input.button_title && [input.dm_message, ...(input.dm_variations ?? [])].some(t => dmText(t, tagged.url, false).length > DM_LIMIT)) {
     return { ok: false, error: `The DM and its link together must be ${DM_LIMIT} characters or fewer` }
   }
   return { ok: true, link: tagged.url }
@@ -404,7 +448,8 @@ export function finalLink(input: Pick<AutomationInput, 'link' | 'keywords' | 'dm
  * that forgets the post cannot switch on a DM to everyone who comments.
  */
 export function zernioPayload(
-  input: Pick<AutomationInput, 'keywords' | 'match_mode' | 'dm_message' | 'button_title' | 'comment_reply'>,
+  input: Pick<AutomationInput, 'keywords' | 'match_mode' | 'dm_message' | 'button_title' | 'comment_reply'>
+    & { dm_variations?: readonly string[]; reply_variations?: readonly string[] },
   ids: { profileId: string; accountId: string },
   binding: Binding,
   extra: { name: string; postTitle: string; link: string | null },
@@ -431,6 +476,10 @@ export function zernioPayload(
       ? { buttons: [{ type: 'url', title: input.button_title, url: extra.link }], linkTracking: true }
       : {}),
     ...(input.comment_reply ? { commentReply: input.comment_reply } : {}),
+    ...(input.dm_variations?.length
+      ? { dmMessageVariations: input.dm_variations.map(t => dmText(t, extra.link, hasButton)) }
+      : {}),
+    ...(input.comment_reply && input.reply_variations?.length ? { commentReplyVariations: [...input.reply_variations] } : {}),
   }
 }
 
@@ -559,6 +608,17 @@ export function updatePatch(
     if (c.length > COMMENT_REPLY_LIMIT) return { ok: false, error: `The public reply must be ${COMMENT_REPLY_LIMIT} characters or fewer` }
     patch.commentReply = c; ours.comment_reply = c || null
   }
+  if (r.dm_variations !== undefined) {
+    const v = readVariations(r.dm_variations, { what: 'DM texts', max: ctx.hasButton ? BUTTON_DM_LIMIT : DM_LIMIT - (ctx.link ? ctx.link.length + 2 : 0) })
+    if (!v.ok) return v
+    // [] clears them (Zernio: "Pass [] to clear")
+    patch.dmMessageVariations = v.list.map(t => dmText(t, ctx.link, ctx.hasButton)); ours.dm_variations = v.list
+  }
+  if (r.reply_variations !== undefined) {
+    const v = readVariations(r.reply_variations, { what: 'public replies', max: COMMENT_REPLY_LIMIT })
+    if (!v.ok) return v
+    patch.commentReplyVariations = v.list; ours.reply_variations = v.list
+  }
   if (Object.keys(patch).length === 0) return { ok: false, error: 'Nothing to change' }
   return { ok: true, patch, ours }
 }
@@ -584,10 +644,15 @@ export type PostAutomation = {
   button_title: string | null
   link: string | null
   comment_reply: string | null
+  /** other DM texts, picked at random with dm_message (up to MAX_VARIATIONS) */
+  dm_variations: string[]
+  /** other public replies, picked at random with comment_reply */
+  reply_variations: string[]
 }
 
 export const NO_AUTOMATION: PostAutomation = {
   on: false, keywords: [DEFAULT_KEYWORD], dm_message: '', button_title: null, link: null, comment_reply: null,
+  dm_variations: [], reply_variations: [],
 }
 
 /** Read whatever is stored (or sent) as a post's automation; null when there is none. */
@@ -606,6 +671,9 @@ export function readPostAutomation(raw: unknown): PostAutomation | null {
     button_title: s(r.button_title, 60).trim() || null,
     link: s(r.link, 2000).trim() || null,
     comment_reply: s(r.comment_reply, 400).trim() || null,
+    // kept as written (capped only against junk); readVariations judges them when it is switched on
+    dm_variations: (Array.isArray(r.dm_variations) ? r.dm_variations : []).map(v => String(v ?? '').slice(0, DM_LIMIT + 100)).slice(0, 10),
+    reply_variations: (Array.isArray(r.reply_variations) ? r.reply_variations : []).map(v => String(v ?? '').slice(0, 400)).slice(0, 10),
   }
 }
 
@@ -615,6 +683,7 @@ export function postAutomationProblem(a: PostAutomation | null | undefined, clie
   const parsed = parseAutomationInput({
     client_id: 'x', social_account_id: 'x', post_key: 'x',
     keywords: a.keywords, dm_message: a.dm_message, button_title: a.button_title, link: a.link, comment_reply: a.comment_reply,
+    dm_variations: a.dm_variations, reply_variations: a.reply_variations,
   })
   if (!parsed.ok) return `Automation: ${parsed.error}`
   // the slug only names the campaign; without one, the link itself is still checked

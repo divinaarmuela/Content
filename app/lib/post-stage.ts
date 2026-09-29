@@ -1019,6 +1019,8 @@ async function createFollowUp(
     per_channel: perChannel,
     scheduled_for: null,
     timezone: frozen.timezone ?? source.timezone ?? 'Australia/Melbourne',
+    // the automation travels with the words it was written for
+    ...(frozen.automation ? { automation: frozen.automation } : {}),
     created_by: actor.id,
     created_at: at,
     updated_at: at,
@@ -1034,7 +1036,7 @@ async function createFollowUp(
     id: postVersionId(id, 1), post_id: id, client_id: source.client_id, n: 1,
     slides: frozen.slides, per_channel: perChannel, channels, caption: frozen.caption,
     scheduled_for: null, timezone: String(base.timezone), frozen_for: 'retime', frozen_by: actor.id,
-    frozen_at: at, from_migration: false,
+    frozen_at: at, from_migration: false, automation: frozen.automation ?? null,
   }
   await versionsT().claim(v1.id, cur => (cur ? null : v1))
   await posts().insert({

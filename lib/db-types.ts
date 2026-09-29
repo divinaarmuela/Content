@@ -577,6 +577,8 @@ export interface CommentAutomation {
   button_title: string | null
   link: string | null
   comment_reply: string | null
+  dm_variations: unknown | null
+  reply_variations: unknown | null
   active: boolean
   paused_reason: string | null
   created_by: string | null
@@ -1634,7 +1636,7 @@ export const TABLE_COLUMNS = {
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
-  comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
+  comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
@@ -1727,7 +1729,7 @@ export const NULLABLE_COLUMNS = {
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
   clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin', 'followers_on_portal', 'followers_daily_top', 'followers_full_cadence'],
-  comment_automations: ['social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'paused_reason', 'created_by'],
+  comment_automations: ['social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
@@ -1827,7 +1829,7 @@ export const JSON_COLUMNS = {
   client_credentials: [],
   client_notes: [],
   clients: ['brand_profile', 'default_scheduler_ids', 'instagram_locations'],
-  comment_automations: ['keywords'],
+  comment_automations: ['keywords', 'dm_variations', 'reply_variations'],
   content_applications: [],
   content_assets: [],
   content_items: ['link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'client_rounds', 'client_frozen', 'posted_slides', 'asked_ids'],
@@ -1926,7 +1928,7 @@ export const JSON_ARRAY_COLUMNS = {
   client_credentials: [],
   client_notes: [],
   clients: ['default_scheduler_ids', 'instagram_locations'],
-  comment_automations: ['keywords'],
+  comment_automations: ['keywords', 'dm_variations', 'reply_variations'],
   content_applications: [],
   content_assets: [],
   content_items: ['raw_assets', 'scheduler_ids', 'asked_ids'],

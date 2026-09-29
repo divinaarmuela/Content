@@ -36,6 +36,7 @@ import {
 import { NETWORK_LABEL } from './publish-core'
 import { reorder, type Slide, type SlideSource } from './version-files-core'
 import { fromZonedInput, wallTimeIn } from './timezone-core'
+import type { PostAutomation } from './comment-automation-core'
 
 /* ── the composition being edited ───────────────────────────────────────── */
 
@@ -195,6 +196,8 @@ export type ComposerState = {
   /** the instant it goes out, or null while nobody has picked one */
   scheduledFor: string | null
   perChannel: Record<string, ChannelExtras>
+  /** the comment-to-DM automation, set up while scheduling (comment-automation-core) */
+  automation?: PostAutomation | null
   /** has anything changed since the last save */
   dirty: boolean
 }
@@ -212,6 +215,8 @@ export type ComposerAction =
   | { type: 'time'; iso: string | null; quiet?: boolean }
   | { type: 'extra'; channel: string; patch: ChannelExtras }
   | { type: 'saved'; postId?: string | null }
+  /** the post's comment-to-DM automation, edited in the window like the caption */
+  | { type: 'automation'; automation: PostAutomation | null }
 
 /**
  * The window's opening state.
@@ -230,6 +235,7 @@ export function initialComposer(input: {
   scheduledFor?: string | null
   channels?: readonly string[]
   perChannel?: Record<string, ChannelExtras> | null
+  automation?: PostAutomation | null
 }): ComposerState {
   return {
     postId: input.postId ?? null,
@@ -239,6 +245,7 @@ export function initialComposer(input: {
     channels: [...(input.channels ?? [])],
     scheduledFor: input.scheduledFor ?? null,
     perChannel: { ...(input.perChannel ?? {}) },
+    ...(input.automation ? { automation: input.automation } : {}),
     dirty: false,
   }
 }
@@ -517,6 +524,8 @@ export function composerReducer(state: ComposerState, action: ComposerAction): C
         dirty: true,
       }
     }
+    case 'automation':
+      return { ...state, automation: action.automation, dirty: true }
     case 'saved':
       return {
         ...state,

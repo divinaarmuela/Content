@@ -55,6 +55,7 @@ import { useTeamMembers } from '../../production/workHooks'
 import type { ImageEditorTarget } from './ImageEditor'
 import MediaPicker from './MediaPicker'
 import PostNotes from './PostNotes'
+import AutomationSection from './AutomationSection'
 import { Dropdown, ExtraRow, MenuItem } from './PostOptionRows'
 import TimePicker from './TimePicker'
 import { Thumb } from './tiles'
@@ -120,6 +121,8 @@ export type PostWindowContext = {
     email?: string | null
     contact_name?: string | null
     client_approval_required?: boolean | null
+    /** names the campaign on an automation's link (utm_campaign) */
+    slug?: string | null
   } | null
   /** the channels that work — what a new post can be sent to */
   accounts: SocialAccount[]
@@ -190,7 +193,8 @@ export default function PostWindow({
   const working: WorkingCopy = useMemo(() => ({
     slides: state.slides, caption: state.caption, channels: state.channels,
     perChannel: state.perChannel, scheduledFor: state.scheduledFor,
-  }), [state.slides, state.caption, state.channels, state.perChannel, state.scheduledFor])
+    ...(state.automation !== undefined ? { automation: state.automation } : {}),
+  }), [state.slides, state.caption, state.channels, state.perChannel, state.scheduledFor, state.automation])
 
   /**
    * The row is live, and the window follows it WITHOUT taking what somebody
@@ -1075,6 +1079,17 @@ export default function PostWindow({
                   </label>
                 )}
 
+                {chosen.some(a => ['instagram', 'facebook'].includes(String(a.platform))) && (
+                  <AutomationSection
+                    automation={editable ? state.automation : shown.automation}
+                    editable={editable}
+                    onChange={next => dispatch({ type: 'automation', automation: next })}
+                    clientSlug={context.client?.slug ?? null}
+                    postId={saved?.id ?? null}
+                    stage={saved?.stage ?? null}
+                  />
+                )}
+
                 {editable && groups.length > 0 && (
                   <div data-tour="post-options" className="flex flex-col gap-2.5">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">More options</span>
@@ -1371,7 +1386,10 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
 /* ── helpers ──────────────────────────────────────────────────────────── */
 
 function composerFieldsOf(w: WorkingCopy) {
-  return { slides: w.slides, caption: w.caption, channels: w.channels, scheduledFor: w.scheduledFor, perChannel: w.perChannel }
+  return {
+    slides: w.slides, caption: w.caption, channels: w.channels, scheduledFor: w.scheduledFor, perChannel: w.perChannel,
+    automation: w.automation ?? null,
+  }
 }
 
 /** The accounts a post goes to, in the post's own order. */

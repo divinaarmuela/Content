@@ -54,6 +54,7 @@ import { MIN_LEAD_MS, TIME_TOO_SOON, TIME_TOO_SOON_OR_NOW, validateComposition }
 import { optionsFromExtras, readChannelExtras, type ChannelExtras } from './schedule-compose-core'
 import type { PostKind } from './publish-core'
 import type { Slide } from './version-files-core'
+import { readPostAutomation, type PostAutomation } from './comment-automation-core'
 
 /* ── stages ─────────────────────────────────────────────────────────────── */
 
@@ -344,6 +345,8 @@ export type PostState = {
   slides: Slide[]
   caption: string
   per_channel: Record<string, ChannelExtras>
+  /** the comment-to-DM automation set up while scheduling (comment-automation-core); frozen with the rest */
+  automation?: PostAutomation | null
   // the stage's records
   approval_steps: ApprovalSteps | null
   approval: Approval | null
@@ -465,6 +468,8 @@ export function readPostState(row: Record<string, unknown> | null | undefined): 
     assigned_to: str(row.assigned_to),
     source_item_id: str(row.source_item_id) ?? str(row.item_id),
     source_deleted: row.source_deleted === true,
+    // only when there is one, so a post without an automation reads exactly as it always did
+    ...(readPostAutomation(row.automation) ? { automation: readPostAutomation(row.automation) } : {}),
   }
 }
 

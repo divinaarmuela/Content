@@ -10,6 +10,7 @@ import { previewPosts, type NetworkLine } from '@/app/lib/schedule-stage-core'
 import { feedWords, type LiveTile } from '@/app/lib/feed-preview-core'
 import Chip from '../../ui/Chip'
 import { AlertMark, NetworkLogos, STAGE_DIM, STAGE_RING, StageDot, Thumb, clockLabel } from './tiles'
+import { automationLine } from '@/app/lib/comment-automation-core'
 import { isFileDrag } from '@/app/lib/schedule-upload-core'
 import { RAIL_DRAG_TYPE } from './MediaRail'
 import { DROP_KINDS } from './WeekGrid'
@@ -145,7 +146,12 @@ function PostRow({ post, tz, onOpen, onBin }: {
   onBin?: BinHandler
 }) {
   const f = post.facts
-  const extra = f.alert || f.networks.length > 0 || post.source_deleted
+  // the comment-to-DM automation set up while scheduling: "Automation: BOOK → DM with link · waiting for the post"
+  const out = post.stage === 'booked' || post.stage === 'posted'
+  const auto = post.state.automation?.on
+    ? automationLine(post.state.automation, out ? { made: true, active: true, live: post.stage === 'posted', stats: null } : null)
+    : null
+  const extra = f.alert || f.networks.length > 0 || post.source_deleted || auto
   return (
     <div
       className={cn(
@@ -203,6 +209,7 @@ function PostRow({ post, tz, onOpen, onBin }: {
           {post.source_deleted && (
             <p className="text-[12px] text-muted-foreground">Its card was deleted — the post is kept here.</p>
           )}
+          {auto && <p className="text-[12px] text-muted-foreground" data-post-automation-line>{auto}</p>}
         </div>
       )}
     </div>

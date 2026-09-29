@@ -749,6 +749,8 @@ const GHOST_TABLES = {
     ['button_title', col('string', true)],
     ['link', col('string', true)],                 // the final link, UTM tags included
     ['comment_reply', col('string', true)],
+    ['dm_variations', col('unknown', true, true, true)],     // other DM texts (Zernio dmMessageVariations)
+    ['reply_variations', col('unknown', true, true, true)],  // other public replies (commentReplyVariations)
     ['active', col('boolean', false)],
     ['paused_reason', col('string', true)],        // why the app switched it off, e.g. the post was cancelled
     ['created_by', col('string', true)],

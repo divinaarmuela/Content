@@ -114,6 +114,8 @@ describe('db-types (generated)', () => {
       'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted',
       // a send to the client in flight — claimed before the email goes (review fix, 29 Sep 2026)
       'sending',
+      // the comment-to-DM automation set up while scheduling, frozen with the caption (29 Sep 2026)
+      'automation',
     ])
     // a post always belongs to a client and an item; a draft may not have
     // picked its version, its time or its words yet
@@ -129,7 +131,7 @@ describe('db-types (generated)', () => {
     // the jsonb columns lib/db.ts has to put back when they read empty
     expect(JSON_COLUMNS.social_posts)
       .toEqual(['slides', 'per_channel', 'channels', 'publish_job_ids',
-        'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending'])
+        'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending', 'automation'])
     expect(JSON_ARRAY_COLUMNS.social_posts)
       .toEqual(['slides', 'channels', 'publish_job_ids'])
     expect(JSON_ARRAY_COLUMNS.social_posts).not.toContain('per_channel')

@@ -21,7 +21,7 @@ import PlatformIcon from '../PlatformIcon'
 import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
 import {
-  BUTTON_DM_LIMIT, BUTTON_TITLE_LIMIT, DEFAULT_KEYWORD, DM_LIMIT, dmText, normaliseKeywords, withUtm,
+  BUTTON_DM_LIMIT, BUTTON_TITLE_LIMIT, DEFAULT_KEYWORD, DM_LIMIT, MAX_VARIATIONS, dmText, normaliseKeywords, readVariations, withUtm,
   type AutomationLogRow, type AutomationStats, type PostChoice,
 } from '@/app/lib/comment-automation-core'
 
@@ -41,6 +41,8 @@ type Row = {
   button_title: string | null
   link: string | null
   comment_reply: string | null
+  dm_variations: string[]
+  reply_variations: string[]
   active: boolean
   paused_reason: string | null
   created_at: string
@@ -80,6 +82,8 @@ const EMPTY_DRAFT = {
   client_id: '', social_account_id: '', post_key: '',
   keywords: DEFAULT_KEYWORD, match_mode: 'word', dm_message: '',
   button_title: '', link: '', comment_reply: '', name: '',
+  // one per line; sent as arrays (Zernio's dmMessageVariations / commentReplyVariations)
+  dm_variations: '', reply_variations: '',
 }
 
 /**
@@ -166,6 +170,8 @@ export default function AutomationsPage() {
   const tagged = draft.link.trim() && client ? withUtm(draft.link, { clientSlug: client.slug, keyword: keywords[0] }) : null
   const finalDm = dmText(draft.dm_message, tagged?.ok ? tagged.url : null, hasButton)
   const dmLimit = hasButton ? BUTTON_DM_LIMIT : DM_LIMIT
+  const dmVar = readVariations(draft.dm_variations, { what: 'DM texts', max: dmLimit, main: draft.dm_message })
+  const replyVar = readVariations(draft.reply_variations, { what: 'public replies', max: 300, main: draft.comment_reply })
 
   const problem =
     !draft.client_id ? 'Pick the client'
@@ -177,6 +183,9 @@ export default function AutomationsPage() {
     : draft.button_title.trim() && !draft.link.trim() ? 'The button needs a link'
     : tagged && !tagged.ok ? tagged.error
     : (hasButton ? draft.dm_message.trim().length : finalDm.length) > dmLimit ? `The DM must be ${dmLimit} characters or fewer`
+    : !dmVar.ok ? dmVar.error
+    : !replyVar.ok ? replyVar.error
+    : replyVar.list.length > 0 && !draft.comment_reply.trim() ? 'Write the public reply first — the other replies are picked at random with it'
     : null
 
   const create = async () => {
@@ -185,7 +194,11 @@ export default function AutomationsPage() {
       const res = await fetch('/api/social/automations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({
+          ...draft,
+          dm_variations: draft.dm_variations.split(/\r?\n/),
+          reply_variations: draft.reply_variations.split(/\r?\n/),
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not switch it on')
@@ -410,9 +423,21 @@ export default function AutomationsPage() {
                 )}
 
                 <label className="grid gap-1.5">
+                  {label('Other DM texts', `optional, up to ${MAX_VARIATIONS}, one per line — one is picked at random each time`)}
+                  <Textarea rows={2} value={draft.dm_variations}
+                    onChange={e => setDraft(d => ({ ...d, dm_variations: e.target.value }))} />
+                </label>
+
+                <label className="grid gap-1.5">
                   {label('Public reply under their comment', 'optional')}
                   <Input value={draft.comment_reply} maxLength={300} placeholder="Just sent it to your DMs."
                     onChange={e => setDraft(d => ({ ...d, comment_reply: e.target.value }))} />
+                </label>
+
+                <label className="grid gap-1.5">
+                  {label('Other replies', `optional, up to ${MAX_VARIATIONS}, one per line`)}
+                  <Textarea rows={2} value={draft.reply_variations} placeholder="Check your DMs!"
+                    onChange={e => setDraft(d => ({ ...d, reply_variations: e.target.value }))} />
                 </label>
 
                 <label className="grid gap-1.5">
@@ -501,7 +526,14 @@ export default function AutomationsPage() {
                     {r.button_title && <span className="mt-1 block text-secondary-13">Button: <span className="font-medium text-foreground">{r.button_title}</span></span>}
                   </p>
                   {r.link && <code className="break-all font-mono text-[12px] text-muted-foreground">{r.link}</code>}
-                  {r.comment_reply && <p className="text-secondary-13 text-muted-foreground">Public reply: {r.comment_reply}</p>}
+                  {r.dm_variations.length > 0 && (
+                    <p className="text-secondary-13 text-muted-foreground">Other DM texts: {r.dm_variations.length}</p>
+                  )}
+                  {r.comment_reply && (
+                    <p className="text-secondary-13 text-muted-foreground">
+                      Public reply: {[r.comment_reply, ...r.reply_variations].join(' / ')}
+                    </p>
+                  )}
 
                   <div className="flex flex-wrap gap-x-5 gap-y-1">
                     {STATS.map(([k, w]) => (

@@ -43,6 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ...(body.per_channel === undefined ? {} : { per_channel: body.per_channel }),
         ...(body.scheduled_for === undefined ? {} : { scheduled_for: body.scheduled_for }),
         ...(body.note === undefined ? {} : { note: body.note }),
+        ...(body.automation === undefined ? {} : { automation: body.automation }),
         ...(typeof body.expect_rev === 'number' ? { expect_rev: body.expect_rev } : {}),
       })
       return NextResponse.json({ post })

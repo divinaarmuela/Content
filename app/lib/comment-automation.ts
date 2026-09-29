@@ -212,6 +212,8 @@ export async function createForPost(user: TeamUser, raw: unknown): Promise<{ ok:
       button_title: input.button_title && link.link ? input.button_title : null,
       link: link.link,
       comment_reply: input.comment_reply,
+      dm_variations: input.dm_variations,
+      reply_variations: input.reply_variations,
       active: true,
       paused_reason: null,
       created_by: user.id,
@@ -243,6 +245,8 @@ export type ViewRow = {
   button_title: string | null
   link: string | null
   comment_reply: string | null
+  dm_variations: string[]
+  reply_variations: string[]
   active: boolean
   paused_reason: string | null
   created_at: string
@@ -317,6 +321,8 @@ export async function listForView(user: TeamUser): Promise<{ rows: ViewRow[]; ou
       button_title: r.button_title,
       link: r.link,
       comment_reply: r.comment_reply,
+      dm_variations: Array.isArray(r.dm_variations) ? (r.dm_variations as unknown[]).map(String) : [],
+      reply_variations: Array.isArray(r.reply_variations) ? (r.reply_variations as unknown[]).map(String) : [],
       // Zernio's word on/off wins — it is the one that sends
       active: zd ? zd.isActive : z ? z.isActive : r.active,
       paused_reason: r.paused_reason,
@@ -540,12 +546,16 @@ async function armOne(
       if (old && old.stats.triggered > 0) await publisher.updateAutomation(old.id, { isActive: false }).catch(() => {})
       else if (old) await publisher.deleteAutomation(old.id).catch(e => console.error('comment automation: old pending one would not go', old.id, e))
     }
-    const link = finalLink({ link: automation.link, keywords: automation.keywords, dm_message: automation.dm_message, button_title: automation.button_title }, client.slug)
+    // the same reading the form's save used (postAutomationProblem) — variations checked, blanks dropped
+    const parsed = parseAutomationInput({ client_id: 'x', social_account_id: 'x', post_key: 'x', ...automation })
+    if (!parsed.ok) { console.error('comment automation: not made —', parsed.error, { post: post.postId }); return }
+    const variations = { dm: parsed.value.dm_variations, reply: parsed.value.reply_variations }
+    const link = finalLink(parsed.value, client.slug)
     if (!link.ok) { console.error('comment automation: not made —', link.error, { post: post.postId }); return }
     const title = postTitleOf(post.caption, job.scheduled_for)
     const name = defaultName(automation.keywords, title)
     const payload = zernioPayload(
-      { keywords: automation.keywords, match_mode: 'word', dm_message: automation.dm_message, button_title: automation.button_title, comment_reply: automation.comment_reply },
+      { ...parsed.value, match_mode: 'word' },
       { profileId: client.social_profile_id!, accountId: account.provider_account_id },
       binding,
       { name, postTitle: title, link: link.link },
@@ -572,6 +582,8 @@ async function armOne(
       button_title: automation.button_title && link.link ? automation.button_title : null,
       link: link.link,
       comment_reply: automation.comment_reply,
+      dm_variations: variations.dm,
+      reply_variations: variations.reply,
       active: true,
       paused_reason: null,
       created_by: row?.created_by ?? job.created_by ?? null,

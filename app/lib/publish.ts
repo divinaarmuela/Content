@@ -309,6 +309,15 @@ export async function tellThePost(jobId: string, opts: { lost?: boolean } = {}):
   } catch (e) {
     console.error('[publish] could not record the outcome on its post', jobId, e instanceof Error ? e.message : e)
   }
+  // …and the post's comment-to-DM automation, set up while scheduling, is made (or switched back on)
+  // now that Zernio holds the booking and its post id is known (comment-automation.armPostAutomations —
+  // idempotent, best-effort, never throws)
+  try {
+    const { armPostAutomations } = await import('./comment-automation')
+    await armPostAutomations(jobId)
+  } catch (e) {
+    console.error('[publish] could not arm the post automation', jobId, e instanceof Error ? e.message : e)
+  }
 }
 
 /**

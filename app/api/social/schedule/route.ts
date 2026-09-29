@@ -53,6 +53,7 @@ export async function POST(req: Request) {
         per_channel: body.per_channel,
         scheduled_for: body.scheduled_for ?? null,
         timezone: body.timezone ?? null,
+        automation: body.automation,
       })
       return NextResponse.json({ post })
     } catch (e) {

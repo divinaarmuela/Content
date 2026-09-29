@@ -43,6 +43,7 @@ import {
 } from './post-stage'
 import { STAGE_LABEL, readPostState, type PostStage, type PostState } from './post-stage-core'
 import { jobIdsOfPost, type PostJobsLike } from './post-outcome-core'
+import { postAutomationProblem, readPostAutomation, type PostAutomation } from './comment-automation-core'
 
 /**
  * The planned post, server side — the calendar's reads, the composer's working copy, and the media.
@@ -527,6 +528,8 @@ export type CreatePostInput = {
   per_channel?: unknown
   scheduled_for?: string | null
   timezone?: string | null
+  /** the comment-to-DM automation (comment-automation-core readPostAutomation) */
+  automation?: unknown
 }
 
 /**
@@ -552,6 +555,7 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
   const perChannel = readPerChannel(input.per_channel)
   const caption = String(input.caption ?? '')
   const scheduledFor = input.scheduled_for ? String(input.scheduled_for) : null
+  const automation = checkedAutomation(input.automation)
 
   // a half-made draft is allowed; a post with real content in it is judged
   if (accounts.length > 0 && slides.length > 0) {
@@ -575,7 +579,25 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
     scheduledFor,
     timezone: input.timezone ?? null,
     version: (elig.version as AssetVersion) ?? null,
+    automation,
   })
+}
+
+/**
+ * The post's automation as sent by the window: read, and — when it is switched on — checked, so a DM
+ * that cannot go out (no text, a button with no link, a link that is not https) is refused at the save
+ * with the reason, not discovered silently when the booking reaches Zernio.
+ */
+function checkedAutomation(raw: unknown): PostAutomation | null {
+  const a = readPostAutomation(raw)
+  const problem = postAutomationProblem(a, null)
+  if (problem) throw new ComposeError([problem])
+  // the window keeps blank lines while someone types; what is stored has none
+  return a && {
+    ...a,
+    dm_variations: a.dm_variations.map(t => t.trim()).filter(Boolean),
+    reply_variations: a.reply_variations.map(t => t.trim()).filter(Boolean),
+  }
 }
 
 /**
@@ -597,6 +619,7 @@ async function insertPost(
     scheduledFor: string | null
     timezone: string | null
     version: AssetVersion | null
+    automation?: PostAutomation | null
   },
 ): Promise<PlannedPost> {
   const id = randomUUID()
@@ -640,6 +663,7 @@ async function insertPost(
       channels: input.channels,
       scheduled_for: input.scheduledFor,
       timezone: await zoneOf(item.client_id, input.timezone),
+      automation: input.automation ?? null,
     })
     // A big video's copy is made NOW, not when the post is due. Fire and
     // forget: nothing about this save waits on it, and the publish job still
@@ -712,6 +736,7 @@ export type UpdatePostInput = {
   per_channel?: unknown
   scheduled_for?: string | null
   note?: string | null
+  automation?: unknown
   /** the rev the page drew; a stale page is refused rather than overwriting someone else's save */
   expect_rev?: number | null
 }
@@ -796,6 +821,7 @@ export async function updatePost(
     per_channel: perChannel,
     scheduled_for: scheduledFor,
     ...(input.note === undefined ? {} : { note: input.note ? String(input.note) : null }),
+    ...(input.automation === undefined ? {} : { automation: checkedAutomation(input.automation) }),
   }, input.expect_rev ?? null)
   if (!saved.ok) throwRefusal(saved)
 

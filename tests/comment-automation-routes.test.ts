@@ -33,6 +33,13 @@ vi.mock('@/lib/db', () => ({
     insert: async (row: R) => { tbl(name).set(row.id, row); return row },
     update: async (id: string, patch: Partial<R>) => { const cur = tbl(name).get(id); if (!cur) return null; const n = { ...cur, ...patch }; tbl(name).set(id, n); return n },
     remove: async (id: string) => { tbl(name).delete(id) },
+    claim: async (id: string, mutate: (cur: R | null) => R | null) => {
+      const cur = tbl(name).get(id) ?? null
+      const next = mutate(cur)
+      if (!next) return { claimed: false, current: cur }
+      tbl(name).set(id, next)
+      return { claimed: true, row: next }
+    },
   }),
 }))
 
@@ -42,6 +49,7 @@ vi.stubEnv('ZERNIO_API_KEY', 'test-key')
 type Call = { method: string; path: string; body: Record<string, unknown> | null }
 const calls: Call[] = []
 let createResponse: { status: number; body: unknown } = { status: 200, body: { success: true, automation: { id: 'za1' } } }
+let livePosts: Record<string, string> = {}
 const ACCOUNT_POSTS = { status: 'success', posts: [
   { id: '18125559040862013', message: 'Live post\nsecond line', createdTime: '2026-09-29T06:19:12.000Z', picture: 'https://pic/1', permalink: 'https://www.instagram.com/p/LIVE/' },
   { id: '18000000000000002', message: 'Made on the phone', createdTime: '2026-09-20T06:19:12.000Z', picture: null, permalink: 'https://www.instagram.com/p/PHONE/' },
@@ -57,8 +65,13 @@ vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     { id: 'za1', accountId: 'zacc1', platform: 'instagram', platformPostId: '18125559040862013', keywords: ['BOOK'], isActive: true, trigger: 'comment', stats: { triggered: 2, dmsSent: 2 } },
     { id: 'zwide', name: 'Old one', accountId: 'zacc1', platform: 'instagram', keywords: ['LINK'], isActive: true, trigger: 'comment', stats: {} },
   ] })
+  if (method === 'GET' && path.startsWith('/posts/')) {
+    const id = path.split('/')[2]
+    return json({ post: { _id: id, platforms: [{ platform: 'instagram', accountId: { _id: 'zacc1' }, ...(livePosts[id] ? { platformPostId: livePosts[id] } : {}) }] } })
+  }
   if (method === 'GET' && path.startsWith('/comment-automations/')) {
     const id = path.split('/')[2]
+    if (id.startsWith('zpending')) return json({ success: true, automation: { id, accountId: 'zacc1', postId: 'x', isActive: true, stats: { triggered: 0 } }, logs: [] })
     if (id === 'zwide') return json({ success: true, automation: { id: 'zwide', accountId: 'zacc1', keywords: ['LINK'], isActive: true, trigger: 'comment' } })
     return json({ success: true, automation: { id, accountId: 'zacc1', platformPostId: '181', isActive: true, stats: { triggered: 2, dmsSent: 2, linkClicks: 1 } },
       logs: [{ id: 'l1', commenterName: 'akmal.ashwin', commentText: 'BOOK', status: 'sent', createdAt: '2026-09-29T09:00:14Z' }] })
@@ -72,7 +85,7 @@ afterAll(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 const list = await import('../app/api/social/automations/route')
 const one = await import('../app/api/social/automations/[id]/route')
 const setup = await import('../app/api/social/automations/setup/route')
-const { pauseAutomationsForPost } = await import('../app/lib/comment-automation')
+const { pauseAutomationsForPost, armPostAutomations } = await import('../app/lib/comment-automation')
 
 const post = (body: unknown) => new Request('http://x/api/social/automations', { method: 'POST', body: JSON.stringify(body) })
 const ZERNIO_BOOKED = '6abb5843c8ba30684174d977'
@@ -81,6 +94,7 @@ beforeEach(() => {
   role = 'account_manager'
   allowedClients = null
   calls.length = 0
+  livePosts = {}
   createResponse = { status: 200, body: { success: true, automation: { id: 'za1' } } }
   for (const k of Object.keys(db)) delete db[k]
   tbl('clients').set('c1', { id: 'c1', name: 'Justin Engelke', slug: 'justin-engelke', social_profile_id: 'prof1' })
@@ -89,7 +103,7 @@ beforeEach(() => {
   tbl('social_accounts').set('s2', { id: 's2', client_id: 'c2', platform: 'instagram', provider_account_id: 'zacc2', username: 'np', active: true })
   tbl('social_posts').set('pb', { id: 'pb', client_id: 'c1', stage: 'booked', caption: 'Booked post', channels: ['s1'], slides: [], scheduled_for: '2026-10-02T09:00:00Z', booking: { job_ids: ['j1'], pending: false, at: 'x', for_time: null }, outcomes: {} })
   tbl('social_posts').set('pp', { id: 'pp', client_id: 'c1', stage: 'posted', caption: 'Live post', channels: ['s1'], slides: [], booking: { job_ids: ['j2'], pending: false, at: 'x', for_time: null }, outcomes: { instagram: { status: 'published', url: 'https://www.instagram.com/p/LIVE/', at: '2026-09-29T06:19:20Z' } } })
-  tbl('publish_jobs').set('j1', { id: 'j1', status: 'scheduled', provider_post_id: ZERNIO_BOOKED, targets: [{ platform: 'instagram' }] })
+  tbl('publish_jobs').set('j1', { id: 'j1', client_id: 'c1', status: 'scheduled', provider_post_id: ZERNIO_BOOKED, targets: [{ platform: 'instagram' }] })
   tbl('publish_jobs').set('j2', { id: 'j2', status: 'published', provider_post_id: 'bbbbbbbbbbbbbbbbbbbbbbbb', targets: [{ platform: 'instagram' }] })
 })
 
@@ -230,5 +244,99 @@ describe('list, switch, delete', () => {
     await pauseAutomationsForPost('pp')
     expect(calls.find(c => c.method === 'PATCH')).toMatchObject({ path: '/comment-automations/za1', body: { isActive: false } })
     expect(tbl('comment_automations').get('r1')).toMatchObject({ active: false, paused_reason: 'The post was cancelled' })
+  })
+})
+
+/* ── set up while scheduling: made when the booking reaches Zernio (29 Sep 2026, "ManyChat-style") ── */
+
+describe('the post\'s own automation, at booking', () => {
+  const AUTO = {
+    on: true, keywords: ['BOOK'], dm_message: 'Hi!', button_title: 'Book a call', link: 'https://book.example.com',
+    comment_reply: 'Sent!', dm_variations: ['Hey there!'], reply_variations: ['Check your DMs'],
+  }
+  const ROW_ID = 'post_pb__s1'
+  beforeEach(() => {
+    createResponse = { status: 200, body: { success: true, automation: { id: 'zpending1' } } }
+    const pb = tbl('social_posts').get('pb')!
+    tbl('social_posts').set('pb', { ...pb, automation: AUTO })
+  })
+  const bindingOf = (b: Record<string, unknown> | null) => (b?.platformPostId ? 'live' : b?.postId ? 'pending' : 'NONE')
+
+  it('a booked post: made ONCE, bound by the booking\'s Zernio post id (pending), with its variations', async () => {
+    await armPostAutomations('j1')
+    await armPostAutomations('j1') // the reconciler, the webhook: again and again
+    expect(created()).toHaveLength(1)
+    const body = created()[0].body!
+    expect(body).toMatchObject({
+      postId: ZERNIO_BOOKED, accountId: 'zacc1', profileId: 'prof1', keywords: ['BOOK'],
+      dmMessageVariations: ['Hey there!'], commentReply: 'Sent!', commentReplyVariations: ['Check your DMs'],
+      buttons: [{ type: 'url', title: 'Book a call', url: 'https://book.example.com?utm_source=mdmedia&utm_medium=instagram_dm&utm_campaign=justin_engelke&utm_content=book' }],
+    })
+    expect(body).not.toHaveProperty('platformPostId')
+    expect(tbl('comment_automations').get(ROW_ID)).toMatchObject({ social_post_id: 'pb', zernio_post_id: ZERNIO_BOOKED, zernio_automation_id: 'zpending1', active: true })
+  })
+
+  it('already out on Instagram: bound by the network\'s id (platformPostId) instead', async () => {
+    tbl('publish_jobs').set('j1', { ...tbl('publish_jobs').get('j1')!, status: 'published' })
+    livePosts[ZERNIO_BOOKED] = '17999'
+    await armPostAutomations('j1')
+    expect(created()).toHaveLength(1)
+    expect(created()[0].body).toMatchObject({ platformPostId: '17999' })
+    expect(created()[0].body).not.toHaveProperty('postId')
+  })
+
+  it('out, but Zernio has not said the network id yet: nothing is made (the reconciler asks again)', async () => {
+    tbl('publish_jobs').set('j1', { ...tbl('publish_jobs').get('j1')!, status: 'published' })
+    await armPostAutomations('j1')
+    expect(created()).toHaveLength(0)
+  })
+
+  it('switched off in the window, or a job not at Zernio yet: nothing is made', async () => {
+    tbl('social_posts').set('pb', { ...tbl('social_posts').get('pb')!, automation: { ...AUTO, on: false } })
+    await armPostAutomations('j1')
+    tbl('social_posts').set('pb', { ...tbl('social_posts').get('pb')!, automation: AUTO })
+    tbl('publish_jobs').set('j1', { ...tbl('publish_jobs').get('j1')!, status: 'queued', provider_post_id: null })
+    await armPostAutomations('j1')
+    expect(created()).toHaveLength(0)
+  })
+
+  it('taken off then booked again: switched off (never deleted), then back on — no second automation', async () => {
+    await armPostAutomations('j1')
+    await pauseAutomationsForPost('pb', 'The post was taken off the schedule')
+    expect(tbl('comment_automations').get(ROW_ID)).toMatchObject({ active: false })
+    expect(calls.filter(c => c.method === 'DELETE')).toHaveLength(0)
+    await armPostAutomations('j1')
+    expect(created()).toHaveLength(1)
+    expect(calls.filter(c => c.method === 'PATCH').map(c => c.body)).toEqual([{ isActive: false }, { isActive: true }])
+    expect(tbl('comment_automations').get(ROW_ID)).toMatchObject({ active: true, paused_reason: null })
+  })
+
+  it('switched off by a PERSON: a later booking never switches it back on', async () => {
+    await armPostAutomations('j1')
+    tbl('comment_automations').set(ROW_ID, { ...tbl('comment_automations').get(ROW_ID)!, active: false, paused_reason: null })
+    await armPostAutomations('j1')
+    expect(calls.filter(c => c.method === 'PATCH')).toHaveLength(0)
+    expect(created()).toHaveLength(1)
+  })
+
+  it('moved to a new time (a new booking): the old pending one is replaced, keeping our one row — PATCH has no binding field', async () => {
+    await armPostAutomations('j1')
+    const NEW = 'cccccccccccccccccccccccc'
+    tbl('publish_jobs').set('j3', { id: 'j3', client_id: 'c1', status: 'scheduled', provider_post_id: NEW, targets: [{ platform: 'instagram' }] })
+    tbl('social_posts').set('pb', { ...tbl('social_posts').get('pb')!, booking: { job_ids: ['j3'], pending: false, at: 'y', for_time: null } })
+    createResponse = { status: 200, body: { success: true, automation: { id: 'zpending2' } } }
+    await armPostAutomations('j3')
+    expect(calls.find(c => c.method === 'DELETE')!.path).toBe('/comment-automations/zpending1')
+    expect(created()).toHaveLength(2)
+    expect(created()[1].body!.postId).toBe(NEW)
+    expect([...tbl('comment_automations').keys()]).toEqual([ROW_ID])
+    expect(tbl('comment_automations').get(ROW_ID)).toMatchObject({ zernio_automation_id: 'zpending2', zernio_post_id: NEW })
+  })
+
+  it('no automation is ever created without a post binding', async () => {
+    await armPostAutomations('j1')
+    await list.POST(post({ client_id: 'c1', social_account_id: 's1', post_key: 'ig:18000000000000002', dm_message: 'Hi!' }))
+    expect(created().length).toBeGreaterThan(0)
+    for (const c of created()) expect(bindingOf(c.body)).not.toBe('NONE')
   })
 })
