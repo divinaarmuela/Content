@@ -1,57 +1,39 @@
 import { NextResponse } from 'next/server'
+import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
-import { getPublisher } from '@/app/lib/publisher'
+import { deleteAutomation, updateAutomation } from '@/app/lib/comment-automation'
 
-/** One automation, with its stats and recent trigger log. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireRole('scheduler')
-    const { id } = await params
-    const publisher = getPublisher()
-    const [automation, logs] = await Promise.all([
-      publisher.getAutomation(id),
-      publisher.automationLogs(id),
-    ])
-    return NextResponse.json({ automation, logs })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
+type Ctx = { params: Promise<{ id: string }> }
+
+/** On/off, or the DM text and public reply. `id` is our row id, or `z:<zernio id>` for one made elsewhere. */
+export async function PATCH(req: Request, { params }: Ctx) {
+  return withRequestCache(async () => {
+    try {
+      const user = await requireRole('account_manager')
+      const { id } = await params
+      const body = await req.json().catch(() => null)
+      const done = await updateAutomation(user, decodeURIComponent(id), body)
+      if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status })
+      return NextResponse.json({ ok: true })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
+    }
+  })
 }
 
-/** Pause/resume or edit. Only known-safe fields pass through. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireRole('scheduler')
-    const { id } = await params
-    const body = await req.json()
-
-    const patch: Record<string, unknown> = {}
-    if (typeof body.isActive === 'boolean') patch.isActive = body.isActive
-    if (typeof body.dmMessage === 'string' && body.dmMessage.trim()) patch.dmMessage = body.dmMessage.trim()
-    if (Array.isArray(body.keywords)) {
-      const keywords = body.keywords.map((k: unknown) => String(k ?? '').trim()).filter(Boolean)
-      if (keywords.length > 0) patch.keywords = keywords
+/** Delete at Zernio (its history goes with it) and here. The page confirms first. */
+export async function DELETE(_req: Request, { params }: Ctx) {
+  return withRequestCache(async () => {
+    try {
+      const user = await requireRole('account_manager')
+      const { id } = await params
+      const done = await deleteAutomation(user, decodeURIComponent(id))
+      if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status })
+      return NextResponse.json({ ok: true })
+    } catch (e) {
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
     }
-    if (Object.keys(patch).length === 0) {
-      return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
-    }
-
-    return NextResponse.json({ updated: await getPublisher().updateAutomation(id, patch) })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
-}
-
-/** Delete permanently, logs included — the UI confirms before calling. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    await requireRole('scheduler')
-    const { id } = await params
-    return NextResponse.json({ deleted: await getPublisher().deleteAutomation(id) })
-  } catch (e) {
-    const { error, status } = authzErrorResponse(e)
-    return NextResponse.json({ error }, { status })
-  }
+  })
 }

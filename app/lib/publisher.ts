@@ -44,6 +44,8 @@ export interface Publisher {
    * feed preview draws under our own planned posts (24 Sep 2026).
    */
   accountPosts(providerAccountId: string): Promise<unknown>
+  /** One Zernio post (GET /v1/posts/{postId}): `{ post: { platforms: [{ accountId, platformPostId, platformPostUrl }] } }`. */
+  getPost(postId: string): Promise<unknown>
   /** Per-post analytics, including posts published outside this dashboard. */
   postAnalytics(postId?: string): Promise<unknown>
   /** One post's numbers day by day since it went up (needs the Analytics add-on). */
@@ -604,6 +606,10 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/accounts/${encodeURIComponent(providerAccountId)}/posts`)
   }
 
+  getPost(postId: string) {
+    return this.getJson(`/posts/${encodeURIComponent(postId)}`)
+  }
+
   listComments() {
     return this.getJson('/inbox/comments')
   }
@@ -983,6 +989,7 @@ class UnconfiguredPublisher implements Publisher {
   async followerStats() { return null }
   async listPosts() { return null }
   async accountPosts() { return null }
+  async getPost() { return null }
   async postAnalytics() { return null }
   async postTimeline() { return null }
   async listComments() { return null }

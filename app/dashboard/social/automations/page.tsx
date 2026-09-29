@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -16,114 +16,168 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Pause, Play, Plus, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, ImageOff, Plus, Trash2, X, Zap } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
 import EmptyState from '../../EmptyState'
-import { BUTTON_MESSAGE_LIMIT, MESSAGE_LIMIT, parseAutomationDraft } from '@/app/lib/automation-core'
 import PageTitle from '../../ui/PageTitle'
+import {
+  BUTTON_DM_LIMIT, BUTTON_TITLE_LIMIT, DEFAULT_KEYWORD, DM_LIMIT, dmText, normaliseKeywords, withUtm,
+  type AutomationLogRow, type AutomationStats, type PostChoice,
+} from '@/app/lib/comment-automation-core'
 
-type SocialAccount = {
-  id: string; provider_account_id: string; platform: string
-  username: string | null; name: string | null; active: boolean
-}
+type SetupAccount = { id: string; platform: string; username: string | null; name: string | null }
+type SetupClient = { id: string; name: string; slug: string; problem: string | null; accounts: SetupAccount[] }
 
-type PostRow = { id: string; accountId: string; content: string }
-
-type TriggerLog = {
+type Row = {
   id: string
-  commenterName?: string
-  commentText?: string
-  status?: string
-  error?: string | null
-  commentReplyStatus?: string
-  clickedAt?: string | null
-  clickCount?: number
-  createdAt?: string
+  client_id: string
+  client_name: string
+  account: { id: string; platform: string; username: string | null }
+  post: { title: string | null; thumb: string | null; date: string | null; social_post_id: string | null; bound: 'live' | 'pending' }
+  name: string
+  keywords: string[]
+  match_mode: string
+  dm_message: string
+  button_title: string | null
+  link: string | null
+  comment_reply: string | null
+  active: boolean
+  paused_reason: string | null
+  created_at: string
+  stats: AutomationStats | null
+  logs: AutomationLogRow[]
+  warning: string | null
 }
 
-type Automation = {
-  id: string
-  name?: string
-  platform?: string
-  trigger?: string
-  keywords?: string[]
-  dmMessage?: string
-  commentReply?: string
-  isActive?: boolean
-  platformPostId?: string
-  alsoMatchInDms?: boolean
-  stats?: Record<string, number>
-  createdAt?: string
+type Outside = {
+  id: string; name: string; client_name: string | null; account_username: string | null; platform: string
+  keywords: string[]; active: boolean; account_wide: boolean; stats: AutomationStats
 }
 
-const STAT_LABELS: [string, string][] = [
-  ['triggered', 'Triggered'], ['dmsSent', 'DMs sent'],
-  ['delivered', 'Delivered'], ['read', 'Read'], ['linkClicks', 'Link clicks'],
+const STATS: [keyof AutomationStats, string][] = [
+  ['triggered', 'Triggered'], ['dmsSent', 'DMs sent'], ['delivered', 'Delivered'],
+  ['read', 'Read'], ['failed', 'Failed'], ['linkClicks', 'Link clicks'],
 ]
 
+const MATCH_WORDS: Record<string, string> = {
+  word: 'The keyword as a whole word',
+  contains: 'The keyword anywhere, even inside a word',
+  exact: 'The comment is exactly the keyword',
+}
+
+const day = (iso: string | null) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+const when = (iso: string | null) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+}
+
+const EMPTY_DRAFT = {
+  client_id: '', social_account_id: '', post_key: '',
+  keywords: DEFAULT_KEYWORD, match_mode: 'word', dm_message: '',
+  button_title: '', link: '', comment_reply: '', name: '',
+}
+
 /**
- * Comment→DM automations — the "comment LINK and I'll send it to you" loop.
- * One page: what is running, how it is performing, and a form to add more.
+ * COMMENT-TO-DM AUTOMATIONS, ONE POST EACH (the owner, 29 Sep 2026: "select
+ * account and the post name and then do that"). Pick the client, its account,
+ * then the post; write the keyword and the DM; the link gets its UTM tags.
+ * Nothing here ever answers every comment on an account — an automation is
+ * always one post's (app/lib/comment-automation-core.ts).
  */
 export default function AutomationsPage() {
-  const [autos, setAutos] = useState<Automation[] | null>(null)
-  const [accounts, setAccounts] = useState<SocialAccount[] | null>(null)
-  const [posts, setPosts] = useState<PostRow[]>([])
+  const [rows, setRows] = useState<Row[] | null>(null)
+  const [outside, setOutside] = useState<Outside[]>([])
+  const [canManage, setCanManage] = useState(false)
+  const [zernioRead, setZernioRead] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState<Automation | null>(null)
-  // per-person history, loaded on demand per automation
-  const [openLogs, setOpenLogs] = useState<string | null>(null)
-  const [logs, setLogs] = useState<Record<string, TriggerLog[] | null>>({})
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null)
 
-  const [draft, setDraft] = useState({
-    accountRowId: '', name: '', trigger: 'comment',
-    keywords: '', dmMessage: '', buttonTitle: '', buttonUrl: '',
-    alsoMatchInDms: false, linkTracking: true, commentReply: '', platformPostId: '',
-  })
+  const [creating, setCreating] = useState(false)
+  const [clients, setClients] = useState<SetupClient[] | null>(null)
+  const [posts, setPosts] = useState<PostChoice[] | null>(null)
+  const [postsNote, setPostsNote] = useState<string | null>(null)
+  const [draft, setDraft] = useState(EMPTY_DRAFT)
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/social/automations')
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load automations')
-      const raw = json.automations
-      setAutos(raw?.automations ?? raw?.data ?? (Array.isArray(raw) ? raw : []))
+      setRows(json.rows ?? [])
+      setOutside(json.outside ?? [])
+      setCanManage(json.can_manage === true)
+      setZernioRead(json.zernioRead !== false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load automations')
-      setAutos([])
+      setRows([])
     }
   }, [])
 
+  useEffect(() => { void load() }, [load])
+
+  // the form's lists, only once someone opens it
   useEffect(() => {
-    void load()
+    if (!creating || clients) return
     void (async () => {
       try {
-        const res = await fetch('/api/social/accounts')
+        const res = await fetch('/api/social/automations/setup')
         const json = await res.json()
-        const list: SocialAccount[] = (json.accounts ?? []).filter((a: SocialAccount) => a.active)
-        setAccounts(list)
-        if (list.length === 1) setDraft(d => ({ ...d, accountRowId: list[0].id }))
-      } catch { setAccounts([]) }
-      try {
-        const res = await fetch('/api/social/inbox')
-        const json = await res.json()
-        if (res.ok) setPosts(json.data ?? [])
-      } catch { /* post scoping simply unavailable */ }
+        if (!res.ok) throw new Error(json.error ?? 'Could not load clients')
+        setClients(json.clients ?? [])
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not load clients')
+        setClients([])
+      }
     })()
-  }, [load])
+  }, [creating, clients])
 
-  const account = useMemo(
-    () => (accounts ?? []).find(a => a.id === draft.accountRowId) ?? null,
-    [accounts, draft.accountRowId],
-  )
-  const accountPosts = useMemo(
-    () => posts.filter(p => p.accountId === account?.provider_account_id),
-    [posts, account],
-  )
-  const msgLimit = draft.buttonUrl.trim() ? BUTTON_MESSAGE_LIMIT : MESSAGE_LIMIT
-  const parsed = parseAutomationDraft(draft)
-  const problem = !draft.accountRowId ? 'Pick an account' : parsed.ok ? null : parsed.error
+  useEffect(() => {
+    setPosts(null)
+    setPostsNote(null)
+    if (!draft.client_id || !draft.social_account_id) return
+    let live = true
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ client_id: draft.client_id, account_id: draft.social_account_id })
+        const res = await fetch(`/api/social/automations/setup?${qs}`)
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Could not load the posts')
+        if (!live) return
+        setPosts(json.posts ?? [])
+        if (json.account_posts_read === false) setPostsNote('Zernio did not answer for this account\'s own posts, so only posts made here are listed.')
+      } catch (e) {
+        if (!live) return
+        setPosts([])
+        setPostsNote(e instanceof Error ? e.message : 'Could not load the posts')
+      }
+    })()
+    return () => { live = false }
+  }, [draft.client_id, draft.social_account_id])
+
+  const client = useMemo(() => (clients ?? []).find(c => c.id === draft.client_id) ?? null, [clients, draft.client_id])
+  const chosenPost = useMemo(() => (posts ?? []).find(p => p.key === draft.post_key) ?? null, [posts, draft.post_key])
+  const keywords = normaliseKeywords(draft.keywords)
+  const hasButton = draft.button_title.trim() !== '' && draft.link.trim() !== ''
+  const tagged = draft.link.trim() && client ? withUtm(draft.link, { clientSlug: client.slug, keyword: keywords[0] }) : null
+  const finalDm = dmText(draft.dm_message, tagged?.ok ? tagged.url : null, hasButton)
+  const dmLimit = hasButton ? BUTTON_DM_LIMIT : DM_LIMIT
+
+  const problem =
+    !draft.client_id ? 'Pick the client'
+    : client?.problem ? client.problem
+    : !draft.social_account_id ? 'Pick the account'
+    : !chosenPost ? 'Pick the post it answers on'
+    : chosenPost.unavailable ? chosenPost.unavailable
+    : !draft.dm_message.trim() ? 'Write the DM it sends'
+    : draft.button_title.trim() && !draft.link.trim() ? 'The button needs a link'
+    : tagged && !tagged.ok ? tagged.error
+    : (hasButton ? draft.dm_message.trim().length : finalDm.length) > dmLimit ? `The DM must be ${dmLimit} characters or fewer`
+    : null
 
   const create = async () => {
     setBusy('create')
@@ -134,215 +188,244 @@ export default function AutomationsPage() {
         body: JSON.stringify(draft),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not create the automation')
-      toast.success(`"${draft.name.trim()}" is live — it starts answering straight away`)
+      if (!res.ok) throw new Error(json.error ?? 'Could not switch it on')
+      toast.success(chosenPost?.state === 'booked'
+        ? 'Set — it starts answering the moment the post goes out'
+        : 'Switched on — it answers comments on that post from now')
       setCreating(false)
-      setDraft(d => ({
-        ...d, name: '', keywords: '', dmMessage: '',
-        buttonTitle: '', buttonUrl: '', platformPostId: '', alsoMatchInDms: false,
-      }))
+      setDraft(EMPTY_DRAFT)
       void load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not create the automation')
+      toast.error(e instanceof Error ? e.message : 'Could not switch it on')
     } finally {
       setBusy(null)
     }
   }
 
-  const toggleActive = async (a: Automation) => {
-    setBusy(a.id)
+  const patch = async (id: string, body: Record<string, unknown>, done: string) => {
+    setBusy(id)
     try {
-      const res = await fetch(`/api/social/automations/${a.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !(a.isActive ?? true) }),
+      const res = await fetch(`/api/social/automations/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not update')
-      toast.success(a.isActive ? 'Paused — it stops answering' : 'Running again')
+      if (!res.ok) throw new Error(json.error ?? 'Could not change it')
+      toast.success(done)
       void load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update')
+      toast.error(e instanceof Error ? e.message : 'Could not change it')
     } finally {
       setBusy(null)
     }
   }
 
-  const toggleLogs = async (a: Automation) => {
-    if (openLogs === a.id) { setOpenLogs(null); return }
-    setOpenLogs(a.id)
-    if (logs[a.id]) return
-    setLogs(prev => ({ ...prev, [a.id]: null }))
+  const remove = async (id: string) => {
+    setBusy(id)
     try {
-      const res = await fetch(`/api/social/automations/${a.id}`)
+      const res = await fetch(`/api/social/automations/${encodeURIComponent(id)}`, { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not load activity')
-      const raw = json.logs
-      setLogs(prev => ({ ...prev, [a.id]: raw?.logs ?? raw?.data ?? (Array.isArray(raw) ? raw : []) }))
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not load activity')
-      setLogs(prev => ({ ...prev, [a.id]: [] }))
-    }
-  }
-
-  const doDelete = async (a: Automation) => {
-    setBusy(a.id)
-    try {
-      const res = await fetch(`/api/social/automations/${a.id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Could not delete')
-      toast.success(`"${a.name ?? 'Automation'}" deleted`)
+      if (!res.ok) throw new Error(json.error ?? 'Could not delete it')
+      toast.success('Deleted')
       setConfirmDelete(null)
       void load()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not delete')
+      toast.error(e instanceof Error ? e.message : 'Could not delete it')
     } finally {
       setBusy(null)
     }
   }
 
+  const groups = useMemo(() => {
+    const m = new Map<string, Row[]>()
+    for (const r of rows ?? []) m.set(r.client_name, [...(m.get(r.client_name) ?? []), r])
+    return [...m.entries()]
+  }, [rows])
+
+  const label = (text: string, hint?: string) => (
+    <span className="text-secondary-13 font-medium text-muted-foreground">
+      {text}{hint && <span className="font-normal"> · {hint}</span>}
+    </span>
+  )
+
   return (
     <div className="flex flex-col gap-4">
-      <Link href="/dashboard/social"
-        className="inline-flex w-fit items-center gap-1.5 text-secondary-13 text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> Social channels
-      </Link>
-
       <PageTitle
-        title="Comment → DM automations"
-        summary="When someone comments a keyword, the account DMs them automatically — the &ldquo;comment LINK and I&rsquo;ll send it to you&rdquo; loop."
-        actions={<>
-          <Button size="sm" onClick={() => setCreating(v => !v)}>
-            <Plus className="h-4 w-4" /> New automation
-          </Button>
-        </>}
+        title="Automations"
+        summary="Someone comments a keyword on one post, and the account DMs them the link. Each automation belongs to one post — never the whole account."
+        actions={canManage && !creating ? (
+          <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New automation</Button>
+        ) : undefined}
       />
+
+      {!zernioRead && (
+        <p className="rounded-inner border border-border bg-tint-amber px-3 py-2 text-secondary-13">
+          Zernio did not answer, so the on/off state and numbers below may be out of date.
+        </p>
+      )}
 
       {creating && (
         <Card>
-          <CardContent className="grid gap-3 p-4">
+          <CardContent className="grid gap-5 p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-body-15 font-semibold">New automation</h2>
+              <Button size="sm" variant="ghost" onClick={() => { setCreating(false); setDraft(EMPTY_DRAFT) }}>
+                <X className="h-4 w-4" /> Close
+              </Button>
+            </div>
+
+            {/* 1 + 2: client and account */}
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">Account</label>
-                <Select value={draft.accountRowId} onValueChange={v => setDraft(d => ({ ...d, accountRowId: v, platformPostId: '' }))}>
-                  <SelectTrigger><SelectValue placeholder="Pick an account" /></SelectTrigger>
+              <label className="grid gap-1.5">
+                {label('1. Client')}
+                <Select value={draft.client_id}
+                  onValueChange={v => {
+                    const c = (clients ?? []).find(x => x.id === v)
+                    setDraft(d => ({ ...d, client_id: v, social_account_id: c?.accounts.length === 1 ? c.accounts[0].id : '', post_key: '' }))
+                  }}>
+                  <SelectTrigger><SelectValue placeholder={clients === null ? 'Loading…' : 'Pick the client'} /></SelectTrigger>
                   <SelectContent>
-                    {(accounts ?? []).map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.username ? `@${a.username}` : a.name ?? a.platform}
-                      </SelectItem>
-                    ))}
+                    {(clients ?? []).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">Name</label>
-                <Input value={draft.name} placeholder="e.g. Launch link drop"
-                  onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">Listens to</label>
-                <Select value={draft.trigger} onValueChange={v => setDraft(d => ({ ...d, trigger: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="comment">Comments on posts</SelectItem>
-                    <SelectItem value="story_reply">Story replies</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">
-                  Keywords <span className="font-normal text-muted-foreground">comma separated</span>
-                </label>
-                <Input value={draft.keywords} placeholder="LINK, price, info"
-                  onChange={e => setDraft(d => ({ ...d, keywords: e.target.value }))} />
-              </div>
-            </div>
-
-            {draft.trigger === 'comment' && accountPosts.length > 0 && (
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">Which posts</label>
-                <Select value={draft.platformPostId || 'all'}
-                  onValueChange={v => setDraft(d => ({ ...d, platformPostId: v === 'all' ? '' : v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Every post on the account</SelectItem>
-                    {accountPosts.slice(0, 25).map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {(p.content || '(no caption)').slice(0, 60)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid gap-1.5">
-              <div className="flex items-baseline justify-between">
-                <label className="text-secondary-13 font-medium text-muted-foreground">The DM it sends</label>
-                <span className={`font-mono text-[12px] tabular-nums ${draft.dmMessage.length > msgLimit ? 'text-accent-red' : 'text-muted-foreground'}`}>
-                  {draft.dmMessage.length}/{msgLimit}
-                </span>
-              </div>
-              <Textarea rows={3} value={draft.dmMessage}
-                placeholder="Hey! Here's the link you asked for 👇"
-                onChange={e => setDraft(d => ({ ...d, dmMessage: e.target.value }))} />
-            </div>
-
-            {draft.trigger === 'comment' && (
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">
-                  Public reply under their comment <span className="font-normal text-muted-foreground">optional</span>
-                </label>
-                <Input value={draft.commentReply} maxLength={300}
-                  placeholder="Check your DMs! 📩"
-                  onChange={e => setDraft(d => ({ ...d, commentReply: e.target.value }))} />
-              </div>
-            )}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">
-                  Button label <span className="font-normal text-muted-foreground">optional</span>
-                </label>
-                <Input value={draft.buttonTitle} placeholder="Shop now" maxLength={20}
-                  onChange={e => setDraft(d => ({ ...d, buttonTitle: e.target.value }))} />
-              </div>
-              <div className="grid gap-1.5">
-                <label className="text-secondary-13 font-medium text-muted-foreground">Button link</label>
-                <Input value={draft.buttonUrl} placeholder="https://…"
-                  onChange={e => setDraft(d => ({ ...d, buttonUrl: e.target.value }))} />
-              </div>
-            </div>
-
-            <label className="flex w-fit cursor-pointer items-center gap-2 text-body-15">
-              <input type="checkbox" checked={draft.alsoMatchInDms}
-                onChange={e => setDraft(d => ({ ...d, alsoMatchInDms: e.target.checked }))}
-                className="h-4 w-4 accent-[var(--dbx-blue)]" />
-              Also answer when the keyword arrives as a DM
-            </label>
-
-            {draft.buttonUrl.trim() !== '' && (
-              <label className="flex w-fit cursor-pointer items-start gap-2 text-body-15">
-                <input type="checkbox" checked={draft.linkTracking}
-                  onChange={e => setDraft(d => ({ ...d, linkTracking: e.target.checked }))}
-                  className="mt-0.5 h-4 w-4 accent-[var(--dbx-blue)]" />
-                <span>
-                  Count link clicks
-                  <span className="block text-secondary-13 text-muted-foreground">
-                    Wraps the link in a short redirect — the tapper briefly sees the
-                    tracking domain. Turn off for a clean direct link (no click stats).
-                  </span>
-                </span>
               </label>
+              <label className="grid gap-1.5">
+                {label('2. Account')}
+                <Select value={draft.social_account_id} disabled={!client || !!client.problem}
+                  onValueChange={v => setDraft(d => ({ ...d, social_account_id: v, post_key: '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Pick the Instagram or Facebook account" /></SelectTrigger>
+                  <SelectContent>
+                    {(client?.accounts ?? []).map(a => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.platform === 'facebook' ? 'Facebook' : 'Instagram'} · {a.username ? `@${a.username}` : a.name ?? a.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+            {client?.problem && <p className="text-secondary-13 text-accent-red">{client.problem}</p>}
+
+            {/* 3: the post */}
+            {draft.social_account_id && (
+              <div className="grid gap-2">
+                {label('3. Post', 'the automation answers comments on this post only')}
+                {posts === null ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-20" />)}</div>
+                ) : posts.length === 0 ? (
+                  <p className="text-secondary-13 text-muted-foreground">
+                    No posts on this account yet — book one on the Schedule, or post it, and it shows up here.
+                  </p>
+                ) : (
+                  <div className="grid max-h-[420px] gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                    {posts.map(p => {
+                      const picked = p.key === draft.post_key
+                      return (
+                        <button key={p.key} type="button" disabled={!!p.unavailable}
+                          onClick={() => setDraft(d => ({ ...d, post_key: p.key }))}
+                          className={`flex min-w-0 gap-3 rounded-inner border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${picked ? 'border-accent-blue-deep bg-tint-blue' : 'border-border hover:bg-foreground/[0.04]'}`}>
+                          {p.thumb ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.thumb} alt="" className="h-14 w-14 shrink-0 rounded object-cover" />
+                          ) : (
+                            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-foreground/[0.06]">
+                              <ImageOff className="h-4 w-4 text-muted-foreground" />
+                            </span>
+                          )}
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="line-clamp-2 text-secondary-13 font-medium">{p.title}</span>
+                            <span className="text-[12px] text-muted-foreground">
+                              {p.state === 'booked' ? `Booked · ${day(p.date)}` : `Live · ${day(p.date)}`}
+                              {p.source === 'account' ? ' · not made here' : ''}
+                            </span>
+                            {p.unavailable && <span className="text-[12px] text-accent-red">{p.unavailable}</span>}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {postsNote && <p className="text-secondary-13 text-muted-foreground">{postsNote}</p>}
+                {chosenPost?.state === 'booked' && (
+                  <p className="text-secondary-13 text-muted-foreground">
+                    This post is booked, not live yet — the automation waits and starts by itself when it goes out.
+                  </p>
+                )}
+              </div>
             )}
 
-            <div className="flex items-center gap-3">
-              <Button size="sm" disabled={busy !== null || problem !== null} onClick={create}>
-                {busy === 'create' ? 'Creating…' : 'Create automation'}
+            {/* 4: what it listens for and what it sends */}
+            {chosenPost && (
+              <div className="grid gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    {label('4. Keyword', 'comma separated for more than one')}
+                    <Input value={draft.keywords} placeholder={DEFAULT_KEYWORD}
+                      onChange={e => setDraft(d => ({ ...d, keywords: e.target.value }))} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    {label('It fires on')}
+                    <Select value={draft.match_mode} onValueChange={v => setDraft(d => ({ ...d, match_mode: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(MATCH_WORDS).map(([k, w]) => <SelectItem key={k} value={k}>{w}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                </div>
+
+                <label className="grid gap-1.5">
+                  <span className="flex items-baseline justify-between">
+                    {label('5. The DM it sends')}
+                    <span className={`font-mono text-[12px] tabular-nums ${(hasButton ? draft.dm_message.trim().length : finalDm.length) > dmLimit ? 'text-accent-red' : 'text-muted-foreground'}`}>
+                      {hasButton ? draft.dm_message.trim().length : finalDm.length}/{dmLimit}
+                    </span>
+                  </span>
+                  <Textarea rows={3} value={draft.dm_message} placeholder="Hi! Thanks for commenting. Here's the link to book a call."
+                    onChange={e => setDraft(d => ({ ...d, dm_message: e.target.value }))} />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    {label('Link', 'optional')}
+                    <Input value={draft.link} placeholder="https://…"
+                      onChange={e => setDraft(d => ({ ...d, link: e.target.value }))} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    {label('Button label', 'optional — without one, the link goes in the text')}
+                    <Input value={draft.button_title} placeholder="Book a call" maxLength={BUTTON_TITLE_LIMIT}
+                      onChange={e => setDraft(d => ({ ...d, button_title: e.target.value }))} />
+                  </label>
+                </div>
+
+                {tagged && (
+                  <div className="rounded-inner border border-border bg-foreground/[0.03] px-3 py-2 text-secondary-13">
+                    {tagged.ok ? (
+                      <>
+                        <span className="font-medium">The link people get</span>
+                        <span className="text-muted-foreground"> · {hasButton ? 'on the button, clicks counted' : 'at the end of the DM'}</span>
+                        <code className="mt-1 block break-all font-mono text-[12px]">{tagged.url}</code>
+                      </>
+                    ) : <span className="text-accent-red">{tagged.error}</span>}
+                  </div>
+                )}
+
+                <label className="grid gap-1.5">
+                  {label('Public reply under their comment', 'optional')}
+                  <Input value={draft.comment_reply} maxLength={300} placeholder="Just sent it to your DMs."
+                    onChange={e => setDraft(d => ({ ...d, comment_reply: e.target.value }))} />
+                </label>
+
+                <label className="grid gap-1.5">
+                  {label('Name', `optional — "${keywords[0]} on ${chosenPost.title.slice(0, 30)}" if left blank`)}
+                  <Input value={draft.name} maxLength={80}
+                    onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} />
+                </label>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="sm" disabled={busy !== null || problem !== null} onClick={() => void create()}>
+                {busy === 'create' ? 'Switching on…' : 'Switch it on for this post'}
               </Button>
               {problem && <span className="text-secondary-13 text-muted-foreground">{problem}</span>}
             </div>
@@ -350,137 +433,162 @@ export default function AutomationsPage() {
         </Card>
       )}
 
-      {autos === null ? (
-        <div className="grid gap-3">{[0, 1].map(i => <Skeleton key={i} className="h-28" />)}</div>
-      ) : autos.length === 0 ? (
-        !creating && (
-          <EmptyState
-            icon={Zap}
-            title="No automations yet"
-            body="An automation watches a post for a keyword and replies to the commenter with a direct message — even while everyone is asleep. Create the first one and pick which account it runs on."
-            actionLabel="Create the first automation"
-            onAction={() => setCreating(true)}
-          />
-        )
+      {rows === null ? (
+        <div className="grid gap-3">{[0, 1].map(i => <Skeleton key={i} className="h-32" />)}</div>
+      ) : rows.length === 0 && !creating ? (
+        <EmptyState
+          icon={Zap}
+          title="No automations yet"
+          body="An automation watches ONE post for a keyword and DMs the commenter the link. Set one up by picking the client, its account and the post."
+          {...(canManage ? { actionLabel: 'Set up the first one', onAction: () => setCreating(true) } : {})}
+        />
       ) : (
-        <div className="grid gap-3">
-          {autos.map(a => (
-            <Card key={a.id}>
-              <CardContent className="flex flex-col gap-3 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  {a.platform && <PlatformIcon platform={a.platform} size={18} />}
-                  <span className="text-body-15 font-semibold">{a.name ?? 'Automation'}</span>
-                  <Badge variant="outline" className={a.isActive === false
-                    ? 'border-border text-muted-foreground'
-                    : 'border-accent-green/30 bg-tint-green text-foreground'}>
-                    {a.isActive === false ? 'Paused' : 'Running'}
-                  </Badge>
-                  <span className="text-secondary-13 text-muted-foreground">
-                    {a.trigger === 'story_reply' ? 'story replies' : a.platformPostId ? 'one post' : 'all posts'}
-                    {a.alsoMatchInDms && ' · DMs too'}
-                  </span>
-                  <span className="ml-auto flex gap-1.5">
-                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void toggleActive(a)}>
-                      {a.isActive === false ? <><Play className="h-3.5 w-3.5" /> Resume</> : <><Pause className="h-3.5 w-3.5" /> Pause</>}
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={busy !== null}
-                      className="text-accent-red hover:text-foreground"
-                      onClick={() => setConfirmDelete(a)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {(a.keywords ?? []).map(k => (
-                    <span key={k} className="rounded-full bg-foreground/[0.06] px-2.5 py-1.5 font-mono text-chip-12">{k}</span>
-                  ))}
-                </div>
-
-                {a.dmMessage && (
-                  <p className="rounded-inner bg-foreground/[0.04] px-3 py-2 text-body-15 text-muted-foreground">
-                    {a.dmMessage}
-                  </p>
-                )}
-                {a.commentReply && (
-                  <p className="text-secondary-13 text-muted-foreground">
-                    Public reply: <span className="text-muted-foreground">{a.commentReply}</span>
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                  {STAT_LABELS.map(([k, label]) => (
-                    <span key={k} className="text-secondary-13 text-muted-foreground">
-                      {label}{' '}
-                      <span className="font-mono font-medium tabular-nums text-foreground">
-                        {(a.stats?.[k] ?? 0).toLocaleString()}
+        groups.map(([clientName, list]) => (
+          <section key={clientName} className="grid gap-3">
+            <h2 className="text-body-15 font-semibold">{clientName}</h2>
+            {list.map(r => (
+              <Card key={r.id}>
+                <CardContent className="flex flex-col gap-3 p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    {r.post.thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.post.thumb} alt="" className="h-14 w-14 shrink-0 rounded object-cover" />
+                    ) : (
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-foreground/[0.06]">
+                        <ImageOff className="h-4 w-4 text-muted-foreground" />
                       </span>
-                    </span>
-                  ))}
-                  {(a.stats?.triggered ?? 0) > 0 && (
-                    <button type="button" onClick={() => void toggleLogs(a)}
-                      className="text-secondary-13 text-accent-blue-deep hover:underline">
-                      {openLogs === a.id ? 'Hide activity' : 'Who triggered it'}
-                    </button>
-                  )}
-                </div>
+                    )}
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="text-body-15 font-semibold">{r.post.title ?? r.name}</span>
+                      <span className="flex flex-wrap items-center gap-1.5 text-secondary-13 text-muted-foreground">
+                        <PlatformIcon platform={r.account.platform} size={14} />
+                        {r.account.username ? `@${r.account.username}` : r.account.platform}
+                        {r.post.date && <> · {day(r.post.date)}</>}
+                        {r.post.bound === 'pending' && <Badge variant="outline">Starts when the post goes out</Badge>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-secondary-13 text-muted-foreground">{r.active ? 'On' : 'Off'}</span>
+                      <Switch checked={r.active} disabled={!canManage || busy !== null}
+                        aria-label={r.active ? 'Switch off' : 'Switch on'}
+                        onCheckedChange={v => void patch(r.id, { active: v }, v ? 'Switched on' : 'Switched off — it stops answering')} />
+                      {canManage && (
+                        <Button size="sm" variant="outline" disabled={busy !== null} aria-label="Delete"
+                          className="text-accent-red hover:text-foreground"
+                          onClick={() => setConfirmDelete({ id: r.id, name: r.post.title ?? r.name })}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-                {openLogs === a.id && (
-                  logs[a.id] === null ? (
-                    <Skeleton className="h-10 w-full" />
-                  ) : (logs[a.id] ?? []).length === 0 ? (
-                    <p className="text-secondary-13 text-muted-foreground">
-                      Nothing yet — the first time someone comments the keyword, the reply it sent shows up here.
+                  {(r.warning || (!r.active && r.paused_reason)) && (
+                    <p className="flex items-start gap-2 rounded-inner bg-tint-amber px-3 py-2 text-secondary-13">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      {r.warning ?? r.paused_reason}
                     </p>
-                  ) : (
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 text-secondary-13 text-muted-foreground">
+                    Comment
+                    {r.keywords.map(k => (
+                      <span key={k} className="rounded-full bg-foreground/[0.06] px-2.5 py-1 font-mono text-chip-12 text-foreground">{k}</span>
+                    ))}
+                    <span>· {MATCH_WORDS[r.match_mode]?.toLowerCase() ?? r.match_mode}</span>
+                  </div>
+                  <p className="whitespace-pre-line rounded-inner bg-foreground/[0.04] px-3 py-2 text-body-15 text-muted-foreground">
+                    {r.dm_message}
+                    {r.button_title && <span className="mt-1 block text-secondary-13">Button: <span className="font-medium text-foreground">{r.button_title}</span></span>}
+                  </p>
+                  {r.link && <code className="break-all font-mono text-[12px] text-muted-foreground">{r.link}</code>}
+                  {r.comment_reply && <p className="text-secondary-13 text-muted-foreground">Public reply: {r.comment_reply}</p>}
+
+                  <div className="flex flex-wrap gap-x-5 gap-y-1">
+                    {STATS.map(([k, w]) => (
+                      <span key={k} className="text-secondary-13 text-muted-foreground">
+                        {w} <span className="font-mono font-medium tabular-nums text-foreground">{r.stats ? r.stats[k].toLocaleString() : '—'}</span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {r.logs.length > 0 && (
                     <div className="flex flex-col divide-y divide-border rounded-inner border border-border">
-                      {(logs[a.id] ?? []).map(l => (
+                      {r.logs.map(l => (
                         <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-secondary-13">
-                          <span className="font-medium">{l.commenterName ?? 'someone'}</span>
-                          {l.commentText && (
-                            <span className="text-muted-foreground">&ldquo;{l.commentText.slice(0, 60)}&rdquo;</span>
-                          )}
+                          <span className="font-medium">{l.username ? `@${l.username}` : 'someone'}</span>
+                          {l.comment && <span className="text-muted-foreground">&ldquo;{l.comment.slice(0, 60)}&rdquo;</span>}
                           <span className="ml-auto flex items-center gap-2">
-                            <span className={l.status === 'sent'
-                              ? 'text-accent-green'
-                              : 'text-muted-foreground'}>
-                              {l.status === 'sent' ? 'DM sent' : l.status ?? '—'}
+                            <span className={l.status === 'sent' ? 'text-accent-green' : l.status === 'failed' ? 'text-accent-red' : 'text-muted-foreground'}
+                              title={l.error ?? undefined}>
+                              {l.status === 'sent' ? 'DM sent' : l.status}
                             </span>
-                            {l.clickedAt ? (
-                              <span className="rounded-full bg-tint-blue px-2 py-0.5 font-medium text-foreground">
-                                Clicked{(l.clickCount ?? 0) > 1 ? ` ×${l.clickCount}` : ''}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">no click</span>
-                            )}
+                            {l.clicks > 0 && <span className="rounded-full bg-tint-blue px-2 py-0.5">Clicked{l.clicks > 1 ? ` ×${l.clicks}` : ''}</span>}
+                            <span className="text-muted-foreground">{when(l.at)}</span>
                           </span>
                         </div>
                       ))}
                     </div>
-                  )
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </section>
+        ))
+      )}
+
+      {outside.length > 0 && (
+        <section className="grid gap-3">
+          <h2 className="text-body-15 font-semibold">Made outside this page</h2>
+          <p className="text-secondary-13 text-muted-foreground">
+            These were set up on Zernio directly or before this page. They can be switched off or deleted here; one that
+            answers every comment on the account cannot be switched back on from here.
+          </p>
+          {outside.map(o => (
+            <Card key={o.id}>
+              <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                <PlatformIcon platform={o.platform} size={16} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-body-15 font-medium">{o.name}</span>
+                  <span className="text-secondary-13 text-muted-foreground">
+                    {o.client_name ?? 'No client here'}{o.account_username ? ` · @${o.account_username}` : ''} · {o.keywords.join(', ') || 'any comment'}
+                    {' · '}{o.stats.triggered} triggered, {o.stats.dmsSent} DMs, {o.stats.linkClicks} clicks
+                  </span>
+                  {o.account_wide && (
+                    <span className="mt-1 flex items-center gap-1.5 text-secondary-13 text-accent-red">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Answers every comment on the account, not one post
+                    </span>
+                  )}
+                </div>
+                <span className="text-secondary-13 text-muted-foreground">{o.active ? 'On' : 'Off'}</span>
+                <Switch checked={o.active} disabled={!canManage || busy !== null || (!o.active && o.account_wide)}
+                  aria-label={o.active ? 'Switch off' : 'Switch on'}
+                  onCheckedChange={v => void patch(`z:${o.id}`, { active: v }, v ? 'Switched on' : 'Switched off')} />
+                {canManage && (
+                  <Button size="sm" variant="outline" disabled={busy !== null} aria-label="Delete"
+                    className="text-accent-red hover:text-foreground"
+                    onClick={() => setConfirmDelete({ id: `z:${o.id}`, name: o.name })}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 )}
               </CardContent>
             </Card>
           ))}
-        </div>
+        </section>
       )}
 
       <AlertDialog open={confirmDelete !== null} onOpenChange={o => !o && setConfirmDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-popover">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete &ldquo;{confirmDelete?.name ?? 'this automation'}&rdquo;?</AlertDialogTitle>
             <AlertDialogDescription>
-              It stops answering immediately and its history is deleted with it.
-              This cannot be undone — pausing keeps the history if you might want it back.
+              It stops answering at once, and Zernio deletes its history with it. Switching it off keeps the history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={busy !== null}
+            <AlertDialogAction disabled={busy !== null}
               className="bg-accent-red text-cream hover:bg-accent-red/90"
-              onClick={e => { e.preventDefault(); if (confirmDelete) void doDelete(confirmDelete) }}
-            >
+              onClick={e => { e.preventDefault(); if (confirmDelete) void remove(confirmDelete.id) }}>
               {busy !== null ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>

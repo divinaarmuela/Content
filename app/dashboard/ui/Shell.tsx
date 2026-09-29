@@ -96,8 +96,10 @@ export const NAV_SOCIAL_CHILDREN: NavItem[] = [
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
   // every person on a client's Instagram and every touch (28 Sep 2026)
   { href: '/dashboard/social/people',      label: 'People',      icon: Users },
-  { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
+  // beside People: a comment-to-DM automation on ONE post turns commenters into
+  // people in a conversation (the owner, 29 Sep 2026)
   { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
+  { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
 ]
 
 export const NAV_TOOLS: NavItem[] = [

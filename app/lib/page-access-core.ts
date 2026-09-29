@@ -85,8 +85,12 @@ export const SCHEDULE_PAGE = '/dashboard/social/schedule'
  *  A scheduler's second Social page (the owner, 11 Sep 2026: "scheduler
  *  should see posts page … so they can know what's posted and what's not"). */
 export const POSTS_PAGE = '/dashboard/social/activity'
+/** The comment-to-DM automations, one post each (29 Sep 2026). A scheduler may LOOK
+ *  (what is running on the posts they booked); setting one up is an account manager's,
+ *  and the API routes enforce that, not this list. */
+export const AUTOMATIONS_PAGE = '/dashboard/social/automations'
 /** the Social children a scheduler holds without holding Social */
-const SCHEDULER_SOCIAL_PAGES = [SCHEDULE_PAGE, POSTS_PAGE]
+const SCHEDULER_SOCIAL_PAGES = [SCHEDULE_PAGE, POSTS_PAGE, AUTOMATIONS_PAGE]
 const SOCIAL_PAGE = '/dashboard/social'
 
 /** The Social page a child href rides on, or null for anything else. */

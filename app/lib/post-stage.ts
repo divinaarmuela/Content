@@ -18,6 +18,7 @@ import { clientRecipients, pickRecipients, type ClientRecipient } from './client
 import { portalPostHref } from './post-page-core'
 import type { ChannelExtras } from './schedule-compose-core'
 import type { Slide } from './version-files-core'
+import { CANCELLED_REASON, TAKEN_OFF_REASON, readPostAutomation, type PostAutomation } from './comment-automation-core'
 
 /**
  * THE ONE WRITER OF A POST'S STAGE (the posting rebuild, 29 Sep 2026 — SPEC §3.1, §5).
@@ -120,6 +121,8 @@ export type FrozenCopy = {
   caption: string
   scheduled_for: string | null
   timezone: string | null
+  /** the comment-to-DM automation, frozen with the caption (comment-automation-core) */
+  automation?: PostAutomation | null
 }
 
 export type QueueInput = {
@@ -189,6 +192,11 @@ export type PostEngineDeps = {
   announce: (post: Pick<PostState, 'id' | 'client_id'>, kind: string) => void
   /** Is this client one this person may act on? */
   mayActOnClient: (user: TeamUser, clientId: string) => Promise<boolean>
+  /**
+   * A cancelled post stops DMing people: every comment-to-DM automation on it is switched off
+   * (app/lib/comment-automation.ts, 29 Sep 2026). Best-effort — never refuses the move.
+   */
+  pauseAutomations: (postId: string, reason: string) => Promise<void>
 }
 
 const defaultDeps: PostEngineDeps = {
@@ -218,6 +226,10 @@ const defaultDeps: PostEngineDeps = {
     const { accessibleClientIds } = await import('./production-access')
     const ids = await accessibleClientIds(user)
     return ids === null || ids.includes(clientId)
+  },
+  pauseAutomations: async (postId, reason) => {
+    const { pauseAutomationsForPost } = await import('./comment-automation')
+    await pauseAutomationsForPost(postId, reason)
   },
 }
 
@@ -260,6 +272,7 @@ export function copyOfVersion(v: PostVersion | null | undefined): FrozenCopy | n
     caption: typeof v.caption === 'string' ? v.caption : '',
     scheduled_for: typeof v.scheduled_for === 'string' ? v.scheduled_for : null,
     timezone: typeof v.timezone === 'string' ? v.timezone : null,
+    ...(readPostAutomation(v.automation) ? { automation: readPostAutomation(v.automation) } : {}),
   }
 }
 
@@ -272,6 +285,7 @@ function copyOfPost(post: PostState, time?: string | null): FrozenCopy {
     caption: post.caption,
     scheduled_for: time === undefined ? post.scheduled_for : time,
     timezone: post.timezone,
+    ...(post.automation ? { automation: post.automation } : {}),
   }
 }
 
@@ -290,10 +304,11 @@ function stable(v: unknown): string {
   return JSON.stringify(v ?? null)
 }
 
-function contentKey(c: Pick<FrozenCopy, 'slides' | 'per_channel' | 'channels' | 'caption' | 'scheduled_for' | 'timezone'>): string {
+function contentKey(c: Pick<FrozenCopy, 'slides' | 'per_channel' | 'channels' | 'caption' | 'scheduled_for' | 'timezone' | 'automation'>): string {
   return stable({
     slides: c.slides, per_channel: c.per_channel, channels: c.channels,
     caption: c.caption ?? '', scheduled_for: c.scheduled_for ?? null, timezone: c.timezone ?? null,
+    automation: c.automation ?? null,
   })
 }
 
@@ -340,6 +355,7 @@ export async function freezeVersion(
     frozen_by: frozenBy,
     frozen_at: at,
     from_migration: false,
+    automation: copy.automation ?? null,
   }
   const res = await versionsT().claim(next.id, cur => (cur ? null : next))
   if (res.claimed) return { ok: true, n }
@@ -438,6 +454,8 @@ export type WorkingCopy = Partial<{
   per_channel: Record<string, ChannelExtras>
   scheduled_for: string | null
   timezone: string
+  /** the comment-to-DM automation (comment-automation-core readPostAutomation) — saved like the caption */
+  automation: PostAutomation | null
   note: string | null
   version_id: string | null
   version_number: number | null
@@ -739,6 +757,16 @@ async function afterLanded(
 ): Promise<PostActResult> {
   const landed = readPostState(row as unknown as Record<string, unknown>)!
   await writeEvent(done.event)
+
+  // A POST TAKEN OFF STOPS DMING PEOPLE (29 Sep 2026): cancelled, taken off the schedule, opened for an
+  // edit, or moved to a new time (its old booking is pulled). Switched off, never deleted — its history
+  // stays; a new booking switches it back on when it reaches Zernio (comment-automation.armPostAutomations).
+  // Before the re-booking below, so the new booking's own switch-on cannot be undone by this.
+  const takenOff = landed.stage === 'cancelled' || TAKES_OFF.includes(done.action) || done.effects.some(e => e.kind === 'reschedule_jobs')
+  if (takenOff) {
+    await deps.pauseAutomations(landed.id, landed.stage === 'cancelled' ? CANCELLED_REASON : TAKEN_OFF_REASON)
+      .catch(e => console.error('could not pause automations', landed.id, e))
+  }
 
   let final: PostState = landed
   let createdId: string | null = null
@@ -1143,6 +1171,7 @@ export async function insertDraftPost(input: {
   version_id?: string | null
   version_number?: number | null
   approval_steps?: 'team' | 'team_then_client' | null
+  automation?: PostAutomation | null
 }): Promise<SocialPost> {
   const at = deps.now().toISOString()
   return posts().insert({
@@ -1167,6 +1196,7 @@ export async function insertDraftPost(input: {
     stage_at: at,
     draft_version: 1,
     approval_steps: input.approval_steps ?? null,
+    ...(input.automation ? { automation: input.automation } : {}),
   } as unknown as SocialPost)
 }
 
@@ -1227,7 +1257,11 @@ export async function cascadeItemDelete(
     if (box.stoppedBy) return { ok: false, reason: 'A post from this card was booked in just now — take it off the schedule first, then delete the card.' }
     if (res.claimed) {
       marked.push(r.id)
-      if (box.event) { cancelled.push(r.id); await writeEvent(box.event) }
+      if (box.event) {
+        cancelled.push(r.id)
+        await writeEvent(box.event)
+        await deps.pauseAutomations(r.id, CANCELLED_REASON).catch(e => console.error('could not pause automations', r.id, e))
+      }
     }
   }
   return { ok: true, cancelled, marked }

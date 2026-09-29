@@ -46,6 +46,13 @@ describe('GROUPS covers the nav', () => {
     for (const child of hrefs(NAV_SOCIAL_CHILDREN)) expect(grouped.has(child)).toBe(false)
   })
 
+  it('puts Automations right after People (the owner, 29 Sep 2026), titled', () => {
+    const list = hrefs(NAV_SOCIAL_CHILDREN)
+    expect(list.indexOf('/dashboard/social/automations')).toBe(list.indexOf('/dashboard/social/people') + 1)
+    expect(pageTitle('/dashboard/social/automations')).toBe('Automations')
+    expect(readFileSync(join(process.cwd(), 'app/dashboard/social/automations/page.tsx'), 'utf8')).toContain('<PageTitle')
+  })
+
   it('puts Schedule first under Social — it is where the week is planned', () => {
     expect(NAV_SOCIAL_CHILDREN[0].href).toBe('/dashboard/social/schedule')
     expect(NAV_SOCIAL_CHILDREN[0].label).toBe('Schedule')
@@ -118,7 +125,9 @@ describe('resolveNav by role', () => {
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
     // Schedule and Posts, and nothing else of Social (the owner, 11 Sep
     // 2026: "scheduler should see posts page")
-    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule', '/dashboard/social/activity'])
+    // …and Automations, to look at (29 Sep 2026: "schedulers may view"; the routes keep setting one up
+    // an account manager's)
+    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule', '/dashboard/social/activity', '/dashboard/social/automations'])
     expect(nav.allowed.has('/dashboard/social')).toBe(false)
     // and the rail knows where they are
     expect(nav.current).toBe('/dashboard/social/schedule')

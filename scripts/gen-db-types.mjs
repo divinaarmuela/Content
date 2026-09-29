@@ -80,6 +80,8 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //                    (`source_item_id`) is a source of media and nothing
 //                    more: the post never reads the card's status, and the
 //                    card's approval never moves the post.
+//   comment_automations — our record of each comment-to-DM automation, bound
+//                    to ONE post (see its definition below).
 //   post_versions  — a FROZEN copy of a post, append-only, id `<post>_v<n>`.
 //   post_events    — every stage change, append-only, id `<post>_r<rev>`.
 //   post_comments  — notes on a post: per file/slide or on the whole post,
@@ -172,6 +174,12 @@ const GHOST_TABLES = {
     ['source_item_id', col('string', true)],
     ['source_deleted', col('boolean', true)],
     ['sending', col('unknown', true, true)],
+    //   automation     the post's comment-to-DM automation, set up WHILE SCHEDULING (the owner, 29 Sep
+    //                  2026, "ManyChat-style"): {on, keywords[], dm_message, button_title, link,
+    //                  comment_reply}. Part of the working copy and frozen with it, like the caption;
+    //                  made at Zernio when the post is booked (app/lib/comment-automation.ts), bound to
+    //                  THIS post only. Rules: app/lib/comment-automation-core.ts readPostAutomation.
+    ['automation', col('unknown', true, true)],
   ],
   // post_versions — A FROZEN POST (SPEC §2.2). Written once, never changed:
   //   id `<post_id>_v<n>`, claimed against a null current so the first writer
@@ -194,6 +202,7 @@ const GHOST_TABLES = {
     ['frozen_by', col('string', true)],
     ['frozen_at', col('string', false)],
     ['from_migration', col('boolean', true)],
+    ['automation', col('unknown', true, true)],   // frozen with the rest (social_posts.automation)
   ],
   // post_events — EVERY STAGE CHANGE, append-only (SPEC §2.3). id
   //   `<post_id>_r<rev>`: one event per rev, so a retried write cannot log
@@ -714,13 +723,45 @@ const GHOST_TABLES = {
     ['post_id', col('string', true)],           // the provider post, when it was a comment
     ['updated_at', col('string', false)],
   ],
+  // COMMENT-TO-DM AUTOMATIONS, ONE POST EACH (the owner, 29 Sep 2026: "select account and the post name and then
+  // do that"). The automation itself lives at Zernio (POST /v1/comment-automations); this row is OUR record of
+  // who switched it on, for which client, account and post, and the final link with its UTM tags. The owner's
+  // standing rule: nothing messages a prospect on its own except an automation a person deliberately switched on
+  // for ONE post — so exactly one of platform_post_id (a live post) / zernio_post_id (a booked, not yet published
+  // post, which Zernio arms on publish) was sent, never neither. Rules: app/lib/comment-automation-core.ts.
+  comment_automations: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['social_account_id', col('string', false)],   // our social_accounts row
+    ['provider_account_id', col('string', false)], // Zernio's account id
+    ['platform', col('string', false)],            // instagram | facebook
+    ['zernio_automation_id', col('string', false)],
+    ['social_post_id', col('string', true)],       // the app's own post, when it was one
+    ['platform_post_id', col('string', true)],     // bound to a live post
+    ['zernio_post_id', col('string', true)],       // bound to a booked post (pending until it publishes)
+    ['post_title', col('string', true)],
+    ['post_thumb', col('string', true)],
+    ['post_date', col('string', true)],
+    ['name', col('string', false)],
+    ['keywords', col('unknown', false, true, true)],
+    ['match_mode', col('string', false)],
+    ['dm_message', col('string', false)],
+    ['button_title', col('string', true)],
+    ['link', col('string', true)],                 // the final link, UTM tags included
+    ['comment_reply', col('string', true)],
+    ['active', col('boolean', false)],
+    ['paused_reason', col('string', true)],        // why the app switched it off, e.g. the post was cancelled
+    ['created_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches', 'comment_automations']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
