@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import type { SocialPost } from '@/lib/db-types'
 import { STAGE_PAGE, readPostState, type PostStage } from '../../lib/post-stage-core'
-import { postWindowHref } from '../../lib/post-board-core'
+import { postApprovalHref, postWindowHref } from '../../lib/post-board-core'
 import { POST_APPROVAL_BOARD } from '../../lib/overview-links-core'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostWindow'
@@ -25,7 +25,10 @@ import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostW
  * (decision 1). A post that moves on while the window is open stays here
  * until the window closes, so the person reads the answer to their own press.
  */
-export default function PostWindowFromAddress() {
+export default function PostWindowFromAddress({ clientId = '' }: {
+  /** the client the page is narrowed to — closing the window goes back to it (`?client=`) */
+  clientId?: string
+} = {}) {
   const params = useSearchParams()
   const router = useRouter()
   const postId = params.get('post')
@@ -54,7 +57,7 @@ export default function PostWindowFromAddress() {
 
   if (!postId || !row || belongsToSchedule) return null
 
-  const close = () => router.replace(POST_APPROVAL_BOARD, { scroll: false })
+  const close = () => router.replace(postApprovalHref(clientId), { scroll: false })
   const done = (outcome: PostWindowOutcome) => {
     toast.success(outcome.link ? `${outcome.words}. The link to send: ${outcome.link}` : outcome.words)
     if (outcome.createdPostId) router.replace(`${POST_APPROVAL_BOARD}?post=${encodeURIComponent(outcome.createdPostId)}`, { scroll: false })

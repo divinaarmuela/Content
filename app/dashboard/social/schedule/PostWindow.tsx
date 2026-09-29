@@ -19,11 +19,11 @@ import {
 } from '@/app/lib/schedule-compose-core'
 import {
   AGREED_VIA, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, approvalStepsOf, compositionProblems, defaultApproveBy,
-  hatsFor, lostChannels, postActions, postVersionId, readPostState,
+  hatsFor, isReminderSend, lostChannels, postActions, postVersionId, readPostState,
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
 import {
-  AGREED_VIA_CHOICES, STAYS_OPEN, answerProblem, applyInstagramChoice, bodyEditable,
+  AGREED_VIA_CHOICES, CLOSE_QUESTION, STAYS_OPEN, answerProblem, applyInstagramChoice, bodyEditable, closeChoices, hasUnsavedChanges,
   defaultPostTime, footerButtons, frozenCopyOf, instagramChoices, instagramCounter,
   noteVersionOf, nowChip, pressAction, questionFor, readPostNotes, timeHint, unsavedPost, windowHeader,
   withWorkingCopy, workingBody, workingCopyOf,
@@ -522,16 +522,18 @@ export default function PostWindow({
     confirm: null,
     steps: post ? approvalStepsOf(post, context.client) : null,
     send_to: defaultRecipients(recipients),
-    via: recipients.length > 0 ? 'email' : 'link',
+    // a reminder is always an email (there is no link to copy for it)
+    via: recipients.length > 0 || isReminderSend(q.action) ? 'email' : 'link',
     // decision 11: the client's answer-by, shown with its default so the person can move it. A resend
-    // picks a new posting time, so its default comes from that time on the server.
-    approve_by: q.needs.includes('recipients') && q.action !== 'resend_new_time' && post
+    // picks a new posting time, so its default comes from that time on the server; a reminder keeps
+    // the answer-by the client already has, so it asks for none.
+    approve_by: q.needs.includes('recipients') && q.action !== 'resend_new_time' && !isReminderSend(q.action) && post
       ? defaultApproveBy(post.scheduled_for, nowMs)
       : null,
   })
 
-  const go = async (action: PostAction, answers: Answers) => {
-    if (!post || busy) return
+  const go = async (action: PostAction, answers: Answers): Promise<boolean> => {
+    if (!post || busy) return false
     setBusy(true)
     setReply(null)
     const r = await pressAction(api, {
@@ -553,7 +555,7 @@ export default function PostWindow({
       }
       if (STAYS_OPEN.includes(action) && r.stage !== 'deleted') {
         setReply({ action, tone: 'ok', text: r.words, problems: [] })
-        return
+        return true
       }
       const outcome: PostWindowOutcome = {
         postId: r.postId, itemId, words: r.words, stage: r.stage,
@@ -562,10 +564,11 @@ export default function PostWindow({
       }
       if (onDone) onDone(outcome)
       else setReply({ action, tone: 'ok', text: r.link ? `${r.words}. The link: ${r.link}` : r.words, problems: [] })
-      return
+      return true
     }
     if (asking && asking.q.action === action) setAsking({ ...asking, problem: r.reason })
     else setReply({ action, tone: 'error', text: r.reason, problems: r.problems.filter(p => p !== r.reason) })
+    return false
   }
 
   const press = (offered: OfferedAction) => {
@@ -634,12 +637,30 @@ export default function PostWindow({
 
   /* ── closing, and the keyboard ───────────────────────────────────────── */
 
-  const dirtyRef = useRef(state.dirty)
-  dirtyRef.current = state.dirty
+  /* UNSAVED CHANGES ARE NEVER LOST SILENTLY (the owner's live test, 29 Sep 2026). "Unsaved" is the
+   * one rule `hasUnsavedChanges`: touched AND different from what was last saved (a new post: what it
+   * opened with). The X, Escape and a click outside ask "Save your changes?" beside the footer; a
+   * reload or leaving the page gets the browser's own prompt. Nothing asks when nothing changed. */
+  const openedWith = useRef<WorkingCopy>(working)
+  const changed = editable && hasUnsavedChanges(saved ? workingCopyOf(saved) : openedWith.current, working, state.dirty)
+  const changedRef = useRef(changed)
+  changedRef.current = changed
   const requestClose = useCallback(() => {
-    if (dirtyRef.current) { setClosing(true); setAsking(null); return }
+    if (changedRef.current) { setClosing(true); setAsking(null); return }
     onClose()
   }, [onClose])
+  useEffect(() => {
+    if (!changed) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [changed])
+  const closeWith = closeChoices(list)
+  const saveAndClose = async () => {
+    const ok = await go('save', {})
+    if (ok) onClose()
+    else setClosing(false)
+  }
   const requestCloseRef = useRef(requestClose)
   requestCloseRef.current = requestClose
 
@@ -1130,12 +1151,18 @@ export default function PostWindow({
                 )}
               </div>
             )}
-            {closing && (
-              <div role="alertdialog" className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
-                <span className="text-[13px] font-medium">You have changes that are not saved. Close anyway?</span>
-                <span className="ml-auto flex gap-2">
-                  <button type="button" onClick={() => setClosing(false)} className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold">Keep editing</button>
-                  <button type="button" onClick={onClose} className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background">Close and lose them</button>
+            {closing && changed && (
+              <div role="alertdialog" aria-label={CLOSE_QUESTION} data-close-question className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+                <span className="text-[13px] font-semibold">{CLOSE_QUESTION}</span>
+                <span className="ml-auto flex flex-wrap gap-2">
+                  {closeWith.map(c => (
+                    <button key={c.key} type="button" data-close-choice={c.key} disabled={busy && c.key !== 'keep'}
+                      onClick={() => (c.key === 'save' ? void saveAndClose() : c.key === 'discard' ? onClose() : setClosing(false))}
+                      className={cn('min-h-11 rounded-full px-4 text-[13px] font-semibold disabled:opacity-60',
+                        c.key === 'save' ? 'bg-foreground text-background' : 'border border-border bg-surface')}>
+                      {c.key === 'save' && busy ? 'Saving…' : c.label}
+                    </button>
+                  ))}
                 </span>
               </div>
             )}
@@ -1157,7 +1184,7 @@ export default function PostWindow({
           </div>
 
           <div className="flex flex-wrap items-center gap-2" data-footer-buttons>
-            {state.dirty && editable && <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>}
+            {changed && <span className="text-[12px] font-medium text-muted-foreground">Not saved yet</span>}
             {!me && <span className="text-[12px] text-muted-foreground">Checking who you are…</span>}
             {me && post && buttons.length === 0 && (
               <span className="text-[13px] text-muted-foreground">Nothing for you to do on this post right now.</span>
@@ -1288,14 +1315,16 @@ function QuestionPanel({ asking, busy, tz, recipients, team, makerId, now, onNow
               {r.name}{r.name !== r.email && <span className="text-muted-foreground"> · {r.email}</span>}
             </label>
           ))}
-          <label className="flex min-h-9 items-center gap-2 text-[13px]">
-            <input type="checkbox" className="h-4 w-4" checked={a.via === 'link'} onChange={e => set({ via: e.target.checked ? 'link' : 'email' })} />
-            Copy the link instead — I will send it myself
-          </label>
+          {!isReminderSend(q.action) && (
+            <label className="flex min-h-9 items-center gap-2 text-[13px]">
+              <input type="checkbox" className="h-4 w-4" checked={a.via === 'link'} onChange={e => set({ via: e.target.checked ? 'link' : 'email' })} />
+              Copy the link instead — I will send it myself
+            </label>
+          )}
         </fieldset>
       )}
 
-      {q.needs.includes('recipients') && (
+      {q.needs.includes('recipients') && !isReminderSend(q.action) && (
         <div className="flex flex-col gap-1" data-answer-by-question>
           <p className="text-[12px] font-semibold">The client answers by</p>
           <div className="flex flex-wrap items-center gap-2">

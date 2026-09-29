@@ -69,6 +69,8 @@ function goodCase(action: PostAction, stage: PostStage): { p: PostState; input: 
       input.delivered_to = ['jordan@example.invalid']; break
     case 'resend_new_time':
       input.delivered_to = ['jordan@example.invalid']; input.scheduled_for = at(96); break
+    case 'remind_client':
+      input.delivered_to = ['jordan@example.invalid']; break
     case 'ask_change': case 'client_ask_change':
       input.note = 'Slide 2 has the old logo'; break
     case 'approve_for_client':
@@ -729,7 +731,7 @@ describe('postActions', () => {
   it('with the client, a manager never gets Approve as the main button (audit B7)', () => {
     const list = postActions(post('with_client'), viewerHats('account_manager'), NOW, CTX)
     expect(list.primary).toBeNull()
-    expect(list.secondary.map(a => a.action)).toEqual(['resend_new_time', 'approve_for_client', 'team_decides', 'take_back'])
+    expect(list.secondary.map(a => a.action)).toEqual(['remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back'])
     expect(list.secondary.find(a => a.action === 'approve_for_client')?.needs).toEqual(['agreed_via', 'note'])
     expect(list.danger?.action).toBe('cancel')
   })

@@ -27,7 +27,7 @@
 
 import {
   APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
-  STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine,
+  STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine, reminderWords,
   STAGE_PAGE, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
@@ -146,7 +146,7 @@ export function laneFromAddress(value: string | null | undefined): string | null
 export const PAGE_ACTIONS: Readonly<Partial<Record<PostStage, readonly PostAction[]>>> = {
   draft: ['send_to_qc', 'set_steps', 'delete_draft', 'cancel'],
   quality_check: ['pass', 'pass_send_client', 'ask_change', 'edit', 'set_steps', 'cancel'],
-  with_client: ['resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
+  with_client: ['remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['send_to_client', 'edit', 'set_steps', 'cancel'],
   cancelled: ['rebook', 'duplicate'],
 }
@@ -216,6 +216,48 @@ export function postWindowHref(
   return page === 'post_approval'
     ? `${POST_APPROVAL_BOARD}?post=${encodeURIComponent(post.id)}`
     : `${schedulePage}?client=${encodeURIComponent(post.client_id)}&post=${encodeURIComponent(post.id)}`
+}
+
+/* ── ?client= on Post approval (live test, 29 Sep 2026: the parameter was ignored) ── */
+
+/** The client a Post approval address names (`?client=<id>`) — '' (every client) when it names none. */
+export function clientFromAddress(search: string | null | undefined): string {
+  try {
+    return (new URLSearchParams(String(search ?? '')).get('client') ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The address with this client written in — or taken out, for every client — every other part kept
+ * (`?post=`, `?lane=`), so the Client dropdown makes a link that can be shared. '' when nothing is left.
+ */
+export function addressWithClient(search: string | null | undefined, clientId: string | null | undefined): string {
+  const p = new URLSearchParams(String(search ?? ''))
+  const id = String(clientId ?? '').trim()
+  if (id) p.set('client', id)
+  else p.delete('client')
+  const qs = p.toString()
+  return qs ? `?${qs}` : ''
+}
+
+/** Post approval narrowed to one client (or every client) — where the post window returns to on close. */
+export function postApprovalHref(clientId: string | null | undefined): string {
+  return `${POST_APPROVAL_BOARD}${addressWithClient('', clientId)}`
+}
+
+/**
+ * The Client dropdown's choices: the clients with posts on the board, by name — and the one the address
+ * chose even when it has nothing on the board, so the dropdown never claims "Every client" while the
+ * board is narrowed to one.
+ */
+export function clientDropdownChoices(
+  onBoard: readonly { id: string; name: string }[], chosen: string, nameOf: (id: string) => string | null | undefined,
+): { id: string; name: string }[] {
+  const list = [...onBoard]
+  if (chosen && !list.some(c => c.id === chosen)) list.push({ id: chosen, name: nameOf(chosen) || 'This client' })
+  return list.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** "Make a post" from an edit that is ready to become one — the Schedule page opens its composer on the piece. */
@@ -412,7 +454,9 @@ export function postCardFace(
   const current = post.sent_version
   // a send or an approval of an EARLIER version is history, not a fact about this card
   const send = post.client_send && post.client_send.version === current ? post.client_send : null
-  const sentLine = clientSendLine(send)
+  // "Emailed to … · Mon 28 Sep · Reminded 30 Sep": the send, its day, then the last reminder (29 Sep 2026)
+  const sentLine = clientSendLine(send ? { ...send, reminded_at: null } : null, zone)
+  const reminded = reminderWords(send, zone)
   const sentDay = send?.at ? formatInZone(send.at, zone, 'date') : null
   const approval = post.approval && post.approval.version === current ? post.approval : null
   const ca = post.changes_asked
@@ -429,7 +473,7 @@ export function postCardFace(
     waiting: { ...wait, sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
-    sent: sentLine && post.stage === 'with_client' ? (sentDay ? `${sentLine} · ${sentDay}` : sentLine) : null,
+    sent: sentLine && post.stage === 'with_client' ? [sentLine, sentDay, reminded].filter(Boolean).join(' · ') : null,
     answerBy: post.stage === 'with_client' && send && !slotMissed(post, opts.now) && approveByOf(post)
       ? `Answer needed by ${formatInZone(approveByOf(post)!, zone, 'full')}` : null,
     approval: ['ready', 'booked', 'posted'].includes(post.stage) ? approvalLine(approval, nameOf) : null,

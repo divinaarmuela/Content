@@ -647,6 +647,91 @@ export function touchHandle(username: string): string {
   return key(username)
 }
 
+/* ── one account per handle (29 Sep 2026) ─────────────────────────────────
+ * The same Instagram account (testbusinessaccount2026) was connected twice in
+ * Zernio, under two clients. Zernio delivers a comment once PER CONNECTED
+ * ACCOUNT, and a touch is keyed by the account it came to, so one comment
+ * became two `inbox_touches` rows — one per client. The rule: accounts that
+ * share a platform and a handle are ONE account, and it belongs to the best
+ * client among them. */
+
+export type AccountForPick = {
+  id: string
+  provider_account_id: string
+  platform: string
+  username: string | null
+  client_id: string | null
+  active?: boolean | null
+}
+/** the client a `client_id` names, or null/undefined when there is no such client */
+export type ClientForPick = { name?: string | null; status?: string | null } | null | undefined
+
+/** "platform:handle" — the identity two connections of one real account share; null without a handle */
+export function accountIdentity(a: Pick<AccountForPick, 'platform' | 'username'>): string | null {
+  const handle = a.username ? key(a.username) : ''
+  return handle ? `${String(a.platform).toLowerCase()}:${handle}` : null
+}
+
+/**
+ * How good a home an account is, best first: linked to a client that exists and is not archived;
+ * that client's name does not start with "ZZ" (the agency's test clients); the connection is live.
+ */
+function accountRank(a: AccountForPick, clientOf: (id: string) => ClientForPick): number[] {
+  const c = a.client_id ? clientOf(a.client_id) : null
+  const real = !!c && c.status !== 'archived'
+  const notTest = real && !/^\s*zz/i.test(String(c?.name ?? ''))
+  return [real ? 0 : 1, notTest ? 0 : 1, a.active === false ? 1 : 0]
+}
+
+/**
+ * THE ONE ACCOUNT, among connections of the same platform + handle, that a touch or a follower
+ * read is recorded for. Never drops the only match: one candidate is returned as it is, and an
+ * empty list is null. Ties break on the provider account id, then the row id, so every webhook
+ * delivery of the same comment lands on the same account.
+ */
+export function preferredAccount<T extends AccountForPick>(
+  candidates: readonly T[], clientOf: (id: string) => ClientForPick,
+): T | null {
+  if (candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0]
+  const ranked = candidates.map(a => ({ a, r: accountRank(a, clientOf) }))
+  ranked.sort((x, y) => {
+    for (let i = 0; i < x.r.length; i++) if (x.r[i] !== y.r[i]) return x.r[i] - y.r[i]
+    return x.a.provider_account_id.localeCompare(y.a.provider_account_id) || x.a.id.localeCompare(y.a.id)
+  })
+  return ranked[0].a
+}
+
+/**
+ * The account a touch that arrived on `providerAccountId` is recorded for: itself, unless another
+ * connection of the same platform + handle is a better home. An unknown account is returned as
+ * null, so the caller keeps the id it was given.
+ */
+export function canonicalAccount<T extends AccountForPick>(
+  accounts: readonly T[], providerAccountId: string, clientOf: (id: string) => ClientForPick,
+): T | null {
+  const self = accounts.find(a => a.provider_account_id === providerAccountId)
+  if (!self) return null
+  const id = accountIdentity(self)
+  if (!id) return self
+  return preferredAccount(accounts.filter(a => accountIdentity(a) === id), clientOf) ?? self
+}
+
+/** One account per platform + handle, the preferred one; accounts with no handle are all kept. Order kept. */
+export function onePerIdentity<T extends AccountForPick>(
+  accounts: readonly T[], clientOf: (id: string) => ClientForPick,
+): T[] {
+  const groups = new Map<string, T[]>()
+  for (const a of accounts) {
+    const id = accountIdentity(a)
+    if (id) groups.set(id, [...(groups.get(id) ?? []), a])
+  }
+  return accounts.filter(a => {
+    const id = accountIdentity(a)
+    return !id || preferredAccount(groups.get(id)!, clientOf) === a
+  })
+}
+
 /** folding one sighting into the row we already had */
 export function nextTouch(
   prev: { kind: string; first_at: string; last_at: string; name: string | null } | null,

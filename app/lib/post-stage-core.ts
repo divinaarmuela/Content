@@ -302,6 +302,12 @@ export type ClientSend = {
   approve_by: string | null
   /** the posting time the client was shown */
   for_time: string | null
+  /**
+   * The last "Remind the client" (29 Sep 2026): the SAME version's link emailed again. It changes
+   * nothing else — not the version, not the approve-by, not the posting time.
+   */
+  reminded_at?: string | null
+  reminded_to?: string[]
 }
 export type Booking = { job_ids: string[]; pending: boolean; at: string; for_time: string | null }
 export type OutcomeStatus = 'published' | 'failed' | 'duplicate' | 'scheduled'
@@ -380,6 +386,7 @@ function readClientSend(v: unknown): ClientSend | null {
   return {
     version, at: str(v.at) ?? '', to: strList(v.to), via: v.via === 'link' ? 'link' : 'email',
     approve_by: str(v.approve_by), for_time: str(v.for_time),
+    ...(str(v.reminded_at) ? { reminded_at: str(v.reminded_at), reminded_to: strList(v.reminded_to) } : {}),
   }
 }
 
@@ -681,7 +688,7 @@ export function postedWords(post: Pick<PostState, 'outcomes'>): string {
 export const POST_ACTIONS = [
   'save', 'send_to_qc', 'pass', 'pass_send_client', 'ask_change',
   'client_approve', 'client_ask_change', 'approve_for_client', 'team_decides', 'take_back', 'resend_new_time',
-  'send_to_client', 'book', 'post_now', 'change_time', 'unbook',
+  'remind_client', 'send_to_client', 'book', 'post_now', 'change_time', 'unbook',
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
 ] as const
@@ -743,6 +750,10 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'team_decides', spec: 'decision 6', from: ['with_client'], to: 'ready', who: MANAGERS, label: 'Approve without the client', versioned: true, needs: ['note'] },
   { action: 'take_back', spec: 'T9', from: ['with_client'], to: 'draft', who: BOOKERS, label: 'Take back' },
   { action: 'resend_new_time', spec: 'T10', from: ['with_client'], to: 'with_client', who: MANAGERS, label: 'New time and resend', needs: ['time', 'recipients'] },
+  // the owner's live test, 29 Sep 2026: a one-press nudge. The SAME frozen version's link again, to the
+  // client's own addresses; no new version, the approve-by and the posting time stay. A missed slot is
+  // refused — the client could not answer any more, so New time and resend is the way.
+  { action: 'remind_client', spec: 'live test 29 Sep', from: ['with_client'], to: 'with_client', who: MANAGERS, label: 'Remind the client', needs: ['recipients'] },
   { action: 'send_to_client', spec: 'T2b', from: ['ready'], to: 'with_client', who: MANAGERS, label: 'Send to client', versioned: true, needs: ['recipients'] },
   { action: 'book', spec: 'T11', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Book in' },
   { action: 'post_now', spec: 'T12', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Post now', needs: ['confirm'], confirm:'This goes out on the client\'s accounts now.' },
@@ -765,6 +776,15 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'record_partial', spec: 'T17', from: ['booked', 'posted'], to: 'posted', who: ['system'], label: 'Posted in part' },
   { action: 'record_failed', spec: 'T18', from: ['booked'], to: 'ready', who: ['system'], label: 'Did not go out' },
 ]
+
+/**
+ * A reminder of the send the client already has (Remind the client): it asks WHO to email and
+ * nothing else — no copied link (it is an email), no new answer-by time (the first one stands).
+ * The board's dialog and the window both read this, so they ask the same questions.
+ */
+export function isReminderSend(action: PostAction | string | null | undefined): boolean {
+  return action === 'remind_client'
+}
 
 export const ROW_OF: Record<PostAction, TransitionRow> =
   Object.fromEntries(POST_TRANSITIONS.map(r => [r.action, r])) as Record<PostAction, TransitionRow>
@@ -853,6 +873,7 @@ const STALE = 'Someone changed this post while you had it open. It has been relo
 const VERSION_MISSING = 'This page did not say which version you saw — reload it and try again.'
 const VERSION_CHANGED = 'This is not the version you looked at — it has changed since. Reload and look again.'
 export const MISSED_FOR_CLIENT = 'The time for this post has passed — the team will send you a new time.'
+export const REMIND_MISSED = 'Its time has passed, so the client can no longer answer — set a new time and resend instead.'
 
 /** `lenient`: skip the guards that need data a board may not have loaded (channels). Only `postActions` uses it. */
 type CheckOpts = { lenient?: boolean }
@@ -948,6 +969,16 @@ export function checkPostTransition(
       if (action === 'resend_new_time' && !when) return refuse('time', TIME_MISSING)
       const r = clientSendProblem(when)
       if (r) return r
+      break
+    }
+
+    case 'remind_client': {
+      if (slotMissed(post, now)) return refuse('time', REMIND_MISSED)
+      if (!post.client_send || post.client_send.version !== post.sent_version) {
+        return refuse('delivery', 'This version was never sent to the client — there is nothing to remind them about.')
+      }
+      if (input.via === 'link') return refuse('invalid', 'A reminder is an email — choose who gets it.')
+      if (ctx.clientHasContact === false) return refuse('contact', 'This client has nobody to send to — add a contact on the client\'s page first.')
       break
     }
 
@@ -1112,6 +1143,7 @@ function eventNote(act: PostAction, note: string | null, post: PostState, input:
   if (note) return note
   if (act === 'change_time' && post.approval) return 'Time changed after approval'
   if (act === 'booking_failed') return String(input.problem ?? '').trim() || null
+  if (act === 'remind_client') return `Reminded ${joinNames((input.delivered_to ?? []).filter(Boolean))}`
   return null
 }
 
@@ -1147,7 +1179,7 @@ export function planPostTransition(
   const act = row.action
   const at = iso(ctx.now)
   const note = String(input.note ?? '').trim() || null
-  const clientSend = ['pass_send_client', 'send_to_client', 'resend_new_time'].includes(act)
+  const clientSend = ['pass_send_client', 'send_to_client', 'resend_new_time', 'remind_client'].includes(act)
   const delivered = (input.delivered_to ?? []).filter(x => typeof x === 'string' && x.trim())
   if (clientSend && delivered.length === 0 && input.via !== 'link') {
     return refuse('delivery', 'Nothing reached the client, so nothing has changed. Check the address and try again.')
@@ -1213,6 +1245,10 @@ export function planPostTransition(
       patch.client_send = sendRecord(version!, input.scheduled_for!)
       break
     }
+    case 'remind_client':
+      // the same send, reminded: version, approve-by and posting time untouched; no freeze
+      patch.client_send = { ...post.client_send!, reminded_at: at, reminded_to: delivered }
+      break
     case 'ask_change':
     case 'client_ask_change': {
       const who = act === 'client_ask_change' ? 'client' : 'team'
@@ -1364,7 +1400,9 @@ export function planPostTransition(
     note: eventNote(act, note, post, input),
     at,
   }
-  const words = to === 'deleted' ? 'Draft deleted' : `${row.label} — now in ${STAGE_LABEL[to]}`
+  const words = to === 'deleted' ? 'Draft deleted'
+    : act === 'remind_client' ? `Reminder sent to ${joinNames(delivered)} — still ${STAGE_LABEL[to]}`
+    : `${row.label} — now in ${STAGE_LABEL[to]}`
   return { ok: true, action: act, from: post.stage, to, patch, event, effects, words }
 }
 
@@ -1386,7 +1424,7 @@ const DANGER: readonly PostAction[] = ['cancel', 'delete_draft']
 const ORDER: Record<PostStage, readonly PostAction[]> = {
   draft: ['send_to_qc', 'save', 'set_steps', 'delete_draft', 'cancel'],
   quality_check: ['pass', 'pass_send_client', 'ask_change', 'change_time', 'edit', 'set_steps', 'cancel'],
-  with_client: ['client_approve', 'client_ask_change', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
+  with_client: ['client_approve', 'client_ask_change', 'remind_client', 'resend_new_time', 'approve_for_client', 'team_decides', 'take_back', 'cancel'],
   ready: ['book', 'change_time', 'post_now', 'send_to_client', 'edit', 'set_steps', 'cancel'],
   booked: ['change_time', 'unbook', 'edit_booked', 'cancel'],
   posted: ['missing_networks', 'duplicate'],
@@ -1560,11 +1598,23 @@ export function approvalLine(approval: Approval | null | undefined, nameOf: Name
   return `Passed quality check — ${cap(name)}`
 }
 
-/** "Emailed to jordan@…" — only from a send that happened, for the version it was (audit B4, B16). */
-export function clientSendLine(send: ClientSend | null | undefined): string | null {
+/**
+ * "Emailed to jordan@…" — only from a send that happened, for the version it was (audit B4, B16) —
+ * with "· Reminded 29 Sep" once Remind the client has gone.
+ */
+export function clientSendLine(send: ClientSend | null | undefined, timeZone = 'Australia/Melbourne'): string | null {
   if (!send) return null
-  if (send.via === 'link') return 'Link shared with the client'
-  return send.to.length > 0 ? `Emailed to ${joinNames(send.to)}` : null
+  const reminded = reminderWords(send, timeZone)
+  const base = send.via === 'link' ? 'Link shared with the client' : send.to.length > 0 ? `Emailed to ${joinNames(send.to)}` : null
+  return base && reminded ? `${base} · ${reminded}` : base ?? reminded
+}
+
+/** "Reminded 29 Sep" — the day the last reminder went, in the agency's time zone; null when none has. */
+export function reminderWords(send: ClientSend | null | undefined, timeZone = 'Australia/Melbourne'): string | null {
+  const t = ms(send?.reminded_at ?? null)
+  if (!Number.isFinite(t)) return null
+  const day = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', timeZone }).format(new Date(t))
+  return `Reminded ${day}`
 }
 
 /** "The client asked for a change" or "Joy asked for a change" — never guessed (audit B6, P13). */

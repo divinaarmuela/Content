@@ -9,7 +9,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, ROW_OF, approvalStepsOf, defaultApproveBy,
+  AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, ROW_OF, approvalStepsOf, defaultApproveBy, isReminderSend,
   type AgreedVia, type ApprovalSteps, type OfferedAction, type PostState,
 } from '../../../lib/post-stage-core'
 import { postAct, type PostActRequest } from '../../../lib/post-act-contract'
@@ -149,6 +149,7 @@ const DIALOG_WORDS: Partial<Record<string, string>> = {
   pass_send_client: 'This passes the quality check and emails the client a link to this version. It moves only once an email has gone out.',
   send_to_client: 'This emails the client a link to this version. It moves only once an email has gone out.',
   resend_new_time: 'Pick the new time. The client is emailed this version again, with the new time.',
+  remind_client: 'The client is emailed the same version again, as a reminder. Nothing else changes — the posting time and the answer-by time stay as they are.',
   set_steps: 'Choose who approves this post. The client’s usual setting is the default.',
   team_decides: 'The team approves this version without waiting for the client. The client’s page will say the team decided it — never that they approved it.',
   change_time: 'Pick the new time. The files and words stay as they are, so nothing is checked again.',
@@ -199,12 +200,14 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
     setByLink(false)
     // a resend picks a new posting time, so its answer-by starts empty: the server then takes the
     // default from the NEW time
-    const by = pending.action.action === 'resend_new_time' ? null : defaultApproveBy(p.scheduled_for, new Date())
+    // a reminder keeps the answer-by the client already has, so it asks for none
+    const by = pending.action.action === 'resend_new_time' || isReminderSend(pending.action.action) ? null : defaultApproveBy(p.scheduled_for, new Date())
     setAnswerBy(by ? toZonedInput(by, p.timezone || DEFAULT_TZ) : '')
     setLocal(null)
   }, [pending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!post || !action) return null
+  const reminder = isReminderSend(action.action)
 
   const go = () => {
     setLocal(null)
@@ -228,7 +231,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
       extra.agreed_via = agreed
     }
     if (needs.has('recipients')) {
-      if (byLink) {
+      if (byLink && !reminder) {
         extra.via = 'link'
       } else {
         if (choices.length === 0) { setLocal('This client has nobody to email. Copy the link instead, or add a contact on the client’s page first.'); return }
@@ -236,7 +239,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
         extra.send_to = picks
         extra.via = 'email'
       }
-      if (answerBy) {
+      if (answerBy && !reminder) {
         const iso = fromZonedInput(answerBy, zone)
         if (!iso) { setLocal('Pick when the client should answer by.'); return }
         extra.approve_by = iso
@@ -294,14 +297,16 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
                   </span>
                 </label>
               ))}
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-[14px]">
-                <input type="checkbox" className="h-4 w-4 accent-foreground" checked={byLink} onChange={e => setByLink(e.target.checked)} />
-                Copy the link instead — I will send it myself
-              </label>
+              {!reminder && (
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 px-1 text-[14px]">
+                  <input type="checkbox" className="h-4 w-4 accent-foreground" checked={byLink} onChange={e => setByLink(e.target.checked)} />
+                  Copy the link instead — I will send it myself
+                </label>
+              )}
             </fieldset>
           )}
 
-          {needs.has('recipients') && (
+          {needs.has('recipients') && !reminder && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="post-act-answer-by">The client answers by</Label>
               <input id="post-act-answer-by" type="datetime-local" value={answerBy} onChange={e => setAnswerBy(e.target.value)}

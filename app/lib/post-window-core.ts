@@ -26,7 +26,7 @@
 import {
   ACTION_LABEL, AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, ROW_OF, STAGE_WORDS,
   approvalLine, approveByOf, bookableTimeProblem, changesAskedLine, clientSendLine, instagramOverflow,
-  readPostState, waitingOn, INSTAGRAM_MAX, MISSED_LABEL,
+  isReminderSend, readPostState, waitingOn, INSTAGRAM_MAX, MISSED_LABEL,
   type AccountRef, type AgreedVia, type ApprovalSteps, type CommentVisibility, type InputNeed,
   type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostStage,
   type PostState, type StageTone,
@@ -113,6 +113,51 @@ export function withWorkingCopy(post: PostState, working: WorkingCopy): PostStat
     per_channel: working.perChannel,
     scheduled_for: working.scheduledFor,
   }
+}
+
+/**
+ * ARE THERE REAL UNSAVED CHANGES? (the owner's live test, 29 Sep 2026: edits vanished on close.)
+ * True only when the person has touched the working copy (`touched` — the reducer's `dirty`) AND
+ * what is on screen differs from what was last saved (`base`: the saved post's working copy, or
+ * what a new post opened with). A caption typed and rubbed out, a channel ticked and unticked, is
+ * not a change — nothing is asked and no browser prompt fires.
+ */
+export function hasUnsavedChanges(base: WorkingCopy | null | undefined, working: WorkingCopy, touched: boolean): boolean {
+  if (!touched) return false
+  if (!base) return true
+  return workingKey(base) !== workingKey(working)
+}
+
+function workingKey(w: WorkingCopy): string {
+  const t = w.scheduledFor ? new Date(w.scheduledFor).getTime() : null
+  return stableJson({
+    slides: w.slides ?? [], caption: (w.caption ?? '').replace(/\s+$/, ''), channels: w.channels ?? [],
+    perChannel: w.perChannel ?? {}, scheduledFor: t != null && Number.isFinite(t) ? t : null,
+  })
+}
+
+/** Keys sorted, empty values dropped — two reads of the same content compare equal. */
+function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>
+    return `{${Object.keys(o).sort().filter(k => o[k] !== undefined && o[k] !== null)
+      .map(k => `${JSON.stringify(k)}:${stableJson(o[k])}`).join(',')}}`
+  }
+  return JSON.stringify(v ?? null)
+}
+
+/** The three answers to "Save your changes?" when a window with unsaved changes is closed. */
+export type CloseChoice = { key: 'save' | 'discard' | 'keep'; label: string }
+export const CLOSE_QUESTION = 'Save your changes?'
+/** Save is offered only when this person may save this post right now (the `save` button is theirs and unblocked). */
+export function closeChoices(list: PostActionList): CloseChoice[] {
+  const save = [list.primary, ...list.secondary].find(a => a?.action === 'save')
+  return [
+    ...(save && !save.blocked ? [{ key: 'save' as const, label: 'Save' }] : []),
+    { key: 'discard', label: 'Discard' },
+    { key: 'keep', label: 'Keep editing' },
+  ]
 }
 
 /** The working copy a post holds, for the window to start from. */
@@ -217,7 +262,7 @@ export function windowHeader(
     missed: wait.missed ? MISSED_LABEL : null,
     versionLine,
     approvalLine: showApproval ? approvalLine(post.approval, nameOf) : null,
-    sendLine: showSend ? clientSendLine(post.client_send) : null,
+    sendLine: showSend ? clientSendLine(post.client_send, opts.tz ?? undefined) : null,
     answerByLine: showSend && !wait.missed && when(approveByOf(post)) ? `Answer needed by ${when(approveByOf(post))}` : null,
     changeLine: ca ? changesAskedLine(ca, nameOf) : null,
     changeNote: ca?.note?.trim() ? ca.note.trim() : null,
@@ -258,6 +303,7 @@ const PROMPT: Partial<Record<PostAction, { prompt: string; go: string; stay?: st
   pass_send_client: { prompt: 'Who should get it? It is emailed to them with a link to approve it.', go: 'Pass and send' },
   send_to_client: { prompt: 'Who should get it? It is emailed to them with a link to approve it.', go: 'Send to client' },
   resend_new_time: { prompt: 'Pick the new posting time, then who gets it.', go: 'Resend' },
+  remind_client: { prompt: 'Who gets the reminder? The same version is emailed again — the posting time and the answer-by time stay as they are.', go: 'Send the reminder' },
   ask_change: { prompt: 'What needs changing, and who should change it?', go: 'Ask for the change' },
   approve_for_client: { prompt: 'How did the client say yes? It is saved as your approval, for the client.', go: 'Approve for the client' },
   team_decides: { prompt: 'Why is the team deciding without the client? Their page will say the team decided it.', go: 'Approve without the client' },
@@ -317,6 +363,7 @@ export function answerProblem(
         if (q.action !== 'approve_for_client' && !note) return 'Say what needs changing — a short note is enough.'
         break
       case 'recipients':
+        if (isReminderSend(q.action) && !(a.send_to ?? []).some(x => cleanEmail(x) != null)) return 'Tick who gets the reminder.'
         if (a.via !== 'link' && !(a.send_to ?? []).some(x => cleanEmail(x) != null)) {
           return 'Tick who gets it, or choose "Copy the link instead".'
         }
@@ -351,9 +398,11 @@ export function buildActRequest(post: Pick<PostState, 'rev' | 'sent_version' | '
   if (needs.includes('confirm')) req.confirm = true
   if (needs.includes('steps') && a.steps) req.steps = a.steps
   if (needs.includes('recipients')) {
-    if (a.via === 'link') req.via = 'link'
+    // a reminder is an email of the same send: never a copied link, never a new answer-by time
+    const reminder = isReminderSend(action)
+    if (a.via === 'link' && !reminder) req.via = 'link'
     else { req.via = 'email'; req.send_to = [...new Set((a.send_to ?? []).map(x => x.trim()).filter(Boolean))] }
-    if (a.approve_by) req.approve_by = a.approve_by
+    if (a.approve_by && !reminder) req.approve_by = a.approve_by
   }
   return req
 }

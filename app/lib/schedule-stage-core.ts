@@ -253,3 +253,36 @@ export function previewPosts<T extends PreviewRow>(rows: readonly T[], instagram
     r.channels.some(id => instagramIds.has(id))
     && (r.stage === 'ready' || r.stage === 'booked' || (r.stage === 'posted' && !feedShown)))
 }
+
+/* ── the media rail: what a piece's POSTS say about it ─────────────────── */
+
+export const RAIL_ALREADY_POSTED = 'Already posted'
+export const RAIL_BEING_APPROVED = 'Being approved'
+
+export type RailStanding = {
+  /** the words on the rail's card, from the posts' stages */
+  label: string
+  /** nothing left to post: the rail's "Approved, not yet posted" view leaves it out */
+  used: boolean
+}
+
+/**
+ * WHERE A PIECE STANDS, READ FROM ITS POSTS' STAGES (the owner's live test, 29 Sep 2026: "zz test 1"
+ * had just POSTED and still sat under "Approved, not yet posted" as "Still being made" — the rail read
+ * the edit card's old `content_items.status`, which a piece uploaded straight onto Schedule never
+ * leaves, instead of the post).
+ *
+ * Null when the piece has no post that counts (none, or only cancelled ones): then the edit card's
+ * own funnel is the truth, and the caller keeps it. Otherwise, over the posts that count:
+ *   - any still in Draft, Quality check or With client → "Being approved";
+ *   - else any Ready to post / Booked in → that stage's own words (approved, not yet out);
+ *   - else every one has gone out → "Already posted", and the piece is used.
+ */
+export function railStanding(posts: readonly Pick<PostState, 'stage'>[]): RailStanding | null {
+  const live = posts.filter(p => p.stage !== 'cancelled')
+  if (live.length === 0) return null
+  if (live.some(p => BEING_APPROVED.includes(p.stage))) return { label: RAIL_BEING_APPROVED, used: false }
+  if (live.some(p => p.stage === 'ready')) return { label: STAGE_LABEL.ready, used: false }
+  if (live.some(p => p.stage === 'booked')) return { label: STAGE_LABEL.booked, used: false }
+  return { label: RAIL_ALREADY_POSTED, used: true }
+}

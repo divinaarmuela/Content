@@ -1,9 +1,9 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import { encodeKey } from '@/lib/db-types'
-import type { InboxTouch as InboxTouchRow, SocialAccount } from '@/lib/db-types'
+import type { Client, InboxTouch as InboxTouchRow, SocialAccount } from '@/lib/db-types'
 import {
-  foldTouches, nextTouch, touchHandle, touchesFromComments, touchesFromConversations,
+  canonicalAccount, foldTouches, nextTouch, touchHandle, touchesFromComments, touchesFromConversations,
   type InboxTouch, type TouchSeen,
 } from './people-analytics-core'
 
@@ -42,13 +42,26 @@ export function touchId(accountId: string, username: string): string {
   return `${encodeKey(accountId)}:${encodeKey(touchHandle(username))}`
 }
 
-/** the client each connected account belongs to, and every handle that is ours */
-async function accountMap(): Promise<{ clientOf: Map<string, string | null>; ours: string[] }> {
-  const accounts = await table<SocialAccount>('social_accounts').list().catch(() => [] as SocialAccount[])
-  return {
-    clientOf: new Map(accounts.map(a => [a.provider_account_id, a.client_id])),
-    ours: accounts.map(a => a.username).filter((u): u is string => !!u),
+/**
+ * The account a touch is recorded under, and its client, for every connected account — and every handle
+ * that is ours. ONE HANDLE, ONE ROW (29 Sep 2026): the same Instagram account connected twice under two
+ * clients made Zernio deliver one comment twice, once per connection, and each became its own row. A
+ * touch on either connection is now recorded under the preferred one (`canonicalAccount`), so both
+ * deliveries land on the same row, on the real client's People page.
+ */
+async function accountMap(): Promise<{ homeOf: Map<string, { account_id: string; client_id: string | null }>; ours: string[] }> {
+  const [accounts, clients] = await Promise.all([
+    table<SocialAccount>('social_accounts').list().catch(() => [] as SocialAccount[]),
+    table<Client>('clients').list().catch(() => [] as Client[]),
+  ])
+  const byId = new Map(clients.map(c => [c.id, c]))
+  const clientOf = (id: string) => byId.get(id) as { name?: string | null; status?: string | null } | undefined
+  const homeOf = new Map<string, { account_id: string; client_id: string | null }>()
+  for (const a of accounts) {
+    const home = canonicalAccount(accounts, a.provider_account_id, clientOf) ?? a
+    homeOf.set(a.provider_account_id, { account_id: home.provider_account_id, client_id: home.client_id })
   }
+  return { homeOf, ours: accounts.map(a => a.username).filter((u): u is string => !!u) }
 }
 
 /**
@@ -60,11 +73,12 @@ export async function recordTouches(seen: readonly TouchSeen[], now: Date = new 
   const folded = foldTouches(seen)
   if (folded.length === 0) return 0
   const stamp = now.toISOString()
-  const { clientOf } = await accountMap()
+  const { homeOf } = await accountMap()
   let written = 0
   for (const t of folded) {
-    const accountId = t.account_id
-    if (!accountId) continue
+    if (!t.account_id) continue
+    const home = homeOf.get(t.account_id)
+    const accountId = home?.account_id ?? t.account_id
     const id = touchId(accountId, t.username)
     try {
       const prev = await touches().get(id)
@@ -73,7 +87,7 @@ export async function recordTouches(seen: readonly TouchSeen[], now: Date = new 
       await touches().upsert({
         id,
         account_id: accountId,
-        client_id: clientOf.get(accountId) ?? prev?.client_id ?? null,
+        client_id: home?.client_id ?? prev?.client_id ?? null,
         username: touchHandle(t.username),
         name: next.name,
         kind: next.kind,

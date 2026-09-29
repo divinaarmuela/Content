@@ -43,7 +43,7 @@ import {
   anyNetworkLive, hatsFor, readPostState,
   type AccountRef, type OfferedAction, type PostStage, type PostState, type Viewer,
 } from '@/app/lib/post-stage-core'
-import { binAction, moveBlockReason, scheduleFacts, type ScheduleFacts } from '@/app/lib/schedule-stage-core'
+import { binAction, moveBlockReason, railStanding, scheduleFacts, type ScheduleFacts } from '@/app/lib/schedule-stage-core'
 import { safeZone } from '@/app/lib/timezone-core'
 import { isAdHocUploadVersion } from '@/app/lib/schedule-upload-core'
 import {
@@ -410,10 +410,11 @@ export function useSchedulePosts(
         const gone = takenSlideUrls(own)
         for (const u of readPostedSlides((item as { posted_slides?: unknown }).posted_slides)?.urls ?? []) gone.add(u)
         const slides = elig.ok ? remainingSlides(elig.slides, gone) : []
-        const holdsBooking = own.some(p => {
-          const st = readPostState(p as unknown as Record<string, unknown>)
-          return !!st && (st.stage === 'booked' || anyNetworkLive(st))
-        })
+        const ownStates = own.map(p => readPostState(p as unknown as Record<string, unknown>)).filter((st): st is PostState => !!st)
+        const holdsBooking = ownStates.some(st => st.stage === 'booked' || anyNetworkLive(st))
+        // WHERE THE PIECE STANDS comes from its posts' STAGES when it has any (live test, 29 Sep 2026:
+        // a piece whose post had gone out still read "Still being made" from the card's old status)
+        const standing = railStanding(ownStates)
         return {
           itemId: item.id,
           forContactId: (item as { for_contact_id?: string | null }).for_contact_id ?? null,
@@ -422,7 +423,7 @@ export function useSchedulePosts(
           slides,
           cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
-          reason: elig.ok ? null : elig.reason,
+          reason: elig.ok ? null : standing?.label ?? elig.reason,
           needsClientApproval: elig.ok && elig.needsClientApproval,
           clientApproved: elig.ok && !elig.needsClientApproval
             && !itemVersions.some(isAdHocUploadVersion),
@@ -432,7 +433,7 @@ export function useSchedulePosts(
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
           // "used" means nothing left to post — every file is in a post
-          used: elig.ok && elig.slides.length > 0 && slides.length === 0,
+          used: (elig.ok && elig.slides.length > 0 && slides.length === 0) || (!elig.ok && standing?.used === true),
           holdsBooking,
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
           driveFolderUrl: folderOf(item as Parameters<typeof folderOf>[0])?.kind === 'drive' ? folderOf(item as Parameters<typeof folderOf>[0])!.url : null,

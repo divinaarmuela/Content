@@ -140,6 +140,7 @@ export function factProblem(action: PostAction | string, post: PostState, versio
     case 'pass_send_client':
     case 'send_to_client':
     case 'resend_new_time':
+    case 'remind_client':
       return at('with_client') ?? sameVersion()
         ?? (post.client_send && post.client_send.version === post.sent_version ? null : 'Nothing reached the client for this version')
     case 'ask_change':
@@ -488,16 +489,21 @@ export function clientRoundEmail(w: {
   posts: readonly RoundPost[]
   note?: string | null
   test?: boolean
+  /** Remind the client: the same post(s), still waiting on their answer */
+  reminder?: boolean
 }): { subject: string; heading: string; lines: string[]; items: { title: string; lines: string[]; link: string }[]; cta: string } {
   const n = w.posts.length
   const one = n === 1 ? w.posts[0] : null
   const subject = (w.test ? `[Test — what ${w.clientName} gets] ` : '')
+    + (w.reminder ? 'Reminder: ' : '')
     + (one ? `Your post is ready to approve: ${one.title}` : `${n} posts are ready for you to approve`)
   const byTimes = w.posts.map(p => p.approve_by).filter((x): x is string => !!x)
   const lines = [
     ...(w.test ? [`A test copy for you — exactly what ${w.clientName} receives. Nothing on the posts changes.`] : []),
     `Hi ${w.hello},`,
-    `${w.senderName} has sent you ${one ? one.title : `${n} posts`} to look over before ${one ? 'it goes' : 'they go'} out.`,
+    w.reminder
+      ? `A reminder from ${w.senderName}: ${one ? one.title : `${n} posts`} ${one ? 'is' : 'are'} still waiting for your answer before ${one ? 'it goes' : 'they go'} out.`
+      : `${w.senderName} has sent you ${one ? one.title : `${n} posts`} to look over before ${one ? 'it goes' : 'they go'} out.`,
     ...(w.note && w.note.trim() ? [w.note.trim()] : []),
     `Open ${one ? 'it' : 'each one'} to see the post, then press Approve — or Ask for a change and tell us what to change.`,
     ...(byTimes.length > 0 ? [`Please answer by ${byTimes[0]}${byTimes.length > 1 && new Set(byTimes).size > 1 ? ' for the first one' : ''}.`] : []),

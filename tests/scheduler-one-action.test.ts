@@ -76,11 +76,28 @@ describe('New post on Post approval: which client, then the one flow', () => {
     expect(src).toMatch(/Who is this post for\?/)
     expect(src).toMatch(/aria-label="New post"/)
     // one client to hold is no question at all
-    expect(src).toMatch(/data\.clients\.length !== 1/)
+    expect(src).toMatch(/clients\.length !== 1/)
   })
 
-  it('has the client list it needs, live, rather than a second fetch', () => {
-    expect(src).toMatch(/useSchedulePosts\(viewer, clientId\)/)
+  // 29 Sep 2026: the list took ~13 s on the live site, because it came from
+  // live subscriptions to the WHOLE clients and team_user_clients tables. It
+  // is now one lean request, and the live data opens only once a client is
+  // picked (ChosenClient).
+  it('lists the clients from ONE lean request, and opens the live data only after the pick', () => {
+    expect(src).toMatch(/fetch\('\/api\/clients\/for-posting'\)/)
+    expect(src).toMatch(/readClientChoices\(/)
+    const picker = src.slice(src.indexOf('function NewPostFlow('), src.indexOf('function Frame('))
+    expect(picker).not.toMatch(/useSchedulePosts|useTable|useRole\(/)
+    const chosen = src.slice(src.indexOf('function ChosenClient('))
+    expect(chosen).toMatch(/useSchedulePosts\(viewer, clientId\)/)
+  })
+
+  it('the lean route decides on the server, and answers id + name only', () => {
+    const route = code('app/api/clients/for-posting/route.ts')
+    expect(route).toMatch(/requireSignedIn\(\)/)
+    expect(route).toMatch(/mayCreatePost\(user\.role\)/)
+    expect(route).toMatch(/accessibleClientIds\(user\)/)
+    expect(route).toMatch(/clients: clientChoices\(rows, allowed\)/)
   })
 
   it('makes no decision of its own — the post window\'s buttons do', () => {

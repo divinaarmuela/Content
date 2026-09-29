@@ -7,6 +7,7 @@ import {
   modeForDay, readFinished, refreshAllowed, settingsOf, snapshotBucket, snapshotId,
   type FollowerRow, type FollowerSnapshotRow, type SnapshotMode, type SnapshotTrigger,
 } from './followers-core'
+import { onePerIdentity } from './people-analytics-core'
 
 /**
  * WHO FOLLOWS — the database half.
@@ -170,7 +171,9 @@ export async function accountsDueToday(now: Date = new Date()): Promise<{ accoun
   const clients = await table<Client>('clients').list()
   const byId = new Map(clients.map(c => [c.id, c]))
   const out: { accountId: string; mode: SnapshotMode; day: string }[] = []
-  for (const a of accounts) {
+  // ONE HANDLE, ONE LOOK (29 Sep 2026): an Instagram account connected twice, under two clients, is one
+  // account — read once, for the preferred connection (a real client, not a "ZZ" test one), never twice
+  for (const a of onePerIdentity(accounts, id => byId.get(id))) {
     const client = byId.get(a.client_id as string)
     if (!client || client.status === 'archived') continue
     out.push({ accountId: a.id, mode: modeForDay(settingsOf(client).fullCadence, day), day })

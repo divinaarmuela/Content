@@ -286,6 +286,8 @@ export async function sendClientRound(input: {
   pressedBy: { id: string; name?: string | null; email: string }
   test?: boolean
   again?: boolean
+  /** Remind the client: worded as a reminder of the same post(s) */
+  reminder?: boolean
   now?: Date
 }): Promise<ClientRoundResult> {
   const now = input.now ?? new Date()
@@ -340,7 +342,7 @@ export async function sendClientRound(input: {
   for (const email of picked.emails) {
     const who = test ? null : allowed.find(r => r.email === email)
     const hello = who && who.name !== email ? who.name.split(' ')[0] : client.name
-    const mail = clientRoundEmail({ clientName: client.name, hello, senderName: sender.name, posts: roundPosts, note: input.note, test })
+    const mail = clientRoundEmail({ clientName: client.name, hello, senderName: sender.name, posts: roundPosts, note: input.note, test, reminder: input.reminder === true })
     const body = mail.lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')
       + mail.items.map(it =>
         `<div style="margin:16px 0;padding:12px 14px;border:1px solid #e4e4e7;border-radius:8px;background:#ffffff;">`

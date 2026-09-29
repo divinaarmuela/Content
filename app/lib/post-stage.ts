@@ -142,6 +142,8 @@ export type DeliveryInput = {
   approveBy: string | null
   actor: EngineActor
   note: string | null
+  /** Remind the client: the same version again — its own email (never deduplicated into the first), worded as a reminder */
+  reminder?: boolean
 }
 
 /** A round: the posts at the versions being sent, to addresses already checked against the client's list. */
@@ -392,7 +394,7 @@ function contextOf(loaded: Loaded, now: Date, via: 'email' | 'link'): Transition
 
 /* ── the move ───────────────────────────────────────────────────────────── */
 
-const CLIENT_SENDS: readonly PostAction[] = ['pass_send_client', 'send_to_client', 'resend_new_time']
+const CLIENT_SENDS: readonly PostAction[] = ['pass_send_client', 'send_to_client', 'resend_new_time', 'remind_client']
 
 /** Moves that take a booked post off the provider — refused once any network went out (audit V11, S5). */
 const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel']
@@ -655,11 +657,15 @@ async function prepareClientSend(
   }
   const version = action === 'resend_new_time' ? (frozenN ?? post.draft_version) : (post.sent_version ?? 0)
   const forTime = action === 'resend_new_time' ? (input.scheduled_for ?? null) : post.scheduled_for
+  // a reminder keeps the answer-by time the client was first given — it is the same send, again
+  const approveBy = action === 'remind_client'
+    ? (post.client_send?.approve_by ?? defaultApproveBy(forTime, now))
+    : input.approve_by ?? defaultApproveBy(forTime, now)
   return {
     ok: true,
     prep: {
       postId, action, actor, input, post, loaded, ctx, via, emails, frozenN, token, at,
-      version, approveBy: input.approve_by ?? defaultApproveBy(forTime, now),
+      version, approveBy,
     },
   }
 }
@@ -671,6 +677,7 @@ async function deliverOne(prep: PreparedSend): Promise<{ delivered: string[]; li
       post: prep.post, version: prep.version, client: prep.loaded.client!, emails: prep.emails, via: prep.via,
       approveBy: prep.approveBy,
       actor: prep.actor, note: String(prep.input.note ?? '').trim() || null,
+      ...(prep.action === 'remind_client' ? { reminder: true } : {}),
     })
     return { delivered: sent.delivered, link: sent.link }
   } catch (e) {
@@ -1347,6 +1354,9 @@ async function defaultDeliver(input: DeliveryInput): Promise<{ delivered: string
     emails: input.emails,
     note: input.note,
     pressedBy: { id: String(input.actor.id ?? ''), name: input.actor.name ?? null, email: String(input.actor.email ?? '') },
+    // a reminder is its own email: `again` gives it its own outbox key, so it is not taken for the first
+    // send and answered "duplicate" (which would count as delivered without anything going)
+    ...(input.reminder ? { again: true, reminder: true } : {}),
   })
   if (!sent.ok) {
     console.error('client send refused:', input.post.id, sent.error)

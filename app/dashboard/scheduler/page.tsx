@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ScopeViewer } from '../../lib/production-access-core'
-import { laneFromAddress } from '../../lib/post-board-core'
+import { addressWithClient, clientDropdownChoices, clientFromAddress, laneFromAddress } from '../../lib/post-board-core'
 import { postWaitingRows } from '../../lib/post-waiting-core'
 import { useRole } from '../useRole'
 import { AccountUnavailable } from '../production/shoot-ui'
@@ -52,13 +52,22 @@ export default function PostApprovalPage() {
   const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf, clientOf: data.clientOf })
   const sheet = useCardSheet()
 
-  /* ── narrowing to one client, for people who look across many ── */
-  const [clientId, setClientId] = useState<string>('')
+  /* ── narrowing to one client, for people who look across many ──
+   * `?client=<id>` chooses it (live test, 29 Sep 2026: the parameter was ignored), read ONCE as the
+   * first state, as Schedule does; the dropdown writes it back into the address, so the link can be
+   * shared. Every other part of the address (`?post=`, `?lane=`) is kept. */
+  const [clientId, setClientId] = useState<string>(
+    () => (typeof window === 'undefined' ? '' : clientFromAddress(window.location.search)))
+  useEffect(() => {
+    const next = addressWithClient(window.location.search, clientId)
+    if (next !== window.location.search) window.history.replaceState(null, '', `${window.location.pathname}${next}`)
+  }, [clientId])
   const clientsOnBoard = useMemo(() => {
     const seen = new Map<string, string>()
     for (const bp of [...data.onLanes, ...data.cancelled]) seen.set(bp.post.client_id, bp.face.client)
-    return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-  }, [data.onLanes, data.cancelled])
+    const names = new Map(data.clients.map(c => [c.id, String(c.name ?? '')]))
+    return clientDropdownChoices([...seen].map(([id, name]) => ({ id, name })), clientId, id => names.get(id))
+  }, [data.onLanes, data.cancelled, data.clients, clientId])
   const lanes = useMemo(
     () => (clientId ? data.onLanes.filter(bp => bp.post.client_id === clientId) : data.onLanes),
     [data.onLanes, clientId])
@@ -129,7 +138,7 @@ export default function PostApprovalPage() {
         </div>
       ) : (
         <>
-          {clientsOnBoard.length > 1 && (
+          {(clientsOnBoard.length > 1 || clientId !== '') && (
             <label className="inline-flex h-11 w-fit items-center gap-2 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold text-muted-foreground">
               Client
               <select aria-label="Show one client" value={clientId} onChange={e => setClientId(e.target.value)}
@@ -153,7 +162,7 @@ export default function PostApprovalPage() {
       )}
 
       {acts.dialogs}
-      <Suspense fallback={null}><PostWindowFromAddress /></Suspense>
+      <Suspense fallback={null}><PostWindowFromAddress clientId={clientId} /></Suspense>
       {/* an edit from the tray, opened beside the board — the edit's own card */}
       <CardSheet id={sheet.cardId} onClose={sheet.close} />
     </div>
