@@ -393,3 +393,13 @@ describe('Post approval reads ?client= and writes the dropdown back to the addre
     expect(win).toMatch(/router\.replace\(postApprovalHref\(clientId\)/)
   })
 })
+
+describe('our own save is never "someone else changed this post" (live test, 29 Sep 2026)', () => {
+  it('holds the conflict line while a press is in flight, and clears it when the save lands', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(src).toContain('if (samePost && state.dirty && savingRef.current) return')
+    expect(src).toContain('}).finally(() => { savingRef.current = false })')
+    expect(src).toContain('// the server took it against the rev we held, so nobody else moved it under us')
+  })
+})

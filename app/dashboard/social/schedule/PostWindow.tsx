@@ -199,11 +199,16 @@ export default function PostWindow({
    */
   const loadedKey = useRef<string | null>(saved ? `${saved.id}:${saved.rev}` : null)
   const [movedUnder, setMovedUnder] = useState(false)
+  /** a press of ours is on its way to the server */
+  const savingRef = useRef(false)
   useEffect(() => {
     if (!saved) return
     const key = `${saved.id}:${saved.rev}`
     if (loadedKey.current === key) return
     const samePost = loadedKey.current?.startsWith(`${saved.id}:`) ?? false
+    // OUR OWN SAVE IS NOT SOMEONE ELSE (live test, 29 Sep 2026): the live row often lands before the Save's own
+    // answer, so while a press is in flight a new rev is ours — wait for the answer instead of crying conflict
+    if (samePost && state.dirty && savingRef.current) return
     if (samePost && state.dirty) { setMovedUnder(true); return }
     loadedKey.current = key
     setMovedUnder(false)
@@ -536,9 +541,10 @@ export default function PostWindow({
     if (!post || busy) return false
     setBusy(true)
     setReply(null)
+    savingRef.current = true
     const r = await pressAction(api, {
       post: saved, itemId, working, dirty: state.dirty || unsaved, timezone: tz, action, answers,
-    })
+    }).finally(() => { savingRef.current = false })
     setBusy(false)
     if (r.postId && r.postId !== id) {
       setId(r.postId)
@@ -551,6 +557,8 @@ export default function PostWindow({
         // a plain Save keeps what is on screen (someone may still be typing);
         // any move reloads the window from the post the server answered with
         loadedKey.current = action === 'save' && r.post.stage === 'draft' ? `${r.post.id}:${r.post.rev}` : null
+        // the server took it against the rev we held, so nobody else moved it under us
+        setMovedUnder(false)
         dispatch({ type: 'saved', postId: r.postId })
       }
       if (STAYS_OPEN.includes(action) && r.stage !== 'deleted') {
