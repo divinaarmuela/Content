@@ -82,7 +82,7 @@ export function PostCard({
         {face.answerBy && <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream" data-answer-by>{face.answerBy}</span>}
         {face.approval && <span className="mt-1 block font-medium text-foreground [[data-tone=ink]_&]:text-cream">{face.approval}</span>}
         {face.posted && <span className="mt-1 block">{face.posted}</span>}
-        {face.when && <span className="mt-1 block">Goes out {face.when}</span>}
+        {face.when && <span className="mt-1 block">{face.whenWord} {face.when}</span>}
         {face.problem && (
           <span className="mt-1 flex items-start gap-1.5 font-medium text-foreground [[data-tone=ink]_&]:text-cream">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {face.problem}

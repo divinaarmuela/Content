@@ -423,3 +423,12 @@ describe('edits ready to become posts — a tray, not a lane (audit B3, L5)', ()
     expect(postWindowHref({ id: 'p1', client_id: 'c1' }, '/dashboard/social/schedule')).toBe('/dashboard/social/schedule?client=c1&post=p1')
   })
 })
+
+describe('a posted card says it went out (live test, 29 Sep 2026)', () => {
+  it('Went out once posted, Was planned once cancelled, Goes out before', async () => {
+    const { readFileSync } = await import('node:fs')
+    const core = readFileSync('app/lib/post-board-core.ts', 'utf8')
+    expect(core).toContain("whenWord: post.stage === 'posted' ? 'Went out' : post.stage === 'cancelled' ? 'Was planned' : 'Goes out',")
+    expect(readFileSync('app/dashboard/scheduler/board/PostCard.tsx', 'utf8')).toContain('{face.whenWord} {face.when}')
+  })
+})

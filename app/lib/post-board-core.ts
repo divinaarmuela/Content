@@ -357,6 +357,8 @@ export type PostCardFace = {
   approval: string | null
   /** when it goes out, in the post's own zone */
   when: string | null
+  /** the word before `when`: "Went out" once posted, "Was planned" once cancelled, else "Goes out" (live test, 29 Sep 2026) */
+  whenWord: 'Goes out' | 'Went out' | 'Was planned'
   /** "Version 2" — the frozen version with the reviewer or the client */
   version: string | null
   /** "Team only" / "Team, then the client" — shown while it is being approved */
@@ -432,6 +434,7 @@ export function postCardFace(
       ? `Answer needed by ${formatInZone(approveByOf(post)!, zone, 'full')}` : null,
     approval: ['ready', 'booked', 'posted'].includes(post.stage) ? approvalLine(approval, nameOf) : null,
     when: post.scheduled_for ? formatInZone(post.scheduled_for, zone, 'full') : null,
+    whenWord: post.stage === 'posted' ? 'Went out' : post.stage === 'cancelled' ? 'Was planned' : 'Goes out',
     version: current != null && post.stage !== 'draft' ? `Version ${current}` : null,
     steps: approving ? APPROVAL_STEPS_LABEL[approvalStepsOf(post, opts.client)] : null,
     problem: post.source_deleted
