@@ -83,6 +83,8 @@ function relative(iso: string | null): string {
 export default function IntakePanel({ clientId }: { clientId: string }) {
   const [forms, setForms] = useState<Form[] | null>(null)
   const [canManage, setCanManage] = useState(false)
+  // a super admin's alone: the default list for every form, and deleting a form the client answered
+  const [isAdmin, setIsAdmin] = useState(false)
   const [team, setTeam] = useState<TeamMember[]>([])
   const [defaults, setDefaults] = useState<string[]>([])
   const [recipientsFor, setRecipientsFor] = useState<string | null>(null)
@@ -109,6 +111,7 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
     const json = await res.json()
     setForms(json.forms ?? [])
     setCanManage(Boolean(json.can_manage))
+    setIsAdmin(Boolean(json.is_admin))
     setTeam(json.team ?? [])
     setDefaults(json.default_recipients ?? [])
   }, [clientId])
@@ -459,10 +462,12 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                   onClick={() => void patch({ form_id: form.id, action: 'rotate' }, 'Link rotated, the old one is dead')}>
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Rotate link
                 </Button>
-                <Button size="sm" variant="ghost" className="text-destructive" disabled={busy}
-                  onClick={() => void remove(form, false)}>
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
-                </Button>
+                {(isAdmin || form.completion.answered === 0) && (
+                  <Button size="sm" variant="ghost" className="text-destructive" disabled={busy}
+                    onClick={() => void remove(form, false)}>
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                  </Button>
+                )}
               </div>
             )}
 
@@ -520,11 +525,13 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
                       )
                     })}
                   </div>
-                  <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
-                    <input type="checkbox" checked={applyAll}
-                      onChange={e => setApplyAll(e.target.checked)} />
-                    Use this list for all intake forms, not just this one
-                  </label>
+                  {isAdmin && (
+                    <label className="flex items-center gap-2 text-secondary-13 text-muted-foreground">
+                      <input type="checkbox" checked={applyAll}
+                        onChange={e => setApplyAll(e.target.checked)} />
+                      Use this list for all intake forms, not just this one
+                    </label>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" disabled={busy}
                       onClick={async () => {

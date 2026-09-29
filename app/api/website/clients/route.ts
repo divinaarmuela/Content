@@ -77,6 +77,7 @@ export async function POST(req: Request) {
   return withRequestCache(async () => {
   const denied = await guard('account_manager')
   if (denied) return denied
+  const user = await requireRole('account_manager')
 
   const body = await req.json()
   if (!body.name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -96,6 +97,14 @@ export async function POST(req: Request) {
       // front door that 404s
       share_token: randomUUID(),
     })
+    // AN ACCOUNT MANAGER WHO ADDS A CLIENT MANAGES IT (the owner, 29 Sep 2026: "allow them to add a new client with
+    // no breaks"): an account manager only sees the clients they are on, so without this the client they just made
+    // would vanish from their boards, intake and brand. A super admin sees every client and is not put on it.
+    if (!roleSatisfies(user.role, 'super_admin')) {
+      await table('team_user_clients').insert({
+        team_user_id: user.id, client_id: String(data.id), assigned_by: user.id, assigned_at: new Date().toISOString(),
+      })
+    }
     return NextResponse.json(data, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })

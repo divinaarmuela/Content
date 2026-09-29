@@ -21,9 +21,13 @@ import { inngest } from '../../../../inngest/client'
  * Intake forms for one client.
  *
  * Reading is editor+, so anyone who can see the client can read what they said.
- * Creating, editing, rotating, reopening and deleting are super_admin only —
- * consistent with every other client-scoped write, and enforced here rather
- * than by the UI hiding buttons.
+ * Creating, editing, rotating, reopening and deleting are account_manager+ (the
+ * owner, 29 Sep 2026: "can an AM create an intake form? … make it so they can"),
+ * like the client's brand, agreement and managers. Three things stay super_admin,
+ * because they reach past this one form: the agency-wide default recipients,
+ * the shared templates (their own route), and deleting a form the client has
+ * already answered — their words go with it and there is no undo. Enforced
+ * here rather than by the UI hiding buttons.
  *
  * Every mutation resolves the form THROUGH the client, so a form id belonging
  * to a different client cannot be operated on by someone who knows it.
@@ -61,7 +65,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     ])
 
     return NextResponse.json({
-      can_manage: roleSatisfies(user.role, 'super_admin'),
+      can_manage: roleSatisfies(user.role, 'account_manager'),
+      // the agency-wide default and deleting answers are a super admin's (see the note at the top)
+      is_admin: roleSatisfies(user.role, 'super_admin'),
       team,
       default_recipients: defaultRecipients,
       forms: await Promise.all(forms.map(async f => ({
@@ -91,7 +97,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    const admin = await requireRole('super_admin')
+    const manager = await requireRole('account_manager')
     const { id } = await params
     const body = await req.json().catch(() => ({}))
     const key = (body?.template_key ?? 'one_off') as TemplateKey
@@ -117,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    const form = await createIntakeForm(id, key, admin.id, title, copyFrom, copyNotify)
+    const form = await createIntakeForm(id, key, manager.id, title, copyFrom, copyNotify)
     return NextResponse.json(
       { id: form.id, token: form.token, status: form.status, title: form.title },
       { status: 201 },
@@ -132,7 +138,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    await requireRole('super_admin')
+    const user = await requireRole('account_manager')
     const { id } = await params
     const body = await req.json().catch(() => ({}))
 
@@ -176,13 +182,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       case 'set_recipients': {
         // `emails: null` means "go back to inheriting the default"
         const emails = body?.emails === null ? null : body?.emails
+        // "use for all" changes every client's default: a super admin's. Refused BEFORE anything is
+        // written, so an account manager's press never half-saves
+        const toAll = !!body?.apply_to_all && emails !== null
+        if (toAll && !roleSatisfies(user.role, 'super_admin')) {
+          return NextResponse.json({ error: 'Only a super admin can change the list for every form' }, { status: 403 })
+        }
         await setFormRecipients(form.id, emails)
         // one control, two scopes: ticking "use for all" writes the same list
         // as the agency default, so the next form created inherits it
-        if (body?.apply_to_all && emails !== null) {
-          const admin = await requireRole('super_admin')
-          await saveIntakeDefaultRecipients(emails, admin.email)
-        }
+        if (toAll) await saveIntakeDefaultRecipients(emails, user.email)
         return NextResponse.json({ ok: true })
       }
 
@@ -229,13 +238,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
   try {
-    await requireRole('super_admin')
+    const user = await requireRole('account_manager')
     const { id } = await params
     const url = new URL(req.url)
     const form = await getIntakeFormForClient(id, url.searchParams.get('form_id') ?? '')
     if (!form) return NextResponse.json({ error: 'No such form on this client' }, { status: 404 })
 
     const answered = completion(form.definition, form.answers).answered
+    if (answered > 0 && !roleSatisfies(user.role, 'super_admin')) {
+      return NextResponse.json({ error: 'The client has answered this form — only a super admin can delete it' }, { status: 403 })
+    }
     if (answered > 0 && url.searchParams.get('confirm') !== 'answers') {
       return NextResponse.json({
         error: `This form has ${answered} answer${answered === 1 ? '' : 's'} from the client. Deleting cannot be undone.`,
