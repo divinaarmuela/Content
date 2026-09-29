@@ -34,9 +34,19 @@ const ACTOR = '3548cc71-5a34-4fe9-9130-11579d1a4137'
 const actor = { id: ACTOR, role: 'editor', name: 'Ed', email: 'e@x.invalid' } as any
 
 /** a post that passes validatePost, so the guard is what decides the outcome */
+/** THE POST the job books: the door onto a client's account asks the post, not the card
+ *  (publish-core.publishDoorRefusal) — Booked in, holding an approval of the version it sends */
+const bookedPost = (): Row => ({
+  id: 'post-1', client_id: 'client-1', item_id: ITEM, source_item_id: ITEM, stage: 'booked', rev: 3,
+  sent_version: 1, draft_version: 2,
+  approval: { version: 1, by: 'qr-1', hat: 'quality_reviewer', at: '2026-09-01T00:00:00.000Z' },
+  booking: { job_ids: [], pending: true, at: '2026-09-01T00:00:00.000Z', for_time: null },
+  slides: [], channels: [], caption: 'Hello', timezone: 'Australia/Melbourne',
+}) as unknown as Row
 const validPost = {
   clientId: 'client-1',
   contentItemId: ITEM,
+  postId: 'post-1',
   caption: 'Hello',
   media: [{ url: 'https://media.mdmmarketing.com.au/a.jpg', type: 'image' as const }],
   targets: [{ platform: 'instagram' as const, accountId: 'acc-1' }],
@@ -58,7 +68,7 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
   // index over status in ('queued','publishing','scheduled')
   for (const status of ['queued', 'publishing', 'scheduled']) {
     it(`refuses a second job while one is ${status}`, async () => {
-      fake = seedDb({ publish_jobs: [job('j1', status)] })
+      fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', status)] })
       const result = await queuePublishJob(validPost)
       expect(result).toEqual({ error: 'These files are already queued to publish on this card' })
       // …and nothing was written
@@ -67,14 +77,14 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
   }
 
   it('a SCHEDULED job still holds the slot — the provider is holding that post until its time', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'scheduled')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'scheduled')] })
     expect(await queuePublishJob(validPost))
       .toEqual({ error: 'These files are already queued to publish on this card' })
   })
 
   for (const status of ['published', 'duplicate', 'failed', 'cancelled']) {
     it(`lets the item be queued again once the last job is ${status}`, async () => {
-      fake = seedDb({ publish_jobs: [job('j1', status)] })
+      fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', status)] })
       const result = await queuePublishJob(validPost)
       expect(result).toHaveProperty('id')
       expect(fake.rows('publish_jobs')).toHaveLength(2)
@@ -82,9 +92,48 @@ describe('one live publish job per item — publish_jobs_one_live_per_item', () 
   }
 
   it('another item is never blocked by this one', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'scheduled')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'scheduled')] })
     const result = await queuePublishJob({ ...validPost, contentItemId: 'other-item' })
     expect(result).toHaveProperty('id')
+  })
+})
+
+/**
+ * THE DOOR ASKS THE POST (the posting rebuild, 29 Sep 2026). The item-wide
+ * approval gate is gone (audit V1: one gate per ITEM), so a card's files go
+ * out only for a post that is Booked in and approved at the version it sends —
+ * the item page and the old composer cannot walk round the post's approval.
+ */
+describe('the one door onto a client account asks the post', () => {
+  it('refuses a card\'s files with no post behind them', async () => {
+    fake = seedDb({ social_posts: [bookedPost()] })
+    const { postId: _none, ...noPost } = validPost
+    expect(await queuePublishJob(noPost)).toEqual({ error: 'Book this from its post on Schedule. A post has to pass its approval before it goes out.', blocked: true })
+    expect(fake.rows('publish_jobs')).toHaveLength(0)
+  })
+
+  for (const [what, change, words] of [
+    ['a post in Ready to post (not booked)', { stage: 'ready' }, 'This post is not booked in, so it cannot go out.'],
+    ['a post approved at an older version', { sent_version: 2 }, 'This version of the post is not approved, so it cannot go out.'],
+    ['a post with no approval at all', { approval: null }, 'This version of the post is not approved, so it cannot go out.'],
+    ['another client\'s post', { client_id: 'client-2' }, 'That post belongs to another client.'],
+  ] as const) {
+    it(`refuses ${what}`, async () => {
+      fake = seedDb({ social_posts: [{ ...bookedPost(), ...change } as unknown as Row] })
+      expect(await queuePublishJob(validPost)).toEqual({ error: words, blocked: true })
+      expect(fake.rows('publish_jobs')).toHaveLength(0)
+    })
+  }
+
+  it('refuses a post that is gone', async () => {
+    fake = seedDb({})
+    expect(await queuePublishJob(validPost)).toEqual({ error: 'That post no longer exists.', blocked: true })
+  })
+
+  it('lets a text post from the composer through, as before (no card, no post)', async () => {
+    fake = seedDb({})
+    const { postId: _p, ...text } = validPost
+    expect(await queuePublishJob({ ...text, contentItemId: null })).toHaveProperty('id')
   })
 })
 
@@ -106,7 +155,7 @@ describe('the TikTok tick, on every path that queues a post', () => {
   }
 
   it('refuses a TikTok post nobody has ticked, in words a person can act on', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     const result = await queuePublishJob(tiktokPost) as { error: string; issues?: string[] }
     expect(result.error).toBe('This post is not valid for every selected platform')
     expect((result.issues ?? []).join(' ')).toMatch(/Tick the TikTok box/)
@@ -114,7 +163,7 @@ describe('the TikTok tick, on every path that queues a post', () => {
   })
 
   it('lets it through the moment the tick is there', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     const result = await queuePublishJob({
       ...tiktokPost,
       targets: [{ platform: 'tiktok' as const, accountId: 'acc-tt', options: { tiktokConsent: true } }],
@@ -123,7 +172,7 @@ describe('the TikTok tick, on every path that queues a post', () => {
   })
 
   it('leaves every other network alone', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     expect(await queuePublishJob({ ...validPost, contentItemId: null })).toHaveProperty('id')
   })
 })
@@ -135,7 +184,7 @@ describe('one row per (item, version) — asset_versions', () => {
   })
 
   it('refuses a second row for a version number already taken', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     await table('asset_versions').insert(version(1))
     await expect(table('asset_versions').insert(version(1)))
       .rejects.toMatchObject({ code: 'unique' })
@@ -145,7 +194,7 @@ describe('one row per (item, version) — asset_versions', () => {
   })
 
   it('derives the row id from the pair, so the two are the same fact', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     const row = await table('asset_versions').insert(version(3))
     expect(row.id).toBe(`${ITEM}__3`)
   })

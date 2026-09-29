@@ -60,7 +60,14 @@ import { whoseTurn, type ItemStatus } from '../../app/lib/workflow-core'
 import { UNASKED_LINE } from '../../app/lib/waiting-core'
 import { DELIVERED_LINE, DELIVER_ONLY_REASON, PORTAL_DELIVERED_LINE, isDelivered } from '../../app/lib/deliver-only-core'
 import { monthStages, stagesLine } from '../../app/lib/overview-stages-core'
-import { createPost, sendForApproval, cancelPost, schedulePost } from '../../app/lib/social-schedule'
+import { createPost } from '../../app/lib/social-schedule'
+// RETIRED by the posting rebuild (29 Sep 2026): the one-press "send for approval / book" doors are gone. A post's
+// own moves go through POST /api/posts/<id>/act (app/lib/post-stage.ts), and its quality check is required. The
+// steps that pressed the old doors are skipped below; the new journeys are package P9's Playwright specs (e2e/).
+const retired = (..._: unknown[]): Promise<any> => { throw new Error('retired by the posting rebuild — see docs/posting-rebuild/SPEC.md') }
+const sendForApproval = retired
+const cancelPost = retired
+const schedulePost = retired
 import { postingEligibility } from '../../app/lib/social-schedule-core'
 import { getPortalData } from '../../app/lib/portal-data'
 import { putObject, deleteStoredObject } from '../../app/lib/storage'
@@ -297,7 +304,7 @@ beforeAll(() => withRequestCache(async () => {
 
 /* ── A. swap a booked post to another approved asset ────────────────────── */
 
-describe('A. the scheduler swaps a booked post for another approved asset', () => {
+describe.skip('A. the scheduler swaps a booked post for another approved asset', () => {
   it('A1. two cards are approved through the gate; the scheduler books A', async () => {
     await makeCard('A', 'Launch reel A'); await makeCard('B', 'Launch photo B')
     await throughTheGate(cards.A, SLIDES[0]); await throughTheGate(cards.B, SLIDES[1])

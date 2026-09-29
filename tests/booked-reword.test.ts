@@ -30,17 +30,17 @@ describe('what a change to a booked post is', () => {
     expect(REWORD_LEAD_MS).toBe(60_000)
     expect(TOO_LATE_TO_REWORD).toContain('Cancel it instead')
   })
-  it('the server pulls the booking back and books it again; the composer keeps the caption open with one button', () => {
+  it('a booked post is not reworded in place; the window shows the frozen version and offers Edit', () => {
+    // the posting rebuild (29 Sep 2026, decision 8): rewordBooked is gone from the server; an edit makes version N+1
     const s = readFileSync('app/lib/social-schedule.ts', 'utf8')
-    expect(s).toContain("if (change === 'caption' || change === 'settings') {")
-    expect(s).toContain('targets: targetsFor(next, accounts, versions),')
-    expect(s).toContain("the words are re-booked at once; the client's yes stands")
-    expect(s).toContain("action: 'post_reworded', detail: `${caption !== String(post.caption ?? '') ? 'Words' : 'Cover or settings'} changed on a booked post")
-    expect(s).toContain("await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })")
-    const d = readFileSync('app/dashboard/social/schedule/NewPostDialog.tsx', 'utf8')
-    expect(d).toContain('readOnly={locked && !bookedWords}')
-    expect(d).toContain('body: JSON.stringify({ caption: state.caption, per_channel: state.perChannel })')
-    expect(d).toContain("{busy ? 'Saving…' : coverChanged ? 'Save the changes' : 'Save the new words'}")
-    expect(d).toContain('locked={locked && !bookedWords}')
+    expect(s).not.toContain('export async function rewordBooked(')
+    // THE POSTING REBUILD (29 Sep 2026, the owner's decision 8): a booked post's
+    // words are no longer changed in place — the window shows the frozen
+    // version read only, and "Edit" (take it off the schedule, make version
+    // N+1) is a footer button like every other move.
+    const d = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(d).toContain('readOnly={!editable}')
+    expect(d).not.toContain('bookedWords')
+    expect(d).toContain('locked={locked}')
   })
 })

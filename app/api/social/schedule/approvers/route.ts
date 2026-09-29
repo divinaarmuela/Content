@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { withRequestCache } from '@/lib/db'
 import { requireRole, authzErrorResponse } from '../../../../lib/authz'
 import { assertClientAccess } from '../../../../lib/social-schedule'
-import { clientManagers } from '../../../../lib/posting-approval'
+import { clientManagers } from '../../../../lib/post-stage'
 
 /**
  * GET ?clientId= → who a scheduler can send a post to for approval.

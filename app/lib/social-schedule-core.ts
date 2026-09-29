@@ -12,11 +12,12 @@
  *   1. ONLY APPROVED WORK GETS POSTED. Eligibility is `content_items.status`
  *      (workflow-core) plus real slides (`postSlides`, version-files-core).
  *      Nothing here decides what a slide is.
- *   2. THE POST'S APPROVAL IS THE ITEM'S. `social_posts.status` MIRRORS
- *      `content_items.posting_approval_state` (posting-approval-core) and adds
- *      the publish lifecycle on top of it, read off `publish_jobs`. There is
- *      no second state machine, and `mirrorStatus` is a projection, never a
- *      source of truth.
+ *   2. A POST'S STAGE IS ITS OWN. Where a post stands is `social_posts.stage`,
+ *      and the rules for it live in `post-stage-core` (the posting rebuild,
+ *      29 Sep 2026). Nothing here works a post's state out of its edit card
+ *      or its jobs any more: the old `mirrorStatus` did, and drew a draft
+ *      nobody had approved as green "Approved" (audit S2). What the Schedule
+ *      page shows per stage is `schedule-stage-core`.
  *   3. A POSTING TIME BELONGS TO THE CLIENT'S ZONE. Which column a tile sits
  *      in is a fact about the audience, so every day key here comes from
  *      `dayKeyInZone`/`wallTimeIn` and every wall time goes back through
@@ -27,9 +28,8 @@
  * clocks change still has seven days in it, each of them once.
  */
 
-import { publishBlockReason, parseApprovalState } from './posting-approval-core'
 import {
-  LIVE_JOB_STATUSES, NETWORK_LABEL, optionProblems, PLATFORM_RULES,
+  NETWORK_LABEL, optionProblems, PLATFORM_RULES,
   type Platform, type PostKind, type PostOptions,
 } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
@@ -41,8 +41,13 @@ import type { ItemStatus } from './workflow-core'
 
 /* ── the post ───────────────────────────────────────────────────────────── */
 
-/** What a planned post can be. The first four MIRROR the item's posting
- *  approval state; the last four are the publish lifecycle underneath it. */
+/**
+ * LEGACY: the old `social_posts.status` words. A post's stage is now
+ * `social_posts.stage` (`post-stage-core`'s POST_STAGES), and no Schedule
+ * page reads these. They stay only while other files (the server, P1, and
+ * `post-page-core`) still name them; the migration's `--drop-legacy` pass removes the
+ * column, and these go with it.
+ */
 export const SOCIAL_POST_STATUSES = [
   'draft', 'pending', 'approved', 'changes',
   'scheduled', 'published', 'failed', 'cancelled',
@@ -486,61 +491,7 @@ export function coverForSlide(
   return null
 }
 
-/* ── the status a tile wears ────────────────────────────────────────────── */
-
-/**
- * What the post IS right now, from the item's approval state and its jobs.
- *
- * A post's OWN status is read first when it is terminal: 'cancelled' is
- * something a person did to this post directly, and it must win even with
- * no jobs behind it — `canReschedule` already refuses to move a cancelled
- * post, and mirroring the item's approval state instead here would make the
- * tile claim it could still be moved when the drag handler would refuse it.
- *
- * Otherwise the jobs win when there are any, because a queued post has moved
- * past the approval question. Their order of precedence, in the
- * multi-channel case:
- *
- *   still going out  → 'scheduled'  — one channel left to go means the post
- *                                     as a whole has not happened yet
- *   anything failed  → 'failed'     — a failure needs a person more than a
- *                                     success needs applause
- *   anything posted  → 'published'
- *   all cancelled    → 'cancelled'
- *
- * With no jobs it is a straight mirror of `posting_approval_state`; an item
- * the gate never touched reads as a draft, which is what it is.
- */
-export function mirrorStatus(
-  item: ScheduleItem | null | undefined,
-  post: SchedulePost | null | undefined,
-  jobs: readonly ScheduleJob[] | null | undefined,
-): SocialPostStatus {
-  if (String(post?.status ?? '') === 'cancelled') return 'cancelled'
-
-  const list = (Array.isArray(jobs) ? jobs : []).map(j => String(j?.status ?? ''))
-  if (list.some(s => LIVE_JOB_STATUSES.includes(s))) return 'scheduled'
-  if (list.includes('failed')) return 'failed'
-  if (list.includes('published')) return 'published'
-  if (list.length > 0 && list.every(s => s === 'cancelled')) return 'cancelled'
-
-  const state = parseApprovalState(item?.posting_approval_state)
-  if (state) return state
-  // the gate was never used on this item: whatever the row calls itself, the
-  // post has not been sent anywhere, and that is a draft
-  return 'draft'
-}
-
-/**
- * Why this post cannot go out yet, in the one sentence the server would
- * refuse with — or null when nothing is in the way.
- *
- * A thin read of `publishBlockReason`, so the tile's tooltip, the composer
- * footer and `/api/social/publish` cannot drift into three different reasons.
- */
-export function blockReason(item: ScheduleItem | null | undefined): string | null {
-  return publishBlockReason(item?.posting_approval_state)
-}
+/* ── LEGACY: the tone of an old status word ─────────────────────────────── */
 
 const TONES: Record<SocialPostStatus, TileTone> = {
   pending: 'amber',
@@ -553,8 +504,8 @@ const TONES: Record<SocialPostStatus, TileTone> = {
   cancelled: 'muted',
 }
 
-/** The tone a tile is drawn in. Anything unrecognised is muted — a tile whose
- *  state we cannot name must not shout. */
+/** LEGACY: the tone for an old status word. The Schedule page draws a tile in
+ *  its stage's tone (`STAGE_TONE`); only the old post window still asks this. */
 export function tileTone(status: string | null | undefined): TileTone {
   return TONES[String(status ?? '') as SocialPostStatus] ?? 'muted'
 }
@@ -1074,19 +1025,6 @@ export type TileAccount = {
   active?: boolean | null
 }
 
-/** What a tile is drawn from, once the post, its item and its jobs are read
- *  together. Everything here is DERIVED — none of it is stored on the post. */
-export type PostTileFacts = {
-  /** the status the tile wears, from `mirrorStatus` */
-  live_status: SocialPostStatus
-  /** the colour that status is drawn in */
-  tone: TileTone
-  /** the NETWORKS this post goes to — never the account ids the row stores */
-  platforms: string[]
-  /** the one sentence the server would refuse to post with, or null */
-  block_reason: string | null
-}
-
 const asStrings = (v: unknown): string[] =>
   (Array.isArray(v) ? v : []).map(x => String(x ?? '')).filter(Boolean)
 
@@ -1095,8 +1033,8 @@ const asStrings = (v: unknown): string[] =>
  *
  * Never by item. An item can carry a second post after the first was
  * cancelled, and matching by item makes the OLD post's cancelled job speak
- * for the new one: `mirrorStatus` sees "every job cancelled" and marks a
- * brand-new draft `cancelled` without anybody cancelling it. The server
+ * for the new one: it reads "every job cancelled" and marks a brand-new
+ * post `cancelled` without anybody cancelling it. The server
  * (`social-schedule.ts`'s `jobsOf`) matches the same way, so the calendar and
  * the API cannot tell a person two different stories about one post.
  */
@@ -1176,57 +1114,15 @@ export function channelBlockReason(
     : `${dropped.length} of this post’s channels need reconnecting — it is on hold until somebody reconnects them`
 }
 
-/**
- * One tile's facts: what this post IS right now, in what colour, on which
- * networks, and what is standing in its way.
- *
- * Pure and separate from the page on purpose — this join is where a calendar
- * quietly starts disagreeing with the API, so it is the part that gets tests.
- */
-export function postTileFacts(
-  post: TilePost | null | undefined,
-  item: ScheduleItem | null | undefined,
-  jobsById: ReadonlyMap<string, TileJob>,
-  accounts: readonly TileAccount[] | null | undefined,
-): PostTileFacts {
-  const live = mirrorStatus(item, post as SchedulePost, jobsForPost(post, jobsById))
-  return {
-    live_status: live,
-    tone: tileTone(live),
-    platforms: postPlatforms(post?.channels, accounts),
-    // the SERVER's reason, read the server's way — `publishBlockReason` on the
-    // item's approval state, not a second opinion assembled here. The
-    // approval gate comes first when both apply: an unapproved post is not
-    // going out whatever its channels are doing.
-    block_reason: blockReason(item) ?? channelBlockReason(post?.channels, accounts),
-  }
-}
-
 /* ── what is on screen ──────────────────────────────────────────────────── */
 
-/**
- * A DRAFT IS NOT A PLAN. A file somebody uploaded and walked away from is
- * saved as a draft with a default time, and drawn on the week grid it
- * looked like something booked for that hour (the owner, 10 Sep 2026: "if
- * an admin or AM uploaded a file and just leaves it, don't show it on the
- * calendar… we have yet to schedule that"). So the grids — week, month,
- * preview, stories — draw only posts somebody has moved past draft:
- * waiting for approval, approved, scheduled, posted, did not go out. The
- * List still shows drafts, wherever their time is, and the rail counts them,
- * so a draft nobody can find is still a draft somebody can finish.
+/*
+ * WHICH POSTS THE GRIDS DRAW is `showsOnSchedule` in `schedule-stage-core`:
+ * Ready to post, Booked in and Posted, off the post's own stage (the owner's
+ * decision 1). Drafts and cancelled posts are lists of their own, never a
+ * tile — a deleted draft landing on the week as a "Cancelled" tile was
+ * audit S1.
  */
-export function showsOnGrid(post: { live_status: SocialPostStatus }): boolean {
-  return post.live_status !== 'draft'
-}
-
-/** Belongs in this week's List: on one of its days, or with no time yet, or
- *  a draft (which the grids never show, so the List is where it lives). */
-export function belongsInList(
-  post: { live_status: SocialPostStatus; scheduled_for: string | null },
-  onTheseDays: boolean,
-): boolean {
-  return !post.scheduled_for || post.live_status === 'draft' || onTheseDays
-}
 
 /** Does this instant fall on one of these days, in the client's zone? */
 export function onOneOfDays(
@@ -1278,10 +1174,7 @@ export function nowLineTop(
 
 /* ── the list view ──────────────────────────────────────────────────────── */
 
-export type ListablePost = { scheduled_for?: string | null; live_status?: string | null }
-
-/** the List's first heading: the drafts, which no grid draws (10 Sep 2026) */
-export const DRAFTS_GROUP_LABEL = 'Drafts — not on the calendar until scheduled'
+export type ListablePost = { scheduled_for?: string | null }
 
 export type ListGroup<T extends ListablePost> = {
   /** the client's day key, or '' for posts with no time yet */
@@ -1308,20 +1201,14 @@ export function groupForList<T extends ListablePost>(
 ): ListGroup<T>[] {
   const zone = safeZone(tz)
   const groups = new Map<string, T[]>()
-  const drafts: T[] = []
   for (const post of Array.isArray(posts) ? posts : []) {
-    // drafts first, together: they are the one kind of post no grid shows,
-    // so the List is where somebody comes to find them
-    if (post?.live_status === 'draft') { drafts.push(post); continue }
     const key = dayKeyInZone(post?.scheduled_for ?? null, zone) ?? ''
     const list = groups.get(key) ?? []
     list.push(post)
     groups.set(key, list)
   }
   const byTime = (a: T, b: T) => String(a?.scheduled_for ?? '').localeCompare(String(b?.scheduled_for ?? ''))
-  const out: ListGroup<T>[] = drafts.length
-    ? [{ dayKey: 'drafts', label: DRAFTS_GROUP_LABEL, posts: drafts.sort(byTime) }]
-    : []
+  const out: ListGroup<T>[] = []
   for (const dayKey of [...groups.keys()].sort()) {
     out.push({
       dayKey,

@@ -7,6 +7,7 @@ import { cardColumn, BOARD_COLUMNS, columnOf, OUT_COLUMNS } from '../app/lib/boa
 import {
   cardActions, cardLines, dropAction, groupByLane, pageCards, pageLanes, type BoardViewCard,
 } from '../app/lib/board-view-core'
+import { readyToBecomePosts } from '../app/lib/post-board-core'
 import { cardLine } from '../app/lib/portal-core'
 import { scopeContextOf, visibleItems } from '../app/lib/scope-client'
 
@@ -58,8 +59,8 @@ describe('the Delivered column', () => {
     expect(cardColumn(card({ status: 'published' }))).toBe('posted')
   })
   it('groups by the card’s column, and the Editor page folds Delivered into Done', () => {
-    const lanes = pageLanes('scheduler')
-    const grouped = groupByLane(lanes, [card(), card({ id: 'c2', deliver_only: false, posting_approval_state: 'approved' } as never)])
+    const lanes = pageLanes('production')
+    const grouped = groupByLane(lanes, [card(), card({ id: 'c2', deliver_only: false })])
     expect(grouped.find(g => g.lane.key === 'delivered')!.cards.map(c => c.id)).toEqual(['c1'])
     expect(grouped.find(g => g.lane.key === 'ready_to_post')!.cards.map(c => c.id)).toEqual(['c2'])
     const editor = pageLanes('editor')
@@ -87,7 +88,9 @@ describe('what a deliver-only card offers and refuses', () => {
   it('a scheduler never sees it on any page, even when handed it', () => {
     const c = card({ scheduler_ids: ['sch'] })
     expect(pageCards('scheduler', [c], sch, '2026-09-11')).toEqual([])
-    expect(pageCards('scheduler', [c], am, '2026-09-11').map(x => x.id)).toEqual(['c1'])
+    // …and it never becomes a post: not in the tray on Post approval (29 Sep 2026)
+    expect(readyToBecomePosts([c as never], new Set())).toEqual([])
+    expect(pageCards('editor', [c], am, '2026-09-11').map(x => x.id)).toEqual(['c1'])
     // …and the server’s scope agrees, from the card’s word or the client’s
     const items = [
       { id: 'a', client_id: 'k', status: 'approved_for_scheduling', owner_id: null, scheduler_ids: ['sch'], deliver_only: true },

@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  APPROVAL_LINE, addToPost, clockPillLabel, composerReducer, footerActions,
+  addToPost, clockPillLabel, composerReducer,
   inPost, initialComposer, isPostingNow, joinClock, limitsLine, moreOptionsFor, moveInPost,
   readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
-  to12, to24, NEW_VERSION_NOTICE, PAGE_ID_HELP, type ComposerState,
+  to12, to24, POST_MEDIA_NOTICE, PAGE_ID_HELP, MINUTE_STEPS, type ComposerState,
   CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
-  SEND_FOR_REVIEW, sentForReviewLine,
-  composerWait, mediaApprovalBadge, WAITING_ON_MANAGER,
-  CLIENT_APPROVED_BADGE, NEW_MEDIA_BADGE, NOT_CLIENT_SIGNED_BADGE, TEAM_APPROVED_BADGE,
 } from '@/app/lib/schedule-compose-core'
+import * as composeCore from '@/app/lib/schedule-compose-core'
 import { isPageId, kindTakesLocation, toPlatformData } from '@/app/lib/publish-core'
-import { SOCIAL_POST_STATUSES } from '@/app/lib/social-schedule-core'
 import type { Slide } from '@/app/lib/version-files-core'
 
 /**
@@ -397,103 +394,41 @@ describe('what is in the post', () => {
     expect(inPost([a], b.url)).toBe(false)
   })
 
-  it('says the new-version rule in plain words, and never says "graphic"', () => {
-    expect(NEW_VERSION_NOTICE).toMatch(/new version/)
-    expect(NEW_VERSION_NOTICE).toMatch(/client's approval/)
-    expect(NEW_VERSION_NOTICE.toLowerCase()).not.toContain('graphic')
+  it('says the files belong to this post, and never promises a new version of the edit (29 Sep 2026)', () => {
+    expect(POST_MEDIA_NOTICE).toMatch(/this post only/)
+    expect(POST_MEDIA_NOTICE).toMatch(/quality check/)
+    expect(POST_MEDIA_NOTICE).not.toMatch(/new version|client's approval/)
+    expect(POST_MEDIA_NOTICE.toLowerCase()).not.toContain('graphic')
   })
 })
 
-describe('the button at the bottom offers only what this person may do', () => {
-  const scheduler = { mayApprove: false, mayPublish: true }
-  const manager = { mayApprove: true, mayPublish: true }
-  const editor = { mayApprove: false, mayPublish: false }
-
-  it('a scheduler is never offered "Schedule without approval"', () => {
-    const { primary, menu } = footerActions({ status: 'draft', ...scheduler })
-    expect(primary.label).toBe(SEND_FOR_REVIEW)
-    expect(menu.map(m => m.key)).toEqual(['draft'])
-  })
-
-  it('an account manager just posts — one press, no approval step', () => {
-    const { primary, menu } = footerActions({ status: 'draft', ...manager })
-    expect(primary).toEqual({ key: 'direct', label: 'Schedule' })
-    // asking is still there, one press away, for when they want it
-    expect(menu.map(m => m.key)).toEqual(['send', 'draft'])
-    expect(menu[0].label).toBe(SEND_FOR_REVIEW)
-  })
-
-  it('…and "Post now" when the time they picked is now', () => {
-    const { primary } = footerActions({ status: 'draft', ...manager, postingNow: true })
-    expect(primary).toEqual({ key: 'direct', label: 'Post now' })
-  })
-
-  // the owner, 9 Sep 2026: "no approval or accept feature, even when the
-  // client has that lock" — the manager's button does not move for it
-  it('a client who signs every post off does NOT move the manager off the one press', () => {
-    const { primary, menu } = footerActions({ status: 'draft', ...manager, clientSignsOff: true })
-    expect(primary).toEqual({ key: 'direct', label: 'Schedule' })
-    expect(menu.map(m => m.key)).toEqual(['send', 'draft'])
-  })
-
-  it('a scheduler on that client sees exactly what they saw before', () => {
-    const { primary, menu } = footerActions({ status: 'draft', ...scheduler, clientSignsOff: true })
-    expect(primary.label).toBe(SEND_FOR_REVIEW)
-    expect(menu.map(m => m.key)).toEqual(['draft'])
-  })
-
-  it('an editor is offered no short cut either way', () => {
-    for (const clientSignsOff of [false, true]) {
-      const { primary, menu } = footerActions({ status: 'draft', ...editor, clientSignsOff })
-      expect(primary.key).toBe('send')
-      expect(menu.map(m => m.key)).toEqual(['draft'])
+/**
+ * THE OLD FOOTER IS GONE (29 Sep 2026). `footerActions`, `approvalLine`,
+ * `composerWait`, `mediaApprovalBadge` and `outcomeWords` read the old status
+ * and the edit card; the post window's buttons are `postActions`
+ * (tests/post-stage-core.test.ts) and its words are post-window-core's
+ * (tests/post-window-core.test.ts). This pins that they stay gone.
+ */
+describe('the composer core no longer decides a post\'s buttons or words', () => {
+  it('has none of the old status-based footer left', () => {
+    for (const gone of ['footerActions', 'approvalLine', 'composerWait', 'mediaApprovalBadge', 'APPROVAL_LINE',
+      'SEND_FOR_REVIEW', 'sentForReviewLine', 'outcomeWords', 'NEW_VERSION_NOTICE', 'WAITING_ON_MANAGER']) {
+      expect(gone in composeCore, gone).toBe(false)
     }
   })
 
-  it('"now" is the next couple of minutes, never a time already gone', () => {
+  it('"now" is the next couple of minutes, never a time already gone (kept for the server\'s old path)', () => {
     const t = Date.parse('2026-09-05T10:00:00.000Z')
     expect(isPostingNow(new Date(t + 30_000).toISOString(), t)).toBe(true)
     expect(isPostingNow(new Date(t + 119_000).toISOString(), t)).toBe(true)
     expect(isPostingNow(new Date(t + 10 * 60_000).toISOString(), t)).toBe(false)
-    // already gone: the composer says so plainly and the button stays disabled
     expect(isPostingNow(new Date(t - 60_000).toISOString(), t)).toBe(false)
     expect(isPostingNow(null, t)).toBe(false)
     expect(isPostingNow('not a time', t)).toBe(false)
   })
 
-  it('after approval the people who may publish get Schedule and Post now', () => {
-    const { primary, menu } = footerActions({ status: 'approved', ...scheduler })
-    expect(primary).toEqual({ key: 'schedule', label: 'Schedule' })
-    expect(menu.map(m => m.key)).toEqual(['now'])
-  })
-
-  it('…and somebody who may not publish is told who does, not given a dead button', () => {
-    const { primary, menu } = footerActions({ status: 'approved', ...editor })
-    expect(primary.key).toBe('none')
-    expect(primary.label).toMatch(/scheduler/)
-    expect(menu).toEqual([])
-  })
-
-  it('a post already finished has nothing to press; a booked one can be moved by somebody who may post', () => {
-    for (const status of ['published', 'failed', 'cancelled'] as const) {
-      expect(footerActions({ status, ...manager }).primary.key).toBe('none')
-    }
-    // 9 Sep 2026: "I accidentally scheduled it for tomorrow"
-    const moved = footerActions({ status: 'scheduled', ...manager })
-    expect(moved.primary).toEqual({ key: 'move', label: 'Move to this time' })
-    expect(moved.menu.map(m => m.key)).toEqual(['now'])
-    expect(footerActions({ status: 'scheduled', mayApprove: false, mayPublish: false }).primary.key).toBe('none')
-  })
-
-  it('a post waiting on somebody can be sent again rather than sent twice', () => {
-    expect(footerActions({ status: 'pending', ...scheduler }).primary.label).toBe('Send again')
-  })
-
-  it('gives every status a sentence for the footer pill', () => {
-    for (const status of SOCIAL_POST_STATUSES) {
-      expect(APPROVAL_LINE[status], status).toBeTruthy()
-      expect(APPROVAL_LINE[status].toLowerCase()).not.toContain('graphic')
-    }
+  it('offers minutes in five-minute steps (audit W9)', () => {
+    expect(MINUTE_STEPS).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55])
   })
 })
 
@@ -630,102 +565,6 @@ describe('durationWords', () => {
 /* ── waiting on somebody else ─────────────────────────────────── */
 
 /**
- * A scheduler who drops their own file on the calendar had the piece moved
- * to `internal_review` (the manager already told) and was then shown "Still
- * being made" in red over that file, under a button `!check.ok` had already
- * disabled. Nothing was wrong and nothing could be pressed.
- */
-describe('the window says the calm truth when it is waiting on somebody else', () => {
-  it('names the wait, and names the problem sentence it replaces', () => {
-    const wait = composerWait({ itemStatus: 'internal_review', mayApprove: false })
-    expect(wait?.line).toBe(WAITING_ON_MANAGER)
-    expect(WAITING_ON_MANAGER).toMatch(/account manager/)
-    expect(WAITING_ON_MANAGER).toMatch(/been told/)
-    // the sentence it replaces is validateComposition's own, never a copy
-    expect(wait?.replaces).toBe('Still being made')
-  })
-
-  it('is not the manager\'s window — they are the person being waited on', () => {
-    expect(composerWait({ itemStatus: 'internal_review', mayApprove: true })).toBeNull()
-    // …and a client who signs every post off does not change that (the owner,
-    // 9 Sep 2026): the lock is a note to the manager, never a wait
-    expect(composerWait({ itemStatus: 'internal_review', mayApprove: true, clientSignsOff: true }))
-      .toBeNull()
-  })
-
-  it('is only this one wait: a piece with the client, or still being made, is said as before', () => {
-    for (const status of ['client_review', 'revision_required', 'draft_uploaded', 'approved_for_scheduling']) {
-      expect(composerWait({ itemStatus: status, mayApprove: false })).toBeNull()
-    }
-  })
-
-  it('offers only what is possible: save the draft, and nothing under the arrow', () => {
-    const { primary, menu } = footerActions({
-      status: 'draft', mayApprove: false, mayPublish: true, waiting: true,
-    })
-    expect(primary).toEqual({ key: 'draft', label: 'Save as draft' })
-    expect(menu).toEqual([])
-    // a dead "Send for review" is exactly what it replaces
-    expect(primary.label).not.toBe(SEND_FOR_REVIEW)
-  })
-})
-
-/* ── who signed the media off ────────────────────────────────── */
-
-describe('the badge over the picture says who actually signed it off', () => {
-  const at = (over: Partial<Parameters<typeof mediaApprovalBadge>[0]> = {}) => mediaApprovalBadge({
-    clientApproved: false, allFromApprovedVersion: true, itemStatus: 'approved_for_scheduling', ...over,
-  })
-
-  it('says the client only when the client said yes', () => {
-    expect(at({ clientApproved: true })).toEqual({ label: CLIENT_APPROVED_BADGE, tone: 'green' })
-    expect(CLIENT_APPROVED_BADGE).toBe('Client approved')
-  })
-
-  it('a manager\'s own sign-off says so, and never wears the client\'s name', () => {
-    const badge = at({ clientApproved: false })
-    expect(badge).toEqual({ label: TEAM_APPROVED_BADGE, tone: 'amber' })
-    expect(badge.label).not.toContain('Client')
-  })
-
-  it('a piece nobody has signed off is said plainly', () => {
-    expect(at({ itemStatus: 'internal_review' }))
-      .toEqual({ label: NOT_CLIENT_SIGNED_BADGE, tone: 'amber' })
-  })
-
-  it('a file from outside the approved version is covered by no sign-off at all', () => {
-    expect(at({ clientApproved: true, allFromApprovedVersion: false }))
-      .toEqual({ label: NEW_MEDIA_BADGE, tone: 'amber' })
-  })
-})
-
-
-/* ── 8 Sep 2026: the composer must read the same rule the server does ──── */
-import { approvalLine as pillLine, footerActions as footer } from '@/app/lib/schedule-compose-core'
-import { mayPostWithoutApproval as mayPost } from '@/app/lib/social-schedule-core'
-
-describe('a scheduler on the Schedule page', () => {
-  it('gets "Send for approval" as the button — they ask, a manager answers', () => {
-    // exactly how NewPostDialog composes it: role -> mayApprove -> footer + pill.
-    // Tested as a SCHEDULER on purpose: the super admin path never hits this.
-    const mayApprove = mayPost('scheduler', false)
-    expect(mayApprove).toBe(false)
-    const f = footer({ status: 'draft', mayApprove, mayPublish: true, clientSignsOff: false })
-    expect(f.primary.key).toBe('send')
-    expect(f.primary.label).toBe('Send for approval')
-    expect(f.menu.map(m => m.key)).not.toContain('direct')
-    expect(pillLine('draft', { mayApprove, clientSignsOff: false })).toBe('Needs approval before it can post')
-  })
-
-  it('a manager gets Schedule, and "yours to post"', () => {
-    const mayApprove = mayPost('account_manager', false)
-    const f = footer({ status: 'draft', mayApprove, mayPublish: true, clientSignsOff: false })
-    expect(f.primary.key).toBe('direct')
-    expect(pillLine('draft', { mayApprove, clientSignsOff: false })).toBe('Not sent to anyone — yours to post')
-  })
-})
-
-/**
  * THE CALENDAR'S DAY, ONE FRAME OF REFERENCE (the owner, 9 Sep 2026: "the
  * calendar cursor on the popup is not showing on the right day"). The
  * picker read react-day-picker's LOCAL-midnight cell with getUTC*, which
@@ -753,38 +592,3 @@ describe('the day the calendar hands back is the day that was pressed', () => {
   })
 })
 
-/**
- * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026: "saving as draft
- * doesn't tell the user that it's a draft … once scheduled show a different
- * popup"). One sentence for what happened, one for where it is.
- */
-describe('what the page says after a press', () => {
-  const at = '2026-09-15T08:30:00.000Z' // 6:30 pm Melbourne
-
-  it('a draft says nothing goes out, and where it sits', async () => {
-    const { outcomeWords } = await import('../app/lib/schedule-compose-core')
-    const timed = outcomeWords({ kind: 'draft', at, tz: MELB, networks: ['Instagram'] })
-    expect(timed.title).toBe('Saved as a draft')
-    expect(timed.body).toMatch(/Nothing goes out/)
-    expect(timed.body).toMatch(/6:30 pm/)
-    // a draft is off the calendar grids (10 Sep 2026): the popup says where it is
-    expect(timed.body).toMatch(/Drafts in the left rail/)
-    expect(timed.showOnCalendar).toBe(false)
-    const untimed = outcomeWords({ kind: 'draft', at: null, tz: MELB, networks: [] })
-    expect(untimed.body).toMatch(/no time yet/i)
-    expect(untimed.showOnCalendar).toBe(false)
-  })
-
-  it('booked names the time and the networks; sent names the person', async () => {
-    const { outcomeWords } = await import('../app/lib/schedule-compose-core')
-    const booked = outcomeWords({ kind: 'booked', at, tz: MELB, networks: ['Instagram', 'TikTok'] })
-    expect(booked.title).toMatch(/^Booked in for .*6:30 pm/)
-    expect(booked.body).toContain('Instagram, TikTok')
-    const sent = outcomeWords({ kind: 'sent', at, tz: MELB, networks: ['Instagram'], who: 'Ava' })
-    expect(sent.title).toBe('Sent to Ava for approval')
-    expect(sent.body).toMatch(/Once they approve it/)
-    const now = outcomeWords({ kind: 'now', at, tz: MELB, networks: ['TikTok'] })
-    expect(now.title).toBe('Posting now')
-    expect(now.body).toContain('TikTok')
-  })
-})

@@ -23,13 +23,10 @@ import { isDismissSwipe, readCardParam, usesMakerDrawer, withCardParam } from '.
  * swipe to the right: the panel follows the thumb and lets go past 80px.
  * The full page is one tap away for anyone who wants the room.
  */
-export function CardSheet({ id, onClose, simple = false, editor = false }: {
+export function CardSheet({ id, onClose, editor = false }: {
   /** the open card, or null for shut */
   id: string | null
   onClose: () => void
-  /** the plain drawer — files, decision, what was said — for every card, not
-   *  only an uploaded post (the Editor page, 9 Sep 2026) */
-  simple?: boolean
   /** the EDITOR'S card, in the Video Editors SOP's order (11 Sep 2026) —
    *  what the person making the piece sees; managers keep the plain drawer */
   editor?: boolean
@@ -37,8 +34,12 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
   // the swipe: where the touch began, how far it has come
   const start = useRef<{ x: number; y: number } | null>(null)
   const [dx, setDx] = useState(0)
-  // a post uploaded for approval gets its own drawer (8 Sep 2026); production
+  // an uploaded post's file holder gets its own drawer (8 Sep 2026); production
   // work keeps the card. Decided from the row, so it is right the first time.
+  // A POST is not opened here: it opens the post window (the posting rebuild,
+  // 29 Sep 2026). Post approval used to open every card in the plain drawer,
+  // whose green "Ready to post — signed off" header contradicted the column
+  // the card was clicked in (audit B5).
   const { row: opened, loading: openedLoading } = useRow<ContentItem>('content_items', id)
   const { me } = useRole()
   const adhoc = (opened as { adhoc_post?: unknown } | null)?.adhoc_post === true
@@ -92,7 +93,7 @@ export function CardSheet({ id, onClose, simple = false, editor = false }: {
         <SheetTitle className="sr-only">Card</SheetTitle>
         {id && !openedLoading && (editor && !adhoc && maker
           ? <EditorCardDrawer key={id} id={id} onClose={onClose} />
-          : adhoc || simple
+          : adhoc
             ? <PostApprovalDetail key={id} id={id} onClose={onClose} />
             : <CardDetail key={id} id={id} layout="sheet" onClose={onClose} />)}
       </SheetContent>

@@ -3,8 +3,11 @@ import { NextResponse } from 'next/server'
 import { table } from '@/lib/db'
 import type { ProviderWebhook, PublishJob, SocialAccount } from '@/lib/db-types'
 import { decryptSecret } from './secret-box'
-import { resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
-import type { RemotePlatformRow } from './publish-core'
+import {
+  keepLive, readPlatformResults, resultsForAll, resultsFromRemote, urlBelongsTo,
+  type OutcomeJob, type PlatformOutcome,
+} from './post-outcome-core'
+import { isStillProcessing, platformErrorWords, type RemotePlatformRow } from './publish-core'
 import { authorizeDelivery, parseZernioEvent } from './zernio-webhook-core'
 import {
   claimDelivery, finishDelivery, releaseDelivery,
@@ -48,14 +51,6 @@ export function zernioWebhookUrl(): string {
 
 /** Statuses a webhook may move a job out of. A settled job is left alone. */
 const OPEN_STATUSES = ['queued', 'publishing', 'scheduled']
-
-/** Platform names off a job's stored targets — the fallback for crediting. */
-function platformsOfTargets(targets: unknown): string[] {
-  if (!Array.isArray(targets)) return []
-  return [...new Set(targets
-    .map(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase())
-    .filter(Boolean))]
-}
 
 /**
  * Every secret a delivery may be signed with.
@@ -170,6 +165,9 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
 
     case 'platform_published': {
       const wrote = await platformPublished(action)
+      // …and the network's own record says it is out, with its own link, so
+      // the post can be recorded without waiting for the whole post's rollup
+      await tellPosts(await noteNetwork(action.postId, action.platform, { status: 'published', url: action.permalink }))
       return done(
         NextResponse.json({ ok: true, platform: action.platform, linked: wrote }),
         wrote,
@@ -180,6 +178,10 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
     }
     case 'platform_failed': {
       const settled = await platformFailed(action)
+      // the job's one word says failed; its per-network record has to say
+      // WHICH network, or the post reads "still going out" for ever
+      const noted = await noteNetwork(action.postId, action.platform, { status: 'failed', reason: action.error })
+      await tellPosts(noted.length ? noted : await jobIdsFor(action.postId))
       return done(
         NextResponse.json({ ok: true, platform: action.platform, failed: settled }),
         settled, `${action.platform}: ${action.error}`,
@@ -209,7 +211,16 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
     }
 
     case 'cancelled': {
+      // the jobs still open BEFORE the provider's cancel settles them: those
+      // are the ones it dropped. One we cancelled ourselves is marked
+      // 'cancelled' on our side as we do it, so it is not here and is not
+      // called lost (see production-publish.recordPostOutcome for the moment
+      // between our provider call and our own write).
+      const open = await openJobIdsFor(action.postId)
       const settled = await postCancelled(action.postId)
+      // nothing went out on its networks: the post comes back to Ready to
+      // post saying so (T18), instead of sitting booked for a job that is gone
+      if (settled) await tellPosts(open, { lost: true })
       return done(NextResponse.json({ ok: true, cancelled: settled }), settled)
     }
     case 'scheduled': {
@@ -339,8 +350,18 @@ async function published(
     for (const j of open) {
       const wanted = wantedOf(j)
       const everyChannelLive = live.length === 0 || wanted.length === 0 || wanted.every(p => live.includes(p))
-      const results = resultsForAll(j as unknown as OutcomeJob, 'published', { at: now, url: permalink })
+      const stored = readPlatformResults(j.platform_results) ?? []
+      const results = keepLive(stored, resultsForAll(j as unknown as OutcomeJob, 'published', { at: now })
         .map(o => live.length && !live.includes(o.platform) ? { ...o, status: 'pending' as const, url: null } : o)
+        // ONE link for the whole post lands only on the network it is from —
+        // it used to go on every network, so LinkedIn's row carried an
+        // Instagram link (audit L1). A network's own link, noted earlier by
+        // its platform event, is kept.
+        .map(o => o.status !== 'published' ? o : {
+          ...o,
+          url: urlBelongsTo(o.platform, permalink, wanted.length === 1) ? permalink
+            : stored.find(s => s.platform === o.platform && s.url)?.url ?? null,
+        }))
       if (everyChannelLive) {
         const row = await jobs.update(j.id, {
           status: 'published', published_at: now, updated_at: now, error: null,
@@ -358,6 +379,9 @@ async function published(
       }
     }
     if (partial.length && !settled.length) {
+      // the networks already up get their own links on their own rows; the
+      // post stays booked for the rest
+      await tellPosts(partial.map(j => j.id))
       return NextResponse.json({ ok: true, partial: partial.map(j => j.id), waitingOn: partial.map(j => wantedOf(j).filter(p => !live.includes(p))) })
     }
     rows = settled
@@ -379,23 +403,20 @@ async function published(
       })
       await Promise.all(blank.map(j => jobs.update(j.id, { permalink })))
     }
+    // …and a job already settled (a network failed first, or the run answered
+    // before this delivery) still hears which networks this says are live
+    const noted: string[] = []
+    for (const p of platforms) noted.push(...await noteNetwork(postId, p, { status: 'published', url: permalink }))
+    await tellPosts(noted)
     return NextResponse.json({ ok: true, duplicate: true })
   }
 
-  const job = rows[0]
-  if (job.content_item_id) {
-    // production-publish owns writing this back into the board: the same
-    // system actor, the same workflow_activity row, the same notifications as
-    // every other transition. Imported lazily so this module does not pull the
-    // workflow machine into every request that merely verifies a signature.
-    const { recordPublishOnItem } = await import('./production-publish')
-    await recordPublishOnItem(
-      job.content_item_id as string,
-      permalink,
-      platforms.length ? platforms : platformsOfTargets(job.targets),
-    )
-  }
-  return NextResponse.json({ ok: true, published: job.id })
+  // the publish recorder owns writing this back: the post (T16/T17), each
+  // network's schedule row with its own link, and the edit card's roll-up
+  // through the ordinary machine. Imported lazily (tellPosts) so this module
+  // does not pull the workflow machine into every signature check.
+  await tellPosts(rows.map(j => j.id))
+  return NextResponse.json({ ok: true, published: rows[0].id })
 }
 
 /**
@@ -432,6 +453,25 @@ async function failed(postId: string, message: string, rows?: RemotePlatformRow[
       for (const j of open) await resendTimedOut(j, recorded.get(j.id) ?? [])
     } catch (e) {
       console.error('[zernio webhook] re-send failed to queue:', e instanceof Error ? e.message : e)
+    }
+    // AFTER the re-sends: a network being re-sent is still going out, so the
+    // post stays booked for it (T17/T18 only once every network has answered)
+    await tellPosts(open.map(j => j.id))
+    // a job an earlier per-network event already settled is not open any
+    // more, but this rollup still says what each network did — without it a
+    // network that went out after its sibling failed was never written down
+    if (rows?.length) {
+      const noted: string[] = []
+      for (const r of rows) {
+        const st = String(r.status ?? '').toLowerCase()
+        const platform = String(r.platform ?? r.name ?? '')
+        if (['published', 'posted', 'success'].includes(st)) {
+          noted.push(...await noteNetwork(postId, platform, { status: 'published', url: r.platformPostUrl ?? null }))
+        } else if (st === 'failed' && !isStillProcessing(r)) {
+          noted.push(...await noteNetwork(postId, platform, { status: 'failed', reason: r.errorMessage ?? r.error ?? null }))
+        }
+      }
+      await tellPosts(noted.filter(id => !open.some(j => j.id === id)))
     }
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
@@ -481,4 +521,82 @@ async function accountInactive(accountId: string): Promise<Response> {
       .catch(e => console.error('could not say that an account needs reconnecting:', a.id, e))
   }
   return NextResponse.json({ ok: true, marked: accountId, told: dropped.length })
+}
+
+/**
+ * Tell the posts what these jobs came to — the publish recorder, through
+ * publish.tellThePost (lazily imported, best effort: a delivery that did its
+ * real work is never failed over the bookkeeping).
+ */
+async function tellPosts(jobIds: readonly string[], opts: { lost?: boolean } = {}): Promise<void> {
+  if (jobIds.length === 0) return
+  try {
+    const { tellThePost } = await import('./publish')
+    for (const id of new Set(jobIds)) await tellThePost(id, opts)
+  } catch (e) {
+    console.error('[zernio webhook] could not record the outcome on its post:', e instanceof Error ? e.message : e)
+  }
+}
+
+async function jobIdsFor(postId: string): Promise<string[]> {
+  const rows = await table<PublishJob>('publish_jobs').list({ where: j => j.provider_post_id === postId }).catch(() => [] as PublishJob[])
+  return rows.map(j => j.id)
+}
+
+async function openJobIdsFor(postId: string): Promise<string[]> {
+  const rows = await table<PublishJob>('publish_jobs')
+    .list({ where: j => j.provider_post_id === postId && OPEN_STATUSES.includes(j.status) })
+    .catch(() => [] as PublishJob[])
+  return rows.map(j => j.id)
+}
+
+/**
+ * One network's own word, written into its row of the job's per-network
+ * record (`platform_results`) — claimed, so two deliveries cannot trample
+ * each other. A network already live stays live (keepLive: a stale failure
+ * never takes back a post that went out), and a link is kept only on the
+ * network it belongs to. Returns the jobs it changed.
+ */
+export async function noteNetwork(
+  postId: string,
+  platform: string | null | undefined,
+  next: { status: 'published' | 'failed'; url?: string | null; reason?: string | null },
+): Promise<string[]> {
+  const p = String(platform ?? '').toLowerCase()
+  if (!p || !postId) return []
+  const jobs = table<PublishJob>('publish_jobs')
+  const rows = await jobs.list({ where: j => j.provider_post_id === postId }).catch(() => [] as PublishJob[])
+  const touched: string[] = []
+  for (const j of rows) {
+    try {
+      const taken = await jobs.claim(j.id, cur => {
+        if (!cur) return null
+        // no record yet: every other network has simply not answered — the
+        // job's one status word was set about ONE network (platformFailed)
+        // and must not be read as the verdict on all of them
+        const list: PlatformOutcome[] = readPlatformResults(cur.platform_results)
+          ?? resultsForAll(cur as unknown as OutcomeJob, 'pending', { at: new Date().toISOString() })
+        const i = list.findIndex(o => o.platform === p)
+        if (i < 0) return null
+        const had = list[i]
+        if (had.status === 'published' && next.status !== 'published') return null
+        const now = new Date().toISOString()
+        const row: PlatformOutcome = next.status === 'published'
+          ? {
+            ...had, status: 'published', reason: null,
+            url: urlBelongsTo(p, next.url, list.length === 1) ? next.url ?? null : had.url,
+            at: had.status === 'published' ? had.at : now,
+          }
+          : { ...had, status: 'failed', url: null, reason: platformErrorWords(next.reason) || next.reason || 'no reason given', at: now }
+        if (had.status === row.status && had.url === row.url && had.reason === row.reason) return null
+        const out = [...list]
+        out[i] = row
+        return { ...cur, platform_results: out, updated_at: now }
+      })
+      if (taken.claimed) touched.push(j.id)
+    } catch (e) {
+      console.error('[zernio webhook] could not note', p, 'on job', j.id, e instanceof Error ? e.message : e)
+    }
+  }
+  return touched
 }

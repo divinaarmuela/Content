@@ -78,7 +78,12 @@ import {
 } from '../../app/lib/editor-sop-core'
 import { flagsOf } from '../../app/lib/card-flag-core'
 import { kindIdForContentType } from '../../app/lib/work-kinds-core'
-import { createPost, sendForApproval } from '../../app/lib/social-schedule'
+import { createPost } from '../../app/lib/social-schedule'
+// RETIRED by the posting rebuild (29 Sep 2026): the one-press "send for approval / book" doors are gone. A post's
+// own moves go through POST /api/posts/<id>/act (app/lib/post-stage.ts), and its quality check is required. The
+// steps that pressed the old doors are skipped below; the new journeys are package P9's Playwright specs (e2e/).
+const retired = (..._: unknown[]): Promise<any> => { throw new Error('retired by the posting rebuild — see docs/posting-rebuild/SPEC.md') }
+const sendForApproval = retired
 import { postingEligibility } from '../../app/lib/social-schedule-core'
 import { getPortalData } from '../../app/lib/portal-data'
 import { putObject, deleteStoredObject } from '../../app/lib/storage'
@@ -540,7 +545,7 @@ describe('the editor’s card, every button, live', () => {
     await screenEditor(editor, 'Editor')
   })
 
-  it('12. the scheduler books it (dry run): Done, folded; the files are the channel’s now', async () => {
+  it.skip('12. the scheduler books it (dry run): Done, folded; the files are the channel’s now', async () => {
     as(scheduler)
     const versions = await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })
     const elig = postingEligibility((await row()) as never, versions as never, false)

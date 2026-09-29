@@ -1,46 +1,33 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  approveWithoutClientQuestion, mayPostWithoutApproval, OPEN_POST_STATUSES, type SuggestedTime,
-} from '@/app/lib/social-schedule-core'
+import { approveWithoutClientQuestion, type SuggestedTime } from '@/app/lib/social-schedule-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
-import { outcomeWords, readLocations } from '@/app/lib/schedule-compose-core'
-import { NETWORK_LABEL } from '@/app/lib/social-schedule-core'
-import { dayKeyInZone } from '@/app/lib/timezone-core'
+import { readLocations } from '@/app/lib/schedule-compose-core'
+import { STAGE_MEANING, isPostStage } from '@/app/lib/post-stage-core'
+import { dayKeyInZone, formatInZone } from '@/app/lib/timezone-core'
 import type { UploadedPostSummary } from '@/app/lib/schedule-upload-core'
 import type { Role } from '@/app/lib/identity-core'
 import ImageEditor, { type ImageEditorTarget } from './ImageEditor'
-import NewPostDialog, { type ComposerOutcome, type ComposerTarget } from './NewPostDialog'
+import PostWindow, { type PostWindowContext, type PostWindowOutcome, type PostWindowSeed } from './PostWindow'
 import NewPostSources from './NewPostSources'
-import type { RailMedia, ScheduleData, SchedulePostRow } from './useSchedulePosts'
+import type { RailMedia, ScheduleData } from './useSchedulePosts'
 import type { Slide } from '@/app/lib/version-files-core'
-
-/** a post still being written — the one a second press on its piece reopens.
- *  The SERVER's list, not a copy of it: the copy here forgot `changes`. */
-const OPEN_POST: readonly string[] = OPEN_POST_STATUSES
 
 /**
  * ONE ACTION: ADD THE MEDIA, SEE IT, SEND IT — WHEREVER YOU ARE STANDING.
  *
- * The owner, more than once: "ONE BUTTON… IT SHOULD BE ONE ACTION WHERE I CAN
- * PUT FILES OR DRIVE TO SEND TO MY AM FOR APPROVAL", and "where is this
- * preview feature in the Scheduler page? my New post is still taking me to the
- * Schedule page." The Scheduler's button used to navigate to the Schedule page
- * and open the composer over there, which is the one thing they said not to do.
+ * The Schedule page's flow, and the Post approval page's New post button runs
+ * the same one (the posting rebuild, 29 Sep 2026):
  *
- * This is the Schedule page's OWN flow, lifted whole so both pages run the
- * same one rather than a copy each:
- *
- *   `NewPostSources`  the files — drop them, or take them out of the client's
+ *   `NewPostSources`  the files — drop them, take them out of the client's
  *                     Google Drive folder (read only, trap 13), or pick a
- *                     piece that is already approved.
- *   `NewPostDialog`   the composer, with the per-network preview
- *                     (`PostPreview` / `post-preview-core`) on its own tab.
- *   its footer        `footerActions` — "Send for approval" for somebody who
- *                     needs one, scheduling or posting for an account manager
- *                     or a super admin who does not (`mayPostWithoutApproval`).
- *                     Nobody is ever shown a button the server would refuse.
+ *                     piece.
+ *   `PostWindow`      the one post window: the stage and what happens next,
+ *                     the post, and only the buttons `postActions` gives this
+ *                     person for this stage. The same window wherever it opens.
+ *   the answer        after a press, the server's own words, read from the
+ *                     stage the post landed in.
  *
  * It is a hook rather than a component because the Schedule page opens the
  * same windows from six places — the rail, an empty slot, a suggested time, a
@@ -49,29 +36,25 @@ const OPEN_POST: readonly string[] = OPEN_POST_STATUSES
  */
 
 /**
- * The client somebody worked on last, remembered in this browser.
- *
- * ONE key, shared: the Schedule page opens on it, and the Scheduler page's
- * button offers it first. Two keys would mean two "last clients" and a person
- * posting for whoever the other screen happened to remember.
+ * The client somebody worked on last, remembered in this browser — one key,
+ * shared by the Schedule page and the Post approval page's New post button.
  */
 export const CLIENT_KEY = 'md-schedule-client'
 
 export type ComposeFlow = {
   /** an empty slot, a suggested time, or a button: ask what goes in it */
   openAt: (at: string | null) => void
-  /** a piece from the rail or the approved grid */
-  /** …with, optionally, only SOME of its files (the folder's ticks) */
+  /** a piece from the rail — with, optionally, only SOME of its files (the folder's ticks) */
   openNew: (media: RailMedia, at: string | null, slides?: Slide[] | null) => void
-  /** an upload that just became a post — open the composer on it */
+  /** an upload that just became a post — open the window on it */
   openMade: (made: UploadedPostSummary, at: string | null) => void
   /** an existing post */
-  openPost: (post: SchedulePostRow) => void
-  /** a piece named in a link — the bell, or the "approve this post" email */
+  openPost: (post: { id: string; item_id?: string | null; source_item_id?: string | null }) => void
+  /** a piece named in a link — the bell, or an email: its draft post, or a new one */
   openItem: (itemId: string) => void
-  /** the manager's own sign-off on a piece, asked first */
+  /** the manager's own sign-off on a piece (the EDIT's approval — never a post's) */
   approve: (media: RailMedia) => void
-  /** the one image editor, opened from the week's chooser or the composer */
+  /** the one image editor, opened from the week's chooser or the post window */
   edit: (target: ImageEditorTarget | null) => void
   /** is any of it on screen */
   open: boolean
@@ -79,69 +62,39 @@ export type ComposeFlow = {
   windows: React.ReactNode
 }
 
-export function useComposeFlow({ clientId, data, role, userId, suggested, reviewOnly, onShowDay, forContact = null }: {
+/** The draft post already being made from this piece — the one a second "new post" reopens. */
+function draftOf(posts: ScheduleData['posts'], itemId: string) {
+  return posts.find(p => ((p as { source_item_id?: string | null }).source_item_id ?? p.item_id) === itemId && p.stage === 'draft') ?? null
+}
+
+export function useComposeFlow({ clientId, data, role, userId, suggested, onShowDay, forContact = null }: {
   clientId: string | null
   /** whom a new upload is for: null for the business, a contact's id for a person (15 Sep 2026) */
   forContact?: string | null
   data: ScheduleData
   role: Role | null
-  /** who is looking — carried into the post window so its first-time
-   *  walkthrough runs once for this person and then never again */
+  /** who is looking (the post window reads its own viewer; kept for the page's call) */
   userId?: string | null
   suggested: SuggestedTime[]
-  /** "Show on calendar" from the window that follows a press: the page
-   *  moves its week to that day (a 'YYYY-MM-DD' key in the client's zone) */
+  /** "Show on calendar" after a press: the page moves its week to that day */
   onShowDay?: (dayKey: string) => void
-  /** the approval step (the Scheduler page): no clock, one press that sends
-   *  it for a decision. Posting is chosen afterwards, on the Schedule page. */
-  reviewOnly?: boolean
 }): ComposeFlow {
-  /**
-   * The composer, held as "which piece, and which post" rather than as a copy
-   * of the post: the row itself is looked up in the LIVE list every render, so
-   * an approval landing in another tab changes the window's pill and its
-   * button without anything here refetching.
-   */
+  void userId
+  /** which post, or which piece a new post is made from — the row itself is read live by the window */
   const [composing, setComposing] = useState<
-    { itemId: string; postId: string | null; at: string | null; slides?: Slide[] | null } | null>(null)
-  /**
-   * "New post" with nothing chosen yet.
-   *
-   * NOTHING IS PICKED FOR ANYBODY. The time the click meant is carried into
-   * the chooser and on into the composer.
-   */
+    { itemId: string | null; postId: string | null; at: string | null; slides?: Slide[] | null } | null>(null)
   const [choosing, setChoosing] = useState<{ at: string | null } | null>(null)
-  /**
-   * A POST THAT WAS A FILE ON SOMEBODY'S LAPTOP A SECOND AGO.
-   *
-   * The rows are live, so the piece and the post an upload just made arrive by
-   * themselves — but not instantly, and a window that does not open is
-   * indistinguishable from a press that did nothing. So the server's own
-   * answer is held and the composer opens on THAT; the live rows take over the
-   * moment they land.
-   */
+  /** an upload's own answer, until the live rows carry it */
   const [pending, setPending] = useState<UploadedPostSummary | null>(null)
-  /**
-   * THE WINDOW THAT FOLLOWS A PRESS (the owner, 9 Sep 2026). Save as draft,
-   * Send for approval, Schedule and Post now used to leave the composer open
-   * looking exactly as it had, with one green line above the footer. Now
-   * the composer closes and this says what happened, where it is, and what
-   * is left to do.
-   */
-  const [done, setDone] = useState<ComposerOutcome | null>(null)
+  /** what the server said after the last press, once the window has closed */
+  const [done, setDone] = useState<PostWindowOutcome | null>(null)
 
   const openNew = useCallback((media: RailMedia, at: string | null, slides?: Slide[] | null) => {
-    if (!media.ok) return
     setChoosing(null)
-    // one OPEN post per piece: a second "new post" on a piece that has one
-    // still being written opens that one (the server would insist). A post
-    // already booked or out is not "the one" — the next post is made of the
-    // files still free (posted in parts, 9 Sep 2026).
-    // …unless the files were ticked in the folder: that is a NEW post of
-    // those files, whatever else is being written on the piece
-    const existing = slides?.length
-      ? null
-      : data.posts.find(p => p.item_id === media.itemId && OPEN_POST.includes(String(p.status))) ?? null
+    // one DRAFT per piece: a second "new post" on a piece that has one being
+    // made opens it — unless files were ticked in the folder, which is a new
+    // post of those files
+    const existing = slides?.length ? null : draftOf(data.posts, media.itemId)
     setComposing({ itemId: media.itemId, postId: existing?.id ?? null, at, slides: slides ?? null })
   }, [data.posts])
 
@@ -151,28 +104,21 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
     setComposing({ itemId: made.itemId, postId: made.postId || null, at })
   }, [])
 
-  const openPost = useCallback((post: SchedulePostRow) =>
-    setComposing({ itemId: post.item_id, postId: post.id, at: null }), [])
+  const openPost = useCallback((post: { id: string; item_id?: string | null; source_item_id?: string | null }) =>
+    setComposing({ itemId: post.source_item_id ?? post.item_id ?? null, postId: post.id, at: null }), [])
 
-  const openItem = useCallback((itemId: string) =>
-    setComposing({ itemId, postId: null, at: null }), [])
+  const openItem = useCallback((itemId: string) => {
+    const existing = draftOf(data.posts, itemId)
+    setComposing({ itemId, postId: existing?.id ?? null, at: null })
+  }, [data.posts])
 
   const openAt = useCallback((at: string | null) => setChoosing({ at }), [])
 
-  /**
-   * "Approve without client" — the manager's own sign-off.
-   *
-   * One question first, because it skips the client. The move itself is the
-   * EXISTING transition to `approved_for_scheduling`: the same edge, the same
-   * refusals and the same activity trail as the item page, so nobody gains a
-   * right by being on this screen.
-   */
+  /* "Approve without client" — the EDIT's sign-off, through the edit's own transition. It never moves a post. */
   const [approving, setApproving] = useState<RailMedia | null>(null)
   const [approveNote, setApproveNote] = useState<string | null>(null)
   const [approveBusy, setApproveBusy] = useState(false)
-
   const approve = useCallback((m: RailMedia) => { setApproveNote(null); setApproving(m) }, [])
-
   const approveWithoutClient = async (m: RailMedia) => {
     setApproveBusy(true)
     setApproveNote(null)
@@ -183,10 +129,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
         body: JSON.stringify({ to: 'approved_for_scheduling' }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setApproveNote(friendlyError(String(json?.error ?? ''), 'Schedule'))
-        return
-      }
+      if (!res.ok) { setApproveNote(friendlyError(String(json?.error ?? ''), 'Schedule')); return }
       setApproving(null)
     } catch {
       setApproveNote(loadFailedMessage('that approval'))
@@ -194,9 +137,6 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
       setApproveBusy(false)
     }
   }
-
-  // Escape closes the question, like every other window here. A dialog only
-  // the mouse can dismiss is one somebody gets stuck in.
   useEffect(() => {
     if (!approving) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setApproving(null) }
@@ -204,70 +144,51 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
     return () => document.removeEventListener('keydown', onKey)
   }, [approving])
 
-  /**
-   * ONE IMAGE EDITOR, TWO WAYS IN — the week's "Edit media" chooser and the
-   * composer's own "Edit image" button. Two copies would drift, and one opened
-   * over the other is a window nobody can get out of.
-   */
+  /* ONE IMAGE EDITOR, two ways in — the week's chooser and the post window's own button */
   const [editing, setEditing] = useState<ImageEditorTarget | null>(null)
   const [editSaved, setEditSaved] = useState<string | null>(null)
-
-  // a note about a save clears itself: it is a receipt, not a state
   useEffect(() => {
     if (!editSaved) return
-    const id = window.setTimeout(() => setEditSaved(null), 8000)
-    return () => window.clearTimeout(id)
+    const t = window.setTimeout(() => setEditSaved(null), 8000)
+    return () => window.clearTimeout(t)
   }, [editSaved])
 
-  const target: ComposerTarget | null = useMemo(() => {
-    if (!composing) return null
+  /** the new post's files, when the window opens on a piece rather than a post */
+  const seed: PostWindowSeed | null = useMemo(() => {
+    if (!composing || composing.postId || !composing.itemId) return null
     const media = data.media.find(m => m.itemId === composing.itemId)
-    const post = composing.postId
-      ? data.posts.find(p => p.id === composing.postId) ?? null
-      : composing.slides?.length
-        ? null
-        : data.posts.find(p => p.item_id === composing.itemId && OPEN_POST.includes(String(p.status))) ?? null
-    // the upload's own answer, until the live rows carry it
     const fresh = pending && pending.itemId === composing.itemId ? pending : null
-    if (!media && !post && !fresh) return null
+    if (!media && !fresh) return null
     return {
       itemId: composing.itemId,
-      title: media?.title ?? post?.item_title ?? fresh?.title ?? 'Post',
-      contentType: media?.contentType ?? String(post?.item_type ?? fresh?.contentType ?? ''),
-      // A BOOKED OR LIVE POST'S FILES ARE THE SIGNED-OFF FILES. Its piece has
-      // left the rail (the rail is "approved, not yet posted"), so `media` is
-      // null here and the window read the post as carrying files nobody
-      // signed off — "New media — not signed off" over a post the manager
-      // had booked themselves (the owner, 9 Sep 2026)
-      approved: media?.slides ?? fresh?.slides
-        ?? (post && (post.live_status === 'scheduled' || post.live_status === 'published') ? post.slides : []),
-      knownUrls: media?.knownUrls ?? (fresh ? fresh.slides.map(s => s.url)
-        : post && (post.live_status === 'scheduled' || post.live_status === 'published') ? post.slides.map(s => s.url) : []),
+      title: media?.title ?? fresh?.title ?? 'Post',
+      slides: composing.slides?.length ? composing.slides : (media?.slides ?? fresh?.slides ?? []),
+      pieceFiles: media?.slides ?? fresh?.slides ?? [],
+      versionNumber: media?.versionNumber ?? null,
       coverUrl: media?.coverUrl ?? null,
-      versionNumber: post?.version_number ?? null,
-      needsClientApproval: media?.needsClientApproval ?? Boolean(fresh?.needsApproval),
-      // a fresh upload never saw the board; an opened post reads its piece
-      boardApproved: media?.boardApproved ?? false,
-      // a post made from an upload a moment ago was never the client's to approve
-      clientApproved: media?.clientApproved ?? false,
-      itemStatus: media?.status
-        ?? (fresh
-          ? (fresh.itemStatus || (fresh.needsApproval ? 'draft_uploaded' : 'approved_for_scheduling'))
-          : 'approved_for_scheduling'),
-      post,
       at: composing.at,
-      initialSlides: composing.slides ?? null,
     }
-  }, [composing, data.media, data.posts, pending])
+  }, [composing, data.media, pending])
 
-  /** the places this client tags Instagram posts at — saved on their Social
-   *  page, because Instagram wants a Facebook Page id and has no search */
-  const locations = useMemo(
-    () => readLocations((data.client as { instagram_locations?: unknown } | null)?.instagram_locations),
-    [data.client])
-  /** the client has a Drive folder we can read — no folder, no Drive tab */
+  /** the files of the piece, for the media picker of a SAVED post too */
+  const pieceFor = useCallback((itemId: string | null) => data.media.find(m => m.itemId === itemId) ?? null, [data.media])
+
+  const context: PostWindowContext | null = useMemo(() => (clientId ? {
+    clientId,
+    tz: data.tz,
+    client: data.client as PostWindowContext['client'],
+    accounts: data.accounts,
+    allAccounts: data.allAccounts,
+    contacts: data.contacts,
+    locations: readLocations((data.client as { instagram_locations?: unknown } | null)?.instagram_locations),
+    suggested: suggested.slice(0, 3),
+  } : null), [clientId, data.tz, data.client, data.accounts, data.allAccounts, data.contacts, suggested])
+
   const driveAvailable = Boolean(
     String((data.client as { drive_folder_id?: string | null } | null)?.drive_folder_id ?? '').trim())
+
+  const showWindow = !!composing && !!context && (!!composing.postId || !!seed)
+  const piece = composing ? pieceFor(composing.itemId) : null
 
   const windows = (
     <>
@@ -283,15 +204,13 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
           clientSignsOff={data.clientSignsOff}
           driveAvailable={driveAvailable || data.media.some(m => m.driveFolderUrl)}
           handedFolders={data.media.filter(m => m.driveFolderUrl).map(m => ({ itemId: m.itemId, title: m.title }))}
-          // Schedule offers approved pieces only; Post approval's window uploads
-          // the owner, 8 Sep 2026: "an AM or super admin can go directly to the
-          // Schedule page to post there without approval — upload files and
-          // automatically do it there". Everybody else books approved pieces.
-          allowUploads={mayPostWithoutApproval(role, data.clientSignsOff)}
+          // an upload straight from here is a post from birth, for everyone who
+          // builds posts (the owner's decisions 4 and 7): it goes to the quality
+          // check like any other
+          allowUploads
           onPick={m => openNew(m, choosing.at)}
           onApprove={approve}
           onCreated={made => openMade(made, choosing.at)}
-          // the server named the post that already holds these files
           onOpenExisting={(itemId, postId) => { setChoosing(null); setComposing({ itemId, postId, at: null }) }}
           onClose={() => setChoosing(null)}
         />
@@ -306,32 +225,17 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
           className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
         >
           <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-card bg-popover p-4 shadow-xl">
-            <h2 className="text-section-title">
-              {approveWithoutClientQuestion(approving.versionNumber)}
-            </h2>
+            <h2 className="text-section-title">{approveWithoutClientQuestion(approving.versionNumber)}</h2>
             <p className="text-[13px] text-muted-foreground">
-              {`“${approving.title}” is signed off in your name and can be posted. `}
-              The client is not asked.
+              {`“${approving.title}” is signed off in your name. `}This is the piece&rsquo;s approval, not a post&rsquo;s — every post made from it still goes through the quality check.
             </p>
             {approveNote && (
-              <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
-                {approveNote}
-              </p>
+              <p className="rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">{approveNote}</p>
             )}
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setApproving(null)}
-                className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold"
-              >
-                Not yet
-              </button>
-              <button
-                type="button"
-                disabled={approveBusy}
-                onClick={() => void approveWithoutClient(approving)}
-                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60"
-              >
+              <button type="button" onClick={() => setApproving(null)} className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold">Not yet</button>
+              <button type="button" disabled={approveBusy} onClick={() => void approveWithoutClient(approving)}
+                className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-60">
                 {approveBusy ? 'Approving…' : 'Approve without client'}
               </button>
             </div>
@@ -339,62 +243,66 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
         </div>
       )}
 
-      {target && (
-        <NewPostDialog
-          reviewOnly={reviewOnly}
-          target={target}
-          tz={data.tz}
-          accounts={data.accounts}
-          contacts={data.contacts}
-          suggested={suggested.slice(0, 3)}
-          role={role}
-          userId={userId}
-          clientSignsOff={data.clientSignsOff}
-          locations={locations}
-          clientName={(data.client as { name?: string | null } | null)?.name ?? null}
+      {showWindow && composing && context && (
+        <PostWindow
+          postId={composing.postId}
+          seed={seed ?? (piece ? {
+            itemId: piece.itemId, title: piece.title, slides: piece.slides, pieceFiles: piece.slides,
+            versionNumber: piece.versionNumber ?? null, coverUrl: piece.coverUrl ?? null, at: null,
+          } : null)}
+          context={context}
           onClose={() => { setComposing(null); setPending(null) }}
-          onOpenPost={id => setComposing(c => (c ? { ...c, postId: id } : c))}
+          onOpenPost={pid => setComposing(c => (c ? { ...c, postId: pid } : c))}
           onEditMedia={setEditing}
           onDone={outcome => { setComposing(null); setPending(null); setDone(outcome) }}
         />
       )}
 
       {done && (() => {
-        const networks = [...new Set(done.channels
-          .map(id => data.accounts.find(a => a.id === id)?.platform)
-          .filter((p): p is string => !!p)
-          .map(p => NETWORK_LABEL[p] ?? p))]
-        const words = outcomeWords({ kind: done.kind, at: done.at, tz: data.tz, networks, who: done.who })
-        const reopen = () => { const o = done; setDone(null); setComposing({ itemId: o.itemId, postId: o.postId, at: null }) }
+        const stage = isPostStage(done.stage) ? done.stage : null
+        const when = done.at ? formatInZone(done.at, data.tz, 'full') : null
+        const onCalendar = !!done.at && !!stage && ['quality_check', 'with_client', 'ready', 'booked', 'posted'].includes(stage)
+        const reopen = () => { const o = done; setDone(null); if (o.postId) setComposing({ itemId: o.itemId, postId: o.postId, at: null }) }
         return (
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={words.title}
+            aria-label={done.words}
             onMouseDown={e => { if (e.target === e.currentTarget) setDone(null) }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4"
           >
             <div className="flex w-full max-w-[440px] flex-col gap-3 rounded-card bg-popover p-5 text-popover-foreground shadow-xl">
-              <h2 className="text-section-title">{words.title}</h2>
-              <p className="text-[14px] leading-[1.5] text-muted-foreground">{words.body}</p>
+              <h2 className="text-section-title">{done.words}</h2>
+              {stage && (
+                <p className="text-[14px] leading-[1.5] text-muted-foreground">
+                  {STAGE_MEANING[stage]}{when ? ` Posting time: ${when}.` : ''}
+                </p>
+              )}
+              {done.link && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[13px] font-medium">Send the client this link yourself — nothing was emailed:</p>
+                  <input readOnly value={done.link} onFocus={e => e.currentTarget.select()} aria-label="The client's link"
+                    className="min-h-11 w-full rounded-full border border-border bg-paper px-3 text-[13px]" />
+                  <button type="button" onClick={() => { void navigator.clipboard?.writeText(done.link!).catch(() => {}) }}
+                    className="min-h-11 self-start rounded-full border border-border px-4 text-[13px] font-semibold">Copy the link</button>
+                </div>
+              )}
               <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-                {done.kind === 'draft' && (
-                  <button type="button" onClick={reopen}
-                    className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">
-                    Keep editing
-                  </button>
+                {done.postId && stage && (
+                  <button type="button" onClick={reopen} className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">Open the post</button>
                 )}
-                {words.showOnCalendar && done.at && onShowDay && (
+                {done.createdPostId && (
+                  <button type="button" onClick={() => { const o = done; setDone(null); setComposing({ itemId: o.itemId, postId: o.createdPostId!, at: null }) }}
+                    className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">Open the new post</button>
+                )}
+                {onCalendar && onShowDay && (
                   <button type="button"
                     onClick={() => { const key = dayKeyInZone(done.at!, data.tz); setDone(null); if (key) onShowDay(key) }}
                     className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">
                     Show on calendar
                   </button>
                 )}
-                <button type="button" onClick={() => setDone(null)}
-                  className="min-h-11 rounded-full bg-foreground px-5 text-[13px] font-semibold text-background">
-                  Done
-                </button>
+                <button type="button" onClick={() => setDone(null)} className="min-h-11 rounded-full bg-foreground px-5 text-[13px] font-semibold text-background">Done</button>
               </div>
             </div>
           </div>
@@ -402,10 +310,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
       })()}
 
       {editSaved && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-50 max-w-[440px] -translate-x-1/2 rounded-card border border-border bg-popover px-4 py-3 text-[13px] font-medium shadow-xl"
-        >
+        <div role="status" className="fixed bottom-6 left-1/2 z-50 max-w-[440px] -translate-x-1/2 rounded-card border border-border bg-popover px-4 py-3 text-[13px] font-medium shadow-xl">
           {editSaved}
         </div>
       )}
@@ -415,10 +320,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
           target={editing}
           mayApprove={data.postWithoutApproval}
           onClose={() => setEditing(null)}
-          onSaved={message => {
-            setEditSaved(message)
-            setEditing(null)
-          }}
+          onSaved={message => { setEditSaved(message); setEditing(null) }}
         />
       )}
     </>
@@ -427,25 +329,16 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, review
   return {
     openAt, openNew, openMade, openPost, openItem, approve,
     edit: setEditing,
-    open: choosing !== null || target !== null || approving !== null || editing !== null || done !== null,
+    open: choosing !== null || showWindow || approving !== null || editing !== null || done !== null,
     windows,
   }
 }
 
 /**
- * GOOD TIMES TO POST.
- *
- * The one thing on the Schedule page that is fetched rather than subscribed:
- * it is ninety days of results averaged into three hours a day, it changes
- * when a post lands and not before, and the rule that computes it needs
- * analytics rows no page has another reason to hold. A missing suggestion is a
- * missing hint, not a broken week.
+ * GOOD TIMES TO POST — fetched rather than subscribed: ninety days of results
+ * averaged into three hours a day. A missing suggestion is a missing hint.
  */
-export function useSuggestedTimes(
-  clientId: string | null,
-  network: string,
-  tz: string,
-): SuggestedTime[] {
+export function useSuggestedTimes(clientId: string | null, network: string, tz: string): SuggestedTime[] {
   const [suggested, setSuggested] = useState<SuggestedTime[]>([])
   useEffect(() => {
     if (!clientId) { setSuggested([]); return }

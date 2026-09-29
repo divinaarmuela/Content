@@ -7,18 +7,22 @@ import { readFileSync } from 'node:fs'
  * calendar?" was drawn in the scrolling body, below the fold on a long post, so the press looked like nothing.
  */
 describe('the post window bin', () => {
-  const src = readFileSync('app/dashboard/social/schedule/NewPostDialog.tsx', 'utf8')
-  const footer = src.indexOf('<div className="sticky bottom-0 z-20 mt-auto flex flex-wrap items-center gap-3 border-t border-border bg-surface p-3.5">')
-  it('asks its question inside the sticky footer, beside the bin', () => {
-    const question = src.indexOf("'Take this post off the calendar? The piece itself is not deleted.'")
-    const bin = src.indexOf("aria-label={state.postId ? 'Take this post off the calendar' : 'Close without saving'}")
+  // the one post window since the posting rebuild (29 Sep 2026): the bin is
+  // `postActions`' danger button — Delete draft for a draft never sent,
+  // Cancel post for anything else — and its question is drawn in the sticky
+  // footer, right above the buttons, before the press goes to the act route
+  const src = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8').replace(/\r\n/g, '\n')
+  const footer = src.indexOf('<div className="sticky bottom-0 z-20 mt-auto flex flex-col gap-2 border-t border-border bg-popover p-3.5">')
+  it('asks its question inside the sticky footer, above the buttons', () => {
+    const question = src.indexOf('<QuestionPanel')
+    const buttons = src.indexOf('data-footer-buttons')
     expect(footer).toBeGreaterThan(0)
     expect(question).toBeGreaterThan(footer)
-    expect(question).toBeLessThan(bin)
+    expect(question).toBeLessThan(buttons)
   })
-  it('the bin press opens the question; Take it off calls the delete', () => {
-    expect(src).toContain("onClick={() => (state.postId ? setConfirm('delete') : requestClose())}")
-    expect(src).toContain("onClick={() => (confirm === 'close' ? onClose() : void remove())}")
-    expect(src).toContain("fetch(`/api/social/schedule/${state.postId}`, { method: 'DELETE' })")
+  it('the bin is the danger button, and its press asks before it goes', () => {
+    expect(src).toContain("kind === 'danger' && <Trash2")
+    expect(src).toContain('onClick={() => press(offered)}')
+    expect(src).toContain('const q = questionFor(offered)')
   })
 })

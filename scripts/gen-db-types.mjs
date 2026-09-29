@@ -844,6 +844,11 @@ const GHOST_COLUMNS = {
     //   content_items.client_rounds — EVERY ROUND THE CLIENT WAS GIVEN, in order (22 Sep 2026): the client's
     //   "Version N" is the Nth of these. A round sent back at the quality check never reaches them and is no version of theirs.
     ['client_rounds', col('unknown', true, true)],
+    //   content_items.client_frozen — WHAT THE CLIENT WAS GIVEN, FROZEN (the posting rebuild, 29 Sep 2026; SPEC §2.6,
+    //   audit P1): written by performTransition in the same claim as the move to With client —
+    //   { round, at, files: [{ id, asset_id, version, url, name, mime }], link }. The portal's edit page reads these
+    //   files, never the card's live final_files, so a file added after the send never reaches the client unasked.
+    ['client_frozen', col('unknown', true, true)],
     //   content_items.share_token — THE PUBLIC SHARE LINK for the accepted
     //     version (17 Sep 2026): 32 hex characters, or null. share-link-core.
     ['share_token', col('string', true)],

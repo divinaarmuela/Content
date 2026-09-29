@@ -21,8 +21,8 @@ describe('managesClients', () => {
 
 describe('everywhere a client’s managers are named (source pins)', () => {
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
-  it('the card face on the Editor and Post approval boards', () => {
-    for (const p of ['app/dashboard/editor/page.tsx', 'app/dashboard/scheduler/page.tsx']) {
+  it('the card face on the Editor board (Post approval draws posts, 29 Sep 2026)', () => {
+    for (const p of ['app/dashboard/editor/page.tsx']) {
       expect(src(p), p).toContain('if (!managesClients(role.get(a.team_user_id))) continue')
       expect(src(p), p).not.toContain("!== 'account_manager') continue")
     }

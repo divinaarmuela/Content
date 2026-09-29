@@ -282,9 +282,12 @@ describe('the client’s copy of the page', () => {
     }],
     content_items: [{ id: 'i1', client_id: 'c1', title: 'Hero reel', status: 'published' }],
     social_posts: [{
-      id: 'p1', client_id: 'c1', item_id: 'i1', caption: 'Morning',
+      id: 'p1', client_id: 'c1', item_id: 'i1', source_item_id: 'i1', caption: 'Morning',
       publish_job_ids: ['j1'], channels: [], per_channel: {}, slides: [],
       status: 'published', timezone: 'Australia/Melbourne',
+      // the posting rebuild: the post's own stage and its booking's jobs are what the portal reads
+      stage: 'posted', rev: 4, booking: { job_ids: ['j1'], pending: false, at: '2026-09-04T00:00:00Z', for_time: '2026-09-04T00:00:00Z' },
+      outcomes: { instagram: { status: 'published', url: null, at: '2026-09-04T00:00:00Z', error: null } },
     }],
     post_analytics: [{
       id: 'a1', item_id: 'i1', publish_job_id: 'j1', provider_post_id: 'z1',

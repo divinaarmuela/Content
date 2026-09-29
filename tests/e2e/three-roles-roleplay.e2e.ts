@@ -52,7 +52,12 @@ import type {
   AssetVersion, ContentItem, PublishJob, SocialAccount, SocialPost, TeamUserClient,
 } from '../../lib/db-types'
 import type { TeamUser } from '../../app/lib/authz'
-import { createPost, sendForApproval } from '../../app/lib/social-schedule'
+import { createPost } from '../../app/lib/social-schedule'
+// RETIRED by the posting rebuild (29 Sep 2026): the one-press "send for approval / book" doors are gone. A post's
+// own moves go through POST /api/posts/<id>/act (app/lib/post-stage.ts), and its quality check is required. The
+// steps that pressed the old doors are skipped below; the new journeys are package P9's Playwright specs (e2e/).
+const retired = (..._: unknown[]): Promise<any> => { throw new Error('retired by the posting rebuild — see docs/posting-rebuild/SPEC.md') }
+const sendForApproval = retired
 import { performTransition } from '../../app/lib/workflow'
 import { visibleItems } from '../../app/lib/scope-client'
 import { pageCards, cardActions } from '../../app/lib/board-view-core'
@@ -268,7 +273,7 @@ describe('three roles, one post, live', () => {
     console.log(`[3] approved and handed; told: ${told.map(t => `${t.recipient_email} "${t.subject}" ${t.entity_id}`).join(', ')}`)
   })
 
-  it('4. the scheduler sees the folder with four free files, and books ONE (dry run)', async () => {
+  it.skip('4. the scheduler sees the folder with four free files, and books ONE (dry run)', async () => {
     const item = await itemRow()
     const versions = await table<AssetVersion>('asset_versions').list({ fresh: true, by: { item_id: itemId } as never })
     const elig = postingEligibility(item as never, versions as never, false)

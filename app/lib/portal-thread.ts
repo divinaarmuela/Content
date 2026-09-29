@@ -3,7 +3,8 @@ import { sanitiseScripts } from './script-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type {
-  AssetVersion, Batch, BatchComment, Client, ContentItem, ItemComment, SocialAccount, SocialPost, WorkflowActivity,
+  AssetVersion, Batch, BatchComment, ContentItem, ItemComment, PostComment, PostVersion, SocialAccount, SocialPost,
+  TeamUser as TeamUserRow, WorkflowActivity,
 } from '@/lib/db-types'
 import { CLIENT_LABELS, type ItemStatus } from './workflow-core'
 import {
@@ -13,7 +14,17 @@ import { accountManagerName, type PortalItem, type PortalShoot } from './portal-
 import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
-import { slotMissed } from './post-to-client-core'
+import {
+  clientHadEdit, clientPostNotes, clientPostView, networkLabel, pieceReachedClient, postLiveLinks, postTypeLine,
+  postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
+} from './portal-core'
+import { postVersionId, readPostState, type PostState } from './post-stage-core'
+import { frozenFilesForClient } from './edit-freeze-core'
+import { belongsToPortal } from './portal-owner-core'
+import { scheduledWhen } from './portal-words'
+import { safeZone } from './timezone-core'
+import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
+import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { portalOwnerByToken } from './portal-owner'
 import { forTheClient } from './comment-visibility-core'
@@ -91,7 +102,9 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   if (!item || kind?.slug === 'shoot_brief' || isInternalKind(kind)) return null
 
   const status = item.status as ItemStatus
-  const clientFacing = !['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check'].includes(status)
+  // media only once the piece reached THEM — an edit the team approved and
+  // never sent carries none (audit P7, P8)
+  const clientFacing = pieceReachedClient(item as never)
   const [version, comments, amName, lastMove] = await Promise.all([
     clientFacing
       ? table<AssetVersion>('asset_versions')
@@ -226,7 +239,12 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
 /** the same mapping for a team board's comments (portal-team-board.ts, 22 Sep 2026) */
 export const toPortalComment = toComment
 
-/* ── FOR YOUR APPROVAL: the one post a "Send to client" email opens (28 Sep 2026) ── */
+/* ── FOR YOUR APPROVAL: the EDIT a "Send to client" email opens (28 Sep 2026) ──
+ *
+ * Since the posting rebuild (29 Sep 2026) this is the EDIT's page only. A POST
+ * has its own page (`getPortalPostPage`, below), read from its stage and its
+ * frozen version; nothing here reads the edit card's posting fields any more.
+ */
 export type PortalApproval = {
   client: { id: string; name: string }
   am_name: string | null
@@ -236,31 +254,37 @@ export type PortalApproval = {
   caption: string
   /** waiting = theirs to answer now; approved / changes = already answered; not_ready = not with them yet */
   state: 'waiting' | 'approved' | 'changes' | 'not_ready'
-  /** card = the edit itself (With client); post = the final post, once the edit is approved */
-  kind: 'card' | 'post'
+  /** always the edit now; a post opens its own page */
+  kind: 'card'
   /** "Carousel · 14 slides", "Reel", "Video" — what it is, in one line */
   typeLine: string
-  /** the final post only: when it goes out, and where */
-  whenLine: string | null
-  whereLine: string | null
-  /** its planned time has gone while it waited on them — approving still counts, and a new time is picked (28 Sep 2026) */
-  missed?: boolean
-  /** the notes on this piece, the client's and the team's — shown beside the slide they are about (28 Sep 2026) */
+  whenLine: null
+  whereLine: null
+  missed?: false
+  /** the files were sent before versions were kept: these are the files as they are now (SPEC §2.6) */
+  unfrozen?: boolean
+  /** the notes on this piece, the client's and the team's — shown beside the slide they are about */
   comments: PortalComment[]
 }
 
-/** the post, sanitised for the client: a card handed in as files shows the files they were given (the newest cut of
- *  each clip at the version sent to them); anything else shows its post's pictures */
-export async function getPortalApproval(rawToken: string, itemId: string, opts: { preview?: boolean } = {}): Promise<PortalApproval | null> {
+const isVideo = (mime: string | null | undefined, name: string) =>
+  /^video\//.test(String(mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(name)
+
+/** The edit, sanitised for the client: the files it was FROZEN with when it went to them (audit P1). */
+export async function getPortalApproval(rawToken: string, itemId: string): Promise<PortalApproval | null> {
   const detail = await getPortalItemDetail(rawToken, itemId)
   if (!detail) return null
   const row = await table<ContentItem>('content_items').get(itemId).catch(() => null)
   if (!row || row.client_id !== detail.client.id) return null
   const { finalFilesOf, liveFilesAt } = await import('./final-files-core')
   const { clientSeenRound } = await import('./editing-portal-core')
-  const files = finalFilesOf(row as never).length > 0 ? liveFilesAt(row as never, clientSeenRound(row as never)) : []
+  // the files as they were when the edit went to the client; only a card sent
+  // before versions were kept falls back to its files as they are now, and says so
+  const frozen = frozenFilesForClient(row as never)
+  const live = frozen == null && finalFilesOf(row as never).length > 0 ? liveFilesAt(row as never, clientSeenRound(row as never)) : []
+  const files = frozen ?? live.map(f => ({ url: f.url, name: f.name, mime: f.mime }))
   const slides = files.length > 0
-    ? files.map(f => ({ url: f.url, name: f.name, type: (/^video\//.test(String(f.mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : 'image') as 'video' | 'image' }))
+    ? files.map(f => ({ url: f.url, name: f.name, type: (isVideo(f.mime, f.name) ? 'video' : 'image') as 'video' | 'image' }))
     : (detail.item.slides ?? []).filter(s => s && s.url).map(s => ({ url: s.url, name: s.name, type: s.type }))
   const status = String(row.status)
   const kindWord = (n: number) => {
@@ -270,45 +294,16 @@ export async function getPortalApproval(rawToken: string, itemId: string, opts: 
     return n > 1 ? `${word} · ${n} ${allVideo ? 'clips' : 'slides'}` : word
   }
 
-  // THE FINAL POST, when that is what is waiting on them (28 Sep 2026): its own pictures, caption, time and networks
-  const postState = String((row as { posting_approval_state?: unknown }).posting_approval_state ?? '')
-  if (['approved_for_scheduling', 'scheduled', 'published'].includes(status) && ((row as { posting_client_required?: unknown }).posting_client_required === true || (opts.preview && postState === 'pending')) && ['pending', 'approved', 'changes'].includes(postState)) {
-    const posts = await table<SocialPost>('social_posts').list({ by: { item_id: row.id } }).catch(() => [] as SocialPost[])
-    const post = posts.filter(p => p.status !== 'cancelled').sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))[0] ?? null
-    const postSlides = (Array.isArray(post?.slides) ? post!.slides as unknown as { url?: string; name?: string; type?: string }[] : [])
-      .filter(s => s && typeof s.url === 'string' && s.url)
-      .map(s => ({ url: String(s.url), name: s.name, type: (s.type === 'video' ? 'video' : 'image') as 'video' | 'image' }))
-    const accounts = post && Array.isArray(post.channels) && post.channels.length
-      ? await table<SocialAccount>('social_accounts').list({ where: a => (post.channels as unknown as string[]).includes(a.id) }).catch(() => [] as SocialAccount[])
-      : []
-    const NAMES: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest' }
-    const tz = String((post as { timezone?: string | null } | null)?.timezone ?? 'Australia/Melbourne')
-    const when = post?.scheduled_for
-      ? new Date(post.scheduled_for).toLocaleString('en-AU', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
-      : null
-    const media = postSlides.length ? postSlides : slides
-    return {
-      client: detail.client, am_name: detail.am_name, title: String(detail.item.title ?? 'Your post'),
-      slides: media,
-      caption: String(post?.caption ?? (row as { caption?: string | null }).caption ?? '').trim(),
-      state: postState === 'pending' ? 'waiting' : postState === 'approved' ? 'approved' : 'changes',
-      kind: 'post',
-      typeLine: (() => { const n = media.length; const allVideo = n > 0 && media.every(s => s.type === 'video'); const t = String((row as { content_type?: string | null }).content_type ?? '').toLowerCase(); const w = t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'; return n > 1 ? `${w} · ${n} ${allVideo ? 'clips' : 'slides'}` : w })(),
-      comments: detail.comments,
-      whenLine: when,
-      missed: postState === 'pending' && slotMissed(post?.scheduled_for ?? null),
-      whereLine: accounts.length ? [...new Set(accounts.map(a => NAMES[String(a.platform)] ?? String(a.platform)))].join(', ') : null,
-    }
-  }
-
   return {
     client: detail.client,
     am_name: detail.am_name,
     title: String(detail.item.title ?? 'Your post'),
     slides: slides.length > 0 ? slides : (detail.item.preview_url ? [{ url: detail.item.preview_url }] : []),
     caption: String((row as { caption?: string | null }).caption ?? '').trim(),
+    // "approved" only for an edit that was theirs to approve: an edit the team
+    // passed without them is not something they said yes to (audit P5, P6)
     state: status === 'client_review' ? 'waiting'
-      : ['approved_for_scheduling', 'scheduled', 'published'].includes(status) ? 'approved'
+      : ['approved_for_scheduling', 'scheduled', 'published'].includes(status) && clientHadEdit(row as never) ? 'approved'
       : status === 'client_changes_requested' ? 'changes'
       : 'not_ready',
     kind: 'card',
@@ -316,5 +311,202 @@ export async function getPortalApproval(rawToken: string, itemId: string, opts: 
     typeLine: kindWord(slides.length),
     whenLine: null,
     whereLine: null,
+    ...(frozen == null && files.length > 0 ? { unfrozen: true } : {}),
   }
+}
+
+/* ══ ONE POST ON THE CLIENT'S PORTAL (the posting rebuild, SPEC §4.4) ══════ */
+
+export type PortalPostPage = {
+  client: { id: string; name: string; timezone: string }
+  am_name: string | null
+  post_id: string
+  title: string
+  /** what the client sees of it — from its stage only */
+  view: ClientPostView
+  /** the version shown; the answer carries it and the server refuses any other */
+  version: number | null
+  /** frozen by the migration, not at a send: "Sent before versions were kept" */
+  from_migration: boolean
+  /** a live post from before versions were kept, shown as it went out */
+  shown_as_posted: boolean
+  /** every file they are asked about, each can take a note */
+  files: { url: string; name: string; type: 'image' | 'video' }[]
+  caption: string
+  type_line: string
+  /** "Goes out Thu 10 Sept, 6:00 pm", or when it went out */
+  when_line: string | null
+  networks: string[]
+  /** the post as each network will show it, stripped for the client */
+  previews: ClientPreview[]
+  /** the Client thread on this version, per file and on the whole post */
+  notes: PortalPostNote[]
+  /** one link per network it went out on */
+  links: { platform: string; network: string; url: string }[]
+  /** the team's look through the client's eyes: nothing can be pressed */
+  preview_mode: boolean
+  /** THE INSTAGRAM GRID (decision 16): this post first, then the newest posts
+   *  already live on their Instagram — how it will sit on their profile. Null
+   *  when the post is not going to Instagram, or it is already out. */
+  grid: { url: string; type: 'image' | 'video' }[] | null
+}
+
+const NOT_SENT_PREVIEW: ClientPostView = {
+  state: 'review', version: null, canAnswer: false,
+  headline: 'Preview — the client cannot see this post yet',
+  line: 'This is the version they would see. Nothing on this page can be pressed.',
+  tone: undefined, column: 'checking',
+}
+
+/**
+ * ONE POST, FOR ONE SHARE TOKEN — or null. Reads the post's stage and the
+ * FROZEN version the client was shown, never the working copy or the edit
+ * card (audit P2, P11). Null when the post is not this portal's, not theirs
+ * to see (a draft they never had, a post the team approved without sending,
+ * audit P3), or has no frozen version to show.
+ *
+ * `team`: the signed-in team member's preview (?preview=1, checked by the
+ * page against Clerk — never taken from the address alone, audit P4). It
+ * shows the version the client would see, with nothing to press.
+ */
+export async function getPortalPostPage(
+  rawToken: string, postId: string, opts: { now?: Date; team?: boolean } = {},
+): Promise<PortalPostPage | null> {
+  const owner = await portalOwnerByToken(rawToken)
+  if (!owner) return null
+  const client = owner.client
+  const row = await table<SocialPost>('social_posts').get(postId).catch(() => null)
+  const post = readPostState(row as unknown as Record<string, unknown> | null)
+  if (!post || post.client_id !== client.id) return null
+  // a person's portal holds only their own pieces' posts
+  const item = post.source_item_id ? await table<ContentItem>('content_items').get(post.source_item_id).catch(() => null) : null
+  if (item ? !belongsToPortal(item as { for_contact_id?: string | null }, owner.scope) : owner.scope.kind !== 'business') return null
+
+  const now = opts.now ?? new Date()
+  const tz = safeZone((client as { timezone?: string | null }).timezone ?? post.timezone ?? null)
+  const when = (iso: string | null | undefined) => scheduledWhen(iso ?? null, tz)
+  const approver = post.approval?.on_behalf_of_client && post.approval.by
+    ? await table<TeamUserRow>('team_users').get(post.approval.by).catch(() => null) : null
+  const seen = clientPostView(post, now, { when, nameOf: id => (id && approver?.id === id ? approver.name : null) })
+  const preview = opts.team === true
+  if (!seen && !preview) return null
+  const view: ClientPostView = seen
+    ? (preview ? { ...seen, canAnswer: false } : seen)
+    : NOT_SENT_PREVIEW
+  const version = seen ? seen.version : post.sent_version
+
+  const versionRow = version != null
+    ? await table<PostVersion>('post_versions').get(postVersionId(post.id, version)).catch(() => null) : null
+  let frozen = readFrozenPost(versionRow as unknown as Record<string, unknown> | null)
+  let shownAsPosted = false
+  if (!frozen && post.stage === 'posted') {
+    // live before versions were kept: what went out is public, so show it as it went
+    frozen = readFrozenPost({
+      n: version ?? 0, slides: post.slides, per_channel: post.per_channel, channels: post.channels,
+      caption: post.caption, scheduled_for: post.scheduled_for, timezone: post.timezone,
+    })
+    shownAsPosted = true
+  }
+  // nothing frozen to show: never fall back to the live post (audit P2)
+  if (!frozen) return null
+
+  const [accounts, noteRows, amName] = await Promise.all([
+    frozen.channels.length
+      ? table<SocialAccount>('social_accounts').list({ by: { client_id: client.id } }).catch(() => [] as SocialAccount[])
+      : Promise.resolve([] as SocialAccount[]),
+    table<PostComment>('post_comments').list({ by: { post_id: post.id } }).catch(() => [] as PostComment[]),
+    accountManagerName(client.id),
+  ])
+  const accountById = new Map(accounts.map(a => [a.id, a]))
+  const files = reviewFiles(frozen)
+  const networks = [...new Set(frozen.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkLabel(String(a.platform))] : [] }))]
+
+  let previews: ClientPreview[] = []
+  try {
+    const perChannel = readPerChannel((versionRow as { per_channel?: unknown } | null)?.per_channel ?? (shownAsPosted ? post.per_channel : null))
+    const built = buildPostPreview({
+      caption: frozen.caption,
+      media: frozen.slides.map(sl => ({ url: sl.url, type: sl.type, name: sl.name })),
+      channels: frozen.channels.flatMap(id => {
+        const a = accountById.get(id)
+        if (!a) return []
+        const own = frozen!.per_channel[id]?.slides ?? []
+        return [{
+          id: a.id, platform: String(a.platform), handle: a.username, name: a.name, avatarUrl: a.avatar_url,
+          options: optionsFromExtras(perChannel[id]),
+          media: own.length ? own.map(sl => ({ url: sl.url, type: sl.type, name: sl.name })) : null,
+          placeName: null,
+        }]
+      }),
+    })
+    previews = clientPreviews(built)
+  } catch { previews = [] }
+
+  const posted = view.state === 'posted'
+  // how it sits on their Instagram: the first picture Instagram gets, before
+  // the newest posts already live there (what is live is public)
+  let grid: PortalPostPage['grid'] = null
+  const igOf = (channels: readonly string[]) => channels.find(acc => String(accountById.get(acc)?.platform ?? '') === 'instagram') ?? null
+  const ig = igOf(frozen.channels)
+  if (ig && !posted) {
+    const own = frozen.per_channel[ig]?.slides ?? []
+    const first = (own.length ? own : frozen.slides)[0]
+    if (first) {
+      const others = await table<SocialPost>('social_posts').list({ by: { client_id: client.id } }).catch(() => [] as SocialPost[])
+      const live = others
+        .map(r => readPostState(r as unknown as Record<string, unknown>))
+        .filter((p): p is PostState => !!p && p.id !== post.id && p.stage === 'posted'
+          && ['published', 'duplicate'].includes(p.outcomes.instagram?.status ?? ''))
+        .sort((a, b) => String(postedAt(b) ?? '').localeCompare(String(postedAt(a) ?? '')))
+        .slice(0, 8)
+        .flatMap(p => {
+          const acc = igOf(p.channels)
+          const ownSlides = acc ? readFrozenPost({ slides: [], per_channel: { [acc]: p.per_channel[acc] ?? {} }, channels: [acc] })?.per_channel[acc]?.slides ?? [] : []
+          const cover = (ownSlides.length ? ownSlides : p.slides)[0]
+          return cover ? [{ url: cover.url, type: cover.type === 'video' ? 'video' as const : 'image' as const }] : []
+        })
+      grid = [{ url: first.url, type: first.type === 'video' ? 'video' : 'image' }, ...live]
+    }
+  }
+  return {
+    client: { id: client.id, name: client.name, timezone: tz },
+    am_name: amName,
+    post_id: post.id,
+    title: String(item?.title ?? '').trim() || 'Your post',
+    view,
+    version,
+    from_migration: frozen.from_migration,
+    shown_as_posted: shownAsPosted,
+    files: files.map(f => ({ url: f.url, name: f.name, type: f.type === 'video' ? 'video' : 'image' })),
+    caption: frozen.caption,
+    type_line: postTypeLine(files, frozen.channels.map(id => frozen!.per_channel[id]?.kind ?? null)),
+    when_line: posted ? when(postedAt(post)) : when(post.stage === 'booked' ? (post.booking?.for_time ?? frozen.scheduled_for) : frozen.scheduled_for),
+    networks,
+    previews,
+    // the Client thread only — a team note never reaches this page (decision 9, audit P10)
+    notes: clientPostNotes(noteRows, post.id, version, client.name),
+    links: posted ? postLiveLinks(post) : [],
+    preview_mode: preview,
+    grid,
+  }
+}
+
+/**
+ * THE POST AN OLD LINK MEANT. Links sent before the rebuild carry the edit
+ * card's id (`/approve/<item id>`). The post of that piece the client can see
+ * — the one waiting on them first, else the newest — or null.
+ */
+export async function portalPostForItem(rawToken: string, itemId: string): Promise<string | null> {
+  const owner = await portalOwnerByToken(rawToken)
+  if (!owner) return null
+  const rows = await table<SocialPost>('social_posts').list({ by: { client_id: owner.client.id } }).catch(() => [] as SocialPost[])
+  const now = new Date()
+  const mine = rows
+    .map(r => readPostState(r as unknown as Record<string, unknown>))
+    .filter((p): p is PostState => !!p && p.source_item_id === itemId)
+    .map(p => ({ p, view: clientPostView(p, now) }))
+    .filter(x => !!x.view)
+  const pick = mine.find(x => x.view!.canAnswer)
+    ?? [...mine].sort((a, b) => String(b.p.stage_at ?? '').localeCompare(String(a.p.stage_at ?? '')))[0]
+  return pick?.p.id ?? null
 }

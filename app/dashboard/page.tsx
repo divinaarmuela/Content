@@ -28,8 +28,10 @@ import {
 } from '../lib/timezone-core'
 import { useTable } from '@/lib/db-client'
 import type {
-  Lead, PostAnalytic, PublishJob, ScheduleEntry, SocialAccount, UserPageAccess,
+  Lead, PostAnalytic, PublishJob, ScheduleEntry, SocialAccount, SocialPost, UserPageAccess,
 } from '@/lib/db-types'
+import { readPostState, type PostState } from '../lib/post-stage-core'
+import { postVisibleTo } from '../lib/post-board-core'
 import PlatformIcon from './social/PlatformIcon'
 import { useRole } from './useRole'
 import { useWorkRows } from './useLiveWork'
@@ -481,6 +483,15 @@ export default function OverviewPage() {
   // `buildOverview` reads `entries` only in its scheduler branch, so every
   // role's numbers are exactly what they were.
   const { rows: entryRows } = useTable<ScheduleEntry>('schedule_entries', { enabled })
+  /** THE POSTS, by their own stage — what the posting tiles count (the posting
+   *  rebuild, 29 Sep 2026; audit B12: the tiles used to count edit cards) */
+  const { rows: socialPostRows } = useTable<SocialPost>('social_posts', { enabled: enabled && me?.role !== 'editor' })
+  const posts = useMemo(() => {
+    if (!viewer) return [] as PostState[]
+    return socialPostRows
+      .map(r => readPostState(r as unknown as Record<string, unknown>))
+      .filter((p): p is PostState => !!p && postVisibleTo(p, viewer, live.tables.assignments.rows))
+  }, [socialPostRows, viewer, live.tables.assignments.rows])
   /**
    * WHAT EACH ACCOUNT POSTED THIS MONTH — managers only, so nobody else
    * downloads these four tables. They are listened to whole, exactly as the
@@ -699,6 +710,7 @@ export default function OverviewPage() {
     const leadsWeek = leadRows.filter(l => new Date(l.created_at).getTime() >= weekAgo).length
     const out: OverviewTile[] = overviewTiles({
       viewer, cards, today: todayKey, postingToday, connectedClientIds, clientCount, leadsWeek, mayLeads,
+      posts, now: new Date().toISOString(),
     })
     // SHOOT PLANS LATE (the playbook's one-week rule, 11 Sep 2026): a shoot
     // under seven days out whose plan has not been shared. Shown to the
@@ -731,7 +743,7 @@ export default function OverviewPage() {
       })
     }
     return out
-  }, [viewer, live.loading, live.batches, postCards, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone])
+  }, [viewer, live.loading, live.batches, postCards, live.tables.assignments.rows, live.tables.clients.rows, entryRows, leadRows, mayLeads, connectedClientIds, todayKey, zone, posts])
   /* MiniCalendar reads a Date with the BROWSER's own calendar. This hands it
      one whose local year/month/day are the viewer zone's today, so the filled
      cell and the markers can never disagree about which day it is. */
@@ -944,7 +956,7 @@ export default function OverviewPage() {
               thing a manager should do first now says so, and says how many. */}
           {!loading && isManager && (data?.manager?.needs_review?.length ?? 0) > 0 && (
             <Button size="sm" className="min-h-11 w-fit" asChild>
-              <Link href="/dashboard/scheduler?show=decide">
+              <Link href={boardHref('editor', { show: 'decide' })}>
                 Check {data!.manager!.needs_review.length} card{data!.manager!.needs_review.length === 1 ? '' : 's'} waiting on you
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>

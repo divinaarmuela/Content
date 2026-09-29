@@ -1,17 +1,18 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Toaster } from 'sonner'
 import { getPortalPost } from '../../../../lib/portal-post'
+import { getPortalPostPage } from '../../../../lib/portal-thread'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import PortalLive from '../../../../components/portal/PortalLive'
-import SlideCarousel from '../../../../components/media/SlideCarousel'
+import PortalPostReview from '../../../../components/portal/PortalPostReview'
 import Sparkline from '../../../../components/Sparkline'
 import {
   compactCount, METRICS_PENDING_LINE, metricCells, metricsPending,
 } from '../../../../lib/post-analytics-core'
 import { portalFollowersLine } from '../../../../lib/post-performance-core'
-import { formatWithZone } from '../../../../lib/timezone-core'
 
 export const metadata: Metadata = {
   title: 'Your post — MD Media',
@@ -20,35 +21,44 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 /**
- * ONE POST, ON THE CLIENT'S OWN PAGE.
+ * ONE POST, ON THE CLIENT'S OWN PAGE (the posting rebuild, 29 Sep 2026; SPEC §4.4).
  *
- * The same page the team reads, in the client's words: what went out, where,
- * when, how many people interacted, how the account moved around it, and —
- * only when their Followers switch is on — who. No service is named, no id
- * is shown, and nothing here asks a platform anything: every figure was
- * written by a sweep that already runs, and `PortalLive` re-renders the page
- * on the server when something about this client changes, so the sanitising
- * happens once, in one place, every time.
+ * The same address for the whole of a post's life. While it is with them: the
+ * version they were sent, a note on any file, and Approve or Ask for a change.
+ * After: what became of it, in true words — "You approved this", "Approved by
+ * Divina for you", "The team is updating this post", "Live on Instagram" with
+ * each network's own link — and, once it is live, how it did.
+ *
+ * Everything comes from the post's stage and its FROZEN version; nothing from
+ * the edit card, nothing from the live working copy (audit P2, P5, P6, P13).
+ *
+ * THERE IS NO PREVIEW HERE (audit P4: `?preview=1` showed internal posts to
+ * anyone holding the link). This page is exactly the client's, for everybody:
+ * the portal's token pages run without Clerk (middleware.ts), so no sign-in
+ * can be checked on them, and an address flag is not a sign-in. The team's
+ * look through the client's eyes belongs behind Clerk in the dashboard —
+ * `getPortalPostPage(token, id, { team: true })` builds it, with nothing to
+ * press — never on the share link.
  */
 export default async function PortalPostPage({ params }: {
   params: Promise<{ token: string; id: string }>
 }) {
   const { token: raw, id } = await params
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
-  const post = await getPortalPost(raw, id)
-  if (!post) notFound()
+  const data = await getPortalPostPage(raw, id)
+  if (!data) notFound()
+  const live = data.view.state === 'posted' && !data.preview_mode ? await getPortalPost(raw, id) : null
 
-  const perf = post.performance
-  const cells = metricCells(post.metrics)
-  const pending = metricsPending(post.metrics)
+  const perf = live?.performance ?? null
+  const cells = live ? metricCells(live.metrics) : []
+  const pending = live ? metricsPending(live.metrics) : true
   const followers = portalFollowersLine(perf?.followers ?? null)
-  const when = post.posted_at ? formatWithZone(post.posted_at, post.timezone, 'long') : null
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
-      <PortalLive clientId={post.client.id} />
+      <PortalLive clientId={data.client.id} />
       <div
-        className="bg-background text-foreground"
+        className="min-h-screen bg-background text-foreground"
         style={{
           fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif',
           ['--p-bg' as string]: 'hsl(var(--background))',
@@ -61,133 +71,102 @@ export default async function PortalPostPage({ params }: {
         }}
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-          <div className="mx-auto flex h-14 w-full max-w-3xl items-center gap-3 px-5 pr-14 sm:px-10">
+          <div className="mx-auto flex h-14 w-full max-w-[1280px] items-center gap-3 px-5 pr-14 sm:px-8">
             <Link href={`/portal/${token}`} className="inline-flex min-h-11 items-center gap-2 text-[14px] font-semibold">
               ← Your board
             </Link>
+            <p className="ml-auto hidden text-[11px] uppercase tracking-[0.2em] text-muted-foreground sm:block" style={{ fontFamily: 'var(--font-sometype), monospace' }}>
+              MD Media · {data.client.name}
+            </p>
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-8 pb-24 sm:px-10 sm:pb-16">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px]">{post.title}</h1>
-            <p className="text-[14px] text-muted-foreground">
-              {[post.networks.join(' · ') || null, when].filter(Boolean).join(' · ') || 'Not out yet.'}
-            </p>
-          </div>
+        <main className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-5 pb-24 pt-6 sm:px-8 sm:pb-16">
+          <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px]">{data.title}</h1>
+          <PortalPostReview token={token} data={data} />
 
-          {post.slides.length > 0 && (
-            <SlideCarousel
-              slides={post.slides}
-              aspect="natural"
-              mode="full"
-              className="overflow-hidden rounded-inner"
-              label={`${post.title}${post.slides.length > 1 ? ` — ${post.slides.length} slides` : ''}`}
-            />
-          )}
+          {/* ── once it is live: how it did ── */}
+          {live && (
+            <div className="flex max-w-3xl flex-col gap-8">
+              <section className="flex flex-col gap-3">
+                <h2 className="text-[18px] font-semibold">How it did</h2>
+                {pending || (!perf && cells.length === 0) ? (
+                  <p className="text-[14px] text-muted-foreground">{METRICS_PENDING_LINE}</p>
+                ) : (
+                  <>
+                    {perf && perf.interactions !== null && (
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="text-[40px] font-semibold leading-none tracking-tight">{compactCount(perf.interactions)}</span>
+                        <span className="text-[15px] text-muted-foreground">{perf.interactions === 1 ? 'person interacted' : 'people interacted'}</span>
+                      </div>
+                    )}
+                    {cells.length > 0 && (
+                      <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                        {cells.map(c => (
+                          <li key={c.key} className="flex items-baseline gap-1">
+                            <span className="text-[15px] font-semibold tabular-nums">{compactCount(c.value)}</span>
+                            <span className="text-[13px] text-muted-foreground">{c.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {perf && perf.spark.length > 1 && (
+                      <figure className="flex flex-col gap-1">
+                        <span style={{ color: 'var(--p-accent, currentColor)' }}>
+                          <Sparkline points={perf.spark} width={320} height={64} label="Interactions, day by day" />
+                        </span>
+                        <figcaption className="text-[13px] text-muted-foreground">Interactions, day by day</figcaption>
+                      </figure>
+                    )}
+                    {followers && <p className="text-[15px] font-medium">{followers}</p>}
+                  </>
+                )}
+              </section>
 
-          {post.caption?.trim() && (
-            <p className="whitespace-pre-line text-[15px] leading-[1.5]">{post.caption}</p>
-          )}
-
-          {post.live_urls.length > 0 && (
-            <div className="flex flex-wrap gap-x-5 gap-y-1">
-              {post.live_urls.map(url => (
-                <a key={url} href={url} target="_blank" rel="noreferrer noopener"
-                  className="inline-flex min-h-11 items-center text-[14px] font-semibold underline-offset-4 hover:underline">
-                  See the live post
-                </a>
-              ))}
+              <section className="flex flex-col gap-3">
+                <h2 className="text-[18px] font-semibold">People</h2>
+                <p className="text-[14px]">
+                  {live.comment_count === 0
+                    ? 'Nobody has commented yet.'
+                    : live.comment_count === 1 ? '1 person commented' : `${live.comment_count} people commented`}
+                  {live.liked_count > 0 && (
+                    <> · {live.liked_count === 1 ? '1 person liked it' : `${live.liked_count} people liked it`}</>
+                  )}
+                  {live.followed_count > 0 && (
+                    <> · {live.followed_count === 1
+                      ? '1 of them followed you from this post'
+                      : `${live.followed_count} of them followed you from this post`}</>
+                  )}
+                </p>
+                {live.shows_people ? (
+                  <>
+                    {live.comments.length > 0 && (
+                      <ul className="flex flex-col gap-1.5">
+                        {live.comments.map(c => (
+                          <li key={c.id} className="rounded-tile bg-foreground/[0.04] px-3 py-2 text-[14px]">
+                            {c.name && <span className="font-semibold">{c.name}</span>}{' '}
+                            <span>{c.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {live.liked.length > 0 && (
+                      <p className="text-[14px] text-muted-foreground">Liked by {live.liked.map(p => p.name).join(', ')}</p>
+                    )}
+                    {live.followed.length > 0 && (
+                      <p className="text-[14px] text-muted-foreground">Followed you from this post: {live.followed.map(p => p.name).join(', ')}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[13px] text-muted-foreground">
+                    We keep the names to ourselves unless you ask for them — say the word and they appear here.
+                  </p>
+                )}
+              </section>
             </div>
           )}
-
-          {/* ── how it did ─────────────────────────────────────────────── */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[18px] font-semibold">How it did</h2>
-            {pending || (!perf && cells.length === 0) ? (
-              <p className="text-[14px] text-muted-foreground">{METRICS_PENDING_LINE}</p>
-            ) : (
-              <>
-                {perf && perf.interactions !== null && (
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-[40px] font-semibold leading-none tracking-tight">
-                      {compactCount(perf.interactions)}
-                    </span>
-                    <span className="text-[15px] text-muted-foreground">
-                      {perf.interactions === 1 ? 'person interacted' : 'people interacted'}
-                    </span>
-                  </div>
-                )}
-                {cells.length > 0 && (
-                  <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                    {cells.map(c => (
-                      <li key={c.key} className="flex items-baseline gap-1">
-                        <span className="text-[15px] font-semibold tabular-nums">{compactCount(c.value)}</span>
-                        <span className="text-[13px] text-muted-foreground">{c.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {perf && perf.spark.length > 1 && (
-                  <figure className="flex flex-col gap-1">
-                    <span style={{ color: 'var(--p-accent, currentColor)' }}>
-                      <Sparkline points={perf.spark} width={320} height={64} label="Interactions, day by day" />
-                    </span>
-                    <figcaption className="text-[13px] text-muted-foreground">Interactions, day by day</figcaption>
-                  </figure>
-                )}
-                {followers && <p className="text-[15px] font-medium">{followers}</p>}
-              </>
-            )}
-          </section>
-
-          {/* ── the people ─────────────────────────────────────────────── */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[18px] font-semibold">People</h2>
-            <p className="text-[14px]">
-              {post.comment_count === 0
-                ? 'Nobody has commented yet.'
-                : post.comment_count === 1 ? '1 person commented' : `${post.comment_count} people commented`}
-              {post.liked_count > 0 && (
-                <> · {post.liked_count === 1 ? '1 person liked it' : `${post.liked_count} people liked it`}</>
-              )}
-              {post.followed_count > 0 && (
-                <> · {post.followed_count === 1
-                  ? '1 of them followed you from this post'
-                  : `${post.followed_count} of them followed you from this post`}</>
-              )}
-            </p>
-
-            {post.shows_people ? (
-              <>
-                {post.comments.length > 0 && (
-                  <ul className="flex flex-col gap-1.5">
-                    {post.comments.map(c => (
-                      <li key={c.id} className="rounded-tile bg-foreground/[0.04] px-3 py-2 text-[14px]">
-                        {c.name && <span className="font-semibold">{c.name}</span>}{' '}
-                        <span>{c.text}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {post.liked.length > 0 && (
-                  <p className="text-[14px] text-muted-foreground">
-                    Liked by {post.liked.map(p => p.name).join(', ')}
-                  </p>
-                )}
-                {post.followed.length > 0 && (
-                  <p className="text-[14px] text-muted-foreground">
-                    Followed you from this post: {post.followed.map(p => p.name).join(', ')}
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-[13px] text-muted-foreground">
-                We keep the names to ourselves unless you ask for them — say the word and they appear here.
-              </p>
-            )}
-          </section>
         </main>
+        <Toaster position="top-center" />
       </div>
     </PortalShell>
   )

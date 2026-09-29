@@ -61,3 +61,35 @@ describe('posted by hand carries when and where (9 Sep 2026)', () => {
     expect(readPostedSlides({ urls: ['a'], posted: 1, total: 2, hand: [{ at: 5 }] })).toEqual({ urls: ['a'], posted: 1, total: 2 })
   })
 })
+
+describe('the rail reads the post’s STAGE (posting rebuild, audit S6)', () => {
+  it('a post sent for checking, approved, booked or live holds its files; a draft or a cancelled one does not', () => {
+    const rows = [
+      { stage: 'draft', slides: [{ url: 'a' }] },
+      { stage: 'quality_check', slides: [{ url: 'b' }] },
+      { stage: 'with_client', slides: [{ url: 'c' }] },
+      { stage: 'ready', slides: [{ url: 'd' }] },
+      { stage: 'booked', slides: [{ url: 'e' }] },
+      { stage: 'posted', slides: [{ url: 'f' }] },
+      { stage: 'cancelled', slides: [{ url: 'g' }] },
+    ]
+    expect([...takenSlideUrls(rows)].sort()).toEqual(['b', 'c', 'd', 'e', 'f'])
+  })
+
+  it('the stage wins over a stale status: a failed booking back in Ready still holds, a cancelled one lets go', () => {
+    // the old column stayed 'scheduled' after its job failed or was cancelled
+    expect([...takenSlideUrls([{ stage: 'cancelled', status: 'scheduled', slides: [{ url: 'a' }] }])]).toEqual([])
+    expect([...takenSlideUrls([{ stage: 'ready', status: 'draft', slides: [{ url: 'a' }] }])]).toEqual(['a'])
+  })
+
+  it('a network’s own files are held too', () => {
+    const row = { stage: 'booked', slides: [{ url: 'a' }], per_channel: { acc1: { slides: [{ url: 'x' }, { url: 'a' }] } } }
+    expect([...takenSlideUrls([row])].sort()).toEqual(['a', 'x'])
+  })
+
+  it('published means Posted, or a job of its that published', () => {
+    expect([...publishedSlideUrls([{ stage: 'posted', slides: [{ url: 'a' }] }])]).toEqual(['a'])
+    expect([...publishedSlideUrls([{ stage: 'booked', status: 'published', slides: [{ url: 'a' }] }])]).toEqual([])
+    expect([...publishedSlideUrls([{ stage: 'booked', slides: [{ url: 'a' }], publish_job_ids: ['j'] }], new Set(['j']))]).toEqual(['a'])
+  })
+})

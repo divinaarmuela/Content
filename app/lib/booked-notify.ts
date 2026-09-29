@@ -1,8 +1,9 @@
 import 'server-only'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
-import type { TeamUserClient } from '@/lib/db-types'
+import type { SocialPost, TeamUserClient } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml } from './mailer'
+import { bookedFactProblem } from './post-notify-core'
 
 import type { TeamUser } from './authz'
 import { formatInZone, safeZone } from './timezone-core'
@@ -15,16 +16,31 @@ import { DASHBOARD_URL } from './app-url'
  * When a post is booked in, every active account manager and super admin on
  * the client is told — bell and email, the same `notify` every other event
  * uses — except the person who booked it. Nobody outside the team is told.
+ *
+ * ONLY ONCE THE BOOKING EXISTS (the posting rebuild, 29 Sep 2026; audit V14:
+ * "The booking email goes out before the booking exists" — schedulePost called
+ * this before queuePublishJob, so a booking the provider refused still told the
+ * managers it was booked). The post is read FRESH and the email goes only when
+ * the row proves a booking (`bookedFactProblem`, post-notify-core.ts). The
+ * rebuilt flow sends its "Booked in" from post-notify.ts on the booking_done
+ * step; this stays for the older caller and refuses to report a booking it
+ * cannot see.
  */
 export async function notifyManagersBooked(
   actor: TeamUser,
   item: { id: string; title: string; client_id: string; adhoc_post?: unknown },
-  post: { scheduled_for?: string | null; timezone?: string | null },
+  post: { id?: string | null; scheduled_for?: string | null; timezone?: string | null },
   channels: readonly string[],
   /** "Trial Reel · non-followers first, …" when it is one */
   trial: string | null = null,
 ): Promise<void> {
   try {
+    const row = post.id ? await table<SocialPost>('social_posts').get(post.id, { fresh: true }).catch(() => null) : null
+    const notBooked = bookedFactProblem(row as unknown as Record<string, unknown> | null)
+    if (notBooked) {
+      console.log('[booked notify] not sent —', notBooked, post.id ?? '(no post id)')
+      return
+    }
     const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: item.client_id } })
     const joined = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'name', 'role', 'active_status'])
     const managers = joined

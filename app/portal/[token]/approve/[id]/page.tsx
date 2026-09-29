@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { getPortalApproval } from '../../../../lib/portal-thread'
+import { notFound, redirect } from 'next/navigation'
+import { getPortalApproval, portalPostForItem } from '../../../../lib/portal-thread'
+import { portalPostHref } from '../../../../lib/post-page-core'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import PostReview from '../../../../components/portal/PostReview'
@@ -12,22 +13,25 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic'
 
 /**
- * FOR YOUR APPROVAL (the owner, 28 Sep 2026: "the portal is for the approved post, not the boards"; "make sure it
- * looks nice"). The page the "Send to client" email opens: the post — every picture or clip, the caption — and one
- * question, Approve or Ask for a change. No board, no menu, nothing else to find. The client's yes takes the card to
- * Ready to post through the same rules the board uses.
+ * FOR YOUR APPROVAL — the EDIT's page (the owner, 28 Sep 2026: "the portal is for the approved post, not the
+ * boards"; "make sure it looks nice"): every picture or clip, the notes on each, and one question.
+ *
+ * Since the posting rebuild (29 Sep 2026) a POST has its own page, `/portal/<token>/post/<post id>`, read from the
+ * post's stage and the version the client was sent. A link from before, which names the piece rather than the post,
+ * goes to that piece's post when the client has one to see — never to a post they were not sent (audit P3). There
+ * is no `?preview=1` here any more: the team's look is on the post page, and only for a signed-in team member
+ * (audit P4).
  */
-export default async function PortalApprovePage({ params, searchParams }: {
+export default async function PortalApprovePage({ params }: {
   params: Promise<{ token: string; id: string }>
-  searchParams: Promise<{ preview?: string }>
 }) {
   const { token: raw, id } = await params
-  // PREVIEW: the team sees exactly what the client will, with the answer switched off (28 Sep 2026)
-  const preview = (await searchParams).preview === '1'
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
-  const data = await getPortalApproval(raw, id, { preview })
+  const postId = await portalPostForItem(raw, id).catch(() => null)
+  if (postId) redirect(portalPostHref(token, postId))
+  const data = await getPortalApproval(raw, id)
   if (!data) notFound()
-  const { slides, caption, state, typeLine, whenLine, whereLine, kind, missed } = data
+  const { slides, caption, state, typeLine, whenLine, whereLine, kind } = data
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -42,13 +46,15 @@ export default async function PortalApprovePage({ params, searchParams }: {
             </p>
             <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px]">{data.title}</h1>
           </header>
-          {preview && (
-            <p className="rounded-inner border border-accent-amber/40 bg-tint-amber px-3 py-2 text-[13px]">Preview — this is exactly what the client sees. Approve and notes are switched off here.</p>
+          {data.unfrozen && (
+            <p className="rounded-inner border border-border bg-card px-3 py-2 text-[13px] text-muted-foreground">
+              Sent before versions were kept — these are the files as they are now.
+            </p>
           )}
-          {/* ONE LAYOUT for every way a client reaches a post (28 Sep 2026): the post on the left, one slide at a time;
-              the details, the notes on that slide and the answer on the right, in view */}
+          {/* ONE LAYOUT for every way a client reaches a piece (28 Sep 2026): the piece on the left, one slide at a
+              time; the details, the notes on that slide and the answer on the right, in view */}
           <PostReview token={token} itemId={id} title={data.title} slides={slides} caption={caption} typeLine={typeLine}
-            whenLine={whenLine} whereLine={whereLine} missed={missed === true} state={state} kind={kind} preview={preview}
+            whenLine={whenLine} whereLine={whereLine} missed={false} state={state} kind={kind} preview={false}
             clientName={data.client.name} comments={data.comments} />
         </main>
       </div>

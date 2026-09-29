@@ -17,7 +17,6 @@ import {
 import { useTable } from '@/lib/db-client'
 import type { CardView, PostAnalytic, PublishJob, SocialPost } from '@/lib/db-types'
 import { cardBookingLine, type OutcomeJob } from '../../lib/post-outcome-core'
-import { approvalTimeLine } from '../../lib/post-to-client-core'
 import { readPostedSlides } from '../../lib/posted-slides-core'
 import { boardLine, readPerformance } from '../../lib/post-performance-core'
 import { readInteractors, withFromThisPost } from '../../lib/followers-core'
@@ -190,8 +189,8 @@ export function Board({
       if (!['approved_for_scheduling', 'scheduled', 'published'].includes(String(c.status))) continue
       const mine = postRows.filter(p => p.item_id === c.id)
       const progress = readPostedSlides((c as { posted_slides?: unknown }).posted_slides)
-      // a time that went before the client said yes, or a new time not yet sent to them, says so first (28 Sep 2026)
-      const line = approvalTimeLine(c as never, mine) ?? cardBookingLine(mine, jobsById, progress ? { posted: progress.posted, total: progress.total } : null, fmt)
+      // a post's own wait (a missed time, a send to the client) is the post's, said on Post approval — not on the card
+      const line = cardBookingLine(mine, jobsById, progress ? { posted: progress.posted, total: progress.total } : null, fmt)
       if (line) out.set(c.id, line)
     }
     return out
@@ -309,7 +308,6 @@ export function Board({
                 viewer={viewer}
                 names={names}
                 managers={managersOf?.(c.client_id) ?? []}
-                kinds={kinds}
                 today={today}
                 busy={busyId === c.id}
                 canEdit={canEdit(c)}

@@ -18,6 +18,9 @@ const isProtectedRoute = createRouteMatcher([
   '/api/overview(.*)',
   '/api/assistant(.*)',
   '/api/boards(.*)',
+  // the one route that moves a post (the posting rebuild, 29 Sep 2026) — the
+  // route checks the person's hats on the post itself as well
+  '/api/posts(.*)',
   // "act as this person" — signed-in only; the route itself then refuses
   // every address but tech@
   '/api/act-as(.*)',
@@ -144,6 +147,7 @@ export const config = {
     '/api/link-preview/:path*',
     '/api/portal/:path*',
     '/api/overview/:path*',
+    '/api/posts/:path*',
     '/api/production/:path*',
     '/api/reports/:path*',
     '/api/shoots/:path*',

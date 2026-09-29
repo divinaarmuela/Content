@@ -148,18 +148,20 @@ describe('the Overview counts it for the people asked, and nobody else', () => {
     expect(matchesShow(card(null), 'decide', ctx)).toBe(true)
   })
 
-  it('a scheduler’s queue narrows the same way', () => {
+  it('a scheduler’s queue is the POSTS at Ready to post — an edit card asked of them is not a post (29 Sep 2026)', () => {
+    // the posting rebuild: Ready to post is a post's own stage (audit B12), so
+    // an approved EDIT is not counted as something to book in, asked or not
     const ready = (asked: string[] | null) => ({
       id: `r-${asked?.join('-') ?? 'none'}`, title: 'Hero reel',
       status: 'approved_for_scheduling' as const, client_id: 'c1',
       owner_id: null, due_date: null, asked_ids: asked,
     })
-    const toBookIn = (viewerId: string, cards: ReturnType<typeof ready>[]) =>
-      overviewTiles({ viewer: { id: viewerId, role: 'scheduler' }, cards, today })
+    const toBookIn = (viewerId: string, cards: ReturnType<typeof ready>[], posts = [] as never[]) =>
+      overviewTiles({ viewer: { id: viewerId, role: 'scheduler' }, cards, today, posts })
         .find(t => t.key === 'ready')!.stats[0].value
-    expect(toBookIn('u-sc', [ready(['u-sc'])])).toBe(1)
-    expect(toBookIn('u-sc2', [ready(['u-sc'])])).toBe(0)
-    expect(toBookIn('u-sc2', [ready(null)])).toBe(1)
+    expect(toBookIn('u-sc', [ready(['u-sc'])])).toBe(0)
+    const post = { id: 'p1', client_id: 'c1', stage: 'ready', created_by: 'x', assigned_to: null, changes_asked: null } as never
+    expect(toBookIn('u-sc2', [], [post])).toBe(1)
   })
 })
 

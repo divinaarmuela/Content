@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { ChevronDown, FolderOpen, Plus, Star } from 'lucide-react'
 import type { Slide } from '@/app/lib/version-files-core'
 import { cn } from '@/lib/utils'
-import { mayApproveWithoutClient, NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
+import { NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
+import { POST_APPROVAL_HREF } from '@/app/lib/schedule-stage-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
 
@@ -17,10 +19,14 @@ import type { RailMedia } from './useSchedulePosts'
  * a post is still shown, greyed, with the reason on it: hiding it only makes
  * someone ask where their video went.
  *
- * Tapping a card starts a post from it; dragging one onto the calendar does
- * the same with the hour it was dropped on. A card that CANNOT start a post
- * is not clickable and says why, rather than opening a window that would
- * immediately refuse.
+ * Tapping a card opens its files; dragging one onto the calendar starts a
+ * post at the hour it was dropped on. A card that CANNOT start a post still
+ * opens: to say why, and so a manager can remove it (audit S11: a greyed
+ * card could never be removed from here).
+ *
+ * NOTHING IS APPROVED FROM HERE (the owner's decision 1). A post made from a
+ * piece is a draft that goes to the quality check. The old "Approve without
+ * client" button signed the EDIT off from the Schedule page, and is gone.
  */
 
 export const RAIL_FILTERS = ['Unused', 'Videos', 'Photos', 'Starred'] as const
@@ -71,28 +77,24 @@ export function filterMedia(
 }
 
 export default function MediaRail({
-  media, waiting, drafts = 0, onDrafts, onWaiting, loading, role, postWithoutApproval, onNew, onPick, onApprove, onRemove,
+  media, waiting, drafts = 0, onDrafts, loading, role, postWithoutApproval, onNew, onPick, onRemove,
 }: {
   media: RailMedia[]
+  /** posts still being approved (Quality check, With client) — on Post approval */
   waiting: number
-  /** posts saved and left — never drawn on a grid; the List is where they are */
+  /** drafts — never drawn on a grid; the List's Drafts filter is where they are */
   drafts?: number
   onDrafts?: () => void
-  /** show the posts waiting for approval — the List, narrowed to them */
-  onWaiting?: () => void
   loading: boolean
-  /** the viewer's role — an account manager or a super admin may sign a piece
-   *  off without the client from here */
+  /** the viewer's role — an account manager or a super admin may remove a piece */
   role: string | null
-  /** …and for those two the rail also carries media the client has not signed
-   *  off yet, which is why the heading cannot say "Approved" to them */
+  /** for those two the rail also carries media the client has not signed off
+   *  yet, which is why the heading cannot say "Approved" to them */
   postWithoutApproval: boolean
   /** start a post with nothing chosen yet */
   onNew: () => void
   /** start a post from this piece — with only the ticked files, when given */
   onPick: (media: RailMedia, slides?: Slide[]) => void
-  /** sign this piece off without waiting for the client */
-  onApprove: (media: RailMedia) => void
   /** a manager throwing a piece away from here — the rail had no way to
    *  delete anything (the owner, 10 Sep 2026: "as a super admin or AM why
    *  wasn't I able to delete this") */
@@ -218,11 +220,10 @@ export default function MediaRail({
                   <div className="flex items-center gap-2 p-1.5">
                     <button
                       type="button"
-                      disabled={!m.ok}
                       onClick={() => openIt(m)}
                       aria-expanded={isOpen}
                       aria-label={m.ok ? `Open ${m.title}` : `${m.title} — ${m.reason}`}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
                       <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[6px] bg-foreground/[0.06]">
                         <Thumb slide={m.cover} label={m.title} className={cn('h-full w-full', !m.ok && 'opacity-45')} />
@@ -311,10 +312,25 @@ export default function MediaRail({
                     </div>
                   )}
 
-                  {/* a manager removes a piece from here: two presses, and
-                      never one the channel is holding */}
+                  {/* open on a card that cannot start a post: why, in words */}
+                  {isOpen && !m.ok && m.reason && (
+                    <p className="border-t border-border px-2 py-1.5 text-[12px] text-muted-foreground">
+                      {m.reason}. It cannot become a post yet.
+                    </p>
+                  )}
+
+                  {/* a manager removes a piece from here: two presses, on ANY
+                      card (audit S11), and never one whose posts are booked
+                      in or live. The button stays, with the reason beside it */}
                   {onRemove && (role === 'account_manager' || role === 'super_admin') && isOpen && (
-                    removing === m.itemId ? (
+                    m.holdsBooking ? (
+                      <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1.5">
+                        <button type="button" disabled className="min-h-11 shrink-0 text-left text-[12px] font-semibold text-muted-foreground opacity-50">
+                          Remove this piece
+                        </button>
+                        <span className="text-right text-[12px] text-muted-foreground">Take its posts off the schedule first</span>
+                      </div>
+                    ) : removing === m.itemId ? (
                       <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1.5">
                         <span className="text-[12px] font-semibold">Remove this piece and its files?</span>
                         <span className="flex gap-1.5">
@@ -332,18 +348,6 @@ export default function MediaRail({
                       </button>
                     )
                   )}
-                  {/* waiting on somebody, and this person could be that
-                      somebody: sign it off, after one question */}
-                  {!m.ok && mayApproveWithoutClient(role, m.status, m.clientSignsOff) && (
-                    <button
-                      type="button"
-                      onClick={() => onApprove(m)}
-                      title={m.reason ? `${m.title} — ${m.reason}` : m.title}
-                      className="min-h-11 w-full rounded-b-tile border-t border-border bg-cream/95 px-2 text-[12px] font-semibold text-ink hover:bg-cream"
-                    >
-                      Approve without client
-                    </button>
-                  )}
                 </div>
               )
             })}
@@ -356,22 +360,15 @@ export default function MediaRail({
         onto a time.
       </p>
 
-      {/* a count you can press: it opens the List narrowed to the posts
-          waiting on a yes (the owner, 11 Sep 2026: "schedule post approval
-          card when clicked") */}
-      {onWaiting && waiting > 0 ? (
-        <button
-          type="button"
-          onClick={onWaiting}
-          className="flex min-h-11 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
-        >
-          Waiting for approval · {waiting}
-        </button>
-      ) : (
-        <div className="flex min-h-11 items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold">
-          Waiting for approval · {waiting}
-        </div>
-      )}
+      {/* POSTS STILL BEING APPROVED live on Post approval (the owner's
+          decision 1): this page only counts them and says where they are */}
+      <Link
+        href={POST_APPROVAL_HREF}
+        className="flex min-h-11 flex-col items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
+      >
+        <span>Being approved · {waiting}</span>
+        <span className="text-[12px] font-normal text-muted-foreground">On Post approval</span>
+      </Link>
       {drafts > 0 && (
         <button
           type="button"
@@ -379,7 +376,7 @@ export default function MediaRail({
           className="flex min-h-10 flex-col items-center justify-center rounded-full border border-dashed border-border px-3 text-[13px] font-semibold hover:bg-muted"
         >
           <span>Drafts · {drafts}</span>
-          <span className="text-[12px] font-normal text-muted-foreground">Not on the calendar until scheduled</span>
+          <span className="text-[12px] font-normal text-muted-foreground">Not on the calendar — they go to quality check first</span>
         </button>
       )}
     </div>

@@ -20,6 +20,8 @@
 import { networkName, platformErrorWords, type MediaItem } from './publish-core'
 import { isTrialTarget } from './trial-reel-core'
 import { readPostedSlides } from './posted-slides-core'
+import { platformOfUrl } from './external-post-match-core'
+import type { NetworkOutcome, OutcomeStatus as PostOutcomeStatus } from './post-stage-core'
 
 export type OutcomeStatus = 'queued' | 'scheduled' | 'published' | 'failed' | 'pending' | 'cancelled'
 
@@ -454,6 +456,36 @@ function plural(kind: string, n: number): string {
   return `${w}s`
 }
 
+/* ── a post, booked or out ─────────────────────────────────────────────── */
+
+/** The slice of a `social_posts` row the card lines read. `stage` and
+ *  `booking.job_ids` are the post's own (the posting rebuild, 29 Sep 2026);
+ *  `status` and `publish_job_ids` are read only for a row the migration has
+ *  not reached, and go when it drops them. */
+export type PostJobsLike = {
+  stage?: string | null
+  booking?: unknown
+  status?: string | null
+  slides?: unknown
+  publish_job_ids?: unknown
+  scheduled_for?: string | null
+}
+
+/** 'booked' while it waits to go out, 'out' once it went, null otherwise. */
+export function postBookedOrOut(p: PostJobsLike): 'booked' | 'out' | null {
+  if (typeof p.stage === 'string' && p.stage) return p.stage === 'booked' ? 'booked' : p.stage === 'posted' ? 'out' : null
+  const legacy = String(p.status ?? '')
+  return legacy === 'scheduled' ? 'booked' : legacy === 'published' ? 'out' : null
+}
+
+/** The jobs a post holds: its booking's, or the legacy list before migration. */
+export function jobIdsOfPost(p: PostJobsLike): string[] {
+  const b = p.booking as { job_ids?: unknown } | null | undefined
+  const ids = b && typeof b === 'object' && Array.isArray(b.job_ids) ? b.job_ids
+    : Array.isArray(p.publish_job_ids) ? p.publish_job_ids : []
+  return ids.map(String).filter(Boolean)
+}
+
 /* ── the one line a board card says about its booking ───────────────────── */
 
 /**
@@ -464,29 +496,29 @@ function plural(kind: string, n: number): string {
  * understand the cards… if it's scheduled then say what platform(s)").
  */
 export function cardBookingLine(
-  posts: readonly { status?: string | null; slides?: unknown; publish_job_ids?: unknown; scheduled_for?: string | null }[],
+  posts: readonly PostJobsLike[],
   jobsById: ReadonlyMap<string, OutcomeJob>,
   progress: { posted: number; total: number } | null,
   fmt: (iso: string) => string,
 ): string | null {
-  const live = posts.filter(p => ['scheduled', 'published'].includes(String(p.status ?? '')))
+  const live = posts.filter(p => postBookedOrOut(p) !== null)
   if (live.length === 0) return null
-  const outcomes = live.flatMap(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
-    .map(id => jobsById.get(String(id))).filter((j): j is OutcomeJob => !!j).flatMap(outcomesForJob))
+  const outcomes = live.flatMap(p => jobIdsOfPost(p)
+    .map(id => jobsById.get(id)).filter((j): j is OutcomeJob => !!j).flatMap(outcomesForJob))
   const names = (list: PlatformOutcome[]) => [...new Set(list.map(o => networkName(o.platform)))].join(', ')
   const out = outcomes.filter(o => o.status === 'published')
   const booked = outcomes.filter(o => o.status === 'scheduled' || o.status === 'queued' || o.status === 'pending')
   const failed = outcomes.filter(o => o.status === 'failed')
   const soonest = booked.map(o => o.at).filter((a): a is string => !!a).sort()[0]
-    ?? live.filter(p => p.status === 'scheduled').map(p => p.scheduled_for).filter((a): a is string => !!a).sort()[0]
+    ?? live.filter(p => postBookedOrOut(p) === 'booked').map(p => p.scheduled_for).filter((a): a is string => !!a).sort()[0]
   const latest = out.map(o => o.at).filter((a): a is string => !!a).sort().slice(-1)[0]
   const parts: string[] = []
   if (progress && progress.posted > 0 && progress.posted < progress.total) parts.push(`${progress.posted} of ${progress.total} posted`)
   if (booked.length) parts.push(`Booked on ${names(booked)}${soonest ? ` · ${fmt(soonest)}` : ''}`)
   else if (out.length && !(progress && progress.posted > 0 && progress.posted < progress.total)) parts.push(`Posted on ${names(out)}${latest ? ` · ${fmt(latest)}` : ''}`)
   if (failed.length) parts.push(`Did not post on ${names(failed)}`)
-  if (parts.length && live.some(p => (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
-    .some(id => { const j = jobsById.get(String(id)); return j ? jobIsTrial(j) : false }))) {
+  if (parts.length && live.some(p => jobIdsOfPost(p)
+    .some(id => { const j = jobsById.get(id); return j ? jobIsTrial(j) : false }))) {
     parts.push('Trial Reel')
   }
   return parts.length ? parts.join(' · ') : null
@@ -507,19 +539,19 @@ export type FileBooking = {
  */
 export function fileBooking(
   url: string,
-  posts: readonly { status?: string | null; slides?: unknown; publish_job_ids?: unknown; scheduled_for?: string | null }[],
+  posts: readonly PostJobsLike[],
   jobsById: ReadonlyMap<string, OutcomeJob>,
 ): FileBooking | null {
   for (const p of posts) {
-    const status = String(p.status ?? '')
-    if (status !== 'scheduled' && status !== 'published') continue
+    const where = postBookedOrOut(p)
+    if (!where) continue
     const slides = Array.isArray(p.slides) ? p.slides as { url?: unknown }[] : []
     if (!slides.some(s => s?.url === url)) continue
-    const jobs = (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : [])
-      .map(id => jobsById.get(String(id))).filter((j): j is OutcomeJob => !!j)
+    const jobs = jobIdsOfPost(p)
+      .map(id => jobsById.get(id)).filter((j): j is OutcomeJob => !!j)
     const outcomes = jobs.flatMap(outcomesForJob)
     const live = outcomes.filter(o => o.status === 'published')
-    if (status === 'published' || live.length > 0) {
+    if (where === 'out' || live.length > 0) {
       return { status: 'published', at: live[0]?.at ?? jobs[0]?.published_at ?? null, outcomes }
     }
     return { status: 'scheduled', at: p.scheduled_for ?? jobs[0]?.scheduled_for ?? null, outcomes }
@@ -575,4 +607,285 @@ export function foldResends<J extends ResendJob>(jobs: readonly J[]): J[] {
 export function keepLive(stored: readonly PlatformOutcome[] | null | undefined, fresh: readonly PlatformOutcome[]): PlatformOutcome[] {
   const live = new Map((stored ?? []).filter(o => o.status === 'published').map(o => [o.platform, o]))
   return fresh.map(o => live.get(o.platform) ?? o)
+}
+
+/* ── THE POST'S OWN RECORD, PER NETWORK (the posting rebuild, 29 Sep 2026) ──
+ *
+ * Everything above reads a JOB. What follows turns the jobs of one booking into
+ * the POST's `outcomes` — `{[platform]: {status, url, at, error}}`, SPEC §2.1 —
+ * which the publish recorder (`production-publish.recordPostOutcome`) hands to
+ * the one writer of a post's stage as T16 / T17 / T18. It is the only place a
+ * post learns what happened to it, and it fixes four things the audit found:
+ *
+ *   S5   a 'duplicate' job (the provider says it is already live) counts as out
+ *   S15  a job marked published whose per-channel record still says scheduled
+ *        is read per network, not as one word for the whole post
+ *   V11  a re-send child speaks for its one network, over its parent's failure
+ *   L1   a link is kept only on the network it belongs to — the old recorder
+ *        put Instagram's link on LinkedIn's row
+ */
+
+/** A job as the post's record reads it: its own outcome, plus who it re-sends. */
+export type BookingJob = OutcomeJob & { id: string; resend_of?: string | null; created_at?: string | null }
+
+/**
+ * The jobs of one booking: the ids it holds, and every re-send made of any of
+ * them — found through `resend_of`, so a child nobody linked still counts
+ * (audit V11: post ff85fac3 held a8854fc7 only, while its children 54f9c381
+ * and fdb70988 went unseen by status and cancel).
+ */
+export function bookingJobs<J extends { id: string; resend_of?: string | null }>(
+  jobIds: readonly string[], all: readonly J[],
+): J[] {
+  const ids = new Set(jobIds.map(String))
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const j of all) {
+      if (!ids.has(j.id) && j.resend_of && ids.has(j.resend_of)) { ids.add(j.id); grew = true }
+    }
+  }
+  return all.filter(j => ids.has(j.id))
+}
+
+/** The re-sends of a booking its own `job_ids` do not list yet — what the recorder links (V11). */
+export function unlinkedJobs(jobIds: readonly string[], all: readonly { id: string; resend_of?: string | null }[]): string[] {
+  const held = new Set(jobIds.map(String))
+  return bookingJobs(jobIds, all).map(j => j.id).filter(id => !held.has(id))
+}
+
+const EXTRA_HOSTS: Record<string, readonly string[]> = {
+  youtube: ['youtube.com', 'youtu.be'],
+  twitter: ['twitter.com', 'x.com'],
+  threads: ['threads.net', 'threads.com'],
+  pinterest: ['pinterest.com', 'pin.it'],
+  bluesky: ['bsky.app'],
+  reddit: ['reddit.com', 'redd.it'],
+}
+
+/** The network a live link is on, or null for a host this does not know. */
+export function networkOfUrl(url: string | null | undefined): string | null {
+  const known = platformOfUrl(url)
+  if (known) return known
+  let host = ''
+  try { host = new URL(String(url ?? '')).hostname.toLowerCase().replace(/^(www|m|mobile)\./, '') } catch { return null }
+  for (const [network, hosts] of Object.entries(EXTRA_HOSTS)) {
+    if (hosts.some(h => host === h || host.endsWith(`.${h}`))) return network
+  }
+  return null
+}
+
+/**
+ * May this link stand for this network? Yes when its host is that network's;
+ * no when it is another network's (audit L1: a tiktok.com link on the LinkedIn
+ * row). A host nobody recognises — a short link — is kept only when the job
+ * went to that one network, so it cannot be anyone else's.
+ */
+export function urlBelongsTo(platform: string, url: string | null | undefined, onlyNetwork = false): boolean {
+  if (!url) return false
+  const owner = networkOfUrl(url)
+  if (owner) return owner === String(platform).toLowerCase()
+  return onlyNetwork
+}
+
+/** What a post says about a network the provider dropped without posting. */
+export const LOST_AT_PROVIDER = 'Cancelled at the publishing service — nothing was posted.'
+
+const POST_WENT_OUT: readonly PostOutcomeStatus[] = ['published', 'duplicate']
+
+function outcomeOfRow(o: PlatformOutcome, jobStatus: string, onlyNetwork: boolean): NetworkOutcome | null {
+  const url = urlBelongsTo(o.platform, o.url, onlyNetwork) ? o.url : null
+  switch (o.status) {
+    case 'published':
+      // a draft handed to the creator is not live anywhere (DRAFT_KIND)
+      if (o.kind === DRAFT_KIND) return { status: 'scheduled', url: null, at: o.at, error: null }
+      return { status: jobStatus === 'duplicate' ? 'duplicate' : 'published', url, at: o.at, error: null }
+    case 'failed':
+      return { status: 'failed', url: null, at: o.at, error: o.reason }
+    case 'queued': case 'scheduled':
+      // a job settled as published has every network out (the rule since 10
+      // Sep 2026); a per-network record still saying "scheduled" under it is
+      // a record nobody updated, not a network still waiting (audit S15)
+      if (jobStatus === 'published' || jobStatus === 'duplicate') {
+        return { status: jobStatus === 'duplicate' ? 'duplicate' : 'published', url, at: o.at, error: null }
+      }
+      return { status: 'scheduled', url: null, at: o.at, error: null }
+    case 'pending':
+      return { status: 'scheduled', url: null, at: o.at, error: null }
+    default:
+      // a cancelled job says nothing about the network
+      return null
+  }
+}
+
+/**
+ * What each network of a booking came to — the post's `outcomes`, and the
+ * networks the booking targeted (the `platforms` T16–T18 are judged on).
+ *
+ * Jobs are read oldest first, re-sends after the jobs they re-send, so the
+ * newest word per network wins — except that a network already live is never
+ * taken back: a stale "failed" from the provider about the ORIGINAL post never
+ * learns that a re-send went out (the double LinkedIn of 24 Sep 2026, keepLive).
+ *
+ * A cancelled job says nothing — unless it is in `lost`, the jobs the
+ * provider cancelled itself: those networks did not go out (T18 "the job was
+ * lost"), and saying nothing would leave the post booked for ever.
+ */
+export function postNetworkOutcomes(
+  jobs: readonly BookingJob[],
+  opts: { lost?: ReadonlySet<string> } = {},
+): { outcomes: Record<string, NetworkOutcome>; platforms: string[] } {
+  const lost = opts.lost ?? new Set<string>()
+  const ids = new Set(jobs.map(j => j.id))
+  const isChild = (j: BookingJob) => !!j.resend_of && ids.has(j.resend_of)
+  const ordered = [...jobs].sort((a, b) =>
+    Number(isChild(a)) - Number(isChild(b))
+    || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+
+  const targetsOfJob = (j: BookingJob) => [...new Set((Array.isArray(j.targets) ? j.targets : [])
+    .map(t => String(t?.platform ?? '').toLowerCase()).filter(Boolean))]
+  const roots = ordered.filter(j => !isChild(j))
+  const standing = roots.filter(j => j.status !== 'cancelled' || lost.has(j.id))
+  const platforms = [...new Set((standing.length ? standing : roots).flatMap(targetsOfJob))]
+
+  const out: Record<string, NetworkOutcome> = {}
+  const put = (platform: string, next: NetworkOutcome) => {
+    const had = out[platform]
+    if (had && POST_WENT_OUT.includes(had.status)) {
+      // live stays live; a later live word may only add the link
+      if (POST_WENT_OUT.includes(next.status) && !had.url && next.url) out[platform] = { ...had, url: next.url }
+      return
+    }
+    out[platform] = next
+  }
+  for (const job of ordered) {
+    const status = String(job.status ?? '')
+    const targets = targetsOfJob(job)
+    if (status === 'cancelled') {
+      if (!lost.has(job.id)) continue
+      for (const p of targets) {
+        if (platforms.includes(p)) put(p, { status: 'failed', url: null, at: job.updated_at ?? null, error: LOST_AT_PROVIDER })
+      }
+      continue
+    }
+    for (const o of outcomesForJob(job)) {
+      if (!platforms.includes(o.platform)) continue
+      const next = outcomeOfRow(o, status, targets.length === 1)
+      if (next) put(o.platform, next)
+    }
+  }
+  return { outcomes: out, platforms }
+}
+
+/** Are two sets of outcomes the same — so a sweep that learns nothing new writes nothing. */
+export function sameOutcomes(a: Record<string, NetworkOutcome>, b: Record<string, NetworkOutcome>): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const k of keys) {
+    const x = a[k], y = b[k]
+    if (!x || !y) return false
+    if (x.status !== y.status || (x.url ?? null) !== (y.url ?? null) || (x.error ?? null) !== (y.error ?? null)) return false
+  }
+  return true
+}
+
+/* ── the schedule rows, one per network ─────────────────────────────────── */
+
+export type ScheduleRowLike = {
+  id: string
+  platform?: string | null
+  scheduled_at?: string | null
+  live_url?: string | null
+  publish_status?: string | null
+  published_at?: string | null
+}
+
+export type ScheduleRowWrite =
+  | { kind: 'update'; id: string; patch: Record<string, unknown> }
+  | { kind: 'insert'; row: Record<string, unknown> }
+
+/**
+ * What each network's schedule row should now say — EXACTLY that network's
+ * row, with that network's link (audit V16, L1, L2: one published part used
+ * to mark every row of the card published, with one link on all of them).
+ *
+ *   - a network that went out: `published`, its own link, when it went out.
+ *     A link already there is kept unless it is another network's.
+ *   - a network still booked: its row carries the booking's time — never a
+ *     cancelled job's old one (audit L8: 48f70493 kept 41ee4e5d's time).
+ *   - a network that did not go out is never marked published; its row is
+ *     left as it is (the post's own `problem` says what happened).
+ *
+ * A row already marked published is not re-timed.
+ */
+export function scheduleRowWrites(
+  itemId: string,
+  outcomes: Record<string, NetworkOutcome>,
+  rows: readonly ScheduleRowLike[],
+  bookedFor: string | null,
+): ScheduleRowWrite[] {
+  const byPlatform = new Map<string, ScheduleRowLike>()
+  for (const r of rows) {
+    const p = String(r.platform ?? '').toLowerCase()
+    if (p && !byPlatform.has(p)) byPlatform.set(p, r)
+  }
+  const writes: ScheduleRowWrite[] = []
+  for (const [platform, o] of Object.entries(outcomes)) {
+    const row = byPlatform.get(platform)
+    if (POST_WENT_OUT.includes(o.status)) {
+      const keepLink = !!row?.live_url && urlBelongsTo(platform, row.live_url, true)
+      const url = keepLink ? row!.live_url! : o.url
+      const patch: Record<string, unknown> = { publish_status: 'published', published_at: row?.published_at ?? o.at ?? null }
+      if (url) patch.live_url = url
+      else if (row?.live_url) patch.live_url = null
+      if (!row?.scheduled_at && bookedFor) patch.scheduled_at = bookedFor
+      if (!row) { writes.push({ kind: 'insert', row: { item_id: itemId, platform, ...patch } }); continue }
+      const changed = Object.entries(patch).some(([k, v]) => ((row as Record<string, unknown>)[k] ?? null) !== v)
+      if (changed) writes.push({ kind: 'update', id: row.id, patch })
+      continue
+    }
+    if (o.status === 'scheduled' && bookedFor) {
+      if (!row) { writes.push({ kind: 'insert', row: { item_id: itemId, platform, scheduled_at: bookedFor, publish_status: 'scheduled' } }); continue }
+      if (row.publish_status !== 'published' && row.scheduled_at !== bookedFor) {
+        writes.push({ kind: 'update', id: row.id, patch: { scheduled_at: bookedFor } })
+      }
+    }
+  }
+  return writes
+}
+
+/* ── the time handed to the provider ────────────────────────────────────── */
+
+/** How late a booked job may still go out, as "now": the wait for a clean copy
+ *  or a retry after a bad few minutes (a post four minutes late beats one that
+ *  looks wrong — publish.ts, awaitCleanCopies). Past this it is not sent. */
+export const LATE_SEND_GRACE_MS = 15 * 60_000
+
+export const TIME_PASSED_UNSENT =
+  'The posting time passed before it could be sent, so it was not posted. Pick a new time and book it again.'
+
+/**
+ * What the provider is told about WHEN (the owner's decision 11). The provider
+ * publishes a time that has already passed AT ONCE, so a past time is never
+ * handed over:
+ *
+ *   now     — Post now (no time on the job), a re-send (the app's own prompt
+ *             retry, inside its 45-minute window), or a booked time only a few
+ *             minutes gone (LATE_SEND_GRACE_MS)
+ *   at      — a time still ahead: the provider holds it until then
+ *   refuse  — a booked time long gone: nothing is sent, and the post comes
+ *             back to Ready to post with the reason (T18)
+ */
+export function providerTiming(
+  job: { scheduled_for?: string | null; resend_of?: string | null },
+  now: Date = new Date(),
+): { send: 'now' } | { send: 'at'; at: string } | { send: 'refuse'; reason: string } {
+  if (!job.scheduled_for) return { send: 'now' }
+  const t = Date.parse(job.scheduled_for)
+  if (!Number.isFinite(t)) {
+    return { send: 'refuse', reason: 'The posting time on this job could not be read, so it was not posted. Pick a new time and book it again.' }
+  }
+  if (t > now.getTime()) return { send: 'at', at: new Date(t).toISOString() }
+  if (job.resend_of) return { send: 'now' }
+  if (now.getTime() - t <= LATE_SEND_GRACE_MS) return { send: 'now' }
+  return { send: 'refuse', reason: TIME_PASSED_UNSENT }
 }

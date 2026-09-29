@@ -176,11 +176,38 @@ export const publishDispatcher = inngest.createFunction(
     // Three reads collapsed into one step for the same billing reason as the
     // scan dispatcher. Each is independently idempotent, so a retry replaying
     // all three is safe.
-    const { reclaimed, corrected, ids } = await step.run('sweep', async () => ({
+    const { reclaimed, corrected, recorded, reminded, ids } = await step.run('sweep', async () => ({
       // rescue anything a dead worker left claimed, before looking for new work
       reclaimed: await reclaimStalePublishing(),
       // and correct anything the provider later reported as failed
       corrected: await reconcilePublishedJobs(),
+      // THE PUBLISH RECORDER'S BACKSTOP (the posting rebuild, 29 Sep 2026):
+      // every post still Booked in is recorded again from its jobs, so a
+      // webhook that never came, or a job that settled before its booking
+      // was written down, still reaches the post. Part of this existing
+      // function — no new function, so no re-sync (CLAUDE.md trap 5b).
+      // Never fails the sweep: -1 in the output means it could not run.
+      recorded: await (async () => {
+        try {
+          const { recordBookedOutcomes } = await import('../lib/production-publish')
+          return await recordBookedOutcomes()
+        } catch (e) {
+          console.error('[publish dispatcher] could not record booked posts:', e instanceof Error ? e.message : e)
+          return -1
+        }
+      })(),
+      // THE 24h AND 1h REMINDERS before a post's approve-by time (decision 11):
+      // the client's account managers are emailed, each reminder once (keyed on
+      // post, version and approve-by). Nothing moves. Same function, no re-sync.
+      reminded: await (async () => {
+        try {
+          const { sendApprovalReminders } = await import('../lib/post-notify')
+          return (await sendApprovalReminders()).sent
+        } catch (e) {
+          console.error('[publish dispatcher] could not send approval reminders:', e instanceof Error ? e.message : e)
+          return -1
+        }
+      })(),
       ids: await dueJobIds(),
     }))
     // `synced` is a deliberate canary: it appears in a run's output only once
@@ -189,13 +216,13 @@ export const publishDispatcher = inngest.createFunction(
     // and the Vercel integration is not syncing — the exact silent failure
     // that stopped every scheduled post between 31 Aug and 8 Sep. Cheap to
     // read (`/v1/events/<id>/runs`), and it costs one word per run.
-    if (ids.length === 0) return { due: 0, reclaimed, corrected, synced: '2026-09-08' }
+    if (ids.length === 0) return { due: 0, reclaimed, corrected, recorded, reminded, synced: '2026-09-08' }
 
     await step.sendEvent(
       'dispatch-publish',
       ids.map(id => ({ name: 'app/post.publish.requested', data: { jobId: id } }))
     )
-    return { due: ids.length, reclaimed, corrected, synced: '2026-09-08' }
+    return { due: ids.length, reclaimed, corrected, recorded, reminded, synced: '2026-09-08' }
   })
 )
 

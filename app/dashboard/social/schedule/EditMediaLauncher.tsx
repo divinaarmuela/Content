@@ -4,9 +4,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, Wand2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { editMediaFooterLine } from '@/app/lib/image-edit-core'
+import { draftPostsOf } from '@/app/lib/post-window-core'
+import { formatInZone } from '@/app/lib/timezone-core'
 import { Thumb } from './tiles'
 import type { ImageEditorTarget } from './ImageEditor'
-import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
+import type { RailMedia } from './useSchedulePosts'
+
+/** The few fields of a post this chooser reads. */
+type LauncherPost = {
+  id: string
+  item_id?: string | null
+  source_item_id?: string | null
+  stage?: string | null
+  caption?: string | null
+  scheduled_for?: string | null
+}
 
 /**
  * THE WAY IN TO THE IMAGE EDITOR.
@@ -23,14 +35,22 @@ import type { RailMedia, SchedulePostRow } from './useSchedulePosts'
  * for somebody already writing a post; this is the one for somebody looking
  * at the week who wants to fix a picture before anything is planned.
  *
+ * WHICH POST AN EDIT CHANGES (audit S10, 29 Sep 2026). Only a post that is
+ * still a DRAFT may take the edited picture — never a booked, posted or
+ * cancelled one, and never "the first post of the piece" by guesswork. One
+ * draft: that one. Several: the chooser asks which. None: the edit saves to
+ * the piece only.
+ *
  * It does not OWN the editor. There is exactly one editor on the page, opened
  * by whoever asks for it — this chooser, or the composer's own button — so a
  * picture edited from one place and a picture edited from the other cannot
  * behave differently, and two of them can never be open at once.
  */
-export default function EditMediaLauncher({ media, posts, mayApprove, className, onEdit }: {
+export default function EditMediaLauncher({ media, posts, mayApprove, className, onEdit, tz }: {
   media: RailMedia[]
-  posts: SchedulePostRow[]
+  posts: readonly LauncherPost[]
+  /** the client's zone, for the draft chooser's times */
+  tz?: string
   /** this person may schedule a post themselves — the footer says so */
   mayApprove: boolean
   className?: string
@@ -39,10 +59,31 @@ export default function EditMediaLauncher({ media, posts, mayApprove, className,
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
+  /** a picture whose piece has several drafts: which one should the edit change? */
+  const [which, setWhich] = useState<{ tile: { media: RailMedia; index: number }; drafts: LauncherPost[] } | null>(null)
+
+  const hand = (m: RailMedia, index: number, postId: string | null) => {
+    setOpen(false)
+    setWhich(null)
+    onEdit({
+      itemId: m.itemId,
+      title: m.title,
+      versionNumber: m.versionNumber,
+      slides: m.slides,
+      index,
+      postId,
+      clientApproved: m.clientApproved,
+    })
+  }
+  const pick = (m: RailMedia, index: number) => {
+    const drafts = draftPostsOf(posts, m.itemId)
+    if (drafts.length > 1) { setWhich({ tile: { media: m, index }, drafts }); return }
+    hand(m, index, drafts[0]?.id ?? null)
+  }
 
   useEffect(() => {
     if (!open) return
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setWhich(null) } }
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
   }, [open])
@@ -57,12 +98,11 @@ export default function EditMediaLauncher({ media, posts, mayApprove, className,
         media: m,
         slide,
         index,
-        postId: posts.find(p => p.item_id === m.itemId)?.id ?? null,
       })))
       .filter(t => !needle
         || t.media.title.toLowerCase().includes(needle)
         || t.slide.name.toLowerCase().includes(needle))
-  }, [media, posts, q])
+  }, [media, q])
 
   return (
     <>
@@ -132,18 +172,7 @@ export default function EditMediaLauncher({ media, posts, mayApprove, className,
                     <button
                       key={t.key}
                       type="button"
-                      onClick={() => {
-                        setOpen(false)
-                        onEdit({
-                          itemId: t.media.itemId,
-                          title: t.media.title,
-                          versionNumber: t.media.versionNumber,
-                          slides: t.media.slides,
-                          index: t.index,
-                          postId: t.postId,
-                          clientApproved: t.media.clientApproved,
-                        })
-                      }}
+                      onClick={() => pick(t.media, t.index)}
                       className="group relative flex aspect-[4/5] flex-col overflow-hidden rounded-tile border border-border bg-foreground/[0.06] text-left hover:shadow-md"
                     >
                       <Thumb
@@ -165,8 +194,27 @@ export default function EditMediaLauncher({ media, posts, mayApprove, className,
               )}
             </div>
 
+            {which && (
+              <div role="group" aria-label="Which post should this change?" className="flex flex-col gap-2 rounded-inner border border-accent-blue/50 bg-tint-blue/40 p-3">
+                <p className="text-[13px] font-semibold">
+                  “{which.tile.media.title}” has {which.drafts.length} draft posts. Which one should this edit change?
+                </p>
+                {which.drafts.map(d => (
+                  <button key={d.id} type="button" onClick={() => hand(which.tile.media, which.tile.index, d.id)}
+                    className="min-h-11 rounded-full border border-border bg-surface px-3 text-left text-[13px] font-semibold hover:bg-muted">
+                    {(d.caption ?? '').trim().slice(0, 60) || 'A draft with no caption yet'}
+                    {d.scheduled_for && tz ? <span className="font-normal text-muted-foreground"> · {formatInZone(d.scheduled_for, tz, 'full')}</span> : null}
+                  </button>
+                ))}
+                <button type="button" onClick={() => hand(which.tile.media, which.tile.index, null)}
+                  className="min-h-11 rounded-full border border-border bg-surface px-3 text-left text-[13px] font-semibold hover:bg-muted">
+                  None of them — only the piece&rsquo;s file
+                </button>
+              </div>
+            )}
+
             <p className="text-[12px] text-muted-foreground">
-              {editMediaFooterLine(mayApprove)}
+              {editMediaFooterLine(mayApprove)} An edit changes a post only while that post is a draft.
             </p>
           </div>
         </div>

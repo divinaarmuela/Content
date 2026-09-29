@@ -13,7 +13,16 @@
  * card (`content_items.posted_slides`) is written by the server from these.
  */
 
-export type PostLike = { status?: unknown; slides?: unknown; publish_job_ids?: unknown }
+export type PostLike = {
+  /** THE post's stage (`social_posts.stage`) — what decides, whenever the row has one */
+  stage?: unknown
+  /** the legacy column: read ONLY for a row the migration has not given a stage yet */
+  status?: unknown
+  slides?: unknown
+  /** per network: `per_channel[account].slides` — a network with its own files takes those too */
+  per_channel?: unknown
+  publish_job_ids?: unknown
+}
 export type SlideLike = { url: string }
 
 export type PostedSlides = {
@@ -29,33 +38,65 @@ export type PostedSlides = {
   hand?: { url: string; at: string; link: string | null }[]
 }
 
-const urlsOf = (p: PostLike): string[] =>
-  (Array.isArray(p.slides) ? p.slides : [])
+const listOf = (v: unknown): unknown[] =>
+  Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v as Record<string, unknown>) : []
+const slideUrls = (v: unknown): string[] =>
+  listOf(v)
     .map(s => (s && typeof s === 'object' ? String((s as { url?: unknown }).url ?? '') : ''))
     .filter(Boolean)
+/** every file the post holds: its shared slides and any network's own */
+const urlsOf = (p: PostLike): string[] => {
+  const out = new Set(slideUrls(p.slides))
+  for (const extras of listOf(p.per_channel)) {
+    if (extras && typeof extras === 'object') for (const u of slideUrls((extras as { slides?: unknown }).slides)) out.add(u)
+  }
+  return [...out]
+}
 
-/** urls in a post that is BOOKED or LIVE — not free to post again. A draft,
- *  or a post still waiting on an approval, holds nothing: the owner, 9 Sep
- *  2026, "I only see two items but the approved card had five" — a forgotten
- *  draft had swallowed the other three. */
+/**
+ * THE STAGES THAT HOLD A POST'S FILES (SPEC §4.3, audit S6): once a post is
+ * sent for quality check its files are spoken for, until it is cancelled. A
+ * draft holds nothing — "a forgotten draft had swallowed the other three"
+ * (the owner, 9 Sep 2026) — and a cancelled post gives its files back.
+ */
+export const STAGES_HOLDING_FILES = ['quality_check', 'with_client', 'ready', 'booked', 'posted'] as const
+const STAGES = ['draft', 'quality_check', 'with_client', 'ready', 'booked', 'posted', 'cancelled']
+const stageOf = (p: PostLike): string | null => (STAGES.includes(String(p.stage ?? '')) ? String(p.stage) : null)
+
+/**
+ * urls in a post that holds them — not free to post again. Read off the
+ * post's STAGE: a failed booking comes back to Ready to post and still holds
+ * its files (it is re-timed, not remade), and a cancelled post lets them go.
+ * The old rule read `status`, which stayed 'scheduled' after a job failed or
+ * was cancelled, so the rail kept files nobody could reach (audit S6).
+ *
+ * A row with no stage yet (before the migration, package P8) is read the old
+ * way — booked or published — so the server and the portal behave the same
+ * until every row has one.
+ */
 export function takenSlideUrls(posts: readonly PostLike[]): Set<string> {
   const out = new Set<string>()
   for (const p of posts) {
-    const s = String(p.status ?? '')
-    if (s !== 'scheduled' && s !== 'published') continue
+    const stage = stageOf(p)
+    const holds = stage
+      ? (STAGES_HOLDING_FILES as readonly string[]).includes(stage)
+      : ['scheduled', 'published'].includes(String(p.status ?? ''))
+    if (!holds) continue
     for (const u of urlsOf(p)) out.add(u)
   }
   return out
 }
 
-/** urls that a post actually PUBLISHED — its own row says so, or one of the
+/** urls that a post actually PUBLISHED — its stage is Posted, or one of the
  *  publish jobs it carries has (`publishedJobIds`), which is how the live
- *  system records it */
+ *  system records it the moment it happens. A row with no stage yet is read
+ *  by its old `status`. */
 export function publishedSlideUrls(posts: readonly PostLike[], publishedJobIds: ReadonlySet<string> = new Set()): Set<string> {
   const out = new Set<string>()
   for (const p of posts) {
-    const jobs = (Array.isArray(p.publish_job_ids) ? p.publish_job_ids : []).map(String)
-    const live = String(p.status ?? '') === 'published' || jobs.some(j => publishedJobIds.has(j))
+    const jobs = listOf(p.publish_job_ids).map(String)
+    const stage = stageOf(p)
+    const live = (stage ? stage === 'posted' : String(p.status ?? '') === 'published') || jobs.some(j => publishedJobIds.has(j))
     if (!live) continue
     for (const u of urlsOf(p)) out.add(u)
   }

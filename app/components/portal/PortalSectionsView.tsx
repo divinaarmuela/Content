@@ -32,7 +32,8 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
   const token = 'token' in surface ? surface.token : null
   const theme = pickPortalTheme(data.brand as Parameters<typeof pickPortalTheme>[0])
   const accent = theme.branded ? { background: theme.accent, color: theme.accentInk } : undefined
-  const work = data.cards.filter(c => c.kind === 'work')
+  // pieces and posts: a post card sits in its section exactly as a piece does
+  const work = data.cards.filter(c => c.kind !== 'shoot')
   const shoots = data.cards.filter(c => c.kind === 'shoot')
   const sections = portalSections(work)
   const counts = heroCounts(data.cards, data.post_approvals)
@@ -111,7 +112,7 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
       {/* the finished POST — the pictures, the words and the hour, as each
           network will show them. It sits ABOVE the work review because it is
           the last thing anybody is waiting on before it goes out. */}
-      <PortalPostApprovals items={data.post_approvals} surface={surface} accent={accent} />
+      <PortalPostApprovals items={data.post_approvals} missed={data.posts_missed} surface={surface} accent={accent} />
 
       {grid('review')}
 

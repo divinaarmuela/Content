@@ -4,39 +4,46 @@
  * THE SCHEDULE PAGE'S DATA, LIVE.
  *
  * Every row the calendar draws comes from a Realtime Database listener, not
- * from a fetch: a post that somebody approves, queues or cancels in another
- * tab has to appear on this week without anyone pressing anything. That is
- * the same discipline `useLiveWork` brought to the three boards, applied to
- * the tables a post is made of:
+ * from a fetch: a post that somebody books, moves or cancels in another tab
+ * has to appear on this week without anyone pressing anything.
  *
- *   social_posts    the tiles
- *   content_items   what the post IS, and whether the client approved it
- *   publish_jobs    whether it went out
+ *   social_posts    the tiles — each read by `readPostState`, off its own STAGE
+ *   content_items   the media rail, and a post's title
  *   asset_versions  the media a post can be made from
  *   social_accounts the client's channels — the avatars in the profiles bar
  *   schedule_notes  the team's own notes pinned to a day
  *   batches, work_kinds, team_user_clients   what this viewer may see
  *
- * NOTHING HERE DECIDES ANYTHING. The join — this post's jobs, the status it
- * wears, the networks it goes to, what is blocking it — is `postTileFacts` in
- * `social-schedule-core`, pure and tested. What this viewer may see is
- * `scope-client`'s `visibleItems` with the shared `scopeContextOf`, the same
- * pair the items API and the boards use. This file subscribes and assembles.
+ * WHERE A POST STANDS IS `social_posts.stage` AND NOTHING ELSE (the posting
+ * rebuild, 29 Sep 2026). The old join worked a tile's state out of the edit
+ * card's `posting_approval_state` and the publish jobs, and drew a draft
+ * nobody approved as green "Approved" (audit S2) and a live post as not
+ * posted (audit S5). No edit card, no job and no `status` column is read to
+ * decide anything here: the words, the colours and the buttons all come from
+ * `post-stage-core`, through `schedule-stage-core`.
+ *
+ * NOTHING HERE DECIDES ANYTHING. What this viewer may see is `scope-client`'s
+ * `visibleItems` with the shared `scopeContextOf`, the same pair the items API
+ * and the boards use. This file subscribes and assembles.
  */
 
-import { waitingOnWords } from '../../../lib/post-to-client-core'
 import { DELIVER_ONLY_REASON, deliverOnly } from '@/app/lib/deliver-only-core'
 import { folderOf } from '@/app/lib/card-link-core'
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTable } from '@/lib/db-client'
 import type {
-  AssetVersion, Batch, BatchComment, Client, ClientContact, ContentItem, ItemComment, PublishJob, ScheduleNote,
+  AssetVersion, Batch, BatchComment, Client, ClientContact, ContentItem, ItemComment, ScheduleNote,
   SocialAccount, SocialPost, TeamUserClient, WorkflowActivity, WorkKind,
 } from '@/lib/db-types'
 import {
   assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility, type Eligibility,
-  postTileFacts, type SocialPostStatus, type TileJob, type TileTone,
+  postPlatforms,
 } from '@/app/lib/social-schedule-core'
+import {
+  anyNetworkLive, hatsFor, readPostState,
+  type AccountRef, type OfferedAction, type PostStage, type PostState, type Viewer,
+} from '@/app/lib/post-stage-core'
+import { binAction, moveBlockReason, scheduleFacts, type ScheduleFacts } from '@/app/lib/schedule-stage-core'
 import { safeZone } from '@/app/lib/timezone-core'
 import { isAdHocUploadVersion } from '@/app/lib/schedule-upload-core'
 import {
@@ -44,27 +51,35 @@ import {
 } from '@/app/lib/scope-client'
 import { slidesOf, type Slide } from '@/app/lib/version-files-core'
 import { postedLine, readPostedSlides, remainingSlides, takenSlideUrls } from '@/app/lib/posted-slides-core'
-import { outcomesForJob, type OutcomeJob, type PlatformOutcome } from '@/app/lib/post-outcome-core'
 
-/** A post as the calendar draws it: the row, its media, and the status, tone
- *  and networks the core gives it once the item and the jobs are read too. */
-export type SchedulePostRow = SocialPost & {
+/**
+ * A post as the calendar draws it: the row, the typed stage the rules read,
+ * and what the page says about it NOW (the page's minute clock feeds `facts`,
+ * so a time missed while the page is open shows as missed — audit S12).
+ */
+export type SchedulePostRow = Omit<SocialPost, 'slides' | 'channels' | 'publish_job_ids' | 'outcomes' | 'source_deleted'> & {
+  /** the post as `post-stage-core` reads it — the one source of truth */
+  state: PostState
+  /** `state.stage`, lifted for the views and the filters */
+  stage: PostStage
   slides: Slide[]
   /** the account ids the row stores — what the channel filter matches on */
   channels: string[]
-  /** the NETWORKS those accounts are on — what a logo is drawn from */
+  /** the NETWORKS those accounts are on — every one gets a logo (audit S14) */
   platforms: string[]
-  publish_job_ids: string[]
-  live_status: SocialPostStatus
-  /** "Waiting on Jordan Wilson · emailed 28 Sep, 12:40 pm" — who a post waiting on a yes is waiting on (28 Sep 2026) */
-  waiting_on?: string | null
-  tone: TileTone
+  /** the edit card's title, or the caption's first words when there is no card */
   item_title: string | null
   item_type: string | null
-  /** the one sentence the server would refuse to post with, or null */
-  block_reason: string | null
-  /** what each channel did with it — went out, booked, refused (post-outcome-core) */
-  outcomes: PlatformOutcome[]
+  /** the edit card this came from was deleted — the post still shows (audit S9) */
+  source_deleted: boolean
+  /** words, colour, missed, alerts, per-network lines — worked out at `now` */
+  facts: ScheduleFacts
+  /** the sentence that stops a drag to a new time, or null (from `postActions`) */
+  move_block: string | null
+  /** the bin: "Delete draft" on a never-sent draft, "Cancel post" elsewhere, or null */
+  bin: OfferedAction | null
+  /** the booked jobs, from `booking.job_ids` */
+  publish_job_ids: string[]
 }
 
 /** One card in the media rail: an approved item's media, or the plain reason
@@ -82,11 +97,12 @@ export type RailMedia = {
   /** why not, in the words a person would use */
   reason: string | null
   /**
-   * Usable, but the client has not seen it yet.
+   * Usable, but the client has not seen the EDIT yet.
    *
-   * Only ever true for an account manager or a super admin: they may post it
-   * (the app does the sign-off for them when it goes out), and the card wears
-   * a quiet marker so they know what they are posting. Never a block.
+   * Only ever true for an account manager or a super admin. The card wears a
+   * quiet marker so they know what they are making a post of. Never a block,
+   * and never an approval: the post itself still goes through the quality
+   * check (the owner's decision 3).
    */
   needsClientApproval: boolean
   /**
@@ -98,21 +114,23 @@ export type RailMedia = {
    * client has seen it. The image editor's footer is written from this.
    */
   clientApproved: boolean
-  /** where the piece is in the funnel — what says whether a manager may sign
-   *  it off without the client from here */
+  /** where the piece is in the funnel */
   status: string
   /** the pieces were approved ON THE BOARD (Draft → Internal check → With
-   *  client → Ready to post), so whoever schedules them just schedules them —
-   *  no second approval. False for a file uploaded straight onto Schedule. */
+   *  client → Ready to post). False for a file uploaded straight onto Schedule. */
   boardApproved: boolean
-  /** the version the client would be approving, for the question they are
-   *  asked before one is skipped */
+  /** the version the client would be approving */
   versionNumber: number | null
-  /** does THIS CLIENT sign every post off (`clients.client_approval_required`)
-   *  — the one client the short cut does not exist on, for anybody */
+  /** does THIS CLIENT sign every post off (`clients.client_approval_required`) */
   clientSignsOff: boolean
-  /** a post already uses this item — one post, one item */
+  /** every file of this piece is in a post already */
   used: boolean
+  /**
+   * A post made from this piece is Booked in, or has gone out on a network:
+   * the piece cannot be removed until its posts come off the schedule
+   * (SPEC §4.3). The Remove button still shows, with that reason beside it.
+   */
+  holdsBooking?: boolean
   /** "2 of 4 posted" while a piece is part-way out (posted-slides-core) */
   posted: string | null
   /** the Drive folder a scheduler was handed to post from (the card's link),
@@ -122,28 +140,19 @@ export type RailMedia = {
    * Every file this piece has EVER held, across every version.
    *
    * Not decoration: it is how the composer tells "somebody brought a new file
-   * in" from "somebody dragged slide 3 to the front". Judging that against the
-   * APPROVED files alone said "all new" the moment the piece went back to the
-   * client, and every reorder after that made another version.
+   * in" from "somebody dragged slide 3 to the front".
    */
   knownUrls: string[]
   /**
-   * The cover picture somebody chose in the image editor, if they did.
-   *
-   * Not the same thing as `cover` above, which is the tile's thumbnail — this
-   * is the frame that goes OUT with a video, saved on the version and sent as
-   * the post's `thumbnailUrl`. It is here so the composer can say the cover is
-   * already set rather than showing an empty box next to a decision somebody
-   * already made.
+   * The cover picture somebody chose in the image editor, if they did — the
+   * frame that goes OUT with a video, sent as the post's `thumbnailUrl`.
    */
   coverUrl: string | null
   updatedAt: string
 }
 
-const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
-
-/** The statuses that mean the work is sitting with someone for approval —
- *  the rail's footer count. */
+const asArray = <T,>(v: unknown): T[] =>
+  (Array.isArray(v) ? (v as T[]) : v && typeof v === 'object' ? (Object.values(v) as T[]) : [])
 
 export type ScheduleData = {
   /** the clients this person may pick between, by name */
@@ -151,6 +160,7 @@ export type ScheduleData = {
   client: Client | null
   /** the client's zone — every day key and every time on the page is in it */
   tz: string
+  /** every post of this client that has a stage — the views choose which to draw */
   posts: SchedulePostRow[]
   notes: ScheduleNote[]
   accounts: SocialAccount[]
@@ -158,11 +168,11 @@ export type ScheduleData = {
   /** the client's people — a connection can be one of theirs (15 Sep 2026) */
   contacts: ClientContact[]
   media: RailMedia[]
-  /** this client signs every post off themselves — nobody skips the wait */
+  /** this client signs every post off themselves (clients.client_approval_required) */
   clientSignsOff: boolean
-  /** …and so this viewer may post with no approval step in the way */
+  /** …and so this viewer may use media the client has not signed off yet */
   postWithoutApproval: boolean
-  /** how many pieces are still with someone for approval */
+  /** posts still being approved — they live on Post approval; this page only counts them */
   waiting: number
   loading: boolean
   error: string | null
@@ -174,11 +184,21 @@ export type ScheduleData = {
  * `clientId` may be null before a client is picked: the client list and the
  * viewer's scope are still worked out, so the picker can be drawn, and the
  * per-client listeners simply return nothing.
+ *
+ * `now` is the page's clock. Pass the minute tick: the words a tile wears
+ * ("Missed — needs a new time") depend on it, and a clock read once when the
+ * data loaded froze them (audit S12). A caller with no clock gets the time of
+ * its render.
  */
 export function useSchedulePosts(
-  viewer: ScopeViewer | null,
+  viewer: (ScopeViewer & Viewer) | null,
   clientId: string | null,
+  now?: number,
 ): ScheduleData {
+  // no clock given: the time of the first render, held — a fresh Date.now()
+  // on every render would make every row new on every render
+  const [mounted] = useState(() => Date.now())
+  const clock = now ?? mounted
   const byClient = useMemo(() => ({ client_id: clientId ?? '' }), [clientId])
   const on = Boolean(clientId)
 
@@ -186,7 +206,6 @@ export function useSchedulePosts(
   // `client_id` is an indexed column, so this is one client's items rather
   // than a live subscription to every client's work in every browser
   const items = useTable<ContentItem>('content_items', { by: byClient, enabled: on })
-  const jobs = useTable<PublishJob>('publish_jobs', { by: byClient, enabled: on })
   // `asset_versions` carries no client_id, so it cannot be narrowed the same
   // way — the boards read it whole today (`useLiveWork.ts`'s `versions`), and
   // this follows that precedent rather than inventing a second answer
@@ -234,6 +253,10 @@ export function useSchedulePosts(
   const itemById = useMemo(
     () => new Map(scopedItems.map(i => [i.id, i])), [scopedItems])
 
+  /** every edit card of this client, visible or not — to tell "deleted" from "not yours to see" */
+  const clientItemIds = useMemo(
+    () => new Set(items.rows.filter(i => i.client_id === clientId).map(i => i.id)), [items.rows, clientId])
+
   /** every version of every item on screen, newest first inside each item */
   const versionsByItem = useMemo(() => {
     const out = new Map<string, AssetVersion[]>()
@@ -271,10 +294,9 @@ export function useSchedulePosts(
    *
    * TWO lists, on purpose. The profiles bar and the composer offer only
    * channels that WORK (`liveAccounts`), because offering a revoked one is
-   * offering something that cannot happen. The tiles are drawn from all of
+   * offering something that cannot happen. The tiles are read against all of
    * them, because a post already booked onto a channel that has since been
-   * revoked has to be able to SAY so — and a tile drawn from the live-only
-   * list would simply lose the logo and show nothing wrong.
+   * revoked has to be able to SAY so, in red, not only in a hover (audit S13).
    */
   const clientAccounts = useMemo(
     () => accounts.rows.filter(a => a.client_id === clientId),
@@ -282,49 +304,90 @@ export function useSchedulePosts(
   const liveAccounts = useMemo(
     () => clientAccounts.filter(a => a.active), [clientAccounts])
 
-  /** the tiles — each carrying the status the CORE gives it, never the stored
-   *  one on its own: an approval or a job may have moved since it was written */
-  const tiles: SchedulePostRow[] = useMemo(() => {
-    const jobsById = new Map<string, TileJob>(
-      jobs.rows.filter(j => j.client_id === clientId).map(j => [j.id, j as TileJob]))
-    return posts.rows
-      .filter(row => row.client_id === clientId)
-      // A post whose ITEM this person may not see is not drawn at all. Drawing
-      // it anyway showed the media and the time off the post row while
-      // `mirrorStatus(null, …)` called a scheduled post a draft — a tile that
-      // is wrong twice over, on work that was not this person's to look at.
-      .filter(row => itemById.has(row.item_id))
-      .map(row => {
-        const item = itemById.get(row.item_id)!
-        const facts = postTileFacts(row, item, jobsById, clientAccounts)
-        const jobIds = asArray<string>(row.publish_job_ids).map(String)
-        // per channel: the list row says "Instagram went out, TikTok did
-        // not" rather than one word for the lot
-        const outcomes = jobIds
-          .map(id => jobsById.get(id) as unknown as OutcomeJob | undefined)
-          .filter((j): j is OutcomeJob => !!j)
-          .flatMap(outcomesForJob)
-        return {
-          ...row,
-          slides: asArray<Slide>(row.slides),
-          channels: asArray<string>(row.channels).map(String),
-          publish_job_ids: jobIds,
-          item_title: (item.title as string | null) ?? null,
-          waiting_on: facts.live_status === 'pending' ? waitingOnWords(item as never, client?.name as string | null, tz, row.scheduled_for as string | null) : null,
-          item_type: (item.content_type as string | null) ?? null,
-          ...facts,
-          outcomes,
-        }
-      })
-      .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
-  }, [posts.rows, jobs.rows, itemById, liveAccounts, clientId])
+  /** the channels as the rules read them: connected or not, by network */
+  const accountRefs: AccountRef[] = useMemo(
+    () => clientAccounts.map(a => ({
+      id: a.id,
+      platform: String(a.platform ?? ''),
+      live: a.active !== false,
+      name: (a as { name?: string | null }).name ?? null,
+    })),
+    [clientAccounts])
+
+  /** the posts, typed once — the time-free half, so the clock tick does not re-read every row */
+  const typed = useMemo(() => {
+    const out: { row: SocialPost; state: PostState }[] = []
+    for (const row of posts.rows) {
+      if (row.client_id !== clientId) continue
+      // a row the migration has not given a stage yet is not drawn: guessing
+      // one from its old columns is the bug this rebuild removes
+      const state = readPostState(row as unknown as Record<string, unknown>)
+      if (!state) continue
+      const source = state.source_item_id
+      // the edit card exists but this person may not see it: not drawn. A
+      // DELETED card hides nothing — posting history and failures stay on
+      // the calendar (audit S9)
+      if (source && clientItemIds.has(source) && !itemById.has(source)) continue
+      out.push({ row, state })
+    }
+    return out
+  }, [posts.rows, clientId, clientItemIds, itemById])
 
   /**
-   * DOES THIS CLIENT SIGN EVERY POST OFF, AND MAY THIS PERSON SKIP THE WAIT?
+   * The rows handed out last time, by post id. The clock ticks every minute,
+   * and a row object that is new every minute is a post window that re-seeds
+   * itself under somebody's typing (audit W1). So a row whose post, card and
+   * words have not changed is handed back as the SAME object, and the list as
+   * the same array.
+   */
+  const lastRows = useRef<{ list: SchedulePostRow[]; byId: Map<string, { sig: string; raw: SocialPost; row: SchedulePostRow }> }>({ list: [], byId: new Map() })
+
+  /** the tiles, at `now` — the clock is a dependency on purpose: "Missed" has to appear the minute it becomes true */
+  const tiles: SchedulePostRow[] = useMemo(() => {
+    const fresh = typed.map(({ row, state }) => {
+      const item = state.source_item_id ? itemById.get(state.source_item_id) ?? null : null
+      const hats = hatsFor(viewer, state)
+      const firstLine = state.caption.trim().split('\n')[0]?.slice(0, 60) || null
+      const cardGone = !!state.source_item_id && !items.loading && !clientItemIds.has(state.source_item_id)
+      return {
+        ...row,
+        state,
+        stage: state.stage,
+        slides: state.slides,
+        channels: state.channels,
+        platforms: postPlatforms(state.channels, clientAccounts),
+        item_title: (item?.title as string | null | undefined) || firstLine,
+        item_type: (item?.content_type as string | null | undefined) ?? null,
+        source_deleted: state.source_deleted || cardGone,
+        facts: scheduleFacts(state, accountRefs, clock),
+        move_block: moveBlockReason(state, hats, clock),
+        bin: binAction(state, hats, clock),
+        publish_job_ids: state.booking?.job_ids ?? [],
+      } satisfies SchedulePostRow
+    })
+      .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
+
+    const byId = new Map<string, { sig: string; raw: SocialPost; row: SchedulePostRow }>()
+    let same = fresh.length === lastRows.current.list.length
+    const list = fresh.map((row, i) => {
+      const raw = typed.find(t => t.state.id === row.state.id)!.row
+      const sig = JSON.stringify([row.facts, row.move_block, row.bin, row.platforms, row.item_title, row.item_type, row.source_deleted])
+      const prev = lastRows.current.byId.get(row.state.id)
+      const keep = prev && prev.raw === raw && prev.sig === sig ? prev.row : row
+      if (keep !== lastRows.current.list[i]) same = false
+      byId.set(row.state.id, { sig, raw, row: keep })
+      return keep
+    })
+    const out = same ? lastRows.current.list : list
+    lastRows.current = { list: out, byId }
+    return out
+  }, [typed, itemById, clientItemIds, items.loading, clientAccounts, accountRefs, viewer, clock])
+
+  /**
+   * MAY THIS PERSON USE MEDIA THE CLIENT HAS NOT SIGNED OFF YET?
    *
-   * Two questions the rail, the pickers and the composer all ask, answered
-   * once here so they cannot disagree with each other — or with the server,
-   * which asks the same pair of pure functions of the same two rows.
+   * About the EDIT only — which pieces the rail offers to make a post from.
+   * It never approves a post: every post still goes through the quality check.
    */
   const clientSignsOff = clientSignsOffEveryPost(client)
   const postWithoutApproval = mayPostWithoutApproval(viewer?.role ?? null, clientSignsOff)
@@ -339,13 +402,17 @@ export function useSchedulePosts(
         const elig: Eligibility = deliverOnly(item as { deliver_only?: unknown }, client as { posts_own_content?: unknown } | null)
           ? { ok: false, reason: DELIVER_ONLY_REASON }
           : postingEligibility(item, itemVersions, postWithoutApproval)
-        // A PIECE POSTED IN PARTS (9 Sep 2026): a file already in a post that
-        // is booked or live, or marked posted by hand, is not offered again;
-        // what is left is what the next post is made of
-        const own = posts.rows.filter(p => p.item_id === item.id)
+        // A PIECE POSTED IN PARTS (9 Sep 2026): a file already held by a post
+        // — by that post's STAGE, never its old status (audit S6) — or marked
+        // posted by hand, is not offered again
+        const own = posts.rows.filter(p => (p.source_item_id ?? p.item_id) === item.id)
         const gone = takenSlideUrls(own)
         for (const u of readPostedSlides((item as { posted_slides?: unknown }).posted_slides)?.urls ?? []) gone.add(u)
         const slides = elig.ok ? remainingSlides(elig.slides, gone) : []
+        const holdsBooking = own.some(p => {
+          const st = readPostState(p as unknown as Record<string, unknown>)
+          return !!st && (st.stage === 'booked' || anyNetworkLive(st))
+        })
         return {
           itemId: item.id,
           forContactId: (item as { for_contact_id?: string | null }).for_contact_id ?? null,
@@ -363,8 +430,9 @@ export function useSchedulePosts(
           clientSignsOff,
           versionNumber: itemVersions.reduce(
             (best, v) => Math.max(best, Number(v?.version_number ?? 0)), 0) || null,
-          // "used" now means nothing left to post — every file is in a post
+          // "used" means nothing left to post — every file is in a post
           used: elig.ok && elig.slides.length > 0 && slides.length === 0,
+          holdsBooking,
           posted: postedLine(readPostedSlides((item as { posted_slides?: unknown }).posted_slides)),
           driveFolderUrl: folderOf(item as Parameters<typeof folderOf>[0])?.kind === 'drive' ? folderOf(item as Parameters<typeof folderOf>[0])!.url : null,
           knownUrls: [...new Set(itemVersions.flatMap(v => slidesOf(v).map(sl => sl.url)))],
@@ -374,11 +442,11 @@ export function useSchedulePosts(
       })
       .sort((a, b) =>
         Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
-  }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff])
+  }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff, client])
 
-  /** posts waiting on a yes — what the rail's "Waiting for approval" counts and opens (28 Sep 2026) */
+  /** posts still being approved — they live on Post approval; this page only counts them */
   const waiting = useMemo(
-    () => tiles.filter(p => p.live_status === 'pending').length,
+    () => tiles.filter(p => p.stage === 'quality_check' || p.stage === 'with_client').length,
     [tiles])
 
   // The page waits only on what the tiles are made of. Versions and accounts
@@ -386,11 +454,11 @@ export function useSchedulePosts(
   // rather than the week blank.
   const loading = viewer === null
     || clients.loading
-    || (on && (posts.loading || items.loading || jobs.loading))
+    || (on && (posts.loading || items.loading))
 
   // A listener that could not read is a FAILURE, not an empty week — an empty
   // calendar drawn over a dropped subscription looks like an answer.
-  const error = posts.error || items.error || jobs.error || clients.error || null
+  const error = posts.error || items.error || clients.error || null
 
   return useMemo(() => ({
     clients: pickable,
@@ -409,7 +477,7 @@ export function useSchedulePosts(
     loading,
     error,
   }), [
-    pickable, client, tz, tiles, notes.rows, liveAccounts, media,
+    pickable, client, tz, tiles, notes.rows, liveAccounts, clientAccounts, contacts.rows, media,
     clientSignsOff, postWithoutApproval, waiting, loading, error, clientId,
   ])
 }

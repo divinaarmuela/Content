@@ -21,6 +21,7 @@ import {
   APPROVED_TOAST, PLAN_APPROVED_TOAST, amPhrase, approveConsequence, changesSentToast,
 } from '../../lib/portal-words'
 import { PostMetricsRow } from './PortalSections'
+import PortalPostCard from './PortalPostCard'
 
 /**
  * ONE CARD ON THE CLIENT'S PORTAL — a piece of work or a shoot.
@@ -57,14 +58,23 @@ const TONE: Record<NonNullable<PortalCard['tone']>, string> = {
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
-export function PortalCardView({ card, amName, accent, surface, className }: {
+type CardProps = {
   card: PortalCard
   amName: string | null
   /** the client's brand colour on the Approve button, when they have one */
   accent?: React.CSSProperties
   surface: Surface
   className?: string
-}) {
+}
+
+/** One card: a POST is drawn from its stage (PortalPostCard); a piece of work or a shoot as before. */
+export function PortalCardView(props: CardProps) {
+  return props.card.kind === 'post'
+    ? <PortalPostCard card={props.card} surface={props.surface} className={props.className} />
+    : <WorkOrShootCard {...props} />
+}
+
+function WorkOrShootCard({ card, amName, accent, surface, className }: CardProps) {
   const router = useRouter()
   const token = 'token' in surface ? surface.token : null
   const ink = card.tone === 'ink'
@@ -150,7 +160,7 @@ export function PortalCardView({ card, amName, accent, surface, className }: {
       toast.success(action === 'approve'
         ? (card.kind === 'shoot' ? PLAN_APPROVED_TOAST : APPROVED_TOAST)
         : changesSentToast(amName))
-      setActed(actedLine(card.kind, action))
+      setActed(actedLine(card.kind === 'shoot' ? 'shoot' : 'work', action))
       setAsking(false)
       setNote('')
       refresh()

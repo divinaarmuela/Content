@@ -27,10 +27,9 @@ import { roundOf } from './edit-round-core'
 import { hasFinishedWork } from './final-files-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
-import {
-  awaitsClientPostApproval, mayApprovePost, parseApprovalState,
-} from './posting-approval-core'
 import type { Role } from './identity-core'
+import { hatsFor, waitingOnViewer as postWaitingOnViewer, type NowLike, type PostState } from './post-stage-core'
+import { SCHEDULE_PAGE } from './page-access-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
 export type BoardViewCard = {
@@ -79,13 +78,9 @@ export type BoardViewCard = {
   updated_at?: string | null
   /** when the status last changed, on rows that record it separately */
   status_changed_at?: string | null
-  /** the FINAL POST's gate (`posting-approval-core`) — a post built from this
-   *  piece may be sitting at 'pending' waiting on somebody's yes. It is the
-   *  item's own column, so the card gets it for free off a '*' row. */
-  posting_approval_state?: unknown
-  /** …and whether the CLIENT was the one asked, which decides whose wait the
-   *  card names when the viewer is not the one deciding */
-  posting_client_required?: unknown
+  /* A POST IS NOT A CARD (the posting rebuild, 29 Sep 2026): whether a post
+   * made from this piece is waiting on anyone is the post's own stage, drawn
+   * on Post approval (post-board-core). No card field says it. */
   /** the shoot this card came from (`batch_id`), and its name when the page
    *  has it — an editor is told which shoot's footage this is */
   batch_id?: string | null
@@ -131,7 +126,8 @@ export type CardLines = {
   brief: string | null
   /** "2 of 4 posted" while a piece is part-way out; null otherwise */
   posted: string | null
-  /** "Sent to client 11 Sept" — the playbook's delivery date, once stamped */
+  /** "Sent to client 11 Sept" — the playbook's delivery date, once stamped;
+   *  "Passed 11 Sept" when the EDIT never went to the client */
   delivered: string | null
   /** "Made 18 Sept" — when the card was made (21 Sep 2026) */
   made: string | null
@@ -192,11 +188,11 @@ export function cardLines(
     // DELIVERED is the moment the final was sent to the client (the
     // playbook: "that's the moment our obligation is met"), so the card says
     // it in those words and keeps saying it through Ready to post and Posted
-    // …but ONLY when the client actually had it (the owner, 28 Sep 2026: every card read "Sent to client", Alia's
-    // included, because the date is stamped at every quality-check pass — "approve without client" and a self-pass too).
-    // Put to the client (their edit review, an emailed or copied post link) → "Sent to client"; otherwise "Passed".
+    // …but ONLY when the client actually had the EDIT: its own client review
+    // round (audit B4, L4). A post's send to the client is the post's own
+    // fact, shown on Post approval from `client_send`, never on the edit card.
     delivered: card.delivered_at && shortDate(card.delivered_at)
-      ? `${clientHadIt(card) ? 'Sent to client' : 'Passed'} ${shortDate(card.delivered_at)}`
+      ? `${editWentToClient(card) ? 'Sent to client' : 'Passed'} ${shortDate(card.delivered_at)}`
       : null,
     made: card.created_at && shortDate(card.created_at) ? `Made ${shortDate(card.created_at)}` : null,
     // "Client posts it" is a word about what is still to come: a card the
@@ -239,77 +235,26 @@ export function cardLines(
 export type CardAction =
   | { kind: 'transition'; to: ItemStatus; label: string }
   | { kind: 'send_back'; to: 'revision_required'; label: string }
-  | { kind: 'post_approval'; to: 'approve' | 'request_changes'; label: string }
 
-/**
- * A POST WAITING ON THIS PERSON, SAID WHERE THEY ALREADY ARE.
+/*
+ * A POST IS NOT ANSWERED ON A CARD (the posting rebuild, 29 Sep 2026).
  *
- * `posting_approval_state === 'pending'` used to be reachable only through
- * the email and the bell: the board card and the side panel both drew
- * nothing, so an account manager who came to their work any other way never
- * learnt there was a post to answer. These are the same two answers the
- * composer offers, worded once, and they hit the same route.
+ * This file used to carry the post's approval on the edit card: "A post is
+ * waiting on your OK", an "Approve the post" button, and a guess at who asked
+ * for a change. Those read the item's own post-approval field, which is not
+ * where a post is, so a manager was offered Approve while the post was with
+ * the client (audit B7) and "The client asked" was printed when a manager
+ * asked (B6). A post's stage, its waits and its buttons live on the post now
+ * (post-stage-core) and are drawn on Post approval (post-board-core).
  */
-export const POST_WAITING_LINE = 'A post is waiting on your OK'
-export const POST_APPROVE_LABEL = 'Approve the post'
-export const POST_CHANGES_LABEL = 'Ask for a change'
-/** …and the same wait, seen by somebody who is not the one deciding. */
-export const POST_WAITING_CLIENT = 'A post is waiting on the client'
-export const POST_WAITING_MANAGER = 'A post is waiting on an account manager'
 
 /**
- * The one line a card says about a post waiting on somebody — whoever is
- * looking. Null when no post on this card is waiting on anyone.
+ * Did the client have the EDIT, in its own client review round? A post sent
+ * to the client is not this: that is `client_send` on the post (audit B4, L4).
  */
-/** did the client actually receive this piece — their edit review, or the post emailed or its link copied to them */
-function clientHadIt(card: object): boolean {
-  const c = card as { client_round?: unknown; client_rounds?: unknown; client_sent?: unknown; posting_client_required?: unknown }
-  return !!c.client_round || (Array.isArray(c.client_rounds) && c.client_rounds.length > 0) || !!c.client_sent || c.posting_client_required === true
-}
-
-/** the client asked for a change on the post — the card says so, rather than sitting in Draft with no reason (28 Sep 2026) */
-export const POST_CHANGES_ASKED = 'The client asked for a change'
-
-export function postWaitingLine(
-  card: BoardViewCard, viewer: BoardViewer,
-): string | null {
-  if (String(card.posting_approval_state ?? '') === 'changes') return POST_CHANGES_ASKED
-  if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
-  // once it is put to the client it is waiting on THEM, whoever may also answer for them (28 Sep 2026)
-  if (card.posting_client_required === true) return POST_WAITING_CLIENT
-  if (mayApprovePost(actingRoles(viewer, card))) return POST_WAITING_LINE
-  return awaitsClientPostApproval({
-    status: card.status,
-    posting_approval_state: card.posting_approval_state,
-    posting_client_required: card.posting_client_required,
-  }) ? POST_WAITING_CLIENT : POST_WAITING_MANAGER
-}
-
-export type PostApprovalOffer = {
-  /** the plain line naming what is waiting */
-  line: string
-  /** say yes */
-  primary: CardAction
-  /** …and ask for a change, which needs words with it */
-  changes: CardAction
-}
-
-/**
- * Is a post on this card waiting on THIS viewer, and what may they do?
- *
- * Null for everybody else — including the people who sent it, who are
- * waiting rather than deciding.
- */
-export function postApprovalOffer(
-  card: BoardViewCard, viewer: BoardViewer,
-): PostApprovalOffer | null {
-  if (parseApprovalState(card.posting_approval_state) !== 'pending') return null
-  if (!mayApprovePost(actingRoles(viewer, card))) return null
-  return {
-    line: POST_WAITING_LINE,
-    primary: { kind: 'post_approval', to: 'approve', label: POST_APPROVE_LABEL },
-    changes: { kind: 'post_approval', to: 'request_changes', label: POST_CHANGES_LABEL },
-  }
+function editWentToClient(card: object): boolean {
+  const c = card as { client_round?: unknown; client_rounds?: unknown }
+  return !!c.client_round || (Array.isArray(c.client_rounds) && c.client_rounds.length > 0)
 }
 
 export const SEND_BACK_LABEL = 'Send back for changes'
@@ -391,15 +336,8 @@ export function cardActions(
   const handInOf = (a: CardAction) => a.kind === 'transition' && a.to === 'quality_check' && editingStage
     && ((!!card.owner_id && card.owner_id !== viewer.id) || nothingHandedIn)
   const push = (raw: CardAction) => { if (handInOf(raw)) return; const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
-  // a post waiting on THIS person outranks any move: it is the one thing on
-  // the card that somebody else is held up by
-  const waiting = postApprovalOffer(card, viewer)
-  const first = waiting
-    ? waiting.primary
-    : primary ? actionFor(primary.to, primary.label, hats) : null
+  const first = primary ? actionFor(primary.to, primary.label, hats) : null
   if (first) push(first)
-  if (waiting) push(waiting.changes)
-  if (waiting && primary) push(actionFor(primary.to, primary.label, hats))
   for (const s of secondary) push(actionFor(s.to, s.label, hats))
   // AN UPLOADED POST IS BOOKED ON THE SCHEDULE PAGE and marked posted one
   // file at a time ("Posted by hand"): a whole-card "Booked in" was a 400
@@ -485,7 +423,8 @@ export function moveTargets(
   return out
 }
 
-export type BoardPage = 'production' | 'editor' | 'scheduler'
+/** The boards that draw edit CARDS. Post approval draws POSTS (post-board-core), not cards. */
+export type BoardPage = 'production' | 'editor'
 
 /** Is this card assigned to this person — to make, or to post? */
 export function isAssignedTo(card: BoardViewCard, viewerId: string): boolean {
@@ -528,11 +467,16 @@ export function recentlyPosted(
 /**
  * THE CARDS A PAGE SHOWS — and nobody is left with work they cannot see.
  *
- * Production is every card the person may see. Scheduler is the same set —
- * the whole flow, so the scheduler sees what is coming — and its lanes say
- * what is ready. Editor is the cards assigned to the viewer (an editor's
- * whole world) — or, for a manager looking in, everything still being made.
- * Assigned means shown, whatever the kind.
+ * Production is every card the person may see. Editor is the cards assigned
+ * to the viewer (an editor's whole world) — or, for a manager looking in,
+ * everything still being made. Assigned means shown, whatever the kind.
+ *
+ * Post approval ('scheduler') shows NO cards: its board is posts, read from
+ * `social_posts.stage` (post-board-core). It used to put edit cards on its
+ * lanes by a guess from the edit's status and the item's post-approval field,
+ * which is how an edit still being revised sat in its Draft lane (audit B3,
+ * L5) and a card was drawn in one lane and acted on as another (B1). The
+ * name is still accepted, so an older caller is told the truth: nothing.
  *
  * On every page, Posted keeps only what went out in the last `POSTED_DAYS`
  * (`recentlyPosted`); older posts are records, not board work. Pass `today`
@@ -540,37 +484,18 @@ export function recentlyPosted(
  * is cut.
  */
 export function pageCards<T extends BoardViewCard>(
-  page: BoardPage, cards: readonly T[], viewer: BoardViewer, today?: string | null,
+  page: BoardPage | 'scheduler', cards: readonly T[], viewer: BoardViewer, today?: string | null,
 ): T[] {
+  if (page === 'scheduler') return []
   // A DELIVERED CARD IS NEVER A SCHEDULER'S (the playbook's deliver-only
   // clients, 11 Sep 2026): the client posts it, so it is not on any page of
   // theirs — handed to them or not
   if (viewer.role === 'scheduler') cards = cards.filter(c => cardColumn(c) !== 'delivered')
   const mine = (c: T) => isAssignedTo(c, viewer.id)
-  /**
-   * Media uploaded straight onto the Schedule page to be posted is a POST,
-   * not production work — it keeps its card for the file and the numbers,
-   * and stays off all three boards.
-   *
-   * ONE EXCEPTION, and only on the Scheduler board: a post on such a card
-   * that is waiting on THIS person's yes. The gate is reachable from the
-   * bell and the email, and from nowhere else; a manager who works from the
-   * board would otherwise be holding somebody up with nothing on any screen
-   * to press. It leaves again the moment they answer.
-   */
-  // Media uploaded straight onto the Schedule page is a POST, not production
-  // work, so it stays off these boards — EXCEPT while it is waiting on a
-  // person. A scheduler's upload goes to internal check for a manager, and
-  // hiding it there meant the thing needing a decision appeared nowhere at
-  // all: not in Draft, not in Internal check, not in anyone's list. It shows
-  // while it waits, and leaves again the moment it is answered.
-  //
-  // THE FINAL SHAPE (8 Sep 2026): a piece uploaded for posting lives on the
-  // POST APPROVAL board — every column, from the scheduler's Draft through
-  // the manager's Internal check and the client's With client to Ready to
-  // post and Posted — and on no other board. Production and Editor are for
-  // production work, which it is not.
-  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true || page === 'scheduler'
+  // Media uploaded straight onto the Schedule page is a POST from birth, not
+  // production work: its card only holds the file, and it is on no board of
+  // cards (audit V13). Its post is on Post approval like any other post.
+  const work = (c: T) => (c as { adhoc_post?: unknown }).adhoc_post !== true
   const fresh = (c: T) => work(c) && (!today || recentlyPosted(c, today))
   if (page === 'editor') {
     // a general user's Editor page is their own cards too — the making is
@@ -583,29 +508,8 @@ export function pageCards<T extends BoardViewCard>(
     // "didn't have" — and the hand-over to a scheduler happens right there.
     return cards.filter(fresh)
   }
-  // POST APPROVAL IS THE END OF THE EDIT (the owner, 13 Sep 2026: "post
-  // approval items are only shown at the end of editing — either we deliver
-  // directly or we hand over to the scheduler… the card doesn't suddenly
-  // appear in Post approval while they are editing"). A card being made,
-  // checked or with the client is the Editor page's. It arrives here once
-  // it is approved and ready to post. The posts made or uploaded HERE
-  // (adhoc) run through every column.
-  // …and a card HANDED to a scheduler ("we hand over the drive to the
-  // scheduler, which shows in Draft") is theirs from that moment, whatever
-  // column it sits in
-  if (page === 'scheduler') {
-    return cards.filter(c => fresh(c) && (
-      (c as { adhoc_post?: unknown }).adhoc_post === true
-      || ((c as { scheduler_ids?: unknown }).scheduler_ids as unknown[] | null | undefined ?? []).length > 0
-      || (viewer.role === 'scheduler' && mine(c))
-      || POST_APPROVAL_FROM.includes(cardColumn(c))
-    ))
-  }
   return cards.filter(fresh)
 }
-
-/** The columns an EDITED card is on Post approval for: from ready to post on. */
-export const POST_APPROVAL_FROM: readonly BoardColumnKey[] = ['ready_to_post', 'booked', 'posted', 'delivered']
 
 /** A lane is one column, or several columns folded into one narrow strip. */
 export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' | 'for_handoff'
@@ -693,9 +597,8 @@ export function pageLanes(page: BoardPage): PageLane[] {
   // FIVE COLUMNS ON EVERY PAGE — the owner's standing rule, and the spec's.
   // Work needs an internal check and the client's word whoever is looking at
   // it, so no page hides those stages: an editor watches their card go to the
-  // client and out the door, a scheduler sees what is coming before it is
-  // ready. What differs per page is WHICH CARDS are shown (pageCards) and
-  // which button each role gets, never which stages exist.
+  // client and out the door. What differs per page is WHICH CARDS are shown
+  // (pageCards) and which button each role gets, never which stages exist.
   const lanes = BOARD_COLUMNS.map(c => laneOfColumn(c.key))
   if (page !== 'editor') return lanes
   // THE EDITOR'S FOUR (the Video Editors SOP §6, the owner 11 Sep 2026:
@@ -746,30 +649,12 @@ export function handedToWords(card: { scheduler_ids?: unknown }, names: Readonly
   return known.length > 0 ? `Handed to ${known.join(', ')}` : 'Handed to a scheduler'
 }
 
-/** Group cards by lane, every lane present (empty arrays included), in
- *  board order. Input order within a lane is preserved. */
 /**
- * WHERE A POST SITS ON THE POSTING ROAD (the owner, 28 Sep 2026: "why are all posts Ready to post when they're not
- * client approved — I think our current flow is wrong … this is a post approval, not editing; those are independent").
- * An approved EDIT puts a card at Ready to post; the POST on it has its own approval. While that is waiting, the card
- * is not ready: waiting on the client → With client; waiting on the team → Quality check; the client asked for a
- * change → back in Draft. Only the posting pages read this — the editor's and designer's boards keep the edit's own
- * stage, which is finished.
+ * Group cards by lane, every lane present (empty arrays included), in board
+ * order. Input order within a lane is preserved. A card's lane is its EDIT's
+ * column: nothing about a post moves it (the posting rebuild, 29 Sep 2026 —
+ * a post's own stage is drawn on Post approval, never folded into a card).
  */
-export function postingColumn(card: { status?: unknown; posting_approval_state?: unknown; posting_client_required?: unknown; adhoc_post?: unknown }, column: BoardColumnKey): BoardColumnKey {
-  if (column !== 'ready_to_post') return column
-  // SCHEDULING IS A NEW FLOW (the owner, 28 Sep 2026: "even if it's approved from there, once it's gone to the
-  // scheduling phase it's a new flow"): the edit's yes does not make the POST ready. Ready to post = the post approved.
-  const state = String(card.posting_approval_state ?? '')
-  if (state === 'approved') return column
-  if (state === 'pending') return card.posting_client_required === true ? 'with_client' : 'quality_check'
-  // AN UPLOAD STRAIGHT FROM SCHEDULE IS THE POST (the owner, 28 Sep 2026: "I think she passed it, no?" — Joy passed
-  // Alia's three uploads a week ago and they dropped to Draft): its quality-check pass IS the post's approval. Only a
-  // change asked for sends it back. A card made from a shoot or an edit still needs its own post approval.
-  if (card.adhoc_post === true && state !== 'changes') return column
-  return 'draft'
-}
-
 export function groupByLane<T extends { status: ItemStatus; deliver_only?: unknown; clients?: { posts_own_content?: unknown } | null }>(
   lanes: readonly PageLane[], cards: readonly T[],
 ): { lane: PageLane; cards: T[] }[] {
@@ -777,16 +662,8 @@ export function groupByLane<T extends { status: ItemStatus; deliver_only?: unkno
   const laneByColumn = new Map<BoardColumnKey, PageLaneKey>(
     lanes.flatMap(l => l.columns.map((c): [BoardColumnKey, PageLaneKey] => [c, l.key])))
   for (const card of cards) {
-    // the editor's road ends at the hand-over: the scheduler's Draft is not the editor's In Progress
-    // …and on the post approval page a handed-over card is the scheduler's Draft until it is ready to post (the owner,
-    // 24 Sep 2026: "it needs to hand over to scheduler in draft")
-    const handed = (card as { adhoc_post?: unknown }).adhoc_post !== true
-      && Array.isArray((card as { scheduler_ids?: unknown }).scheduler_ids) && ((card as unknown as { scheduler_ids: unknown[] }).scheduler_ids).length > 0
-    const early = !POST_APPROVAL_FROM.includes(cardColumn(card))
-    const key = handedOver(card as never) && buckets.has('done') ? 'done'
-      : handed && early && buckets.has('draft') && !buckets.has('done') ? 'draft'
-      // the posting pages (not the editor's): the post's own approval decides (28 Sep 2026)
-      : laneByColumn.get(buckets.has('done') ? cardColumn(card) : postingColumn(card as never, cardColumn(card)))
+    // the editor's road ends at the hand-over: the scheduler's posting job is not the editor's In Progress
+    const key = handedOver(card as never) && buckets.has('done') ? 'done' : laneByColumn.get(cardColumn(card))
     if (key) buckets.get(key)!.push(card)
   }
   return lanes.map(l => ({ lane: l, cards: buckets.get(l.key)! }))
@@ -917,6 +794,20 @@ export type OverviewInput = {
   clientCount?: number
   leadsWeek?: number
   mayLeads?: boolean
+  /**
+   * THE POSTS this person may see, as the rules read them (`readPostState`).
+   * A post's place is its own stage, so every tile about posts counts these
+   * — never the edit cards (audit B12: the Overview said 12 ready to post
+   * while the board showed 8, and "With clients" left out posts with a client).
+   */
+  posts?: readonly PostState[]
+  /** the moment "waiting on you" is worked out at; defaults to midday of `today` */
+  now?: NowLike
+}
+
+/** Post approval, opened on one lane. */
+export function postApprovalHref(lane?: 'draft' | 'quality_check' | 'with_client' | 'approved'): string {
+  return lane ? `/dashboard/scheduler?lane=${lane}` : '/dashboard/scheduler'
 }
 
 const count = (cards: readonly BoardViewCard[], pred: (c: BoardViewCard) => boolean) =>
@@ -931,6 +822,19 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     viewer, today, postingToday: input.postingToday, connectedClientIds: input.connectedClientIds,
   }
   const inColumn = (key: BoardColumnKey) => count(cards, c => cardColumn(c) === key)
+  const posts = input.posts ?? []
+  const now = input.now ?? `${today}T12:00:00.000Z`
+  const postsAt = (stage: PostState['stage']) => posts.filter(p => p.stage === stage)
+  /** THE POSTS, on Post approval: what waits on this person, and what is out with somebody else */
+  const postTile: OverviewTile = {
+    key: 'posts', title: 'Posts to approve', tone: 'amber',
+    href: postApprovalHref(), actionLabel: 'Post approval',
+    stats: [
+      { value: posts.filter(p => postWaitingOnViewer(p, { id: viewer.id, hats: hatsFor(viewer, p) }, now)).length, label: 'waiting on you' },
+      { value: postsAt('quality_check').length, label: 'with the quality check' },
+      { value: postsAt('with_client').length, label: 'with a client' },
+    ],
+  }
 
   if (viewer.role === 'editor') {
     const mine = cards.filter(c => matchesShow(c, 'mine', ctx))
@@ -972,9 +876,11 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
       },
       {
         key: 'ready', title: 'Ready to post', tone: 'blue',
-        href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Post approval',
-        stats: [{ value: inColumn('ready_to_post'), label: 'approved, not yet booked' }],
+        // approved posts are booked on the Schedule page (the owner's decision 1)
+        href: SCHEDULE_PAGE, actionLabel: 'Schedule',
+        stats: [{ value: postsAt('ready').length, label: 'approved, not yet booked' }],
       },
+      postTile,
     ]
   }
 
@@ -982,24 +888,24 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
     return [
       {
         key: 'ready', title: 'Ready to post', tone: 'green',
-        href: boardHref('scheduler', { column: 'ready_to_post' }), actionLabel: 'Scheduler',
-        // a post somebody was asked to book in is theirs to book in; with
-        // nobody asked, the column is still the whole queue
-        stats: [{
-          value: count(cards, c => cardColumn(c) === 'ready_to_post' && waitingOnViewer(c, viewer.id)),
-          label: 'to book in',
-        }],
+        // approved posts, booked on the Schedule page (the owner's decision 1)
+        href: SCHEDULE_PAGE, actionLabel: 'Schedule',
+        stats: [{ value: postsAt('ready').length, label: 'to book in' }],
       },
       {
         key: 'today', title: 'Going out today', tone: 'blue',
-        href: boardHref('scheduler', { show: 'today' }), actionLabel: 'See them',
+        href: SCHEDULE_PAGE, actionLabel: 'See them',
         stats: [{ value: count(cards, c => matchesShow(c, 'today', ctx)), label: 'posting today' }],
       },
       {
         key: 'account', title: 'Waiting on an account', tone: 'amber',
-        href: boardHref('scheduler', { show: 'account' }), actionLabel: 'See them',
-        stats: [{ value: count(cards, c => matchesShow(c, 'account', ctx)), label: 'with no channel connected' }],
+        href: SCHEDULE_PAGE, actionLabel: 'See them',
+        stats: [{
+          value: postsAt('ready').filter(p => !(input.connectedClientIds?.has(p.client_id) ?? false)).length,
+          label: 'approved, with no channel connected',
+        }],
       },
+      postTile,
     ]
   }
 
@@ -1008,9 +914,9 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   // own line. The tile still opens the lens that shows both.
   const decide: OverviewTile = {
     key: 'decide', title: 'Needs your decision', tone: 'amber',
-    // the deciding board is Post approval: Shoots holds filming days only
-    // (the owner, 11 Sep 2026: "it's confusing")
-    href: boardHref('scheduler', { show: 'decide' }), actionLabel: 'Decide',
+    // these are EDIT decisions, and edits live on the Editor page — Post
+    // approval holds posts only (the posting rebuild, 29 Sep 2026)
+    href: boardHref('editor', { show: 'decide' }), actionLabel: 'Decide',
     stats: [
       { value: count(cards, c => matchesShow(c, 'decide', ctx) && !nobodyAskedYet(c)), label: 'waiting on you' },
       { value: count(cards, c => matchesShow(c, 'decide', ctx) && nobodyAskedYet(c)), label: 'nobody asked yet' },
@@ -1028,10 +934,11 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
       { value: count(cards, c => c.status === 'quality_check' && nobodyAskedYet(c)), label: 'not asked to anyone' },
     ],
   }
+  // EDITS with a client; posts with a client are counted on the posts tile
   const withClients: OverviewTile = {
-    key: 'with_client', title: 'With clients', tone: 'blue',
-    href: boardHref('scheduler', { column: 'with_client' }), actionLabel: 'See them',
-    stats: [{ value: count(cards, c => c.status === 'client_review'), label: 'waiting on a client' }],
+    key: 'with_client', title: 'Edits with clients', tone: 'blue',
+    href: boardHref('editor', { column: 'with_client' }), actionLabel: 'See them',
+    stats: [{ value: count(cards, c => c.status === 'client_review'), label: 'edits waiting on a client' }],
   }
   const clients: OverviewTile = {
     key: 'clients', title: 'Your clients', tone: 'green',
@@ -1041,16 +948,17 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
 
   // THE QUALITY CHECKER (13 Sep 2026): one tile — what waits on their
   // check. Deciding, clients and leads are not theirs.
-  if (viewer.role === 'quality_checker') return [quality]
+  if (viewer.role === 'quality_checker') return [quality, postTile]
 
   if (viewer.role === 'super_admin') {
     const tiles: OverviewTile[] = [
       {
         key: 'glance', title: 'The agency at a glance', tone: 'paper',
-        href: boardHref('scheduler'), actionLabel: 'Board',
+        // the edits, by column — on the Editor board, which shows a manager every lane
+        href: boardHref('editor'), actionLabel: 'Board',
         stats: BOARD_COLUMNS.map(c => ({ value: inColumn(c.key), label: c.label.toLowerCase() })),
       },
-      decide, quality, withClients,
+      decide, quality, withClients, postTile,
     ]
     if (input.mayLeads !== false) {
       tiles.push({
@@ -1065,7 +973,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   }
 
   // account manager
-  return [clients, decide, quality, withClients]
+  return [clients, decide, quality, withClients, postTile]
 }
 
 /**

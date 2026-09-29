@@ -7,7 +7,7 @@ import type {
 import { queuePublishJob } from './publish'
 import { getPublisher } from './publisher'
 import {
-  isPlatform, mediaTypeFor,
+  BOOK_FROM_THE_POST, isPlatform, mediaTypeFor,
   type MediaItem, type PostKind, type Target,
 } from './publish-core'
 import { postSlides, slidesOf } from './version-files-core'
@@ -17,8 +17,14 @@ import { STATUS_LABELS, type ItemStatus } from './workflow-core'
 import { performTransition, systemActor, type ContentItem } from './workflow'
 import { statusAfterQueue, systemActorLabel, systemPublishSteps } from './posting-card-core'
 import { fullyPosted, postedProgress, publishedSlideUrls, readPostedSlides } from './posted-slides-core'
-import { publishBlockReason } from './posting-approval-core'
-import { postingApprovalStateOf } from './posting-approval'
+import {
+  bookingJobs, jobIdsOfPost, postNetworkOutcomes, sameOutcomes, scheduleRowWrites, unlinkedJobs, urlBelongsTo,
+  type BookingJob, type ScheduleRowWrite,
+} from './post-outcome-core'
+import {
+  outcomeAction, readPostState,
+  type NetworkOutcome, type PostState, type TransitionInput,
+} from './post-stage-core'
 import { analyticsForItems } from './post-analytics'
 import type { PostMetrics } from './post-analytics-core'
 import { readPerformance, type PostPerformance } from './post-performance-core'
@@ -118,13 +124,12 @@ export async function planItemPublish(itemId: string): Promise<ItemPublishPlan> 
     plan.blocked = `This item is "${STATUS_LABELS[status as ItemStatus] ?? status}" — it has not been approved for scheduling yet`
   }
 
-  // …and the POST itself — the caption, the media, the hour — has its own
-  // sign-off once the final-post gate has been used on this item. Read
-  // tolerantly: a database without the column answers null, which is "the
-  // gate is not in use", and nothing changes.
-  if (!plan.blocked) {
-    plan.blocked = publishBlockReason(await postingApprovalStateOf(itemId))
-  }
+  // …and an ITEM is not a post. What goes out is a post, approved as a post
+  // (passed at quality check, or approved by or for the client) and booked
+  // from Schedule, where its own stage is checked (the posting rebuild, 29 Sep
+  // 2026). The item-wide gate that used to stand here is gone, so this door is
+  // shut rather than left open with no gate at all.
+  if (!plan.blocked) plan.blocked = BOOK_FROM_THE_POST
 
   // newest version wins; that is the one reviewers signed off
   const version = (await table<AssetVersion>('asset_versions')
@@ -304,7 +309,13 @@ export async function queueItemPublish(
  * The schedule row is the board's and the client portal's version of the same
  * fact — "Instagram, Thursday 6pm". Queueing without writing it left the item
  * queued at the provider and blank on every screen that reads schedule_entries,
- * which is most of them. A human-set time is kept rather than stamped over.
+ * which is most of them.
+ *
+ * The row takes THIS booking's time. It used to keep whatever time a row
+ * already had, on the belief that the queue had used the same one — but a
+ * re-booked post had not: row 48f70493 kept the time of cancelled job
+ * 41ee4e5d while the post went out an hour later (audit L8). A network
+ * already posted keeps its row as it is.
  */
 async function recordQueuedSchedule(
   itemId: string, targets: Target[], scheduledFor: string | null,
@@ -315,9 +326,10 @@ async function recordQueuedSchedule(
   const byPlatform = new Map(existing.map(r => [String(r.platform), r]))
 
   const rows = targets
-    // a platform that already carries a time keeps it — the queue used that
-    // same time, so rewriting it would only churn the row
-    .filter(t => !byPlatform.get(t.platform)?.scheduled_at)
+    .filter(t => {
+      const row = byPlatform.get(t.platform)
+      return !row || (row.publish_status !== 'published' && row.scheduled_at !== when)
+    })
     .map(t => ({ item_id: itemId, platform: t.platform, scheduled_at: when }))
   if (rows.length === 0) return
   try {
@@ -378,13 +390,253 @@ export async function markScheduledAfterQueue(
   }
 }
 
-/**
- * Write a publish result back into production.
+/* ── THE PUBLISH RECORDER (the posting rebuild, 29 Sep 2026) ────────────────
  *
- * Without this the two halves drift: the post is live on Instagram while the
- * board still says "scheduled", and the scheduler has no live link to give the
- * client. Best-effort by design — a bookkeeping failure must never make a
- * successful publish look failed.
+ * What went out, per network, written onto the POST — SPEC §5 and package P2.
+ *
+ * Every place a job settles calls `recordPostOutcome(jobId)`: the publish run,
+ * the ten-minute reconcile, the provider's webhook, the analytics back-fill.
+ * It reads the jobs of the booking (its re-sends included), works out each
+ * network's outcome (post-outcome-core.postNetworkOutcomes), and asks the ONE
+ * writer of a post's stage — P1's `performSystemTransition` (post-stage.ts),
+ * wearing the system hat — for the matching row:
+ *
+ *   T16 record_posted   every network went out           booked → posted
+ *   T17 record_partial  some out, some not               booked → posted, with a problem naming the network
+ *   T18 record_failed   none went out (or the job lost)  booked → ready, with the problem
+ *
+ * It never writes `stage` itself (SPEC §8.3: the only writer is post-stage.ts).
+ * It is the only writer of `outcomes`, through those rows. And it writes each
+ * network's schedule row with that network's own link, never one link on all
+ * (audit V16, L1, L2).
+ *
+ * Idempotent: a sweep that learns nothing new writes nothing; a lost race
+ * (another write between our read and the writer's claim) is read again.
+ * Best effort: a bookkeeping failure never makes a publish look failed.
+ */
+
+export type RecorderAction = 'record_posted' | 'record_partial' | 'record_failed' | 'link_jobs'
+
+/** What the one writer answers: the post as it now stands, or why not. */
+export type StageWriteResult =
+  | { ok: true; post: PostState }
+  | { ok: false; code?: string | null; reason: string; post?: PostState | null }
+
+/**
+ * The one writer of a post's stage, narrowed to the system rows —
+ * `performSystemTransition(postId, action, input)` in app/lib/post-stage.ts
+ * (package P1), which runs the rules again inside its claim, on the row it
+ * lands on. Handed in so the tests can stand in for it.
+ */
+export type StageWriter = (postId: string, action: RecorderAction, input: TransitionInput) => Promise<StageWriteResult>
+
+/** P1's writer, lazily loaded (post-stage.ts loads this file lazily too). */
+async function stageWriter(): Promise<StageWriter> {
+  const { performSystemTransition } = await import('./post-stage')
+  return async (postId, action, input) => {
+    try {
+      const r = await performSystemTransition(postId, action, input)
+      return r.ok ? { ok: true, post: r.post } : { ok: false, code: r.code, reason: r.reason, post: r.post }
+    } catch (e) {
+      return { ok: false, code: null, reason: e instanceof Error ? e.message : String(e), post: null }
+    }
+  }
+}
+
+export type RecordedPost = {
+  post_id: string
+  /** the row asked for, or null while a network is still going out */
+  action: RecorderAction | null
+  wrote: boolean
+  /** where the post stands after this */
+  stage: string | null
+  note?: string
+}
+export type RecordOutcomeResult = { job_id: string; posts: RecordedPost[]; schedule_rows: number }
+
+const postsTable = () => table<SocialPost>('social_posts')
+
+/** Every post that holds this job, or the job it re-sends. */
+async function postsHolding(job: PublishJob): Promise<SocialPost[]> {
+  const ids = new Set([job.id, ...(job.resend_of ? [job.resend_of] : [])])
+  const rows = job.content_item_id
+    ? await postsTable().list({ by: { item_id: job.content_item_id } })
+    : job.client_id ? await postsTable().list({ by: { client_id: job.client_id } }) : []
+  return rows.filter(r => jobIdsOfPost(r as never).some(id => ids.has(id)))
+}
+
+/** The jobs a booking may hold: the job's own item's (or client's), re-sends included. */
+async function jobsAround(job: PublishJob): Promise<BookingJob[]> {
+  const rows = job.content_item_id
+    ? await table<PublishJob>('publish_jobs').list({ by: { content_item_id: job.content_item_id } })
+    : job.client_id ? await table<PublishJob>('publish_jobs').list({ by: { client_id: job.client_id } }) : [job]
+  return rows as unknown as BookingJob[]
+}
+
+/**
+ * Record what one job came to, on every post that holds it.
+ *
+ * `lost`: the provider cancelled this job itself (its webhook), so its
+ * networks did not go out — T18 "the job was lost". A cancel of our own
+ * marks the job cancelled on our side, so the provider's echo finds no open
+ * job and is not called lost — except in the moment between P1 asking the
+ * provider and writing our row (post-stage.defaultCancelJob), where the move
+ * P1 is making then meets a changed post and is refused, never applied twice.
+ */
+export async function recordPostOutcome(
+  jobId: string,
+  opts: { lost?: boolean; write?: StageWriter } = {},
+): Promise<RecordOutcomeResult> {
+  const result: RecordOutcomeResult = { job_id: jobId, posts: [], schedule_rows: 0 }
+  try {
+    const job = await table<PublishJob>('publish_jobs').get(jobId, { fresh: true })
+    if (!job) return result
+    const holders = await postsHolding(job)
+    const staged = holders.filter(r => readPostState(r as never) !== null)
+    const all = await jobsAround(job)
+    const lost = opts.lost ? new Set([job.id]) : new Set<string>()
+
+    if (staged.length === 0) {
+      // A post the migration has not reached yet (no stage): nothing to move,
+      // but its schedule rows and the edit card still hear what went out, per
+      // network — the old recorder's job, without its one-link-on-every-row bug.
+      if (job.content_item_id) {
+        const own = bookingJobs([job.resend_of ?? job.id], all)
+        const { outcomes } = postNetworkOutcomes(own, { lost })
+        result.schedule_rows += await writeScheduleRows(job.content_item_id, outcomes, job.scheduled_for ?? null)
+        const live = Object.entries(outcomes).filter(([, o]) => o.status === 'published' || o.status === 'duplicate').map(([p]) => p)
+        if (live.length > 0) await rollUpItem(job.content_item_id, live)
+      }
+      return result
+    }
+
+    const write = opts.write ?? await stageWriter()
+    for (const row of staged) {
+      const done = await recordOnPost(row.id, all, lost, write)
+      result.posts.push(done.recorded)
+      if (done.itemId && done.outcomes) {
+        result.schedule_rows += await writeScheduleRows(done.itemId, done.outcomes, done.bookedFor)
+        if (done.recorded.wrote && (done.recorded.action === 'record_posted' || done.recorded.action === 'record_partial')) {
+          await rollUpItem(done.itemId, done.live)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[publish recorder] could not record job', jobId, e instanceof Error ? e.message : e)
+  }
+  return result
+}
+
+/** One post: link its re-sends, work out its networks, ask for the row. A stale read is read again. */
+async function recordOnPost(
+  postId: string,
+  all: readonly BookingJob[],
+  lost: ReadonlySet<string>,
+  write: StageWriter,
+): Promise<{
+  recorded: RecordedPost
+  itemId: string | null
+  outcomes: Record<string, NetworkOutcome> | null
+  bookedFor: string | null
+  live: string[]
+}> {
+  const none = (note: string, stage: string | null = null) => ({
+    recorded: { post_id: postId, action: null, wrote: false, stage, note },
+    itemId: null, outcomes: null, bookedFor: null, live: [] as string[],
+  })
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const raw = await postsTable().get(postId, { fresh: true })
+    const post = readPostState(raw as never)
+    if (!raw || !post) return none('no stage yet')
+    const held = jobIdsOfPost(raw as never)
+    const mine = bookingJobs(held, all)
+    const { outcomes, platforms } = postNetworkOutcomes(mine, { lost })
+    const itemId = post.source_item_id
+    const bookedFor = post.booking?.for_time ?? post.scheduled_for
+    const live = Object.entries(outcomes).filter(([, o]) => o.status === 'published' || o.status === 'duplicate').map(([p]) => p)
+    const answer = (recorded: RecordedPost) => ({ recorded, itemId, outcomes, bookedFor, live })
+
+    // only a booking reports back; a post taken off the schedule, cancelled or
+    // edited has left it, and its rows are not ours to touch
+    if (post.stage !== 'booked' && post.stage !== 'posted') {
+      return { ...none(`in ${post.stage}`, post.stage) }
+    }
+
+    // a re-send the booking does not list yet is linked first, so a cancel
+    // sees it too (audit V11)
+    const unlinked = unlinkedJobs(held, all)
+    if (unlinked.length > 0) {
+      const linked = await write(post.id, 'link_jobs', { job_ids: unlinked })
+      if (linked.ok || linked.code === 'stale') continue
+      console.error('[publish recorder] could not link the re-sends of post', post.id, linked.reason)
+    }
+
+    const merged = { ...post.outcomes, ...outcomes }
+    const action = outcomeAction(merged, platforms)
+    if (!action) return answer({ post_id: post.id, action: null, wrote: false, stage: post.stage, note: 'still going out' })
+    if (post.stage === 'posted') {
+      // a posted post only learns more (a link, a re-send that went out) —
+      // it never goes back, and the same news twice writes nothing
+      if (action === 'record_failed' || sameOutcomes(merged, post.outcomes)) {
+        return answer({ post_id: post.id, action, wrote: false, stage: post.stage, note: 'nothing new' })
+      }
+    }
+    const res = await write(post.id, action, { outcomes, platforms })
+    if (res.ok) return answer({ post_id: post.id, action, wrote: true, stage: res.post.stage })
+    if (res.code === 'stale') continue
+    return answer({ post_id: post.id, action, wrote: false, stage: post.stage, note: res.reason })
+  }
+  return none('kept changing while being recorded — the next sweep tries again')
+}
+
+/** Each network's own schedule row, with its own link (audit V16, L1, L2, L8). */
+async function writeScheduleRows(
+  itemId: string, outcomes: Record<string, NetworkOutcome>, bookedFor: string | null,
+): Promise<number> {
+  if (Object.keys(outcomes).length === 0) return 0
+  try {
+    const entries = table<ScheduleEntry>('schedule_entries')
+    const rows = await entries.list({ by: { item_id: itemId } })
+    const writes: ScheduleRowWrite[] = scheduleRowWrites(itemId, outcomes, rows, bookedFor)
+    for (const w of writes) {
+      if (w.kind === 'update') await entries.update(w.id, w.patch as Partial<ScheduleEntry>)
+      else await table('schedule_entries').insert(w.row)
+    }
+    return writes.length
+  } catch (e) {
+    console.error('[publish recorder] could not write the schedule rows of', itemId, e instanceof Error ? e.message : e)
+    return 0
+  }
+}
+
+/**
+ * The backstop, run by the ten-minute publish dispatcher (no new Inngest
+ * function, so nothing to re-sync — CLAUDE.md trap 5b). Every post still
+ * booked is recorded again from its jobs, so a webhook that never came, or a
+ * job that settled before its booking was written down, still reaches the
+ * post. Returns how many posts moved.
+ */
+export async function recordBookedOutcomes(opts: { write?: StageWriter; limit?: number } = {}): Promise<number> {
+  const booked = await postsTable().list({ where: p => p.stage === 'booked', limit: opts.limit ?? 100 })
+  let moved = 0
+  for (const p of booked) {
+    const jobIds = jobIdsOfPost(p as never)
+    if (jobIds.length === 0) continue
+    const r = await recordPostOutcome(jobIds[0], opts)
+    if (r.posts.some(x => x.post_id === p.id && x.wrote)) moved++
+  }
+  return moved
+}
+
+/**
+ * Write a publish result back into production — the edit card and its
+ * schedule rows — for a file posted BY HAND (the card's "Posted by hand").
+ *
+ * Only the named networks' rows are touched, and a link only lands on the
+ * network it belongs to: this used to set every row of the card to published
+ * with one permalink, so a LinkedIn row carried a TikTok link and an Instagram
+ * row that never posted read published (audit V16, L1, L2). A post booked
+ * through the app is recorded by `recordPostOutcome` instead.
  */
 export async function recordPublishOnItem(
   contentItemId: string,
@@ -392,22 +644,35 @@ export async function recordPublishOnItem(
   platforms: string[] = [],
 ): Promise<void> {
   try {
-    const patch: Record<string, unknown> = {
-      publish_status: 'published',
-      published_at: new Date().toISOString(),
+    const named = [...new Set(platforms.map(p => String(p).toLowerCase()).filter(Boolean))]
+    if (named.length > 0) {
+      const now = new Date().toISOString()
+      const outcomes: Record<string, NetworkOutcome> = {}
+      for (const p of named) {
+        outcomes[p] = {
+          status: 'published',
+          url: urlBelongsTo(p, permalink, named.length === 1) ? permalink : null,
+          at: now,
+          error: null,
+        }
+      }
+      await writeScheduleRows(contentItemId, outcomes, null)
     }
-    if (permalink) patch.live_url = permalink
+    await rollUpItem(contentItemId, named)
+  } catch (e) {
+    console.error('could not record publish on content item', contentItemId, e)
+  }
+}
 
-    const entries = await table<ScheduleEntry>('schedule_entries')
-      .list({ by: { item_id: contentItemId } })
-    await Promise.all(entries.map(e => table('schedule_entries').update(e.id, patch)))
-
+/**
+ * The edit card's roll-up (SPEC §2.5): its "posted" count, and Published once
+ * every file has gone. It reads the posts; it never moves one.
+ */
+async function rollUpItem(contentItemId: string, platforms: string[]): Promise<void> {
+  try {
     // The status change runs through the ordinary machine, wearing a system
     // actor: the same optimistic-concurrency guard, the same workflow_activity
-    // row, the same notifications the team gets for every other move. The old
-    // code wrote content_items.status directly and hand-rolled the log entry,
-    // which meant "it went live" was the one transition that skipped every
-    // guarantee the rest of the workflow has.
+    // row, the same notifications the team gets for every other move.
     const row = await table<ContentItemRow>('content_items').get(contentItemId)
     if (!row) return
 
@@ -437,7 +702,7 @@ export async function recordPublishOnItem(
       item_id: contentItemId, client_id: item.client_id, status: item.status, kind: 'transition',
     })
   } catch (e) {
-    console.error('could not record publish on content item', contentItemId, e)
+    console.error('could not roll the publish up onto content item', contentItemId, e)
   }
 }
 
@@ -456,7 +721,10 @@ export async function postedSlidesFor(
   const item = await table<ContentItemRow>('content_items').get(contentItemId).catch(() => null)
   const latest = (item ? approvedFilesVersion(item as never) : null) ?? [...versions].sort((a, b) => Number(b.version_number ?? 0) - Number(a.version_number ?? 0))[0] ?? null
   const slides = slidesOf(latest as never)
-  const publishedJobs = new Set(jobs.filter(j => String(j.status) === 'published').map(j => j.id))
+  // 'duplicate' is out too: the provider refused a second copy because the first is live (audit S5)
+  const publishedJobs = new Set(jobs.filter(j => ['published', 'duplicate'].includes(String(j.status))).map(j => j.id))
   const prev = readPostedSlides(row.posted_slides)
-  return postedProgress(slides, publishedSlideUrls(socialPosts, publishedJobs), prev?.urls ?? [], prev?.hand)
+  // a post's jobs are its booking's now (SPEC §2.1), the legacy list only before migration
+  const posts = socialPosts.map(p => ({ ...p, publish_job_ids: jobIdsOfPost(p as never) }))
+  return postedProgress(slides, publishedSlideUrls(posts, publishedJobs), prev?.urls ?? [], prev?.hand)
 }

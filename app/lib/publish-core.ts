@@ -137,6 +137,36 @@ export function autoKindFor(platform: Platform, media: MediaItem[]): PostKind {
  */
 export const LIVE_JOB_STATUSES = ['queued', 'publishing', 'scheduled']
 
+/** Said wherever an edit card, not a post, is asked to go out (the posting rebuild, 29 Sep 2026). */
+export const BOOK_FROM_THE_POST =
+  'Book this from its post on Schedule. A post has to pass its approval before it goes out.'
+
+/**
+ * THE ONE DOOR ONTO A CLIENT'S ACCOUNT (the posting rebuild, 29 Sep 2026).
+ *
+ * The item-wide approval gate is gone (it was one gate per ITEM, audit V1),
+ * so the door asks the post instead: a job for a card's files goes out only
+ * for a post that is Booked in, holding an approval of the version it is
+ * about to send. The post's own claim (ready → booked) already checked that;
+ * this is the second lock on the same door, so no other path — the item
+ * page, the old composer — can walk round it.
+ *
+ * `post` is the post as `readPostState` reads it, or null when the row is
+ * missing. A job with no card and no post (a text post from the composer)
+ * has nothing to ask and is let through, as before.
+ */
+export function publishDoorRefusal(
+  input: { contentItemId?: string | null; postId?: string | null; clientId?: string | null },
+  post: { stage: string; client_id: string; sent_version: number | null; approval: { version: number } | null } | null,
+): string | null {
+  if (!input.postId) return input.contentItemId ? BOOK_FROM_THE_POST : null
+  if (!post) return 'That post no longer exists.'
+  if (input.clientId && post.client_id !== input.clientId) return 'That post belongs to another client.'
+  if (post.stage !== 'booked') return 'This post is not booked in, so it cannot go out.'
+  if (!post.approval || post.approval.version !== post.sent_version) return 'This version of the post is not approved, so it cannot go out.'
+  return null
+}
+
 export const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES) as Platform[]
 
 export function isPlatform(v: string): v is Platform {

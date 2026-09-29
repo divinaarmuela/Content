@@ -76,6 +76,10 @@ export type PostActOk = {
   stage: PostStage | 'deleted'
   /** "Passed — now in Ready to post" */
   words: string
+  /** the post a move made (Post the missing networks, Duplicate) — the page can open it */
+  created_post_id?: string
+  /** a client send by copied link: the client's page, for the person to paste */
+  link?: string
 }
 
 export type PostActRefused = {

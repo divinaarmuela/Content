@@ -66,13 +66,13 @@ const SCHEDULER: GettingStartedPanel = {
   steps: [
     {
       title: 'See what is ready',
-      body: 'Ready to post is your queue: cards handed to you, checked by the quality reviewer and approved by the client. Everything left of it is still with someone else. A green "Your turn" means it was handed to you by name.',
+      body: 'Post approval shows every post by its stage: Draft, Quality check, With client, Approved. Edits handed to you wait above the board. Press Make a post, then send it for the quality check.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },
     {
       title: 'Book it on the Schedule page',
-      body: 'Pick the client, press New post, choose "Approved media", tick the channels, write the caption, set the time, press Schedule. The card moves to Booked in by itself.',
+      body: 'An approved post is booked on the Schedule page. Open it there, check the time, and press Book in. It shows as Booked in once the booking has gone through.',
       href: '/dashboard/social/schedule',
       linkLabel: 'Open the Schedule page',
     },
@@ -96,7 +96,7 @@ const ACCOUNT_MANAGER: GettingStartedPanel = {
     },
     {
       title: 'The quality check is the gate',
-      body: 'A submitted card lands in Quality check on Post approval, with the reviewer. You are copied when one of your clients’ cards gets there; press "Ask for changes" if something is wrong. The quality reviewer sends it to the client.',
+      body: 'Every post passes the quality reviewer before it goes to the client or is approved. On Post approval you can ask for a change, send an approved post to the client, or approve it for the client and say how they agreed.',
       href: '/dashboard/scheduler',
       linkLabel: 'Review what is waiting',
     },
@@ -208,7 +208,7 @@ const SCHEDULER_PAGE_FOR_GENERAL: GettingStartedPanel = {
   steps: [
     {
       title: 'Your cards, as they get checked',
-      body: 'Draft, Quality check, With client, Ready to post, Booked in, Posted. Your own cards show through every stage; Ready to post with nobody named is yours to take.',
+      body: 'Post approval shows every post by its stage: Draft, Quality check, With client, Approved. Waiting on you, at the top, lists the posts you are holding up.',
       href: '/dashboard/scheduler',
       linkLabel: 'See the board',
     },
@@ -220,7 +220,7 @@ const SCHEDULER_PAGE_FOR_GENERAL: GettingStartedPanel = {
     },
     {
       title: 'Book your own piece in',
-      body: 'Once it has passed, book it on the Schedule page: New post, "Approved media", channels, caption, time, Schedule. The card moves to Booked in by itself.',
+      body: 'Once the post is approved, book it on the Schedule page: open it there, check the time, and press Book in. It shows as Booked in once the booking has gone through.',
       href: '/dashboard/social/schedule',
       linkLabel: 'Open the Schedule page',
     },

@@ -111,8 +111,11 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
 })
 
 describe('one drawer for every card', () => {
-  it('Post approval and Editor open the same plain drawer, so a shoot card is not shown the old one', () => {
-    expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} simple \/>/)
+  it('Post approval opens an edit in the card sheet and a post in the post window; the Editor opens the card page', () => {
+    // a post is not a card: Post approval's own board opens the post window,
+    // and only an edit from its tray opens beside the board (29 Sep 2026)
+    expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} \/>/)
+    expect(src(SCHEDULER)).not.toContain(' simple')
     // the Editor page opens the card's own PAGE (15 Sep 2026: "not a slider
     // anymore"), which chooses the same three cards the sheet did
     expect(src(EDITOR)).toContain('onOpen={c => router.push(`/dashboard/editor/${c.id}`)}')
@@ -232,7 +235,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     const s = src('app/dashboard/board/BoardCard.tsx')
     expect(s).toMatch(/needsWorkFirst\(card\) \? UPLOAD_FIRST : 'Quality check, then submit'/)
     expect(s).toMatch(/adhoc_post === true \|\| editorFace \? null : canEdit \?/)
-    expect(s).toMatch(/\{!settled && !adhocPost && !editorFace && !schedulerFace && \(/)
+    expect(s).toMatch(/\{!settled && !adhocPost && !editorFace && \(/)
     // a red "at risk" chip has no place on a Done card (the live walk of 12 Sep 2026)
     expect(s).toMatch(/card\.status === 'scheduled' \|\| card\.status === 'published' \? null : riskChip/)
   })
@@ -368,8 +371,9 @@ describe('the shoot canvas is editable on a touch device (13 Sep 2026)', () => {
 
 describe('Post approval is assets only (13 Sep 2026: "what is this video edit tag")', () => {
   const CARD = src('app/dashboard/board/BoardCard.tsx')
-  it('the kind-of-work chip is not drawn on a Post approval card unless it is an internal task', () => {
-    expect(CARD).toMatch(/const kindChip = editorFace \? null : schedulerFace \? \(internalTask \? 'Task' : null\) : lines\.kind/)
+  it('the kind-of-work chip: none on the Editor\u2019s face; Post approval draws posts, not these cards (29 Sep 2026)', () => {
+    expect(CARD).toMatch(/const kindChip = editorFace \? null : lines\.kind/)
+    expect(CARD).not.toMatch(/schedulerFace/)
     expect(CARD).toMatch(/\{!folded && kindChip && <Chip/)
     expect(CARD).not.toMatch(/lines\.kind && !editorFace/)
   })
@@ -377,14 +381,14 @@ describe('Post approval is assets only (13 Sep 2026: "what is this video edit ta
     expect(CARD).toContain('Add the source working folder')
     expect(CARD).toContain('No folder link yet')
     expect(CARD).not.toMatch(/>\s*Add link\s*</)
-    expect(CARD).toMatch(/!settled && !adhocPost && !editorFace && !schedulerFace && \(/)
+    expect(CARD).toMatch(/!settled && !adhocPost && !editorFace && \(/)
   })
   it('the drawer eyebrow says Post, not the kind of work', () => {
     const D = src('app/dashboard/board/PostApprovalDetail.tsx')
     expect(D).toMatch(/uses_media === false \? \(kind\?\.name \?\? 'Task'\) : 'Post'/)
   })
   it('nobody is named by their email address on a board', () => {
-    for (const p of ['app/dashboard/editor/page.tsx', 'app/dashboard/scheduler/page.tsx']) {
+    for (const p of ['app/dashboard/editor/page.tsx', 'app/dashboard/scheduler/board/usePostBoard.ts']) {
       const s = src(p)
       expect(s, p).not.toMatch(/u\.name \|\| u\.email/)
       expect(s, p).toMatch(/personLabel\(u\.name, u\.email\)/)

@@ -16,14 +16,15 @@ const SECRET = 'test-webhook-secret'
 
 type Row = Record<string, unknown>
 
-const recordPublishOnItem = vi.fn(async () => {})
+// the publish recorder (production-publish.recordPostOutcome) is reached through publish.tellThePost;
+// its own behaviour is pinned in tests/publish-recorder.test.ts
+const tellThePost = vi.fn(async (_jobId: string, _opts?: { lost?: boolean }) => {})
 const syncSocialAccounts = vi.fn(async () => 1)
 const notify = vi.fn(async (_input: Record<string, unknown>) => 'sent' as const)
 const send = vi.fn(async () => ({ ids: [] }))
 
-vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem }))
 const resendTimedOut = vi.fn(async () => [])
-vi.mock('../app/lib/publish', () => ({ syncSocialAccounts, resendTimedOut }))
+vi.mock('../app/lib/publish', () => ({ syncSocialAccounts, resendTimedOut, tellThePost }))
 vi.mock('../app/lib/mailer', () => ({ notify }))
 vi.mock('@/app/inngest/client', () => ({ inngest: { send } }))
 
@@ -73,7 +74,7 @@ const published = (postId: string, id = 'evt_1') => ({
 beforeEach(() => {
   process.env.ZERNIO_WEBHOOK_SECRET = SECRET
   forgetWebhookSecrets()
-  for (const fn of [recordPublishOnItem, syncSocialAccounts, notify, send]) fn.mockClear()
+  for (const fn of [tellThePost, syncSocialAccounts, notify, send]) fn.mockClear()
   fake = null
   seed = {
     publish_jobs: [{
@@ -123,9 +124,9 @@ describe('POST /api/zernio/webhook — publishing', () => {
     expect(job().permalink).toBe('https://instagram.com/p/abc')
     expect(job().published_at).toEqual(expect.any(String))
 
-    expect(recordPublishOnItem).toHaveBeenCalledWith(
-      'item-1', 'https://instagram.com/p/abc', ['instagram'],
-    )
+    // the post hears it (T16), and the link sits on the network it is from
+    expect(tellThePost).toHaveBeenCalledWith('job-1', {})
+    expect(job().platform_results).toEqual([expect.objectContaining({ platform: 'instagram', status: 'published', url: 'https://instagram.com/p/abc' })])
   })
 
   it('asks for the first analytics read ten minutes later, once', async () => {
@@ -139,7 +140,7 @@ describe('POST /api/zernio/webhook — publishing', () => {
 
   it('is idempotent: a redelivery of the same event does nothing', async () => {
     await deliver(published('post_1'))
-    expect(recordPublishOnItem).toHaveBeenCalledTimes(1)
+    expect(tellThePost).toHaveBeenCalledTimes(1)
     const after = { ...job() }
 
     // Zernio is at-least-once and retries for ~51 hours — this WILL happen
@@ -147,7 +148,7 @@ describe('POST /api/zernio/webhook — publishing', () => {
 
     expect(res.status).toBe(200)
     expect(json).toEqual({ ok: true, duplicate: true })
-    expect(recordPublishOnItem).toHaveBeenCalledTimes(1)
+    expect(tellThePost).toHaveBeenCalledTimes(1)
     expect(send).toHaveBeenCalledTimes(1)
     expect(job()).toEqual(after)
     // one row, not two — the event id is the claim
@@ -165,7 +166,7 @@ describe('POST /api/zernio/webhook — publishing', () => {
     const { res, json } = await deliver(published('post_unknown'))
     expect(res.status).toBe(200)
     expect(json).toEqual({ ok: true, duplicate: true })
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    expect(tellThePost).not.toHaveBeenCalled()
     expect(job().status).toBe('scheduled')
   })
 
@@ -184,8 +185,8 @@ describe('POST /api/zernio/webhook — publishing', () => {
     expect(res.status).toBe(200)
     expect(json).toMatchObject({ ok: true, failed: 'job-1' })
     expect(job()).toMatchObject({ status: 'failed', error: 'Token expired' })
-    // the item stays Scheduled — it is booked, it just did not go out
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    // the post hears it — the recorder decides (T18, or still booked while a re-send goes)
+    expect(tellThePost).toHaveBeenCalledWith('job-1', {})
     // and the re-send of anything that timed out is asked for, with the per-network record (24 Sep 2026)
     expect(resendTimedOut).toHaveBeenCalledTimes(1)
     expect((resendTimedOut.mock.calls[0] as unknown[])[1]).toEqual([expect.objectContaining({ platform: 'instagram', status: 'failed' })])
@@ -230,7 +231,9 @@ describe('POST /api/zernio/webhook — per-platform results', () => {
   it('does not settle the job — the post-level rollup owns that', async () => {
     await deliver(platformPublished())
     expect(job().status).toBe('scheduled')
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    // …but the network's own record says it is out, and the post is told
+    expect(job().platform_results).toEqual([expect.objectContaining({ platform: 'instagram', status: 'published', url: 'https://instagram/p/abc' })])
+    expect(tellThePost).toHaveBeenCalledWith('job-1', {})
   })
 
   it('never overwrites a link somebody set by hand', async () => {
@@ -276,6 +279,38 @@ describe('POST /api/zernio/webhook — per-platform results', () => {
       status: 'failed', error: 'linkedin: Document too large',
     })
   })
+
+  it('writes WHICH network failed into that network\'s own record, and tells the post', async () => {
+    seed.publish_jobs[0].targets = [{ platform: 'instagram' }, { platform: 'linkedin' }]
+    await deliver({
+      id: 'evt_pf2',
+      event: 'post.platform.failed',
+      data: {
+        post: { id: 'post_1', platforms: [] },
+        platform: { name: 'linkedin', status: 'failed', error: 'Document too large' },
+        account: { accountId: 'acc_1', platform: 'linkedin', username: 'c' },
+      },
+    })
+    const record = job().platform_results as { platform: string; status: string; reason: string | null }[]
+    expect(record.find(o => o.platform === 'linkedin')).toMatchObject({ status: 'failed' })
+    // Instagram has not answered yet: it is not called failed with it
+    expect(record.find(o => o.platform === 'instagram')!.status).not.toBe('failed')
+    expect(tellThePost).toHaveBeenCalledWith('job-1', {})
+
+    // …and when Instagram then goes out, its own record says so, with its own link
+    await deliver({
+      id: 'evt_pp2',
+      event: 'post.platform.published',
+      data: {
+        post: { id: 'post_1', status: 'publishing', platforms: [] },
+        platform: { name: 'instagram', status: 'published', publishedUrl: 'https://www.instagram.com/p/XYZ/' },
+        account: { accountId: 'acc_1', platform: 'instagram', username: 'client' },
+      },
+    })
+    const after = job().platform_results as { platform: string; status: string; url: string | null }[]
+    expect(after.find(o => o.platform === 'instagram')).toMatchObject({ status: 'published', url: 'https://www.instagram.com/p/XYZ/' })
+    expect(after.find(o => o.platform === 'linkedin')).toMatchObject({ status: 'failed', url: null })
+  })
 })
 
 describe('POST /api/zernio/webhook — cancellation and scheduling', () => {
@@ -285,8 +320,8 @@ describe('POST /api/zernio/webhook — cancellation and scheduling', () => {
     expect(json).toMatchObject({ ok: true, cancelled: true })
     expect(job().status).toBe('cancelled')
     expect(String(job().error)).toContain('nothing was posted')
-    // the item itself is untouched: it is still booked
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    // the provider dropped it: the post hears that nothing went out (T18, "the job was lost")
+    expect(tellThePost).toHaveBeenCalledWith('job-1', { lost: true })
     expect(rows('workflow_activity')[0]).toMatchObject({
       entity_type: 'content_item', entity_id: 'item-1', action: 'publish_cancelled',
     })
@@ -297,6 +332,12 @@ describe('POST /api/zernio/webhook — cancellation and scheduling', () => {
     const { json } = await deliver({ id: 'evt_x', event: 'post.cancelled', data: { post: { id: 'post_1' } } })
     expect(json).toMatchObject({ cancelled: false })
     expect(job().status).toBe('published')
+  })
+
+  it('a job WE cancelled first is not called lost when the provider echoes the cancel', async () => {
+    seed.publish_jobs[0].status = 'cancelled'
+    await deliver({ id: 'evt_x2', event: 'post.cancelled', data: { post: { id: 'post_1' } } })
+    expect(tellThePost).not.toHaveBeenCalled()
   })
 
   it('treats post.scheduled as confirmation and changes nothing', async () => {
@@ -474,7 +515,7 @@ describe('POST /api/zernio/webhook — authentication and unknown events', () =>
     const { res, json } = await deliver({ id: 'evt_t', event: 'webhook.test', data: {} })
     expect(res.status).toBe(200)
     expect(json).toMatchObject({ ok: true })
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    expect(tellThePost).not.toHaveBeenCalled()
     // logged as arrived but NOT handled — which is the honest record of it
     expect(rows('webhook_deliveries')[0]).toMatchObject({ event: 'webhook.test', handled: false })
   })
@@ -483,7 +524,7 @@ describe('POST /api/zernio/webhook — authentication and unknown events', () =>
     const { res } = await deliver(published('post_1'), { secret: 'not-our-secret' })
     expect(res.status).toBe(401)
     expect(job().status).toBe('scheduled')
-    expect(recordPublishOnItem).not.toHaveBeenCalled()
+    expect(tellThePost).not.toHaveBeenCalled()
     // an unauthorised delivery must not consume the event id either
     expect(rows('webhook_deliveries')).toHaveLength(0)
   })

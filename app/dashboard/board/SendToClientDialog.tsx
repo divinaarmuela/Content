@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Link2, Mail, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import type { ClientRecipient } from '../../lib/post-to-client-core'
+import type { SendChoice as ClientRecipient } from '../../lib/post-board-core'
 
 /**
  * SEND TO CLIENT — confirm who gets it, then send (the owner, 28 Sep 2026: "at With client it should be sent to the

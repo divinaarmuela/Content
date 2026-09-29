@@ -4,15 +4,17 @@ import { table } from '@/lib/db'
 import type { Row } from '@/lib/db-types'
 
 /**
- * The whole server flow of a planned post, on the real `@/lib/db` over an
- * in-memory Realtime Database: create → send → approve THROUGH THE EXISTING
- * item route → schedule → reschedule → cancel, plus the two rules that cannot
- * be allowed to rot — the approval lock on every publish path, and "one set
- * of jobs, however many people click".
+ * The Schedule page's server, on the real `@/lib/db` over an in-memory Realtime Database: create a post,
+ * save its working copy, move it on the calendar, put it in the bin — and every other move through
+ * `POST /api/posts/<id>/act`, the one route that moves a post (the posting rebuild, 29 Sep 2026).
  *
- * Nothing here may reach a real account: PUBLISH_DRY_RUN=1 makes the provider
- * itself answer with a fake id, and the only fetch in the process is the fake
- * database.
+ * The old model — one approval per ITEM (`posting_approval_state`), a post's status worked out from the
+ * item and its jobs, "send for approval" and "schedule without approval" doors — is gone, and so are its
+ * tests. The rules now live in app/lib/post-stage-core.ts (tests/post-stage-core.test.ts) and the writer in
+ * app/lib/post-stage.ts (tests/post-stage.test.ts). What stays here is what this page's own routes do.
+ *
+ * Nothing here may reach a real account: PUBLISH_DRY_RUN=1 makes the provider itself answer with a fake
+ * id, and the only fetch in the process is the fake database.
  */
 
 const h = vi.hoisted(() => ({
@@ -46,17 +48,6 @@ vi.mock('../app/lib/authz', () => {
 vi.mock('../app/lib/mailer', () => ({
   notify: vi.fn(), renderEmail: () => '', escapeHtml: (s: string) => s,
 }))
-/**
- * The REAL workflow module, deliberately.
- *
- * A post an account manager sends straight out performs the media's own
- * sign-off on the way (`internal_review → approved_for_scheduling`), and a
- * stubbed `performTransition` would let that pass whatever it was given. The
- * edge, its role check, the client's policy and the activity line are the
- * point of the test, so the module runs for real over the fake database;
- * `mailer`, `production-live` and Drive are the mocks that keep it in the
- * room.
- */
 vi.mock('../app/lib/gdrive-mirror', () => ({
   mirrorLatestVersionSoon: vi.fn(), mirrorVersionSlides: vi.fn(async () => []),
 }))
@@ -68,14 +59,11 @@ vi.mock('../app/inngest/client', () => ({ inngest: { send: vi.fn(async () => ({}
 
 const schedule = await import('../app/api/social/schedule/route')
 const one = await import('../app/api/social/schedule/[id]/route')
-const send = await import('../app/api/social/schedule/[id]/send/route')
-const book = await import('../app/api/social/schedule/[id]/schedule/route')
 const move = await import('../app/api/social/schedule/[id]/reschedule/route')
+const actRoute = await import('../app/api/posts/[id]/act/route')
 const notesRoute = await import('../app/api/social/schedule/notes/route')
 const suggested = await import('../app/api/social/schedule/suggested/route')
 const channelOptions = await import('../app/api/social/schedule/options/route')
-const approval = await import('../app/api/production/items/[id]/posting-approval/route')
-const adhoc = await import('../app/api/social/publish/route')
 const lib = await import('../app/lib/social-schedule')
 const transition = await import('../app/api/production/items/[id]/transition/route')
 const clientApproval = await import('../app/api/clients/[id]/approval/route')
@@ -135,6 +123,8 @@ function seed(
       id: `${u.id}__${CLIENT}`, team_user_id: u.id, client_id: CLIENT,
     })) as unknown as Row[],
     social_posts: [],
+    post_versions: [],
+    post_events: [],
     schedule_entries: [],
     schedule_notes: [],
     publish_jobs: [],
@@ -160,50 +150,34 @@ const create = (body: Record<string, unknown> = {}) => json(
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
-const post = (id: string, body: Record<string, unknown> = {}) => json(
-  send.POST(new Request('https://x.test/send', {
-    method: 'POST', body: JSON.stringify(body),
-  }), params(id)))
-const bookIn = (id: string) => json(
-  book.POST(new Request('https://x.test/schedule', { method: 'POST' }), params(id)))
-const moveTo = (id: string, at: string) => json(
-  move.POST(new Request('https://x.test/reschedule', { method: 'POST', body: JSON.stringify({ at }) }), params(id)))
-const approve = (action: 'approve' | 'request_changes', note = 'Looks good') => json(
-  approval.POST(
-    new Request('https://x.test/posting-approval', { method: 'POST', body: JSON.stringify({ action, note }) }),
-    params(ITEM),
-  ))
-
-/** Make every write whose payload contains `needle` fail the way a dropped
- *  connection does. Returns the undo. */
-function failWritesNaming(needle: string) {
-  const inner = globalThis.fetch
-  globalThis.fetch = (async (input: any, init: any = {}) => {
-    if ((init?.method ?? 'GET').toUpperCase() !== 'GET'
-      && typeof init?.body === 'string' && init.body.includes(needle)) {
-      throw new TypeError('fetch failed')
-    }
-    return inner(input, init)
-  }) as typeof globalThis.fetch
-  return () => { globalThis.fetch = inner }
-}
-
-/** Make every READ of a path containing `needle` fail the way a dropped
- *  connection does. Returns the undo. */
-function failReadsNaming(needle: string) {
-  const inner = globalThis.fetch
-  globalThis.fetch = (async (input: any, init: any = {}) => {
-    const url = typeof input === 'string' ? input : String(input?.url ?? '')
-    if ((init?.method ?? 'GET').toUpperCase() === 'GET' && url.includes(needle)) {
-      throw new TypeError('fetch failed')
-    }
-    return inner(input, init)
-  }) as typeof globalThis.fetch
-  return () => { globalThis.fetch = inner }
-}
-
 const row = (id: string) => fake.rows('social_posts').find(p => p.id === id) as any
 const jobs = () => fake.rows('publish_jobs') as any[]
+
+/** one move on the post, with the rev (and version) the page would have drawn */
+const act = async (id: string, action: string, extra: Record<string, unknown> = {}) => json(
+  actRoute.POST(new Request('https://x.test/act', {
+    method: 'POST',
+    body: JSON.stringify({ action, expect_rev: row(id)?.rev ?? 0, version: row(id)?.sent_version ?? undefined, ...extra }),
+  }), params(id)))
+
+const moveTo = (id: string, at: string) => json(
+  move.POST(new Request('https://x.test/reschedule', { method: 'POST', body: JSON.stringify({ at }) }), params(id)))
+const bin = (id: string) => json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
+const save = (id: string, body: Record<string, unknown>) => json(
+  one.PATCH(new Request('https://x.test/post', { method: 'PATCH', body: JSON.stringify(body) }), params(id)))
+
+/** made by the scheduler, checked by the quality reviewer: Ready to post */
+async function readyPost(body: Record<string, unknown> = {}) {
+  as(SCHEDULER)
+  const id = (await create(body)).body.post.id as string
+  const sent = await act(id, 'send_to_qc')
+  expect(sent.status, JSON.stringify(sent.body)).toBe(200)
+  as(QA)
+  const passed = await act(id, 'pass')
+  expect(passed.status, JSON.stringify(passed.body)).toBe(200)
+  as(SCHEDULER)
+  return id
+}
 
 beforeEach(() => {
   process.env.PUBLISH_DRY_RUN = '1'
@@ -220,230 +194,106 @@ afterEach(() => {
 /* ── the whole way through ──────────────────────────────────────────────── */
 
 describe('a planned post, end to end', () => {
-  it('create → send → approve on the item route → schedule → reschedule → cancel', async () => {
-    // create
+  it('create → send for quality check → passed → book in → move → bin', async () => {
     const made = await create()
     expect(made.status).toBe(200)
-    expect(made.body.post.status).toBe('draft')
+    expect(made.body.post.stage).toBe('draft')
     expect(made.body.post.slides).toHaveLength(2)
     const id = made.body.post.id as string
 
-    // send for approval — the ITEM is what moves
-    const sent = await post(id)
-    expect(sent.status).toBe(200)
-    expect(sent.body.post.status).toBe('pending')
-    expect(sent.body.post.sent_at).toBeTruthy()
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('pending')
+    // a draft cannot be booked
+    expect((await act(id, 'book')).status).toBe(409)
 
-    // a post waiting on approval cannot be booked
-    expect((await bookIn(id)).status).toBe(409)
+    const sent = await act(id, 'send_to_qc')
+    expect(sent.status, JSON.stringify(sent.body)).toBe(200)
+    expect(sent.body.post.stage).toBe('quality_check')
+    // the EDIT card never moves for the post (SPEC §1.3)
+    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
+
+    as(QA)
+    const passed = await act(id, 'pass')
+    expect(passed.status).toBe(200)
+    expect(passed.body.words).toBe('Passed — now in Ready to post')
+    // …and nothing was booked by the pass: booking is its own press
     expect(jobs()).toHaveLength(0)
 
-    // approve through the EXISTING item route, as the account manager —
-    // and THE YES BOOKS IT IN (8 Sep 2026): the post carries a time, so the
-    // approval hands it to the provider at that time with nothing else to
-    // press. The provider is stubbed by PUBLISH_DRY_RUN.
-    as(AM)
-    const answered = await approve('approve')
-    expect(answered.status).toBe(200)
-    expect(answered.body.posting_approval_state).toBe('approved')
-    expect(row(id).status).toBe('scheduled')
+    as(SCHEDULER)
+    const booked = await act(id, 'book')
+    expect(booked.status, JSON.stringify(booked.body)).toBe(200)
+    expect(booked.body.post.stage).toBe('booked')
     expect(jobs()).toHaveLength(1)
     expect(jobs()[0].content_item_id).toBe(ITEM)
     expect(jobs()[0].targets[0]).toMatchObject({ platform: 'instagram', accountId: 'prov-1' })
-    expect(row(id).publish_job_ids).toEqual([jobs()[0].id])
+    expect(row(id).booking.job_ids).toEqual([jobs()[0].id])
 
-    // a second Schedule press is told it is already on its way
-    as(SCHEDULER)
-    const again = await bookIn(id)
-    expect(again.status).toBe(409)
+    // a second Book in press is refused; still one job
+    expect((await act(id, 'book')).status).toBe(409)
     expect(jobs()).toHaveLength(1)
 
-    // move it: the provider is holding this one, so the old job is pulled back
+    // move it: the provider is holding this one, so the old job is pulled back and a new one made
     const later = IN_THREE_DAYS()
     const moved = await moveTo(id, later)
-    expect(moved.status).toBe(200)
-    expect(moved.body.mode).toBe('requeue')
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200)
     expect(moved.body.post.scheduled_for).toBe(later)
+    expect(moved.body.post.stage).toBe('booked')
     expect(jobs().filter(j => j.status === 'cancelled')).toHaveLength(1)
     expect(jobs().filter(j => j.status === 'queued')).toHaveLength(1)
 
-    // and take it off the calendar
-    const gone = await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
-    expect(gone.status).toBe(200)
-    expect(gone.body.post.status).toBe('cancelled')
+    // and take it off the calendar: a sent post is cancelled, never deleted
+    const gone = await bin(id)
+    expect(gone.status, JSON.stringify(gone.body)).toBe(200)
+    expect(gone.body.post.stage).toBe('cancelled')
     expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
   })
 
-  /**
-   * BOOKING A POST IS SCHEDULING THE PIECE.
-   *
-   * The tile said “scheduled” while the piece stayed at “Approved” with no
-   * schedule row, so the board and the client’s own card were told nothing:
-   * the client read “we’ll book a posting time” until the post appeared live.
-   * Booking writes both now — through the SAME call the older publish route
-   * uses — and writes them once.
-   */
-  it('booking a post writes the schedule the client reads, and moves the piece', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-
-    // the approval above booked it in; nothing else was pressed
-    const when = row(id).scheduled_for as string
-    expect(row(id).status).toBe('scheduled')
-
-    const entries = fake.rows('schedule_entries') as any[]
-    expect(entries).toHaveLength(1)
-    expect(entries[0]).toMatchObject({ item_id: ITEM, platform: 'instagram', scheduled_at: when })
-    expect((fake.rows('content_items')[0] as any).status).toBe('scheduled')
-  })
-
-  it('re-booking the same post never doubles the schedule row or the move', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-
-    await bookIn(id)
-    // the second click loses the claim, exactly as it did before
-    expect((await bookIn(id)).status).toBe(409)
-    // …and a move re-queues the job without a second schedule row
-    await moveTo(id, IN_THREE_DAYS())
-    expect(fake.rows('schedule_entries')).toHaveLength(1)
-    expect((fake.rows('content_items')[0] as any).status).toBe('scheduled')
-  })
-
-  it('moves a post nobody has handed over yet with one write', async () => {
+  it('moves a draft with one write, and never onto a time that has gone', async () => {
     const id = (await create()).body.post.id as string
     const later = IN_THREE_DAYS()
     const moved = await moveTo(id, later)
     expect(moved.status).toBe(200)
-    expect(moved.body.mode).toBe('move')
     expect(row(id).scheduled_for).toBe(later)
+    expect(row(id).stage).toBe('draft')
     expect(jobs()).toHaveLength(0)
+
+    const past = await moveTo(id, new Date(Date.now() - 3600_000).toISOString())
+    expect(past.status).toBe(409)
+    expect(past.body.error).toBe('That time has already gone — pick a later one')
   })
 
-  it('refuses a time that has already gone, in plain words', async () => {
-    const id = (await create()).body.post.id as string
-    const moved = await moveTo(id, new Date(Date.now() - 3600_000).toISOString())
-    expect(moved.status).toBe(409)
-    expect(moved.body.error).toBe('That time has already gone — pick a later one')
+  it('keeps the approval when only the time moves (SPEC T13)', async () => {
+    const id = await readyPost()
+    const later = IN_THREE_DAYS()
+    const moved = await moveTo(id, later)
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200)
+    expect(moved.body.post.stage).toBe('ready')
+    expect(moved.body.post.approval.version).toBe(moved.body.post.sent_version)
+    // …a time-only PATCH does the same
+    const again = await save(id, { scheduled_for: IN_TWO_DAYS() })
+    expect(again.status, JSON.stringify(again.body)).toBe(200)
+    expect(row(id).stage).toBe('ready')
   })
 
-  it('takes the approval back when the words change, and says so on the item', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-
-    // THE WORDS OF A BOOKED POST MAY CHANGE (Raina and the owner, 22 Sep 2026): the booking is pulled
-    // back and made again with the new words, same time — and the client's yes stands. It used to be
-    // refused outright (8 Sep 2026).
-    const edited = await json(one.PATCH(
-      new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: 'A different line' }) }),
-      params(id),
-    ))
-    expect(edited.status).toBe(200)
-    expect(row(id).status).toBe('scheduled')
-    expect(row(id).caption).toBe('A different line')
-    expect(row(id).publish_job_ids).toHaveLength(1)
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-  })
-
-  // THE CLICK THAT USED TO COST A CLIENT'S APPROVAL.
-  //
-  // The composer opened an approved post with an empty caption and empty
-  // per-channel extras, and pressing Schedule PATCHed the WHOLE composition
-  // — those empties included. `updatePost` read the empty caption as a
-  // content change and took the sign-off back, from a press that changed
-  // nothing anybody could see. The window now opens holding what the post
-  // holds, so the body it sends back is identical; this is the route's half
-  // of that promise.
-  it('an untouched Schedule press sends the same body and keeps the approval', async () => {
-    const id = (await create({
-      per_channel: { 'acc-1': { firstComment: '#launch', locationId: '102938475610293' } },
-    })).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-
-    const before = row(id)
-    // exactly what the composer sends when nobody has typed anything: every
-    // field, read back off the post it opened with
-    const unchanged = await json(one.PATCH(
-      new Request('https://x.test/x', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          item_id: ITEM,
-          slides: before.slides,
-          caption: before.caption,
-          channels: before.channels,
-          per_channel: before.per_channel,
-          scheduled_for: before.scheduled_for,
-          timezone: 'Australia/Melbourne',
-        }),
-      }),
-      params(id),
-    ))
-
-    // the yes booked it in (8 Sep 2026); an untouched press changes nothing (22 Sep 2026: it answers the
-    // post as it is, rather than a refusal), and must not cost the approval or a single field
-    expect(unchanged.status).toBe(200)
-    expect(row(id).status).toBe('scheduled')
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-    // …and nothing was quietly lost on the way through, either
+  it('refuses to change the words of a post that was sent — press Edit first', async () => {
+    const id = await readyPost()
+    const r = await save(id, { caption: 'Different words' })
+    expect(r.status).toBe(409)
+    expect(String(r.body.error)).toMatch(/Press Edit/)
     expect(row(id).caption).toBe('Hello everyone')
-    expect(row(id).per_channel['acc-1'])
-      .toEqual({ firstComment: '#launch', locationId: '102938475610293' })
+    // Edit makes it a draft of the next version; then the words may change
+    expect((await act(id, 'edit')).status).toBe(200)
+    expect((await save(id, { caption: 'Different words' })).status).toBe(200)
+    expect(row(id).caption).toBe('Different words')
+    expect(row(id).stage).toBe('draft')
   })
 
-  it('an EMPTY caption on an approved post is still a change, and still costs the approval', async () => {
-    // the other half: the guard must not have been loosened into "a caption
-    // edit no longer counts". Somebody deliberately clearing the words is a
-    // content change and has to be re-approved.
+  it('the bin deletes a draft that was never sent', async () => {
     const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-    const cleared = await json(one.PATCH(
-      new Request('https://x.test/x', { method: 'PATCH', body: JSON.stringify({ caption: '' }) }),
-      params(id),
-    ))
-    // THE WORDS OF A BOOKED POST MAY CHANGE (Raina and the owner, 22 Sep 2026): even to nothing — the
-    // booking is pulled back and made again with the new words, and the client's yes stands. It used to
-    // be refused outright (8 Sep 2026).
-    expect(cleared.status).toBe(200)
-    expect(row(id).caption).toBe('')
-    expect(row(id).status).toBe('scheduled')
-    expect(row(id).publish_job_ids).toHaveLength(1)
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-  })
-
-  it('keeps the approval when only the time moves', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-    await moveTo(id, IN_THREE_DAYS())
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-    // booked by the yes, and still booked after the move
-    expect(row(id).status).toBe('scheduled')
-  })
-
-  it('mirrors "changes requested" onto the tile', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    expect((await approve('request_changes', 'Shorten the caption')).status).toBe(200)
-    expect(row(id).status).toBe('changes')
+    const gone = await bin(id)
+    expect(gone.status).toBe(200)
+    expect(gone.body.stage).toBe('deleted')
+    expect(row(id)).toBeUndefined()
+    // …and the piece may carry a new post of the same files straight away
+    expect((await create()).status).toBe(200)
   })
 
   it('refuses graphics that are not part of the approved version', async () => {
@@ -455,485 +305,31 @@ describe('a planned post, end to end', () => {
     expect(fake.rows('social_posts')).toHaveLength(0)
   })
 
-  /**
-   * A PIECE THE CLIENT IS LOOKING AT RIGHT NOW IS NOT MEDIA TO POST WITH.
-   *
-   * For one day it was: `client_review` sat in the one-press set, so the
-   * manager's rail offered it as ordinary usable media and one press took it
-   * off the client's screen. Not even the account manager builds a post on it
-   * now — the "Approve without client" button, and the question it asks, is
-   * the only way past a review that is happening.
-   */
-  it('refuses a piece the client is looking at right now — for everybody', async () => {
-    fake.restore()
-    fake = seed({ status: 'client_review' })
-    as(AM)
-    const made = await create()
-    expect(made.status).toBe(400)
-    expect(made.body.error).toBe('With the client now')
-    expect(fake.rows('social_posts')).toHaveLength(0)
-
-    // …and a scheduler cannot see it at all, which is a different (older) refusal
-    as(SCHEDULER)
-    expect((await create()).status).toBe(404)
-  })
-
-  it('…and says the same on a client who signs every post off', async () => {
-    fake.restore()
-    fake = seed({ status: 'client_review' }, { client_approval_required: true })
-    as(AM)
-    const made = await create()
-    expect(made.status).toBe(400)
-    expect(made.body.error).toBe('With the client now')
-    expect(fake.rows('social_posts')).toHaveLength(0)
-  })
-})
-
-/* ── scheduling without asking ──────────────────────────────────────────── */
-
-describe('schedule without approval', () => {
-  it('lets an account manager clear their own post and book it in', async () => {
-    const made = await create()
-    const id = made.body.post.id as string
-
-    as(AM)
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.status).toBe('scheduled')
-    expect(direct.body.post.approval_mode).toBe('self')
-    expect(direct.body.post.approved_by).toBe(AM.id)
-    // the item went through the ordinary state machine, so every other screen
-    // reads it as an approved post
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-    expect(jobs()).toHaveLength(1)
-  })
-
-  it('lets a scheduler post a piece the BOARD approved, with no second approval (8 Sep 2026)', async () => {
-    // the seed piece is approved_for_scheduling and is not an ad-hoc upload:
-    // it came through the columns, so scheduling it is just scheduling it
-    const id = (await create()).body.post.id as string
-    as(SCHEDULER)
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.status).toBe('scheduled')
-    expect(direct.body.post.approval_mode).toBe('assets')
-    expect(jobs()).toHaveLength(1)
-    // the item's gate says who and why, so nothing later flips it back
-    const item = fake.rows('content_items')[0] as any
-    expect(item.posting_approval_state).toBe('approved')
-    expect(item.posting_approved_by).toBe(SCHEDULER.id)
-    expect(String(item.posting_approval_note)).toMatch(/board/i)
-  })
-
-  it('an uploaded piece the manager cleared posts like any other (8 Sep 2026, final)', async () => {
-    fake.restore()
-    fake = seed({ adhoc_post: true })   // approved_for_scheduling in the seed
-    const id = (await create()).body.post.id as string
-    as(SCHEDULER)
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.approval_mode).toBe('assets')
-    expect(jobs()).toHaveLength(1)
-  })
-
-  it('refuses an editor on their own item too', async () => {
-    as(OWNER)
-    const id = (await create()).body.post.id as string
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(403)
-    expect(jobs()).toHaveLength(0)
-  })
-
-  it('marks an ordinary send as the client route', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    expect(row(id).approval_mode).toBe('client')
-  })
-})
-
-/* ── one press, no approval step (ruled 5 Sep 2026) ───────────────── */
-
-describe('an account manager posts media the client has not signed off', () => {
-  /** the ordinary case: the work is finished and waiting on the manager's own
-   *  check, and the item's own flag says the client normally sees it */
-  const waiting = () => {
-    fake.restore()
-    fake = seed({ status: 'internal_review', client_approval_required: true })
-  }
-
-  it('a manager who is not the quality reviewer sends the piece to the gate, and is told so', async () => {
-    // Abby, 11 Sep 2026: everything goes through Joy BEFORE scheduling
-    waiting()
-    as(AM)
-    const id = (await create()).body.post.id as string
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(409)
-    expect(String(direct.body.error)).toContain('quality check')
-    expect((fake.rows('content_items')[0] as any).status).toBe('quality_check')
-    expect(jobs()).toHaveLength(0)
-  })
-
-  it('does the media sign-off and the post approval in ONE request', async () => {
-    waiting()
-    as(QA)
-    const made = await create()
-    expect(made.status).toBe(200)
-    const id = made.body.post.id as string
-
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.status).toBe('scheduled')
-    expect(direct.body.post.approval_mode).toBe('self')
-    expect(direct.body.post.approved_by).toBe(AM.id)
-
-    // the MEDIA went the ordinary way: the item moved on the workflow edge…
-    const item = fake.rows('content_items')[0] as any
-    // …through approved_for_scheduling and on to scheduled, because booking a
-    // post IS scheduling the piece — the trail below records both moves
-    expect(item.status).toBe('scheduled')
-    // …and the post's own approval is the ordinary one on top of it
-    expect(item.posting_approval_state).toBe('approved')
-    expect(jobs()).toHaveLength(1)
-  })
-
-  it('…and records WHO signed the media off, on the ordinary activity trail', async () => {
-    waiting()
-    as(QA)
-    const id = (await create()).body.post.id as string
-    await post(id, { mode: 'direct' })
-
-    const line = (fake.rows('workflow_activity') as any[]).find(
-      a => a.entity_id === ITEM && a.new_value === 'approved_for_scheduling')
-    expect(line).toBeTruthy()
-    expect(line.actor_id).toBe(AM.id)
-    expect(line.old_value).toBe('internal_review')
-  })
-
-  it('refuses a scheduler the same way approving would', async () => {
-    waiting()
-    // on a draft an account manager left behind — a scheduler cannot even see
-    // a piece still in internal review, so this is the only way they reach one
-    as(AM)
-    const id = (await create()).body.post.id as string
-    as(SCHEDULER)
-    const direct = await post(id, { mode: 'direct' })
-    // a piece still in internal review is not even theirs to look at, so the
-    // refusal arrives one door earlier than the approval check — either way
-    // nothing moved
-    expect(direct.status).toBe(404)
-    expect((fake.rows('content_items')[0] as any).status).toBe('internal_review')
-    expect(jobs()).toHaveLength(0)
-
-    // …and on a piece they CAN see — one the board approved — they post it
-    // with no second approval (8 Sep 2026)
-    fake.restore()
-    fake = seed()
-    as(AM)
-    const visible = (await create()).body.post.id as string
-    as(SCHEDULER)
-    const allowed = await post(visible, { mode: 'direct' })
-    expect(allowed.status).toBe(200)
-    expect(allowed.body.post.status).toBe('scheduled')
-    expect(allowed.body.post.approval_mode).toBe('assets')
-  })
-
-  // the owner, 9 Sep 2026: "they can schedule or publish as an AM or super
-  // admin — no approval or accept feature, even when the client has that lock"
-  it('lets a manager straight through on a client who signs every post off', async () => {
-    fake.restore()
-    fake = seed({}, { client_approval_required: true })
-    as(AM)
-    const id = (await create()).body.post.id as string
-    const direct = await post(id, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.status).toBe('scheduled')
-    expect(direct.body.post.approval_mode).toBe('self')
-    expect(jobs()).toHaveLength(1)
-  })
-
-  it('will not rescue a piece that is still being MADE — no edge takes it', async () => {
-    fake.restore()
-    fake = seed({ status: 'revision_required' })
-    as(AM)
-    const made = await create()
-    expect(made.status).toBe(400)
-    expect((fake.rows('content_items')[0] as any).status).toBe('revision_required')
-  })
-})
-
-/* ── exactly one winner ─────────────────────────────────────────────────── */
-
-describe('two people booking the same post', () => {
-  it('queues one set of jobs, and the loser is told plainly', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-
-    // the yes booked it (8 Sep 2026): one set of jobs exists before anybody
-    // presses anything, and every press after is told plainly
-    expect(jobs()).toHaveLength(1)
-    const [a, b] = await Promise.all([bookIn(id), bookIn(id)])
-    expect(jobs()).toHaveLength(1)
-    for (const r of [a, b]) {
-      expect(r.status).toBe(409)
-      expect(String(r.body.error)).toMatch(/already/i)
-    }
-  })
-
   it('starts one post per item, however many times the button is pressed', async () => {
     const [a, b] = await Promise.all([create(), create()])
     expect([a, b].filter(r => r.status === 200)).toHaveLength(1)
     expect(fake.rows('social_posts')).toHaveLength(1)
   })
-})
 
-/* ── the lock, on every path ────────────────────────────────────────────── */
-
-describe('the approval lock', () => {
-  const adhocBody = {
-    clientId: CLIENT,
-    contentItemId: ITEM,
-    caption: 'Straight to the queue',
-    media: [{ url: 'https://media.mdmmarketing.com.au/one.jpg', type: 'image' }],
-    targets: [{ platform: 'instagram', accountId: 'prov-1' }],
-  }
-  const adhocPost = (body: Record<string, unknown> = {}) => json(
-    adhoc.POST(new Request('https://x.test/api/social/publish', {
-      method: 'POST', body: JSON.stringify({ ...adhocBody, ...body }),
-    })))
-
-  it('refuses an ad-hoc publish while the item is waiting on approval', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'pending' })
-    const res = await adhocPost()
-    expect(res.status).toBe(409)
-    expect(res.body.error).toBe(
-      'Waiting on final approval — the post was sent for sign-off and nobody has approved it yet',
-    )
-    expect(jobs()).toHaveLength(0)
-  })
-
-  it('refuses one where changes were asked for', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'changes' })
-    const res = await adhocPost()
-    expect(res.status).toBe(409)
-    expect(res.body.error).toContain('Changes were asked for')
-    expect(jobs()).toHaveLength(0)
-  })
-
-  it('lets an approved item through', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'approved' })
-    const res = await adhocPost()
-    expect(res.status).toBe(200)
-    expect(jobs()).toHaveLength(1)
-  })
-
-  it('refuses an editor the ad-hoc publish door, approved item or not', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'approved' })
-    as(OWNER)
-    const res = await adhocPost()
-    expect(res.status).toBe(403)
-    expect(res.body.error).toBe('Posting to a channel is for schedulers and account managers')
-    expect(jobs()).toHaveLength(0)
-
-    // …and with nothing linked, where the approval gate has nothing to say
-    const loose = await adhocPost({ contentItemId: null })
-    expect(loose.status).toBe(403)
-    expect(jobs()).toHaveLength(0)
-  })
-
-  it('refuses an editor the list of what went out', async () => {
-    as(OWNER)
-    const res = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
-    expect(res.status).toBe(403)
-  })
-
-  it('lists an account manager their clients’ posts, and a scheduler every client’s (11 Sep 2026)', async () => {
-    const job = (id: string, client_id: string) => ({
-      id, client_id, content_item_id: null, status: 'published', caption: id, media: [], targets: [{ platform: 'instagram' }],
-      scheduled_for: null, published_at: '2026-09-10T03:00:00Z', created_at: '2026-09-10T02:00:00Z', updated_at: '2026-09-10T03:00:00Z',
-      attempts: 1, error: null, permalink: null, provider_post_id: null, timezone: 'Australia/Melbourne',
-    })
-    fake.restore()
-    fake = seed()
-    const tables = fake.tree().mdm!.tables! as Record<string, Record<string, unknown>>
-    ;(tables.publish_jobs ??= {})['j-mine'] = job('j-mine', CLIENT)
-    tables.publish_jobs['j-theirs'] = job('j-theirs', 'c-other')
-    // the access helpers insist on a real id, as every real team row has
-    const ADA = { ...AM, id: '5e1f0d2c-2b3a-4c4d-8e5f-6a7b8c9d0e1f' }
-    tables.team_users[ADA.id] = { ...tables.team_users[AM.id] as object, id: ADA.id }
-    tables.team_user_clients[`${ADA.id}__${CLIENT}`] = { id: `${ADA.id}__${CLIENT}`, team_user_id: ADA.id, client_id: CLIENT }
-    as(ADA)
-    const mine = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
-    expect(mine.status).toBe(200)
-    expect(mine.body.jobs.map((j: any) => j.id)).toEqual(['j-mine'])
-    // asking for the other client by id is answered with nothing, not refused by name
-    const asked = await json(adhoc.GET(new Request('https://x.test/api/social/publish?clientId=c-other')))
-    expect(asked.body.jobs).toEqual([])
-    as(SCHEDULER)
-    const all = await json(adhoc.GET(new Request('https://x.test/api/social/publish')))
-    expect(all.body.jobs.map((j: any) => j.id).sort()).toEqual(['j-mine', 'j-theirs'])
-  })
-
-  it('leaves a post with no item linked exactly as it was', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'pending' })
-    const res = await adhocPost({ contentItemId: null })
-    expect(res.status).toBe(200)
-    expect(jobs()).toHaveLength(1)
-  })
-})
-
-/* ── a post reads its OWN jobs ──────────────────────────────────────────── */
-
-describe('one item, one post at a time', () => {
-  it('leaves a fresh post alone after the previous one was cancelled', async () => {
-    // A: made, approved, booked in, then taken off the calendar
-    const a = (await create()).body.post.id as string
-    await post(a)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-    await bookIn(a)
-    await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(a)))
-    expect(row(a).status).toBe('cancelled')
-    expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
-
-    // B: a new post on the same item — cancelling A freed the item
+  it('a fresh post after a cancelled one is a draft of its own', async () => {
+    const a = await readyPost()
+    expect((await bin(a)).body.post.stage).toBe('cancelled')
     const made = await create()
     expect(made.status).toBe(200)
-    const b = made.body.post.id as string
-    expect(made.body.post.status).toBe('draft')
-
-    // the mirror must read B's own jobs (it has none), not A's cancelled one
-    await lib.syncFromItem(ITEM)
-    expect(row(b).status).toBe('draft')
-    expect(row(a).status).toBe('cancelled')
-
-    const listed = await json(schedule.GET(
-      new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
-    const tile = listed.body.posts.find((x: { id: string }) => x.id === b)
-    expect(tile.live_status).toBe('draft')
-  })
-
-  it('reads an approved post as approved when the requeue could not be made', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-    await bookIn(id)
-    expect(jobs()).toHaveLength(1)
-
-    // the channel takes the cancel but the new booking will not go in
-    const off = failWritesNaming('"status":"queued"')
-    const moved = await moveTo(id, IN_THREE_DAYS())
-    off()
-
-    expect(moved.status).toBe(409)
-    expect(row(id).status).toBe('approved')
-    expect(row(id).publish_job_ids ?? []).toEqual([])
-    const listed = await json(schedule.GET(
-      new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
-    expect(listed.body.posts[0].live_status).toBe('approved')
+    expect(made.body.post.stage).toBe('draft')
+    expect(row(a).stage).toBe('cancelled')
   })
 })
 
-/* ── cancelling takes the approval with it ──────────────────────────────── */
-
-describe('cancelling a post', () => {
-  const adhocFor = (body: Record<string, unknown> = {}) => json(
-    adhoc.POST(new Request('https://x.test/api/social/publish', {
-      method: 'POST',
-      body: JSON.stringify({
-        clientId: CLIENT, contentItemId: ITEM, caption: 'Straight to the queue',
-        media: [{ url: SLIDES[0].url, type: 'image' }],
-        targets: [{ platform: 'instagram', accountId: 'prov-1' }],
-        ...body,
-      }),
-    })))
-
-  it('puts the item\u2019s approval back, so nothing inherits it', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(SCHEDULER)
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-
-    const gone = await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
-    expect(gone.status).toBe(200)
-    expect(gone.body.post.status).toBe('cancelled')
-    // the yes belonged to that post, and that post is gone
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('draft')
-
-    // the job the yes made goes with it
-    expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
-    // …so the ad-hoc door is shut again for this item
-    const adHoc = await adhocFor()
-    expect(adHoc.status).toBe(409)
-    expect(adHoc.body.error).toBe('Send the post for approval first')
-    expect(jobs().filter(j => j.status !== 'cancelled')).toHaveLength(0)
-  })
-
-  it('leaves the item alone when the post was never sent', async () => {
-    fake.restore()
-    fake = seed({ posting_approval_state: 'approved' })
-    const id = (await create()).body.post.id as string
-
-    const gone = await json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
-    expect(gone.status).toBe(200)
-    // nothing was ever asked on this post, so there is no answer to take back
-    expect((fake.rows('content_items')[0] as any).posting_approval_state).toBe('approved')
-  })
-})
-
-/* ── sending, when somebody got there first ─────────────────────────────── */
-
-describe('send for approval, against a moving post', () => {
-  it('will not drag a post that was booked in the meantime back to pending', async () => {
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('request_changes', 'Shorten the caption')
-    as(SCHEDULER)
-    expect(row(id).status).toBe('changes')
-
-    // the rival's write lands between this send's read and its own write
-    const off = fake.onBeforeWrite(`/mdm/tables/social_posts/${id}`, () => {
-      off()
-      const live = (fake.tree() as any).mdm.tables.social_posts[id]
-      live.status = 'scheduled'
-    })
-    const sent = await post(id)
-
-    expect(sent.status).toBe(409)
-    expect(sent.body.error).toContain('moved on while you were sending it')
-    expect(row(id).status).toBe('scheduled')
-  })
-
-  it('treats a second click on an already-pending post as done, not as an error', async () => {
-    const id = (await create()).body.post.id as string
-    expect((await post(id)).status).toBe(200)
-    const again = await post(id)
-    expect(again.status).toBe(200)
-    expect(again.body.post.status).toBe('pending')
-  })
-})
-
-/* ── who may do what ────────────────────────────────────────────────────── */
+/* ── who may ────────────────────────────────────────────────────────────── */
 
 describe('roles', () => {
-  it('lets an editor draft a post on their OWN item', async () => {
+  it('an editor moves no post (the owner, decision 7)', async () => {
+    const id = (await create()).body.post.id as string
     as(OWNER)
-    const made = await create()
-    expect(made.status).toBe(200)
-    expect(made.body.post.created_by).toBe(OWNER.id)
+    const r = await act(id, 'send_to_qc')
+    expect(r.status).toBe(403)
+    expect(row(id).stage).toBe('draft')
   })
 
   it('refuses an editor on somebody else’s item', async () => {
@@ -943,39 +339,129 @@ describe('roles', () => {
     expect(fake.rows('social_posts')).toHaveLength(0)
   })
 
-  it('refuses an editor the booking, even on their own post', async () => {
-    as(OWNER)
-    const id = (await create()).body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')
-    as(OWNER)
-    const booked = await bookIn(id)
-    expect(booked.status).toBe(403)
-    expect(booked.body.error).toBe('Only a scheduler or an account manager can book a post to go out')
-    // the one job there is was made by the manager's yes, not by the editor
-    expect(jobs()).toHaveLength(1)
-  })
-
   it('refuses a client outright', async () => {
     as({ ...OWNER, role: 'client' } as typeof AM)
     expect((await create()).status).toBe(403)
   })
 })
 
+/* ── TikTok's tick, judged with the options the composer actually holds ── */
+
+describe('the TikTok tick', () => {
+  const withTikTok = () => {
+    const tables = (fake.tree() as any).mdm.tables
+    tables.social_accounts['acc-tt'] = {
+      id: 'acc-tt', client_id: CLIENT, platform: 'tiktok', provider_account_id: 'prov-tt',
+      name: 'Acme on TikTok', username: 'acme', avatar_url: null, active: true,
+    }
+  }
+
+  it('a DRAFT saves without the tick — nothing is going out yet', async () => {
+    withTikTok()
+    const made = await create({ channels: ['acc-1', 'acc-tt'] })
+    expect(made.status).toBe(200)
+    expect(made.body.post.stage).toBe('draft')
+  })
+
+  it('…and the send for quality check asks for it, before anybody looks at the post', async () => {
+    withTikTok()
+    const made = await create({ channels: ['acc-1', 'acc-tt'] })
+    const sent = await act(made.body.post.id as string, 'send_to_qc')
+    expect(sent.status).toBe(409)
+    expect(String(sent.body.reason) + JSON.stringify(sent.body.problems ?? [])).toMatch(/TikTok/)
+    expect(row(made.body.post.id).stage).toBe('draft')
+  })
+
+  it('a ticked box is a ticked box — the post goes to the check', async () => {
+    withTikTok()
+    const made = await create({
+      channels: ['acc-1', 'acc-tt'],
+      per_channel: { 'acc-tt': { tiktokConsent: true } },
+    })
+    expect(made.status).toBe(200)
+    const sent = await act(made.body.post.id as string, 'send_to_qc')
+    expect(sent.status, JSON.stringify(sent.body)).toBe(200)
+  })
+})
+
+/* ── the cover the editor saved ─────────────────────────────────────────── */
+
+describe('the cover picture reaches the provider', () => {
+  const COVER = 'https://media.mdmmarketing.com.au/one_cover.jpg'
+
+  /** book a post in and hand back the targets that were queued */
+  const bookAndRead = async (body: Record<string, unknown> = {}) => {
+    const id = await readyPost(body)
+    const booked = await act(id, 'book')
+    expect(booked.status, JSON.stringify(booked.body)).toBe(200)
+    return (jobs()[0] as any).targets as any[]
+  }
+
+  it('sends the version’s cover as the post’s cover picture', async () => {
+    // the editor writes it on the version, not on the post
+    await table('asset_versions').update('v1', { cover_url: COVER })
+    const targets = await bookAndRead()
+    expect(targets).toHaveLength(1)
+    expect(targets[0].options?.thumbnailUrl).toBe(COVER)
+  })
+
+  it('leaves the post alone when no cover was ever chosen', async () => {
+    const targets = await bookAndRead()
+    expect(targets[0]?.options?.thumbnailUrl).toBeUndefined()
+  })
+
+  it('never overrides a cover somebody typed in for that channel', async () => {
+    await table('asset_versions').update('v1', { cover_url: COVER })
+    const mine = 'https://media.mdmmarketing.com.au/typed_in.jpg'
+    const targets = await bookAndRead({
+      per_channel: { 'acc-1': { thumbnailUrl: mine } },
+    })
+    expect(targets[0].options.thumbnailUrl).toBe(mine)
+  })
+})
+
+/* ── the time a post is handed over with ────────────────────────────────── */
+
+describe('the time a post is handed over with', () => {
+  it('Post now sends NO time, so the provider publishes it straight away', async () => {
+    const id = await readyPost()
+    const r = await act(id, 'post_now', { confirm: true })
+    expect(r.status, JSON.stringify(r.body)).toBe(200)
+    expect(jobs()).toHaveLength(1)
+    expect(jobs()[0].scheduled_for).toBeFalsy()
+  })
+
+  it('…and Book in keeps the time of a post booked for a real date', async () => {
+    const later = IN_THREE_DAYS()
+    const id = await readyPost({ scheduled_for: later })
+    await act(id, 'book')
+    expect(jobs()).toHaveLength(1)
+    expect(jobs()[0].scheduled_for).toBe(later)
+  })
+})
+
 /* ── the rest of the calendar ───────────────────────────────────────────── */
 
 describe('the calendar reads', () => {
-  it('lists a client’s posts with the status the tile should wear', async () => {
+  it('lists a client’s posts with their stage — never a status worked out from the item', async () => {
     const id = (await create()).body.post.id as string
-    await post(id)
+    await act(id, 'send_to_qc')
     const res = await json(schedule.GET(new Request(`https://x.test/api/social/schedule?clientId=${CLIENT}`)))
     expect(res.status).toBe(200)
     expect(res.body.posts).toHaveLength(1)
     expect(res.body.posts[0]).toMatchObject({
-      id, live_status: 'pending', item_title: 'The launch post',
+      id, stage: 'quality_check', item_title: 'The launch post', source_deleted: false,
     })
-    expect(res.body.posts[0].block_reason).toContain('Waiting on final approval')
+    expect(res.body.posts[0].state).toMatchObject({ stage: 'quality_check', sent_version: 1 })
+    expect(res.body.posts[0].block_reason).toBeNull()
+  })
+
+  it('keeps a post whose piece was deleted on the calendar, marked (audit S9)', async () => {
+    const id = (await create()).body.post.id as string
+    await table('content_items').remove(ITEM)
+    const listed = await lib.listPosts({ clientId: CLIENT, viewer: AM as never })
+    expect(listed.map(p => p.id)).toEqual([id])
+    expect(listed[0].source_deleted).toBe(true)
   })
 
   it('keeps one client’s posts away from another', async () => {
@@ -1172,95 +658,6 @@ describe('one open post per piece with the same files', () => {
   })
 })
 
-/* ── TikTok's tick, judged with the options the composer actually holds ── */
-
-describe('the TikTok tick', () => {
-  const withTikTok = () => {
-    const tables = (fake.tree() as any).mdm.tables
-    tables.social_accounts['acc-tt'] = {
-      id: 'acc-tt', client_id: CLIENT, platform: 'tiktok', provider_account_id: 'prov-tt',
-      name: 'Acme on TikTok', username: 'acme', avatar_url: null, active: true,
-    }
-  }
-
-  /**
-   * The owner, 9 Sep 2026: "cant save as draft and also cant post to tiktok".
-   * The server judged the tick with NO options — every TikTok post was
-   * "Tick the TikTok box" whatever the composer had ticked. The window
-   * checked the real options and said fine; the server checked none and
-   * said no.
-   */
-  it('a ticked box is a ticked box — the post saves and goes', async () => {
-    withTikTok()
-    as(AM)
-    const made = await create({
-      channels: ['acc-1', 'acc-tt'],
-      per_channel: { 'acc-tt': { tiktokConsent: true } },
-    })
-    expect(made.status).toBe(200)
-    const direct = await post(made.body.post.id as string, { mode: 'direct' })
-    expect(direct.status).toBe(200)
-    expect(direct.body.post.status).toBe('scheduled')
-  })
-
-  it('a DRAFT saves without the tick — nothing is going out yet', async () => {
-    withTikTok()
-    as(AM)
-    const made = await create({ channels: ['acc-1', 'acc-tt'] })
-    expect(made.status).toBe(200)
-    expect(made.body.post.status).toBe('draft')
-  })
-
-  it('…and the door that sends it still asks for the tick', async () => {
-    withTikTok()
-    as(AM)
-    const made = await create({ channels: ['acc-1', 'acc-tt'] })
-    const direct = await post(made.body.post.id as string, { mode: 'direct' })
-    expect(direct.status).toBe(400)
-    expect(String(direct.body.error ?? direct.body.problems)).toMatch(/Tick the TikTok box/)
-    expect(jobs()).toHaveLength(0)
-  })
-})
-
-/* ── the cover the editor saved ─────────────────────────────────────────── */
-
-describe('the cover picture reaches the provider', () => {
-  const COVER = 'https://media.mdmmarketing.com.au/one_cover.jpg'
-
-  /** book a post in and hand back the targets that were queued */
-  const bookAndRead = async (body: Record<string, unknown> = {}) => {
-    const made = await create(body)
-    const id = made.body.post.id as string
-    await post(id)
-    as(AM)
-    await approve('approve')          // the yes books it in (8 Sep 2026)
-    as(SCHEDULER)
-    expect(row(id).status).toBe('scheduled')
-    return (jobs()[0] as any).targets as any[]
-  }
-
-  it('sends the version’s cover as the post’s cover picture', async () => {
-    // the editor writes it on the version, not on the post
-    await (await import('@/lib/db')).table('asset_versions').update('v1', { cover_url: COVER })
-    const targets = await bookAndRead()
-    expect(targets).toHaveLength(1)
-    expect(targets[0].options?.thumbnailUrl).toBe(COVER)
-  })
-
-  it('leaves the post alone when no cover was ever chosen', async () => {
-    const targets = await bookAndRead()
-    expect(targets[0]?.options?.thumbnailUrl).toBeUndefined()
-  })
-
-  it('never overrides a cover somebody typed in for that channel', async () => {
-    await (await import('@/lib/db')).table('asset_versions').update('v1', { cover_url: COVER })
-    const mine = 'https://media.mdmmarketing.com.au/typed_in.jpg'
-    const targets = await bookAndRead({
-      per_channel: { 'acc-1': { thumbnailUrl: mine } },
-    })
-    expect(targets[0].options.thumbnailUrl).toBe(mine)
-  })
-})
 
 /* ── the note rule, on both sides of the wire ───────────────────────────── */
 
@@ -1388,176 +785,6 @@ describe('listing a week', () => {
     // proved access need not invent one; every ROUTE passes it
     const all = await lib.listPosts({ clientId: CLIENT })
     expect(all.map(p => p.id)).toEqual([hidden])
-  })
-})
-
-
-/* ── whose approval it actually was ─────────────────────── */
-
-/**
- * THE HONESTY FIXES (reviewed 6 Sep 2026, all live at the time).
- *
- * Separate faults, one theme: the app said things about a client's sign-off
- * that were not true. Each test here fails without its fix.
- */
-describe('an approval says who really gave it', () => {
-  const approvalRows = () => fake.rows('approvals') as any[]
-
-  const move = (to: string) => json(transition.POST(
-    new Request('https://x.test/transition', {
-      method: 'POST', body: JSON.stringify({ to }),
-    }),
-    params(ITEM),
-  ))
-
-  /**
-   * C1a. `approval_type` used to be `from === 'client_review' ? 'client'` —
-   * a fair inference while only a client could make that move, and a lie the
-   * day a manager could too. It filed the manager's own decision under the
-   * client's name, so a client asking "who approved this?" was told: you did.
-   */
-  it('files a manager\u2019s own sign-off as INTERNAL, never as the client\u2019s', async () => {
-    fake.restore()
-    fake = seed({ status: 'client_review' })
-    as(AM)
-    const done = await move('approved_for_scheduling')
-    expect(done.status).toBe(200)
-    const written = approvalRows().filter(a => a.item_id === ITEM)
-    expect(written).toHaveLength(1)
-    expect(written[0].approval_type).toBe('internal')
-    expect(written[0].decided_by).toBe(AM.id)
-  })
-
-  it('\u2026and still files the client\u2019s own approval as the client\u2019s', async () => {
-    fake.restore()
-    fake = seed({ status: 'client_review' })
-    as({ id: 'u-client', role: 'client', email: 'them@x.invalid', name: 'Bo', clerk_user_id: null, client_id: CLIENT } as never)
-    const done = await move('approved_for_scheduling')
-    expect(done.status).toBe(200)
-    expect(approvalRows()[0].approval_type).toBe('client')
-  })
-
-  /**
-   * M1. The workflow-level guard — the one that binds every surface, not just
-   * the Schedule page — had no test at all, with the flag set or unset.
-   */
-  // \u2026which the owner then turned around for managers (9 Sep 2026): "no
-  // approval or accept feature, even when the client has that lock". The
-  // guard still binds everyone else; a manager signs off in their own name.
-  it('lets the manager sign off on a client who signs every post off', async () => {
-    fake.restore()
-    fake = seed({ status: 'internal_review' }, { client_approval_required: true })
-    as(QA)
-    const done = await move('approved_for_scheduling')
-    expect(done.status).toBe(200)
-    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
-    expect(approvalRows()[0].approval_type).toBe('internal')
-  })
-
-  it('\u2026and allows it on an ordinary client, with the flag unset', async () => {
-    fake.restore()
-    fake = seed({ status: 'internal_review' })
-    as(QA)
-    const done = await move('approved_for_scheduling')
-    expect(done.status).toBe(200)
-    expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
-    expect(approvalRows()[0].approval_type).toBe('internal')
-  })
-
-  /**
-   * I2. The policy read ended in `.catch(() => null)`, so a dropped connection
-   * answered "the ordinary arrangement" — i.e. go ahead — to the one question
-   * protecting the one client who insisted on seeing every post.
-   */
-  // Since 9 Sep 2026 the policy does not apply to a manager at all, so there
-  // is nothing to check on their behalf: an unreadable client row holds up
-  // nobody the lock no longer governs. (The fail-closed read stays in
-  // `performTransition` for everyone the lock still binds.)
-  it('does not hold a manager up when the client row cannot be read', async () => {
-    fake.restore()
-    fake = seed({ status: 'internal_review' })
-    as(QA)
-    const undo = failReadsNaming('/clients/')
-    try {
-      const done = await move('approved_for_scheduling')
-      expect(done.status).toBe(200)
-      expect((fake.rows('content_items')[0] as any).status).toBe('approved_for_scheduling')
-    } finally {
-      undo()
-    }
-  })
-
-  it('\u2026nor on the Schedule page\u2019s own path', async () => {
-    fake.restore()
-    fake = seed({ status: 'approved_for_scheduling' })
-    as(AM)
-    const id = (await create()).body.post.id as string
-    const undo = failReadsNaming('/clients/')
-    try {
-      const done = await post(id, { mode: 'direct' })
-      expect(done.status).toBe(200)
-      expect(jobs()).toHaveLength(1)
-    } finally {
-      undo()
-    }
-  })
-
-  /**
-   * I3. `performTransition` used to run BEFORE the composition was checked, so
-   * a caption one letter too long left the media signed off in the manager's
-   * name and the team emailed, with no post — and the person, looking at an
-   * error, believed nothing had happened.
-   */
-  it('a post that cannot be composed leaves the media UNSIGNED and nobody emailed', async () => {
-    fake.restore()
-    fake = seed({ status: 'internal_review' })
-    as(AM)
-    const id = (await create()).body.post.id as string
-    // the channel goes away between the window opening and the press — the
-    // ordinary shape of this failure, and the one the reviewer described
-    await table('social_accounts').remove('acc-1')
-
-    const refused = await post(id, { mode: 'direct' })
-    expect(refused.status).toBe(400)
-    // the item never moved, so there is no approval, no activity line and no
-    // fan-out to undo
-    const item = fake.rows('content_items')[0] as any
-    expect(item.status).toBe('internal_review')
-    expect(item.posting_approval_state).toBeFalsy()
-    expect(approvalRows()).toHaveLength(0)
-    expect((fake.rows('workflow_activity') as any[]).filter(
-      a => a.entity_id === ITEM && a.new_value === 'approved_for_scheduling')).toHaveLength(0)
-    expect(jobs()).toHaveLength(0)
-  })
-})
-
-/* ── "Post now" posts now ────────────────────────────── */
-
-describe('the time a post is handed over with', () => {
-  /**
-   * I4. The button says "Post now"; the job carried a `scheduledFor` that had
-   * usually gone by the time the provider saw it. `buildPostBody` sends
-   * `publishNow: true` for a job with no time on it, so the honest thing is to
-   * send no time.
-   */
-  it('sends NO time for a post whose time is now, so the provider publishes it', async () => {
-    as(AM)
-    const soon = new Date(Date.now() + 60_000).toISOString()
-    const id = (await create({ scheduled_for: soon })).body.post.id as string
-    const sent = await post(id, { mode: 'direct' })
-    expect(sent.status).toBe(200)
-    expect(jobs()).toHaveLength(1)
-    // the row carries no time at all, so `buildPostBody` sends publishNow
-    expect(jobs()[0].scheduled_for).toBeFalsy()
-  })
-
-  it('\u2026and keeps the time on a post booked for a real date', async () => {
-    as(AM)
-    const later = IN_THREE_DAYS()
-    const id = (await create({ scheduled_for: later })).body.post.id as string
-    await post(id, { mode: 'direct' })
-    expect(jobs()).toHaveLength(1)
-    expect(jobs()[0].scheduled_for).toBe(later)
   })
 })
 

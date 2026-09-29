@@ -272,17 +272,16 @@ describe('a file the client has never seen', () => {
     expect(h.emails.map(e => String(e.recipientEmail))).toEqual([])
   })
 
-  it('takes the final-post approval back, because it was given to other media', async () => {
+  it('does NOT touch the card’s old item-wide post gate — every post has its own stage now (the posting rebuild, 29 Sep 2026)', async () => {
+    // the item-wide reset took the approval off EVERY post of the card at once (audit V2); a post's
+    // approval is its own, and new files on one draft change nothing about another post
     fake.restore()
     fake = seed({ posting_approval_state: 'approved', posting_approved_by: AM.id })
     await saveMedia({ item_id: ITEM, files: [...APPROVED, NEW_FILE] })
-    expect(item().posting_approval_state).toBe('pending')
-    // …and the record of who gave it goes with it (the store drops a null
-    // rather than writing one, so "nothing" is what is checked)
-    expect(item().posting_approved_by ?? null).toBeNull()
+    expect(item().posting_approval_state).toBe('approved')
   })
 
-  it('carries the arrangement onto the post and un-sends it', async () => {
+  it('carries the arrangement onto the post, which stays a draft', async () => {
     const made = await createPost()
     const id = made.body.post.id
     const saved = await saveMedia({ item_id: ITEM, post_id: id, files: [...APPROVED, NEW_FILE] })
@@ -290,7 +289,20 @@ describe('a file the client has never seen', () => {
     const p = posts().find(x => x.id === id)
     expect(p.slides.map((s: any) => s.name)).toEqual(['one.jpg', 'two.jpg', 'three.jpg'])
     expect(p.version_number).toBe(2)
-    expect(p.status).toBe('draft')
+    expect(p.stage).toBe('draft')
+    expect(p.rev).toBe(1)
+  })
+
+  it('refuses new files on a post that was sent — what was sent stays what was sent (decision 8)', async () => {
+    const made = await createPost()
+    const id = made.body.post.id
+    // the post has gone to the quality check
+    fake.tree().mdm.tables.social_posts[id].stage = 'quality_check'
+    const saved = await saveMedia({ item_id: ITEM, post_id: id, files: [...APPROVED, NEW_FILE] })
+    expect(saved.status).toBe(409)
+    expect(String(saved.body.error)).toMatch(/Press Edit first/)
+    // …and no version of the piece was made for it
+    expect(versions()).toHaveLength(1)
   })
 
   it('refuses an empty set rather than saving a post with nothing in it', async () => {

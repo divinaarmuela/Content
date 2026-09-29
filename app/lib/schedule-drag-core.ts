@@ -18,7 +18,6 @@
  * (`useDragSchedule`) does the hands; this does the thinking.
  */
 
-import { canReschedule, type SchedulePost } from './social-schedule-core'
 import { formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 
 /** Times land on the quarter hour. Nobody means 6:07, and the week grid reads
@@ -168,19 +167,28 @@ export function moveToDay(
 }
 
 /**
+ * What a tile carries about being moved: the sentence that stops it, or null.
+ *
+ * Worked out once per post by `moveBlockReason` (`schedule-stage-core`), from
+ * `postActions` — so a tile lifts exactly when the post window would offer
+ * "Change time" to this person, and the act route would accept it.
+ */
+export type DraggablePost = { move_block?: string | null }
+
+/**
  * May this tile be picked up at all, and if not, why?
  *
- * The same rule the server enforces (`canReschedule`), asked before the drag
- * starts so a finished post simply does not lift — a tile that follows the
- * pointer for a second and then snaps back with a refusal is a worse way of
- * saying the same thing.
+ * Asked before the drag starts, so a post that cannot move simply does not
+ * lift — a tile that follows the pointer for a second and then snaps back
+ * with a refusal is a worse way of saying the same thing. The old rule read
+ * the legacy `status` column (`canReschedule`); the stage decides now.
  */
-export function dragBlockReason(post: SchedulePost | null | undefined): string | null {
-  const move = canReschedule(post)
-  return move.ok ? null : move.reason
+export function dragBlockReason(post: DraggablePost | null | undefined): string | null {
+  if (!post) return 'This post cannot be moved'
+  return post.move_block ?? null
 }
 
-export function mayDragTile(post: SchedulePost | null | undefined): boolean {
+export function mayDragTile(post: DraggablePost | null | undefined): boolean {
   return dragBlockReason(post) === null
 }
 
@@ -221,8 +229,8 @@ export type PreviewablePost = { scheduled_for?: string | null }
  * checkerboard: what will sit next to what, which colours run together, where
  * the video tiles fall. The last post scheduled takes the top left corner and
  * everything older follows, exactly as the profile will look once they have
- * all gone out. A post with no time at all is not in a feed yet and is left
- * out.
+ * all gone out. WHICH posts are in it is `previewPosts` (`schedule-stage-core`):
+ * only what is going out, on Instagram.
  */
 export function previewOrder<T extends PreviewablePost>(posts: readonly T[]): T[] {
   const at = (p: T) => Date.parse(String(p.scheduled_for ?? ''))

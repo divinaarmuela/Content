@@ -21,7 +21,7 @@ const VIEWS = [
     href: '/dashboard/scheduler',
     label: 'Board',
     icon: Kanban,
-    blurb: 'Approve or send back every piece before it is posted. New post uploads the files and sends them to an account manager; once a piece is approved it is on the Schedule page to book in.',
+    blurb: 'Get each post approved: Draft, then the quality check, then the client when it goes to them. Approved posts are booked in on the Schedule page.',
   },
 ]
 

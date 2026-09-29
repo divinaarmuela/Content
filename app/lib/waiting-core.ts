@@ -1,32 +1,32 @@
 /**
- * EVERYTHING WAITING ON A DECISION, IN ONE LIST.
+ * EVERY EDIT WAITING ON A DECISION, IN ONE LIST.
  *
- * The Scheduler board says where every card IS. It does not say which of them
- * are stuck on somebody, and the five or six that are sit scattered across
- * five columns — found by hunting, answered one card at a time. This is the
- * pure half of the list that sits above the board: which cards qualify, what
+ * The boards say where every card IS. They do not say which of them are stuck
+ * on somebody, and the five or six that are sit scattered across five
+ * columns. This is the pure half of a list of them: which cards qualify, what
  * each row says, and which of the two answers this viewer may actually give.
+ *
+ * EDITS ONLY (the posting rebuild, 29 Sep 2026). A POST waiting on somebody is
+ * the post's own stage and is listed by `post-waiting-core` on Post approval.
+ * This file used to read the item's own post-approval field for that, which
+ * left a post the client sent back off every list (audit B8) and dated a wait
+ * by the card's last touch (B14).
  *
  * NOTHING NEW IS FETCHED and nothing here decides what is LEGAL. Every row is
  * read off a board card the page already holds, and every action comes from
- * the same two places the board's buttons come from — `cardActions`
- * (`workflow-core`'s transitions) and `postApprovalOffer`
- * (`posting-approval-core`'s gate). A row therefore never offers a button the
- * server would refuse; where the viewer may not act, the row says who it is
- * with and offers nothing.
+ * `cardActions` (`workflow-core`'s transitions). A row therefore never offers a
+ * button the server would refuse; where the viewer may not act, the row says
+ * who it is with and offers nothing.
  *
- * The four ways something can be waiting, all four read off the item row:
+ * The three ways an edit can be waiting, all read off the item row:
  *
- *   1. `posting_approval_state === 'pending'` — a POST was sent for its final
- *      sign-off. On this viewer when they may approve it; otherwise the row
- *      names whose it is (the client, or an account manager).
- *   2. a card at `internal_review` / `revision_complete` /
- *      `client_changes_requested` whose turn is this viewer's (`whoseTurn`,
- *      which already answers "somebody was asked" before it answers "your
- *      role") — the manager's check.
- *   3. a card at `client_review` — waiting on the CLIENT. Shown, never
+ *   1. a card at `client_review` — waiting on the CLIENT. Shown, never
  *      actionable here: the answer is the client's to give, in the portal.
- *   4. `asked_ids` names this person on anything else — they were asked, so
+ *   2. a card at `internal_review` / `revision_complete` /
+ *      `client_changes_requested` / `quality_check` whose turn is this
+ *      viewer's (`whoseTurn`, which already answers "somebody was asked"
+ *      before it answers "your role") — the team's check.
+ *   3. `asked_ids` names this person on anything else — they were asked, so
  *      it is theirs whatever the status says (`asked-core`).
  *
  * No I/O, no React, no clock: `today` is passed in.
@@ -36,25 +36,19 @@ import {
   askedIdsOf, ASKED_VERB,
 } from './asked-core'
 import {
-  cardActions, postApprovalOffer, postWaitingLine, shortDate,
-  POST_WAITING_CLIENT, POST_WAITING_LINE,
+  cardActions, shortDate,
   type BoardViewCard, type BoardViewer, type CardAction,
 } from './board-view-core'
-import { parseApprovalState } from './posting-approval-core'
 import { STATUS_TURN, whoseTurn, type ItemStatus } from './workflow-core'
 
-/** What sort of wait a row is — the four above, in the order they outrank. */
-export type WaitingKind = 'post' | 'check' | 'client' | 'asked'
+/** What sort of wait a row is — the three above. */
+export type WaitingKind = 'check' | 'client' | 'asked'
 
 /** Whose answer the row is stuck on. */
 export type WaitingWho = 'you' | 'client' | 'manager'
 
-/** Where a press on the row goes. A card opens beside the board; a post opens
- *  the composer on its own preview, which is where the words and the pictures
- *  being approved actually are. */
-export type WaitingOpen =
-  | { kind: 'card'; id: string }
-  | { kind: 'post'; href: string }
+/** Where a press on the row goes: the card, opened beside the board. */
+export type WaitingOpen = { kind: 'card'; id: string }
 
 export type WaitingRow = {
   /** the item's id — a row is one card, however many ways it is waiting */
@@ -146,20 +140,12 @@ export const UNASKED_QUALITY_LINE = 'Needs a quality check — nobody asked yet'
 
 /* ── one card, weighed ─────────────────────────────────────────────────── */
 
-/** The composer, opened on this post's own preview — the link the approval
- *  email already sends people to, so both land in the same place. */
-export function postHref(clientId: string, itemId: string): string {
-  return `/dashboard/social/schedule?client=${encodeURIComponent(clientId)}`
-    + `&item=${encodeURIComponent(itemId)}`
-}
-
 /** The two answers a card row may carry: the move that is the point, and
- *  sending it back with words. Never a post-approval action — a post waiting
- *  its sign-off is its own row, above. */
+ *  sending it back with words. */
 function cardAnswers(card: BoardViewCard, viewer: BoardViewer): CardAction[] {
   const { primary, more } = cardActions(card, viewer)
   const out: CardAction[] = []
-  if (primary && primary.kind !== 'post_approval') out.push(primary)
+  if (primary) out.push(primary)
   const back = more.find(a => a.kind === 'send_back')
   if (back) out.push(back)
   return out
@@ -180,32 +166,9 @@ export function waitingRow(
     title: card.title,
   }
 
-  // 1. THE POST'S OWN GATE — it outranks the card's stage, because a post
-  //    sitting unanswered is somebody else already held up.
-  if (parseApprovalState(card.posting_approval_state) === 'pending') {
-    // PUT TO THE CLIENT, IT IS THEIRS (the owner, 28 Sep 2026: four posts emailed to Justin and Jordan sat under "5
-    // waiting on you" on Post approval): a manager MAY log the client's yes, but the post is waiting on the client
-    const offer = card.posting_client_required === true ? null : postApprovalOffer(card, viewer)
-    const line = offer ? POST_WAITING_LINE : postWaitingLine(card, viewer) ?? POST_WAITING_LINE
-    return {
-      ...base,
-      kind: 'post',
-      line,
-      since: sinceWords(card.updated_at, today),
-      onYou: offer !== null,
-      who: offer !== null ? 'you' : line === POST_WAITING_CLIENT ? 'client' : 'manager',
-      // NO INLINE ANSWER on a post (8 Sep 2026): the yes, the change and
-      // "send to the client" are pressed in the composer on Schedule, with
-      // the frames in front of the person. The row is the way there.
-      actions: [],
-      open: { kind: 'post', href: postHref(card.client_id, card.id) },
-      stamp: card.updated_at ?? null,
-    }
-  }
-
   const stamp = card.status_changed_at ?? card.updated_at ?? null
 
-  // 2. WITH THE CLIENT — shown so nobody has to remember it, never actionable
+  // 1. WITH THE CLIENT — shown so nobody has to remember it, never actionable
   //    here: the yes is the client's to give, in their portal.
   if (card.status === 'client_review') {
     return {
@@ -221,7 +184,7 @@ export function waitingRow(
     }
   }
 
-  // 3. THE TEAM'S OWN DECISION, and it is this viewer's turn. `whoseTurn`
+  // 2. THE TEAM'S OWN DECISION, and it is this viewer's turn. `whoseTurn`
   //    answers "somebody was asked" before it answers "your role", so a card
   //    asked of one manager is not on the other four's lists.
   const turn = whoseTurn(card.status, card, viewer)
@@ -238,7 +201,7 @@ export function waitingRow(
       stamp,
     }
   }
-  // 3b. THE EMPTY SEAT: a check nobody was asked for. Shown to everyone who
+  // 2b. THE EMPTY SEAT: a check nobody was asked for. Shown to everyone who
   //     could take it, with the answers, but never counted as theirs.
   if (CHECK_STATUSES.includes(card.status) && turn.unassigned && turn.may) {
     return {
@@ -254,7 +217,7 @@ export function waitingRow(
     }
   }
 
-  // 4. ASKED, anywhere else — being asked is being assigned, whatever the
+  // 3. ASKED, anywhere else — being asked is being assigned, whatever the
   //    stage. The ask's own timestamp dates this one.
   if (askedIdsOf(card).includes(viewer.id)) {
     return {

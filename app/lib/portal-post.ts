@@ -1,15 +1,16 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { Client, ContentItem, PostAnalytic, SocialPost } from '@/lib/db-types'
-import { resolvePortalClient } from './portal-thread'
+import type { Client, ContentItem, PostAnalytic, PostVersion, SocialPost } from '@/lib/db-types'
+import { portalOwnerByToken } from './portal-owner'
+import { belongsToPortal } from './portal-owner-core'
 import { analyticsForPost, networkName } from './post-page-core'
+import { liveNetworks, postVersionId, readPostState } from './post-stage-core'
+import { networkLabel, postLiveLinks, postedAt, readFrozenPost, reviewFiles } from './portal-core'
 import {
   portalPerformance, readPerformance, type PortalPerformance,
 } from './post-performance-core'
 import { readInteractors, settingsOf } from './followers-core'
-import { slidesOf } from './version-files-core'
 import { safeZone } from './timezone-core'
-import type { AssetVersion } from '@/lib/db-types'
 
 /**
  * ONE POST, IN THE CLIENT'S WORDS — the share link's version of the post page.
@@ -75,41 +76,57 @@ export type PortalPost = {
   shows_people: boolean
 }
 
-/** One post, for one share token. Null when the token or the post is wrong. */
+/**
+ * One LIVE post, for one share token. Null when the token or the post is
+ * wrong, or the post is not out yet — a post before it goes out is its review
+ * page (`getPortalPostPage`), read from its frozen version.
+ *
+ * Since the posting rebuild (29 Sep 2026) this reads the post's own stage and
+ * its per-network record (`outcomes`), never the edit card's status or its
+ * files: the pictures are the version that went out, and each network's link
+ * is that network's (audit L1, P5).
+ */
 export async function getPortalPost(rawToken: string, postId: string): Promise<PortalPost | null> {
   try {
-    const who = await resolvePortalClient(rawToken)
-    if (!who) return null
+    const owner = await portalOwnerByToken(rawToken)
+    if (!owner) return null
+    const who = owner.client
     const row = await table<SocialPost>('social_posts').get(postId)
-    if (!row || row.client_id !== who.id) return null
+    const post = readPostState(row as unknown as Record<string, unknown> | null)
+    if (!post || post.client_id !== who.id || post.stage !== 'posted') return null
+    const item = post.source_item_id ? await table<ContentItem>('content_items').get(post.source_item_id).catch(() => null) : null
+    // a person's portal holds only their own pieces' posts
+    if (item ? !belongsToPortal(item as { for_contact_id?: string | null }, owner.scope) : owner.scope.kind !== 'business') return null
 
-    // a post the client has never been shown is not their page: the same
-    // gate the board uses — only a piece that has reached them
-    const item = await table<ContentItem>('content_items').get(row.item_id)
-    if (!item || item.client_id !== who.id) return null
-    const hidden = ['draft_uploaded', 'internal_review', 'revision_required', 'revision_complete', 'quality_check']
-    if (hidden.includes(String(item.status))) return null
-
-    const [clientRow, versions, analyticRows] = await Promise.all([
+    const jobIds = post.booking?.job_ids ?? []
+    const [clientRow, version, analyticRows] = await Promise.all([
       table<Client>('clients').get(who.id).catch(() => null),
-      table<AssetVersion>('asset_versions')
-        .list({ by: { item_id: row.item_id }, orderBy: [['version_number', 'desc']], limit: 1 })
-        .catch(() => [] as AssetVersion[]),
-      table<PostAnalytic>('post_analytics').list({ by: { item_id: row.item_id } }).catch(() => [] as PostAnalytic[]),
+      post.sent_version != null
+        ? table<PostVersion>('post_versions').get(postVersionId(post.id, post.sent_version)).catch(() => null)
+        : Promise.resolve(null),
+      post.source_item_id
+        ? table<PostAnalytic>('post_analytics').list({ by: { item_id: post.source_item_id } }).catch(() => [] as PostAnalytic[])
+        : jobIds.length
+          ? table<PostAnalytic>('post_analytics').list({ where: r => jobIds.includes(String(r.publish_job_id ?? '')) }).catch(() => [] as PostAnalytic[])
+          : Promise.resolve([] as PostAnalytic[]),
     ])
 
     const showsPeople = settingsOf(clientRow).onPortal
-    const rows = analyticsForPost(analyticRows, {
-      item_id: row.item_id, publish_job_ids: row.publish_job_ids,
-    })
+    const rows = analyticsForPost(analyticRows, { item_id: post.source_item_id ?? '', publish_job_ids: jobIds })
     const main = rows[0] ?? null
     const performance = readPerformance(main?.performance)
     const interactors = readInteractors(main?.interactors)
 
-    // the approved cut is what the client is shown — the same reader the
-    // portal's own item page uses, so both pages show one set of pictures
-    const slides = slidesOf(versions[0] ?? null)
-    const networks = [...new Set(rows.map(r => networkName(r.platform)).filter(Boolean))]
+    // what went out: the frozen version, or — for a post from before versions
+    // were kept — the post as it went. Never the edit card's newest cut.
+    const shown = readFrozenPost((version ?? {
+      n: 0, slides: post.slides, per_channel: post.per_channel, channels: post.channels,
+      caption: post.caption, scheduled_for: post.scheduled_for, timezone: post.timezone,
+    }) as unknown as Record<string, unknown>)
+    const slides = shown ? reviewFiles(shown) : []
+    const links = postLiveLinks(post)
+    const live = liveNetworks(post).map(networkLabel)
+    const networks = live.length > 0 ? live : [...new Set(rows.map(r => networkName(r.platform)).filter(Boolean))]
 
     const person = (p: { username: string; full_name: string | null; profile_pic: string | null }): PortalPostPerson => ({
       name: p.full_name?.trim() || `@${p.username}`,
@@ -122,13 +139,13 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
 
     return {
       client: { id: who.id, name: who.name },
-      title: item.title,
-      caption: row.caption ?? null,
+      title: String(item?.title ?? '').trim() || 'Your post',
+      caption: shown?.caption || null,
       slides: slides.map(s => ({ url: s.url, type: s.type, name: s.name })),
       networks,
-      posted_at: main?.published_at ?? row.sent_at ?? row.scheduled_for ?? null,
-      timezone: safeZone(row.timezone ?? (clientRow?.timezone as string | null) ?? null),
-      live_urls: rows.map(r => r.platform_post_url).filter((u): u is string => Boolean(u)),
+      posted_at: main?.published_at ?? postedAt(post),
+      timezone: safeZone(post.timezone ?? (clientRow?.timezone as string | null) ?? null),
+      live_urls: links.map(l => l.url),
       performance: portalPerformance(performance),
       metrics: main
         ? {

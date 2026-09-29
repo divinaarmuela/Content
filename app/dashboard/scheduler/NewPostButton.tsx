@@ -1,61 +1,39 @@
 'use client'
 
 /**
- * THE ONE BUTTON ON THE SCHEDULER PAGE.
+ * THE ONE BUTTON ON THE POST APPROVAL PAGE.
  *
- * The owner, more than once, in their words: "ONE BUTTON… IT SHOULD BE ONE
- * ACTION WHERE I CAN PUT FILES OR DRIVE TO SEND TO MY AM FOR APPROVAL" — and
- * "where is this preview feature in the Scheduler page? my New post is still
- * taking me to the Schedule page."
+ * The owner, more than once: "ONE BUTTON… IT SHOULD BE ONE ACTION WHERE I CAN
+ * PUT FILES OR DRIVE TO SEND TO MY AM FOR APPROVAL" — and it must not take
+ * anyone to another page.
  *
- * It used to `router.push('/dashboard/social/schedule?new=1')`. That is the
- * thing they said not to do: the composer opened on the other page, and coming
- * back meant finding your place in the queue again.
+ * Since the posting rebuild (29 Sep 2026) it opens the SAME flow the Schedule
+ * page runs (`useComposeFlow`): pick the client, pick the files, and the one
+ * post window opens on the new post — with "Send for quality check" as its
+ * main button, because every post passes the quality check first (the owner's
+ * decision 3). There is no second small window with its own approve and send
+ * buttons any more: that was a second copy of the rules, and it wrote to the
+ * edit card instead of the post (audit V13, W10).
  *
- * So this navigates NOWHERE. Pressing it opens ONE small window over this
- * page (`SendForApprovalDialog`, 8 Sep 2026 — the owner: "make it simple",
- * "why is the modal there when it's an approval stage"): the client, the
- * files, a name for the piece, and the one decision — send it to a manager,
- * or (a manager) approve it or send it to the client. No caption, no
- * channels, no network options: those are the Schedule page's, where an
- * approved piece is booked in.
- *
- * It does not appear for somebody who cannot publish — `/api/social/publish`
- * requires the scheduler role and would refuse them, and a button that exists
- * to say no is not a button.
+ * It navigates nowhere, and it does not appear for somebody who does not make
+ * posts (`mayCreatePost`).
  */
 
-import { useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { ScopeViewer } from '@/app/lib/scope-client'
+import { loadFailedMessage } from '@/app/lib/support-core'
 import { useRole } from '../useRole'
-import { useWorkRows } from '../useLiveWork'
-import { useTeamMembers } from '../production/workHooks'
-import type { BoardViewer } from '../../lib/board-view-core'
-import { NewCardDialog } from '../board/BoardDialogs'
 import { mayCreatePost } from '../../lib/overview-links-core'
-import SendForApprovalDialog from './SendForApprovalDialog'
+import { contactIdOf, ownerChoices } from '../../lib/account-owner-core'
+import { useSchedulePosts } from '../social/schedule/useSchedulePosts'
+import { CLIENT_KEY, useComposeFlow } from '../social/schedule/useComposeFlow'
 
 export default function NewPostButton() {
   const { me, can, loading: roleLoading } = useRole()
   const [open, setOpen] = useState(false)
-  // ONE BUTTON (the owner, 13 Sep 2026: "just one button that makes sense").
-  // For an account manager or a super admin it opens the card popup — files,
-  // what needs doing, who posts it, the Drive folder to post from —
-  // for everyone else the upload-and-send flow.
-  const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
-  const viewer = useMemo<BoardViewer | null>(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
-  const live = useWorkRows(isManager ? viewer : null, { schedulerPostFilter: false })
-  const team = useTeamMembers(isManager)
-
-  // the role is still arriving: render nothing rather than a button that may
-  // be about to disappear. And ONLY the roles who raise posts: a quality
-  // checker satisfies `can('scheduler')` on the ladder, but does not make
-  // posts (the owner, 13 Sep 2026: "doesn't make sense quality review can
-  // create a post")
   if (roleLoading || !can('scheduler') || !mayCreatePost(me?.role)) return null
-
   return (
     <>
       <Button
@@ -64,26 +42,142 @@ export default function NewPostButton() {
         onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" /> New post
       </Button>
-
-      {/* mounted only while it is open — the listeners behind it belong to a
-          post being written, not to a board being looked at */}
-      {open && isManager && viewer ? (
-        <NewCardDialog
-          open={open}
-          onOpenChange={setOpen}
-          // every active client, not only the ones this person already has
-          // cards for (the owner, 13 Sep 2026: "when an editor creates a new
-          // card I can't see all clients — only one option")
-          clients={live.tables.clients.rows.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => ({ id: c.id, name: c.name }))}
-          kinds={live.tables.workKinds.rows}
-          team={team}
-          viewer={{ ...viewer, name: me?.name }}
-          simple
-          forPosting
-        />
-      ) : open ? (
-        <SendForApprovalDialog onClose={() => setOpen(false)} />
-      ) : null}
+      {/* mounted only while open — the listeners behind it belong to a post being made */}
+      {open && <NewPostFlow onClose={() => setOpen(false)} />}
     </>
+  )
+}
+
+/** Pick the client (and whom it is for), then the Schedule page's own flow. */
+function NewPostFlow({ onClose }: { onClose: () => void }) {
+  const { me } = useRole()
+  const viewer: ScopeViewer | null = useMemo(() => (me ? { id: me.id, role: me.role } : null), [me])
+  const [clientId, setClientId] = useState<string | null>(null)
+  const [postFor, setPostFor] = useState('company')
+  const data = useSchedulePosts(viewer, clientId)
+  const client = data.clients.find(c => c.id === clientId) ?? null
+
+  const remembered = useMemo(() => {
+    let saved: string | null = null
+    try { saved = localStorage.getItem(CLIENT_KEY) } catch { /* private mode */ }
+    return saved && data.clients.some(c => c.id === saved) ? saved : null
+  }, [data.clients])
+  const pick = (id: string) => {
+    setClientId(id)
+    setPostFor('company')
+    try { localStorage.setItem(CLIENT_KEY, id) } catch { /* private mode */ }
+  }
+  useEffect(() => {
+    if (clientId || data.clients.length !== 1) return
+    pick(data.clients[0].id)
+  }, [clientId, data.clients])
+
+  const people = data.contacts.filter(c => data.accounts.some(a => a.contact_id === c.id))
+  const [ready, setReady] = useState(false)
+  const flow = useComposeFlow({
+    clientId: ready ? clientId : null,
+    data,
+    role: me?.role ?? null,
+    userId: me?.id ?? null,
+    suggested: [],
+    forContact: contactIdOf(postFor),
+  })
+
+  // once the client is chosen, the files window opens; when every window of
+  // the flow has closed again, so does this
+  const started = useRef(false)
+  useEffect(() => {
+    if (!ready || started.current) return
+    started.current = true
+    flow.openAt(null)
+  }, [ready, flow])
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (flow.open) { wasOpen.current = true; return }
+    if (wasOpen.current) onClose()
+  }, [flow.open, onClose])
+
+  useEffect(() => {
+    if (ready) return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [ready, onClose])
+
+  if (ready) return <>{flow.windows}</>
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="New post"
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/55 p-3 sm:items-center sm:p-6"
+    >
+      <div className="flex max-h-full w-full max-w-[520px] flex-col gap-4 overflow-y-auto rounded-card bg-popover p-4 text-popover-foreground shadow-xl sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col">
+            <h2 className="text-section-title">New post</h2>
+            <p className="text-[13px] text-muted-foreground">
+              {!clientId ? 'Who is this post for?' : 'Then pick the files. The post goes to the quality check before anyone else sees it.'}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-muted">
+            <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+
+        {!clientId ? (
+          data.error ? (
+            <p className="rounded-inner border border-border bg-paper px-3 py-2 text-[13px]">{loadFailedMessage('your clients')}</p>
+          ) : data.loading && data.clients.length === 0 ? (
+            <p role="status" className="py-6 text-center text-[13px] text-muted-foreground">Loading your clients…</p>
+          ) : data.clients.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-muted-foreground">You are not on any client yet.</p>
+          ) : (
+            <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
+              {[...data.clients]
+                .sort((a, b) => Number(b.id === remembered) - Number(a.id === remembered) || a.name.localeCompare(b.name))
+                .map(c => (
+                  <button key={c.id} type="button" onClick={() => pick(c.id)}
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-inner border border-border bg-paper px-4 text-left text-[14px] font-semibold hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue">
+                    <span className="min-w-0 truncate">{c.name}</span>
+                    {c.id === remembered && <span className="shrink-0 text-[11px] font-semibold uppercase text-muted-foreground">Last time</span>}
+                  </button>
+                ))}
+            </div>
+          )
+        ) : (
+          <>
+            {data.clients.length > 1 && (
+              <p className="text-[13px]">
+                For <span className="font-semibold">{client?.name}</span>
+                {' '}<button type="button" aria-label="Change the client this post is for"
+                  className="-my-2 inline-flex min-h-11 items-center text-muted-foreground underline"
+                  onClick={() => setClientId(null)}>change</button>
+              </p>
+            )}
+            {people.length > 0 && (
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] font-semibold text-muted-foreground">Posting for</span>
+                <select value={postFor} onChange={e => setPostFor(e.target.value)}
+                  className="min-h-11 w-full rounded-full border border-border bg-paper px-4 text-[14px] outline-none">
+                  {ownerChoices(client?.name ?? 'The business', people).map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setReady(true)} disabled={data.loading && data.accounts.length === 0}
+                className="min-h-11 rounded-full bg-foreground px-5 text-[13px] font-semibold text-background disabled:opacity-60">
+                Pick the files
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

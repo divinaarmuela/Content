@@ -27,7 +27,7 @@ const publisher = {
 }
 vi.mock('../app/lib/publisher', () => ({ getPublisher: () => publisher }))
 // closing the loop back into production is a different job's business
-vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => {}) }))
+vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => {}), recordPostOutcome: vi.fn(async () => ({ job_id: '', posts: [], schedule_rows: 0 })) }))
 
 const { runPublishJob, queuePublishJob } = await import('../app/lib/publish')
 
@@ -42,9 +42,19 @@ const job = (id: string, status: string): Row => ({
   created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z',
 }) as unknown as Row
 
+/** THE POST the job books: the door onto a client's account asks the post, not the card
+ *  (publish-core.publishDoorRefusal) — Booked in, holding an approval of the version it sends */
+const bookedPost = (): Row => ({
+  id: 'post-1', client_id: 'client-1', item_id: ITEM, source_item_id: ITEM, stage: 'booked', rev: 3,
+  sent_version: 1, draft_version: 2,
+  approval: { version: 1, by: 'qr-1', hat: 'quality_reviewer', at: '2026-09-01T00:00:00.000Z' },
+  booking: { job_ids: [], pending: true, at: '2026-09-01T00:00:00.000Z', for_time: null },
+  slides: [], channels: [], caption: 'Hello', timezone: 'Australia/Melbourne',
+}) as unknown as Row
 const validPost = {
   clientId: 'client-1',
   contentItemId: ITEM,
+  postId: 'post-1',
   caption: 'Hello',
   media: [{ url: 'https://zernio.com/a.jpg', type: 'image' as const }],
   targets: [{ platform: 'instagram' as const, accountId: 'acc-1' }],
@@ -55,7 +65,7 @@ afterEach(() => { fake?.restore(); fake = null; created.length = 0 })
 
 describe('runPublishJob claims queued → publishing exactly once', () => {
   it('the winner publishes and the loser never calls the provider', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'queued')] })
     const [a, b] = await Promise.all([runPublishJob('j1'), runPublishJob('j1')])
     expect([a, b].filter(r => r === 'published')).toHaveLength(1)
     expect([a, b].filter(r => r === null)).toHaveLength(1)
@@ -63,7 +73,7 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
   })
 
   it('a rival taking the job between the read and the write is not overwritten', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'queued')] })
     const off = fake.onBeforeWrite('/mdm/tables/publish_jobs/j1', () => {
       off()
       fake!.tree().mdm.tables.publish_jobs.j1.status = 'publishing'
@@ -74,7 +84,7 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
   })
 
   it('the claim stamps updated_at, so the stale sweep cannot re-dispatch it', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'queued')] })
     // the job sat in the queue for an hour before a worker picked it up
     fake.tree().mdm.tables.publish_jobs.j1.updated_at = '2026-09-01T00:00:00.000Z'
     await runPublishJob('j1')
@@ -83,7 +93,7 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
   })
 
   it('a claim that is still running is NOT reclaimed as stale', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'queued')] })
     fake.tree().mdm.tables.publish_jobs.j1.updated_at = '2026-09-01T00:00:00.000Z'
     // hold the provider call open, so the row is observed mid-publish
     let release = () => {}
@@ -104,7 +114,7 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
   })
 
   it('a job nobody else wants is still claimed and published', async () => {
-    fake = seedDb({ publish_jobs: [job('j1', 'queued')] })
+    fake = seedDb({ social_posts: [bookedPost()], publish_jobs: [job('j1', 'queued')] })
     expect(await runPublishJob('j1')).toBe('published')
     expect(created).toEqual(['req-j1'])
   })
@@ -112,7 +122,7 @@ describe('runPublishJob claims queued → publishing exactly once', () => {
 
 describe('one live publish job per content item, under a race', () => {
   it('two enqueues at the same moment leave exactly one job', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     const [a, b] = await Promise.all([queuePublishJob(validPost), queuePublishJob(validPost)])
     const results = [a, b]
     expect(results.filter(r => 'id' in r)).toHaveLength(1)
@@ -123,7 +133,7 @@ describe('one live publish job per content item, under a race', () => {
   })
 
   it('the item is queueable again once its job settles', async () => {
-    fake = seedDb({})
+    fake = seedDb({ social_posts: [bookedPost()] })
     const first = await queuePublishJob(validPost)
     expect(first).toHaveProperty('id')
     // …the job runs and reaches a terminal state, which hands the lock back

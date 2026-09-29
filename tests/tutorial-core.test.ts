@@ -10,7 +10,7 @@ import { panelForPage, type GettingStartedPage } from '../app/lib/getting-starte
 import { TOURS } from '../app/lib/tour-core'
 import { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_TOOLS, PAGE_TITLES } from '../app/dashboard/ui/Shell'
 import { BOARD_COLUMNS } from '../app/lib/board-core'
-import { SEND_FOR_REVIEW } from '../app/lib/schedule-compose-core'
+import { ACTION_LABEL } from '../app/lib/post-stage-core'
 import type { Role } from '../app/lib/identity-core'
 
 const root = join(__dirname, '..')
@@ -184,10 +184,10 @@ describe('the words are the screen’s words', () => {
   })
 
   it('quotes the composer’s buttons as they read', () => {
-    expect(SEND_FOR_REVIEW).toBe('Send for approval')
-    const composeCore = read('app/lib/schedule-compose-core.ts')
-    expect(composeCore).toContain("label: 'Schedule'")
-    expect(composeCore).toContain("'Post now'")
+    // the post window's buttons are the stage rules' own labels (29 Sep 2026)
+    expect(ACTION_LABEL.send_to_qc).toBe('Send for quality check')
+    expect(ACTION_LABEL.post_now).toBe('Post now')
+    expect(ACTION_LABEL.book).toBe('Book in')
     const scheduler = everyLine('scheduler')
     expect(scheduler).toContain('Send for approval')
     expect(scheduler).toContain('Post now')

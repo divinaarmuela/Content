@@ -132,15 +132,12 @@ describe('the card page does no posting', () => {
    * answers it on the SAME route the composer uses — one gate, one set of
    * words (`board-view-core`), never a second approval flow.
    */
-  it('answers a waiting post on the composer\'s own route, and says it in the board\'s words', () => {
-    expect(src).toContain('/api/production/items/${detail.id}/posting-approval')
-    expect(src).toContain('POST_APPROVE_LABEL')
-    expect(src).toContain('POST_CHANGES_LABEL')
-    // the decision is the pure layer's, not an `if` in the panel
-    expect(src).toContain('postApprovalOffer(boardCard, viewer)')
-    expect(src).toContain('postWaitingLine(boardCard, viewer)')
-    // and no second gate: the words and the state still come from one place
-    expect(src).not.toContain('posting-approval-core')
+  it('does not answer a post: a post\'s moves are its own, on Post approval (the posting rebuild, 29 Sep 2026)', () => {
+    // it used to offer "Approve the post" from the edit card, even while the
+    // post was with the client (audit B7)
+    expect(src).not.toContain('posting-approval')
+    expect(src).not.toMatch(/POST_APPROVE_LABEL|POST_CHANGES_LABEL|postApprovalOffer|postWaitingLine/)
+    expect(src).not.toMatch(/posting_approval_state|posting_client_required/)
   })
 
   it('a move is one tap — no notify_ids or scheduler_ids ride the transition', () => {

@@ -47,7 +47,7 @@ vi.mock('../app/lib/publisher', () => ({
   }),
 }))
 // the permalink back-fill's side trip; not under test here
-vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => undefined) }))
+vi.mock('../app/lib/production-publish', () => ({ recordPublishOnItem: vi.fn(async () => undefined), recordPostOutcome: vi.fn(async () => ({ job_id: '', posts: [], schedule_rows: 0 })) }))
 vi.mock('../app/lib/external-post-match', () => ({ sweepExternalPosts: vi.fn(async () => ({ scanned: 0, matched: 0, refreshed: 0 })) }))
 
 const { refreshOnePost, refreshRecentPostAnalytics, forgetFollowerStats } = await import('../app/lib/post-analytics')

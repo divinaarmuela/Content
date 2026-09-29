@@ -15,6 +15,12 @@
 import { PORTAL_DELIVERED_LINE } from './deliver-only-core'
 import { ITEM_STATUSES, type ItemStatus } from './workflow-core'
 import { LINK_LABELS, linkKindOf, type LinkKind } from './card-link-core'
+import {
+  MISSED_FOR_CLIENT, PORTAL_COLUMN, approveByOf, failedNetworks, liveNetworks, notesForFile, slotMissed,
+  type NowLike, type PostState,
+} from './post-stage-core'
+import { NETWORK_LABEL } from './publish-core'
+import { normaliseSlides, type Slide } from './version-files-core'
 
 // ── the five columns, in the client's words ─────────────────────────────────
 
@@ -56,37 +62,6 @@ export function portalColumnFor(status: ItemStatus): PortalColumnKey {
   // every status is in exactly one column (pinned by the test); this is the
   // type system's fallback, not a real path
   return col?.key ?? 'making'
-}
-
-/**
- * THE POST'S OWN APPROVAL DECIDES ITS COLUMN (the owner, 28 Sep 2026: "why is it under Approved and Scheduled" —
- * Jordan's posts 3, 4 and 11 were waiting on his yes and sat under Approved, because the column read only the edit's
- * status). A post put to the client and not yet answered is theirs to review; one waiting on the team, or being
- * changed after their notes, is being checked; only a yes (or a post that never needed one) is Approved.
- */
-export function portalColumnForPost(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown; clientSaw?: boolean }): PortalColumnKey {
-  const base = portalColumnFor(status)
-  if (base !== 'approved' && base !== 'posted') return base
-  if (status === 'published') return base
-  const state = String(posting.state ?? '')
-  if (state === 'pending') return posting.clientRequired === true ? 'your_review' : 'checking'
-  if (state === 'approved') return base
-  // SCHEDULING IS A NEW FLOW (28 Sep 2026): an approved EDIT is not an approved POST. Nothing is "Approved" to the
-  // client until they said yes to it (the edit, on their portal) or the post itself was approved — an upload straight
-  // to the Schedule, a draft, or a change being made is the team's, and not on their page.
-  if (status === 'approved_for_scheduling' && posting.clientSaw !== true) return 'checking'
-  if (state === 'changes' || state === 'draft') return 'checking'
-  return base
-}
-
-/** …and what that column's card says and wears, when the post's approval moved it (28 Sep 2026: "why does it say
- *  Approved with green on the page" — Jordan had not approved anything) */
-export function postingCardFace(status: ItemStatus, posting: { state?: unknown; clientRequired?: unknown; clientSaw?: boolean }): { tone: PortalCardTone | undefined; line: string } | null {
-  const col = portalColumnForPost(status, posting)
-  if (col === portalColumnFor(status)) return null
-  if (col === 'your_review') return { tone: 'amber', line: 'Waiting on your approval' }
-  if (String(posting.state ?? '') === 'changes') return { tone: undefined, line: 'We’re making your changes' }
-  return { tone: undefined, line: 'A last look before it comes to you' }
 }
 
 // ── what the client may see and do ──────────────────────────────────────────
@@ -355,12 +330,15 @@ export function sectionCounts<T extends { column: PortalColumnKey; actions: Port
  * counted ONCE now: added to review, and taken out of whichever pile its own
  * card was sitting in, so the four numbers still add up to the page.
  */
-export function heroCounts<T extends { kind: 'work' | 'shoot'; id: string; column: PortalColumnKey; actions: PortalActions }>(
+export function heroCounts<T extends { kind: 'work' | 'shoot' | 'post'; id: string; column: PortalColumnKey; actions: PortalActions }>(
   cards: T[],
-  /** the pieces whose finished post is waiting on the client (`post_approvals`) */
+  /** the posts waiting on the client (`post_approvals`) — drawn in their own
+   *  section above the rest, so they are not among `cards`; were one ever
+   *  passed in both, it is still counted once */
   postApprovals: readonly { id: string }[] = [],
 ): Record<PortalSectionKey, number> {
-  const work = cards.filter(c => c.kind === 'work')
+  // a post card (posting rebuild, 29 Sep 2026) counts exactly as a piece does
+  const work = cards.filter(c => c.kind !== 'shoot')
   const counts = sectionCounts(work)
   counts.review += cards.filter(c => c.kind === 'shoot' && c.actions.approve).length
 
@@ -519,4 +497,373 @@ export function shootDayLabel(d: string | null | undefined): string | null {
   const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * THE POST, AS THE CLIENT SEES IT (the posting rebuild, 29 Sep 2026).
+ *
+ * Read docs/posting-rebuild/OWNER_DECISIONS.md and SPEC.md §4.4 first. The old
+ * portal worked out where a post was from the EDIT card's fields and showed
+ * the LIVE post. That is how a client approved a post nobody had sent them
+ * (audit V5, P3), read "Approved — thank you" on a post the team approved
+ * (P6), was thanked for a note they never wrote (P13), and approved pictures
+ * added after the email went out (P2). The rules now:
+ *
+ *   1. Where a post is: `social_posts.stage`, and nothing else.
+ *   2. What the client sees: a FROZEN version (`post_versions`), never the
+ *      working copy. The one exception is a post that is already live on a
+ *      network and was never frozen (it went out before versions were kept):
+ *      what went out is public, so it is shown as it went.
+ *   3. They may answer only a post that is with them, for the version they
+ *      were sent, before its "approve by" time.
+ *   4. Everything else they see states a fact that is true: who decided, and
+ *      where it went.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** What one post is, on the client's side. */
+export type ClientPostState =
+  | 'review'            // with them, theirs to answer
+  | 'missed'            // with them, but its approve-by time has gone
+  | 'thanks'            // they asked for a change; the team is making it
+  | 'updating'          // the team took it back to change it
+  | 'you_approved'      // their own yes
+  | 'approved_for_you'  // a manager said yes for them (decision 5)
+  | 'team_decided'      // they saw an earlier version; the team decided this one (decision 6)
+  | 'posted'
+  | 'cancelled'
+
+export type ClientPostView = {
+  state: ClientPostState
+  /** the frozen version the client is shown; null only for a live post that was never frozen */
+  version: number | null
+  /** may they press Approve or Ask for a change, now */
+  canAnswer: boolean
+  /** the one line at the top of the page and on the card */
+  headline: string
+  /** a second, quieter line, or null */
+  line: string | null
+  tone: PortalCardTone | undefined
+  /** where it sits on the portal home — 'checking' is not drawn there */
+  column: PortalColumnKey
+}
+
+export type ClientPostWords = {
+  /** a time in the client's words, in the client's zone ("Thu 10 Sept, 6:00 pm") */
+  when?: (iso: string | null | undefined) => string | null
+  /** a team member's name, by id (for "Approved by Divina for you") */
+  nameOf?: (id: string | null | undefined) => string | null | undefined
+}
+
+const firstName = (n: string | null | undefined) => String(n ?? '').trim().split(/\s+/)[0] || null
+const listNames = (names: string[]) =>
+  names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+
+/** A network's own name ("Instagram", "LinkedIn"). */
+export const networkLabel = (platform: string) => NETWORK_LABEL[String(platform).toLowerCase()] ?? platform
+
+/** The portal home's column for a stage the client may see (SPEC §4.4: Review · Approved · Going out · Done). */
+function homeColumn(post: PostState): PortalColumnKey {
+  const c = PORTAL_COLUMN[post.stage]
+  if (c === 'review') return 'your_review'
+  if (c === 'approved' || c === 'going_out') return 'approved'
+  if (c === 'done') return 'posted'
+  return 'checking'
+}
+
+/** "Goes out Thu 10 Sept, 6:00 pm." or the plain words when there is no time yet. */
+function goingOutLine(post: PostState, w: ClientPostWords): string {
+  if (post.stage === 'booked') {
+    const t = w.when?.(post.booking?.for_time ?? post.scheduled_for)
+    return t ? `Goes out ${t}.` : 'Booked in — the posting time is set.'
+  }
+  return 'The team will book a time for it.'
+}
+
+/** Did the client ever have a version of this post in front of them? */
+export function clientEverSaw(post: Pick<PostState, 'client_send' | 'last_client_send' | 'approval'>): boolean {
+  return !!(post.client_send || post.last_client_send || post.approval?.hat === 'client' || post.approval?.on_behalf_of_client)
+}
+
+/**
+ * WHAT THE CLIENT SEES OF ONE POST, or null when it is not theirs to see.
+ * Everything on the portal — the post page, the home card, the one list of
+ * what is waiting — reads this, and the act route asks the same question
+ * (`canAnswer`) before it hands the answer to the one writer.
+ *
+ * Not theirs to see (null): a draft or a check they never had, and a post the
+ * team approved without ever sending it (SPEC §4.4). A post that is live is
+ * public, so it is always shown.
+ */
+export function clientPostView(post: PostState, now: NowLike, w: ClientPostWords = {}): ClientPostView | null {
+  const view = (
+    state: ClientPostState, version: number | null, headline: string, line: string | null,
+    tone: PortalCardTone | undefined, canAnswer = false,
+  ): ClientPostView => ({
+    state, version, canAnswer, headline, line, tone,
+    column: state === 'review' || state === 'missed' ? 'your_review'
+      : state === 'thanks' || state === 'updating' || state === 'cancelled' ? 'checking'
+      : homeColumn(post),
+  })
+
+  switch (post.stage) {
+    case 'with_client': {
+      const send = post.client_send
+      // a post at With client that nothing reached is not with them (audit P9)
+      if (!send) return null
+      if (slotMissed(post, now)) return view('missed', send.version, MISSED_FOR_CLIENT, null, undefined)
+      const by = w.when?.(approveByOf(post))
+      // the version they were sent is the version they answer — nothing else (audit P2)
+      const current = send.version === post.sent_version
+      return view('review', send.version, 'Ready for you — approve it, or ask for a change.',
+        by ? `Please answer by ${by}.` : null, 'amber', current)
+    }
+    case 'draft':
+    case 'quality_check': {
+      const last = post.last_client_send
+      if (!last) return null
+      // "thanks for your note" only when the note was THEIRS (audit P13)
+      if (post.stage === 'draft' && post.changes_asked?.who === 'client') {
+        return view('thanks', last.version, 'Thanks — we have your note', 'The team is making the change.', undefined)
+      }
+      return view('updating', last.version, 'The team is updating this post', 'Nothing for you to do yet.', undefined)
+    }
+    case 'ready':
+    case 'booked': {
+      const a = post.approval
+      const version = a?.version ?? post.sent_version
+      const tone: PortalCardTone = post.stage === 'booked' ? 'blue' : 'green'
+      if (a?.hat === 'client' && !a.on_behalf_of_client) {
+        return view('you_approved', version, 'You approved this', goingOutLine(post, w), tone)
+      }
+      if (a?.on_behalf_of_client) {
+        // the manager's yes, in the manager's name — never "you approved" (decision 5, audit P6)
+        const who = firstName(w.nameOf?.(a.by)) ?? 'the team'
+        return view('approved_for_you', version, `Approved by ${who} for you`, goingOutLine(post, w), tone)
+      }
+      // they had an earlier version; the team decided this one (decision 6)
+      if (post.last_client_send) {
+        return view('team_decided', version, 'The team approved this one', `Nothing for you to do. ${goingOutLine(post, w)}`, tone)
+      }
+      // approved by the team and never sent: not the client's (SPEC §4.4)
+      return null
+    }
+    case 'posted': {
+      const live = liveNetworks(post).map(networkLabel)
+      const failed = failedNetworks(post).map(networkLabel)
+      return view('posted', post.sent_version,
+        live.length > 0 ? `Live on ${listNames(live)}` : 'Live',
+        failed.length > 0 ? `Not out yet on ${listNames(failed)}.` : null, 'ink')
+    }
+    case 'cancelled':
+      if (!clientEverSaw(post)) return null
+      return view('cancelled', post.last_client_send?.version ?? post.approval?.version ?? post.sent_version,
+        'This post was cancelled', 'It will not go out.', undefined)
+  }
+}
+
+/** The live links, one per network, from the post's own per-network record (audit L1, P5). */
+export function postLiveLinks(post: Pick<PostState, 'outcomes'>): { platform: string; network: string; url: string }[] {
+  return Object.entries(post.outcomes)
+    .filter(([, o]) => (o.status === 'published' || o.status === 'duplicate') && !!o.url && /^https:\/\//i.test(o.url))
+    .map(([platform, o]) => ({ platform, network: networkLabel(platform), url: o.url! }))
+}
+
+/** When it went out: the earliest network's time, else the booked time. */
+export function postedAt(post: Pick<PostState, 'outcomes' | 'booking' | 'scheduled_for'>): string | null {
+  const times = Object.values(post.outcomes)
+    .filter(o => (o.status === 'published' || o.status === 'duplicate') && o.at)
+    .map(o => o.at!)
+    .sort()
+  return times[0] ?? post.booking?.for_time ?? post.scheduled_for ?? null
+}
+
+/**
+ * THE ONE LIST OF WHAT IS WAITING ON THE CLIENT (decision 15): every post
+ * with them, sent, and still open — the one whose time runs out first on top.
+ * A post whose approve-by time has gone is not on it (decision 11).
+ */
+export function postsWaitingOnClient<P extends PostState>(posts: readonly P[], now: NowLike): P[] {
+  const by = (p: PostState) => {
+    const t = new Date(approveByOf(p) ?? '').getTime()
+    return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER
+  }
+  return posts
+    .filter(p => clientPostView(p, now)?.canAnswer === true)
+    .sort((a, b) => by(a) - by(b) || a.id.localeCompare(b.id))
+}
+
+/** The posts with the client whose approve-by time went while they waited. */
+export function postsMissedByClient<P extends PostState>(posts: readonly P[], now: NowLike): P[] {
+  return posts.filter(p => clientPostView(p, now)?.state === 'missed')
+}
+
+/* ── the frozen version ─────────────────────────────────────────────────── */
+
+/** A `post_versions` row, as the portal reads it. */
+export type FrozenPost = {
+  n: number
+  slides: Slide[]
+  /** per network (by account id): its own kind and its own files, when it has them */
+  per_channel: Record<string, { kind: string | null; slides: Slide[] }>
+  channels: string[]
+  caption: string
+  scheduled_for: string | null
+  timezone: string | null
+  /** frozen by the migration, not at a send — the page says so */
+  from_migration: boolean
+}
+
+const asObj = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
+
+/** Read a raw `post_versions` row (or, for a live post never frozen, the post's own row). Null when there is none. */
+export function readFrozenPost(row: Record<string, unknown> | null | undefined): FrozenPost | null {
+  if (!row) return null
+  const n = typeof row.n === 'number' ? row.n : typeof row.sent_version === 'number' ? row.sent_version : 0
+  const per: FrozenPost['per_channel'] = {}
+  for (const [acc, raw] of Object.entries(asObj(row.per_channel) ?? {})) {
+    const r = asObj(raw) ?? {}
+    per[acc] = { kind: typeof r.kind === 'string' ? r.kind : null, slides: normaliseSlides(r.slides) }
+  }
+  const rawChannels = Array.isArray(row.channels) ? row.channels : Object.values(asObj(row.channels) ?? {})
+  return {
+    n,
+    slides: normaliseSlides(row.slides),
+    per_channel: per,
+    channels: rawChannels.filter((x): x is string => typeof x === 'string' && !!x),
+    caption: typeof row.caption === 'string' ? row.caption : '',
+    scheduled_for: typeof row.scheduled_for === 'string' && row.scheduled_for ? row.scheduled_for : null,
+    timezone: typeof row.timezone === 'string' && row.timezone ? row.timezone : null,
+    from_migration: row.from_migration === true,
+  }
+}
+
+/**
+ * EVERY FILE THE CLIENT IS ASKED ABOUT, once each: the post's shared files,
+ * then any a network has of its own (Instagram's ten beside LinkedIn's
+ * fourteen). A note is pinned to a file by its address, so it can be left on
+ * any of them (decision 9).
+ */
+export function reviewFiles(v: Pick<FrozenPost, 'slides' | 'per_channel' | 'channels'>): Slide[] {
+  const seen = new Set<string>()
+  const out: Slide[] = []
+  const add = (s: Slide) => { if (!seen.has(s.url)) { seen.add(s.url); out.push(s) } }
+  v.slides.forEach(add)
+  for (const acc of v.channels) (v.per_channel[acc]?.slides ?? []).forEach(add)
+  return out
+}
+
+/** "Carousel · 14 slides", "Reel", "Photo post" — what it is, in one line. */
+export function postTypeLine(files: readonly { type?: string | null }[], kinds: readonly (string | null)[] = []): string {
+  const n = files.length
+  const allVideo = n > 0 && files.every(f => f.type === 'video')
+  const kind = kinds.find(k => !!k) ?? null
+  const word = kind === 'reel' ? 'Reel' : kind === 'story' ? 'Story'
+    : allVideo ? (n > 1 ? 'Videos' : 'Video') : n > 1 ? 'Carousel' : 'Photo post'
+  return n > 1 ? `${word} · ${n} ${allVideo ? 'clips' : 'slides'}` : word
+}
+
+/* ── notes on a post: per file, the client's thread only ────────────────── */
+
+/** One note as the client reads it. `file_url` null = the whole post. */
+export type PortalPostNote = {
+  id: string
+  created_at: string
+  body: string
+  author_name: string
+  from_team: boolean
+  file_url: string | null
+}
+
+type NoteRow = {
+  id: string; post_id?: string | null; version?: number | null; visibility?: string | null; file_url?: string | null
+  body?: string | null; author_name?: string | null; author_role?: string | null; created_at?: string | null
+}
+
+/**
+ * THE CLIENT'S THREAD ON ONE VERSION (decision 9, audit P10). Only
+ * `post_comments` in the Client thread — never a team note, never the edit's
+ * `item_comments` — and only this version's, oldest first.
+ */
+export function clientPostNotes(rows: readonly NoteRow[], postId: string, version: number | null, clientName: string): PortalPostNote[] {
+  return rows
+    .filter(r => r.post_id === postId && r.visibility === 'client' && (version == null || r.version == null || r.version === version))
+    .map(r => {
+      const fromTeam = String(r.author_role ?? 'client') !== 'client'
+      const name = String(r.author_name ?? '').trim()
+      return {
+        id: r.id,
+        created_at: String(r.created_at ?? ''),
+        body: String(r.body ?? ''),
+        author_name: fromTeam ? (name || 'MD Media') : (name || clientName),
+        from_team: fromTeam,
+        file_url: r.file_url ?? null,
+      }
+    })
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+}
+
+/** The notes on one file — the post-stage rule, so a reorder cannot move a note. */
+export function notesOnFile(notes: readonly PortalPostNote[], fileUrl: string): PortalPostNote[] {
+  return notesForFile(notes, fileUrl, null)
+}
+
+/** May the client leave a note on this file of this post? Only while it is theirs to answer, only on a file it has. */
+export function clientMayNote(view: ClientPostView | null, files: readonly { url: string }[], fileUrl: string | null): boolean {
+  if (!view?.canAnswer) return false
+  return fileUrl == null || files.some(f => f.url === fileUrl)
+}
+
+/* ── addresses ──────────────────────────────────────────────────────────── */
+
+/** THE ONE LINK (decision 15): everything waiting on the client, on one page. (One post's own page is
+ *  `portalPostHref` in post-page-core — its review while it is with them, what became of it after.) */
+export function portalWaitingPath(token: string): string {
+  return `/portal/${encodeURIComponent(token)}/posts`
+}
+
+/* ── the edit's card, now that its posts speak for themselves ───────────── */
+
+type PieceRow = { status?: string | null; client_round?: unknown; client_rounds?: unknown }
+
+/** Did the client have a round of this EDIT on their portal? */
+export function clientHadEdit(i: PieceRow): boolean {
+  return !!(i.client_round || (Array.isArray(i.client_rounds) && i.client_rounds.length > 0))
+}
+
+/**
+ * HAS THIS PIECE REACHED THE CLIENT? Only then does it carry media, a link, a
+ * caption or a thread (audit P7, P8): at their review, after their notes,
+ * once they had a round of it, or once it is live. An edit the team approved
+ * and never sent them is theirs to see only when its post is.
+ */
+export function pieceReachedClient(i: PieceRow): boolean {
+  const status = String(i.status ?? '')
+  if (status === 'client_review' || status === 'client_changes_requested' || status === 'published') return true
+  if (status === 'approved_for_scheduling' || status === 'scheduled') return clientHadEdit(i)
+  return false
+}
+
+/**
+ * WHERE THE EDIT'S CARD SITS once the edit is approved (the posting rebuild).
+ * Past the edit a piece is its POSTS, each by its own stage, so the edit's
+ * card steps aside ('checking' is not drawn) — except when the client
+ * approved the edit and no post of it is theirs to see yet, when it says what
+ * is true: the team is getting the post ready. A piece with no post at all
+ * (from before posts existed) keeps its own status, but only once it reached
+ * them. Null: the edit's own column applies.
+ */
+export function pieceFace(
+  i: PieceRow, status: ItemStatus, visiblePosts: number, hasPosts: boolean,
+): { column: PortalColumnKey; tone: PortalCardTone | undefined; line: string | null } | null {
+  if (status !== 'approved_for_scheduling' && status !== 'scheduled' && status !== 'published') return null
+  const hidden = { column: 'checking' as const, tone: undefined, line: null }
+  if (hasPosts) {
+    if (visiblePosts === 0 && status === 'approved_for_scheduling' && clientHadEdit(i)) {
+      return { column: 'approved', tone: 'green', line: 'You approved this — the team is getting the post ready.' }
+    }
+    return hidden
+  }
+  return pieceReachedClient({ ...i, status }) ? null : hidden
 }

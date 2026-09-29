@@ -463,21 +463,24 @@ describe('nothing internal reaches the client', () => {
 
 describe('the composer previews the post it is about to send', () => {
   const src = readFileSync(
-    join(process.cwd(), 'app/dashboard/social/schedule/NewPostDialog.tsx'), 'utf8')
+    join(process.cwd(), 'app/dashboard/social/schedule/PostWindow.tsx'), 'utf8')
 
   it('builds the preview from the composer\'s own state, not a copy', () => {
     const start = src.indexOf('buildPostPreview({')
     expect(start).toBeGreaterThan(0)
     const call = src.slice(start, src.indexOf('}), [', start))
-    expect(call).toContain('caption: state.caption')
-    expect(call).toContain('state.slides.map')
-    expect(call).toContain('state.perChannel[a.id]')
+    // `shown` IS the composer's state while the post is a draft, and the
+    // frozen version once it has been sent (29 Sep 2026)
+    expect(src).toContain('const shown: WorkingCopy = editable || !saved ? working : (frozen ?? workingCopyOf(saved))')
+    expect(call).toContain('caption: shown.caption')
+    expect(call).toContain('shown.slides.map')
+    expect(call).toContain('shown.perChannel[a.id]')
     expect(call).toContain('chosen.map')
   })
 
   it('re-reads it whenever any of those change', () => {
-    const deps = src.slice(src.indexOf('}), [state.slides, state.caption')).slice(0, 140)
-    for (const dep of ['state.slides', 'state.caption', 'state.perChannel', 'chosen']) {
+    const deps = src.slice(src.indexOf('}), [shown.slides, shown.caption')).slice(0, 140)
+    for (const dep of ['shown.slides', 'shown.caption', 'shown.perChannel', 'chosen']) {
       expect(deps, `the preview must follow ${dep}`).toContain(dep)
     }
   })
@@ -489,15 +492,10 @@ describe('the composer previews the post it is about to send', () => {
     expect(src).not.toMatch(/useState[^\n]*previewSlides/)
   })
 
-  it('sends for review through the approval that already exists', () => {
-    expect(src).toContain('/send')
-    expect(src).toContain("mode: what === 'direct' ? 'direct' : 'approval'")
-    // the client is asked by the MANAGER after their review, never straight
-    // from a scheduler's send (8 Sep 2026)
-    expect(src).toContain('client_too: false')
-    expect(src).toContain('reviewer_ids: [approverId]')
-    // and answers through the item's own posting-approval route
-    expect(src).toContain('/posting-approval')
+  it('moves the post through the one act route, never the old send or posting-approval routes (29 Sep 2026)', () => {
+    expect(src).toContain('pressAction(api, {')
+    expect(src).not.toContain('/posting-approval')
+    expect(src).not.toMatch(/client_too|reviewer_ids|mode: what/)
   })
 })
 
@@ -512,11 +510,13 @@ describe('the portal is handed the stripped copy and nothing else', () => {
     expect(portal).not.toMatch(/preview:\s*built\.networks/)
   })
 
-  it('the client\'s card acts on the routes that already existed', () => {
+  it('the client\'s card answers a POST, by its id and the version sent — one route, the post\'s own rules', () => {
+    // the posting rebuild (29 Sep 2026): the edit card's id and its posting-approval route are gone (audit V5)
     expect(card).toContain('/api/portal/act')
-    expect(card).toContain('approve_post')
-    expect(card).toContain('request_post_changes')
-    expect(card).toContain('/posting-approval')
+    expect(card).toContain('client_approve')
+    expect(card).toContain('client_ask_change')
+    expect(card).toContain('version: item.version')
+    expect(card).not.toMatch(/approve_post|request_post_changes|\/posting-approval/)
   })
 
   it('the client\'s card never prints a refusal', () => {

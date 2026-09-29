@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   CHECK_LINES, CHECK_LINE_FALLBACK, CHECK_STATUSES, CLIENT_LINE,
-  askedLine, countOnYou, othersLabel, postHref, sinceWords, splitWaiting,
+  askedLine, countOnYou, othersLabel, sinceWords, splitWaiting,
   waitingRow, waitingRows, waitingTitle, UNASKED_LINE, UNASKED_QUALITY_LINE,
 } from '../app/lib/waiting-core'
 import {
-  POST_APPROVE_LABEL, POST_CHANGES_LABEL, POST_WAITING_CLIENT, POST_WAITING_LINE,
-  POST_WAITING_MANAGER, SEND_BACK_LABEL, cardActions,
+  SEND_BACK_LABEL, cardActions,
   type BoardViewCard, type BoardViewer,
 } from '../app/lib/board-view-core'
+import { readFileSync } from 'node:fs'
 import { availableTransitionsAs, actingRoles } from '../app/lib/workflow-core'
 
 /**
- * "Waiting on you" — the pile above the Scheduler board, pinned.
+ * The EDITS waiting on a decision, pinned. A post waiting on somebody is the
+ * post's own stage, listed by post-waiting-core (tests/post-waiting-core.test.ts).
  *
  * The rule these tests exist to hold: a row never offers an answer the server
  * would refuse. Every action is compared against `workflow-core`'s own
@@ -53,55 +54,15 @@ describe('how long it has been waiting, in words', () => {
   })
 })
 
-describe('a post sent for its final sign-off', () => {
-  const pending = card({
-    status: 'approved_for_scheduling', posting_approval_state: 'pending',
-    updated_at: '2026-09-07T02:00:00.000Z',
+describe('a post is not an edit\u2019s wait (the posting rebuild, 29 Sep 2026)', () => {
+  it('reads no post-approval field and has no post row kind', () => {
+    const src = readFileSync('app/lib/waiting-core.ts', 'utf8')
+    expect(src).not.toMatch(/posting_approval_state|posting_client_required|posting-approval-core/)
+    expect(src).not.toMatch(/kind: 'post'/)
   })
 
-  it('is on the manager who may answer it — and the answer is given on Schedule, not here', () => {
-    const row = waitingRow(pending, manager, TODAY)!
-    expect(row.kind).toBe('post')
-    expect(row.onYou).toBe(true)
-    expect(row.who).toBe('you')
-    expect(row.line).toBe(POST_WAITING_LINE)
-    expect(row.since).toBe('since yesterday')
-    // no inline Approve / Send back (8 Sep 2026): the row is the way to the
-    // composer, where the frames are; the labels still exist for the composer
-    expect(row.actions).toEqual([])
-    expect([POST_APPROVE_LABEL, POST_CHANGES_LABEL].every(Boolean)).toBe(true)
-  })
-
-  it('opens the composer on its own preview, not the card', () => {
-    const row = waitingRow(pending, manager, TODAY)!
-    expect(row.open).toEqual({ kind: 'post', href: postHref('c1', 'i1') })
-    expect(postHref('c1', 'i1')).toBe('/dashboard/social/schedule?client=c1&item=i1')
-  })
-
-  it('is informational for the scheduler who sent it — and names whose it is', () => {
-    const row = waitingRow(pending, scheduler, TODAY)!
-    expect(row.onYou).toBe(false)
-    expect(row.actions).toEqual([])
-    expect(row.line).toBe(POST_WAITING_MANAGER)
-    expect(row.who).toBe('manager')
-  })
-
-  it('names the CLIENT when the client is the one who was asked', () => {
-    const row = waitingRow(card({
-      status: 'approved_for_scheduling',
-      posting_approval_state: 'pending', posting_client_required: true,
-    }), scheduler, TODAY)!
-    expect(row.line).toBe(POST_WAITING_CLIENT)
-    expect(row.who).toBe('client')
-    expect(row.actions).toEqual([])
-  })
-
-  it('leaves the list the moment it is answered', () => {
-    for (const state of ['approved', 'changes', 'draft', null, undefined]) {
-      const answered = card({ status: 'approved_for_scheduling', posting_approval_state: state })
-      const row = waitingRow(answered, manager, TODAY)
-      expect(row?.kind === 'post').toBeFalsy()
-    }
+  it('an approved edit is waiting on nobody here, whatever a post made from it is doing', () => {
+    expect(waitingRow(card({ status: 'approved_for_scheduling' }), manager, TODAY)).toBeNull()
   })
 })
 
@@ -230,8 +191,8 @@ describe('the list itself', () => {
     card({ id: 'b', title: 'B', status: 'internal_review', updated_at: '2026-09-07T00:00:00.000Z' }),
     card({ id: 'c', title: 'C', status: 'draft_uploaded' }),
     card({
-      id: 'd', title: 'D', status: 'approved_for_scheduling',
-      posting_approval_state: 'pending', updated_at: '2026-09-05T00:00:00.000Z',
+      id: 'd', title: 'D', status: 'revision_complete',
+      asked_ids: ['am'], asked_at: '2026-09-05T00:00:00.000Z', updated_at: '2026-09-05T00:00:00.000Z',
     }),
   ], manager, TODAY)
 
@@ -259,9 +220,8 @@ describe('the list itself', () => {
     const { yours, others } = splitWaiting(rows())
     expect(yours.map(r => r.id)).toEqual(['d'])
     expect(others.map(r => r.id)).toEqual(['a', 'b'])
-    // a card yours to answer carries its answers; a POST yours to answer
-    // carries none here — it is answered on Schedule — but is still yours
-    expect(yours.every(r => r.actions.length > 0 || r.kind === 'post')).toBe(true)
+    // a card yours to answer carries its answers
+    expect(yours.every(r => r.actions.length > 0)).toBe(true)
     // the empty seat still carries its answers — anyone who could take it can
     expect(others.find(r => r.id === 'b')!.actions.length).toBeGreaterThan(0)
     expect(others.find(r => r.id === 'a')!.actions).toEqual([])
@@ -273,8 +233,8 @@ describe('the list itself', () => {
     expect(othersLabel(client)).toBe('1 more, with the client')
     const mixed = waitingRows([
       card({ id: 'a', status: 'client_review' }),
-      card({ id: 'b', status: 'approved_for_scheduling', posting_approval_state: 'pending' }),
-    ], scheduler, TODAY)
+      card({ id: 'b', status: 'internal_review' }),
+    ], manager, TODAY)
     expect(othersLabel(mixed)).toBe('2 more, with somebody else')
   })
 

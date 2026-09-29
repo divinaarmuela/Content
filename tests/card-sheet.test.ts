@@ -31,9 +31,9 @@ const DETAIL = 'app/dashboard/production/[id]/CardDetail.tsx'
 // no cards any more (11 Sep 2026)
 // …and the Editor page opens a card on its OWN page, /dashboard/editor/<id>
 // (the owner, 15 Sep 2026: "not a slider anymore") — tests/editor-card-page
-const PAGES = [
-  'app/dashboard/scheduler/page.tsx',
-]
+// …and Post approval opens a POST in the post window (the posting rebuild,
+// 29 Sep 2026); the sheet is only for an edit from its "ready to become posts" tray
+const PAGES: string[] = []
 
 describe('a board card opens the sheet instead of navigating', () => {
   const card = code(read(BOARD_CARD))
@@ -76,6 +76,15 @@ describe('the three boards host the sheet, and the address carries the card', ()
       expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\}( simple)?( editor)? \/>/)
     })
   }
+
+  it('Post approval opens an edit from its tray in the sheet, and a post in the post window', () => {
+    const src = code(read('app/dashboard/scheduler/page.tsx'))
+    expect(src).toContain("from '../board/CardSheet'")
+    expect(src).toContain('useCardSheet()')
+    expect(src).toMatch(/<SourceTray items=\{sources\} onOpenEdit=\{sheet\.open\}/)
+    expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} \/>/)
+    expect(code(read('app/dashboard/scheduler/board/PostCard.tsx'))).toMatch(/href=\{windowHref\}/)
+  })
 
   it('the Editor page opens a card on its own page and draws no card sheet (15 Sep 2026)', () => {
     const src = code(read('app/dashboard/editor/page.tsx'))
