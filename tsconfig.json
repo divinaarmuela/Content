@@ -37,6 +37,8 @@
   ],
   "exclude": [
     "node_modules",
-    "services"
+    "services",
+    "e2e",
+    "playwright.config.ts"
   ]
 }
