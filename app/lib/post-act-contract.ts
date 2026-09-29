@@ -1,7 +1,8 @@
 /**
  * THE ACT ROUTE'S CONTRACT — pure types and one parser, shared by the server
  * (package P1: `app/api/posts/[id]/act/route.ts`), the post window and the
- * boards (P3, P5), and the portal (P6). No I/O.
+ * boards (P3, P5), and the portal (P6). The only I/O is `postAct`, the one
+ * browser call every page makes to the route.
  *
  * One route moves a post: `POST /api/posts/<id>/act` with `{action, expect_rev, …}`.
  * It answers `{ok: true, post, stage, words}` or a refusal with the fresh post,
@@ -18,21 +19,46 @@ import {
   AGREED_VIA, APPROVAL_STEPS, CLIENT_ACTIONS, POST_ACTIONS, SYSTEM_ACTIONS, isPostAction,
   type AgreedVia, type ApprovalSteps, type PostAction, type PostStage, type PostState, type RefusalCode,
 } from './post-stage-core'
-
-/** The route, as Next's file system names it. */
-export const POST_ACT_ROUTE = '/api/posts/[id]/act'
+import { friendlyError } from './support-core'
 
 /** The URL a page posts to for one post. */
 export function postActPath(postId: string): string {
   return `/api/posts/${encodeURIComponent(postId)}/act`
 }
 
+/**
+ * THE ONE CALL A PAGE MAKES TO MOVE A POST — Post approval's buttons, the
+ * Schedule page and the post window all send through here. It never throws:
+ * a refusal, a body that is not an answer, or a dropped connection all come
+ * back as a refusal whose `reason` is the sentence to show by the button.
+ */
+export async function postAct(postId: string, request: PostActRequest): Promise<PostActResponse> {
+  let res: Response
+  try {
+    res = await fetch(postActPath(postId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) })
+  } catch {
+    return { ok: false, code: 'bad_request', reason: 'Could not reach the server. Nothing has changed — try again.', post: null }
+  }
+  const json: unknown = await res.json().catch(() => null)
+  if (isObj(json) && json.ok === true) return json as unknown as PostActOk
+  const body = isObj(json) ? json : {}
+  const problems = Array.isArray(body.problems) ? body.problems.filter((p): p is string => typeof p === 'string') : []
+  const said = [body.reason, problems[0]].find((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    ?? (typeof body.error === 'string' && body.error.trim() ? friendlyError(body.error, 'this post') : undefined)
+  const reason = said
+    ?? (res.status === 404 ? 'That post is not there any more — it may have been deleted.' : 'That did not go through. Nothing has changed — try again.')
+  return {
+    ok: false,
+    code: (typeof body.code === 'string' ? body.code : res.status === 404 ? 'not_found' : 'bad_request') as PostActRefused['code'],
+    reason,
+    ...(problems.length > 0 ? { problems } : {}),
+    post: (isObj(body.post) ? body.post : null) as PostState | null,
+  }
+}
+
 /** The moves a TEAM member makes through the act route. The client's go through the portal; the app's never come in over HTTP. */
 export const TEAM_ACT_ACTIONS: readonly PostAction[] =
   POST_ACTIONS.filter(a => !SYSTEM_ACTIONS.includes(a) && !CLIENT_ACTIONS.includes(a))
-
-/** The moves the client makes, through `api/portal/act` (P6). */
-export const PORTAL_POST_ACTIONS: readonly PostAction[] = CLIENT_ACTIONS
 
 /** The body of `POST /api/posts/<id>/act`. */
 export type PostActRequest = {

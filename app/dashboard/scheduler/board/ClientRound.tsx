@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { STAGE_LABEL, type NowLike, type PostState } from '../../../lib/post-stage-core'
-import { roundCandidates, defaultPicks, type SendChoice } from '../../../lib/post-board-core'
+import { roundCandidates } from '../../../lib/post-board-core'
+import { defaultRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import type { BoardPost } from './usePostBoard'
 
 /**
@@ -22,7 +23,7 @@ import type { BoardPost } from './usePostBoard'
 export default function ClientRound({ posts, now, choicesFor }: {
   posts: readonly BoardPost[]
   now: NowLike
-  choicesFor: (post: Pick<PostState, 'client_id'>) => SendChoice[]
+  choicesFor: (post: Pick<PostState, 'client_id'>) => ClientRecipient[]
 }) {
   const groups = useMemo(() => roundCandidates(posts, now).filter(g => g.posts.length >= 2), [posts, now])
   if (groups.length === 0) return null
@@ -39,11 +40,11 @@ export default function ClientRound({ posts, now, choicesFor }: {
 
 function RoundForClient({ group, choices }: {
   group: { clientId: string; clientName: string; posts: { bp: BoardPost; label: string }[] }
-  choices: SendChoice[]
+  choices: ClientRecipient[]
 }) {
   const [open, setOpen] = useState(false)
   const [ticked, setTicked] = useState<string[]>(() => group.posts.map(p => p.bp.post.id))
-  const [picks, setPicks] = useState<string[]>(() => defaultPicks(choices))
+  const [picks, setPicks] = useState<string[]>(() => defaultRecipients(choices))
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [answer, setAnswer] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)

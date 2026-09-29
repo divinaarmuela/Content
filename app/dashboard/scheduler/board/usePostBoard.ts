@@ -9,9 +9,10 @@ import {
   type AccountRef, type PostHat, type PostState, type TransitionContext,
 } from '../../../lib/post-stage-core'
 import {
-  onBoard, postCardFace, postVisibleTo, readyToBecomePosts, sendChoices, sourcesWithLivePost,
-  type PostCardFace, type SendChoice,
+  onBoard, postCardFace, postVisibleTo, readyToBecomePosts, sourcesWithLivePost,
+  type PostCardFace,
 } from '../../../lib/post-board-core'
+import { clientRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import type { ScopeViewer } from '../../../lib/production-access-core'
 import { todayKey } from '../../ui/tone'
 import { useWorkRows, type LiveItem } from '../../useLiveWork'
@@ -95,9 +96,9 @@ export function usePostBoard(person: ScopeViewer | null) {
     return c ? { client_approval_required: c.client_approval_required } : null
   }, [clientById])
 
-  const choicesFor = useCallback((post: Pick<PostState, 'client_id'>): SendChoice[] => {
+  const choicesFor = useCallback((post: Pick<PostState, 'client_id'>): ClientRecipient[] => {
     const c = clientById.get(post.client_id)
-    return sendChoices(c ?? null, contacts.filter(x => x.client_id === post.client_id))
+    return clientRecipients(c ?? null, contacts.filter(x => x.client_id === post.client_id))
   }, [clientById, contacts])
 
   /** every post with a stage, as the rules read it */

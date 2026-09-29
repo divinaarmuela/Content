@@ -28,7 +28,7 @@
 import {
   APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
   STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine,
-  STAGE_PAGE, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTone, postedWords, slotMissed, waitingOn,
+  STAGE_PAGE, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
 } from './post-stage-core'
@@ -36,6 +36,7 @@ import { deliverOnly } from './deliver-only-core'
 import { networkName } from './publish-core'
 import { dayKeyInZone, DEFAULT_TZ, formatInZone } from './timezone-core'
 import { sinceWords } from './waiting-core'
+import { POST_APPROVAL_BOARD } from './overview-links-core'
 
 /* ── which posts this page shows ────────────────────────────────────────── */
 
@@ -196,9 +197,6 @@ export function scheduleLink(post: Pick<PostState, 'id' | 'client_id' | 'stage'>
   return { label, href: postWindowHref(post, schedulePage) }
 }
 
-/** Post approval's own address. */
-export const POST_APPROVAL_PAGE = '/dashboard/scheduler'
-
 /**
  * THE POST WINDOW'S ADDRESS for one post — on the page that owns the post's
  * stage (the owner's decision 1). Draft, Quality check and With client open it
@@ -216,7 +214,7 @@ export function postWindowHref(
   const owner = post.stage ? STAGE_PAGE[post.stage] : 'schedule'
   const page = owner === 'both' ? here : owner
   return page === 'post_approval'
-    ? `${POST_APPROVAL_PAGE}?post=${encodeURIComponent(post.id)}`
+    ? `${POST_APPROVAL_BOARD}?post=${encodeURIComponent(post.id)}`
     : `${schedulePage}?client=${encodeURIComponent(post.client_id)}&post=${encodeURIComponent(post.id)}`
 }
 
@@ -371,20 +369,14 @@ export type PostCardFace = {
   posted: string | null
 }
 
-/** What a post is called on a card: the edit it came from, or its caption's first line. */
-export function postTitle(post: Pick<PostState, 'caption'>, sourceTitle?: string | null): string {
-  const title = String(sourceTitle ?? '').trim()
-  if (title) return title
-  const line = String(post.caption ?? '').split('\n').map(s => s.trim()).find(Boolean) ?? ''
-  if (!line) return 'Untitled post'
-  return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line
-}
-
 /** A channel the page could not find among the client's connected accounts. */
 export const UNKNOWN_NETWORK = { platform: 'unknown', label: 'A channel that is not connected' } as const
 
-/** The networks this post goes to, from its channels, once each, in the order they were chosen. */
-export function postNetworks(
+/**
+ * The network chips on a card: its channels, once each, in the order chosen — with a channel that is no
+ * longer connected shown as one (Schedule's `outcomeNetworks` differs: it adds networks that answered).
+ */
+export function cardNetworks(
   post: Pick<PostState, 'channels'>,
   platformOf: (accountId: string) => string | null | undefined,
 ): { platform: string; label: string }[] {
@@ -431,7 +423,7 @@ export function postCardFace(
     clientId: post.client_id,
     stage: { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
     tone: postTone(post, opts.now),
-    networks: opts.platformOf ? postNetworks(post, opts.platformOf) : [],
+    networks: opts.platformOf ? cardNetworks(post, opts.platformOf) : [],
     waiting: { ...wait, sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
@@ -448,47 +440,6 @@ export function postCardFace(
     thumbs: post.slides.slice(0, 3).map(s => ({ url: s.url, type: s.type === 'video' ? 'video' : 'image' })),
     posted: post.stage === 'posted' ? postedWords(post) : null,
   }
-}
-
-/* ── who a client post can be emailed to ────────────────────────────────── */
-
-/** One address a client send may go to: the business's own, then its people. */
-export type SendChoice = { email: string; name: string; label: string; primary: boolean }
-
-const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/
-
-export function cleanAddress(raw: unknown): string | null {
-  const e = String(raw ?? '').trim().toLowerCase()
-  return EMAIL.test(e) ? e : null
-}
-
-/**
- * The addresses a person may pick from when sending a post to the client —
- * the client's own, then its contacts, primary first, each once. The server
- * checks the same list; a typed address is never accepted.
- */
-export function sendChoices(
-  client: { name?: string | null; email?: string | null } | null | undefined,
-  contacts: readonly { name?: string | null; email?: string | null; role?: string | null; is_primary?: boolean | null }[],
-): SendChoice[] {
-  const out: SendChoice[] = []
-  const seen = new Set<string>()
-  const add = (c: SendChoice) => { if (!seen.has(c.email)) { seen.add(c.email); out.push(c) } }
-  const own = cleanAddress(client?.email)
-  if (own) add({ email: own, name: String(client?.name ?? '').trim() || own, label: 'The business', primary: true })
-  const people = [...contacts].sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary))
-  for (const c of people) {
-    const e = cleanAddress(c.email)
-    if (!e) continue
-    add({ email: e, name: String(c.name ?? '').trim() || e, label: String(c.role ?? '').trim() || (c.is_primary ? 'Main contact' : 'Contact'), primary: !!c.is_primary })
-  }
-  return out
-}
-
-/** The addresses ticked when the send dialog opens: the primary ones, or the first. */
-export function defaultPicks(choices: readonly SendChoice[]): string[] {
-  const primary = choices.filter(c => c.primary).map(c => c.email)
-  return primary.length > 0 ? primary : choices.slice(0, 1).map(c => c.email)
 }
 
 /* ── edits ready to become posts (the tray above the board) ─────────────── */

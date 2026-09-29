@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  POST_APPROVAL_LANES, POST_STAGES, ROW_OF, STAGE_LABEL, MISSED_LABEL, hatsFor, laneOf, pageLaneOf, postActions,
+  POST_APPROVAL_LANES, POST_STAGES, ROW_OF, STAGE_LABEL, MISSED_LABEL, hatsFor, laneOf, pageLaneOf, postActions, postTitle,
   type AccountRef, type PostHat, type PostStage, type PostState, type TransitionContext,
 } from '../app/lib/post-stage-core'
 import {
-  FIRST_THE_CHECK, PAGE_ACTIONS, POSTED_DAYS_ON_BOARD, boardActions, cleanAddress, defaultPicks, dropOnPostLane,
+  FIRST_THE_CHECK, PAGE_ACTIONS, POSTED_DAYS_ON_BOARD, boardActions, cardNetworks, dropOnPostLane,
   groupPosts, laneFromAddress, makePostHref, offeredList, onBoard, pageOffers, postCardFace, postMoveTargets,
-  postNetworks, postTitle, postVisibleTo, postWindowHref, readyToBecomePosts, scheduleLink, sendChoices,
-  sourcesWithLivePost,
+  postVisibleTo, postWindowHref, readyToBecomePosts, scheduleLink, sourcesWithLivePost,
 } from '../app/lib/post-board-core'
 
 /**
@@ -342,8 +341,8 @@ describe('the face of a card — facts only', () => {
 
   it('every network, once each, by its logo name (audit S14)', () => {
     const platformOf = (id: string) => ({ 'acc-ig': 'instagram', 'acc-li': 'linkedin', 'acc-ig2': 'instagram' } as Record<string, string>)[id] ?? null
-    expect(postNetworks({ channels: ['acc-ig', 'acc-li', 'acc-ig2'] }, platformOf).map(n => n.platform)).toEqual(['instagram', 'linkedin'])
-    expect(postNetworks({ channels: ['gone'] }, platformOf)).toEqual([{ platform: 'unknown', label: 'A channel that is not connected' }])
+    expect(cardNetworks({ channels: ['acc-ig', 'acc-li', 'acc-ig2'] }, platformOf).map(n => n.platform)).toEqual(['instagram', 'linkedin'])
+    expect(cardNetworks({ channels: ['gone'] }, platformOf)).toEqual([{ platform: 'unknown', label: 'A channel that is not connected' }])
     expect(postCardFace(post('draft'), { ...opts, platformOf }).networks.map(n => n.label)).toEqual(['Instagram', 'LinkedIn'])
   })
 
@@ -422,23 +421,5 @@ describe('edits ready to become posts — a tray, not a lane (audit B3, L5)', ()
   it('Make a post opens the composer on the piece; a card opens the post window', () => {
     expect(makePostHref({ id: 'i 1', client_id: 'c1' }, '/dashboard/social/schedule')).toBe('/dashboard/social/schedule?client=c1&item=i%201')
     expect(postWindowHref({ id: 'p1', client_id: 'c1' }, '/dashboard/social/schedule')).toBe('/dashboard/social/schedule?client=c1&post=p1')
-  })
-})
-
-describe('who a client post can be emailed to', () => {
-  it('the business first, then its people, primary first, each once — never a typed address', () => {
-    const choices = sendChoices({ name: 'Jordan Wilson', email: 'Hello@Jordan.invalid' }, [
-      { name: 'Sam', email: 'sam@jordan.invalid', role: null, is_primary: false },
-      { name: 'Jordan', email: 'jordan@jordan.invalid', role: 'Owner', is_primary: true },
-      { name: 'Dup', email: 'hello@jordan.invalid' },
-      { name: 'Bad', email: 'not an email' },
-    ])
-    expect(choices.map(c => c.email)).toEqual(['hello@jordan.invalid', 'jordan@jordan.invalid', 'sam@jordan.invalid'])
-    expect(choices[1].label).toBe('Owner')
-    expect(defaultPicks(choices)).toEqual(['hello@jordan.invalid', 'jordan@jordan.invalid'])
-    expect(defaultPicks(sendChoices(null, [{ name: 'A', email: 'a@b.invalid' }]))).toEqual(['a@b.invalid'])
-    expect(sendChoices(null, [])).toEqual([])
-    expect(cleanAddress(' A@B.invalid ')).toBe('a@b.invalid')
-    expect(cleanAddress('nope')).toBeNull()
   })
 })

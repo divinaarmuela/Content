@@ -147,6 +147,16 @@ describe('sendClientRound — one email per person, from Divina, of the frozen v
     expect(String(h.emails[0].bodyHtml)).toContain('Hi Jordan')
   })
 
+  it('B1 — decision 15, the one link: a round of several opens on the page listing everything waiting on the client', async () => {
+    two()
+    const r = await sendClientRound({
+      clientId: 'c1', posts: [{ post_id: 'p1', version: 1 }, { post_id: 'p2', version: 3 }],
+      emails: ['jordan@tkbg.invalid'], pressedBy: { id: 'manal', name: 'Manal', email: 'manal@x.invalid' }, now: NOW,
+    })
+    expect(r.ok && r.link).toBe('https://app.mdmmarketing.com.au/portal/tok123/posts')
+    expect(String(h.emails[0].bodyHtml)).toContain('<a href="https://app.mdmmarketing.com.au/portal/tok123/posts">See everything waiting on you</a>')
+  })
+
   it('the same round pressed twice has the same outbox key (sent once); "again" makes a new one', async () => {
     two()
     const args = { clientId: 'c1', posts: [{ post_id: 'p1', version: 1 }], emails: ['jordan@tkbg.invalid'], pressedBy: { id: 'manal', email: 'manal@x.invalid' }, now: NOW }
@@ -254,21 +264,40 @@ describe('the seams P1\'s engine calls', () => {
     expect(h.emails[0]).toMatchObject({ recipientEmail: 'joy@x.invalid', actorName: 'Cath', actorEmail: 'cath@x.invalid', entityId: 'p1#r5' })
   })
 
-  it('deliverPostToClient: a link emails nobody; an email is a round of one, from Divina, of the frozen version', async () => {
-    seed([{ ...basePost, stage: 'ready', sent_version: 1, draft_version: 2 }], {
+  it('one post sent from the engine is a round of one: from Divina, of the frozen version, only the client list; a link emails nobody', async () => {
+    const seedQc = () => seed([{ ...basePost, stage: 'quality_check', sent_version: 1, draft_version: 1 }], {
       post_versions: [{ id: 'p1_v1', post_id: 'p1', client_id: 'c1', n: 1, slides: [], per_channel: {}, channels: ['acc-ig'], caption: 'FROZEN words', scheduled_for: LATER, timezone: 'Australia/Melbourne', frozen_for: 'quality_check', frozen_at: NOW.toISOString() }] as unknown as Row[],
     })
-    const { deliverPostToClient } = await import('../app/lib/post-notify')
-    const base = { post: { id: 'p1', client_id: 'c1' }, version: 1, client: { id: 'c1', share_token: 'tok123' }, approveBy: '2026-10-02T06:00:00.000Z', actor: { id: 'manal', name: 'Manal', email: 'manal@x.invalid' }, note: null }
-    const link = await deliverPostToClient({ ...base, emails: [], via: 'link' })
-    expect(link).toEqual({ delivered: [], failed: [], link: 'https://app.mdmmarketing.com.au/portal/tok123/post/p1' })
-    expect(h.emails).toHaveLength(0)
-    const sent = await deliverPostToClient({ ...base, emails: ['jordan@tkbg.invalid'], via: 'email' })
-    expect(sent.delivered).toEqual(['jordan@tkbg.invalid'])
-    expect(h.emails[0]).toMatchObject({ toClient: true, deliberateClientSend: true, actorName: 'Divina Armuela' })
-    expect(String(h.emails[0].bodyHtml)).toContain('FROZEN words')
-    expect(String(h.emails[0].bodyHtml)).not.toContain('WORKING COPY')
-    const refused = await deliverPostToClient({ ...base, emails: ['stranger@evil.invalid'], via: 'email' })
-    expect(refused).toMatchObject({ delivered: [], failed: ['stranger@evil.invalid'] })
+    const engine = await import('../app/lib/post-stage')
+    // the engine's own client send (deps.deliverToClient left as it ships); the team notices are not what this pins
+    const undo = engine.usePostEngineDeps({ now: () => NOW, notify: async () => {}, announce: () => {} })
+    try {
+      const joy = { ...team[0], clerk_user_id: null } as never
+      const press = (input: Record<string, unknown>) =>
+        engine.performPostTransition('p1', 'pass_send_client', engine.teamActorFor(joy, { created_by: 'cath' }), { expect_rev: 4, version: 1, ...input })
+
+      seedQc()
+      const link = await press({ via: 'link' })
+      expect(link).toMatchObject({ ok: true, link: 'https://app.mdmmarketing.com.au/portal/tok123/post/p1' })
+      expect(h.emails).toHaveLength(0)
+
+      fake.restore(); seedQc()
+      const sent = await press({ send_to: ['jordan@tkbg.invalid'] })
+      expect(sent.ok, sent.ok ? '' : sent.reason).toBe(true)
+      expect(h.emails).toHaveLength(1)
+      expect(h.emails[0]).toMatchObject({
+        eventType: 'post_round_to_client', recipientEmail: 'jordan@tkbg.invalid', toClient: true, deliberateClientSend: true,
+        actorName: 'Divina Armuela', actorEmail: 'divina@x.invalid',
+      })
+      expect(String(h.emails[0].bodyHtml)).toContain('FROZEN words')
+      expect(String(h.emails[0].bodyHtml)).not.toContain('WORKING COPY')
+
+      fake.restore(); seedQc(); h.emails = []
+      const refused = await press({ send_to: ['stranger@evil.invalid'] })
+      expect(refused).toMatchObject({ ok: false, code: 'contact' })
+      expect(h.emails).toHaveLength(0)
+    } finally {
+      undo()
+    }
   })
 })

@@ -8,9 +8,8 @@ import {
 } from '@/app/dashboard/social/schedule/ProfilesBar'
 import { STAGE_DOT } from '@/app/dashboard/social/schedule/tiles'
 import {
-  jobsForPost, matchesChannel, nowLineTop, onOneOfDays, postPlatforms,
+  matchesChannel, nowLineTop, onOneOfDays, postPlatforms,
   scheduleWeekGrid,
-  type TileJob,
 } from '@/app/lib/social-schedule-core'
 import { POST_STAGES, STAGE_WORDS } from '@/app/lib/post-stage-core'
 import type { RailMedia } from '@/app/dashboard/social/schedule/useSchedulePosts'
@@ -146,23 +145,6 @@ describe('what a person is told', () => {
     expect(initialsOf('Sui Kitchen')).toBe('SK')
     expect(initialsOf('  divina ')).toBe('D')
     expect(initialsOf('')).toBe('—')
-  })
-})
-
-/* ── a post's jobs are its own ──────────────────────────────────────────── */
-
-describe('a post’s jobs are only the ones it carries', () => {
-  const jobs = (...list: [string, string][]) =>
-    new Map<string, TileJob>(list.map(([id, status]) => [id, { id, status }]))
-
-  it('THE CANCELLED-THEN-REMADE CASE: the old job never speaks for the new post', () => {
-    const oldJob = jobs(['old-job', 'cancelled'])
-    expect(jobsForPost({ item_id: 'i1', publish_job_ids: [] }, oldJob)).toEqual([])
-    expect(jobsForPost({ item_id: 'i1', publish_job_ids: ['old-job'] }, oldJob).map(j => j.id)).toEqual(['old-job'])
-  })
-
-  it('ignores a job id it cannot find rather than inventing a status', () => {
-    expect(jobsForPost({ publish_job_ids: ['gone'] }, jobs(['other', 'failed']))).toEqual([])
   })
 })
 

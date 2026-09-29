@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 import type { TeamUser } from '@/app/lib/authz'
+import type { NetworkOutcome } from '@/app/lib/post-stage-core'
 
 /**
  * THE ONE WRITER OF A POST'S STAGE, on the real `@/lib/db` over an in-memory Realtime Database that is
@@ -16,7 +17,8 @@ import type { TeamUser } from '@/app/lib/authz'
  */
 
 const engine = await import('../app/lib/post-stage')
-const { performPostTransition, teamActorFor, usePostEngineDeps, recordPostOutcome, cascadeItemDelete, insertDraftPost, saveWorkingCopy, actOnPost } = engine
+const { performPostTransition, teamActorFor, usePostEngineDeps, cascadeItemDelete, insertDraftPost, saveWorkingCopy, actOnPost } = engine
+const { outcomeAction } = await import('../app/lib/post-stage-core')
 
 /* ── the cast ───────────────────────────────────────────────────────────── */
 
@@ -84,6 +86,18 @@ async function newDraft(over: Record<string, unknown> = {}): Promise<string> {
 
 const rowOf = (id: string) => fake.rows('social_posts').find(p => p.id === id) as Record<string, any> | undefined
 const stateOf = async (id: string) => (await engine.loadPostState(id)).post!
+
+/**
+ * What the publish recorder (production-publish.ts) does with a job's answer: the rules' verdict on the
+ * outcomes, moved through the system transition — nothing while a network is still waiting.
+ */
+async function record(id: string, outcomes: Record<string, NetworkOutcome>, platforms: string[]) {
+  const act = outcomeAction({ ...(await stateOf(id)).outcomes, ...outcomes }, platforms)
+  if (!act) return { ok: true as const, pending: true as const }
+  return engine.performSystemTransition(id, act, { outcomes, platforms })
+}
+/** A resend's jobs joining the booking, as the recorder links them. */
+const linkJobs = (id: string, jobIds: string[]) => engine.performSystemTransition(id, 'link_jobs', { job_ids: jobIds })
 
 async function as(who: TeamUser, postId: string) {
   const post = await stateOf(postId)
@@ -346,7 +360,7 @@ describe('booking', () => {
   it('one job pulled and the next refused: the post comes back to Ready to post, never "booked" over half a booking', async () => {
     const id = await newDraft()
     await toBooked(id)
-    await engine.linkResendJobs('job-1', ['job-child'])
+    await linkJobs(id, ['job-child'])
     const p = await stateOf(id)
     deps.cancelJob.mockImplementation(async (jobId: string) => jobId === 'job-child'
       ? { ok: false, error: 'It is being sent right now' }
@@ -389,7 +403,7 @@ describe('siblings', () => {
   it('a second post on the same card can be sent, passed and booked after the first posted', async () => {
     const first = await newDraft()
     await toBooked(first)
-    const done = await recordPostOutcome('job-1', { instagram: { status: 'published', url: 'https://instagram.com/p/1', at: IN(0), error: null } }, ['instagram'])
+    const done = await record(first, { instagram: { status: 'published', url: 'https://instagram.com/p/1', at: IN(0), error: null } }, ['instagram'])
     expect(done && done.ok).toBe(true)
     expect((await stateOf(first)).stage).toBe('posted')
 
@@ -560,7 +574,7 @@ describe('what went out', () => {
   it('posted on one of two: Posted with the problem, and the missing network becomes its own post', async () => {
     const id = await newDraft({ channels: ['acc-ig', 'acc-li'] })
     await toBooked(id)
-    const r = await recordPostOutcome('job-1', {
+    const r = await record(id, {
       instagram: { status: 'published', url: 'https://instagram.com/p/1', at: IN(0), error: null },
       linkedin: { status: 'failed', url: null, at: IN(0), error: 'token expired' },
     }, ['instagram', 'linkedin'])
@@ -586,7 +600,7 @@ describe('what went out', () => {
   it('nothing is recorded while a network is still waiting', async () => {
     const id = await newDraft({ channels: ['acc-ig', 'acc-li'] })
     await toBooked(id)
-    const r = await recordPostOutcome('job-1', { instagram: { status: 'published', url: null, at: IN(0), error: null } }, ['instagram', 'linkedin'])
+    const r = await record(id, { instagram: { status: 'published', url: null, at: IN(0), error: null } }, ['instagram', 'linkedin'])
     expect(r).toMatchObject({ ok: true, pending: true })
     expect((await stateOf(id)).stage).toBe('booked')
   })
@@ -594,7 +608,7 @@ describe('what went out', () => {
   it('every network failed: back to Ready to post with the reason, the booking cleared', async () => {
     const id = await newDraft()
     await toBooked(id)
-    await recordPostOutcome('job-1', { instagram: { status: 'failed', url: null, at: IN(0), error: 'nope' } }, ['instagram'])
+    await record(id, { instagram: { status: 'failed', url: null, at: IN(0), error: 'nope' } }, ['instagram'])
     const p = await stateOf(id)
     expect(p.stage).toBe('ready')
     expect(p.booking).toBeNull()
@@ -604,7 +618,7 @@ describe('what went out', () => {
   it('a resend’s jobs join the booking, so a cancel would see them (audit V11)', async () => {
     const id = await newDraft()
     await toBooked(id)
-    const r = await engine.linkResendJobs('job-1', ['job-child'])
+    const r = await linkJobs(id, ['job-child'])
     expect(r && r.ok).toBe(true)
     expect((await stateOf(id)).booking?.job_ids).toEqual(['job-1', 'job-child'])
   })
@@ -627,7 +641,7 @@ describe('deleting the card', () => {
     await toReady(ready)
     const posted = await newDraft({ channels: ['acc-li'] })
     await toBooked(posted)
-    await recordPostOutcome('job-1', { linkedin: { status: 'published', url: 'https://linkedin.com/1', at: IN(0), error: null } }, ['linkedin'])
+    await record(posted, { linkedin: { status: 'published', url: 'https://linkedin.com/1', at: IN(0), error: null } }, ['linkedin'])
     const r = await cascadeItemDelete(ITEM, AM.id)
     expect(r.ok).toBe(true)
     for (const id of [draft, ready]) {

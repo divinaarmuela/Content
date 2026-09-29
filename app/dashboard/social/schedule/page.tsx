@@ -11,13 +11,14 @@ import {
   matchesChannel, mayEditNote, nowLineTop, onOneOfDays, scheduleWeekGrid,
 } from '@/app/lib/social-schedule-core'
 import {
-  LIST_FILTER_LABEL, POST_APPROVAL_HREF, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
+  LIST_FILTER_LABEL, matchesListFilter, scheduleCounts, showsOnSchedule, type ListFilter,
 } from '@/app/lib/schedule-stage-core'
 import { MISSED_LABEL, STAGE_LABEL, STAGE_PAGE, STAGE_TONE, MISSED_TONE, type StageTone } from '@/app/lib/post-stage-core'
 import { postWindowHref } from '@/app/lib/post-board-core'
 import { SCHEDULE_PAGE } from '@/app/lib/page-access-core'
+import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { useRouter } from 'next/navigation'
-import { postActPath, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
+import { postAct, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
 import { dayKeyInZone, toZonedInput, zoneLabel } from '@/app/lib/timezone-core'
 import { friendlyError, loadFailedMessage } from '@/app/lib/support-core'
 import { refusedFilesLine, usableUploadFiles } from '@/app/lib/schedule-upload-core'
@@ -226,23 +227,10 @@ export default function SchedulePage() {
    * ago is refused rather than overwritten, and the answer is the post as the
    * server now holds it (audit W4: never draw what we assumed happened).
    */
-  const act = useCallback(async (
+  const act = useCallback((
     post: SchedulePostRow,
     body: Omit<PostActRequest, 'expect_rev'>,
-  ): Promise<PostActResponse> => {
-    try {
-      const res = await fetch(postActPath(post.id), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, expect_rev: post.state.rev }),
-      })
-      const json = await res.json().catch(() => null) as PostActResponse | null
-      if (json && typeof json.ok === 'boolean') return json
-      return { ok: false, code: 'bad_request', reason: friendlyError('', 'Schedule'), post: null }
-    } catch (e) {
-      return { ok: false, code: 'bad_request', reason: friendlyError(e instanceof Error ? e.message : '', 'Schedule'), post: null }
-    }
-  }, [])
+  ): Promise<PostActResponse> => postAct(post.id, { ...body, expect_rev: post.state.rev }), [])
 
   /**
    * MOVING A POST BY HAND is "Change time" (T13 on Ready to post, T15 on
@@ -517,7 +505,7 @@ export default function SchedulePage() {
     <p role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pb-2 text-[13px] text-muted-foreground">
       Showing {LIST_FILTER_LABEL[listFilter]} · {listPosts.length}.
       {listFilter === 'drafts' && (
-        <Link href={POST_APPROVAL_HREF} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+        <Link href={POST_APPROVAL_BOARD} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
           Drafts are sent for quality check on Post approval
         </Link>
       )}

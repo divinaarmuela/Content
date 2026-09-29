@@ -8,12 +8,14 @@ import type {
 import type { TeamUser } from './authz'
 import {
   CLIENT_ACTIONS, ROW_OF, SYSTEM_ACTIONS, anyNetworkLive, defaultApproveBy, failedNetworks, hatsFor,
-  isPostAction, mayWorkOnPost, outcomeAction, planPostTransition, postVersionId, readPostState,
-  type AccountRef, type NetworkOutcome, type NotifyTarget, type Plan, type PostAction, type PostActor,
+  isPostAction, mayWorkOnPost, planPostTransition, postVersionId, readPostState,
+  type AccountRef, type NotifyTarget, type Plan, type PostAction, type PostActor,
   type PostEventRow, type PostHat, type PostStage, type PostState, type Refusal, type RefusalCode,
   type TransitionContext, type TransitionInput,
 } from './post-stage-core'
 import type { PostActRefused, PostActRequest, PostActResponse } from './post-act-contract'
+import { clientRecipients, pickRecipients, type ClientRecipient } from './client-recipients-core'
+import { portalPostHref } from './post-page-core'
 import type { ChannelExtras } from './schedule-compose-core'
 import type { Slide } from './version-files-core'
 
@@ -41,14 +43,16 @@ import type { Slide } from './version-files-core'
  *   - Cancelling one post wiped its siblings' approval (V2, V20). Approval is per POST: nothing here
  *     reads or writes another post or the edit card, except the item-delete cascade, which is about
  *     every post of that card on purpose.
- *   - Re-send jobs were not linked, so cancel ignored them (V11): `link_jobs` adds them to the booking.
+ *   - Re-send jobs were not linked, so cancel ignored them (V11): `link_jobs` (the recorder in
+ *     production-publish.ts moves it through `performSystemTransition`) adds them to the booking.
  *   - Saving a draft emailed the managers (V12): creating or saving a draft tells nobody.
  *
  * The provider, the mailer and the notifications are DEPENDENCIES (`PostEngineDeps`), so the tests run
  * the real claims over the in-memory database without reaching a channel or an inbox. Team emails are
  * package P7's (app/lib/post-notify.ts): this file hands every notice to `deps.notify`, whose default
  * is P7's `sendPostNotice`. The one email that IS part of a move — the send to the
- * client, which has to succeed before the post moves — is sent here.
+ * client, which has to succeed before the post moves — goes through P7's round sender
+ * (`sendClientRound`, a round of one for a single post) before the claim that moves it.
  */
 
 /* ── tables ─────────────────────────────────────────────────────────────── */
@@ -136,7 +140,6 @@ export type DeliveryInput = {
   emails: string[]
   via: 'email' | 'link'
   approveBy: string | null
-  forTime: string | null
   actor: EngineActor
   note: string | null
 }
@@ -360,50 +363,6 @@ async function writeEvent(event: PostEventRow): Promise<void> {
 
 /* ── context ────────────────────────────────────────────────────────────── */
 
-export type ClientRecipient = { email: string; name: string; label: string; primary: boolean }
-
-const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/
-export function cleanEmail(raw: unknown): string | null {
-  const e = String(raw ?? '').trim().toLowerCase()
-  return EMAIL.test(e) ? e : null
-}
-
-/** Every address this client can be sent to: the client's own, then its people — each once, primary first. */
-export function clientRecipients(
-  client: { name?: string | null; email?: string | null } | null | undefined,
-  contacts: readonly { name?: string | null; email?: string | null; role?: string | null; is_primary?: boolean | null }[],
-): ClientRecipient[] {
-  const out: ClientRecipient[] = []
-  const seen = new Set<string>()
-  const add = (r: ClientRecipient) => { if (!seen.has(r.email)) { seen.add(r.email); out.push(r) } }
-  const own = cleanEmail(client?.email)
-  if (own) add({ email: own, name: String(client?.name ?? '').trim() || own, label: 'The business', primary: true })
-  const people = [...contacts].sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary))
-  for (const c of people) {
-    const e = cleanEmail(c.email)
-    if (!e) continue
-    add({ email: e, name: String(c.name ?? '').trim() || e, label: String(c.role ?? '').trim() || (c.is_primary ? 'Main contact' : 'Contact'), primary: !!c.is_primary })
-  }
-  return out
-}
-
-/** Only addresses on the client's own list — never an address typed into the request. */
-export function pickRecipients(requested: unknown, allowed: readonly ClientRecipient[]): { ok: true; emails: string[] } | { ok: false; error: string } {
-  if (allowed.length === 0) return { ok: false, error: 'This client has no email address yet — add one on the client first.' }
-  const wanted = [...new Set((Array.isArray(requested) ? requested : []).map(cleanEmail).filter((e): e is string => !!e))]
-  const known = new Set(allowed.map(r => r.email))
-  const strangers = wanted.filter(e => !known.has(e))
-  if (strangers.length > 0) return { ok: false, error: `${strangers.join(', ')} ${strangers.length === 1 ? 'is' : 'are'} not on this client — add them as a contact on the client first.` }
-  if (wanted.length === 0) return { ok: false, error: 'Tick at least one person to send it to.' }
-  if (wanted.length > 20) return { ok: false, error: 'That is a lot of people — send it to 20 at most.' }
-  return { ok: true, emails: wanted }
-}
-
-/** The client's page for ONE post (SPEC §4.4) — it shows the frozen version only. */
-export function postApprovalLink(base: string, shareToken: string, postId: string): string {
-  return `${base.replace(/\/+$/, '')}/portal/${encodeURIComponent(shareToken)}/post/${encodeURIComponent(postId)}`
-}
-
 type Loaded = {
   client: Client | null
   accounts: SocialAccount[]
@@ -524,9 +483,8 @@ type PreparedSend = {
   frozenN: number | null
   token: string
   at: string
-  /** the version that goes to the client, and when it is for */
+  /** the version that goes to the client, and when the client's answer closes */
   version: number
-  forTime: string | null
   approveBy: string | null
 }
 
@@ -701,7 +659,7 @@ async function prepareClientSend(
     ok: true,
     prep: {
       postId, action, actor, input, post, loaded, ctx, via, emails, frozenN, token, at,
-      version, forTime, approveBy: input.approve_by ?? defaultApproveBy(forTime, now),
+      version, approveBy: input.approve_by ?? defaultApproveBy(forTime, now),
     },
   }
 }
@@ -711,7 +669,7 @@ async function deliverOne(prep: PreparedSend): Promise<{ delivered: string[]; li
   try {
     const sent = await deps.deliverToClient({
       post: prep.post, version: prep.version, client: prep.loaded.client!, emails: prep.emails, via: prep.via,
-      approveBy: prep.approveBy, forTime: prep.forTime,
+      approveBy: prep.approveBy,
       actor: prep.actor, note: String(prep.input.note ?? '').trim() || null,
     })
     return { delivered: sent.delivered, link: sent.link }
@@ -945,40 +903,6 @@ export async function performSystemTransition(
     return refusal('not_allowed', 'Only the app does that.', post)
   }
   return performPostTransition(postId, action, SYSTEM_ACTOR, { ...input, expect_rev: null })
-}
-
-/** The post a publish job belongs to, by the job ids its booking holds (resends included, audit V11). */
-export async function postIdForJob(jobId: string): Promise<string | null> {
-  const rows = await posts().list({ where: p => isObj(p.booking) && strList((p.booking as { job_ids?: unknown }).job_ids).includes(jobId) }).catch(() => [] as SocialPost[])
-  return rows[0]?.id ?? null
-}
-
-/**
- * THE RECORDER'S HALF THAT MOVES A STAGE (SPEC §5, T16–T18). Package P2 reads the provider's answer per
- * network and calls this with the outcomes; the verdict (posted, posted in part, did not go out) is the
- * rules' `outcomeAction`, and nothing is written while any network is still waiting.
- */
-export async function recordPostOutcome(
-  jobId: string,
-  outcomes: Record<string, NetworkOutcome>,
-  platforms: readonly string[],
-): Promise<PostActResult | { ok: true; pending: true; post: PostState | null } | null> {
-  const postId = await postIdForJob(jobId)
-  if (!postId) return null
-  const { post } = await loadPostState(postId)
-  if (!post) return null
-  const merged = { ...post.outcomes, ...outcomes }
-  const act = outcomeAction(merged, platforms)
-  if (!act) return { ok: true, pending: true, post }
-  return performSystemTransition(postId, act, { outcomes, platforms })
-}
-
-/** A resend's child jobs join the parent's booking, so cancel and the recorder see them (audit V11). */
-export async function linkResendJobs(parentJobId: string, childJobIds: readonly string[]): Promise<PostActResult | null> {
-  if (childJobIds.length === 0) return null
-  const postId = await postIdForJob(parentJobId)
-  if (!postId) return null
-  return performSystemTransition(postId, 'link_jobs', { job_ids: childJobIds })
 }
 
 /* ── booking (SPEC §3.1) ────────────────────────────────────────────────── */
@@ -1407,55 +1331,26 @@ async function defaultLiveOnJobs(jobIds: readonly string[]): Promise<string[]> {
 }
 
 /**
- * WHO THE CLIENT HEARS FROM (the owner, 28 Sep 2026: "it should be from Divina"). CLIENT_EMAIL_SENDER_ID
- * overrides; an inactive sender falls back to whoever pressed Send.
+ * THE CLIENT SEND FOR ONE POST IS A ROUND OF ONE (decision 15): the same sender as a round of many
+ * (post-notify `sendClientRound`) — in Divina's name, from the frozen version, only to addresses on the
+ * client's own list, a deliberate client send under the round's outbox key. 'link' builds the client's
+ * page for this post and emails nobody. A refusal comes back as nothing delivered, which
+ * `finishClientSend` turns into "Nothing reached the client, so nothing has changed".
  */
-const CLIENT_EMAIL_SENDER_ID = process.env.CLIENT_EMAIL_SENDER_ID || '54926a48-335e-46e9-a080-df8c1ad42ac9'
-
 async function defaultDeliver(input: DeliveryInput): Promise<{ delivered: string[]; failed: string[]; link: string }> {
-  const [{ DASHBOARD_URL }, mailer] = await Promise.all([import('./app-url'), import('./mailer')])
-  const link = postApprovalLink(DASHBOARD_URL, String(input.client.share_token), input.post.id)
+  const [{ DASHBOARD_URL }, { sendClientRound }] = await Promise.all([import('./app-url'), import('./post-notify')])
+  const link = `${DASHBOARD_URL}${portalPostHref(String(input.client.share_token ?? '').trim(), input.post.id)}`
   if (input.via === 'link') return { delivered: [], failed: [], link }
-
-  const senderRow = await table('team_users').get(CLIENT_EMAIL_SENDER_ID).catch(() => null) as { name?: string; email?: string; active_status?: boolean } | null
-  const sender = senderRow?.active_status && senderRow.email
-    ? { name: senderRow.name || senderRow.email, email: senderRow.email }
-    : { name: input.actor.name || input.actor.email || 'The team', email: input.actor.email || '' }
-  const item = input.post.source_item_id
-    ? await table('content_items').get(input.post.source_item_id).catch(() => null) as { title?: string } | null
-    : null
-  const frozen = copyOfVersion(await loadFrozenVersion(input.post.id, input.version))
-  const caption = String(frozen?.caption ?? input.post.caption ?? '').trim()
-  const title = String(item?.title ?? '').trim() || caption.split('\n')[0].slice(0, 80) || 'Your post'
-  const zone = input.post.timezone || input.client.timezone || 'Australia/Melbourne'
-  const when = (iso: string | null) => iso
-    ? new Date(iso).toLocaleString('en-AU', { timeZone: String(zone), weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-    : null
-  const stamp = new Date().toISOString()
-  const delivered: string[] = []
-  const failed: string[] = []
-  for (const email of input.emails) {
-    const result = await mailer.notify({
-      eventType: 'post_to_client', entityType: 'social_post',
-      entityId: `${input.post.id}#v${input.version}#${email}#${stamp}`,
-      recipientEmail: email, toClient: true, deliberateClientSend: true,
-      actorName: sender.name, actorEmail: sender.email,
-      subject: `Your post is ready to approve: ${title}`,
-      bodyHtml: mailer.renderEmail(
-        `Ready for your approval: ${mailer.escapeHtml(title)}`,
-        `<p>Hi ${mailer.escapeHtml(String(input.client.name ?? 'there'))},</p>` +
-        `<p>${mailer.escapeHtml(sender.name)} has sent you <strong>${mailer.escapeHtml(title)}</strong> to look over before it goes out.</p>` +
-        (input.note ? `<p style="border-left:3px solid #e4e4e7;padding-left:12px;">${mailer.escapeHtml(input.note)}</p>` : '') +
-        (caption ? `<p><strong>Caption:</strong><br>${mailer.escapeHtml(caption).replace(/\n/g, '<br>')}</p>` : '') +
-        (when(input.forTime) ? `<p>It is planned to go out ${mailer.escapeHtml(when(input.forTime)!)}.` +
-          (when(input.approveBy) ? ` Please answer by ${mailer.escapeHtml(when(input.approveBy)!)}.` : '') + '</p>' : '') +
-        `<p>Open it to see the post, then press <strong>Approve</strong> — or <strong>Ask for a change</strong> and tell us what to change.</p>`,
-        'View and approve',
-        link,
-      ),
-    }).catch(() => 'failed' as const)
-    if (result === 'sent' || result === 'duplicate') delivered.push(email)
-    else failed.push(email)
+  const sent = await sendClientRound({
+    clientId: input.client.id,
+    posts: [{ post_id: input.post.id, version: input.version, approve_by: input.approveBy }],
+    emails: input.emails,
+    note: input.note,
+    pressedBy: { id: String(input.actor.id ?? ''), name: input.actor.name ?? null, email: String(input.actor.email ?? '') },
+  })
+  if (!sent.ok) {
+    console.error('client send refused:', input.post.id, sent.error)
+    return { delivered: [], failed: [...input.emails], link }
   }
-  return { delivered, failed, link }
+  return { delivered: sent.delivered, failed: sent.results.filter(r => !sent.delivered.includes(r.email)).map(r => r.email), link }
 }

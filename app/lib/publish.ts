@@ -20,7 +20,6 @@ import {
   type RemotePlatformRow,
 } from './publish-core'
 import type { PlatformOutcome } from './post-outcome-core'
-export { LIVE_JOB_STATUSES }
 
 /**
  * Publishing a client's post is the least reversible thing this system does —

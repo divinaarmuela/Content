@@ -116,9 +116,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({
       ...shaped,
       posting,
-      // the item no longer carries a post's approval: each POST has its own stage (the posting
-      // rebuild, 29 Sep 2026 — SPEC §1.3). Kept as null so an older page draws nothing for it.
-      posting_approval: null,
       client_name: client?.name ?? null,
       client_timezone: (client?.timezone as string | null) || DEFAULT_TZ,
       owner_name,

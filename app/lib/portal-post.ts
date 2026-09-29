@@ -5,7 +5,7 @@ import { portalOwnerByToken } from './portal-owner'
 import { belongsToPortal } from './portal-owner-core'
 import { analyticsForPost, networkName } from './post-page-core'
 import { liveNetworks, postVersionId, readPostState } from './post-stage-core'
-import { networkLabel, postLiveLinks, postedAt, readFrozenPost, reviewFiles } from './portal-core'
+import { postLiveLinks, postedAt, readFrozenPost, reviewFiles } from './portal-core'
 import {
   portalPerformance, readPerformance, type PortalPerformance,
 } from './post-performance-core'
@@ -125,7 +125,7 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
     }) as unknown as Record<string, unknown>)
     const slides = shown ? reviewFiles(shown) : []
     const links = postLiveLinks(post)
-    const live = liveNetworks(post).map(networkLabel)
+    const live = liveNetworks(post).map(networkName)
     const networks = live.length > 0 ? live : [...new Set(rows.map(r => networkName(r.platform)).filter(Boolean))]
 
     const person = (p: { username: string; full_name: string | null; profile_pic: string | null }): PortalPostPerson => ({

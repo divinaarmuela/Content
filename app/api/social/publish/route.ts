@@ -149,8 +149,7 @@ export async function GET(req: Request) {
     })
     // WHICH COMPOSITION EACH JOB CAME FROM, so the row can offer the post's
     // own page. The job does not carry the link — the post carries the job's
-    // id — so it is read back the way `jobsForPost` reads it, from the post's
-    // own list. A job made outside the composer (the ad-hoc door) simply has
+    // id — so it is read back from the post's own list (`jobIdsOfPost`). A job made outside the composer (the ad-hoc door) simply has
     // no post, and the row shows no link rather than a wrong one.
     const jobIds = new Set(rows.map(j => j.id))
     // the post's booking holds its jobs (`booking.job_ids`, re-sends included); `jobIdsOfPost` reads

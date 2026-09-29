@@ -34,6 +34,7 @@ import {
 import type { PostActRequest, PostActResponse } from './post-act-contract'
 import { joinClock, type ChannelExtras, type ClockValue } from './schedule-compose-core'
 import { formatInZone } from './timezone-core'
+import { cleanEmail } from './client-recipients-core'
 import type { Slide } from './version-files-core'
 
 const ms = (t: NowLike | null | undefined): number => {
@@ -285,31 +286,6 @@ export function questionFor(offered: Pick<OfferedAction, 'action' | 'label' | 'n
   }
 }
 
-/** The addresses a client send can go to, primary people first, each once. */
-export type Recipient = { email: string; name: string; primary: boolean }
-export function clientRecipients(
-  client: { email?: string | null; contact_name?: string | null } | null | undefined,
-  contacts: readonly { email?: string | null; name?: string | null; is_primary?: boolean | null }[] = [],
-): Recipient[] {
-  const out: Recipient[] = []
-  const seen = new Set<string>()
-  const add = (email: string | null | undefined, name: string | null | undefined, primary: boolean) => {
-    const e = String(email ?? '').trim()
-    if (!e || !e.includes('@') || seen.has(e.toLowerCase())) return
-    seen.add(e.toLowerCase())
-    out.push({ email: e, name: String(name ?? '').trim() || e, primary })
-  }
-  for (const c of contacts) if (c.is_primary) add(c.email, c.name, true)
-  for (const c of contacts) if (!c.is_primary) add(c.email, c.name, false)
-  add(client?.email, client?.contact_name, out.length === 0)
-  return out
-}
-/** Who is ticked when the question opens: the primary people, or everyone when nobody is primary. */
-export function defaultRecipients(list: readonly Recipient[]): string[] {
-  const primary = list.filter(r => r.primary).map(r => r.email)
-  return primary.length > 0 ? primary : list.map(r => r.email)
-}
-
 /**
  * What is missing from the answers, said next to the button — or null. The
  * server checks it all again; this only stops a press that is sure to be
@@ -341,7 +317,7 @@ export function answerProblem(
         if (q.action !== 'approve_for_client' && !note) return 'Say what needs changing — a short note is enough.'
         break
       case 'recipients':
-        if (a.via !== 'link' && !(a.send_to ?? []).some(x => String(x).includes('@'))) {
+        if (a.via !== 'link' && !(a.send_to ?? []).some(x => cleanEmail(x) != null)) {
           return 'Tick who gets it, or choose "Copy the link instead".'
         }
         break
@@ -557,15 +533,6 @@ export function readPostNotes(rows: readonly Record<string, unknown>[] | null | 
     }))
     .filter(n => n.id && n.body.trim())
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
-}
-
-/**
- * The notes for one place on the post: the whole post (`fileUrl` null) or one
- * file — by the file's URL, never its slot, so a reorder cannot move a note
- * onto another picture (audit P10). `thread` picks Team or Client.
- */
-export function notesAt(notes: readonly PostNote[], fileUrl: string | null, thread: CommentVisibility): PostNote[] {
-  return notes.filter(n => n.visibility === thread && (fileUrl == null ? n.file_url == null : n.file_url === fileUrl))
 }
 
 /** How many notes each file carries, for the dot on its thumbnail. */

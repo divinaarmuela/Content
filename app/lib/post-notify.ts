@@ -8,14 +8,18 @@ import { notify, renderEmail, escapeHtml, type NotifyResult } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { formatWithZone, safeZone } from './timezone-core'
 import {
-  defaultApproveBy, postVersionId, readPostState,
+  defaultApproveBy, postTitle, postVersionId, readPostState,
   type NotifyTarget, type Plan, type PostAction, type PostEventRow, type PostState,
 } from './post-stage-core'
 import {
-  clientRecipients, clientRoundEmail, clientRoundKey, dueApprovalReminder, moveWords, pickRecipients,
-  planMoveEmails, portalHomePath, portalPostPath, postTitle, recipientsFor, reminderWords, roundOutcomeWords,
+  clientRoundEmail, clientRoundKey, dueApprovalReminder, moveWords,
+  planMoveEmails, recipientsFor, reminderWords, roundOutcomeWords,
   teamPostPath, type RoundPost, type Roster, type TeamPerson, type Words,
 } from './post-notify-core'
+import { clientRecipients, pickRecipients } from './client-recipients-core'
+import { portalWaitingPath } from './portal-core'
+import { portalPostHref } from './post-page-core'
+import { POST_APPROVAL_BOARD } from './overview-links-core'
 
 /**
  * EVERY POSTING EMAIL — the server half (the posting rebuild, 29 Sep 2026;
@@ -319,7 +323,7 @@ export async function sendClientRound(input: {
       caption: version.caption ?? '',
       when: whenIn(version.scheduled_for, tz),
       networks: await platformsOf(channels),
-      link: test ? `${DASHBOARD_URL}${teamPostPath(post)}` : `${DASHBOARD_URL}${portalPostPath(token, post.id)}`,
+      link: test ? `${DASHBOARD_URL}${teamPostPath(post)}` : `${DASHBOARD_URL}${portalPostHref(token, post.id)}`,
       approve_by: whenIn(approveBy, tz),
     })
   }
@@ -331,7 +335,7 @@ export async function sendClientRound(input: {
   const sender = await clientFacingSender(input.pressedBy)
   const key = clientRoundKey(roundPosts.map(p => ({ id: p.id, version: p.version })))
   const stamp = now.toISOString()
-  const home = test ? `${DASHBOARD_URL}/dashboard/scheduler` : `${DASHBOARD_URL}${portalHomePath(token)}`
+  const home = test ? `${DASHBOARD_URL}${POST_APPROVAL_BOARD}` : `${DASHBOARD_URL}${portalWaitingPath(token)}`
   const results: { email: string; result: NotifyResult }[] = []
   for (const email of picked.emails) {
     const who = test ? null : allowed.find(r => r.email === email)
@@ -363,7 +367,7 @@ export async function sendClientRound(input: {
     ok: true,
     delivered,
     results,
-    link: test ? home : `${DASHBOARD_URL}${portalHomePath(token)}`,
+    link: test ? home : `${DASHBOARD_URL}${portalWaitingPath(token)}`,
     message: test
       ? (delivered.length ? `Test sent to ${delivered[0]}. Open it to see exactly what ${client.name} gets.` : 'The test could not be emailed. Try again in a moment.')
       : roundOutcomeWords(results),
@@ -402,38 +406,4 @@ export async function sendPostNotice(notice: {
     post: notice.post,
     actor: notice.actor.id ? { id: notice.actor.id, name: notice.actor.name } : null,
   })
-}
-
-/**
- * P1's `deps.deliverToClient`: the client send for one post, as a round of
- * one — in Divina's name, from the frozen version, only to addresses on the
- * client's list. `link` builds the link and emails nobody. Never throws; a
- * refusal comes back as nothing delivered, which the engine turns into "Nothing
- * reached the client, so nothing has changed".
- */
-export async function deliverPostToClient(input: {
-  post: Pick<PostState, 'id' | 'client_id'>
-  version: number
-  client: { id: string; share_token?: string | null }
-  emails: string[]
-  via: 'email' | 'link'
-  approveBy: string | null
-  actor: { id: string | null; name?: string | null; email?: string | null }
-  note: string | null
-}): Promise<{ delivered: string[]; failed: string[]; link: string }> {
-  const token = String(input.client.share_token ?? '').trim()
-  const link = `${DASHBOARD_URL}${portalPostPath(token, input.post.id)}`
-  if (input.via === 'link') return { delivered: [], failed: [], link }
-  const sent = await sendClientRound({
-    clientId: input.client.id,
-    posts: [{ post_id: input.post.id, version: input.version, approve_by: input.approveBy }],
-    emails: input.emails,
-    note: input.note,
-    pressedBy: { id: String(input.actor.id ?? ''), name: input.actor.name ?? null, email: String(input.actor.email ?? '') },
-  }).catch(e => ({ ok: false as const, status: 409 as const, error: e instanceof Error ? e.message : String(e) }))
-  if (!sent.ok) {
-    console.error('client send refused:', input.post.id, sent.error)
-    return { delivered: [], failed: [...input.emails], link }
-  }
-  return { delivered: sent.delivered, failed: sent.results.filter(r => !sent.delivered.includes(r.email)).map(r => r.email), link }
 }

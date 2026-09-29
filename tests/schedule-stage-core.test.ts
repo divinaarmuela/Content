@@ -244,7 +244,7 @@ describe('the Schedule page reads the stage and approves nothing', () => {
 
   it('moves and bins through the one act route, never the old schedule routes', () => {
     const page = code(`${DIR}page.tsx`)
-    expect(page).toContain('postActPath(post.id)')
+    expect(page).toContain('postAct(post.id, { ...body, expect_rev: post.state.rev })')
     expect(page).toContain("action: 'change_time'")
     expect(page).toContain('action: post.bin.action, confirm: true')
     expect(page).not.toMatch(/\/api\/social\/schedule\/\$\{post(Id)?(\.id)?\}/)

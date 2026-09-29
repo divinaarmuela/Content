@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
-import { clientRecipients, pickRecipients, postApprovalLink } from '../app/lib/post-stage'
 
 /**
  * SEND TO CLIENT (the owner, 28 Sep 2026: "at With client it should be sent to the client — confirming the emails
@@ -9,35 +8,9 @@ import { clientRecipients, pickRecipients, postApprovalLink } from '../app/lib/p
  *
  * Since the posting rebuild (29 Sep 2026) the route does two separate things: the EDIT card at With client is
  * emailed as before; a POST is only a door onto the one writer (app/lib/post-stage.ts), which freezes the version,
- * emails it, and moves the post only once something reached the client (audit P9, V9, V10).
+ * emails it, and moves the post only once something reached the client (audit P9, V9, V10). Who may be sent to is
+ * tests/client-recipients-core.test.ts.
  */
-describe('who can be sent to', () => {
-  const client = { name: 'Jordan Wilson', email: 'Jordan@Example.com' }
-  const contacts = [
-    { name: 'Assistant', email: 'assist@example.com', role: 'Marketing', is_primary: false },
-    { name: 'Jordan', email: 'jordan@example.com', role: 'Owner', is_primary: true },
-    { name: 'No email', email: '', role: '', is_primary: false },
-    { name: 'Bad', email: 'not-an-email', role: '', is_primary: false },
-  ]
-  it('the client\'s own address and its people, each once, main first, junk left out', () => {
-    const r = clientRecipients(client, contacts)
-    expect(r.map(x => x.email)).toEqual(['jordan@example.com', 'assist@example.com'])
-    expect(r[0].primary).toBe(true)
-  })
-  it('only addresses on the client\'s list are accepted — never one typed into the request', () => {
-    const list = clientRecipients(client, contacts)
-    expect(pickRecipients(['JORDAN@example.com'], list)).toEqual({ ok: true, emails: ['jordan@example.com'] })
-    const stranger = pickRecipients(['jordan@example.com', 'someone@else.com'], list)
-    expect(stranger.ok).toBe(false)
-    expect((stranger as { error: string }).error).toContain('someone@else.com')
-    expect(pickRecipients([], list)).toMatchObject({ ok: false })
-    expect(pickRecipients(['a@b.co'], [])).toMatchObject({ ok: false, error: expect.stringContaining('no email address') })
-  })
-  it('a post\'s link opens that one post on the client\'s portal', () => {
-    expect(postApprovalLink('https://app.mdmmarketing.com.au/', 'tok-1', 'post-9')).toBe('https://app.mdmmarketing.com.au/portal/tok-1/post/post-9')
-  })
-})
-
 /* ── the route, against an in-memory database ─────────────────────────────── */
 const user = { id: 'am-1', role: 'account_manager', name: 'Manal', email: 'manal@mdmmarketing.com.au' }
 let role = 'account_manager'

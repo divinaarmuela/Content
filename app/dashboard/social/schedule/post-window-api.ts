@@ -18,7 +18,7 @@
  * pressed — never thrown past the window.
  */
 
-import { postActPath, type PostActRequest, type PostActResponse } from '@/app/lib/post-act-contract'
+import { postAct } from '@/app/lib/post-act-contract'
 import type { NoteInput, PostWindowApi, SaveResponse, WorkingBody } from '@/app/lib/post-window-core'
 import { friendlyError } from '@/app/lib/support-core'
 
@@ -51,19 +51,7 @@ export const postWindowApi: PostWindowApi = {
   create: (body: WorkingBody & { item_id: string }) => saveCall('/api/social/schedule', 'POST', body),
   save: (postId: string, body: WorkingBody & { expect_rev: number }) =>
     saveCall(`/api/social/schedule/${encodeURIComponent(postId)}`, 'PATCH', body),
-  async act(postId: string, req: PostActRequest): Promise<PostActResponse> {
-    const res = await fetch(postActPath(postId), { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(req) })
-    const json = await readJson(res)
-    if (res.ok && json.ok === true) return json as unknown as PostActResponse
-    const { reason, problems } = refusalOf(json, 'this post')
-    return {
-      ok: false,
-      code: (typeof json.code === 'string' ? json.code : 'bad_request') as never,
-      reason,
-      ...(problems.length > 0 ? { problems } : {}),
-      post: (json.post && typeof json.post === 'object' ? json.post : null) as never,
-    }
-  },
+  act: postAct,
 }
 
 /** Add a note to a post — Team thread unless someone chose the Client thread. */

@@ -11,7 +11,7 @@ import {
   type TransitionContext, type TransitionInput,
 } from '../app/lib/post-stage-core'
 import {
-  PORTAL_POST_ACTIONS, TEAM_ACT_ACTIONS, parsePostActRequest, postActPath, refusalStatus,
+  TEAM_ACT_ACTIONS, parsePostActRequest, postActPath, refusalStatus,
 } from '../app/lib/post-act-contract'
 import { JSON_ARRAY_COLUMNS, NULLABLE_COLUMNS, TABLE_COLUMNS } from '../lib/db-types'
 
@@ -593,8 +593,9 @@ describe('missed times (decision 11)', () => {
     expect(defaultApproveBy(at(1), NOW)).toBe(at(0.75))
     expect(defaultApproveBy(null, NOW)).toBeNull()
     expect(approveByOf(post('with_client'))).toBe(at(70))
-    expect(approvalReminderTimes(at(70), NOW)).toEqual([{ kind: '24h', at: at(46) }, { kind: '1h', at: at(69) }])
-    expect(approvalReminderTimes(at(10), NOW)).toEqual([{ kind: '1h', at: at(9) }])
+    // the reminder moments, latest first — the sweep (post-notify-core dueApprovalReminder) picks the one that is due
+    expect(approvalReminderTimes(at(70))).toEqual([{ kind: '1h', at: at(69) }, { kind: '24h', at: at(46) }])
+    expect(approvalReminderTimes(null)).toEqual([])
   })
 })
 
@@ -835,8 +836,12 @@ describe('notes (decision 9)', () => {
       { id: 'c', file_url: img(1).url, version: 2 },
       { id: 'd', file_url: null, version: 1 },
     ]
-    expect(notesForFile(notes, img(1).url, 1).map(n => n.id)).toEqual(['a'])
-    expect(notesForFile(notes, img(1).url, null).map(n => n.id)).toEqual(['a', 'c'])
+    expect(notesForFile(notes, img(1).url, { version: 1 }).map(n => n.id)).toEqual(['a'])
+    expect(notesForFile(notes, img(1).url).map(n => n.id)).toEqual(['a', 'c'])
+    // null is the whole post; a thread keeps one thread
+    expect(notesForFile(notes, null).map(n => n.id)).toEqual(['d'])
+    const threads = [{ id: 't', file_url: null, visibility: 'team' }, { id: 'c', file_url: null, visibility: 'client' }]
+    expect(notesForFile(threads, null, { thread: 'client' }).map(n => n.id)).toEqual(['c'])
   })
 })
 
@@ -910,7 +915,6 @@ describe('post-act-contract', () => {
     expect(TEAM_ACT_ACTIONS).not.toContain('client_approve')
     expect(TEAM_ACT_ACTIONS).not.toContain('record_posted')
     expect(TEAM_ACT_ACTIONS).toContain('send_to_qc')
-    expect(PORTAL_POST_ACTIONS).toEqual(['client_approve', 'client_ask_change'])
     expect(parsePostActRequest({ action: 'client_approve', expect_rev: 1 })).toMatchObject({ ok: false })
     expect(parsePostActRequest({ action: 'booking_done', expect_rev: 1 })).toMatchObject({ ok: false })
   })

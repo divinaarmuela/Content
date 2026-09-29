@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  TOO_SOON, eligibility, tileTone, scheduleWeekGrid, monthCells, canReschedule,
+  TIME_TOO_SOON_OR_NOW, eligibility, scheduleWeekGrid, monthCells,
   suggestedTimes, slideLimits, applySlideLimit, groupForList, validateComposition,
   approveWithoutClientQuestion, mayApproveWithoutClient,
   assetsApprovedOnBoard, mayPostPiece, mayPostWithoutApproval, clientSignsOffEveryPost, postingEligibility,
-  NOT_CLIENT_APPROVED, CLIENT_SIGNS_OFF_NOTE, WITH_THE_CLIENT_NOW,
+  NOT_CLIENT_APPROVED, WITH_THE_CLIENT_NOW,
   APPROVE_WITHOUT_CLIENT_STATUSES, APPROVE_WITHOUT_CLIENT_TWO_STEP_STATUSES,
   channelBlockReason, coverForSlide, mayEditNote,
-  type SocialPostStatus,
 } from '@/app/lib/social-schedule-core'
 import { fromZonedInput, toZonedInput, dayKeyInZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -110,24 +109,6 @@ describe('the post’s state is its own stage, never the edit card’s', () => {
     for (const gone of ['mirrorStatus', 'postTileFacts', 'blockReason', 'showsOnGrid', 'belongsInList']) {
       expect(core[gone], gone).toBeUndefined()
     }
-  })
-})
-
-/* ── tileTone ───────────────────────────────────────────────────────────── */
-
-describe('tileTone', () => {
-  it('gives every status its tone', () => {
-    const want: Record<SocialPostStatus, string> = {
-      pending: 'amber', changes: 'red', approved: 'green', scheduled: 'blue',
-      published: 'ink', draft: 'muted', failed: 'red-outline', cancelled: 'muted',
-    }
-    for (const [status, tone] of Object.entries(want)) {
-      expect(tileTone(status as SocialPostStatus)).toBe(tone)
-    }
-  })
-  it('falls back to muted for anything unknown', () => {
-    expect(tileTone('nonsense')).toBe('muted')
-    expect(tileTone(null)).toBe('muted')
   })
 })
 
@@ -267,36 +248,6 @@ describe('monthCells', () => {
     const june = monthCells('2026-06', TZ)
     expect(june[0].key).toBe('2026-06-01')
     expect(june[0].inMonth).toBe(true)
-  })
-})
-
-/* ── canReschedule ──────────────────────────────────────────────────────── */
-
-describe('canReschedule', () => {
-  it('moves a post that has not been queued yet', () => {
-    for (const status of ['draft', 'pending', 'approved', 'changes']) {
-      expect(canReschedule({ status })).toEqual({ ok: true, mode: 'move' })
-    }
-  })
-  it('re-queues a post the provider is already holding', () => {
-    expect(canReschedule({ status: 'scheduled' })).toEqual({ ok: true, mode: 'requeue' })
-  })
-  it('refuses in plain words once the post is done with', () => {
-    for (const status of ['published', 'failed', 'cancelled']) {
-      const r = canReschedule({ status })
-      expect(r.ok).toBe(false)
-      if (!r.ok) {
-        expect(r.reason.length).toBeGreaterThan(10)
-        expect(r.reason).not.toMatch(/[_A-Z]{4,}/)
-      }
-    }
-    expect(canReschedule({ status: 'published' })).toEqual({
-      ok: false, reason: 'This post has already gone out, so it cannot be moved',
-    })
-  })
-  it('treats an unknown status as a draft that can be moved', () => {
-    expect(canReschedule({ status: 'wat' })).toEqual({ ok: true, mode: 'move' })
-    expect(canReschedule(null)).toEqual({ ok: true, mode: 'move' })
   })
 })
 
@@ -694,12 +645,9 @@ describe('who may post without approval', () => {
     expect(clientSignsOffEveryPost(null)).toBe(false)
   })
 
-  it('says its two sentences in plain words', () => {
-    expect(CLIENT_SIGNS_OFF_NOTE).toBe('This client signs off every post.')
+  it('says its sentence in plain words', () => {
     expect(NOT_CLIENT_APPROVED).toBe('Not yet approved by the client')
-    for (const line of [CLIENT_SIGNS_OFF_NOTE, NOT_CLIENT_APPROVED]) {
-      expect(line.toLowerCase()).not.toContain('graphic')
-    }
+    expect(NOT_CLIENT_APPROVED.toLowerCase()).not.toContain('graphic')
   })
 })
 
@@ -950,23 +898,11 @@ describe('a booked time needs a lead', () => {
     now: '2026-09-09T09:00:00Z',
   })
   it('refuses a time five minutes away', () => {
-    expect(check(at(5)).problems).toContain(TOO_SOON)
+    expect(check(at(5)).problems).toContain(TIME_TOO_SOON_OR_NOW)
   })
   it('accepts Post now (inside two minutes) and anything fifteen minutes out', () => {
-    expect(check(at(1)).problems).not.toContain(TOO_SOON)
-    expect(check(at(15)).problems).not.toContain(TOO_SOON)
-    expect(check(at(60)).problems).not.toContain(TOO_SOON)
-  })
-})
-
-describe('one open post per piece — the window and the server read one list', () => {
-  it('a post sent back for changes is still OPEN: the next press reopens it, the server would refuse a second', async () => {
-    const { isOpenPost, OPEN_POST_STATUSES, SOCIAL_POST_STATUSES } = await import('../app/lib/social-schedule-core')
-    expect([...OPEN_POST_STATUSES]).toEqual(['draft', 'pending', 'approved', 'changes'])
-    // the complement is exactly what the server's gate used to spell out
-    const settled = SOCIAL_POST_STATUSES.filter(s => !isOpenPost(s))
-    expect(settled).toEqual(['scheduled', 'published', 'failed', 'cancelled'])
-    expect(isOpenPost('changes')).toBe(true)
-    expect(isOpenPost(undefined)).toBe(false)
+    expect(check(at(1)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
+    expect(check(at(15)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
+    expect(check(at(60)).problems).not.toContain(TIME_TOO_SOON_OR_NOW)
   })
 })

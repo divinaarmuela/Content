@@ -5,8 +5,8 @@ import {
   type PostActor, type PostState, type StagePatch,
 } from '@/app/lib/post-stage-core'
 import {
-  bookedFactProblem, clientRecipients, clientRoundEmail, clientRoundKey, dueApprovalReminder, factProblem,
-  moveWords, nextPersonId, pickRecipients, planMoveEmails, portalHomePath, portalPostPath, postTitle, recipientsFor,
+  bookedFactProblem, clientRoundEmail, clientRoundKey, dueApprovalReminder, factProblem,
+  moveWords, nextPersonId, planMoveEmails, recipientsFor,
   reminderWords, roundOutcomeWords, teamPostPath, type Roster, type TeamPerson,
 } from '@/app/lib/post-notify-core'
 
@@ -253,13 +253,6 @@ describe('the client\'s round: one email per person, listing every post', () => 
     expect(clientRoundKey([{ id: 'p1', version: 2 }, { id: 'p2', version: 1 }])).not.toBe(a)
     expect(a.length).toBeLessThan(24)
   })
-  it('only addresses on the client\'s own list', () => {
-    const list = clientRecipients({ name: 'TKBG', email: 'Hello@TKBG.com.au' }, [{ name: 'Jordan Wilson', email: 'jordan@tkbg.com.au', is_primary: true }])
-    expect(list.map(r => r.email)).toEqual(['hello@tkbg.com.au', 'jordan@tkbg.com.au'])
-    expect(pickRecipients(['JORDAN@tkbg.com.au'], list)).toEqual({ ok: true, emails: ['jordan@tkbg.com.au'] })
-    expect(pickRecipients(['someone@else.com'], list)).toMatchObject({ ok: false, error: expect.stringContaining('not on this client') })
-    expect(pickRecipients([], list)).toMatchObject({ ok: false })
-  })
   it('the outcome words say nothing changed when nothing was sent', () => {
     expect(roundOutcomeWords([{ email: 'a@b.co', result: 'failed' }])).toMatch(/Nothing has changed on the post/)
     expect(roundOutcomeWords([{ email: 'a@b.co', result: 'sent' }, { email: 'c@d.co', result: 'failed' }]))
@@ -271,13 +264,6 @@ describe('links, titles and the older booked email', () => {
   it('a team email opens the post on the page its stage belongs to', () => {
     expect(teamPostPath({ id: 'p1', client_id: 'c1', stage: 'quality_check' })).toBe('/dashboard/scheduler?post=p1')
     expect(teamPostPath({ id: 'p1', client_id: 'c1', stage: 'booked' })).toBe('/dashboard/social/schedule?client=c1&post=p1')
-    expect(portalHomePath('tok')).toBe('/portal/tok')
-    expect(portalPostPath('tok', 'p1')).toBe('/portal/tok/post/p1')
-  })
-  it('a post is named by its edit card, else its caption\'s first line', () => {
-    expect(postTitle({ caption: 'x' }, 'Winter reel')).toBe('Winter reel')
-    expect(postTitle({ caption: '\n  Spring menu is here\nmore' }, null)).toBe('Spring menu is here')
-    expect(postTitle({ caption: '' }, null)).toBe('A post')
   })
   it('the older booked email needs a real booking on the row (audit V14)', () => {
     expect(bookedFactProblem(null)).toBe('No post to check')

@@ -24,7 +24,7 @@ import {
   failedNetworks, liveNetworks, lostChannels, postActions, postedWords, slotMissed, waitingOn,
   type AccountRef, type NowLike, type OfferedAction, type PostHat, type PostStage, type PostState, type StageTone,
 } from './post-stage-core'
-import { NETWORK_LABEL } from './publish-core'
+import { networkName } from './publish-core'
 
 /* ── which posts this page shows ────────────────────────────────────────── */
 
@@ -38,9 +38,6 @@ export function showsOnSchedule(stage: PostStage): boolean {
 
 /** Still on the approval road — shown on Post approval, only counted here. */
 export const BEING_APPROVED: readonly PostStage[] = ['draft', 'quality_check', 'with_client']
-
-/** Where to find a post this page does not show. */
-export const POST_APPROVAL_HREF = '/dashboard/scheduler'
 
 /* ── what one tile says ─────────────────────────────────────────────────── */
 
@@ -81,10 +78,8 @@ export type ScheduleFacts = {
   story: boolean
 }
 
-const networkWord = (platform: string) => NETWORK_LABEL[String(platform).toLowerCase()] ?? platform
-
-/** The networks a post goes to, in its channel order, each once. */
-export function postNetworks(post: Pick<PostState, 'channels' | 'outcomes'>, accounts: readonly AccountRef[]): string[] {
+/** The networks a post goes to, in its channel order, each once — plus any that answered (the card's `cardNetworks` does not). */
+function outcomeNetworks(post: Pick<PostState, 'channels' | 'outcomes'>, accounts: readonly AccountRef[]): string[] {
   const byId = new Map(accounts.map(a => [a.id, a.platform]))
   const out: string[] = []
   for (const id of post.channels) {
@@ -104,9 +99,9 @@ export function postNetworks(post: Pick<PostState, 'channels' | 'outcomes'>, acc
  */
 export function networkLines(post: Pick<PostState, 'stage' | 'channels' | 'outcomes'>, accounts: readonly AccountRef[]): NetworkLine[] {
   if (post.stage !== 'booked' && post.stage !== 'posted') return []
-  return postNetworks(post, accounts).map(platform => {
+  return outcomeNetworks(post, accounts).map(platform => {
     const o = post.outcomes[platform]
-    const base = { platform, network: networkWord(platform), url: o?.url ?? null, error: null as string | null }
+    const base = { platform, network: networkName(platform), url: o?.url ?? null, error: null as string | null }
     if (o?.status === 'published') return { ...base, label: 'Went out', tone: 'done' as const }
     if (o?.status === 'duplicate') return { ...base, label: 'Went out — it was already live', tone: 'done' as const }
     if (o?.status === 'failed') return { ...base, label: 'Did not go out', tone: 'trouble' as const, error: o.error }

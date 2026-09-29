@@ -23,13 +23,14 @@ import {
   type AccountRef, type OfferedAction, type PostAction, type PostActionList, type PostStage, type PostState,
 } from '@/app/lib/post-stage-core'
 import {
-  AGREED_VIA_CHOICES, STAYS_OPEN, answerProblem, applyInstagramChoice, bodyEditable, clientRecipients,
-  defaultPostTime, defaultRecipients, footerButtons, frozenCopyOf, instagramChoices, instagramCounter,
+  AGREED_VIA_CHOICES, STAYS_OPEN, answerProblem, applyInstagramChoice, bodyEditable,
+  defaultPostTime, footerButtons, frozenCopyOf, instagramChoices, instagramCounter,
   noteVersionOf, nowChip, pressAction, questionFor, readPostNotes, timeHint, unsavedPost, windowHeader,
   withWorkingCopy, workingBody, workingCopyOf,
   type Answers, type InstagramChoiceKey, type NoteInput, type PostWindowApi, type Question, type WorkingCopy,
 } from '@/app/lib/post-window-core'
 import type { SuggestedTime } from '@/app/lib/social-schedule-core'
+import { clientRecipients, defaultRecipients } from '@/app/lib/client-recipients-core'
 import {
   autoKindFor, availableKinds, isPlatform, networkName,
   type MediaItem, type Platform, type PostKind,

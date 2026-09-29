@@ -30,11 +30,12 @@
  */
 
 import {
-  APPROVAL_REMINDERS_MS, ROW_OF, STAGE_LABEL, STAGE_PAGE, approvalLine, approveByOf, failedNetworks,
+  APPROVAL_REMINDERS_MS, ROW_OF, approvalReminderTimes, STAGE_LABEL, STAGE_PAGE, approvalLine, approveByOf, failedNetworks,
   isPostAction, liveNetworks, postedWords, readPostState, waitingOn,
   type NotifyTarget, type PostAction, type PostEffect, type PostStage, type PostState,
 } from './post-stage-core'
-import { NETWORK_LABEL } from './publish-core'
+import { networkName } from './publish-core'
+import { POST_APPROVAL_BOARD } from './overview-links-core'
 
 /* ── people ─────────────────────────────────────────────────────────────── */
 
@@ -275,20 +276,10 @@ export type WordsInput = {
   nameOf?: (id: string | null | undefined) => string | null | undefined
 }
 
-const networkWord = (p: string) => NETWORK_LABEL[String(p).toLowerCase()] ?? p
 const joinNames = (names: readonly string[]) =>
   names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 const atWhen = (when: string | null) => (when ? ` for ${when}` : '')
 const quoted = (s: string | null | undefined) => (s && s.trim() ? `“${s.trim()}”` : '')
-
-/** A post has no title of its own: the edit card's, else the caption's first line, else "A post". */
-export function postTitle(post: Pick<PostState, 'caption'>, sourceTitle?: string | null): string {
-  const t = String(sourceTitle ?? '').trim()
-  if (t) return t
-  const first = String(post.caption ?? '').split('\n').map(l => l.trim()).find(Boolean) ?? ''
-  if (!first) return 'A post'
-  return first.length > 60 ? `${first.slice(0, 57).trimEnd()}…` : first
-}
 
 /**
  * The email for one landed move, to one audience. Short sentences: what
@@ -344,7 +335,7 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
         cta: 'Book it in',
       }
     case 'booking_done': {
-      const nets = (w.networks ?? []).map(networkWord)
+      const nets = (w.networks ?? []).map(networkName)
       return {
         subject: `Booked in: ${title}${when ? ` — ${when}` : ''}`,
         lines: [`${title} is booked in. It goes out ${when ?? 'at its time'}${nets.length ? ` on ${joinNames(nets)}` : ''}.`, 'Nothing is needed from you. This is so you know.'],
@@ -399,17 +390,7 @@ export function teamPostPath(post: Pick<PostState, 'id' | 'client_id' | 'stage'>
   const id = encodeURIComponent(post.id)
   return STAGE_PAGE[post.stage] === 'schedule'
     ? `/dashboard/social/schedule?client=${encodeURIComponent(post.client_id)}&post=${id}`
-    : `/dashboard/scheduler?post=${id}`
-}
-
-/** The client's one link: everything waiting on them (decision 15). */
-export function portalHomePath(shareToken: string): string {
-  return `/portal/${encodeURIComponent(shareToken)}`
-}
-
-/** One post on the client's portal (SPEC §4.4). */
-export function portalPostPath(shareToken: string, postId: string): string {
-  return `/portal/${encodeURIComponent(shareToken)}/post/${encodeURIComponent(postId)}`
+    : `${POST_APPROVAL_BOARD}?post=${id}`
 }
 
 /* ── approve-by reminders (decision 11) ─────────────────────────────────── */
@@ -437,10 +418,8 @@ export function dueApprovalReminder(
   const n = msOf(now)
   const sent = msOf(post.client_send.at)
   if (!by || !Number.isFinite(byMs) || !Number.isFinite(n) || n >= byMs) return null
-  const due = (Object.entries(APPROVAL_REMINDERS_MS) as [ReminderKind, number][])
-    .map(([kind, lead]) => ({ kind, at: byMs - lead }))
-    .filter(r => r.at <= n && (!Number.isFinite(sent) || r.at > sent))
-    .sort((a, b) => b.at - a.at)[0]
+  const due = approvalReminderTimes(by)
+    .find(r => msOf(r.at) <= n && (!Number.isFinite(sent) || msOf(r.at) > sent))
   return due ? { kind: due.kind, approve_by: by, version: post.client_send.version } : null
 }
 
@@ -462,45 +441,6 @@ export function reminderWords(kind: ReminderKind, w: { title: string; sentOn: st
 }
 
 /* ── the client's round: one email per person per send ─────────────────── */
-
-export type ClientRecipient = { email: string; name: string; label: string; primary: boolean }
-
-const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/
-
-export function cleanEmail(raw: unknown): string | null {
-  const e = String(raw ?? '').trim().toLowerCase()
-  return EMAIL.test(e) ? e : null
-}
-
-/** Every address this client can be sent to: the business's own, then its people — each once, primary first. */
-export function clientRecipients(
-  client: { name?: string | null; email?: string | null } | null | undefined,
-  contacts: readonly { name?: string | null; email?: string | null; role?: string | null; is_primary?: boolean | null }[],
-): ClientRecipient[] {
-  const out: ClientRecipient[] = []
-  const seen = new Set<string>()
-  const add = (r: ClientRecipient) => { if (!seen.has(r.email)) { seen.add(r.email); out.push(r) } }
-  const own = cleanEmail(client?.email)
-  if (own) add({ email: own, name: String(client?.name ?? '').trim() || own, label: 'The business', primary: true })
-  for (const c of [...contacts].sort((a, b) => Number(!!b.is_primary) - Number(!!a.is_primary))) {
-    const e = cleanEmail(c.email)
-    if (!e) continue
-    add({ email: e, name: String(c.name ?? '').trim() || e, label: String(c.role ?? '').trim() || (c.is_primary ? 'Main contact' : 'Contact'), primary: !!c.is_primary })
-  }
-  return out
-}
-
-/** Only addresses on the client's own list — never one typed into the request. */
-export function pickRecipients(requested: unknown, allowed: readonly ClientRecipient[]): { ok: true; emails: string[] } | { ok: false; error: string } {
-  if (allowed.length === 0) return { ok: false, error: 'This client has no email address yet. Add one on the client first.' }
-  const picked = [...new Set((Array.isArray(requested) ? requested : []).map(cleanEmail).filter((e): e is string => !!e))]
-  const known = new Set(allowed.map(r => r.email))
-  const strangers = picked.filter(e => !known.has(e))
-  if (strangers.length > 0) return { ok: false, error: `${joinNames(strangers)} ${strangers.length === 1 ? 'is' : 'are'} not on this client. Add them as a contact on the client first.` }
-  if (picked.length === 0) return { ok: false, error: 'Tick at least one person to send it to.' }
-  if (picked.length > 20) return { ok: false, error: 'That is a lot of people. Send it to 20 at most.' }
-  return { ok: true, emails: picked }
-}
 
 /** A short, stable hash (FNV-1a, two seeds) so a round's key stays short in the outbox. */
 function shortHash(s: string): string {
@@ -565,7 +505,7 @@ export function clientRoundEmail(w: {
   const items = w.posts.map(p => ({
     title: p.title,
     lines: [
-      ...(p.when ? [`Goes out ${p.when}${p.networks.length ? ` on ${joinNames(p.networks.map(networkWord))}` : ''}.`] : []),
+      ...(p.when ? [`Goes out ${p.when}${p.networks.length ? ` on ${joinNames(p.networks.map(networkName))}` : ''}.`] : []),
       ...(p.caption.trim() ? [p.caption.trim().length > 400 ? `${p.caption.trim().slice(0, 397).trimEnd()}…` : p.caption.trim()] : []),
     ],
     link: p.link,

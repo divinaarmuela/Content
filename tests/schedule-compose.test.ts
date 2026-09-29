@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   addToPost, clockPillLabel, composerReducer,
-  inPost, initialComposer, isPostingNow, joinClock, limitsLine, moreOptionsFor, moveInPost,
+  inPost, initialComposer, joinClock, limitsLine, moreOptionsFor, moveInPost,
   readLocations, readPerChannel, removeFromPost, replaceInPost, splitClock,
-  to12, to24, POST_MEDIA_NOTICE, PAGE_ID_HELP, MINUTE_STEPS, type ComposerState,
+  to12, to24, POST_MEDIA_NOTICE, PAGE_ID_HELP, type ComposerState,
   CHANNEL_EXTRA_KEYS, groupOptions, optionsFromExtras, readChannelExtras,
 } from '@/app/lib/schedule-compose-core'
 import * as composeCore from '@/app/lib/schedule-compose-core'
@@ -415,20 +415,6 @@ describe('the composer core no longer decides a post\'s buttons or words', () =>
       'SEND_FOR_REVIEW', 'sentForReviewLine', 'outcomeWords', 'NEW_VERSION_NOTICE', 'WAITING_ON_MANAGER']) {
       expect(gone in composeCore, gone).toBe(false)
     }
-  })
-
-  it('"now" is the next couple of minutes, never a time already gone (kept for the server\'s old path)', () => {
-    const t = Date.parse('2026-09-05T10:00:00.000Z')
-    expect(isPostingNow(new Date(t + 30_000).toISOString(), t)).toBe(true)
-    expect(isPostingNow(new Date(t + 119_000).toISOString(), t)).toBe(true)
-    expect(isPostingNow(new Date(t + 10 * 60_000).toISOString(), t)).toBe(false)
-    expect(isPostingNow(new Date(t - 60_000).toISOString(), t)).toBe(false)
-    expect(isPostingNow(null, t)).toBe(false)
-    expect(isPostingNow('not a time', t)).toBe(false)
-  })
-
-  it('offers minutes in five-minute steps (audit W9)', () => {
-    expect(MINUTE_STEPS).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55])
   })
 })
 

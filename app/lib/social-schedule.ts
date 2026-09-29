@@ -20,7 +20,7 @@ import {
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
 } from './publish-core'
 import {
-  optionsFromExtras, readChannelExtras, type ChannelExtras, QUALITY_GATE_LINE } from './schedule-compose-core'
+  optionsFromExtras, readChannelExtras, type ChannelExtras } from './schedule-compose-core'
 import {
   applySlideLimit, channelBlockReason, coverForSlide, eligibility,
   mayEditNote, mayPostPiece, postingEligibility, samePostKey, validateComposition,
@@ -38,7 +38,7 @@ import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-c
 import { isTrialTarget, latestFollowerCount, trialFollowersProblem } from './trial-reel-core'
 import { networkName } from './publish-core'
 import {
-  insertDraftPost, loadPostState, mayActOn, performPostTransition, postLockKey, saveWorkingCopy, teamActorFor,
+  insertDraftPost, loadPostState, mayActOn, postLockKey, saveWorkingCopy, teamActorFor,
   type PostActResult,
 } from './post-stage'
 import { STAGE_LABEL, readPostState, type PostStage, type PostState } from './post-stage-core'
@@ -53,8 +53,8 @@ import { jobIdsOfPost, type PostJobsLike } from './post-outcome-core'
  *
  *   • a new post is born a draft through `insertDraftPost` — and tells nobody (audit V12);
  *   • the working copy is saved through the rules' `save`, so it changes only in Draft;
- *   • every other move is `POST /api/posts/<id>/act`; the calendar's drag and bin are thin doors onto
- *     the same writer (`moveToTime`, `binPost`).
+ *   • every other move is `POST /api/posts/<id>/act` — the calendar's drag (Change time) and its bin
+ *     (Cancel post, Delete draft) included.
  *
  * The one invariant that is still this module's is a claim, never check-then-write:
  *
@@ -71,9 +71,6 @@ const OPEN_STAGES: readonly PostStage[] = ['draft', 'quality_check', 'with_clien
 
 /** A refusal that carries every problem at once, so the composer can list
  *  them rather than revealing them one at a time. */
-/** what a manager is told when their Schedule press sent the piece to the gate */
-export { QUALITY_GATE_LINE }
-
 export class ComposeError extends AuthzError {
   problems: string[]
   constructor(problems: string[], status = 400) {
@@ -725,8 +722,8 @@ export type UpdatePostInput = {
  * A post that has been sent is frozen: what the quality check or the client is looking at does not
  * change under them. To change one, the person presses Edit (T19), which makes it a draft of the next
  * version and takes the earlier approvals back — in the open, with the words saying so, never silently
- * the way `stateAfterPostEdit` did it on the ITEM. A time-only change on a post that is Ready to post or
- * Booked in keeps its approval: it goes through `moveToTime`, not here.
+ * the way `stateAfterPostEdit` did it on the ITEM. A new time on a post that is Ready to post or Booked
+ * in keeps its approval: it is the act route's Change time, not a save.
  *
  * Saving a draft never asks for a time and never emails anybody.
  */
@@ -738,15 +735,6 @@ export async function updatePost(
   const state = post.state
   if (!state) throw new AuthzError('This post is from before the new stages and cannot change until it is moved across', 409)
 
-  // only the time, on a post that is approved: that is a new time, not an edit
-  const onlyTime = input.scheduled_for !== undefined
-    && [input.slides, input.caption, input.channels, input.per_channel, input.note].every(v => v === undefined)
-  if (onlyTime && (state.stage === 'ready' || state.stage === 'booked')) {
-    if (!input.scheduled_for) throw new AuthzError('Pick a time — a post that is ready to go needs one', 409)
-    const moved = await moveToTime(user, id, input.scheduled_for, input.expect_rev ?? null)
-    if (!moved.ok) throwRefusal(moved)
-    return shape((await posts().get(id))!)
-  }
   if (state.stage !== 'draft') {
     throw new AuthzError(
       `This post is in ${STAGE_LABEL[state.stage]}, so what was sent is kept as it is. Press Edit to change it — that makes version ${state.draft_version}.`,
@@ -1097,45 +1085,6 @@ export function throwRefusal(r: PostActResult): never {
   const status = r.code === 'not_allowed' ? 403 : r.code === 'not_found' ? 404 : r.code === 'bad_request' ? 400 : 409
   if (r.problems && r.problems.length > 0) throw new ComposeError(r.problems, status)
   throw new AuthzError(r.reason, status)
-}
-
-/**
- * A NEW TIME, from a drag on the calendar or a typed time. A draft's time is part of its working copy
- * (a save); a post that is Ready to post or Booked in changes time through the rules' `change_time`,
- * which keeps its approval and moves the booking with it (SPEC T13/T15). Anywhere else the rules
- * refuse it, and the answer says the post has to be edited first.
- */
-export async function moveToTime(
-  user: TeamUser, id: string, iso: string, expectRev?: number | null,
-): Promise<PostActResult> {
-  const when = new Date(String(iso)).getTime()
-  if (!Number.isFinite(when)) throw new AuthzError('That is not a time we can read — pick one from the calendar', 400)
-  // a drag onto the past is never a time to keep, draft or not (decision 11: never a time already gone)
-  if (when <= Date.now()) throw new AuthzError('That time has already gone — pick a later one', 409)
-  const at = new Date(when).toISOString()
-  const { post } = await loadPostState(id)
-  if (!post) throw new AuthzError('That post no longer exists', 404)
-  await assertClientAccess(user, post.client_id)
-  const actor = teamActorFor(user, post)
-  const rev = expectRev ?? post.rev
-  if (post.stage === 'draft') return saveWorkingCopy(id, actor, { scheduled_for: at }, rev)
-  return performPostTransition(id, 'change_time', actor, { expect_rev: rev, scheduled_for: at })
-}
-
-/**
- * THE BIN (the post window already asked "are you sure"). A draft that was never sent is deleted for
- * good (T23, audit S1); anything else is cancelled (T20) — the provider's jobs pulled first, no other
- * post and no edit card touched (V2, V20).
- */
-export async function binPost(user: TeamUser, id: string, expectRev?: number | null): Promise<PostActResult> {
-  const { post } = await loadPostState(id)
-  if (!post) throw new AuthzError('That post no longer exists', 404)
-  await assertClientAccess(user, post.client_id)
-  const actor = teamActorFor(user, post)
-  const neverSent = post.stage === 'draft' && post.sent_version == null && post.booking == null
-  return performPostTransition(id, neverSent ? 'delete_draft' : 'cancel', actor, {
-    expect_rev: expectRev ?? post.rev, confirm: true,
-  })
 }
 
 /** The provider payload for one post: one target per channel, each carrying

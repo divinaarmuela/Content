@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 import {
-  clientMayNote, clientPostNotes, clientPostView, heroCounts, notesOnFile, pieceFace, pieceReachedClient,
+  clientMayNote, clientPostNotes, clientPostView, heroCounts, pieceFace, pieceReachedClient,
   portalSections, portalWaitingPath, postLiveLinks, postsMissedByClient, postsWaitingOnClient, readFrozenPost,
   reviewFiles, type PortalPostNote,
 } from '../app/lib/portal-core'
-import { MISSED_FOR_CLIENT, readPostState, type PostState } from '../app/lib/post-stage-core'
+import { MISSED_FOR_CLIENT, notesForFile, readPostState, type PostState } from '../app/lib/post-stage-core'
 
 /**
  * THE CLIENT'S SIDE OF A POST (the posting rebuild, 29 Sep 2026 — package P6;
@@ -162,8 +162,8 @@ describe('notes: per file, the Client thread only (decision 9, P10)', () => {
   })
   it('a note belongs to its file by address, so a reorder cannot move it', () => {
     const notes = clientPostNotes(rows, 'p1', 2, 'Jordan') as PortalPostNote[]
-    expect(notesOnFile(notes, u('b.jpg')).map(n => n.id)).toEqual(['n1'])
-    expect(notesOnFile(notes, u('a.jpg'))).toEqual([])
+    expect(notesForFile(notes, u('b.jpg')).map(n => n.id)).toEqual(['n1'])
+    expect(notesForFile(notes, u('a.jpg'))).toEqual([])
   })
   it('a note may be left only while it is theirs to answer, only on a file it has', () => {
     const open = clientPostView(post({ stage: 'with_client', sent_version: 1, client_send: send(1) }), NOW)

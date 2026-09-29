@@ -25,22 +25,14 @@ import {
 } from '../../../../lib/followers-core'
 import {
   analyticsForPost, channelExtraLines, clientTone, inboxHref, likedLine, networkName,
-  NAMES_PENDING_LINE, NO_COMMENTS_LINE, peopleFrom, postStatusWords, PRIVATE_ACCOUNT_NOTE,
+  NAMES_PENDING_LINE, NO_COMMENTS_LINE, peopleFrom, postPageStatus, PRIVATE_ACCOUNT_NOTE,
   whoLikedNote,
 } from '../../../../lib/post-page-core'
 import { formatWithZone } from '../../../../lib/timezone-core'
 import { jobWords } from '../../../../lib/publish-activity-core'
 import type { PublishJob } from '../../../../lib/publish-activity-core'
 import DayGraph from './DayGraph'
-import { STAGE_LABEL, STAGE_MEANING, STAGE_TONE, type PostStage } from '../../../../lib/post-stage-core'
 import { postedAt } from '../../../../lib/portal-core'
-import type { TileTone } from '../../../../lib/social-schedule-core'
-
-/** A stage's tone as this page's chip takes it. */
-function stageTileTone(stage: PostStage): TileTone {
-  const t = STAGE_TONE[stage]
-  return t === 'surface' ? 'muted' : t
-}
 
 /**
  * ONE POST, ON ITS OWN PAGE.
@@ -96,10 +88,8 @@ export default function PostView({ data }: { data: PostPageData }) {
   const whenLabel = wentOut
     ? formatWithZone(wentOut, tz, 'long')
     : dueAt ? formatWithZone(dueAt, tz, 'long') : null
-  // the words come from the post's STAGE (decision 12) — the old stored status is not read
-  const status = failed || rows.length > 0 || wentOut || !st || st.stage === 'booked'
-    ? postStatusWords(failed ? 'failed' : rows.length > 0 || wentOut ? 'published' : st?.stage === 'booked' ? 'scheduled' : 'draft', { whenLabel, failure })
-    : { headline: STAGE_LABEL[st.stage], detail: STAGE_MEANING[st.stage], tone: stageTileTone(st.stage) }
+  // the words come from the post's STAGE (decision 12) — no old status word is read or made
+  const status = postPageStatus(st, { whenLabel, failure, wentOut: !!wentOut || rows.length > 0 })
   const links = [
     ...rows.map(r => r.platform_post_url).filter((u): u is string => Boolean(u)),
     ...jobs.map(j => j.permalink).filter((u): u is string => Boolean(u)),

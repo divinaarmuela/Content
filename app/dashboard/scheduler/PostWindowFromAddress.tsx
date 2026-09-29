@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import type { SocialPost } from '@/lib/db-types'
 import { STAGE_PAGE, readPostState, type PostStage } from '../../lib/post-stage-core'
-import { POST_APPROVAL_PAGE, postWindowHref } from '../../lib/post-board-core'
+import { postWindowHref } from '../../lib/post-board-core'
+import { POST_APPROVAL_BOARD } from '../../lib/overview-links-core'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
 import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostWindow'
 
@@ -53,10 +54,10 @@ export default function PostWindowFromAddress() {
 
   if (!postId || !row || belongsToSchedule) return null
 
-  const close = () => router.replace(POST_APPROVAL_PAGE, { scroll: false })
+  const close = () => router.replace(POST_APPROVAL_BOARD, { scroll: false })
   const done = (outcome: PostWindowOutcome) => {
     toast.success(outcome.link ? `${outcome.words}. The link to send: ${outcome.link}` : outcome.words)
-    if (outcome.createdPostId) router.replace(`${POST_APPROVAL_PAGE}?post=${encodeURIComponent(outcome.createdPostId)}`, { scroll: false })
+    if (outcome.createdPostId) router.replace(`${POST_APPROVAL_BOARD}?post=${encodeURIComponent(outcome.createdPostId)}`, { scroll: false })
     else close()
   }
   return <OpenPostWindow key={postId} postId={postId} onClose={close} onDone={done} />

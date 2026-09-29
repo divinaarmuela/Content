@@ -63,7 +63,6 @@ import { visibleItems } from '../../app/lib/scope-client'
 import { cardActions, cardLines, overviewTiles, pageCards, EDITOR_LANE_LABELS } from '../../app/lib/board-view-core'
 import { boardColumn, columnOf } from '../../app/lib/board-core'
 import { whoseTurn, CLIENT_LABELS, type ItemStatus } from '../../app/lib/workflow-core'
-import { UNASKED_LINE } from '../../app/lib/waiting-core'
 import {
   briefChecklist, ackState, goReady, shootStage, STAGE_LABEL, clockWords, canSeeShoot, hasAcknowledged, type SopShoot,
 } from '../../app/lib/shoot-sop-core'
@@ -195,7 +194,7 @@ const noLeak = (told: { recipient_email: string; status: string }[]) =>
 function turnWords(card: ContentItem, who: TeamUser): string {
   const t = whoseTurn(card.status as ItemStatus, card as never, viewerOf(who))
   if (t.hat === null) return 'no chip'
-  if (t.unassigned) return t.hat === 'editor' ? 'Nobody on it — anyone can take it' : t.hat === 'scheduler' ? 'Nobody on it — any scheduler can take it' : UNASKED_LINE
+  if (t.unassigned) return t.hat === 'editor' ? 'Nobody on it — anyone can take it' : t.hat === 'scheduler' ? 'Nobody on it — any scheduler can take it' : 'Needs a check — nobody asked yet'
   if (t.mine) return 'Your turn'
   return `Waiting on the ${String(t.hat).replace('_', ' ')}`
 }

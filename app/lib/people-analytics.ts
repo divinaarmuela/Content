@@ -3,10 +3,9 @@ import { table } from '@/lib/db'
 import type { ContentItem, PostAnalytic, SocialAccount, SocialPost } from '@/lib/db-types'
 import { followersEnabled, followersOf, snapshotsOf } from './followers'
 import { dayKey, latestOf, postDay, readInteractors, type FollowerRow } from './followers-core'
-import { postPageHref } from './post-page-core'
 import { inboxTouchesFor } from './inbox-people'
 import { readPerformance } from './post-performance-core'
-import { buildPeople, type PeoplePost, type PeopleRow, type PeopleState } from './people-analytics-core'
+import { analyticsPostHref, buildPeople, type PeoplePost, type PeopleRow, type PeopleState } from './people-analytics-core'
 
 /**
  * THE PEOPLE BEHIND THE NUMBERS — the database half.
@@ -37,20 +36,6 @@ export type PeoplePayload = {
 const empty = (state: PeopleState, client: { id: string; name: string } | null, today: string): PeoplePayload => ({
   state, client, today, rows: [], post_days: [], as_of: null,
 })
-
-/** the post page a `post_analytics` row belongs to, when we can name one */
-function hrefFor(row: PostAnalytic, posts: readonly SocialPost[]): string | null {
-  const jobId = row.publish_job_id
-  if (jobId) {
-    const byJob = posts.find(p => Array.isArray(p.publish_job_ids) && (p.publish_job_ids as unknown[]).includes(jobId))
-    if (byJob) return postPageHref(byJob.id)
-  }
-  if (row.item_id) {
-    const byItem = posts.filter(p => p.item_id === row.item_id)
-    if (byItem.length === 1) return postPageHref(byItem[0].id)
-  }
-  return null
-}
 
 export async function loadPeople(
   client: { id: string; name: string },
@@ -93,7 +78,7 @@ export async function loadPeople(
     return {
       item_id: row.item_id,
       title: row.item_id ? titles.get(row.item_id) ?? null : null,
-      href: hrefFor(row, socialPosts),
+      href: analyticsPostHref(row, socialPosts),
       day: postDay(row.published_at),
       likers: it?.likers ?? [],
       commenters: it?.commenters ?? [],

@@ -16,10 +16,10 @@ import { PORTAL_DELIVERED_LINE } from './deliver-only-core'
 import { ITEM_STATUSES, type ItemStatus } from './workflow-core'
 import { LINK_LABELS, linkKindOf, type LinkKind } from './card-link-core'
 import {
-  MISSED_FOR_CLIENT, PORTAL_COLUMN, approveByOf, failedNetworks, liveNetworks, notesForFile, slotMissed,
+  MISSED_FOR_CLIENT, PORTAL_COLUMN, approveByOf, commentVisibleTo, failedNetworks, liveNetworks, slotMissed,
   type NowLike, type PostState,
 } from './post-stage-core'
-import { NETWORK_LABEL } from './publish-core'
+import { networkName } from './publish-core'
 import { normaliseSlides, type Slide } from './version-files-core'
 
 // ── the five columns, in the client's words ─────────────────────────────────
@@ -249,17 +249,6 @@ export function toPortalComment(clientName: string) {
 }
 
 // ── ordering and counting ───────────────────────────────────────────────────
-
-/** Within a column, the card waiting on the client comes first; then newest
- *  first, so the top of every column is the freshest thing in it. */
-export function sortForColumn<T extends { status: ItemStatus; updated_at: string }>(cards: T[]): T[] {
-  return [...cards].sort((a, b) => {
-    const aWait = a.status === 'client_review' ? 0 : 1
-    const bWait = b.status === 'client_review' ? 0 : 1
-    if (aWait !== bWait) return aWait - bWait
-    return b.updated_at.localeCompare(a.updated_at)
-  })
-}
 
 /** Cards by column — a shoot card carries its column already, a piece's
  *  follows from its status, and both count the same way. */
@@ -559,8 +548,6 @@ const firstName = (n: string | null | undefined) => String(n ?? '').trim().split
 const listNames = (names: string[]) =>
   names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 
-/** A network's own name ("Instagram", "LinkedIn"). */
-export const networkLabel = (platform: string) => NETWORK_LABEL[String(platform).toLowerCase()] ?? platform
 
 /** The portal home's column for a stage the client may see (SPEC §4.4: Review · Approved · Going out · Done). */
 function homeColumn(post: PostState): PortalColumnKey {
@@ -649,8 +636,8 @@ export function clientPostView(post: PostState, now: NowLike, w: ClientPostWords
       return null
     }
     case 'posted': {
-      const live = liveNetworks(post).map(networkLabel)
-      const failed = failedNetworks(post).map(networkLabel)
+      const live = liveNetworks(post).map(networkName)
+      const failed = failedNetworks(post).map(networkName)
       return view('posted', post.sent_version,
         live.length > 0 ? `Live on ${listNames(live)}` : 'Live',
         failed.length > 0 ? `Not out yet on ${listNames(failed)}.` : null, 'ink')
@@ -666,7 +653,7 @@ export function clientPostView(post: PostState, now: NowLike, w: ClientPostWords
 export function postLiveLinks(post: Pick<PostState, 'outcomes'>): { platform: string; network: string; url: string }[] {
   return Object.entries(post.outcomes)
     .filter(([, o]) => (o.status === 'published' || o.status === 'duplicate') && !!o.url && /^https:\/\//i.test(o.url))
-    .map(([platform, o]) => ({ platform, network: networkLabel(platform), url: o.url! }))
+    .map(([platform, o]) => ({ platform, network: networkName(platform), url: o.url! }))
 }
 
 /** When it went out: the earliest network's time, else the booked time. */
@@ -829,7 +816,7 @@ type NoteRow = {
  */
 export function clientPostNotes(rows: readonly NoteRow[], postId: string, version: number | null, clientName: string): PortalPostNote[] {
   return rows
-    .filter(r => r.post_id === postId && r.visibility === 'client' && (version == null || r.version == null || r.version === version))
+    .filter(r => r.post_id === postId && commentVisibleTo(r, 'client') && (version == null || r.version == null || r.version === version))
     .map(r => {
       const fromTeam = String(r.author_role ?? 'client') !== 'client'
       const name = String(r.author_name ?? '').trim()
@@ -843,11 +830,6 @@ export function clientPostNotes(rows: readonly NoteRow[], postId: string, versio
       }
     })
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
-}
-
-/** The notes on one file — the post-stage rule, so a reorder cannot move a note. */
-export function notesOnFile(notes: readonly PortalPostNote[], fileUrl: string): PortalPostNote[] {
-  return notesForFile(notes, fileUrl, null)
 }
 
 /** May the client leave a note on this file of this post? Only while it is theirs to answer, only on a file it has. */

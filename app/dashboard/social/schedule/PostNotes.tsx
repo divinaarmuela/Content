@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 import {
   COMMENT_VISIBILITY_LABEL, DEFAULT_COMMENT_VISIBILITY, type CommentVisibility,
 } from '@/app/lib/post-stage-core'
-import { noteCounts, notesAt, type NoteInput, type PostNote } from '@/app/lib/post-window-core'
+import { noteCounts, type NoteInput, type PostNote } from '@/app/lib/post-window-core'
+import { notesForFile } from '@/app/lib/post-stage-core'
 import type { Slide } from '@/app/lib/version-files-core'
 import { Thumb } from './tiles'
 
@@ -36,7 +37,7 @@ export default function PostNotes({ slides, notes, version, onAdd, className }: 
   const [problem, setProblem] = useState<string | null>(null)
   const counts = useMemo(() => noteCounts(notes), [notes])
   const place = at && slides.some(s => s.url === at) ? at : null
-  const shown = notesAt(notes, place, thread)
+  const shown = notesForFile(notes, place, { thread })
   const index = place ? slides.findIndex(s => s.url === place) : -1
 
   const add = async () => {

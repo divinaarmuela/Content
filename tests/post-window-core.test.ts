@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  answerProblem, applyInstagramChoice, bodyEditable, buildActRequest, clientRecipients, defaultPostTime,
-  defaultRecipients, draftPostsOf, footerButtons, frozenCopyOf, hourIsPast, instagramChoices, instagramCounter,
-  minuteIsPast, minuteOptions, notesAt, noteCounts, noteVersionOf, nowChip, parseNoteInput, pressAction,
+  answerProblem, applyInstagramChoice, bodyEditable, buildActRequest, defaultPostTime,
+  draftPostsOf, footerButtons, frozenCopyOf, hourIsPast, instagramChoices, instagramCounter,
+  minuteIsPast, minuteOptions, noteCounts, noteVersionOf, nowChip, parseNoteInput, pressAction,
   questionFor, readPostNotes, STAYS_OPEN, timeHint, unsavedPost, windowHeader, withWorkingCopy, workingCopyOf,
   type PostWindowApi, type WorkingCopy,
 } from '@/app/lib/post-window-core'
 import {
-  compositionProblems, postActions, ROW_OF, TIME_TOO_SOON, TIME_TOO_SOON_OR_NOW,
+  compositionProblems, notesForFile, postActions, ROW_OF,
   type AccountRef, type PostHat, type PostState,
 } from '@/app/lib/post-stage-core'
+import { TIME_TOO_SOON, TIME_TOO_SOON_OR_NOW } from '@/app/lib/social-schedule-core'
 import type { PostActRequest, PostActResponse } from '@/app/lib/post-act-contract'
 import { splitClock } from '@/app/lib/schedule-compose-core'
 import type { Slide } from '@/app/lib/version-files-core'
@@ -263,9 +264,9 @@ describe('notes are per file, in two threads, Team by default (decision 9)', () 
 
   it('pins a note to the FILE, so moving the pictures cannot move it (audit P10)', () => {
     const notes = readPostNotes(rows)
-    expect(notesAt(notes, slide(2).url, 'team').map(n => n.id)).toEqual(['n3', 'n1'])
-    expect(notesAt(notes, null, 'client').map(n => n.id)).toEqual(['n2'])
-    expect(notesAt(notes, null, 'team')).toEqual([])
+    expect(notesForFile(notes, slide(2).url, { thread: 'team' }).map(n => n.id)).toEqual(['n3', 'n1'])
+    expect(notesForFile(notes, null, { thread: 'client' }).map(n => n.id)).toEqual(['n2'])
+    expect(notesForFile(notes, null, { thread: 'team' })).toEqual([])
     expect(noteCounts(notes).get(slide(2).url)).toBe(2)
   })
 
@@ -287,18 +288,6 @@ describe('notes are per file, in two threads, Team by default (decision 9)', () 
 })
 
 describe('the rest of the window\'s small rules', () => {
-  it('client recipients: primary people first, each address once, the client\'s own email as a fallback', () => {
-    const list = clientRecipients({ email: 'owner@cafe.test', contact_name: 'Owner' }, [
-      { email: 'b@cafe.test', name: 'B', is_primary: false },
-      { email: 'a@cafe.test', name: 'A', is_primary: true },
-      { email: 'A@cafe.test', name: 'A again', is_primary: false },
-      { email: 'not-an-email', name: 'X' },
-    ])
-    expect(list.map(r => r.email)).toEqual(['a@cafe.test', 'b@cafe.test', 'owner@cafe.test'])
-    expect(defaultRecipients(list)).toEqual(['a@cafe.test'])
-    expect(defaultRecipients(clientRecipients({ email: 'owner@cafe.test' }, []))).toEqual(['owner@cafe.test'])
-  })
-
   it('an edit from the week toolbar lands only on a DRAFT post of that piece (audit S10)', () => {
     const posts = [
       { id: 'cancelled', item_id: 'i1', stage: 'cancelled' },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  analyticsPostHref,
   buildPeople, csvFilename, dayOfInstant, emptyLine, firstDirFor, foldTouches, followedWordsFor,
   fromUsWords, inboxPersonHref, inPeriod, instagramProfileHref, likelyFromUs, matchesPerson,
   nextTouch, peopleCounts, peopleCsv, reachedOutWords, sinceDay, sortPeople, touchesFromComments,
@@ -349,5 +350,20 @@ describe('reading the Inbox’s own answers', () => {
     })
     expect(rows[0].reached_out_on).toBe('2026-09-06')
     expect(rows[0].reached_out_how).toBe('both')
+  })
+})
+
+describe('B3: which post page a post_analytics row links to', () => {
+  const row = { publish_job_id: 'job-2', item_id: 'item-1' }
+  it('the post whose BOOKING holds the job — what the engine writes, not the dropped publish_job_ids', () => {
+    const posts = [
+      { id: 'p-old', item_id: 'item-1', booking: { job_ids: ['job-1'] } },
+      { id: 'p-new', item_id: 'item-1', booking: { job_ids: ['job-2'] } },
+    ]
+    expect(analyticsPostHref(row, posts)).toBe('/dashboard/social/posts/p-new')
+  })
+  it('the only post of the card when no booking names the job; nothing when the card has several', () => {
+    expect(analyticsPostHref(row, [{ id: 'p1', item_id: 'item-1', booking: null }])).toBe('/dashboard/social/posts/p1')
+    expect(analyticsPostHref(row, [{ id: 'a', item_id: 'item-1' }, { id: 'b', item_id: 'item-1' }])).toBeNull()
   })
 })

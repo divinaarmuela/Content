@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import { table } from '@/lib/db'
 import type { Row } from '@/lib/db-types'
+import { TIME_GONE } from '@/app/lib/post-stage-core'
 
 /**
  * The Schedule page's server, on the real `@/lib/db` over an in-memory Realtime Database: create a post,
@@ -59,7 +60,6 @@ vi.mock('../app/inngest/client', () => ({ inngest: { send: vi.fn(async () => ({}
 
 const schedule = await import('../app/api/social/schedule/route')
 const one = await import('../app/api/social/schedule/[id]/route')
-const move = await import('../app/api/social/schedule/[id]/reschedule/route')
 const actRoute = await import('../app/api/posts/[id]/act/route')
 const notesRoute = await import('../app/api/social/schedule/notes/route')
 const suggested = await import('../app/api/social/schedule/suggested/route')
@@ -160,9 +160,10 @@ const act = async (id: string, action: string, extra: Record<string, unknown> = 
     body: JSON.stringify({ action, expect_rev: row(id)?.rev ?? 0, version: row(id)?.sent_version ?? undefined, ...extra }),
   }), params(id)))
 
-const moveTo = (id: string, at: string) => json(
-  move.POST(new Request('https://x.test/reschedule', { method: 'POST', body: JSON.stringify({ at }) }), params(id)))
-const bin = (id: string) => json(one.DELETE(new Request('https://x.test/x', { method: 'DELETE' }), params(id)))
+/** a new time, as the calendar's drag sends it: Change time on the act route */
+const moveTo = (id: string, at: string) => act(id, 'change_time', { scheduled_for: at })
+/** the bin, as the List's row sends it: the post's own danger move, confirmed */
+const bin = (id: string, action: 'cancel' | 'delete_draft' = 'cancel') => act(id, action, { confirm: true })
 const save = (id: string, body: Record<string, unknown>) => json(
   one.PATCH(new Request('https://x.test/post', { method: 'PATCH', body: JSON.stringify(body) }), params(id)))
 
@@ -246,18 +247,12 @@ describe('a planned post, end to end', () => {
     expect(jobs().every(j => j.status === 'cancelled')).toBe(true)
   })
 
-  it('moves a draft with one write, and never onto a time that has gone', async () => {
-    const id = (await create()).body.post.id as string
-    const later = IN_THREE_DAYS()
-    const moved = await moveTo(id, later)
-    expect(moved.status).toBe(200)
-    expect(row(id).scheduled_for).toBe(later)
-    expect(row(id).stage).toBe('draft')
-    expect(jobs()).toHaveLength(0)
-
+  it('never moves a post onto a time that has gone', async () => {
+    const id = await readyPost()
     const past = await moveTo(id, new Date(Date.now() - 3600_000).toISOString())
     expect(past.status).toBe(409)
-    expect(past.body.error).toBe('That time has already gone — pick a later one')
+    expect(past.body.reason).toBe(TIME_GONE)
+    expect(row(id).stage).toBe('ready')
   })
 
   it('keeps the approval when only the time moves (SPEC T13)', async () => {
@@ -267,10 +262,11 @@ describe('a planned post, end to end', () => {
     expect(moved.status, JSON.stringify(moved.body)).toBe(200)
     expect(moved.body.post.stage).toBe('ready')
     expect(moved.body.post.approval.version).toBe(moved.body.post.sent_version)
-    // …a time-only PATCH does the same
+    // a save is for a draft's working copy only: a new time on an approved post is Change time, never a save
     const again = await save(id, { scheduled_for: IN_TWO_DAYS() })
-    expect(again.status, JSON.stringify(again.body)).toBe(200)
-    expect(row(id).stage).toBe('ready')
+    expect(again.status).toBe(409)
+    expect(String(again.body.error)).toMatch(/Press Edit/)
+    expect(row(id).scheduled_for).toBe(later)
   })
 
   it('refuses to change the words of a post that was sent — press Edit first', async () => {
@@ -288,7 +284,7 @@ describe('a planned post, end to end', () => {
 
   it('the bin deletes a draft that was never sent', async () => {
     const id = (await create()).body.post.id as string
-    const gone = await bin(id)
+    const gone = await bin(id, 'delete_draft')
     expect(gone.status).toBe(200)
     expect(gone.body.stage).toBe('deleted')
     expect(row(id)).toBeUndefined()
@@ -567,10 +563,10 @@ describe('the calendar reads', () => {
   })
 
   it('answers a time it cannot read with a bad request, not a conflict', async () => {
-    const id = (await create()).body.post.id as string
+    const id = await readyPost()
     const moved = await moveTo(id, 'next tuesday-ish')
     expect(moved.status).toBe(400)
-    expect(moved.body.error).toBe('That is not a time we can read — pick one from the calendar')
+    expect(moved.body.reason).toBe('That is not a time we can read — pick one from the calendar.')
   })
 
   it('suggests times, and admits when they are the starting list', async () => {

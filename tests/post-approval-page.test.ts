@@ -92,7 +92,11 @@ describe('buttons come from one list', () => {
 describe('one route, and the server’s words', () => {
   it('every press is one request to the act route, with the rev the page drew', () => {
     const acts = code(read(`${BOARD_DIR}/usePostActs.tsx`))
-    expect(acts).toMatch(/fetch\(postActPath\(post\.id\)/)
+    expect(acts).toMatch(/postAct\(post\.id, body\)/)
+    // ONE client call to the act route: the board, Schedule and the post window all use post-act-contract's postAct
+    for (const f of [`${BOARD_DIR}/usePostActs.tsx`, 'app/dashboard/social/schedule/page.tsx', 'app/dashboard/social/schedule/post-window-api.ts']) {
+      expect(read(f), f).not.toMatch(/fetch\(postActPath/)
+    }
     expect(acts).toMatch(/expect_rev: post\.rev/)
     // the version the person looked at rides with every versioned move
     expect(acts).toMatch(/row\.versioned && post\.sent_version != null \? \{ version: post\.sent_version \}/)

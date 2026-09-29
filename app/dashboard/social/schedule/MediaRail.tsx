@@ -6,7 +6,7 @@ import { ChevronDown, FolderOpen, Plus, Star } from 'lucide-react'
 import type { Slide } from '@/app/lib/version-files-core'
 import { cn } from '@/lib/utils'
 import { NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
-import { POST_APPROVAL_HREF } from '@/app/lib/schedule-stage-core'
+import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { Thumb } from './tiles'
 import type { RailMedia } from './useSchedulePosts'
 
@@ -363,7 +363,7 @@ export default function MediaRail({
       {/* POSTS STILL BEING APPROVED live on Post approval (the owner's
           decision 1): this page only counts them and says where they are */}
       <Link
-        href={POST_APPROVAL_HREF}
+        href={POST_APPROVAL_BOARD}
         className="flex min-h-11 flex-col items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
       >
         <span>Being approved · {waiting}</span>

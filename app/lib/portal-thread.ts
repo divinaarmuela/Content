@@ -15,9 +15,10 @@ import { isInternalKind } from './task-kind-core'
 import { clientStatusWord, planState, progressLine, shootStatusLabel } from './portal-words'
 import { slidesOf } from './version-files-core'
 import {
-  clientHadEdit, clientPostNotes, clientPostView, networkLabel, pieceReachedClient, postLiveLinks, postTypeLine,
+  clientHadEdit, clientPostNotes, clientPostView, pieceReachedClient, postLiveLinks, postTypeLine,
   instagramGrid, postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
 } from './portal-core'
+import { networkName } from './publish-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
 import { frozenFilesForClient } from './edit-freeze-core'
 import { belongsToPortal } from './portal-owner-core'
@@ -419,7 +420,7 @@ export async function getPortalPostPage(
   ])
   const accountById = new Map(accounts.map(a => [a.id, a]))
   const files = reviewFiles(frozen)
-  const networks = [...new Set(frozen.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkLabel(String(a.platform))] : [] }))]
+  const networks = [...new Set(frozen.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkName(String(a.platform))] : [] }))]
 
   let previews: ClientPreview[] = []
   try {

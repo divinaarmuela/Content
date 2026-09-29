@@ -1098,9 +1098,6 @@ export type ClockValue = {
   meridiem: Meridiem
 }
 
-/** Five-minute steps (29 Sep 2026, audit W9). The picker also keeps a post's
- *  own odd minute as a choice: post-window-core `minuteOptions`. */
-export const MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 export const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -1273,22 +1270,6 @@ export const PICKER_LIBRARY_HELP =
  * and its words are post-window-core's, read from `social_posts.stage`.
  */
 
-/**
- * Is the time on this post "now"?
- *
- * Kept for the server's old booking path (app/lib/social-schedule.ts, package
- * P1) until it moves onto the act route. The post window no longer reads it:
- * Post now is its own button, offered only for an approved post.
- */
-export function isPostingNow(
-  iso: string | null | undefined, now: number,
-): boolean {
-  if (!iso) return false
-  const at = Date.parse(iso)
-  if (!Number.isFinite(at)) return false
-  return at > now && at <= now + 2 * 60_000
-}
-
 /** "1 hour 30 minutes", "10 minutes", "45 seconds" — for a limit a person
  *  holds a file up against, so a half hour must not vanish. */
 export function durationWords(seconds: number): string {
@@ -1301,7 +1282,3 @@ export function durationWords(seconds: number): string {
   if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`)
   return parts.join(' ')
 }
-
-/** Kept for the server's old booking path (app/lib/social-schedule.ts, P1)
- *  until it moves onto the act route. The window does not read it. */
-export const QUALITY_GATE_LINE = 'Sent for quality check — the post can be scheduled once the quality reviewer passes it'

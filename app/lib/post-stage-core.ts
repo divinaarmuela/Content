@@ -47,15 +47,11 @@
  * also checks `rev`. This file never writes anything.
  */
 
-import { NETWORK_LABEL, PLATFORM_RULES } from './publish-core'
-import { MIN_LEAD_MS, validateComposition } from './social-schedule-core'
+import { PLATFORM_RULES, networkName } from './publish-core'
+import { MIN_LEAD_MS, TIME_TOO_SOON, TIME_TOO_SOON_OR_NOW, validateComposition } from './social-schedule-core'
 import { optionsFromExtras, readChannelExtras, type ChannelExtras } from './schedule-compose-core'
 import type { PostKind } from './publish-core'
 import type { Slide } from './version-files-core'
-
-// validateComposition is THE composition rule (media, channels, captions,
-// Instagram's ten, per-network slides). It is re-exported, not copied.
-export { validateComposition }
 
 /* ── stages ─────────────────────────────────────────────────────────────── */
 
@@ -153,9 +149,6 @@ export const PORTAL_COLUMN: Record<PostStage, PortalColumn | null> = {
   draft: null, quality_check: null, with_client: 'review',
   ready: 'approved', booked: 'going_out', posted: 'done', cancelled: null,
 }
-export const PORTAL_COLUMN_LABEL: Record<PortalColumn, string> = {
-  review: 'Waiting on you', approved: 'Approved', going_out: 'Going out', done: 'Done',
-}
 
 /* ── who: hats ──────────────────────────────────────────────────────────── */
 
@@ -172,7 +165,6 @@ export const PORTAL_COLUMN_LABEL: Record<PortalColumn, string> = {
  */
 export type PostHat = 'creator' | 'scheduler' | 'am' | 'qr' | 'sa' | 'client' | 'system'
 export const POST_HATS: readonly PostHat[] = ['creator', 'scheduler', 'am', 'qr', 'sa', 'client', 'system']
-export const TEAM_POST_HATS: readonly PostHat[] = ['creator', 'scheduler', 'am', 'qr', 'sa']
 
 export const HAT_WORDS: Record<PostHat, string> = {
   creator: 'the person who made it',
@@ -466,8 +458,6 @@ const ms = (t: NowLike | null | undefined): number => {
 }
 const iso = (t: NowLike): string => new Date(ms(t)).toISOString()
 
-/** A booked time must be at least this far away (the files are prepared first; posts go out on a ten-minute cycle). */
-export { MIN_LEAD_MS }
 /** The default "approve by": this long before the posting time, so the team can still book it after the client's yes. */
 export const APPROVE_BY_LEAD_MS = 2 * 60 * 60_000
 /** Reminders before the "approve by" time (decision 11). */
@@ -476,8 +466,6 @@ export const APPROVAL_REMINDERS_MS = { '24h': 24 * 60 * 60_000, '1h': 60 * 60_00
 export const TIME_MISSING = 'Pick a time — this post has none'
 export const TIME_GONE = 'That time has already gone — pick a later one'
 export const TIME_UNREADABLE = 'That is not a time we can read — pick one from the calendar'
-export const TIME_TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle.'
-export const TIME_TOO_SOON_OR_NOW = `${TIME_TOO_SOON} To send it straight away, choose Post now.`
 
 /** null when `when` is a bookable time (15 or more minutes ahead), else the sentence that says why not. */
 export function bookableTimeProblem(when: string | null | undefined, now: NowLike, postNowOffered = false): string | null {
@@ -532,13 +520,13 @@ export function slotMissed(post: Pick<PostState, 'stage' | 'client_send' | 'sche
   return false
 }
 
-/** The reminder times still ahead of `now`, before the client's approve-by time. */
-export function approvalReminderTimes(approveBy: string | null | undefined, now: NowLike): { kind: '24h' | '1h'; at: string }[] {
+/** The reminder moments before the client's approve-by time (decision 11), the latest first. */
+export function approvalReminderTimes(approveBy: string | null | undefined): { kind: keyof typeof APPROVAL_REMINDERS_MS; at: string }[] {
   const by = ms(approveBy)
   if (!Number.isFinite(by)) return []
-  return (Object.entries(APPROVAL_REMINDERS_MS) as ['24h' | '1h', number][])
+  return (Object.entries(APPROVAL_REMINDERS_MS) as [keyof typeof APPROVAL_REMINDERS_MS, number][])
     .map(([kind, lead]) => ({ kind, at: by - lead }))
-    .filter(r => r.at > ms(now))
+    .sort((a, b) => b.at - a.at)
     .map(r => ({ kind: r.kind, at: iso(r.at) }))
 }
 
@@ -547,7 +535,6 @@ export function approvalReminderTimes(approveBy: string | null | undefined, now:
 /** One connected channel, as the caller has loaded it. */
 export type AccountRef = { id: string; platform: string; live?: boolean | null; name?: string | null }
 
-const networkWord = (platform: string) => NETWORK_LABEL[String(platform).toLowerCase()] ?? platform
 
 /** Instagram's ceiling through the API (publish-core: 28 Sep 2026, fifteen sent, ten went out). */
 export const INSTAGRAM_MAX = PLATFORM_RULES.instagram.carousel
@@ -622,7 +609,7 @@ export function lostChannels(post: Pick<PostState, 'channels'>, accounts: readon
   const byId = new Map(accounts.map(a => [a.id, a]))
   return post.channels
     .filter(id => { const a = byId.get(id); return !a || a.live === false })
-    .map(id => { const a = byId.get(id); return a ? networkWord(a.platform) : 'A channel' })
+    .map(id => { const a = byId.get(id); return a ? networkName(a.platform) : 'A channel' })
 }
 
 /* ── outcomes, per network ──────────────────────────────────────────────── */
@@ -671,13 +658,22 @@ export function outcomeAction(outcomes: Record<string, NetworkOutcome>, targets:
 const joinNames = (names: string[]) =>
   names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 
+/** What a post is called — on a card and in an email: the edit it came from, else its caption's first line. */
+export function postTitle(post: Pick<PostState, 'caption'>, sourceTitle?: string | null): string {
+  const title = String(sourceTitle ?? '').trim()
+  if (title) return title
+  const line = String(post.caption ?? '').split('\n').map(l => l.trim()).find(Boolean) ?? ''
+  if (!line) return 'Untitled post'
+  return line.length > 60 ? `${line.slice(0, 57).trimEnd()}…` : line
+}
+
 /** "Posted on 3 of 4" — never "Did not go out" for a post that is live somewhere (audit S7). */
 export function postedWords(post: Pick<PostState, 'outcomes'>): string {
   const all = Object.keys(post.outcomes)
   const live = liveNetworks(post)
   const failed = failedNetworks(post)
   if (failed.length === 0) return STAGE_LABEL.posted
-  return `Posted on ${live.length} of ${all.length} — ${joinNames(failed.map(networkWord))} did not go out`
+  return `Posted on ${live.length} of ${all.length} — ${joinNames(failed.map(networkName))} did not go out`
 }
 
 /* ── the transition table ───────────────────────────────────────────────── */
@@ -1003,7 +999,7 @@ export function checkPostTransition(
     case 'unbook':
     case 'edit_booked': {
       const live = liveNow()
-      if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkWord))} — it cannot come off the schedule.`)
+      if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkName))} — it cannot come off the schedule.`)
       if (action === 'edit_booked' && input.confirm !== true) return refuse('confirm', 'This takes it off the schedule — confirm to go on.')
       break
     }
@@ -1013,7 +1009,7 @@ export function checkPostTransition(
         return refuse('use_delete', 'This draft was never sent — delete it instead.')
       }
       const live = liveNow()
-      if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkWord))} — it cannot be cancelled.`)
+      if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkName))} — it cannot be cancelled.`)
       if (input.confirm !== true) return refuse('confirm', 'Confirm to cancel this post.')
       break
     }
@@ -1336,7 +1332,7 @@ export function planPostTransition(
     case 'record_failed': {
       const merged = { ...post.outcomes, ...(input.outcomes ?? {}) }
       patch.outcomes = merged
-      const failed = failedNetworks({ outcomes: merged }).map(networkWord)
+      const failed = failedNetworks({ outcomes: merged }).map(networkName)
       if (act === 'record_posted') patch.problem = null
       if (act === 'record_partial') { patch.problem = `Did not go out on ${joinNames(failed)}.`; notify('schedulers') }
       if (act === 'record_failed') {
@@ -1593,9 +1589,18 @@ export function commentVisibleTo(comment: { visibility?: string | null }, reader
   return comment.visibility === 'client'
 }
 
-/** The notes pinned to one file of one version (by the file, not its place — a reorder cannot move a note). */
-export function notesForFile<T extends { file_url?: string | null; version?: number | null }>(
-  comments: readonly T[], fileUrl: string, version: number | null,
+/**
+ * THE NOTES FOR ONE PLACE ON A POST — the one filter the window, the portal
+ * and the rules share. `fileUrl` null is the whole post; a file is matched by
+ * its URL, never its slot, so a reorder cannot move a note onto another
+ * picture (audit P10). `thread` keeps one thread; `version` keeps that
+ * version's notes and the ones that name no version.
+ */
+export function notesForFile<T extends { file_url?: string | null; version?: number | null; visibility?: string | null }>(
+  comments: readonly T[], fileUrl: string | null, opts: { thread?: CommentVisibility; version?: number | null } = {},
 ): T[] {
-  return comments.filter(c => c.file_url === fileUrl && (version == null || c.version == null || c.version === version))
+  return comments.filter(c =>
+    (fileUrl == null ? c.file_url == null : c.file_url === fileUrl)
+    && (opts.thread == null || c.visibility === opts.thread)
+    && (opts.version == null || c.version == null || c.version === opts.version))
 }

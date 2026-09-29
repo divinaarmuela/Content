@@ -54,19 +54,6 @@ export const SOCIAL_POST_STATUSES = [
 ] as const
 export type SocialPostStatus = (typeof SOCIAL_POST_STATUSES)[number]
 
-/**
- * A post still BEING WRITTEN — the one the piece's next press should open
- * rather than start beside. Draft, waiting on approval, approved but not
- * yet booked, or sent back for changes. The server's one-open-post-per-
- * piece gate and the window's "open the existing one" read THIS list; they
- * used to keep their own, and the window's forgot `changes`, so a post sent
- * back for changes looked post-free to the window and the server refused
- * the second one it then started (the owner, 9 Sep 2026: "I can't post it").
- */
-export const OPEN_POST_STATUSES: readonly SocialPostStatus[] = ['draft', 'pending', 'approved', 'changes']
-export const isOpenPost = (status: unknown) =>
-  (OPEN_POST_STATUSES as readonly string[]).includes(String(status ?? ''))
-
 /** The tones the restyle draws a tile in. */
 export type TileTone = 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'muted' | 'red-outline'
 
@@ -74,7 +61,6 @@ export type TileTone = 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'muted' | 'r
 export type ScheduleItem = {
   status?: string | null
   content_type?: string | null
-  posting_approval_state?: unknown
   /** a files card's hand-in — when present, THIS is the approved media (24 Sep 2026) */
   final_files?: unknown
   edit_round?: unknown
@@ -103,8 +89,6 @@ export type ScheduleVersion = VersionLike & {
   id?: string
   version_number?: number | null
 }
-export type SchedulePost = { status?: string | null }
-export type ScheduleJob = { status?: string | null }
 
 /* ── eligibility ────────────────────────────────────────────────────────── */
 
@@ -229,9 +213,6 @@ export function clientSignsOffEveryPost(
 ): boolean {
   return client?.client_approval_required === true
 }
-
-/** The line under the button on such a client. */
-export const CLIENT_SIGNS_OFF_NOTE = 'This client signs off every post.'
 
 /**
  * THE PIECES CAME THROUGH THE BOARD AND WERE SIGNED OFF THERE.
@@ -493,23 +474,6 @@ export function coverForSlide(
 
 /* ── LEGACY: the tone of an old status word ─────────────────────────────── */
 
-const TONES: Record<SocialPostStatus, TileTone> = {
-  pending: 'amber',
-  changes: 'red',
-  approved: 'green',
-  scheduled: 'blue',
-  published: 'ink',
-  draft: 'muted',
-  failed: 'red-outline',
-  cancelled: 'muted',
-}
-
-/** LEGACY: the tone for an old status word. The Schedule page draws a tile in
- *  its stage's tone (`STAGE_TONE`); only the old post window still asks this. */
-export function tileTone(status: string | null | undefined): TileTone {
-  return TONES[String(status ?? '') as SocialPostStatus] ?? 'muted'
-}
-
 /* ── the week grid ──────────────────────────────────────────────────────── */
 
 const DAY_MS = 86_400_000
@@ -726,33 +690,6 @@ export function monthCells(
       inMonth: d.getUTCMonth() + 1 === m && d.getUTCFullYear() === y,
     }
   })
-}
-
-/* ── moving a post ──────────────────────────────────────────────────────── */
-
-export type Reschedule =
-  | { ok: true; mode: 'move' | 'requeue' }
-  | { ok: false; reason: string }
-
-const NO_MOVE: Record<string, string> = {
-  published: 'This post has already gone out, so it cannot be moved',
-  failed: 'This post did not go out — start a new one at the time you want',
-  cancelled: 'This post was cancelled, so it cannot be moved',
-}
-
-/**
- * May this tile be dragged, and what does dropping it cost?
- *
- * 'move' is a write of `scheduled_for` and nothing more. 'requeue' means the
- * provider is already holding the post: the existing job has to be cancelled
- * and a new one queued, so the caller has to be ready for that to fail and to
- * snap the tile back. Anything finished does not move at all.
- */
-export function canReschedule(post: SchedulePost | null | undefined): Reschedule {
-  const status = String(post?.status ?? '')
-  if (status === 'scheduled') return { ok: true, mode: 'requeue' }
-  const stop = NO_MOVE[status]
-  return stop ? { ok: false, reason: stop } : { ok: true, mode: 'move' }
 }
 
 /* ── suggested times ────────────────────────────────────────────────────── */
@@ -1005,16 +942,6 @@ export function applySlideLimit(
 
 /* ── one tile, joined ───────────────────────────────────────────────────── */
 
-/** Only what the join reads off a `social_posts` row. */
-export type TilePost = {
-  item_id?: string | null
-  channels?: unknown
-  publish_job_ids?: unknown
-  scheduled_for?: string | null
-  status?: string | null
-}
-/** A `publish_jobs` row, as the join needs it: its id and its status. */
-export type TileJob = ScheduleJob & { id?: string | null }
 /** A `social_accounts` row, as the join needs it. */
 export type TileAccount = {
   id?: string | null
@@ -1027,28 +954,6 @@ export type TileAccount = {
 
 const asStrings = (v: unknown): string[] =>
   (Array.isArray(v) ? v : []).map(x => String(x ?? '')).filter(Boolean)
-
-/**
- * THIS POST'S jobs — matched only by the ids the post itself carries.
- *
- * Never by item. An item can carry a second post after the first was
- * cancelled, and matching by item makes the OLD post's cancelled job speak
- * for the new one: it reads "every job cancelled" and marks a brand-new
- * post `cancelled` without anybody cancelling it. The server
- * (`social-schedule.ts`'s `jobsOf`) matches the same way, so the calendar and
- * the API cannot tell a person two different stories about one post.
- */
-export function jobsForPost(
-  post: TilePost | null | undefined,
-  jobsById: ReadonlyMap<string, TileJob>,
-): TileJob[] {
-  const out: TileJob[] = []
-  for (const id of asStrings(post?.publish_job_ids)) {
-    const job = jobsById.get(id)
-    if (job) out.push(job)
-  }
-  return out
-}
 
 /**
  * The networks a post goes to.
@@ -1401,7 +1306,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     } else if (Number.isFinite(now) && when <= now) {
       problems.push('That time has already gone — pick a later one')
     } else if (Number.isFinite(now) && when > now + POST_NOW_WINDOW_MS && when < now + MIN_LEAD_MS) {
-      problems.push(TOO_SOON)
+      problems.push(TIME_TOO_SOON_OR_NOW)
     }
   }
 
@@ -1421,7 +1326,9 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
  */
 export const MIN_LEAD_MS = 15 * 60_000
 export const POST_NOW_WINDOW_MS = 2 * 60_000
-export const TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle. To send it straight away, choose Post now.'
+/** The one "too soon" sentence — the composition check, the post window and the engine all say it. */
+export const TIME_TOO_SOON = 'Pick a time at least 15 minutes away — the files are prepared first and posts go out on a ten-minute cycle.'
+export const TIME_TOO_SOON_OR_NOW = `${TIME_TOO_SOON} To send it straight away, choose Post now.`
 
 /**
  * WHEN ARE TWO POSTS THE SAME POST? (the owner, 15 Sep 2026: "the Story
@@ -1446,35 +1353,3 @@ export function samePostKey(
     .map(c => `${c}:${String(perChannel?.[c]?.kind ?? '')}`).join(',')
   return `${files}#${where}`
 }
-
-/* ── the words of a booked post ─────────────────────────────────────────── */
-
-/**
- * WHAT A CHANGE TO A BOOKED POST IS (Raina, 22 Sep 2026: "I wanted to edit the
- * caption of a scheduled post but I'm not able to — do I have to discard it
- * first and create a new one?"). The words may change: the booking is pulled
- * back and made again with the new words, same time, same channels. The
- * media, the channels, their settings and the time may not — those are the
- * cancel-and-remake the server has always asked for. Nothing changed is
- * nothing to do.
- */
-export type BookedChange = 'none' | 'caption' | 'settings' | 'other'
-export function bookedChange(
-  post: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
-  input: { caption?: string | null; slides?: unknown; channels?: unknown; per_channel?: unknown; scheduled_for?: string | null },
-): BookedChange {
-  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
-  const other = (input.slides !== undefined && !same(input.slides, post.slides))
-    || (input.channels !== undefined && !same(input.channels, post.channels))
-    || (input.scheduled_for !== undefined && String(input.scheduled_for ?? '') !== String(post.scheduled_for ?? ''))
-  if (other) return 'other'
-  // A CHANNEL'S OWN SETTINGS — the cover photo above all (the owner, 22 Sep 2026: "cover photo, like
-  // Instagram — same thing") — are re-booked the same way as the words
-  if (input.per_channel !== undefined && !same(input.per_channel, post.per_channel)) return 'settings'
-  const words = input.caption === undefined ? null : String(input.caption ?? '')
-  return words !== null && words !== String(post.caption ?? '') ? 'caption' : 'none'
-}
-
-/** how soon before it goes out the words may still change: the same minute the composer calls "now" */
-export const REWORD_LEAD_MS = 60_000
-export const TOO_LATE_TO_REWORD = 'It goes out within the minute — too late to change the words. Cancel it instead.'

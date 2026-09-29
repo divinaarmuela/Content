@@ -6,7 +6,8 @@ import { Check, ExternalLink, MessageCircle, MessageSquare } from 'lucide-react'
 import SlideCarousel from '../media/SlideCarousel'
 import PostPreviewPane from '../social/PostPreview'
 import type { PortalPostPage } from '../../lib/portal-thread'
-import { notesOnFile, type PortalPostNote } from '../../lib/portal-core'
+import type { PortalPostNote } from '../../lib/portal-core'
+import { notesForFile } from '../../lib/post-stage-core'
 
 const NAME_KEY = 'mdm-portal-name'
 
@@ -45,7 +46,7 @@ export default function PortalPostReview({ token, data, accent }: {
   const total = files.length
   const file = files[index] ?? null
   const what = file?.type === 'video' ? 'video' : 'photo'
-  const onThis = useMemo(() => (file ? notesOnFile(notes, file.url) : []), [notes, file])
+  const onThis = useMemo(() => (file ? notesForFile(notes, file.url) : []), [notes, file])
   const general = useMemo(() => notes.filter(n => !n.file_url), [notes])
   const countOn = useMemo(() => {
     const at = new Map<string, number>()

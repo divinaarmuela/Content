@@ -248,7 +248,7 @@ describe('the audit\'s window fixes are in the source (SPEC §8.3)', () => {
   it('every press goes through the act route (the P0 contract), with the server injectable for tests', () => {
     expect(src).toMatch(/pressAction\(api,/)
     const api = readFileSync('app/dashboard/social/schedule/post-window-api.ts', 'utf8')
-    expect(api).toMatch(/postActPath\(postId\)/)
+    expect(api).toMatch(/act: postAct,/)
   })
 
   it('W3/W9: the time picker has a Now chip, five-minute steps with the odd minute kept, and no 6 pm default', () => {

@@ -42,10 +42,11 @@ import {
   brandLogoUrl, cardLine, clientPostView, isClientFacing, kindWord, linkFor, pieceFace, pieceReachedClient,
   portalActions, portalCardTone,
   portalColumnFor, portalSections, postLiveLinks, postTypeLine, postedAt, postsMissedByClient, postsWaitingOnClient,
-  readFrozenPost, reviewFiles, shootDayLabel, shootStanding, toPortalComment, networkLabel,
+  readFrozenPost, reviewFiles, shootDayLabel, shootStanding, toPortalComment,
   type ClientPostState, type ClientPostView, type FrozenPost, type PortalActions, type PortalCardComment, type PortalCardTone,
   type PortalColumnKey, type PortalLink,
 } from './portal-core'
+import { networkName } from './publish-core'
 import { canvasCardLabel, findCanvasCard } from './canvas-comments-core'
 import { belongsToPortal, portalName, type PortalScope } from './portal-owner-core'
 import { portalOwnerByToken } from './portal-owner'
@@ -668,7 +669,7 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     return String(item?.title ?? '').trim() || 'Your post'
   }
   const networksOf = (v: FrozenPost) =>
-    [...new Set(v.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkLabel(String(a.platform))] : [] }))]
+    [...new Set(v.channels.flatMap(id => { const a = accountById.get(id); return a ? [networkName(String(a.platform))] : [] }))]
   const coverOf = (v: FrozenPost) => {
     const f = reviewFiles(v)[0]
     return f ? { url: f.url, type: f.type === 'video' ? 'video' as const : 'image' as const } : null
@@ -963,8 +964,8 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
       },
     }
   })
-  // the card waiting on the client first, then newest first — the same order
-  // sortForColumn gives pieces, said in terms a shoot card shares
+  // the card waiting on the client first, then newest first, in terms a piece,
+  // a post and a shoot card all share
   const cards = [...workCards, ...postCards, ...shootCards].sort((a, b) =>
     (Number(b.actions.approve) - Number(a.actions.approve)) || b.updated_at.localeCompare(a.updated_at))
 

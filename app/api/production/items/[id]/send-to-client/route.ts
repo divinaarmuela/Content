@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { Client, ClientContact, ContentItem, TeamUser } from '@/lib/db-types'
+import type { Client, ClientContact, ContentItem } from '@/lib/db-types'
 import { AuthzError, authzErrorResponse, requireRole } from '../../../../../lib/authz'
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity } from '../../../../../lib/workflow'
 import { notify, renderEmail, escapeHtml } from '../../../../../lib/mailer'
 import { DASHBOARD_URL } from '../../../../../lib/app-url'
 import { parsePostActRequest, refusalStatus } from '../../../../../lib/post-act-contract'
-import { actOnPost, clientRecipients, loadPostState, pickRecipients } from '../../../../../lib/post-stage'
+import { actOnPost, loadPostState } from '../../../../../lib/post-stage'
+import { clientFacingSender } from '../../../../../lib/post-notify'
+import { clientRecipients, pickRecipients } from '../../../../../lib/client-recipients-core'
 
 /**
  * SEND TO CLIENT — two different things, kept apart (the posting rebuild, 29 Sep 2026).
@@ -41,18 +43,6 @@ function sendOutcomeWords(results: readonly { email: string; result: string }[])
   if (sent.length === 0) return `Nothing was sent — ${failed.join(', ')} could not be emailed. Try again, or send them the link yourself.`
   return `Emailed ${sent.join(', ')} the link to view and approve it.`
     + (failed.length ? ` Could not email ${failed.join(', ')} — send them the link yourself.` : '')
-}
-
-/**
- * WHO THE CLIENT HEARS FROM (the owner, 28 Sep 2026: "it should be from Divina"). CLIENT_EMAIL_SENDER_ID
- * overrides; an inactive sender falls back to whoever pressed Send.
- */
-const CLIENT_EMAIL_SENDER_ID = process.env.CLIENT_EMAIL_SENDER_ID || '54926a48-335e-46e9-a080-df8c1ad42ac9'
-
-async function clientFacingSender(fallback: { name?: string | null; email: string }): Promise<{ name: string; email: string }> {
-  const u = await table<TeamUser>('team_users').get(CLIENT_EMAIL_SENDER_ID).catch(() => null)
-  if (u && u.active_status && u.email) return { name: u.name || u.email, email: u.email }
-  return { name: fallback.name || fallback.email, email: fallback.email }
 }
 
 async function context(id: string) {

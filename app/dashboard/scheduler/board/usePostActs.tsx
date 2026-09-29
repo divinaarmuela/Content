@@ -12,8 +12,9 @@ import {
   AGREED_VIA, AGREED_VIA_WORDS, APPROVAL_STEPS, APPROVAL_STEPS_LABEL, ROW_OF, approvalStepsOf, defaultApproveBy,
   type AgreedVia, type ApprovalSteps, type OfferedAction, type PostState,
 } from '../../../lib/post-stage-core'
-import { postActPath, type PostActRequest, type PostActResponse } from '../../../lib/post-act-contract'
-import { defaultPicks, postWindowHref, type SendChoice } from '../../../lib/post-board-core'
+import { postAct, type PostActRequest } from '../../../lib/post-act-contract'
+import { postWindowHref } from '../../../lib/post-board-core'
+import { defaultRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { DEFAULT_TZ, fromZonedInput, toZonedInput } from '../../../lib/timezone-core'
 
@@ -37,8 +38,8 @@ import { DEFAULT_TZ, fromZonedInput, toZonedInput } from '../../../lib/timezone-
 export type Assignee = { id: string; name: string }
 
 export type PostActDeps = {
-  /** the client's addresses for a send (`sendChoices`) */
-  choicesFor: (post: PostState) => SendChoice[]
+  /** the client's addresses for a send (`clientRecipients`) */
+  choicesFor: (post: PostState) => ClientRecipient[]
   /** people who can be asked to make a change */
   assignees: readonly Assignee[]
   /** the name of a person, for the dialog's default */
@@ -80,11 +81,8 @@ export function usePostActs(deps: PostActDeps): {
     setBusyId(post.id)
     setErrors(e => { const { [post.id]: _gone, ...rest } = e; return rest })
     try {
-      const res = await fetch(postActPath(post.id), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      const json = await res.json().catch(() => null) as PostActResponse | { error?: string } | null
-      if (json && 'ok' in json && json.ok) {
+      const json = await postAct(post.id, body)
+      if (json.ok) {
         // back to Draft to be changed: the change is made in the post window
         const reopen = (action.action === 'edit' || action.action === 'rebook') && json.stage === 'draft'
         if (json.link) {
@@ -98,19 +96,9 @@ export function usePostActs(deps: PostActDeps): {
         } : undefined)
         return null
       }
-      const reason = json && 'reason' in json && json.reason
-        ? json.reason
-        : json && 'error' in json && json.error ? String(json.error)
-        : res.status === 404 ? 'That post is not there any more — it may have been deleted.'
-        : 'That did not go through. Nothing has changed — try again.'
-      setErrors(e => ({ ...e, [post.id]: reason }))
-      toast.error(reason)
-      return reason
-    } catch {
-      const reason = 'Could not reach the server. Nothing has changed — try again.'
-      setErrors(e => ({ ...e, [post.id]: reason }))
-      toast.error(reason)
-      return reason
+      setErrors(e => ({ ...e, [post.id]: json.reason }))
+      toast.error(json.reason)
+      return json.reason
     } finally {
       setBusyId(null)
     }
@@ -204,7 +192,7 @@ function PostActDialog({ pending, busy, error, deps, onClose, onSubmit }: {
     setNote('')
     setAssignTo(p.created_by ?? '')
     setAgreed('')
-    setPicks(pending.action.needs.includes('recipients') ? defaultPicks(choicesFor(p)) : [])
+    setPicks(pending.action.needs.includes('recipients') ? defaultRecipients(choicesFor(p)) : [])
     setWhen(p.scheduled_for ? toZonedInput(p.scheduled_for, p.timezone || DEFAULT_TZ) : '')
     // what the card's chip says: this post's own choice, else the client's default — never "team" by guess
     setSteps(approvalStepsOf(p, deps.clientOf?.(p) ?? null))

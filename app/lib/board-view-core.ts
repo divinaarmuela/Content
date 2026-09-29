@@ -31,6 +31,7 @@ import type { Role } from './identity-core'
 import { STAGE_LABEL, STAGE_TONE, hatsFor, waitingOnViewer as postWaitingOnViewer, type NowLike, type PostState } from './post-stage-core'
 import { DEFAULT_TZ, dayKeyInZone } from './timezone-core'
 import { SCHEDULE_PAGE } from './page-access-core'
+import { POST_APPROVAL_BOARD } from './overview-links-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
 export type BoardViewCard = {
@@ -806,11 +807,6 @@ export type OverviewInput = {
   now?: NowLike
 }
 
-/** Post approval, opened on one lane. */
-export function postApprovalHref(lane?: 'draft' | 'quality_check' | 'with_client' | 'approved'): string {
-  return lane ? `/dashboard/scheduler?lane=${lane}` : '/dashboard/scheduler'
-}
-
 const count = (cards: readonly BoardViewCard[], pred: (c: BoardViewCard) => boolean) =>
   cards.filter(pred).length
 
@@ -834,7 +830,7 @@ export function overviewTiles(input: OverviewInput): OverviewTile[] {
   /** THE POSTS, on Post approval: what waits on this person, and what is out with somebody else */
   const postTile: OverviewTile = {
     key: 'posts', title: 'Posts to approve', tone: 'amber',
-    href: postApprovalHref(), actionLabel: 'Post approval',
+    href: POST_APPROVAL_BOARD, actionLabel: 'Post approval',
     stats: [
       { value: posts.filter(p => postWaitingOnViewer(p, { id: viewer.id, hats: hatsFor(viewer, p) }, now)).length, label: 'waiting on you' },
       { value: postsAt('quality_check').length, label: 'with the quality check' },
