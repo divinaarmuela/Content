@@ -71,11 +71,19 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 //                    claim(). Never migrated: it holds no history.
 //   booking_seats  — one row per (space, seat) holding the time ranges that
 //                    seat is spoken for, so no-overlap is one atomic write.
-//   social_posts   — a PLANNED post: the composition (chosen slides, caption,
-//                    channels, time) that has to exist BEFORE anything is
-//                    queued, because it sits in final-post approval first.
-//                    One post <-> one item; its approval IS the item's
-//                    posting_approval_state, never a second state machine.
+//   social_posts   — ONE POST, and its own stage (the posting rebuild, 29 Sep
+//                    2026: docs/posting-rebuild/SPEC.md §2.1 and
+//                    OWNER_DECISIONS.md). `stage` is the only source of truth
+//                    for where a post is; it is written only by
+//                    app/lib/post-stage.ts, and its rules are
+//                    app/lib/post-stage-core.ts. The edit card it came from
+//                    (`source_item_id`) is a source of media and nothing
+//                    more: the post never reads the card's status, and the
+//                    card's approval never moves the post.
+//   post_versions  — a FROZEN copy of a post, append-only, id `<post>_v<n>`.
+//   post_events    — every stage change, append-only, id `<post>_r<rev>`.
+//   post_comments  — notes on a post: per file/slide or on the whole post,
+//                    in the Team thread (default) or the Client thread.
 //   schedule_notes — a short note pinned to a day and time on the Schedule
 //                    calendar. Team-only; it never reaches a client or a
 //                    provider.
@@ -87,30 +95,141 @@ const GHOST_TABLES = {
   social_posts: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],
+    // LEGACY NAME for `source_item_id`, kept until the migration (P8) finishes
     ['item_id', col('string', false)],
     // a draft dragged onto the calendar before graphics are chosen has no
     // version yet; eligibility() is what refuses to SEND such a post
     ['version_id', col('string', true)],
     ['version_number', col('number', true)],
+    // THE WORKING COPY: slides, per_channel (per_channel[account].slides is a
+    //   network's own pictures — Instagram's ten beside LinkedIn's fourteen),
+    //   channels, caption, scheduled_for. Editable only in `draft`, and its time
+    //   only in `ready`. What a reviewer or the client sees is post_versions.
     ['slides', col('unknown', false, true, true)],
     ['caption', col('string', true)],
     ['per_channel', col('unknown', false, true, false)],
     ['channels', col('unknown', false, true, true)],
     ['scheduled_for', col('string', true)],
     ['timezone', col('string', false)],
-    ['status', col('string', false)],
-    ['publish_job_ids', col('unknown', false, true, true)],
+    // LEGACY (marked L below) — read only by the migration (P8), and removed by its
+    //   --drop-legacy pass. Nothing new reads or writes them: `status` was a second
+    //   answer to where a post is, and `approval_mode` recorded a route the post often
+    //   never took. Kept in their old places so the column order does not move.
+    ['status', col('string', false)],                          // L
+    ['publish_job_ids', col('unknown', false, true, true)],    // L → booking.job_ids
     ['created_by', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
-    ['sent_at', col('string', true)],
-    ['approved_at', col('string', true)],
-    ['approved_by', col('string', true)],
-    // 'client' = it went through the final-post approval; 'self' = an account
-    // manager (or super admin) cleared it themselves at send time, which the
-    // owner asked for on 3 Sep. Null on a post that has not been sent.
-    ['approval_mode', col('string', true)],
+    ['sent_at', col('string', true)],                          // L
+    ['approved_at', col('string', true)],                      // L
+    ['approved_by', col('string', true)],                      // L
+    ['approval_mode', col('string', true)],                    // L
     ['note', col('string', true)],
+    // ── the stage (SPEC §2.1; the rules are app/lib/post-stage-core.ts) ──
+    //   stage          draft | quality_check | with_client | ready | booked | posted | cancelled.
+    //                  Nullable only until the migration has run: a row without one is not shown.
+    //   rev            bumped on every write; every claim checks it
+    //   stage_at       when the post entered this stage — the "since" on a card
+    //   draft_version  the number the working copy gets when it is next frozen (starts at 1)
+    //   sent_version   the frozen version with the quality check or the client, or the one approved
+    //   approval_steps 'team' | 'team_then_client' for THIS post; null = the client's default
+    //                  (clients.client_approval_required: true means team then client)
+    //   approval       {version, by, hat, on_behalf_of_client, agreed_via, note, at}
+    //   qc_pass        {version, by, at}
+    //   changes_asked  {version, by, who: 'client'|'team', to, note, at} — `to` is a named person
+    //   client_send    {version, at, to[], via: 'email'|'link', approve_by, for_time} — only once
+    //                  something reached the client; cleared by any move out of with_client
+    //   last_client_send  the last client_send, kept after it is cleared (the portal's history)
+    //   booking        {job_ids[], pending, at, for_time}
+    //   outcomes       {[platform]: {status: published|failed|duplicate|scheduled, url, at, error}}
+    //   problem        a plain sentence: why it came back from booked, what did not go out
+    //   cancelled      {by, at, from_stage, reason}
+    //   assigned_to    the one person who has to act next, when it is one person
+    //   source_item_id the edit card the media came from — informational only
+    //   source_deleted that card was deleted; the post stays visible
+    ['stage', col('string', true)],
+    ['rev', col('number', true)],
+    ['stage_at', col('string', true)],
+    ['draft_version', col('number', true)],
+    ['sent_version', col('number', true)],
+    ['approval_steps', col('string', true)],
+    ['approval', col('unknown', true, true)],
+    ['qc_pass', col('unknown', true, true)],
+    ['changes_asked', col('unknown', true, true)],
+    ['client_send', col('unknown', true, true)],
+    ['last_client_send', col('unknown', true, true)],
+    ['booking', col('unknown', true, true)],
+    ['outcomes', col('unknown', true, true)],
+    ['problem', col('string', true)],
+    ['cancelled', col('unknown', true, true)],
+    ['assigned_to', col('string', true)],
+    ['source_item_id', col('string', true)],
+    ['source_deleted', col('boolean', true)],
+  ],
+  // post_versions — A FROZEN POST (SPEC §2.2). Written once, never changed:
+  //   id `<post_id>_v<n>`, claimed against a null current so the first writer
+  //   wins. A deep copy of the working copy at the moment it was sent to the
+  //   quality check or the client, or re-timed. File URLs are our own stored
+  //   copies, never a Drive link. `from_migration`: frozen by the migration,
+  //   not at a send — the portal says "Sent before versions were kept".
+  post_versions: [
+    ['id', col('string', false)],
+    ['post_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['n', col('number', false)],
+    ['slides', col('unknown', false, true, true)],
+    ['per_channel', col('unknown', false, true, false)],
+    ['channels', col('unknown', false, true, true)],
+    ['caption', col('string', true)],
+    ['scheduled_for', col('string', true)],
+    ['timezone', col('string', false)],
+    ['frozen_for', col('string', false)],   // quality_check | client | retime | migration
+    ['frozen_by', col('string', true)],
+    ['frozen_at', col('string', false)],
+    ['from_migration', col('boolean', true)],
+  ],
+  // post_events — EVERY STAGE CHANGE, append-only (SPEC §2.3). id
+  //   `<post_id>_r<rev>`: one event per rev, so a retried write cannot log
+  //   twice. History, "who asked" and the audit read from here, not from
+  //   workflow_activity.
+  post_events: [
+    ['id', col('string', false)],
+    ['post_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['rev', col('number', false)],
+    ['from', col('string', true)],
+    ['to', col('string', true)],
+    ['action', col('string', false)],
+    ['actor_id', col('string', true)],
+    ['hat', col('string', true)],
+    ['on_behalf_of_client', col('boolean', true)],
+    ['version', col('number', true)],
+    ['note', col('string', true)],
+    ['at', col('string', false)],
+  ],
+  // post_comments — NOTES ON A POST (SPEC §2.4, the owner: "comment is per
+  //   file"). Pinned to one file of one version (`file_url`, with the slide's
+  //   place at the time in `slide_index`), or to the whole post when both are
+  //   null. `visibility`: 'team' (the default, never shown to the client) or
+  //   'client'. A change asked for names who makes it (`assigned_to`). Never
+  //   read from item_comments, which belong to the edit.
+  post_comments: [
+    ['id', col('string', false)],
+    ['post_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['version', col('number', true)],
+    ['file_url', col('string', true)],
+    ['slide_index', col('number', true)],
+    ['visibility', col('string', false)],   // team | client
+    ['author_id', col('string', true)],
+    ['author_name', col('string', false)],
+    ['author_role', col('string', false)],  // client | scheduler | general | quality_checker | account_manager | super_admin
+    ['body', col('string', false)],
+    ['assigned_to', col('string', true)],
+    ['resolved_at', col('string', true)],
+    ['resolved_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
   ],
   // todos — one thing for one person to do (17 Sep 2026, the owner: "a to-dos
   //   page for every role"). Who sees which row is decided in
@@ -594,7 +713,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
