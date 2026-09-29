@@ -191,7 +191,12 @@ export async function queuePublishJob(input: {
       publishLockKey(input.contentItemId, mediaKeyOf([...mine])), jobId,
       async holder => {
         const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })
-        return !!held && LIVE_JOB_STATUSES.includes(held.status)
+        // A HOLDER THAT IS READ AND FINISHED FREES THE LOCK AT ANY AGE (live test, 29 Sep 2026): Change time on a
+        // booked post pulls its job and books again seconds later, and a young lock would not believe a plain
+        // `false` — "already queued to publish", the moved post left unbooked. Only a holder not written yet
+        // (no row) keeps the young lock's benefit of the doubt.
+        if (!held) return false
+        return LIVE_JOB_STATUSES.includes(held.status) ? true : 'free'
       },
     )
     if (!gate.ok) return { error: 'This content item is already queued to publish' }

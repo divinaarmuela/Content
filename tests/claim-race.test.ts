@@ -87,6 +87,29 @@ describe('claim locks', () => {
     const second = await takeClaimLock('thing__3', 'holder-b', async () => false)
     expect(second).toEqual({ ok: false, holder: 'holder-a' })
   })
+
+  it('a young lock whose holder was READ and is finished is free — moving a booked post (live test, 29 Sep 2026)', async () => {
+    fake = seedDb({})
+    const { takeClaimLock } = await import('../app/lib/claim-lock')
+    await takeClaimLock('thing__4', 'old-job')
+    // seconds later the old job is cancelled and the post books again: the holder's row says it is done
+    const again = await takeClaimLock('thing__4', 'new-job', async () => 'free')
+    expect(again).toEqual({ ok: true })
+    // and only one of two racing re-bookings wins it
+    fake.tree().mdm.tables.claim_locks.thing__5 = { id: 'thing__5', holder: 'old', at: new Date().toISOString() }
+    const [a, b] = await Promise.all([
+      takeClaimLock('thing__5', 'job-a', async () => 'free'),
+      takeClaimLock('thing__5', 'job-b', async () => 'free'),
+    ])
+    expect([a, b].filter(r => r.ok)).toHaveLength(1)
+  })
+
+  it('publish reads the holder fresh and answers free for a finished job, false only for a job not written yet', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/lib/publish.ts', 'utf8')
+    expect(src).toContain("if (!held) return false")
+    expect(src).toContain("return LIVE_JOB_STATUSES.includes(held.status) ? true : 'free'")
+  })
 })
 
 describe('one delivery per (provider, event id)', () => {
