@@ -59,10 +59,14 @@ export function clientRecipients(
  * business address; with no business address, the first on the list.
  */
 export function defaultRecipients(list: readonly ClientRecipient[]): string[] {
-  const primary = list.filter(r => r.primary).map(r => r.email)
-  if (primary.length > 0) return primary
+  // THE CLIENT'S OWN ADDRESS, ticked by itself (the owner, 28 Sep 2026: "Justin is Justin and Jordan is Jordan — it
+  // sends to them individually"): Justin Engelke's record lists Jordan as its main contact, so ticking every "main"
+  // person emailed Jordan about Justin's post. No business address: the first main contact; else the first. Anyone
+  // else is one tick away. One rule for every send dialog.
   const business = list.find(r => r.business)
   if (business) return [business.email]
+  const primary = list.find(r => r.primary)
+  if (primary) return [primary.email]
   return list.slice(0, 1).map(r => r.email)
 }
 

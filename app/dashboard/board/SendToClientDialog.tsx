@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Link2, Mail, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import type { ClientRecipient } from '../../lib/client-recipients-core'
+import { defaultRecipients, type ClientRecipient } from '../../lib/client-recipients-core'
 
 /**
  * SEND TO CLIENT — confirm who gets it, then send (the owner, 28 Sep 2026: "at With client it should be sent to the
@@ -33,12 +33,8 @@ export default function SendToClientDialog({ itemId, onClose }: { itemId: string
         const list = (j.recipients ?? []) as ClientRecipient[]
         setRecipients(list)
         setClientName(String(j.client_name ?? ''))
-        // THE CLIENT'S OWN ADDRESS, ticked by itself (the owner, 28 Sep 2026: "Justin is Justin and Jordan is Jordan — it
-        // sends to them individually"): Justin Engelke's record lists Jordan as its main contact, so ticking every
-        // "main" person emailed Jordan about Justin's post. Anyone else is one tick away.
-        const own = list.filter(x => x.business)
-        const main = list.filter(x => x.primary)
-        setPicked(new Set((own.length ? own : main.length ? main.slice(0, 1) : list.slice(0, 1)).map(x => x.email)))
+        // the client's own address, ticked by itself — the one rule, with the owner's reason (client-recipients-core)
+        setPicked(new Set(defaultRecipients(list)))
         if (!j.has_portal) setProblem('This client has no portal link yet — make one on the client first')
         else if (!j.sendable) setProblem('This can be sent once it is With client')
       })

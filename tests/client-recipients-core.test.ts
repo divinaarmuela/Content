@@ -38,28 +38,30 @@ describe('the client\'s addresses', () => {
   })
 })
 
-describe('B2: who is ticked when a send opens — one rule for Post approval and the post window', () => {
-  const business = { name: 'Cafe', email: 'owner@cafe.test' }
-  it('the primary contact(s)', () => {
+describe("B2: who is ticked when a send opens — the owner's rule, one for every send dialog", () => {
+  const business = { name: 'Justin Engelke', email: 'justin@engelke.test' }
+  it("the client's own address by itself, even when someone else is the main contact (the owner, 28 Sep 2026: \"Justin is Justin and Jordan is Jordan\")", () => {
     const list = clientRecipients(business, [
+      { name: 'Jordan Wilson', email: 'jordan@wilson.test', is_primary: true },
+      { name: 'C', email: 'c@engelke.test' },
+    ])
+    expect(defaultRecipients(list)).toEqual(['justin@engelke.test'])
+  })
+  it('no business address: the first main contact only, never every main contact', () => {
+    const list = clientRecipients({ name: 'Cafe', email: null }, [
       { name: 'A', email: 'a@cafe.test', is_primary: true },
       { name: 'B', email: 'b@cafe.test', is_primary: true },
-      { name: 'C', email: 'c@cafe.test' },
     ])
-    expect(defaultRecipients(list)).toEqual(['a@cafe.test', 'b@cafe.test'])
+    expect(defaultRecipients(list)).toEqual(['a@cafe.test'])
   })
-  it('with nobody primary, the client\'s own business address — not everyone, not the first person', () => {
-    const list = clientRecipients(business, [{ name: 'C', email: 'c@cafe.test' }, { name: 'D', email: 'd@cafe.test' }])
-    expect(defaultRecipients(list)).toEqual(['owner@cafe.test'])
-  })
-  it('with no business address either, the first on the list', () => {
+  it('with no business address and nobody main, the first on the list', () => {
     const list = clientRecipients({ name: 'Cafe', email: null }, [{ name: 'C', email: 'c@cafe.test' }, { name: 'D', email: 'd@cafe.test' }])
     expect(defaultRecipients(list)).toEqual(['c@cafe.test'])
     expect(defaultRecipients([])).toEqual([])
   })
   it('both pages tick with this rule and read this list', () => {
     const src = (f: string) => readFileSync(f, 'utf8')
-    for (const f of ['app/dashboard/scheduler/board/usePostActs.tsx', 'app/dashboard/scheduler/board/ClientRound.tsx', 'app/dashboard/social/schedule/PostWindow.tsx']) {
+    for (const f of ['app/dashboard/scheduler/board/usePostActs.tsx', 'app/dashboard/scheduler/board/ClientRound.tsx', 'app/dashboard/social/schedule/PostWindow.tsx', 'app/dashboard/board/SendToClientDialog.tsx']) {
       expect(src(f), f).toMatch(/from '[^']*client-recipients-core'/)
       expect(src(f), f).toContain('defaultRecipients(')
     }
