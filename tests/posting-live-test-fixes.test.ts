@@ -479,3 +479,31 @@ describe('no sudden jump to the other page (the owner, 29 Sep 2026)', () => {
     expect(postApprovalWindowHref({ id: 'p1' })).toBe('/dashboard/scheduler?post=p1')
   })
 })
+
+// 29 Sep 2026: Justin's 2m41s, 1080 x 1920, 736 MB video booked for 9 am said "Will not post"
+// on Facebook and LinkedIn. Both were the check, not the channel: Facebook's 1280 x 720 was read
+// as a WIDTH, and the window budgeted LinkedIn's copy for 30 minutes because it never passed the
+// clip's length. The server (which knows the length) was already making the LinkedIn copy.
+describe('a vertical phone video is not "Will not post" on Facebook or LinkedIn', () => {
+  const probe = { url: 'x.mp4', type: 'video' as const, bytes: 771815881, seconds: 160.98, width: 1080, height: 1920 }
+  const platforms = ['tiktok', 'instagram', 'facebook', 'linkedin'] as const
+
+  it('Facebook\'s 1280 x 720 minimum is a size either way round', async () => {
+    const { assessAssets } = await import('../app/lib/media-fit-core')
+    const fb = assessAssets({ probes: [probe], platforms: ['facebook'] }).filter(f => f.level === 'blocked')
+    expect(fb).toEqual([])
+    // still refused when it really is too small, vertical or not
+    const small = assessAssets({ probes: [{ ...probe, width: 540, height: 960, bytes: 1e6 }], platforms: ['facebook'] })
+    expect(small.some(f => f.level === 'blocked' && f.headline === 'Below the minimum resolution')).toBe(true)
+  })
+
+  it('knowing the length, the window asks for a LinkedIn copy and calls it a clean copy', async () => {
+    const { copiesToPrepare } = await import('../app/lib/encode-ahead-core')
+    const { assessAssets } = await import('../app/lib/media-fit-core')
+    const copies = copiesToPrepare({ probes: [probe], platforms: [...platforms] }).map(a => a.platform)
+    expect(copies).toContain('linkedin')
+    const blocked = assessAssets({ probes: [probe], platforms: [...platforms], copies, linkedinPersonal: true }).filter(f => f.level === 'blocked')
+    expect(blocked).toEqual([])
+    expect(readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')).toMatch(/seconds: video\.seconds/)
+  })
+})

@@ -343,7 +343,13 @@ export default function PostWindow({
       if (extras?.kind) kindFor[p] = extras.kind as PostKind
       if (extras?.slides?.length) own[p] = extras.slides.map(sl => ({ url: sl.url, type: sl.type === 'video' ? 'video' as const : 'image' as const }))
     }
-    return copiesToPrepare({ probes: [{ url: video.url, type: 'video', bytes: video.bytes }], platforms: list, kinds: kindFor, own })
+    // the clip's length goes in: without it every copy is budgeted for the channel's whole
+    // ceiling (LinkedIn's 30 minutes), no bitrate fits, and a 2-minute video was called
+    // "Will not post" on LinkedIn while the server, which knows the length, made the copy
+    return copiesToPrepare({
+      probes: [{ url: video.url, type: 'video', bytes: video.bytes, ...(video.seconds ? { seconds: video.seconds } : {}) }],
+      platforms: list, kinds: kindFor, own,
+    })
   }, [shown.slides, shown.perChannel, chosen])
   const copyPlatforms = useMemo(() => copyAsks.map(a => a.platform), [copyAsks])
   const preparingCopy = copyAsks.length > 0 ? copyAheadWords(copyAsks.map(a => PLATFORM_MEDIA[a.platform]?.label ?? a.platform)) : null

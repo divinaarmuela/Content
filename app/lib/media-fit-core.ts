@@ -577,16 +577,27 @@ export function assessAssets(input: {
           }
         }
 
-        if (rule.minWidth && probe.width < rule.minWidth) {
+        // A "W x H minimum" with both sides given is a size, not an orientation:
+        // Facebook's 1280 x 720 is the landscape way round, and a 1080 x 1920
+        // vertical clip is well above it. Read literally, it called every 9:16
+        // phone video "refused" on Facebook (Justin's 30 Sep post, 29 Sep 2026)
+        // — so the pair is compared short side to short side, long to long.
+        const sized = rule.minWidth && rule.minHeight && probe.height > probe.width
+        const tooNarrow = sized
+          ? probe.width < Math.min(rule.minWidth!, rule.minHeight!) || probe.height < Math.max(rule.minWidth!, rule.minHeight!)
+          : !!rule.minWidth && probe.width < rule.minWidth
+        if (tooNarrow) {
           push({
             level: probe.type === 'video' ? 'blocked' : 'degraded',
             headline: 'Below the minimum resolution',
-            detail: `${probe.width} px wide; ${spec.label}${kindWord(kind)} wants at least ${rule.minWidth} px`,
+            detail: sized
+              ? `${probe.width} x ${probe.height}; ${spec.label}${kindWord(kind)} wants at least ${Math.min(rule.minWidth!, rule.minHeight!)} x ${Math.max(rule.minWidth!, rule.minHeight!)}`
+              : `${probe.width} px wide; ${spec.label}${kindWord(kind)} wants at least ${rule.minWidth} px`,
             consequence: probe.type === 'video'
               ? 'The platform refuses it. Re-export at a higher resolution.'
               : 'It posts, but upscaled and soft on a phone screen.',
           })
-        } else if (rule.minHeight && probe.height < rule.minHeight) {
+        } else if (!sized && rule.minHeight && probe.height < rule.minHeight) {
           push({
             level: 'degraded',
             headline: 'Below the minimum resolution',
