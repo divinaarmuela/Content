@@ -140,40 +140,44 @@ export function finishedVersionsOf<F extends { version?: number | null }>(
  * MAY THE EDITOR START THE NEXT VERSION THEMSELVES? (the owner, 24 Sep 2026:
  * "they just wanna upload version 2 with the new files".)
  *
- * A version normally moves when a card comes back for changes and is handed
- * in again — that is what keeps one number meaning the same thing to the team
- * and the client. But an editor who has already handed this round in and then
- * re-exports had nowhere to put the new cut: it landed on the round already
- * handed in, and the screen kept saying Version 1 while they uploaded what
- * they thought was Version 2.
+ * Only WHILE THE EDITOR HOLDS THE CARD (29 Sep 2026: Real Deal's "September
+ * 18th" sat in the quality check as Version 2 with only Version 1's files on
+ * it — the button had been pressed after the hand-in, with nothing logged).
+ * Once a round is handed over — the quality check, the client, approved,
+ * booked in, posted — that round is what the next person is looking at, and
+ * its number must not move under them.
  *
- * So they may start the next one deliberately, and only then:
- *   - this round has actually been handed in (a finished link, or files), so
- *     the number never runs ahead of the work;
- *   - the card is not booked in or already posted, where the files belong to
- *     the channel rather than to the editor.
+ * And never where the round moves by itself: a card back FROM the client
+ * already hands in as the next version (`handInRound`), so a press there would
+ * skip one (Version 1 → Version 3).
+ *
+ * So, all of:
+ *   - the card is with the editor: being made, or sent back by the quality check;
+ *   - this round has actually been handed in (a finished link, or files);
+ *   - the next hand-in is not already the next version on its own.
  * No I/O.
  */
-export function mayStartNextRound(input: {
-  status?: unknown
-  handedIn: boolean
-}): boolean {
-  const status = String(input.status ?? '')
-  if (['scheduled', 'published'].includes(status)) return false
-  return input.handedIn === true
+export const EDITOR_HOLDS_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required']
+
+type RoundItem = { status?: unknown; edit_round?: unknown; client_round?: unknown; client_rounds?: unknown }
+
+function nextRoundRefusal(item: RoundItem, handedIn: boolean): string | null {
+  const status = String(item.status ?? '')
+  if (['scheduled', 'published'].includes(status)) return 'Booked in or already posted — the files are the channel’s now.'
+  if (handInRound(item) !== roundOf(item)) return `Back from the client — what you hand in now is ${roundLabel(handInRound(item))} by itself.`
+  if (!EDITOR_HOLDS_STATUSES.includes(status)) return `${roundLabel(roundOf(item))} is handed over — it can only move once the card is back with you.`
+  if (!handedIn) return `Nothing handed in for ${roundLabel(roundOf(item))} yet — replace those files instead.`
+  return null
+}
+
+export function mayStartNextRound(input: { item: RoundItem; handedIn: boolean }): boolean {
+  return nextRoundRefusal(input.item, input.handedIn) === null
 }
 
 /** what the button says, and why it is off when it is */
-export function nextRoundWords(input: { status?: unknown; handedIn: boolean; round: number }): {
+export function nextRoundWords(input: { item: RoundItem; handedIn: boolean }): {
   label: string
   why: string | null
 } {
-  const label = `Start ${roundLabel(input.round + 1)}`
-  if (['scheduled', 'published'].includes(String(input.status ?? ''))) {
-    return { label, why: 'Booked in or already posted — the files are the channel’s now.' }
-  }
-  if (!input.handedIn) {
-    return { label, why: `Nothing handed in for ${roundLabel(input.round)} yet — replace those files instead.` }
-  }
-  return { label, why: null }
+  return { label: `Start ${roundLabel(handInRound(input.item) + 1)}`, why: nextRoundRefusal(input.item, input.handedIn) }
 }

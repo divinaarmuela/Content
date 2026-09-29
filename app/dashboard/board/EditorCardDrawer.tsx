@@ -317,7 +317,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
      Without this an editor who re-exported had nowhere to put the new cut: every upload landed on the round
      already handed in, and the screen kept saying Version 1 while they uploaded what they thought was 2. */
   const handedIn = item ? (!!finishedUrl || currentFiles(item as never).length > 0) : false
-  const nextRound = item ? nextRoundWords({ status: item.status, handedIn, round: handInRound(item as never) }) : null
+  const nextRound = item ? nextRoundWords({ item: item as never, handedIn }) : null
   const startNextRound = async () => {
     setWorking('Starting the next version')
     try {

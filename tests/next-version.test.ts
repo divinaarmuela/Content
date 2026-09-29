@@ -11,26 +11,36 @@ import { handInRound, mayStartNextRound, nextRoundWords, roundLabel, roundOf } f
  * in again, so an editor who re-exported had nowhere to put the new cut.
  */
 describe('starting the next version', () => {
-  it('is allowed once this version has actually been handed in', () => {
-    expect(mayStartNextRound({ status: 'in_progress', handedIn: true })).toBe(true)
-    expect(mayStartNextRound({ status: 'quality_check', handedIn: true })).toBe(true)
-    expect(mayStartNextRound({ status: 'in_progress', handedIn: false })).toBe(false)
+  const card = (status: string, extra: object = {}) => ({ status, edit_round: 1, ...extra })
+  it('is allowed while the editor holds the card and this version has been handed in', () => {
+    expect(mayStartNextRound({ item: card('draft_uploaded'), handedIn: true })).toBe(true)
+    expect(mayStartNextRound({ item: card('revision_required'), handedIn: true })).toBe(true)
+    expect(mayStartNextRound({ item: card('draft_uploaded'), handedIn: false })).toBe(false)
   })
 
-  it('is refused once the files belong to the channel', () => {
-    expect(mayStartNextRound({ status: 'scheduled', handedIn: true })).toBe(false)
-    expect(mayStartNextRound({ status: 'published', handedIn: true })).toBe(false)
+  it("is refused once the round is handed over (29 Sep 2026: Real Deal's September 18th showed Version 2 in the quality check with Version 1's files)", () => {
+    for (const s of ['quality_check', 'internal_review', 'revision_complete', 'client_review', 'approved_for_scheduling', 'scheduled', 'published']) {
+      expect(mayStartNextRound({ item: card(s), handedIn: true }), s).toBe(false)
+    }
+  })
+
+  it('is refused where the round moves by itself, so a card back from the client never skips a version', () => {
+    const back = card('client_changes_requested', { client_rounds: [1] })
+    expect(handInRound(back)).toBe(2)
+    expect(mayStartNextRound({ item: back, handedIn: true })).toBe(false)
+    expect(nextRoundWords({ item: back, handedIn: true }).why).toBe('Back from the client — what you hand in now is Version 2 by itself.')
+    // the quality check sent back what the client had seen: the same, by itself
+    expect(mayStartNextRound({ item: card('revision_required', { client_rounds: [1] }), handedIn: true })).toBe(false)
   })
 
   it('says what it will do, and why it is off when it is', () => {
-    expect(nextRoundWords({ status: 'in_progress', handedIn: true, round: 1 }))
-      .toEqual({ label: 'Start Version 2', why: null })
-    expect(nextRoundWords({ status: 'in_progress', handedIn: false, round: 1 }).why)
+    expect(nextRoundWords({ item: card('draft_uploaded'), handedIn: true })).toEqual({ label: 'Start Version 2', why: null })
+    expect(nextRoundWords({ item: card('draft_uploaded'), handedIn: false }).why)
       .toBe('Nothing handed in for Version 1 yet — replace those files instead.')
-    expect(nextRoundWords({ status: 'published', handedIn: true, round: 3 }))
-      .toMatchObject({ label: 'Start Version 4' })
-    expect(nextRoundWords({ status: 'scheduled', handedIn: true, round: 2 }).why)
-      .toContain('the channel’s now')
+    expect(nextRoundWords({ item: card('quality_check'), handedIn: true }).why)
+      .toBe('Version 1 is handed over — it can only move once the card is back with you.')
+    expect(nextRoundWords({ item: card('scheduled', { edit_round: 2 }), handedIn: true }))
+      .toMatchObject({ label: 'Start Version 3', why: 'Booked in or already posted — the files are the channel’s now.' })
   })
 
   it('leaves the old rule alone: a card sent back still opens the next round by itself', () => {
@@ -46,7 +56,9 @@ describe('starting the next version', () => {
     const route = readFileSync('app/api/production/items/[id]/next-version/route.ts', 'utf8')
     expect(route).toContain("const user = await requireRole('editor')")
     expect(route).toContain('if (!canEditItemFields(user, item)) {')
-    expect(route).toContain('if (!cur || roundOf(cur as never) !== round - 1) return null')
+    expect(route).toContain('if (!cur || roundOf(cur as never) !== round - 1 || nextRoundWords({ item: cur as never, handedIn }).why) return null')
+    // and who pressed it is on the card's history
+    expect(route).toContain("action: 'version_started'")
     expect(route).toContain('return { ...cur, edit_round: round, updated_at: new Date().toISOString() }')
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain('/next-version`, { method: \'POST\' })')
@@ -70,5 +82,13 @@ describe('a card handed in by a link can hand in files instead (the owner, 24 Se
     const card = { status: 'revision_required', link_url: 'https://drive.google.com/drive/folders/x', link_final: true, final_files: [], work_kinds: null }
     expect(handInRound(card)).toBe(1)
     expect(handsInFiles(card as never)).toBe(false)
+  })
+})
+
+describe('a started version is on the card history (29 Sep 2026)', () => {
+  it('says who started which version', async () => {
+    const { describeCardActivity } = await import('../app/lib/card-history-core')
+    const line = describeCardActivity({ action: 'version_started', new_value: 'v2', actor: { name: 'Team AA Edits' } } as never)
+    expect(line?.text).toMatch(/^Version 2 started by /)
   })
 })

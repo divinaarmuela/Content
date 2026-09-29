@@ -95,6 +95,10 @@ export function describeCardActivity(row: HistoryActivity, ctx: HistoryContext =
       const n = String(row.new_value ?? '').replace(/^v/i, '')
       return n ? { text: `New files uploaded by ${who} · version ${n}` } : { text: `New files uploaded by ${who}` }
     }
+    case 'version_started': {
+      const n = String(row.new_value ?? '').replace(/^v/i, '')
+      return { text: `Version ${n || '?'} started by ${who}` }
+    }
     case 'claimed':
       return { text: String(row.detail ?? '').includes('scheduling') ? `Scheduling taken by ${who}` : `Taken by ${who}` }
     case 'schedule_handoff':
