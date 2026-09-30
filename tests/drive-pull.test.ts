@@ -98,9 +98,11 @@ describe('the job, the triggers and the pages (source pins)', () => {
     expect(s).not.toMatch(/googleapis\.com\/upload|method: '(POST|PATCH|PUT|DELETE)'/)
     // a file already here with the same size stands; a new cut in the same folder is new files
     // the same file handed in again in a later round is listed under that round too; a replaced one is copied again beside the old copy (16 Sep 2026)
-    expect(s).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    // (a Drive hand-in proves the cut by checksum, revision or change time instead — drive-handin-core.sameDriveCut, 30 Sep 2026)
+    expect(s).toContain(': !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(s).toContain('? !!latest && sameDriveCut(latest, f)')
     expect(s).toContain('else kept.set(round, { ...latest, name: f.name, version: round })')
-    expect(s).toContain("if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })")
+    expect(s).toContain("if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified, ")
     // a finished pull asks for a preview of each video copy up to 800 MB (16 Sep 2026)
     expect(s).toContain("previewVideos(files.filter(f => f.status === 'done' && !!f.url && fileKindOf(f.mime, f.name) === 'video' && (f.size ?? 0) <= PREVIEW_MAX_BYTES).map(f => f.url))")
     expect(s).toContain('const PREVIEW_MAX_BYTES = 800 * 1024 * 1024')
@@ -157,7 +159,8 @@ describe('the job, the triggers and the pages (source pins)', () => {
     const tiles = src('app/dashboard/board/DriveFolderFiles.tsx')
     expect(tiles).toContain('const tiles = fromCopies ? copyTiles : state.at === \'ready\' ? state.tiles : []')
     expect(tiles).toContain('<video key={showing.id} src={showing.preview} controls playsInline preload="metadata"')
-    expect(tiles).toContain("{roundLabel(r)}{r === rounds[0] ? ' · latest' : ''}")
+    // the pill reads the card's client-numbered version when the card page passes it (edit-round-core.versionLabel, 30 Sep 2026)
+    expect(tiles).toContain("{(labelOf ?? roundLabel)(r)}{r === rounds[0] ? ' · latest' : ''}")
     // the hover shows the preview's stills once it is ready; the copy itself before
     expect(tiles).toContain('const previews = usePreviewRows(')
     expect(tiles).toContain('frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null}')

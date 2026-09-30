@@ -36,7 +36,7 @@ describe('the card’s page', () => {
     const { parsePicks } = await import('../app/dashboard/editor/[id]/compare/page')
     expect(parsePicks('a@1,b@2, c ,d@x,e@0')).toEqual([{ id: 'a', round: 1 }, { id: 'b', round: 2 }, { id: 'c', round: null }, { id: 'd', round: null }, { id: 'e', round: 0 }])
     // a pick from the folder to work from is shown as that, never as a version (16 Sep 2026)
-    expect(src('app/dashboard/editor/[id]/compare/page.tsx')).toContain("{fromFolder ? 'Folder to work from' : roundLabel(fileRound(file))}")
+    expect(src('app/dashboard/editor/[id]/compare/page.tsx')).toContain("{fromFolder ? 'Folder to work from' : labelOf(fileRound(file))}")
     const cmp = src('app/dashboard/editor/[id]/compare/page.tsx')
     expect(cmp).toContain("grid gap-4 ${one ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}")
     expect(cmp).toContain('commentsOnClip(visible as never, f.id)')

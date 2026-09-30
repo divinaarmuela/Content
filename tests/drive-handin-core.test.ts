@@ -145,7 +145,7 @@ describe('the line on the card', () => {
   })
   it('an unreadable link says the owner’s words; done and failed say what happened', () => {
     expect(handInWords({ status: 'unreadable' } as never, h, 0)!.words).toBe(NOT_SHARED_WORDS)
-    expect(handInWords(null, { ...h, status: 'done', file_ids: ['x', 'y'], carried: ['c'] }, 0)!.words).toBe('Handed in from Drive: 2 files · 1 unchanged, kept as they were')
+    expect(handInWords(null, { ...h, status: 'done', file_ids: ['x', 'y'], new_ids: ['y'], carried: ['c'] }, 0)!.words).toBe('3 files handed in — 1 new, 1 updated, 1 unchanged')
     expect(handInWords(null, { ...h, status: 'failed', error: 'Nothing was handed in — X' }, 0)).toEqual({ tone: 'failed', words: 'Nothing was handed in — X' })
   })
   it('copyFor prefers the copy tagged with the hand-in’s round', () => {

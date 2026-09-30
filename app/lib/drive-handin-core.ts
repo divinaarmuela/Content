@@ -90,6 +90,8 @@ export type DriveHandIn = {
   whole?: boolean
   /** the pieces dropped from this version because they were not in the link */
   retired?: string[]
+  /** of file_ids, the ones that are new pieces (the rest are new cuts of pieces already on the card) */
+  new_ids?: string[]
   error?: string | null
 }
 
@@ -229,7 +231,7 @@ export function copyFor(files: readonly PullFile[], driveId: string, round: numb
 }
 
 export type MergeResult =
-  | { ok: true; files: FinalFile[]; added: string[]; carried: string[]; skipped: { drive_id: string; why: string }[]; retired?: string[] }
+  | { ok: true; files: FinalFile[]; added: string[]; carried: string[]; skipped: { drive_id: string; why: string }[]; retired?: string[]; fresh?: string[] }
   | { ok: false; error: string; failed: string[] }
 
 /**
@@ -263,7 +265,7 @@ export function mergeDriveHandIn(
   const manager = handIn.manager === true
   const whole = handIn.whole === true
   let files = [...list]
-  const added: string[] = [], carried: string[] = [], skipped: { drive_id: string; why: string }[] = [], retired: string[] = []
+  const added: string[] = [], carried: string[] = [], skipped: { drive_id: string; why: string }[] = [], retired: string[] = [], fresh: string[] = []
   const used = new Set<string>()
   for (const { d, c } of copies) {
     const copy = c as PullFile
@@ -310,6 +312,7 @@ export function mergeDriveHandIn(
     }
     files[files.length - 1] = { ...files[files.length - 1], ...extra }
     added.push(files[files.length - 1].id)
+    fresh.push(files[files.length - 1].id)
   }
   // …and a piece no longer in the folder is out of this version — kept, with everything said on it, in the ones before
   if (whole) {
@@ -320,13 +323,13 @@ export function mergeDriveHandIn(
       retired.push(a)
     }
   }
-  return { ok: true, files, added, carried, skipped, retired }
+  return { ok: true, files, added, carried, skipped, retired, fresh }
 }
 
 /** the hand-in record, settled */
 export function settledHandIn(h: DriveHandIn, result: MergeResult, round: number, now: string): DriveHandIn {
   if (!result.ok) return { ...h, status: 'failed', error: result.error, settled_at: now }
-  return { ...h, status: 'done', error: null, settled_at: now, settled_round: round, file_ids: result.added, carried: result.carried, skipped: result.skipped, ...(result.retired?.length ? { retired: result.retired } : {}) }
+  return { ...h, status: 'done', error: null, settled_at: now, settled_round: round, file_ids: result.added, carried: result.carried, skipped: result.skipped, ...(result.retired?.length ? { retired: result.retired } : {}), new_ids: result.fresh ?? [] }
 }
 
 /** the card's list with this record put in its place (by id), or appended */
@@ -349,7 +352,11 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     const kept = h.carried?.length ?? 0
     const left = h.skipped?.length ?? 0
     const dropped = h.retired?.length ?? 0
-    return { tone: 'done', words: [`Handed in from Drive: ${n} ${n === 1 ? 'file' : 'files'}`, kept ? `${kept} unchanged, kept as they were` : '', left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }
+    // "4 files handed in — 1 new, 3 updated" (the owner, 30 Sep 2026)
+    const total = n + kept
+    const fresh = Math.min(n, h.new_ids?.length ?? 0)
+    const head = `${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
+    return { tone: 'done', words: [head, left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }
   }
   if (!row) return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
   if (row.status === 'unreadable') return { tone: 'failed', words: NOT_SHARED_WORDS }

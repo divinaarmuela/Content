@@ -22,7 +22,7 @@ describe('a link-shared Drive file is fetched by id WITH its resource key (22 Se
     expect(driveResourceKeyFromLink('https://drive.google.com/file/d/14I9T3hpg_ia-flJKh5OqU0SAvOIvpPbj/view?usp=drivesdk')).toBeNull()
   })
   it('the listing asks Google for the key, and every by-id route takes it', () => {
-    expect(readFileSync('app/lib/gdrive-files.ts', 'utf8')).toContain("'id,name,mimeType,size,modifiedTime,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'")
+    expect(readFileSync('app/lib/gdrive-files.ts', 'utf8')).toContain("'id,name,mimeType,size,modifiedTime,md5Checksum,headRevisionId,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'")
     for (const r of ['info', 'thumbnail', 'stream', 'download']) expect(readFileSync(`app/api/drive/${r}/route.ts`, 'utf8')).toContain('isResourceKey(')
   })
 })

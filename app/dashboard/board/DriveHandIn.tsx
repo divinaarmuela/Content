@@ -72,7 +72,7 @@ export function DriveHandInDialog({ open, onOpenChange, item, round, label }: {
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)} className={outlineBtn}>Cancel</Button>
           <Button disabled={busy || !check || !check.ok} className={primaryBtn} onClick={() => void submit()}>
-            {busy ? 'Handing in…' : `Hand in as ${roundLabel(round)}`}
+            {busy ? 'Handing in…' : 'Hand in'}
           </Button>
         </DialogFooter>
       </DialogContent>
