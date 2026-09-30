@@ -795,13 +795,27 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // META'S DATA DELETION REQUESTS (the Meta App Review groundwork, 30 Sep 2026). One row per request Meta's
+  // Data Deletion Request Callback delivered (POST /api/meta/data-deletion). The id IS the confirmation code
+  // Meta shows the person, derived from the signed request itself, and the row is taken with a claim, so a
+  // callback Meta sends twice records one request. Recording is ALL the callback does: nothing is deleted
+  // and nobody is emailed automatically — a super admin works the request and moves `status` by hand
+  // (received → in_progress → completed | nothing_held). Rules: app/lib/meta-signed-request-core.ts.
+  data_deletion_requests: [
+    ['id', col('string', false)],                  // the confirmation code
+    ['meta_user_id', col('string', false)],        // the app-scoped user id Meta sent
+    ['received_at', col('string', false)],
+    ['status', col('string', false)],              // received | in_progress | completed | nothing_held
+    ['note', col('string', true)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches', 'comment_automations', 'automation_sends']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
