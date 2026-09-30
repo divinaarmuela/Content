@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { pendingHandIn } from '../../../../../lib/drive-handin-core'
 import { table, withRequestCache } from '@/lib/db'
 import type { TeamUser } from '@/lib/db-types'
 import { requireSignedIn, requireRole, authzErrorResponse } from '../../../../../lib/authz'
@@ -59,8 +60,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // as the revision, so a whole-card send-back could be resubmitted with nothing new on it
     if (SENT_BACK_STATUSES.includes(String(item.status)) && to === 'quality_check'
       && (finalFilesOf(item as never).length > 0 || (item as { link_final?: boolean | null }).link_final === true)
-      && !hasFinishedWork(item as never)) {
-      return NextResponse.json({ error: 'Upload the new files on the card first — a Drive link is only the folder to work from' }, { status: 409 })
+      && !hasFinishedWork(item as never) && !pendingHandIn(item as never)) {
+      return NextResponse.json({ error: 'Hand the Drive link in again first — the new files are what the quality check looks at' }, { status: 409 })
     }
     const note = String(body.note ?? '').trim().slice(0, 2000)
     const updated = await performTransition(user, item, to, {

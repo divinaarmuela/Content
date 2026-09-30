@@ -668,21 +668,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           {dropped && <span className="rounded-full bg-foreground/[0.08] px-2 py-0.5 text-[11px] font-semibold">Dropped from {roundLabel(f.retired_round as number)} on</span>}
                           {waiting && !dropped && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Needs changing</span>}
                           {tick && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold" title={`${tick.by}, ${new Date(tick.at).toLocaleString('en-AU')}`}>{/\(MD Media\)$/.test(tick.by) ? `Approved by ${tick.by.replace(/ \(MD Media\)$/, '')} for the client` : 'Approved by the client'}</span>}
-                          {isManager && !frozen && !dropped && (
-                            <Button variant="outline" disabled={busy} onClick={() => void teamApprove(f.id, okByClient)} className="h-9 rounded-full px-3 text-[12px] font-semibold">{okByClient ? 'Take approval back' : 'Approve for the client'}</Button>
-                          )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && dropped && f.retired_round === handInRound(item as never) && (
-                            <Button variant="outline" disabled={busy} onClick={() => void dropAsset(a, true)} className="h-9 rounded-full px-3 text-[12px] font-semibold">Bring back</Button>
-                          )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (
-                            <Button variant="ghost" disabled={busy} onClick={() => void dropAsset(a, false)} className="h-9 rounded-full px-3 text-[12px] font-semibold text-muted-foreground hover:text-accent-red-deep">Drop from {roundLabel(handInRound(item as never))}</Button>
-                          )}
-                          {mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (
-                            <Button variant="outline" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }} className="h-9 rounded-full px-3 text-[12px] font-semibold">
-                              {f.version === handInRound(item as never) ? 'Replace again' : `Replace — ${roundLabel(handInRound(item as never))}`}
-                            </Button>
-                          )}
-                          {mayFile && !frozen && earlier.length === 0 && f.version === handInRound(item as never) && <button type="button" disabled={busy} onClick={() => void removeFinalFile(f.id)} aria-label={`Take ${f.name} off`} className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>}
+                          {/* no per-file Replace / Drop / Approve here (30 Sep 2026): the editor hands the whole Drive folder
+                              in again, and approving is the client's — or the quality check's — step, not the editor card's */}
                         </div>
                         {earlier.length > 0 && (
                           <p className="pl-1 text-[12px] text-muted-foreground">Earlier: {earlier.map(x => <a key={x.id} href={x.url} target="_blank" rel="noreferrer noopener" className="mr-2 underline underline-offset-4">{roundLabel(x.version)} — {x.name}</a>)}</p>
