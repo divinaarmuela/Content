@@ -230,3 +230,32 @@ export function slideFileName(
   if (total <= 1) return `v${n} - ${name}`
   return `v${n} - ${String(index + 1).padStart(2, '0')} - ${name}`
 }
+
+/**
+ * FILES UPLOADED FOR THE POST ITSELF (30 Sep 2026). A post made from an editor's card could only carry that card's
+ * approved files — so when the CLIENT asked for a slide to change at Post approval, every new slide the team
+ * uploaded in Change media ("Files you add here belong to this post only") was refused on Save with "One of those
+ * files is not part of the approved version", and Divina uploaded Jordan's corrected slides eight times without one
+ * going in. A file our own upload recorded (the `assets` table — `known`) may now be added to a draft; a link from
+ * anywhere else still may not. `already` are the files that were allowed anyway, never repeated here.
+ */
+export function uploadedForPost(chosen: unknown, known: ReadonlySet<string>, already: readonly { url: string }[]): Slide[] {
+  if (!Array.isArray(chosen)) return []
+  const have = new Set(already.map(s => s.url))
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined)
+  const out: Slide[] = []
+  for (const raw of chosen) {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const url = String(r.url ?? '')
+    if (!url || have.has(url) || !known.has(url)) continue
+    out.push({
+      url,
+      name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 200) : slideNameFromUrl(url),
+      type: slideTypeFromUrl(url),
+      bytes: num(r.bytes), width: num(r.width), height: num(r.height), seconds: num(r.seconds),
+      source: 'upload',
+    })
+    have.add(url)
+  }
+  return out
+}

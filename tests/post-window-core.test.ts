@@ -351,6 +351,21 @@ describe('one press, start to finish (with the server mocked)', () => {
     expect(r).toMatchObject({ ok: true, words: 'Saved — still in Draft', stage: 'draft' })
   })
 
+  it('Change approval steps saves a changed draft first, so the reload never throws the work away (30 Sep 2026)', async () => {
+    const { api, calls } = fakeApi()
+    await pressAction(api, { ...base, post: post({ rev: 7 }), dirty: true, action: 'set_steps', answers: { steps: 'team' } })
+    expect(calls.map(c => c.kind)).toEqual(['save', 'act'])
+  })
+
+  it('…and when that save is refused, the steps are not changed and the reason comes back', async () => {
+    const { api, calls } = fakeApi({
+      save: vi.fn(async () => ({ ok: false as const, reason: 'Not saved', problems: [] })),
+    })
+    const r = await pressAction(api, { ...base, post: post({ rev: 7 }), dirty: true, action: 'set_steps', answers: { steps: 'team' } })
+    expect(calls.map(c => c.kind)).toEqual([])
+    expect(r).toMatchObject({ ok: false, reason: 'Not saved' })
+  })
+
   it('a move that is not about the words does not save them first', async () => {
     const { api, calls } = fakeApi()
     await pressAction(api, { ...base, post: post({ stage: 'ready' }), dirty: false, action: 'book' })

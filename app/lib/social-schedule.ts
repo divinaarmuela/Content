@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
+  Asset,
   AssetVersion, Batch, Client, ContentItem, EncodeJob, FollowerSnapshot, PublishJob,
   ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
@@ -26,7 +27,7 @@ import {
   mayEditNote, mayPostPiece, postingEligibility, samePostKey, validateComposition,
   type CoverSource, type Eligibility } from './social-schedule-core'
 import {
-  normaliseSlides, postSlides, slidesOf, slidesSatisfyType, type Slide,
+  normaliseSlides, postSlides, slidesOf, slidesSatisfyType, uploadedForPost, type Slide,
 } from './version-files-core'
 import { addVersion, performTransition } from './workflow'
 import { mirrorVersionSlides } from './gdrive-mirror'
@@ -787,6 +788,14 @@ export async function updatePost(
   // NEW file has to come from the piece
   const onPost = post.slides
   const allowed = [...editableSlides, ...onPost.filter(s => !editableSlides.some(e => e.url === s.url))]
+  // …and a file uploaded through the app for this post — a client's change is made HERE (uploadedForPost)
+  if (input.slides !== undefined) {
+    const asked = asArray<{ url?: unknown }>(input.slides).map(r => String(r?.url ?? '')).filter(u => u && !allowed.some(a => a.url === u))
+    if (asked.length > 0) {
+      const known = new Set((await table<Asset>('assets').list({ where: a => asked.includes(String(a.url)) })).map(a => String(a.url)))
+      allowed.push(...uploadedForPost(input.slides, known, allowed))
+    }
+  }
   if (input.slides !== undefined && allowed.length === 0) {
     throw new ComposeError([elig.ok ? 'No media yet' : elig.reason])
   }

@@ -213,7 +213,9 @@ describe('notes are per file, Team by default (decision 9)', () => {
     })
     expect(html).toMatch(/data-note-thread="team">Team only — the client never sees this/)
     expect(html).toContain('Notes on file 3')
-    expect(html).toContain('Whole post')
+    // "All notes" lists every note with its slide (30 Sep 2026) — the Team default stands when the client said nothing
+    expect(html).toContain('All notes')
+    expect(html).toContain('Slide 2')
   })
 })
 

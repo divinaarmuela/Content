@@ -7,6 +7,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Thumb } from './tiles'
 import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
+import { unplacedUploads } from '@/app/lib/post-window-core'
 import { UploadRows, useUploadGroup } from '../../UploadRows'
 import {
   addToPost, inPost, limitsLine, moveInPost, removeFromPost, replaceInPost,
@@ -90,6 +91,13 @@ export default function MediaPicker({
   const [confirm, setConfirm] = useState(false)
   /** a Save was pressed in this opening — only then is a refusal this window's to show (audit W7) */
   const [triedSave, setTriedSave] = useState(false)
+  // AN UPLOAD INTO A POST THAT HAS SLIDES REPLACES ONE (the owner, 30 Sep 2026: "once uploaded they need to pick on
+  // the right"). The file being placed; every slide on the right becomes a "Replace" button until it is.
+  const [placing, setPlacing] = useState<Slide | null>(null)
+  // Save pressed with an upload still not in the post — asked once, here
+  const [askUnplaced, setAskUnplaced] = useState(false)
+  const trayRef = useRef(tray)
+  trayRef.current = tray
 
   const uploadGroup = useMemo(() => `schedule-media:${itemId}`, [itemId])
   const uploads = useUploadGroup(uploadGroup)
@@ -111,6 +119,8 @@ export default function MediaPicker({
       setBrought([])
       setConfirm(false)
       setTriedSave(false)
+      setPlacing(null)
+      setAskUnplaced(false)
       return
     }
     if (seeded.current) return
@@ -196,13 +206,32 @@ export default function MediaPicker({
         source: 'upload' as const,
       }))
       setBrought(b => [...files, ...b])
-      setTray(t => files.reduce((acc, f) => addToPost(acc, f), t))
+      // an empty post takes them in order; a post with slides asks which slide each one replaces
+      if (trayRef.current.length === 0) setTray(t => files.reduce((acc, f) => addToPost(acc, f), t))
+      else setPlacing(p => p ?? files[0] ?? null)
     } catch (e) {
       setProblem(friendlyError(e instanceof Error ? e.message : '', 'the upload'))
     }
   }, [uploadGroup])
 
   useEffect(() => () => clearGroup(uploadGroup), [uploadGroup])
+
+  const unplaced = useMemo(() => unplacedUploads(brought, tray), [brought, tray])
+  useEffect(() => { if (unplaced.length === 0) setAskUnplaced(false) }, [unplaced.length])
+  /** the next upload still waiting for its slide, after `done` */
+  const nextToPlace = useCallback((done: Slide) => unplaced.find(u => u.url !== done.url) ?? null, [unplaced])
+  const placeInto = (i: number) => {
+    if (!placing) return
+    const file = placing
+    setTray(t => replaceInPost(t, i, file))
+    setPlacing(nextToPlace(file))
+  }
+  const placeAtEnd = () => {
+    if (!placing) return
+    const file = placing
+    setTray(t => addToPost(t, file))
+    setPlacing(nextToPlace(file))
+  }
 
   /** has the arrangement moved since the window opened? */
   const trayMoved = useMemo(() => {
@@ -348,7 +377,7 @@ export default function MediaPicker({
                 uploads={uploads}
                 onFiles={takeFiles}
                 files={library}
-                onAdd={s => setTray(t => addToPost(t, s))}
+                onAdd={s => (tray.length > 0 ? setPlacing(s) : setTray(t => addToPost(t, s)))}
                 inTray={url => inPost(tray, url)}
                 onDragStart={dragOut}
               />
@@ -413,7 +442,7 @@ export default function MediaPicker({
               ) : source === 'upload' ? (
                 <UploadTab
                   uploads={uploads} onFiles={takeFiles}
-                  files={library} onAdd={s => setTray(t => addToPost(t, s))}
+                  files={library} onAdd={s => (tray.length > 0 ? setPlacing(s) : setTray(t => addToPost(t, s)))}
                   inTray={url => inPost(tray, url)} onDragStart={dragOut}
                 />
               ) : (
@@ -431,6 +460,28 @@ export default function MediaPicker({
             )}
             <p className="pt-1 text-[12px] text-muted-foreground">{POST_MEDIA_NOTICE}</p>
           </div>
+
+          {placing && (
+            <div role="status" data-placing className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-blue/60 bg-tint-blue px-3 py-2.5">
+              <span className="h-[50px] w-[40px] shrink-0 overflow-hidden rounded-tile border border-border">
+                <Thumb slide={placing} label={placing.name} className="h-full w-full" />
+              </span>
+              <span className="min-w-0 flex-1 text-[13px] font-semibold">
+                Now click the slide on the right that {placing.name} replaces.
+                {unplaced.length > 1 && <span className="block text-[12px] font-normal text-muted-foreground">{unplaced.length} new files to place.</span>}
+              </span>
+              <span className="flex gap-2">
+                <button type="button" onClick={placeAtEnd}
+                  className="min-h-11 rounded-full border border-border bg-surface px-3 text-[13px] font-semibold">
+                  Add as a new slide
+                </button>
+                <button type="button" onClick={() => setPlacing(null)}
+                  className="min-h-11 rounded-full px-3 text-[13px] font-semibold hover:bg-muted">
+                  Not now
+                </button>
+              </span>
+            </div>
+          )}
 
           <div
             onDragOver={e => { e.preventDefault(); setOver('tray') }}
@@ -463,6 +514,16 @@ export default function MediaPicker({
                   <span className="absolute left-1 top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-ink text-[10px] font-bold text-cream">
                     {i + 1}
                   </span>
+                  {placing && (
+                    <button
+                      type="button"
+                      onClick={() => placeInto(i)}
+                      aria-label={`Replace slide ${i + 1} with ${placing.name}`}
+                      className="absolute inset-0 z-10 flex items-end justify-center bg-accent-blue/20 pb-2 text-[12px] font-bold text-ink hover:bg-accent-blue/45"
+                    >
+                      <span className="rounded-full bg-surface px-2 py-0.5">Replace</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={`Take ${slide.name} out of the post`}
@@ -575,6 +636,24 @@ export default function MediaPicker({
             </div>
           )}
 
+          {askUnplaced && unplaced.length > 0 && (
+            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-inner border border-accent-amber/50 bg-tint-amber px-3 py-2.5">
+              <span className="text-[13px] font-medium">
+                {unplaced.length === 1 ? `${unplaced[0].name} was uploaded but is not in the post.` : `${unplaced.length} uploaded files are not in the post: ${unplaced.map(u => u.name).join(', ')}.`}
+              </span>
+              <span className="ml-auto flex gap-2">
+                <button type="button" onClick={() => { setAskUnplaced(false); setPlacing(unplaced[0]) }}
+                  className="min-h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background">
+                  Place {unplaced.length === 1 ? 'it' : 'them'}
+                </button>
+                <button type="button" disabled={saving || busy} onClick={() => { setTriedSave(true); void onSave(tray) }}
+                  className="min-h-11 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold disabled:opacity-60">
+                  Save without {unplaced.length === 1 ? 'it' : 'them'}
+                </button>
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2.5">
             {/* "Discard changes" IS the answer to "are you sure?" — asking it
                 again is the same question twice, and the second one reads as
@@ -590,7 +669,10 @@ export default function MediaPicker({
             <button
               type="button"
               disabled={saving || busy}
-              onClick={() => { setTriedSave(true); void onSave(tray) }}
+              onClick={() => {
+                if (unplaced.length > 0 && !askUnplaced) { setAskUnplaced(true); return }
+                setTriedSave(true); void onSave(tray)
+              }}
               className="flex min-h-11 items-center rounded-full bg-foreground px-4 text-[14px] font-semibold text-background disabled:opacity-60"
             >
               {saving ? 'Saving…' : 'Save'}

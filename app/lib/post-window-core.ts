@@ -729,8 +729,10 @@ export async function pressAction(api: PostWindowApi, input: {
   }
 
   const body = workingBody(input.working, input.timezone)
-  // Schedule it from a Draft freezes the working copy too: what is booked is what is on screen
-  const keepsCopy = action === 'save' || action === 'send_to_qc' || action === 'schedule_direct'
+  // Schedule it from a Draft freezes the working copy too: what is booked is what is on screen. Changing the approval
+  // steps saves it first as well — it reloads the window, which threw unsaved work away (30 Sep 2026, Divina: "it
+  // literally gets rid of everything I've done")
+  const keepsCopy = action === 'save' || action === 'send_to_qc' || action === 'schedule_direct' || action === 'set_steps'
   try {
     if (!postId) {
       if (!input.itemId) return { ok: false, reason: 'Pick the files for this post first.', problems: [], post: null, postId: null }
@@ -769,4 +771,49 @@ export async function pressAction(api: PostWindowApi, input: {
       postId,
     }
   }
+}
+
+/* ── notes placed on the post as it is now (30 Sep 2026) ────────────────── */
+
+/**
+ * WHERE EACH NOTE SITS NOW. A note is pinned to the FILE it was written on (so a reorder cannot move it onto the
+ * wrong picture). When that file has since been REPLACED — the owner, 30 Sep 2026: Jordan's note on slide 6 vanished
+ * once the new slide 6 went in, and when it came back it lit the slide up as if it were still waiting — the note
+ * stays under the slide number it was written on, marked `replaced`: it is history, not work still to do.
+ */
+export type PlacedNote = { note: PostNote; slide: number | null; replaced: boolean }
+
+export function placeNotes(notes: readonly PostNote[], slides: readonly { url: string }[]): PlacedNote[] {
+  const urls = slides.map(s => s.url)
+  return notes.map(note => {
+    if (!note.file_url) return { note, slide: null, replaced: false }
+    const at = urls.indexOf(note.file_url)
+    if (at >= 0) return { note, slide: at + 1, replaced: false }
+    return { note, slide: note.slide_index != null ? note.slide_index + 1 : null, replaced: true }
+  })
+}
+
+/** The blue number on each slide: its notes still to do — on the file there now, not resolved. By slide number. */
+export function openNoteCounts(placed: readonly PlacedNote[]): Map<number, number> {
+  const out = new Map<number, number>()
+  for (const p of placed) {
+    if (p.slide == null || p.replaced || p.note.resolved_at) continue
+    out.set(p.slide, (out.get(p.slide) ?? 0) + 1)
+  }
+  return out
+}
+
+/** Which thread the Notes box opens on: the client's, when the client has said anything — that is what needs doing. */
+export const firstNoteThread = (notes: readonly PostNote[]): CommentVisibility =>
+  notes.some(n => n.visibility === 'client') ? 'client' : 'team'
+
+/**
+ * Files uploaded in the media window that are not in the post. An upload into a post that already has slides is
+ * usually a REPLACEMENT, so it is never tacked on the end (30 Sep 2026: Divina's new slides 3, 5, 7 and 6 were
+ * uploaded and never made it into the post, twice) — the person picks the slide it replaces, and Save stops while
+ * one is left over.
+ */
+export function unplacedUploads<T extends { url: string; source?: string }>(files: readonly T[], tray: readonly { url: string }[]): T[] {
+  const inPost = new Set(tray.map(t => t.url))
+  return files.filter(f => f.source === 'upload' && !inPost.has(f.url))
 }
