@@ -441,12 +441,15 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               {!hasFinishedWork(item as never) ? (
                 <Button className={primaryBtn} disabled={busy}
                   onClick={() => {
-                    if (filesCard) { setUploadOpen(true); return }
+                    // the hand-in is a Drive link now (the owner, 30 Sep 2026) — the upload is the fallback lower down
+                    if (filesCard) { setDriveOpen(true); return }
                     const box = document.getElementById('ed-source')
                     box?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     box?.focus()
                   }}>
-                  <Upload className="h-4 w-4" aria-hidden /> {filesCard ? `Upload ${roundLabel(handInRound(item as never))}` : `Add the ${roundLabel(handInRound(item as never))} link`}
+                  {filesCard
+                    ? <><FolderDown className="h-4 w-4" aria-hidden /> Hand in from Google Drive — {roundLabel(handInRound(item as never))}</>
+                    : <><Upload className="h-4 w-4" aria-hidden /> Add the {roundLabel(handInRound(item as never))} link</>}
                 </Button>
               ) : (
                 <Button className={primaryBtn} disabled={busy}
