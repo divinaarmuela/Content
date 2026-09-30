@@ -7,7 +7,6 @@ import { cardColumn, BOARD_COLUMNS, columnOf, OUT_COLUMNS } from '../app/lib/boa
 import {
   cardActions, cardLines, dropAction, groupByLane, pageCards, pageLanes, type BoardViewCard,
 } from '../app/lib/board-view-core'
-import { readyToBecomePosts } from '../app/lib/post-board-core'
 import { cardLine } from '../app/lib/portal-core'
 import { scopeContextOf, visibleItems } from '../app/lib/scope-client'
 
@@ -88,8 +87,6 @@ describe('what a deliver-only card offers and refuses', () => {
   it('a scheduler never sees it on any page, even when handed it', () => {
     const c = card({ scheduler_ids: ['sch'] })
     expect(pageCards('scheduler', [c], sch, '2026-09-11')).toEqual([])
-    // …and it never becomes a post: not in the tray on Post approval (29 Sep 2026)
-    expect(readyToBecomePosts([c as never], new Set())).toEqual([])
     expect(pageCards('editor', [c], am, '2026-09-11').map(x => x.id)).toEqual(['c1'])
     // …and the server’s scope agrees, from the card’s word or the client’s
     const items = [

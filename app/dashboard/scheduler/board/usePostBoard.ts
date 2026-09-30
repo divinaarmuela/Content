@@ -9,7 +9,7 @@ import {
   type AccountRef, type PostHat, type PostState, type TransitionContext,
 } from '../../../lib/post-stage-core'
 import {
-  onBoard, postCardFace, postVisibleTo, readyToBecomePosts, sourcesWithLivePost,
+  onBoard, postCardFace, postVisibleTo,
   type PostCardFace,
 } from '../../../lib/post-board-core'
 import { clientRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
@@ -152,23 +152,11 @@ export function usePostBoard(person: ScopeViewer | null) {
       .map(decorate)
   }, [visible, clock.now, decorate])
 
-  /**
-   * EDITS READY TO BECOME POSTS (SPEC §4.2 source tray): an edit approved for
-   * posting that has no live post yet. Not a lane — an edit card is a source
-   * of files, never a post (audit B3, L5). An upload made on Schedule is its
-   * own post from the start, and an edit the client posts themselves is not
-   * ours to post, so neither is here.
-   */
-  const sources = useMemo(
-    () => readyToBecomePosts(live.items as LiveItem[], sourcesWithLivePost(postRows as unknown as Record<string, unknown>[])),
-    [live.items, postRows])
-
   return {
     clock,
     loading: live.loading || postsLoading,
     onLanes,
     cancelled,
-    sources,
     unstaged: states.unstaged,
     clients,
     nameOf,

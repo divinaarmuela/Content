@@ -38,6 +38,7 @@ import { useWorkRows } from './useLiveWork'
 import { buildOverview, LEADS_CAP, type OverviewItem } from '../lib/overview-core'
 import { accessibleClientIdsOf } from '../lib/scope-client'
 import { readStoredHealth } from '../lib/account-health-core'
+import { SCHEDULE_PAGE } from '../lib/page-access-core'
 
 const PLATFORM_NAMES: Record<string, string> = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', bluesky: 'Bluesky', googlebusiness: 'Google Business' }
 import { boardHref, overviewTiles, type BoardViewCard, type OverviewTile } from '../lib/board-view-core'
@@ -986,9 +987,10 @@ export default function OverviewPage() {
 
           {role === 'scheduler' && data?.scheduler && (
             <>
-              {/* EDIT CARDS signed off for posting — the source tray on Post approval, not posts. "Ready to
-                  post" is a POST's stage (decision 12), and these are not posts yet (review fix, 29 Sep 2026) */}
-              <Section title="Edits ready to become posts" action={actionFor(role as Role | null, 'Make the posts', '/dashboard/scheduler')}>
+              {/* EDIT CARDS signed off for posting — not posts yet. "Ready to post" is a POST's stage
+                  (decision 12). Their posts are made on Schedule, from its media rail: Post approval
+                  shows posts only, never an edit card (the owner, 30 Sep 2026) */}
+              <Section title="Edits ready to become posts" action={actionFor(role as Role | null, 'Make the posts', SCHEDULE_PAGE)}>
                 <ItemRows items={data.scheduler.queue} todayKey={todayKey} role={role as Role | null}
                   empty="Nothing waiting — an edit lands here the moment it is signed off, ready to become a post." />
               </Section>

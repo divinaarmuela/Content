@@ -9,7 +9,6 @@ import {
 } from '../app/lib/hand-over-core'
 import { eventWords } from '../app/lib/notification-words'
 import { pageCards } from '../app/lib/board-view-core'
-import { readyToBecomePosts } from '../app/lib/post-board-core'
 
 /**
  * HAND TO… — a card given to somebody on purpose.
@@ -149,17 +148,13 @@ describe('handing a card to a scheduler puts it in front of them', () => {
     brief: 'Original brief.\n\n— Handed over by Divina, 7 Sep 2026: cut a 30s version for Reels',
   }) as never
 
-  // POST APPROVAL DRAWS POSTS, NOT CARDS (the posting rebuild, 29 Sep 2026):
-  // a handed edit waits in the "Edits ready to become posts" tray until the
-  // scheduler makes a post from it (post-board-core.readyToBecomePosts)
-  it('waits in their tray on Post approval until a post is made from it', () => {
+  // POST APPROVAL DRAWS POSTS, NOT CARDS (the owner, 30 Sep 2026: "no editing data should be in the
+  // post approval page"): a handed edit is never on Post approval — the hand-over makes a fresh draft
+  // POST from its files instead (handoff route → createPost)
+  it('is never drawn on Post approval, and the hand-over makes a draft post from its files', () => {
     expect(pageCards('scheduler', ['draft_uploaded', 'approved_for_scheduling'].map(card), viewer, '2026-09-07')).toEqual([])
-    const handed = [
-      { id: 'h1', client_id: 'c1', status: 'draft_uploaded', scheduler_ids: ['u-sc'] },
-      { id: 'h2', client_id: 'c1', status: 'approved_for_scheduling', scheduler_ids: ['u-sc'] },
-    ]
-    expect(readyToBecomePosts(handed, new Set()).map(i => i.id)).toEqual(['h1', 'h2'])
-    expect(readyToBecomePosts(handed, new Set(['h1']))).toHaveLength(1)
+    const route = require('node:fs').readFileSync('app/api/production/items/[id]/handoff/route.ts', 'utf8') as string
+    expect(route).toMatch(/await createPost\(user, \{ item_id: id \}\)/)
   })
 
   it('and the words handed with it travel on the card itself', () => {

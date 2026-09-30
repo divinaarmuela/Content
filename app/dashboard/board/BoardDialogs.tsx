@@ -422,12 +422,14 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
       // APPROVE AND HAND, ONE ROUTE: the hand-over route performs the
       // approval (its history, the client's decision recorded) and lands the
       // card in this scheduler's Draft — it is never in Ready to post
+      let postProblem: string | null = null
       if (approve) {
         const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduler_ids: [chosen.id], approve: true }),
         })
         if (!seat.ok) throw new Error(await readError(seat, 'Could not approve and hand it over'))
+        postProblem = ((await seat.json().catch(() => ({}))) as { post_problem?: string }).post_problem ?? null
       }
       const words = note.trim()
       const brief = briefAfterHandover(
@@ -457,8 +459,13 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
           body: JSON.stringify({ scheduler_ids: [chosen.id] }),
         })
         if (!seat.ok) throw new Error(await readError(seat, 'Could not hand the posting over'))
+        postProblem = ((await seat.json().catch(() => ({}))) as { post_problem?: string }).post_problem ?? null
       }
-      toast.success(approve ? `Approved and handed to ${personLabel(chosen)} — it is in their Draft.` : `Handed to ${personLabel(chosen)}.`)
+      // the hand-over makes a fresh draft POST from the edit's files, on Post approval (30 Sep 2026)
+      if (postProblem) toast.error(`Handed to ${personLabel(chosen)}, but the post could not be made: ${postProblem}`)
+      else toast.success(approve || card.status === 'approved_for_scheduling'
+        ? `Handed to ${personLabel(chosen)} — a draft post is waiting for them on Post approval.`
+        : `Handed to ${personLabel(chosen)}.`)
       onHanded?.()
       onClose()
     } catch (e) {
@@ -475,7 +482,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
           <DialogTitle>{approve ? 'Approve and hand it to a scheduler' : 'Hand this to someone'}</DialogTitle>
           <DialogDescription>
             {approve
-              ? 'The approval is logged and the card goes straight into their Draft — it never sits in Ready to post. Close this without picking anyone and nothing changes.'
+              ? 'The approval is logged and a draft post is made from its files, waiting for them on Post approval. Close this without picking anyone and nothing changes.'
               : 'They become the person on it, and they are told — with whatever you write here.'}
           </DialogDescription>
         </DialogHeader>

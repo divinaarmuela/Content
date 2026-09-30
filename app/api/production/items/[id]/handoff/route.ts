@@ -5,6 +5,7 @@ import { requireRole, authzErrorResponse, AuthzError } from '../../../../../lib/
 import { loadItemForUser } from '../../../../../lib/production-access'
 import { logActivity, notifyScheduleHandoff, performTransition } from '../../../../../lib/workflow'
 import { announceItemChange } from '../../../../../lib/production-live'
+import { createPost, DuplicatePostError } from '../../../../../lib/social-schedule'
 
 /** Hand an approved item to specific schedulers — the follow-up to a client
  *  approval, where the fan-out went to everyone and the manager narrows it. */
@@ -73,6 +74,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // scheduled) is left where it is.
     const patch: Record<string, unknown> = { scheduler_ids: valid }
     const toDraft = item.status === 'approved_for_scheduling'
+
+    // A FRESH POST FOR THE SCHEDULER (the owner, 30 Sep 2026: "when we hand it from editor to a
+    // scheduler it's a fresh card… no editing data should be in the post approval page"). The edit's
+    // finished files become a new DRAFT post on Post approval, assigned to the first person it was
+    // handed to; the edit card stays on the Editor page. Made while the card is still approved (the
+    // files' sign-off is read off it). A post already made from these files is not made twice.
+    let postId: string | null = null
+    let postProblem: string | null = null
+    if (toDraft) {
+      try {
+        const made = await createPost(user, { item_id: id })
+        postId = made.id
+        await table('social_posts').update(made.id, { assigned_to: valid[0] })
+      } catch (e) {
+        if (e instanceof DuplicatePostError) postProblem = null
+        else postProblem = e instanceof Error ? e.message : 'The post could not be made'
+      }
+    }
     if (toDraft) patch.status = 'draft_uploaded'
     await table('content_items').update(id, patch)
     announceItemChange({ item_id: id, client_id: item.client_id, status: toDraft ? 'draft_uploaded' : item.status, kind: 'updated' })
@@ -83,7 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       action: 'schedule_handoff',
       detail: `${approve ? 'approved and ' : ''}handed to ${valid.length} person${valid.length === 1 ? '' : 's'} (${sent} notified)`,
     })
-    return NextResponse.json({ notified: sent })
+    return NextResponse.json({ notified: sent, post_id: postId, ...(postProblem ? { post_problem: postProblem } : {}) })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

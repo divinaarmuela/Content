@@ -111,11 +111,9 @@ describe('the shoot page, rebuilt from the Shoot Brief SOP (13 Sep 2026)', () =>
 })
 
 describe('one drawer for every card', () => {
-  it('Post approval opens an edit in the card sheet and a post in the post window; the Editor opens the card page', () => {
-    // a post is not a card: Post approval's own board opens the post window,
-    // and only an edit from its tray opens beside the board (29 Sep 2026)
-    expect(src(SCHEDULER)).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} \/>/)
-    expect(src(SCHEDULER)).not.toContain(' simple')
+  it('Post approval opens only the post window, never an edit card; the Editor opens the card page', () => {
+    // a post is not a card, and no editing data is on Post approval (the owner, 30 Sep 2026)
+    expect(src(SCHEDULER)).not.toContain('CardSheet')
     // the Editor page opens the card's own PAGE (15 Sep 2026: "not a slider
     // anymore"), which chooses the same three cards the sheet did
     expect(src(EDITOR)).toContain('onOpen={c => router.push(`/dashboard/editor/${c.id}`)}')

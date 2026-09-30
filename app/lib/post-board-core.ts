@@ -271,10 +271,6 @@ export function clientDropdownChoices(
   return list.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** "Make a post" from an edit that is ready to become one — the Schedule page opens its composer on the piece. */
-export function makePostHref(item: { id: string; client_id: string }, schedulePage: string): string {
-  return `${schedulePage}?client=${encodeURIComponent(item.client_id)}&item=${encodeURIComponent(item.id)}`
-}
 
 /* ── a round: several posts to one client, in one email ─────────────── */
 
@@ -480,7 +476,7 @@ export function postCardFace(
     clientId: post.client_id,
     stage: { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
     tone: postTone(post, opts.now),
-    networks: opts.platformOf ? cardNetworks(post, opts.platformOf) : [],
+    networks: opts.platformOf ? faceNetworks(post, opts.platformOf) : [],
     waiting: { ...wait, sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
@@ -496,54 +492,31 @@ export function postCardFace(
       ? [post.problem, 'The card it came from was deleted.'].filter(Boolean).join(' ')
       : post.problem,
     thumbs: post.slides.slice(0, 3).map(s => ({ url: s.url, type: s.type === 'video' ? 'video' : 'image' })),
-    posted: post.stage === 'posted' ? postedWords(post) : null,
+    // only when it says more than the stage chip already does: "Posted on 1 of 2 — LinkedIn did not go
+    // out". A plain "Posted" under a "Posted" chip and a "Posted" waiting line was said three times.
+    posted: post.stage === 'posted' && postedWords(post).startsWith('Posted on') ? postedWords(post) : null,
   }
+}
+
+/**
+ * The card's network icons. A channel whose account is no longer on file (disconnected and connected
+ * again as a new row) is named by the network it went out on, from the post's own outcomes; on a post
+ * that has gone out or been cancelled, one that cannot be named at all is left off — it drew a bare
+ * "U" (the owner's check of 30 Sep 2026). Before booking it stays, so the missing channel shows.
+ */
+function faceNetworks(
+  post: PostState, platformOf: (accountId: string) => string | null | undefined,
+): { platform: string; label: string }[] {
+  const known = cardNetworks(post, platformOf)
+  if (!known.some(n => n.platform === UNKNOWN_NETWORK.platform)) return known
+  const named = known.filter(n => n.platform !== UNKNOWN_NETWORK.platform)
+  for (const raw of Object.keys(post.outcomes ?? {})) {
+    const platform = raw.toLowerCase()
+    if (!named.some(n => n.platform === platform)) named.push({ platform, label: networkName(raw) })
+  }
+  const settled = post.stage === 'posted' || post.stage === 'cancelled'
+  return settled ? named : [...named, { ...UNKNOWN_NETWORK }]
 }
 
 /* ── edits ready to become posts (the tray above the board) ─────────────── */
 
-/** What the tray reads off an edit card. */
-export type SourceCard = {
-  id: string
-  client_id: string
-  status: string
-  adhoc_post?: unknown
-  scheduler_ids?: unknown
-  deliver_only?: boolean | null
-  work_kinds?: { slug?: string | null } | null
-  clients?: { posts_own_content?: boolean | null } | null
-}
-
-/**
- * EDITS READY TO BECOME POSTS (SPEC §4.2): an edit approved for posting, or
- * handed to a scheduler to post (the hand-over puts the card back at Draft for
- * them — its edit is finished), that has no live post yet. Never an upload
- * made on Schedule (that is a post from birth, audit V13), never a shoot plan,
- * never a piece the client posts themselves, and never an edit being revised
- * (audit B3, L5).
- */
-export function readyToBecomePosts<T extends SourceCard>(items: readonly T[], sourcesWithPost: ReadonlySet<string>): T[] {
-  return items.filter(i => {
-    if (i.adhoc_post === true) return false
-    if ((i.work_kinds?.slug ?? '') === 'shoot_brief') return false
-    if (deliverOnly(i as never, (i.clients ?? null) as never)) return false
-    if (sourcesWithPost.has(i.id)) return false
-    const handed = Array.isArray(i.scheduler_ids) && i.scheduler_ids.length > 0
-    return i.status === 'approved_for_scheduling' || (handed && i.status === 'draft_uploaded')
-  })
-}
-
-/**
- * The source cards that already have a post that is not cancelled. A row the
- * migration has not given a stage yet counts as live: nothing here guesses a
- * post's place from any other field.
- */
-export function sourcesWithLivePost(rows: readonly Record<string, unknown>[]): Set<string> {
-  const out = new Set<string>()
-  for (const r of rows) {
-    const src = typeof r.source_item_id === 'string' && r.source_item_id ? r.source_item_id
-      : typeof r.item_id === 'string' && r.item_id ? r.item_id : null
-    if (src && r.stage !== 'cancelled') out.add(src)
-  }
-  return out
-}

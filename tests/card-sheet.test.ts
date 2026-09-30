@@ -77,12 +77,10 @@ describe('the three boards host the sheet, and the address carries the card', ()
     })
   }
 
-  it('Post approval opens an edit from its tray in the sheet, and a post in the post window', () => {
+  it('Post approval draws no edit card at all — a post opens in the post window (30 Sep 2026)', () => {
     const src = code(read('app/dashboard/scheduler/page.tsx'))
-    expect(src).toContain("from '../board/CardSheet'")
-    expect(src).toContain('useCardSheet()')
-    expect(src).toMatch(/<SourceTray items=\{sources\} onOpenEdit=\{sheet\.open\}/)
-    expect(src).toMatch(/<CardSheet id=\{sheet\.cardId\} onClose=\{sheet\.close\} \/>/)
+    expect(src).not.toContain('CardSheet')
+    expect(src).not.toContain('SourceTray')
     expect(code(read('app/dashboard/scheduler/board/PostCard.tsx'))).toMatch(/href=\{windowHref\}/)
   })
 

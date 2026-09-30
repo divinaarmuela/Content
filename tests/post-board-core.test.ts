@@ -5,8 +5,8 @@ import {
 } from '../app/lib/post-stage-core'
 import {
   FIRST_THE_CHECK, PAGE_ACTIONS, POSTED_DAYS_ON_BOARD, boardActions, cardNetworks, dropOnPostLane,
-  groupPosts, laneFromAddress, makePostHref, offeredList, onBoard, pageOffers, postCardFace, postMoveTargets,
-  postVisibleTo, postWindowHref, readyToBecomePosts, scheduleLink, sourcesWithLivePost,
+  groupPosts, laneFromAddress, offeredList, onBoard, pageOffers, postCardFace, postMoveTargets,
+  postVisibleTo, postWindowHref, scheduleLink,
 } from '../app/lib/post-board-core'
 
 /**
@@ -152,7 +152,9 @@ describe('what this page offers', () => {
     const p = post('quality_check')
     const joy = boardActions(p, HATS.joy, NOW, CTX)
     expect(joy.primary?.action).toBe('pass')
-    expect(offeredList(joy).map(a => a.action)).toEqual(expect.arrayContaining(['pass', 'pass_send_client', 'ask_change']))
+    expect(offeredList(joy).map(a => a.action)).toEqual(expect.arrayContaining(['pass', 'ask_change']))
+    // one pass button: a Team-only post never offers "Passed — send to client" (30 Sep 2026)
+    expect(offeredList(joy).map(a => a.action)).not.toContain('pass_send_client')
     const am = boardActions(p, HATS.am, NOW, CTX)
     expect(offeredList(am).map(a => a.action)).not.toContain('pass')
     expect(offeredList(am).map(a => a.action)).not.toContain('pass_send_client')
@@ -245,7 +247,10 @@ describe('a drop onto a lane is a button, or the rule’s own reason (audit B1, 
   it('the checker drops onto Approved to pass it, onto With client to pass and send, onto Draft to ask for a change', () => {
     const p = post('quality_check')
     expect(dropOnPostLane(p, 'approved', HATS.joy, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'pass' } })
-    expect(dropOnPostLane(p, 'with_client', HATS.joy, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'pass_send_client' } })
+    // with the client in its route; a Team-only post never goes to the client by a drag (30 Sep 2026)
+    const toClient = post('quality_check', { approval_steps: 'team_then_client' })
+    expect(dropOnPostLane(toClient, 'with_client', HATS.joy, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'pass_send_client' } })
+    expect(dropOnPostLane(p, 'with_client', HATS.joy, NOW, CTX).ok).toBe(false)
     expect(dropOnPostLane(p, 'draft', HATS.joy, NOW, CTX)).toMatchObject({ ok: true, action: { action: 'ask_change', needs: expect.arrayContaining(['note']) } })
   })
 
@@ -392,37 +397,6 @@ describe('who sees a post on the board', () => {
   })
 })
 
-describe('edits ready to become posts — a tray, not a lane (audit B3, L5)', () => {
-  const edit = (over: Record<string, unknown> = {}) => ({ id: 'i1', client_id: 'c1', status: 'approved_for_scheduling', ...over })
-  it('an approved edit with no live post is listed', () => {
-    expect(readyToBecomePosts([edit()], new Set()).map(i => i.id)).toEqual(['i1'])
-    expect(readyToBecomePosts([edit()], new Set(['i1']))).toEqual([])
-  })
-  it('a handed-over edit the hand-over put back at Draft is listed; one being revised is not', () => {
-    expect(readyToBecomePosts([edit({ status: 'draft_uploaded', scheduler_ids: ['s1'] })], new Set())).toHaveLength(1)
-    expect(readyToBecomePosts([edit({ status: 'revision_required', scheduler_ids: ['s1'] })], new Set())).toEqual([])
-    expect(readyToBecomePosts([edit({ status: 'draft_uploaded' })], new Set())).toEqual([])
-  })
-  it('never an upload made on Schedule, a shoot plan, or a piece the client posts (audit V13)', () => {
-    expect(readyToBecomePosts([edit({ adhoc_post: true })], new Set())).toEqual([])
-    expect(readyToBecomePosts([edit({ work_kinds: { slug: 'shoot_brief' } })], new Set())).toEqual([])
-    expect(readyToBecomePosts([edit({ deliver_only: true })], new Set())).toEqual([])
-    expect(readyToBecomePosts([edit({ clients: { posts_own_content: true } })], new Set())).toEqual([])
-  })
-  it('a cancelled post does not count as live; a row not yet given a stage counts as live, whatever else it says', () => {
-    const rows = [
-      { id: 'p1', source_item_id: 'a', stage: 'cancelled' },
-      { id: 'p2', source_item_id: 'b', stage: 'draft' },
-      { id: 'p3', item_id: 'c', status: 'pending' },
-      { id: 'p4', item_id: 'd', status: 'cancelled' },
-    ]
-    expect([...sourcesWithLivePost(rows)].sort()).toEqual(['b', 'c', 'd'])
-  })
-  it('Make a post opens the composer on the piece; a card opens the post window', () => {
-    expect(makePostHref({ id: 'i 1', client_id: 'c1' }, '/dashboard/social/schedule')).toBe('/dashboard/social/schedule?client=c1&item=i%201')
-    expect(postWindowHref({ id: 'p1', client_id: 'c1' }, '/dashboard/social/schedule')).toBe('/dashboard/social/schedule?client=c1&post=p1')
-  })
-})
 
 describe('a posted card says it went out (live test, 29 Sep 2026)', () => {
   it('Went out once posted, Was planned once cancelled, Goes out before', async () => {

@@ -395,6 +395,8 @@ describe('several posts to one client in one email (decision 15)', () => {
     const mk = (id: string, stage: PostStage, client_id = CLIENT): PostState => readPostState({
       id, client_id, stage, rev: 1, sent_version: 1, draft_version: 2, scheduled_for: IN(48), channels: ['acc-ig'],
       slides: SLIDES, qc_pass: stage === 'ready' ? { version: 1, by: 'u-qr', at: 'x' } : null,
+      // the round sends: a post at the quality check goes to the client only on that route (30 Sep 2026)
+      approval_steps: 'team_then_client',
       approval: stage === 'ready' ? { version: 1, by: 'u-qr', hat: 'quality_reviewer', at: 'x' } : null,
     })!
     const ctx = { clientHasContact: true, accounts: [{ id: 'acc-ig', platform: 'instagram', live: true }] }

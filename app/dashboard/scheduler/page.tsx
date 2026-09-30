@@ -9,12 +9,10 @@ import { useRole } from '../useRole'
 import { AccountUnavailable } from '../production/shoot-ui'
 import GettingStarted from '../GettingStarted'
 import NoReviewerBanner from '../ui/NoReviewerBanner'
-import { CardSheet, useCardSheet } from '../board/CardSheet'
 import WaitingOnYou from './WaitingOnYou'
 import PostWindowFromAddress from './PostWindowFromAddress'
 import ClientRound from './board/ClientRound'
 import { PostBoard } from './board/PostBoard'
-import SourceTray from './board/SourceTray'
 import { usePostActs } from './board/usePostActs'
 import { usePostBoard } from './board/usePostBoard'
 
@@ -29,8 +27,7 @@ import { usePostBoard } from './board/usePostBoard'
  *
  * Top to bottom:
  *   1. Waiting on you — the posts somebody is held up by (`post-waiting-core`).
- *   2. Edits ready to become posts — a tray, not a lane (`SourceTray`).
- *   3. The board — Draft · Quality check · With client · Approved, and the
+ *   2. The board — Draft · Quality check · With client · Approved, and the
  *      cancelled posts folded under it (`PostBoard`).
  *
  * Every button on all three is from `boardActions` (post-board-core, which
@@ -41,8 +38,13 @@ import { usePostBoard } from './board/usePostBoard'
  * `?post=<id>` opens that post's window HERE (every card, list row and
  * Waiting row links to it — the quality checker has no Schedule page) and
  * outlines its card; `?item=<id>` / `?card=<id>` (the bell and older emails)
- * outline the posts made from that edit, or open the edit when it has none
- * yet.
+ * outline the posts made from that edit.
+ *
+ * NO EDIT CARDS HERE (the owner, 30 Sep 2026: "what does Team AA Edits doing
+ * here"). The rebuild kept a tray of approved edits above the board whose
+ * names opened the editor's card — its assignee, edit due date and Drive
+ * link — on a page that is about posts. Edits waiting to become posts are on
+ * the Schedule page's media rail, where the post is made from them.
  */
 export default function PostApprovalPage() {
   const { me, noAccount } = useRole()
@@ -50,7 +52,6 @@ export default function PostApprovalPage() {
     () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
   const data = usePostBoard(viewer)
   const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf, clientOf: data.clientOf })
-  const sheet = useCardSheet()
 
   /* ── narrowing to one client, for people who look across many ──
    * `?client=<id>` chooses it (live test, 29 Sep 2026: the parameter was ignored), read ONCE as the
@@ -64,19 +65,18 @@ export default function PostApprovalPage() {
   }, [clientId])
   const clientsOnBoard = useMemo(() => {
     const seen = new Map<string, string>()
-    for (const bp of [...data.onLanes, ...data.cancelled]) seen.set(bp.post.client_id, bp.face.client)
+    // clients with a post in a lane — not those whose only posts are cancelled, which listed names
+    // like Bond Street with nothing to show under them (the owner's check of 30 Sep 2026)
+    for (const bp of data.onLanes) seen.set(bp.post.client_id, bp.face.client)
     const names = new Map(data.clients.map(c => [c.id, String(c.name ?? '')]))
     return clientDropdownChoices([...seen].map(([id, name]) => ({ id, name })), clientId, id => names.get(id))
-  }, [data.onLanes, data.cancelled, data.clients, clientId])
+  }, [data.onLanes, data.clients, clientId])
   const lanes = useMemo(
     () => (clientId ? data.onLanes.filter(bp => bp.post.client_id === clientId) : data.onLanes),
     [data.onLanes, clientId])
   const cancelled = useMemo(
     () => (clientId ? data.cancelled.filter(bp => bp.post.client_id === clientId) : data.cancelled),
     [data.cancelled, clientId])
-  const sources = useMemo(
-    () => (clientId ? data.sources.filter(i => i.client_id === clientId) : data.sources),
-    [data.sources, clientId])
 
   const waiting = useMemo(() => {
     if (!viewer) return []
@@ -107,9 +107,8 @@ export default function PostApprovalPage() {
     if (itemId) {
       const made = all.filter(bp => bp.post.source_item_id === itemId).map(bp => bp.post.id)
       if (made.length > 0) setFocus(new Set(made))
-      else sheet.open(itemId)
     }
-  }, [ready, data.onLanes, data.cancelled, sheet])
+  }, [ready, data.onLanes, data.cancelled])
 
   if (noAccount) return <AccountUnavailable />
 
@@ -121,8 +120,6 @@ export default function PostApprovalPage() {
       {ready && (
         <WaitingOnYou rows={waiting} busyId={acts.busyId} errorFor={acts.errorFor} onPress={acts.press} />
       )}
-
-      {ready && <SourceTray items={sources} onOpenEdit={sheet.open} nameOf={data.nameOf} />}
 
       {ready && <ClientRound posts={lanes} now={data.clock.now} choicesFor={data.choicesFor} />}
 
@@ -163,8 +160,6 @@ export default function PostApprovalPage() {
 
       {acts.dialogs}
       <Suspense fallback={null}><PostWindowFromAddress clientId={clientId} /></Suspense>
-      {/* an edit from the tray, opened beside the board — the edit's own card */}
-      <CardSheet id={sheet.cardId} onClose={sheet.close} />
     </div>
   )
 }

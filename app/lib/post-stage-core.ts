@@ -1536,6 +1536,13 @@ export function postActions(
     if (!r.ok && ['not_allowed', 'wrong_stage', 'use_delete', 'use_cancel', 'steps', 'nothing_missing', 'already', 'unchecked'].includes(r.code)) continue
     // the client gets words, not buttons, once their time has gone (SPEC §4.4)
     if (!r.ok && r.code === 'missed') continue
+    // ONE PASS BUTTON, the one the post's approval route takes (the owner, 30 Sep 2026: a Team-only
+    // post offered "Passed — send to client" beside "Passed"). The other way round is "Change approval
+    // steps", which is offered at the quality check too.
+    if (post.stage === 'quality_check' && (action === 'pass' || action === 'pass_send_client')) {
+      const steps = approvalStepsOf(post, ctx.client)
+      if (action !== (steps === 'team_then_client' ? 'pass_send_client' : 'pass')) continue
+    }
     const label = action === 'edit' || action === 'edit_booked'
       ? `Edit — makes version ${post.draft_version}`
       : action === 'resend_new_time' && missed ? 'Set a new time and resend' : row.label

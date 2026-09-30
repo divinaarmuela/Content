@@ -257,6 +257,11 @@ export default function PostWindow({
     : null)
   const post = base ? withWorkingCopy(base, working) : null
   const editable = post ? bodyEditable(post) : false
+  /** still on its way to being booked: the checks and warnings "before you schedule" only mean
+   *  something here — a booked, posted or cancelled post says nothing about what WILL happen
+   *  (the owner's check of 30 Sep 2026: a post live for days read "a clean copy is made",
+   *  "will not post on LinkedIn" and "reconnect before this can be booked") */
+  const beforeBooking = !!post && ['draft', 'quality_check', 'with_client', 'ready'].includes(post.stage)
   const hats = useMemo(() => (me && post ? hatsFor(me, post) : []), [me, post])
   const accountRefs: AccountRef[] = useMemo(
     () => (context.allAccounts ?? accounts).map(a => ({ id: a.id, platform: String(a.platform), live: a.active !== false, name: a.username ?? a.name })),
@@ -778,7 +783,7 @@ export default function PostWindow({
               {header.approvalLine && <p className="text-muted-foreground">{header.approvalLine}</p>}
               {header.sendLine && <p className="text-muted-foreground">{header.sendLine}</p>}
               {header.answerByLine && <p className="font-medium" data-answer-by>{header.answerByLine}</p>}
-              {header.versionLine && <p className="text-[12px] text-muted-foreground" data-version-line>{header.versionLine}{frozen?.fromMigration ? ' · frozen at migration, not at send' : ''}</p>}
+              {header.versionLine && <p className="text-[12px] text-muted-foreground" data-version-line>{header.versionLine}</p>}
             </div>
           )}
           {gone && <p role="alert" className="text-[13px] font-medium">This post no longer exists.</p>}
@@ -800,9 +805,9 @@ export default function PostWindow({
                     ? <PlatformIcon platform={String(chosen[0].platform)} size={26} className="rounded-full" />
                     : <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-foreground/10"><Plus className="h-3 w-3" aria-hidden /></span>}
                   <span className="flex flex-col items-start leading-[1.1]">
-                    <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : 'Choose a channel'}</span>
+                    <span>{chosen[0] ? (chosen[0].username || chosen[0].name || 'Channel') : beforeBooking ? 'Choose a channel' : 'Its channel'}</span>
                     <span className="text-[11px] font-medium text-muted-foreground">
-                      {chosen.length > 1 ? `and ${chosen.length - 1} more` : chosen[0]?.platform ?? 'none yet'}
+                      {chosen.length > 1 ? `and ${chosen.length - 1} more` : chosen[0] ? networkName(String(chosen[0].platform)) : beforeBooking ? 'none yet' : 'no longer connected'}
                     </span>
                   </span>
                 </>
@@ -889,9 +894,9 @@ export default function PostWindow({
             This post is for {postForPerson?.name ?? 'a person'}, who has no account connected yet — send them their connect link from Social channels. It will not go to the business’s accounts.
           </p>
         )}
-        {lost.length > 0 && (
+        {(beforeBooking || post?.stage === 'booked') && lost.length > 0 && (
           <p role="alert" className="mx-3.5 mt-3 rounded-inner border border-accent-red/40 bg-tint-red px-3 py-2 text-[12px] font-medium">
-            {lost.join(', ')} {lost.length === 1 ? 'is' : 'are'} not connected. Reconnect on Social channels before this can be booked.
+            {lost.join(', ')} {lost.length === 1 ? 'is' : 'are'} not connected. Reconnect on Social channels {beforeBooking ? 'before this can be booked' : 'before it goes out'}.
           </p>
         )}
         {draftTimeHint && (
@@ -1034,7 +1039,7 @@ export default function PostWindow({
             {caps.lines.length > 0 && (
               <div className="flex flex-col gap-0.5">{caps.lines.map(l => <p key={l.id} className="text-[12px] text-muted-foreground">{l.line}</p>)}</div>
             )}
-            {shown.slides.length > 0 && checkPlatforms.length > 0 && (
+            {beforeBooking && shown.slides.length > 0 && checkPlatforms.length > 0 && (
               <div data-tour="post-check">
                 <AssetCheck
                   probes={probes} platforms={checkPlatforms} kinds={checkKinds} copies={copyPlatforms} playable={playable} compact
@@ -1222,14 +1227,19 @@ export default function PostWindow({
               <span className="text-[13px] text-muted-foreground">Nothing for you to do on this post right now.</span>
             )}
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2" data-tour="post-submit">
-              {buttons.map(({ offered, kind }) => (
+              {buttons.map(({ offered, kind }, i) => {
+                // a reason shared by several buttons is said once, under the first of them (the owner's check
+                // of 30 Sep 2026: "Choose at least one channel" printed three times in a row)
+                const saidBy = buttons.find(b => b.offered.blocked === offered.blocked)?.offered.action ?? offered.action
+                const sayReason = !!offered.blocked && buttons.findIndex(b => b.offered.blocked === offered.blocked) === i
+                return (
                 <span key={offered.action} className="flex flex-col items-end gap-0.5">
                   <button
                     type="button"
                     data-action={offered.action}
                     data-kind={kind}
                     disabled={busy || !!offered.blocked}
-                    aria-describedby={offered.blocked ? `why-${offered.action}` : undefined}
+                    aria-describedby={offered.blocked ? `why-${saidBy}` : undefined}
                     onClick={() => press(offered)}
                     className={cn(
                       'flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50',
@@ -1242,11 +1252,12 @@ export default function PostWindow({
                     {kind === 'danger' && <Trash2 className="h-4 w-4" strokeWidth={1.8} aria-hidden />}
                     {busy && asking?.q.action === offered.action ? 'Working…' : offered.label}
                   </button>
-                  {offered.blocked && (
+                  {sayReason && (
                     <span id={`why-${offered.action}`} className="max-w-[260px] text-right text-[11px] leading-snug text-muted-foreground">{offered.blocked}</span>
                   )}
                 </span>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>

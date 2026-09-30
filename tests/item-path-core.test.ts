@@ -66,11 +66,11 @@ describe('the Production card page sends an uploaded post to the Post approval b
 })
 
 describe('the Post approval board opens the card the address names', () => {
-  it('reads ?item= once the posts have arrived: outlines the posts made from it, or opens the edit', () => {
+  it('reads ?item= once the posts have arrived: outlines the posts made from it, and never opens the edit (30 Sep 2026)', () => {
     const src = readFileSync(join(process.cwd(), 'app/dashboard/scheduler/page.tsx'), 'utf8')
     expect(src).toContain(".get('item')")
     expect(src).toMatch(/bp\.post\.source_item_id === itemId/)
-    expect(src).toMatch(/sheet\.open\(itemId\)/)
+    expect(src).not.toMatch(/sheet\.open/)
   })
 })
 
