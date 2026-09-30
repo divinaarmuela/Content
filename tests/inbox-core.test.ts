@@ -68,6 +68,8 @@ describe('the chat view (30 Sep 2026: "we need to fix chat ui"; attachments read
     const { attachmentView, previewWords } = await import('../app/lib/inbox-core')
     expect(attachmentView({ type: 'image', url: 'https://x/a.jpg' })).toMatchObject({ kind: 'image', url: 'https://x/a.jpg' })
     expect(attachmentView({ type: 'video', originalType: 'ig_reel', url: 'u' }).words).toBe('Shared a Reel')
+    // a shared Reel is a link to its page, never a player (Turnkey's, on Jordan's inbox)
+    expect(attachmentView({ type: 'video', originalType: 'ig_reel', url: 'https://www.instagram.com/reel/Dd0woG9Bwu6/' })).toMatchObject({ kind: 'link', words: 'Shared a Reel' })
     expect(attachmentView({ type: 'share', originalType: 'story_mention', url: 'u' }).words).toBe('Mentioned the account in their story')
     expect(attachmentView({ type: 'audio', url: 'u' }).kind).toBe('audio')
     expect(previewWords('[Attachment]')).toBe('Sent an attachment')

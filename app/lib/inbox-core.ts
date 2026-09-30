@@ -131,6 +131,12 @@ export function filterConversations(
 export function attachmentView(a: InboxAttachment): { kind: 'image' | 'video' | 'audio' | 'link'; url: string | null; words: string } {
   const url = a.url || a.previewUrl || a.refreshUrl || null
   const t = String(a.type ?? '')
+  // a shared Reel or post arrives as a link to its Instagram PAGE, not a media file — a player would stay blank
+  // (30 Sep 2026: Turnkey's shared Reel on Jordan's inbox was https://www.instagram.com/reel/…)
+  if (url && /^https?:\/\/(www\.)?instagram\.com\//.test(url)) {
+    return { kind: 'link', url, words: a.originalType === 'ig_reel' || a.originalType === 'reel' ? 'Shared a Reel' : 'Shared a post' }
+  }
+  if (t === 'unsupported_type') return { kind: 'link', url, words: 'Shared something Instagram does not describe' }
   if (a.originalType === 'story_mention') return { kind: 'link', url, words: 'Mentioned the account in their story' }
   if (t === 'image' || t === 'sticker' || t === 'gif') return { kind: 'image', url, words: 'Photo' }
   if (t === 'video') return { kind: 'video', url, words: a.originalType === 'ig_reel' || a.originalType === 'reel' ? 'Shared a Reel' : 'Video' }
