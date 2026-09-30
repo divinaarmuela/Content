@@ -345,6 +345,8 @@ export type AutomationInput = {
   /** other public replies, one picked at random with comment_reply */
   reply_variations: string[]
   name: string | null
+  /** who runs it: Zernio's automation, or our app off the comment webhook (runAppAutomations) */
+  runner: Runner
 }
 
 /**
@@ -418,11 +420,12 @@ export function parseAutomationInput(raw: unknown): { ok: true; value: Automatio
   // Zernio picks from [commentReply, ...variations]: others with no main reply would never be said
   if (replyVar.list.length > 0 && !comment_reply) return { ok: false, error: 'Write the public reply first — the other replies are picked at random with it' }
   const name = s(r.name).slice(0, 80) || null
+  const runner: Runner = r.runner === 'app' ? 'app' : 'zernio'
   return {
     ok: true,
     value: {
       client_id, social_account_id, post_key, keywords, match_mode, dm_message, button_title, link, comment_reply,
-      dm_variations: dmVar.list, reply_variations: replyVar.list, name,
+      dm_variations: dmVar.list, reply_variations: replyVar.list, name, runner,
     },
   }
 }
@@ -740,4 +743,104 @@ export function automationLine(
   const s = state.stats
   const dms = s ? `${s.dmsSent} DM${s.dmsSent === 1 ? '' : 's'}, ${s.linkClicks} click${s.linkClicks === 1 ? '' : 's'}` : ''
   return `Automation: ${what} · live${dms ? ` · ${dms}` : ''}`
+}
+
+/* ── run by our app (the owner, 30 Sep 2026: "we have a comment trigger … and then we send") ── */
+
+/**
+ * AN AUTOMATION OUR APP RUNS ITSELF. Zernio tells us of every comment (`comment.received` on the webhook);
+ * for an automation with runner 'app' our app decides and sends the DM — Instagram's private reply, through
+ * the same Zernio call the Inbox's DM button uses — and the public reply. Still ONE post each (never an
+ * account), still switched on by a person, so it sits under the same standing rule as Zernio's.
+ *
+ * Instagram's rules, which no runner can change: one private reply per comment, within 7 days of it; and
+ * nothing more until the person writes back.
+ */
+export const RUNNERS = ['zernio', 'app'] as const
+export type Runner = typeof RUNNERS[number]
+export const runnerOf = (row: { runner?: string | null }): Runner => (row.runner === 'app' ? 'app' : 'zernio')
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Does this comment say one of the keywords, the way Zernio's matchMode would read it? Case never matters. */
+export function keywordMatches(text: string, keywords: readonly string[], mode: MatchMode | string): boolean {
+  const t = String(text ?? '').trim().toLowerCase()
+  if (!t) return false
+  const ks = keywords.map(k => String(k ?? '').trim().toLowerCase()).filter(Boolean)
+  if (ks.length === 0) return true
+  if (mode === 'exact') return ks.some(k => t === k)
+  if (mode === 'contains') return ks.some(k => t.includes(k))
+  // word: the keyword on its own, not inside another word ("rba!" yes, "carbage" no)
+  return ks.some(k => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(k)}($|[^\\p{L}\\p{N}])`, 'u').test(t))
+}
+
+/** One of [main, ...others], the same one every time for the same seed — a retried send says the same thing. */
+export function pickText(main: string, others: readonly string[], seed: string): string {
+  const all = [main, ...others].filter(t => typeof t === 'string' && t.trim())
+  if (all.length === 0) return main
+  let h = 0
+  for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return all[h % all.length]
+}
+
+/** The row id of one person's send on one automation: the claim that makes it exactly once. */
+export function sendKey(automationId: string, person: string): string {
+  const who = String(person ?? '').trim().toLowerCase().replace(/^@/, '')
+  return `${automationId}:${who.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))}`
+}
+
+export type IncomingComment = {
+  commentId: string
+  accountId: string | null
+  platformPostId: string | null
+  text: string
+  authorId?: string
+  authorUsername?: string
+  own?: boolean
+}
+
+export type AppRunRow = {
+  id: string; runner?: string | null; active: boolean; provider_account_id: string; platform_post_id: string | null
+  keywords: unknown; match_mode: string; comment_reply: string | null; reply_variations: unknown
+}
+
+/**
+ * Should our app answer this comment for this automation? The person is the commenter's id, else their name.
+ * Our own replies come back through the webhook as comments ("Link sent to your DM") — they are never answered:
+ * Zernio marks them own, and a comment that is word for word one of this automation's public replies is ours too.
+ */
+export function appSendDecision(row: AppRunRow, c: IncomingComment):
+  { send: true; person: string } | { send: false; reason: string } {
+  if (runnerOf(row) !== 'app') return { send: false, reason: 'run by Zernio' }
+  if (!row.active) return { send: false, reason: 'switched off' }
+  if (!c.accountId || c.accountId !== row.provider_account_id) return { send: false, reason: 'another account' }
+  if (!c.platformPostId || c.platformPostId !== row.platform_post_id) return { send: false, reason: 'another post' }
+  if (c.own) return { send: false, reason: 'our own comment' }
+  const replies = [row.comment_reply, ...(Array.isArray(row.reply_variations) ? row.reply_variations : [])]
+    .map(r => String(r ?? '').trim().toLowerCase()).filter(Boolean)
+  if (replies.includes(String(c.text ?? '').trim().toLowerCase())) return { send: false, reason: 'our own reply' }
+  const keywords = Array.isArray(row.keywords) ? (row.keywords as unknown[]).map(String) : []
+  if (!keywordMatches(c.text, keywords, row.match_mode)) return { send: false, reason: 'no keyword' }
+  const person = (c.authorId || c.authorUsername || '').trim()
+  if (!person) return { send: false, reason: 'the comment names nobody' }
+  return { send: true, person }
+}
+
+/** Our own sends as the list's numbers and log (the same shape Zernio's give). */
+export function appStats(sends: readonly { status: string }[]): AutomationStats {
+  const n = (s: string) => sends.filter(r => r.status === s).length
+  return { triggered: sends.length, dmsSent: n('sent'), delivered: 0, read: 0, failed: n('failed'), linkClicks: 0, uniqueClicks: 0 }
+}
+
+export function appLogs(sends: readonly {
+  id: string; commenter: string; commenter_name: string | null; comment_text: string | null; status: string; error: string | null; created_at: string
+}[], limit = 10): AutomationLogRow[] {
+  return [...sends]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, limit)
+    .map(r => ({
+      id: r.id,
+      username: r.commenter_name && !/^\d+$/.test(r.commenter_name) ? r.commenter_name : r.commenter,
+      comment: r.comment_text, status: r.status, error: r.error, clicks: 0, at: r.created_at,
+    }))
 }

@@ -735,7 +735,9 @@ const GHOST_TABLES = {
     ['social_account_id', col('string', false)],   // our social_accounts row
     ['provider_account_id', col('string', false)], // Zernio's account id
     ['platform', col('string', false)],            // instagram | facebook
-    ['zernio_automation_id', col('string', false)],
+    // null when OUR APP runs it (runner 'app', 30 Sep 2026) — then Zernio holds nothing for it
+    ['zernio_automation_id', col('string', true)],
+    ['runner', col('string', true)],               // 'zernio' (null = zernio, every row before 30 Sep 2026) | 'app'
     ['social_post_id', col('string', true)],       // the app's own post, when it was one
     ['platform_post_id', col('string', true)],     // bound to a live post
     ['zernio_post_id', col('string', true)],       // bound to a booked post (pending until it publishes)
@@ -757,13 +759,35 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // WHAT OUR APP SENT FOR ITS OWN AUTOMATIONS (runner 'app', the owner, 30 Sep 2026: "we have a comment trigger…
+  // and then we send"). One row per automation and PERSON — its id is `<automation id>:<person>` and it is taken
+  // with a claim, so a person who comments twice, or a webhook delivered twice, is answered once. Written before
+  // the send (status 'sending'), then 'sent' | 'failed' with Instagram's reason.
+  automation_sends: [
+    ['id', col('string', false)],
+    ['automation_id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['account_id', col('string', false)],        // the provider's account id
+    ['platform_post_id', col('string', false)],
+    ['comment_id', col('string', false)],
+    ['commenter', col('string', false)],         // username as the comment named it (or their id)
+    ['commenter_name', col('string', true)],
+    ['comment_text', col('string', true)],
+    ['status', col('string', false)],            // sending | sent | failed
+    ['error', col('string', true)],
+    ['reply_status', col('string', true)],       // sent | failed | none — the public reply
+    ['reply_error', col('string', true)],
+    ['dm_text', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches', 'comment_automations']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'follower_snapshots', 'followers', 'inbox_touches', 'comment_automations', 'automation_sends']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

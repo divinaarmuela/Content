@@ -242,12 +242,19 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
     }
 
     // A comment and a DM both mean the same thing to this dashboard: the Inbox
-    // is now behind. The comment→DM automations themselves run INSIDE Zernio —
-    // we configure them through their API, we do not evaluate them — so there
-    // is no matcher here to run early, and pretending otherwise would risk
-    // sending a client's audience a second DM. Recording the delivery is what
-    // lets the Inbox refresh without polling the provider on a timer.
+    // is now behind. Zernio's comment→DM automations run INSIDE Zernio — we do
+    // not evaluate those. OUR APP's own automations (runner 'app', 30 Sep 2026)
+    // run here, off this event: runAppAutomations claims each person once, so
+    // a redelivered comment never sends a second DM. Recording the delivery is
+    // what lets the Inbox refresh without polling the provider on a timer.
     case 'comment':
+      if (!action.own) {
+        const { runAppAutomations } = await import('./comment-automation')
+        await runAppAutomations({
+          commentId: action.commentId, accountId: action.accountId, platformPostId: action.platformPostId,
+          text: action.text, authorId: action.authorId, authorUsername: action.authorUsername, authorName: action.authorName,
+        })
+      }
       // EVERY TOUCH IS NOTED AS IT HAPPENS (28 Sep 2026: "track every touch point"): who commented, on which account,
       // for the People page — not only when somebody opens the Inbox. The words are not kept here.
       if (action.authorUsername && action.accountId && !action.own) {

@@ -34,6 +34,7 @@ type Row = {
   client_name: string
   account: { id: string; platform: string; username: string | null }
   post: { title: string | null; thumb: string | null; date: string | null; social_post_id: string | null; bound: 'live' | 'pending' }
+  runner: 'zernio' | 'app'
   name: string
   keywords: string[]
   match_mode: string
@@ -61,6 +62,14 @@ const STATS: [keyof AutomationStats, string][] = [
   ['read', 'Read'], ['failed', 'Failed'], ['linkClicks', 'Link clicks'],
 ]
 
+/** what our app cannot know about its own sends: Zernio counts delivery, reads and clicks, our private reply does not */
+const APP_UNKNOWN: readonly (keyof AutomationStats)[] = ['delivered', 'read', 'linkClicks']
+
+const RUNNER_WORDS: Record<'zernio' | 'app', string> = {
+  zernio: 'Zernio sends it',
+  app: 'Our app sends it',
+}
+
 const MATCH_WORDS: Record<string, string> = {
   word: 'The keyword as a whole word',
   contains: 'The keyword anywhere, even inside a word',
@@ -82,6 +91,8 @@ const EMPTY_DRAFT = {
   client_id: '', social_account_id: '', post_key: '',
   keywords: DEFAULT_KEYWORD, match_mode: 'word', dm_message: '',
   button_title: '', link: '', comment_reply: '', name: '',
+  // who sends: Zernio's automation, or our app off the comment webhook (30 Sep 2026)
+  runner: 'zernio' as 'zernio' | 'app',
   // one per line; sent as arrays (Zernio's dmMessageVariations / commentReplyVariations)
   dm_variations: '', reply_variations: '',
 }
@@ -387,6 +398,24 @@ export default function AutomationsPage() {
                 </div>
 
                 <label className="grid gap-1.5">
+                  {label('Who sends it')}
+                  <Select value={draft.runner} onValueChange={v => setDraft(d => ({ ...d, runner: v === 'app' ? 'app' : 'zernio' }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="zernio">{RUNNER_WORDS.zernio}</SelectItem>
+                      <SelectItem value="app" disabled={chosenPost.state === 'booked'}>{RUNNER_WORDS.app}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-secondary-13 text-muted-foreground">
+                    {draft.runner === 'app'
+                      ? 'Our app hears every comment and sends the DM itself. It counts DMs sent and failed; Zernio’s delivered, read and click counts are not available this way.'
+                      : chosenPost.state === 'booked'
+                        ? 'This post is not out yet, so only Zernio can run it — it starts when the post goes out.'
+                        : 'Zernio hears the comment and sends the DM, and counts delivered, read and clicks.'}
+                  </span>
+                </label>
+
+                <label className="grid gap-1.5">
                   <span className="flex items-baseline justify-between">
                     {label('5. The DM it sends')}
                     <span className={`font-mono text-[12px] tabular-nums ${(hasButton ? draft.dm_message.trim().length : finalDm.length) > dmLimit ? 'text-accent-red' : 'text-muted-foreground'}`}>
@@ -490,6 +519,7 @@ export default function AutomationsPage() {
                         {r.account.username ? `@${r.account.username}` : r.account.platform}
                         {r.post.date && <> · {day(r.post.date)}</>}
                         {r.post.bound === 'pending' && <Badge variant="outline">Starts when the post goes out</Badge>}
+                        <Badge variant="outline">{RUNNER_WORDS[r.runner]}</Badge>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -536,7 +566,7 @@ export default function AutomationsPage() {
                   )}
 
                   <div className="flex flex-wrap gap-x-5 gap-y-1">
-                    {STATS.map(([k, w]) => (
+                    {STATS.filter(([k]) => r.runner !== 'app' || !APP_UNKNOWN.includes(k)).map(([k, w]) => (
                       <span key={k} className="text-secondary-13 text-muted-foreground">
                         {w} <span className="font-mono font-medium tabular-nums text-foreground">{r.stats ? r.stats[k].toLocaleString() : '—'}</span>
                       </span>
@@ -554,6 +584,7 @@ export default function AutomationsPage() {
                               title={l.error ?? undefined}>
                               {l.status === 'sent' ? 'DM sent' : l.status}
                             </span>
+                            {l.status === 'failed' && l.error && <span className="max-w-[28ch] truncate text-muted-foreground" title={l.error}>{l.error}</span>}
                             {l.clicks > 0 && <span className="rounded-full bg-tint-blue px-2 py-0.5">Clicked{l.clicks > 1 ? ` ×${l.clicks}` : ''}</span>}
                             <span className="text-muted-foreground">{when(l.at)}</span>
                           </span>

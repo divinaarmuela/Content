@@ -308,10 +308,13 @@ describe('payload → action', () => {
         account: { id: 'acc_1', accountId: 'acc_1', platform: 'instagram', username: 'client' },
       },
     })
-    expect(action).toEqual({
+    // the commenter's id too: our app's own automations answer each PERSON once (30 Sep 2026)
+    expect(action).toMatchObject({
       kind: 'comment', commentId: 'cmt_1', accountId: 'acc_1',
-      platform: 'instagram', platformPostId: '1790', text: 'LINK please',
+      platform: 'instagram', platformPostId: '1790', text: 'LINK please', authorId: 'u1',
     })
+    expect(Object.entries(action as object).filter(([, v]) => v !== undefined).map(([k]) => k).sort())
+      .toEqual(['accountId', 'authorId', 'commentId', 'kind', 'platform', 'platformPostId', 'text'])
   })
 
   it('collapses the whole inbox family into one "you are out of date"', () => {

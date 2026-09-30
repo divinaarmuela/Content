@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
-import type { Client, CommentAutomation, PublishJob, SocialAccount, SocialPost } from '@/lib/db-types'
+import type { AutomationSend, Client, CommentAutomation, PublishJob, SocialAccount, SocialPost } from '@/lib/db-types'
 import type { TeamUser } from './authz'
 import { getPublisher } from './publisher'
 import { accessibleClientIds } from './production-access'
@@ -12,6 +12,8 @@ import {
   appPostChoice, chooseBinding, createdAutomationId, defaultName, finalLink, isAccountWide, isAutomationPlatform,
   isZernioPostId, mergeChoices, parseAutomationInput, platformIdByPermalink, platformPostIdOn, readAccountPosts,
   readZernioAutomation, readZernioAutomations, shapeLogs, updatePatch, waitingOnOldBooking, zernioPayload,
+  appLogs, appSendDecision, appStats, dmText, pickText, runnerOf, sendKey,
+  type AppRunRow, type AutomationInput, type IncomingComment, type Runner,
   type AccountPost, type Binding, type PostAutomation, type AutomationLogRow, type AutomationStats, type PostChoice, type ZernioAutomation,
 } from './comment-automation-core'
 
@@ -39,6 +41,7 @@ type Fail = { ok: false; error: string; status: number }
 const fail = (error: string, status = 400): Fail => ({ ok: false, error, status })
 
 const automations = () => table<CommentAutomation>('comment_automations')
+const sends = () => table<AutomationSend>('automation_sends')
 
 async function mayTouchClient(user: TeamUser, clientId: string): Promise<boolean> {
   const allowed = await accessibleClientIds(user)
@@ -175,6 +178,7 @@ export async function createForPost(user: TeamUser, raw: unknown): Promise<{ ok:
   if (!link.ok) return fail(link.error)
 
   const name = input.name ?? defaultName(input.keywords, choice.title)
+  if (input.runner === 'app') return createAppRun(user, input, client, account, choice, bound.binding, link.link, name)
   const payload = zernioPayload(
     input,
     { profileId: client.social_profile_id!, accountId: account.provider_account_id },
@@ -199,6 +203,7 @@ export async function createForPost(user: TeamUser, raw: unknown): Promise<{ ok:
       provider_account_id: account.provider_account_id,
       platform: String(account.platform).toLowerCase(),
       zernio_automation_id: zernioId,
+      runner: 'zernio',
       social_post_id: choice.social_post_id,
       platform_post_id: bound.binding.kind === 'live' ? bound.binding.platformPostId : null,
       zernio_post_id: bound.binding.kind === 'pending' ? bound.binding.postId : choice.zernio_post_id,
@@ -230,6 +235,60 @@ export async function createForPost(user: TeamUser, raw: unknown): Promise<{ ok:
   }
 }
 
+
+/**
+ * ONE OUR APP RUNS (runner 'app'). Nothing is made at Zernio: the row is the automation, and the comment
+ * webhook runs it (runAppAutomations). Only on a post that is already live — the webhook knows a comment by
+ * the network's post id, which a booked post does not have yet. And never beside another automation on the
+ * same post: Instagram allows one private reply per comment, so two would race for it and one would fail.
+ */
+async function createAppRun(
+  user: TeamUser, input: AutomationInput, client: Client, account: SocialAccount, choice: PostChoice,
+  binding: Binding, link: string | null, name: string,
+): Promise<{ ok: true; row: CommentAutomation } | Fail> {
+  if (binding.kind !== 'live') {
+    return fail('Our app can only run it on a post that is already live. For a booked post, let Zernio run it.')
+  }
+  const postId = binding.platformPostId
+  const mine = await automations().list({ fresh: true, where: r => r.active && r.platform_post_id === postId && r.provider_account_id === account.provider_account_id })
+  if (mine.length > 0) return fail('This post already has an automation switched on. Switch that one off first — two would both try to DM the same people.')
+  const zernio = readZernioAutomations(await getPublisher().listAutomations().catch(() => null))
+  if (zernio.some(a => a.isActive && a.accountId === account.provider_account_id && a.platformPostId === postId)) {
+    return fail('Zernio already runs an automation on this post. Switch it off first — two would both try to DM the same people.')
+  }
+  const at = new Date().toISOString()
+  const row = await automations().insert({
+    id: randomUUID(),
+    client_id: client.id,
+    social_account_id: account.id,
+    provider_account_id: account.provider_account_id,
+    platform: String(account.platform).toLowerCase(),
+    zernio_automation_id: null,
+    runner: 'app',
+    social_post_id: choice.social_post_id,
+    platform_post_id: postId,
+    zernio_post_id: choice.zernio_post_id,
+    post_title: choice.title,
+    post_thumb: choice.thumb,
+    post_date: choice.date,
+    name,
+    keywords: input.keywords,
+    match_mode: input.match_mode,
+    dm_message: input.dm_message,
+    button_title: input.button_title && link ? input.button_title : null,
+    link,
+    comment_reply: input.comment_reply,
+    dm_variations: input.dm_variations,
+    reply_variations: input.reply_variations,
+    active: true,
+    paused_reason: null,
+    created_by: user.id,
+    created_at: at,
+    updated_at: at,
+  })
+  return { ok: true, row }
+}
+
 /* ── the list ───────────────────────────────────────────────────────────── */
 
 export type ViewRow = {
@@ -238,6 +297,8 @@ export type ViewRow = {
   client_name: string
   account: { id: string; platform: string; username: string | null }
   post: { title: string | null; thumb: string | null; date: string | null; social_post_id: string | null; bound: 'live' | 'pending' }
+  /** who sends: Zernio, or our app off the comment webhook */
+  runner: Runner
   name: string
   keywords: string[]
   match_mode: string
@@ -273,11 +334,12 @@ export async function listForView(user: TeamUser): Promise<{ rows: ViewRow[]; ou
   const allowed = await accessibleClientIds(user)
   const ok = (clientId: string | null | undefined) => allowed === null || (!!clientId && allowed.includes(clientId))
   const publisher = getPublisher()
-  const [ours, clients, accounts, zernioRaw] = await Promise.all([
+  const [ours, clients, accounts, zernioRaw, appSends] = await Promise.all([
     automations().list(),
     table<Client>('clients').list(),
     table<SocialAccount>('social_accounts').list(),
     publisher.listAutomations().catch(() => null),
+    sends().list().catch(() => [] as AutomationSend[]),
   ])
   const zernio = new Map<string, ZernioAutomation>(readZernioAutomations(zernioRaw).map(a => [a.id, a]))
   const clientName = new Map(clients.map(c => [c.id, c.name]))
@@ -292,15 +354,17 @@ export async function listForView(user: TeamUser): Promise<{ rows: ViewRow[]; ou
   const jobs = jobIds.size ? await table<PublishJob>('publish_jobs').list({ where: j => jobIds.has(j.id) }) : []
 
   const rows: ViewRow[] = await Promise.all(visible.map(async r => {
-    const z = zernio.get(r.zernio_automation_id) ?? null
-    const detail = await publisher.getAutomation(r.zernio_automation_id).catch(() => null)
+    const byApp = runnerOf(r) === 'app'
+    const mySends = byApp ? appSends.filter(x => x.automation_id === r.id) : []
+    const z = r.zernio_automation_id ? zernio.get(r.zernio_automation_id) ?? null : null
+    const detail = !byApp && r.zernio_automation_id ? await publisher.getAutomation(r.zernio_automation_id).catch(() => null) : null
     const zd = detail ? readZernioAutomation(detail) : null
     const acc = accountById.get(r.social_account_id)
     const state = r.social_post_id ? postStates.get(r.social_post_id) ?? null : null
     const zernioIds = (state?.booking?.job_ids ?? [])
       .map(id => jobs.find(j => j.id === id)?.provider_post_id).filter(isZernioPostId)
     let warning: string | null = null
-    if (zernioRaw != null && !z) warning = 'Zernio no longer has this automation — it is not running. Delete it here and set it up again.'
+    if (!byApp && zernioRaw != null && !z) warning = 'Zernio no longer has this automation — it is not running. Delete it here and set it up again.'
     else if (state?.stage === 'cancelled') warning = 'The post was cancelled, so this was switched off.'
     else if (waitingOnOldBooking(r, state ? { stage: state.stage, zernio_ids: zernioIds } : null)) {
       warning = 'The post was booked again after this was set up, so it is waiting on the old booking and will never start. Delete it and set it up again.'
@@ -314,6 +378,7 @@ export async function listForView(user: TeamUser): Promise<{ rows: ViewRow[]; ou
         title: r.post_title, thumb: r.post_thumb, date: r.post_date, social_post_id: r.social_post_id,
         bound: r.platform_post_id || zd?.platformPostId || z?.platformPostId ? 'live' : 'pending',
       },
+      runner: runnerOf(r),
       name: r.name,
       keywords: Array.isArray(r.keywords) ? (r.keywords as unknown[]).map(String) : [],
       match_mode: r.match_mode,
@@ -324,18 +389,18 @@ export async function listForView(user: TeamUser): Promise<{ rows: ViewRow[]; ou
       dm_variations: Array.isArray(r.dm_variations) ? (r.dm_variations as unknown[]).map(String) : [],
       reply_variations: Array.isArray(r.reply_variations) ? (r.reply_variations as unknown[]).map(String) : [],
       // Zernio's word on/off wins — it is the one that sends
-      active: zd ? zd.isActive : z ? z.isActive : r.active,
+      active: byApp ? r.active : zd ? zd.isActive : z ? z.isActive : r.active,
       paused_reason: r.paused_reason,
       created_at: r.created_at,
-      stats: zd?.stats ?? z?.stats ?? null,
-      logs: detail ? shapeLogs(detail) : [],
+      stats: byApp ? appStats(mySends) : zd?.stats ?? z?.stats ?? null,
+      logs: byApp ? appLogs(mySends) : detail ? shapeLogs(detail) : [],
       warning,
     }
   }))
   rows.sort((a, b) => a.client_name.localeCompare(b.client_name) || b.created_at.localeCompare(a.created_at))
 
   // automations at Zernio this page did not make (the older page, or Zernio's own dashboard)
-  const known = new Set(ours.map(r => r.zernio_automation_id))
+  const known = new Set(ours.map(r => r.zernio_automation_id).filter(Boolean))
   const byProvider = new Map(accounts.map(a => [a.provider_account_id, a]))
   const outside: OutsideRow[] = []
   for (const a of zernio.values()) {
@@ -394,8 +459,11 @@ export async function updateAutomation(user: TeamUser, id: string, raw: unknown)
     const post = readPostState((await table<SocialPost>('social_posts').get(row.social_post_id)) as unknown as Record<string, unknown>)
     if (!post || post.stage === 'cancelled') return fail('The post this answers on was cancelled — it cannot be switched back on.')
   }
-  try { await getPublisher().updateAutomation(row.zernio_automation_id, patch.patch) }
-  catch (e) { return fail(`Zernio refused it: ${e instanceof Error ? e.message : 'unknown error'}`, 502) }
+  // our app's own: the row IS the automation, there is nothing at Zernio to change
+  if (runnerOf(row) !== 'app' && row.zernio_automation_id) {
+    try { await getPublisher().updateAutomation(row.zernio_automation_id, patch.patch) }
+    catch (e) { return fail(`Zernio refused it: ${e instanceof Error ? e.message : 'unknown error'}`, 502) }
+  }
   await automations().update(row.id, { ...patch.ours, updated_at: new Date().toISOString() } as Partial<CommentAutomation>)
   return { ok: true }
 }
@@ -411,11 +479,13 @@ export async function deleteAutomation(user: TeamUser, id: string): Promise<{ ok
   const row = await automations().get(id, { fresh: true })
   if (!row) return fail('That automation is not there any more', 404)
   if (!(await mayTouchClient(user, row.client_id))) return fail('That automation is not on one of your clients', 403)
-  try { await getPublisher().deleteAutomation(row.zernio_automation_id) }
-  catch (e) {
-    const why = e instanceof Error ? e.message : ''
-    // already gone at Zernio: the record goes too
-    if (!/not found|404/i.test(why)) return fail(`Zernio refused it: ${why || 'unknown error'}`, 502)
+  if (runnerOf(row) !== 'app' && row.zernio_automation_id) {
+    try { await getPublisher().deleteAutomation(row.zernio_automation_id) }
+    catch (e) {
+      const why = e instanceof Error ? e.message : ''
+      // already gone at Zernio: the record goes too
+      if (!/not found|404/i.test(why)) return fail(`Zernio refused it: ${why || 'unknown error'}`, 502)
+    }
   }
   await automations().remove(row.id)
   return { ok: true }
@@ -436,7 +506,7 @@ export async function pauseAutomationsForPost(postId: string, reason: string = C
     const rows = await automations().list({ where: r => r.social_post_id === postId && r.active })
     for (const row of rows) {
       try {
-        await getPublisher().updateAutomation(row.zernio_automation_id, { isActive: false })
+        if (runnerOf(row) !== 'app' && row.zernio_automation_id) await getPublisher().updateAutomation(row.zernio_automation_id, { isActive: false })
         await automations().update(row.id, { active: false, paused_reason: reason, updated_at: new Date().toISOString() })
         console.info('comment automation switched off', { post: postId, automation: row.zernio_automation_id, reason })
       } catch (e) {
@@ -534,7 +604,7 @@ async function armOne(
     const at = new Date().toISOString()
     if (decision === 'none') return
     if (decision === 'reactivate' && row) {
-      await publisher.updateAutomation(row.zernio_automation_id, { isActive: true })
+      if (row.zernio_automation_id) await publisher.updateAutomation(row.zernio_automation_id, { isActive: true })
       await automations().update(row.id, { active: true, paused_reason: null, updated_at: at })
       console.info('comment automation switched back on', { post: post.postId, automation: row.zernio_automation_id })
       return
@@ -542,7 +612,7 @@ async function armOne(
     if (decision === 'rebind' && row) {
       // the earlier booking was pulled (a move re-books): its automation waited on a Zernio post that is
       // gone and never armed, so it is replaced. One that DID fire keeps its history and is only switched off.
-      const old = readZernioAutomation(await publisher.getAutomation(row.zernio_automation_id).catch(() => null))
+      const old = row.zernio_automation_id ? readZernioAutomation(await publisher.getAutomation(row.zernio_automation_id).catch(() => null)) : null
       if (old && old.stats.triggered > 0) await publisher.updateAutomation(old.id, { isActive: false }).catch(() => {})
       else if (old) await publisher.deleteAutomation(old.id).catch(e => console.error('comment automation: old pending one would not go', old.id, e))
     }
@@ -568,6 +638,7 @@ async function armOne(
       social_account_id: account.id,
       provider_account_id: account.provider_account_id,
       platform: String(account.platform).toLowerCase(),
+      runner: 'zernio',
       zernio_automation_id: zernioId,
       social_post_id: post.postId,
       platform_post_id: binding.kind === 'live' ? binding.platformPostId : null,
@@ -612,7 +683,7 @@ export async function postAutomationState(user: TeamUser, postId: string): Promi
   return {
     ok: true,
     rows: await Promise.all(rows.map(async r => {
-      const z = readZernioAutomation(await publisher.getAutomation(r.zernio_automation_id).catch(() => null))
+      const z = r.zernio_automation_id ? readZernioAutomation(await publisher.getAutomation(r.zernio_automation_id).catch(() => null)) : null
       return {
         account_id: r.social_account_id,
         made: true,
@@ -625,3 +696,73 @@ export async function postAutomationState(user: TeamUser, postId: string): Promi
   }
 }
 
+
+/* ── run by our app: a comment arrived ──────────────────────────────────── */
+
+/**
+ * THE COMMENT TRIGGER (the owner, 30 Sep 2026: "we have a comment trigger … and then we send"). Called by the
+ * Zernio webhook for every `comment.received`. For each of OUR APP's automations switched on for this post and
+ * account: does the comment say the keyword (appSendDecision)? Then the person is CLAIMED on the send log —
+ * `<automation>:<person>`, so a second comment from them, or the same webhook delivered twice, is answered
+ * once — and only the claimant sends: the DM as Instagram's private reply, then the public reply if the DM
+ * went. Every outcome, Instagram's refusal included, is written to the log the Automations page shows.
+ * Best effort: never throws into the webhook. Returns how many DMs went.
+ */
+export async function runAppAutomations(c: IncomingComment & { authorName?: string }): Promise<number> {
+  const postId = c.platformPostId
+  const accountId = c.accountId
+  if (!postId || !accountId || c.own) return 0
+  let sent = 0
+  try {
+    const rows = await automations().list({
+      fresh: true,
+      where: r => runnerOf(r) === 'app' && r.active && r.platform_post_id === postId && r.provider_account_id === accountId,
+    })
+    const publisher = getPublisher()
+    for (const row of rows) {
+      const decision = appSendDecision(row as unknown as AppRunRow, c)
+      if (!decision.send) continue
+      const id = sendKey(row.id, decision.person)
+      const at = new Date().toISOString()
+      const variations = Array.isArray(row.dm_variations) ? (row.dm_variations as unknown[]).map(String) : []
+      const button = row.button_title && row.link ? { type: 'web_url', title: row.button_title, url: row.link } : null
+      const text = dmText(pickText(row.dm_message, variations, c.commentId), row.link, !!button)
+      const claim = await sends().claim(id, current => current ? null : {
+        id, automation_id: row.id, client_id: row.client_id, account_id: accountId, platform_post_id: postId,
+        comment_id: c.commentId, commenter: c.authorUsername || decision.person, commenter_name: c.authorName ?? null,
+        comment_text: c.text.slice(0, 500), status: 'sending', error: null, reply_status: null, reply_error: null,
+        dm_text: text, created_at: at, updated_at: at,
+      })
+      if (!claim.claimed) continue
+
+      let status: 'sent' | 'failed' = 'sent'
+      let error: string | null = null
+      try {
+        await publisher.privateReply(postId, c.commentId, text, button ? [button] : undefined)
+        sent++
+      } catch (e) {
+        status = 'failed'
+        error = (e instanceof Error ? e.message : String(e)).slice(0, 300)
+      }
+      // the public "check your DM" only when there is a DM to check
+      let reply_status = 'none'
+      let reply_error: string | null = null
+      if (status === 'sent' && row.comment_reply) {
+        const replies = Array.isArray(row.reply_variations) ? (row.reply_variations as unknown[]).map(String) : []
+        try {
+          await publisher.replyToComment(postId, c.commentId, pickText(row.comment_reply, replies, `${c.commentId}:reply`))
+          reply_status = 'sent'
+        } catch (e) {
+          reply_status = 'failed'
+          reply_error = (e instanceof Error ? e.message : String(e)).slice(0, 300)
+        }
+      }
+      await sends().update(id, { status, error, reply_status, reply_error, updated_at: new Date().toISOString() })
+        .catch(e => console.error('app automation: could not record the outcome', id, e))
+      console.info(JSON.stringify({ at: 'app.automation', automation: row.id, comment: c.commentId, status, reply_status }))
+    }
+  } catch (e) {
+    console.error('app automation: run failed', c.commentId, e instanceof Error ? e.message : e)
+  }
+  return sent
+}

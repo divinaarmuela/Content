@@ -131,6 +131,8 @@ export type ZernioAction =
       text: string
       /** who wrote it (28 Sep 2026: the People page tracks every touch) — absent when the payload names nobody */
       authorUsername?: string
+      /** their network id — the steadiest name for a person (their handle can change) */
+      authorId?: string
       authorName?: string
       /** the connected account's own reply, re-delivered as a comment — not a touch from anybody */
       own?: boolean
@@ -542,6 +544,7 @@ export function parseZernioEvent(body: unknown): ZernioEvent {
         platformPostId: str(comment.platformPostId) || null,
         text: str(comment.text).slice(0, 500),
         authorUsername: str(asRecord(comment.author).username) || undefined,
+        authorId: str(asRecord(comment.author).id) || undefined,
         authorName: str(asRecord(comment.author).name) || undefined,
         own: asRecord(comment.author).isOwnAccount === true || undefined,
       },
