@@ -107,6 +107,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
   // uploads have no Drive behind them: our copies are the whole story (17 Sep 2026)
   if (!fromCopies && (!driveId || state.at === 'idle')) return null
   const tiles = fromCopies ? copyTiles : state.at === 'ready' ? state.tiles : []
+  // every file new (a first version): no tag on each — "New in this version" on all of them tells nobody anything
+  const allNew = tiles.length > 0 && tiles.every(t => markOf.get(t.id)?.changed === true)
 
   return (
     <div className="flex flex-col gap-2" data-drive-folder-files>
@@ -199,7 +201,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                     </button>
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
                     {/* the whole set at a version (30 Sep 2026): what changed in it, and what was carried */}
-                    {markOf.has(t.id) && (
+                    {markOf.has(t.id) && !allNew && (
                       <span data-version-mark className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
                         {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'New cut in this version' : 'New in this version') : `Unchanged — from ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
                       </span>

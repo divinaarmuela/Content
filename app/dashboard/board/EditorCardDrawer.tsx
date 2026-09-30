@@ -648,7 +648,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </p>
             )}
             {currentFiles(item as never).length === 0
-              ? <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing handed in for ${roundLabel(handInRound(item as never))} yet.`}</p>
+              ? (driveCopying ? null : <p className="text-[13px] text-muted-foreground">{frozen ? 'Booked in or posted — the files are the channel’s now.' : `Nothing handed in for ${roundLabel(handInRound(item as never))} yet.`}</p>)
               : (
                 <ul className="flex flex-col divide-y divide-border" aria-label="The finished files">
                   {currentFiles(item as never).map(f => {

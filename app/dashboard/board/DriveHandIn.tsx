@@ -63,7 +63,7 @@ export function DriveHandInDialog({ open, onOpenChange, item, round, label }: {
         <DialogHeader>
           <DialogTitle>Hand in from Google Drive — {roundLabel(round)}</DialogTitle>
           <DialogDescription>
-            Paste the link to the folder with the finished files (or to one file). Everything in it becomes {roundLabel(round)} — what changed is the new cut, what did not is kept, and anything no longer in the folder is left out of this version. The files are copied onto the card; nothing in Drive is changed.
+            Paste the link to the Drive folder with the finished files. Everything in it becomes {roundLabel(round)}.
           </DialogDescription>
         </DialogHeader>
         <input value={url} onChange={e => { setUrl(e.target.value); setError(null) }} placeholder="https://drive.google.com/…" aria-label="Google Drive link to the finished folder or file" className={field} />
