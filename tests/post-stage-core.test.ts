@@ -784,7 +784,8 @@ describe('lanes and words', () => {
   })
 
   it('a card is red when its time is missed or it came back with a problem', () => {
-    expect(postTone(post('ready'), NOW)).toBe('green')
+    // approved but NOT booked reads as waiting, never as done (30 Sep 2026)
+    expect(postTone(post('ready'), NOW)).toBe('amber')
     expect(postTone(post('ready', { problem: 'Did not go out on LinkedIn.' }), NOW)).toBe('red')
     expect(postTone(post('booked'), NOW)).toBe('blue')
   })
@@ -803,7 +804,7 @@ describe('waitingOn', () => {
     expect(waitingOn(changes, NOW, id => (id === 'u-maker' ? 'Divina' : null)).line).toBe('The client asked for a change — Divina to make it')
     expect(waitingOn(post('quality_check'), NOW)).toMatchObject({ who: 'quality_check', line: 'Waiting on the quality check' })
     expect(waitingOn(post('with_client'), NOW)).toMatchObject({ who: 'client', line: 'Waiting on the client' })
-    expect(waitingOn(post('ready'), NOW)).toMatchObject({ who: 'scheduler', line: 'Approved — ready to book in' })
+    expect(waitingOn(post('ready'), NOW)).toMatchObject({ who: 'scheduler', line: 'Approved — not booked yet' })
     expect(waitingOn(post('ready', { problem: 'Did not go out on LinkedIn.' }), NOW).line).toBe('Did not go out on LinkedIn. Pick a time and book it again.')
     expect(waitingOn(post('booked'), NOW).who).toBe('nobody')
     expect(waitingOn(post('posted', { outcomes: { instagram: pub('published'), linkedin: pub('failed') } }), NOW).who).toBe('scheduler')

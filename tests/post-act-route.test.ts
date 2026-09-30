@@ -61,6 +61,7 @@ beforeEach(async () => {
     post_events: [],
   })
   undo = engine.usePostEngineDeps({
+    autoBook: false,
     queuePublish: vi.fn(async () => ({ id: 'job-1' })),
     cancelJob: vi.fn(async () => ({ ok: true as const })),
     deliverToClient: vi.fn(async () => ({ delivered: [], failed: [], link: '' })),

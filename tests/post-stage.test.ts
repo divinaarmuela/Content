@@ -46,6 +46,8 @@ let undo: () => void
 let jobSeq = 0
 
 const deps = {
+  // these tests press Book in themselves; auto-booking has its own tests below
+  autoBook: false,
   queuePublish: vi.fn(async (_input: unknown): Promise<{ id: string } | { error: string }> => ({ id: `job-${++jobSeq}` })),
   cancelJob: vi.fn(async (_id: string): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true })),
   deliverToClient: vi.fn(async (input: { emails: string[]; post: { id: string } }) => ({
@@ -137,7 +139,7 @@ async function toBooked(id: string) {
 beforeEach(() => {
   jobSeq = 0
   fake = seed()
-  for (const f of Object.values(deps)) f.mockClear()
+  for (const f of Object.values(deps)) if (typeof f === 'function') f.mockClear()
   undo = usePostEngineDeps(deps as never)
 })
 afterEach(() => {
@@ -824,5 +826,51 @@ describe('Schedule it — the one writer', () => {
     expect(after.problem).toMatch(/Instagram said no/)
     // the approval stays the super admin's, still marked — never turned into a pass
     expect(after.approval).toMatchObject({ hat: 'super_admin', skipped_check: true })
+  })
+})
+
+/* ── approved with a time books itself (the owner, 30 Sep 2026) ─────────── */
+
+describe('auto-booking', () => {
+  let undoAuto: () => void = () => {}
+  beforeEach(() => { undoAuto = usePostEngineDeps({ autoBook: true }) })
+  afterEach(() => undoAuto())
+
+  it('Passed on a team-only post with a time books it, once, and says so', async () => {
+    const id = await newDraft()
+    let p = await stateOf(id)
+    await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
+    p = await stateOf(id)
+    const passed = await performPostTransition(id, 'pass', await as(QR, id), { expect_rev: p.rev, version: 1 })
+    expect(passed.ok && passed.stage).toBe('booked')
+    expect(passed.ok && passed.words).toBe('Passed — booked in automatically for its time')
+    expect(deps.queuePublish).toHaveBeenCalledTimes(1)
+    expect((await stateOf(id)).booking).toMatchObject({ job_ids: ['job-1'], pending: false })
+    expect(fake.rows('post_events').map(e => (e as { action?: string }).action)).toContain('auto_book')
+  })
+
+  it('a booking the channel refuses leaves it on Ready to post, and the answer says why', async () => {
+    const id = await newDraft()
+    let p = await stateOf(id)
+    await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
+    p = await stateOf(id)
+    deps.queuePublish.mockImplementationOnce(async () => ({ error: 'LinkedIn is not connected' }))
+    const passed = await performPostTransition(id, 'pass', await as(QR, id), { expect_rev: p.rev, version: 1 })
+    expect(passed.ok).toBe(true)
+    expect(passed.ok && passed.words).toBe('Passed — now in Ready to post. Not booked automatically: It could not be booked in: LinkedIn is not connected.')
+    expect((await stateOf(id)).stage).toBe('ready')
+  })
+
+  it('Take off the schedule is never undone by itself', async () => {
+    const id = await newDraft()
+    let p = await stateOf(id)
+    await performPostTransition(id, 'send_to_qc', await as(SCHED, id), { expect_rev: p.rev })
+    p = await stateOf(id)
+    await performPostTransition(id, 'pass', await as(QR, id), { expect_rev: p.rev, version: 1 })
+    p = await stateOf(id)
+    expect(p.stage).toBe('booked')
+    const off = await performPostTransition(id, 'unbook', await as(SCHED, id), { expect_rev: p.rev })
+    expect(off.ok && off.stage).toBe('ready')
+    expect(deps.queuePublish).toHaveBeenCalledTimes(1)
   })
 })

@@ -171,13 +171,17 @@ const items = () => fake.rows('content_items') as any[]
 const versions = () => fake.rows('asset_versions') as any[]
 const jobs = () => fake.rows('publish_jobs') as any[]
 
-beforeEach(() => {
+let undoAutoBook: () => void = () => {}
+beforeEach(async () => {
   process.env.PUBLISH_DRY_RUN = '1'
   process.env.ZERNIO_API_KEY = 'not-used-in-a-dry-run'
   as(AM)
   fake = seed()
+  // these walk-throughs press Book in themselves; auto-booking is tested in tests/post-stage.test.ts
+  undoAutoBook = (await import('@/app/lib/post-stage')).usePostEngineDeps({ autoBook: false })
 })
 afterEach(() => {
+  undoAutoBook()
   fake.restore()
   delete process.env.PUBLISH_DRY_RUN
   vi.clearAllMocks()

@@ -710,6 +710,20 @@ const GHOST_TABLES = {
     ['used_at', col('string', true)],
     ['created_at', col('string', false)],
   ],
+  // A DISCONNECTED CHANNEL'S ROW, KEPT (30 Sep 2026: Justin's Instagram was disconnected and reconnected, the reconnect
+  // made a NEW social_accounts row, and every post, version and automation still named the deleted one — "a channel is
+  // not connected" on a post that was booked). Disconnect copies the whole row here before removing it; the next sync
+  // that brings the same account back (same provider id, or the same handle on the same network for the same client)
+  // puts the row back under its OLD id. Rules: app/lib/retired-accounts-core.ts.
+  social_accounts_retired: [
+    ['id', col('string', false)],                  // the social_accounts id it had, and gets back
+    ['client_id', col('string', true)],
+    ['platform', col('string', false)],
+    ['provider_account_id', col('string', false)],
+    ['username', col('string', true)],
+    ['row', col('unknown', false, true)],          // the whole row as it was
+    ['retired_at', col('string', false)],
+  ],
   inbox_touches: [
     ['id', col('string', false)],
     ['account_id', col('string', false)],       // the provider's account id

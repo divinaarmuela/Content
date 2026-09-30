@@ -81,6 +81,7 @@ export type TableName =
   | 'schedule_notes'
   | 'shoot_proposals'
   | 'social_accounts'
+  | 'social_accounts_retired'
   | 'social_posts'
   | 'team_board_comments'
   | 'team_boards'
@@ -1425,6 +1426,16 @@ export interface SocialAccount {
   contact_id: string | null
 }
 
+export interface SocialAccountsRetired {
+  id: string
+  client_id: string | null
+  platform: string
+  provider_account_id: string
+  username: string | null
+  row: unknown
+  retired_at: string
+}
+
 export interface SocialPost {
   id: string
   client_id: string
@@ -1704,6 +1715,7 @@ export const TABLE_COLUMNS = {
   schedule_notes: ['id', 'client_id', 'at', 'text', 'created_by', 'created_at', 'updated_at'],
   shoot_proposals: ['batch_id', 'id', 'token', 'client_id', 'title', 'starts_at', 'ends_at', 'location', 'note', 'send_to', 'status', 'created_by', 'responded_at', 'created_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['id', 'client_id', 'platform', 'provider_account_id', 'name', 'username', 'avatar_url', 'active', 'connected_at', 'last_synced_at', 'health', 'contact_id'],
+  social_accounts_retired: ['id', 'client_id', 'platform', 'provider_account_id', 'username', 'row', 'retired_at'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation'],
   team_board_comments: ['id', 'board_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved', 'created_at'],
   team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at'],
@@ -1798,6 +1810,7 @@ export const NULLABLE_COLUMNS = {
   schedule_notes: ['created_by'],
   shoot_proposals: ['batch_id', 'location', 'note', 'created_by', 'responded_at', 'notify_emails', 'gcal_event_id'],
   social_accounts: ['client_id', 'name', 'username', 'avatar_url', 'health', 'contact_id'],
+  social_accounts_retired: ['client_id', 'username'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation'],
   team_board_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
   team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by'],
@@ -1899,6 +1912,7 @@ export const JSON_COLUMNS = {
   schedule_notes: [],
   shoot_proposals: [],
   social_accounts: ['health'],
+  social_accounts_retired: ['row'],
   social_posts: ['slides', 'per_channel', 'channels', 'publish_job_ids', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending', 'automation'],
   team_board_comments: [],
   team_boards: ['canvas_cards'],
@@ -1999,6 +2013,7 @@ export const JSON_ARRAY_COLUMNS = {
   schedule_notes: [],
   shoot_proposals: [],
   social_accounts: [],
+  social_accounts_retired: [],
   social_posts: ['slides', 'channels', 'publish_job_ids'],
   team_board_comments: [],
   team_boards: [],

@@ -82,7 +82,8 @@ export const STAGE_WORDS: Record<PostStage, { label: string; meaning: string; to
   draft:         { label: 'Draft',         meaning: 'Being made. Nobody else sees it yet.',        tone: 'muted' },
   quality_check: { label: 'Quality check', meaning: 'Waiting for the quality check.',              tone: 'surface' },
   with_client:   { label: 'With client',   meaning: 'Sent to the client. Waiting for their answer.', tone: 'amber' },
-  ready:         { label: 'Ready to post', meaning: 'Approved. It needs to be booked in.',          tone: 'green' },
+  // amber, not green (the owner, 30 Sep 2026: a Ready card and a Booked card both read as done) — approved, NOT booked
+  ready:         { label: 'Ready to post', meaning: 'Approved, not booked yet. It needs Book in.',   tone: 'amber' },
   booked:        { label: 'Booked in',     meaning: 'Booked in. It goes out at its time.',          tone: 'blue' },
   posted:        { label: 'Posted',        meaning: 'Live on its networks.',                        tone: 'ink' },
   cancelled:     { label: 'Cancelled',     meaning: 'Cancelled. It will not go out.',               tone: 'muted' },
@@ -708,6 +709,7 @@ export const POST_ACTIONS = [
   'remind_client', 'send_to_client', 'book', 'schedule_direct', 'post_now', 'change_time', 'unbook',
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
+  'auto_book',
 ] as const
 export type PostAction = (typeof POST_ACTIONS)[number]
 export function isPostAction(v: unknown): v is PostAction {
@@ -791,6 +793,9 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'delete_draft', spec: 'T23', from: ['draft'], to: 'deleted', who: ['creator', 'am', 'sa'], label: 'Delete draft', needs: ['confirm'], confirm: 'Delete this draft? It has never been sent, so nothing else changes.' },
   { action: 'set_steps', spec: 'decision 13', from: ['draft', 'quality_check', 'ready'], to: 'same', who: MANAGERS, label: 'Change approval steps', needs: ['steps'] },
   { action: 'booking_done', spec: '§3.1', from: ['booked'], to: 'same', who: ['system'], label: 'Booked in' },
+  // APPROVED WITH A TIME BOOKS ITSELF (the owner, 30 Sep 2026: "if we move to approved and the time is there, make sure
+  // it's auto scheduled, or if client approved") — Book in, made by the app straight after the approval (autoBookAfter)
+  { action: 'auto_book', spec: 'owner 30 Sep', from: ['ready'], to: 'booked', who: ['system'], label: 'Booked in automatically' },
   { action: 'booking_failed', spec: '§3.1', from: ['booked'], to: 'ready', who: ['system'], label: 'Booking failed' },
   { action: 'link_jobs', spec: '§5', from: ['booked', 'posted'], to: 'same', who: ['system'], label: 'Re-send linked' },
   // …and from posted: a re-send of the missing networks reports back on the same post
@@ -1034,7 +1039,8 @@ export function checkPostTransition(
       if (input.agreed_via === 'other' && !note) return refuse('note', 'Say how the client agreed.')
       break
 
-    case 'book': {
+    case 'book':
+    case 'auto_book': {
       if (!approvedNow) return refuse('unapproved', 'This version is not approved yet.')
       const b = bookingProblem(post.scheduled_for, true)
       if (b) return b
@@ -1331,6 +1337,7 @@ export function planPostTransition(
       patch.assigned_to = actor.id
       break
     case 'book':
+    case 'auto_book':
     case 'post_now': {
       const forTime = act === 'post_now' ? at : post.scheduled_for!
       if (act === 'post_now') patch.scheduled_for = at
@@ -1629,7 +1636,7 @@ export function waitingOn(post: PostState, now: NowLike, nameOf: NameOf = () => 
     case 'ready':
       if (post.problem) return w('scheduler', `${post.problem.replace(/\.?$/, '.')} Pick a time and book it again.`)
       if (missed) return w('scheduler', MISSED_LABEL)
-      return w('scheduler', 'Approved — ready to book in')
+      return w('scheduler', 'Approved — not booked yet')
     case 'booked':
       return w('nobody', post.booking?.pending ? 'Being booked in' : 'Booked in — it goes out at its time')
     case 'posted':
@@ -1731,4 +1738,15 @@ export function notesForFile<T extends { file_url?: string | null; version?: num
     (fileUrl == null ? c.file_url == null : c.file_url === fileUrl)
     && (opts.thread == null || c.visibility === opts.thread)
     && (opts.version == null || c.version == null || c.version === opts.version))
+}
+
+/**
+ * THE APPROVALS THAT BOOK THE POST THEMSELVES when it has a time (the owner, 30 Sep 2026). Only an APPROVAL: a post
+ * back on Ready because somebody took it off the schedule, or because a booking failed, is left for a person —
+ * booking it again by itself would undo a deliberate "take it off", or retry a refusal for ever.
+ */
+export const AUTO_BOOK_AFTER: readonly PostAction[] = ['pass', 'client_approve', 'approve_for_client', 'team_decides']
+
+export function autoBookAfter(action: string, landed: Pick<PostState, 'stage' | 'scheduled_for'> | null | undefined): boolean {
+  return !!landed && landed.stage === 'ready' && !!landed.scheduled_for && (AUTO_BOOK_AFTER as readonly string[]).includes(action)
 }

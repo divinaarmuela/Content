@@ -45,6 +45,8 @@ let undo: () => void
 let jobSeq = 0
 
 const deps = {
+  // these tests press Book in themselves
+  autoBook: false,
   queuePublish: vi.fn(async (_input: unknown): Promise<{ id: string } | { error: string }> => ({ id: `job-${++jobSeq}` })),
   cancelJob: vi.fn(async (_id: string): Promise<{ ok: true } | { ok: false; error: string }> => ({ ok: true })),
   deliverToClient: vi.fn(async (input: { emails: string[]; post: { id: string } }) => ({
@@ -72,7 +74,7 @@ beforeEach(() => {
     team_users: [SCHED, AM, QR, SA] as unknown as Row[],
     social_posts: [], post_versions: [], post_events: [], publish_jobs: [], claim_locks: [],
   } as never)
-  for (const f of Object.values(deps)) f.mockClear()
+  for (const f of Object.values(deps)) if (typeof f === 'function') f.mockClear()
   deps.mayActOnClient.mockImplementation(async (_user: TeamUser, _clientId: string) => true)
   undo = usePostEngineDeps(deps as never)
 })

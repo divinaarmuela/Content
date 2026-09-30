@@ -6,7 +6,7 @@ import type {
   PublishJob as PublishJobRow, SocialAccount, SocialPost,
 } from '@/lib/db-types'
 import type { TeamUser } from './authz'
-import {
+import { autoBookAfter,
   CLIENT_ACTIONS, ROW_OF, SYSTEM_ACTIONS, anyNetworkLive, defaultApproveBy, failedNetworks, hatsFor,
   isPostAction, mayWorkOnPost, planPostTransition, postVersionId, readPostState,
   type AccountRef, type FrozenFor, type NotifyTarget, type Plan, type PostAction, type PostActor,
@@ -173,6 +173,9 @@ export type PostNotice = {
 
 export type PostEngineDeps = {
   now: () => Date
+  /** an approval with a time books the post straight away (autoBookAfter, the owner 30 Sep 2026) — on in the app;
+   *  a test of Book in itself switches it off */
+  autoBook: boolean
   /** Hand the frozen copy to the provider. May throw; the engine treats a throw like a refusal. */
   queuePublish: (input: QueueInput) => Promise<{ id: string } | { error: string; issues?: string[] }>
   /**
@@ -200,6 +203,7 @@ export type PostEngineDeps = {
 }
 
 const defaultDeps: PostEngineDeps = {
+  autoBook: true,
   now: () => new Date(),
   queuePublish: input => defaultQueuePublish(input),
   cancelJob: jobId => defaultCancelJob(jobId),
@@ -483,7 +487,15 @@ export async function performPostTransition(
 ): Promise<PostActResult> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await attemptMove(postId, action, actor, input)
-    if (r !== 'again') return r
+    if (r === 'again') continue
+    // approved and it has a time: the app books it now (autoBookAfter). A refusal — the time too close, a channel
+    // gone — leaves it on Ready to post with the reason in the answer, for a person to book.
+    if (deps.autoBook && r.ok && autoBookAfter(String(action), r.post)) {
+      const b = await performSystemTransition(postId, 'auto_book')
+      if (b.ok) return { ...b, words: `${r.words.split(' — ')[0]} — booked in automatically for its time` }
+      return { ...r, words: `${r.words}. Not booked automatically: ${b.reason}` }
+    }
+    return r
   }
   const { post } = await loadPostState(postId)
   return refusal('stale', STALE, post)
