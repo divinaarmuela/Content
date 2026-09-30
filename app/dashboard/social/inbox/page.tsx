@@ -392,15 +392,14 @@ export default function InboxPage() {
           {emptyWords ? (
             <p className="text-muted-foreground">{emptyWords}</p>
           ) : !tracked ? (
-            <p className="text-muted-foreground">The People page covers Justin Engelke, Jordan Wilson and the test client for now.</p>
+            <p className="text-muted-foreground">This covers Justin Engelke, Jordan Wilson and the test client for now.</p>
           ) : people === null ? (
             <Skeleton className="h-20 w-full" />
           ) : !who ? (
-            <p className="text-muted-foreground">Not on the People page yet — they have not followed, liked or commented where we can see it.</p>
+            <p className="text-muted-foreground">Nothing noted about them yet — they have not commented or written where we can see it.</p>
           ) : (
             <>
               <p className="font-semibold">@{who.username}</p>
-              <p>{who.following ? 'Follows this account' : 'Does not follow this account'}</p>
               {who.md_lead && <p><span className="font-semibold">MD Media lead</span> — {who.md_lead}</p>}
               {lines.length > 0 && (
                 <div className="flex flex-col gap-1 rounded-inner bg-foreground/[0.04] p-2">
@@ -410,7 +409,6 @@ export default function InboxPage() {
                   ))}
                 </div>
               )}
-              <Link href="/dashboard/social/people" className="font-semibold underline underline-offset-2">Open the People page</Link>
             </>
           )}
         </CardContent>

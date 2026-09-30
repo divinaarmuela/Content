@@ -52,14 +52,22 @@ export interface FollowerSource {
 const BASE = 'https://api.hikerapi.com'
 const HTTP_TIMEOUT_MS = 45_000
 
+/**
+ * THE SCAN IS SWITCHED OFF (the owner, 30 Sep 2026: "we don't need the followers then … next push we don't need the
+ * People page"). Instagram gives no follower list, and no list of who liked a post, through its own API — this
+ * third-party read is not something a Meta app of our own could stand behind. Nothing is sent to the provider while
+ * this is false; what was collected before stays where it is. Turning it back on is this one line, and the owner's call.
+ */
+export const FOLLOWER_SCAN_ON = false
+
 export function followersEnabled(): boolean {
-  return Boolean(process.env.HIKER_API_KEY)
+  return FOLLOWER_SCAN_ON && Boolean(process.env.HIKER_API_KEY)
 }
 
 /** the configured source, or null when the feature is not switched on */
 export function configuredSource(): FollowerSource | null {
   const key = process.env.HIKER_API_KEY
-  if (!key) return null
+  if (!FOLLOWER_SCAN_ON || !key) return null
   return hikerSource(key)
 }
 

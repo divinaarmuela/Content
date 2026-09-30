@@ -80,8 +80,10 @@ describe('the page and its wiring', () => {
     expect(wh).toContain("kind: 'comment', account_id: action.accountId")
     expect(wh).toContain('!action.own')
   })
-  it('sits in the Social menu', () => {
-    expect(readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')).toContain("{ href: '/dashboard/social/people',      label: 'People',      icon: Users }")
+  // the owner took the People page out with the follower scan it was built on (30 Sep 2026)
+  it('is no longer in the Social menu, and its address lands on Social', () => {
+    expect(readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')).not.toContain("href: '/dashboard/social/people'")
+    expect(readFileSync('app/dashboard/social/people/page.tsx', 'utf8')).toContain("redirect('/dashboard/social')")
   })
 })
 

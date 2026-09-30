@@ -94,10 +94,8 @@ export const NAV_SOCIAL_CHILDREN: NavItem[] = [
   // then "did it go out?", the question people come to Social with next
   { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
-  // every person on a client's Instagram and every touch (28 Sep 2026)
-  { href: '/dashboard/social/people',      label: 'People',      icon: Users },
-  // beside People: a comment-to-DM automation on ONE post turns commenters into
-  // people in a conversation (the owner, 29 Sep 2026)
+  // (People was here until 30 Sep 2026 — the owner took it out with the follower scan it was built on)
+  // a comment-to-DM automation on ONE post turns commenters into people in a conversation (the owner, 29 Sep 2026)
   { href: '/dashboard/social/automations', label: 'Automations', icon: Sparkles },
   { href: '/dashboard/social/analytics',   label: 'Analytics',   icon: BarChart3 },
 ]
@@ -142,7 +140,6 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/social/schedule': 'Schedule',
   '/dashboard/social/activity': 'Posts',
   '/dashboard/social/inbox':  'Inbox',
-  '/dashboard/social/people': 'People',
   '/dashboard/social/analytics': 'Analytics',
   '/dashboard/social/automations': 'Automations',
   '/dashboard/website':       'Website',

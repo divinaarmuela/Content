@@ -46,9 +46,10 @@ describe('GROUPS covers the nav', () => {
     for (const child of hrefs(NAV_SOCIAL_CHILDREN)) expect(grouped.has(child)).toBe(false)
   })
 
-  it('puts Automations right after People (the owner, 29 Sep 2026), titled', () => {
+  it('puts Automations right after Inbox now People is gone (the owner, 30 Sep 2026), titled', () => {
     const list = hrefs(NAV_SOCIAL_CHILDREN)
-    expect(list.indexOf('/dashboard/social/automations')).toBe(list.indexOf('/dashboard/social/people') + 1)
+    expect(list).not.toContain('/dashboard/social/people')
+    expect(list.indexOf('/dashboard/social/automations')).toBe(list.indexOf('/dashboard/social/inbox') + 1)
     expect(pageTitle('/dashboard/social/automations')).toBe('Automations')
     expect(readFileSync(join(process.cwd(), 'app/dashboard/social/automations/page.tsx'), 'utf8')).toContain('<PageTitle')
   })
@@ -179,13 +180,13 @@ describe('resolveNav by role', () => {
   })
 
   it('opens all the Social children when Social itself is visible, and none to an editor', () => {
-    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(6)
-    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(6)
+    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(5)
+    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(5)
     expect(resolveNav('editor', [], [], '/dashboard').children).toEqual([])
     // hiding Social hides what rides on it
     expect(resolveNav('super_admin', [], ['/dashboard/social'], '/dashboard').children).toEqual([])
     // a grant of Social opens all of it
-    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(6)
+    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(5)
   })
 })
 

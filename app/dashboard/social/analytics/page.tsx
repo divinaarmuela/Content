@@ -225,22 +225,6 @@ export default function SocialAnalyticsPage() {
           : 'Performance across every connected account. Figures come from the platforms themselves and can lag by up to 48 hours.'}
         actions={<>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
-              {(['numbers', 'people'] as const).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  className={`min-h-11 rounded-tile px-3.5 py-1.5 text-body-15 transition-colors ${
-                    view === v
-                      ? 'bg-surface font-medium text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {v === 'numbers' ? 'Numbers' : 'People'}
-                </button>
-              ))}
-            </div>
             <Select value={clientId} onValueChange={setClientId}>
               <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
               <SelectContent>
