@@ -92,7 +92,7 @@ describe('the data deletion callback', () => {
 describe('the Meta review pages stay public', () => {
   const mw = readFileSync(join(__dirname, '..', 'middleware.ts'), 'utf8')
   it('no protected pattern or matcher entry covers them', () => {
-    for (const p of ['/privacy', '/terms', '/data-deletion', '/api/meta']) {
+    for (const p of ['/privacy', '/terms', '/data-deletion', '/app-info', '/support', '/api/meta']) {
       expect(mw).not.toMatch(new RegExp(`'${p.replace(/\//g, '\\/')}[(/:']`))
     }
   })

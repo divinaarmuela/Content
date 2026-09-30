@@ -43,7 +43,7 @@ export default function DataDeletionPage() {
           <LI>your enquiry, lead or prospect record and the notes about our conversations;</LI>
           <LI>newsletter, event and booking details (except payment records we must keep by law);</LI>
           <LI>records of comments or messages you sent to accounts we manage, and of any automated message we sent you;</LI>
-          <LI>your entry in any follower or engagement list we keep for a client&rsquo;s Instagram account;</LI>
+          <LI>your entry in any follower or engagement list we still hold from before 30 September 2026 for a client&rsquo;s Instagram account;</LI>
           <LI>your sign-in to our client portal, if you have one.</LI>
         </UL>
         <P>

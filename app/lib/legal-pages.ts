@@ -1,7 +1,7 @@
 /**
  * THE LEGAL PAGES' SWITCHES (Meta App Review groundwork, 30 Sep 2026).
  *
- * /privacy, /terms and /data-deletion were written from the code, and the
+ * /privacy, /terms, /data-deletion, /app-info and /support were written from the code, and the
  * owner reviews the wording before any of them is relied on. While a page's
  * switch is `true` it shows a "Draft — pending owner review" banner at the
  * top and tells search engines not to index it.
@@ -12,6 +12,8 @@
 export const PRIVACY_DRAFT = true
 export const TERMS_DRAFT = true
 export const DATA_DELETION_DRAFT = true
+export const APP_INFO_DRAFT = true
+export const SUPPORT_DRAFT = true
 
 /** "Last updated" on all three pages */
 export const LEGAL_UPDATED = '30 September 2026'
