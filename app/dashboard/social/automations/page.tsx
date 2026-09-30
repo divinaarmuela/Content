@@ -16,7 +16,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { AlertTriangle, ImageOff, Plus, Trash2, X, Zap } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ImageOff, Plus, Trash2, Workflow, X, Zap } from 'lucide-react'
 import PlatformIcon from '../PlatformIcon'
 import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
@@ -276,9 +277,17 @@ export default function AutomationsPage() {
       <PageTitle
         title="Automations"
         summary="Someone comments a keyword on one post, and the account DMs them the link. Each automation belongs to one post — never the whole account."
-        actions={canManage && !creating ? (
-          <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New automation</Button>
-        ) : undefined}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {/* the flow builder: what happens after someone taps an automation's button */}
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/dashboard/social/automations/flows"><Workflow className="h-4 w-4" /> Flows</Link>
+            </Button>
+            {canManage && !creating && (
+              <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> New automation</Button>
+            )}
+          </div>
+        }
       />
 
       {!zernioRead && (

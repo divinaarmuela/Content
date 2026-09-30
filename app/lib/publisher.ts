@@ -68,6 +68,19 @@ export interface Publisher {
   createAutomation(body: Record<string, unknown>): Promise<unknown>
   updateAutomation(id: string, body: Record<string, unknown>): Promise<unknown>
   deleteAutomation(id: string): Promise<unknown>
+  /**
+   * Workflows (the flow builder, app/lib/flows.ts): list / read / create /
+   * update ONLY. There is deliberately no activate, pause, delete or
+   * start-a-run here — switching a flow on waits for the owner's go-ahead,
+   * and a method that does not exist cannot be called by mistake.
+   */
+  listWorkflows(profileId?: string | null): Promise<unknown>
+  getWorkflow(id: string): Promise<unknown>
+  createWorkflow(body: WorkflowWrite & { profileId: string; accountId: string; platform: string }): Promise<unknown>
+  updateWorkflow(id: string, body: WorkflowWrite): Promise<unknown>
+  /** A workflow's recent runs, and one run's step-by-step timeline — read only. */
+  workflowRuns(id: string, limit?: number): Promise<unknown>
+  workflowRunEvents(id: string, runId: string): Promise<unknown>
   /** Comments on one post. `accountId` is REQUIRED by the provider (its docs, GET /v1/inbox/comments/{postId}) —
    *  without it nothing came back, and no comment ever reached a post page or the People page (28 Sep 2026). */
   postComments(postId: string, accountId?: string | null): Promise<unknown>
@@ -450,6 +463,31 @@ function firstString(...values: unknown[]): string | null {
   return null
 }
 
+/** What the flow builder may write to a workflow: its name, words and graph. Never a status. */
+export type WorkflowWrite = {
+  name: string
+  description?: string
+  nodes: unknown[]
+  edges: unknown[]
+  entryNodeId: string
+}
+
+/**
+ * The body of a workflow create / update, rebuilt field by field so nothing
+ * else can ride along — no `status`, no `isActive`, whatever the caller's
+ * object carried. Zernio creates a workflow as a draft and only
+ * POST /workflows/{id}/activate switches it on; this module never calls it.
+ */
+export function workflowWriteBody(w: WorkflowWrite): Record<string, unknown> {
+  return {
+    name: w.name,
+    ...(w.description !== undefined ? { description: w.description } : {}),
+    nodes: w.nodes,
+    edges: w.edges,
+    entryNodeId: w.entryNodeId,
+  }
+}
+
 export type ProviderAccount = {
   providerAccountId: string
   platform: string
@@ -720,6 +758,36 @@ class ZernioPublisher implements Publisher {
 
   deleteAutomation(id: string) {
     return this.send('DELETE', `/comment-automations/${encodeURIComponent(id)}`)
+  }
+
+  /* ── workflows: read, create (Zernio makes it a draft), update — never switch on ── */
+
+  listWorkflows(profileId?: string | null) {
+    const q = new URLSearchParams({ limit: '50' })
+    if (profileId) q.set('profileId', profileId)
+    return this.getJson(`/workflows?${q.toString()}`)
+  }
+
+  getWorkflow(id: string) {
+    return this.getJson(`/workflows/${encodeURIComponent(id)}`)
+  }
+
+  createWorkflow(body: WorkflowWrite & { profileId: string; accountId: string; platform: string }) {
+    return this.post('/workflows', {
+      profileId: body.profileId, accountId: body.accountId, platform: body.platform, ...workflowWriteBody(body),
+    })
+  }
+
+  updateWorkflow(id: string, body: WorkflowWrite) {
+    return this.send('PATCH', `/workflows/${encodeURIComponent(id)}`, workflowWriteBody(body))
+  }
+
+  workflowRuns(id: string, limit = 25) {
+    return this.getJson(`/workflows/${encodeURIComponent(id)}/executions?limit=${Math.max(1, Math.min(100, Math.floor(limit)))}`)
+  }
+
+  workflowRunEvents(id: string, runId: string) {
+    return this.getJson(`/workflows/${encodeURIComponent(id)}/executions/${encodeURIComponent(runId)}/events`)
   }
 
   postComments(postId: string, accountId?: string | null) {
@@ -1021,6 +1089,12 @@ class UnconfiguredPublisher implements Publisher {
   async createAutomation(): Promise<unknown> { return this.fail() }
   async updateAutomation(): Promise<unknown> { return this.fail() }
   async deleteAutomation(): Promise<unknown> { return this.fail() }
+  async listWorkflows() { return null }
+  async getWorkflow() { return null }
+  async createWorkflow(): Promise<unknown> { return this.fail() }
+  async updateWorkflow(): Promise<unknown> { return this.fail() }
+  async workflowRuns() { return null }
+  async workflowRunEvents() { return null }
   async postComments() { return null }
   async replyToComment() { return this.fail() }
   async privateReply() { return this.fail() }
