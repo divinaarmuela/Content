@@ -38,6 +38,7 @@ import type {
 import {
   assetsApprovedOnBoard, clientSignsOffEveryPost, coverForSlide, mayPostWithoutApproval, postingEligibility, type Eligibility,
   postPlatforms,
+  cardVersionGroups, type VersionGroup,
 } from '@/app/lib/social-schedule-core'
 import {
   anyNetworkLive, hatsFor, readPostState,
@@ -91,6 +92,8 @@ export type RailMedia = {
   title: string
   contentType: string
   slides: Slide[]
+  /** EVERY VERSION of the card, newest first — the media picker offers any of them (30 Sep 2026) */
+  versions?: VersionGroup[]
   cover: Slide | null
   /** may this start a post */
   ok: boolean
@@ -421,6 +424,7 @@ export function useSchedulePosts(
           title: item.title,
           contentType: String(item.content_type ?? ''),
           slides,
+          versions: cardVersionGroups(item, itemVersions),
           cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
           reason: elig.ok ? null : standing?.label ?? elig.reason,

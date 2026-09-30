@@ -50,6 +50,40 @@ export function roundLabel(n: number): string {
   return `Version ${n}`
 }
 
+/* ── THE VERSION NUMBER IS THE CLIENT'S (the owner, 30 Sep 2026: "make sure the version stays the same until the
+ * client — Version 1 comes back, Version 2") ─────────────────────────────────────────────────────────────────────
+ * The card counts its hand-ins in rounds (edit_round, each file's `version`), and a round can move without the
+ * client — "Start the next version" while the editor still holds the card. The NUMBER everybody reads is the
+ * client's: it goes up only when a version went to the client and came back. Internal re-work inside a version
+ * reads "Version 1 · draft 2". Derived, never stored: every round, file, comment and approval stays as it is, and
+ * the portal (editing-portal-core.clientVersionOf) counts the same way.
+ */
+const CLIENT_SEEN_STATUSES: readonly string[] = ['client_review', 'client_changes_requested', 'approved_for_scheduling', 'scheduled', 'published']
+
+/** the internal rounds that went to the client, in order — the stamped list; else, on a card from before it was
+ *  kept, every round up to the last one stamped (or the card's own, once it has been with the client); else none */
+export function clientRoundsForLabels(item: { client_rounds?: unknown; client_round?: unknown; edit_round?: unknown; status?: unknown } | null | undefined): number[] {
+  const list = Array.isArray(item?.client_rounds) ? (item!.client_rounds as unknown[]).filter((n): n is number => typeof n === 'number' && n >= 1) : []
+  if (list.length > 0) return [...new Set(list)].sort((a, b) => a - b)
+  const stamped = Number(item?.client_round)
+  const upTo = Number.isFinite(stamped) && stamped >= 1 ? Math.floor(stamped) : CLIENT_SEEN_STATUSES.includes(String(item?.status ?? '')) ? roundOf(item) : 0
+  return Array.from({ length: upTo }, (_, i) => i + 1)
+}
+
+/** a round as the version everybody reads: the client's number, and which draft of it this round is */
+export function versionOfRound(item: Parameters<typeof clientRoundsForLabels>[0], round: number): { n: number; draft: number } {
+  const given = clientRoundsForLabels(item)
+  const before = given.filter(r => r < round)
+  const first = (before[before.length - 1] ?? 0) + 1
+  return { n: before.length + 1, draft: Math.max(1, round - first + 1) }
+}
+
+/** "Version 1", or "Version 1 · draft 2" for re-work inside a version the client has not been given yet */
+export function versionLabel(item: Parameters<typeof clientRoundsForLabels>[0], round: number): string {
+  const v = versionOfRound(item, round)
+  return v.draft > 1 ? `Version ${v.n} · draft ${v.draft}` : `Version ${v.n}`
+}
+
 /** the rounds present in a set of files, newest first — a file with no round is round 1 */
 export function roundsOf(files: readonly { version?: number | null }[]): number[] {
   const set = new Set<number>()
@@ -164,9 +198,9 @@ type RoundItem = { status?: unknown; edit_round?: unknown; client_round?: unknow
 function nextRoundRefusal(item: RoundItem, handedIn: boolean): string | null {
   const status = String(item.status ?? '')
   if (['scheduled', 'published'].includes(status)) return 'Booked in or already posted — the files are the channel’s now.'
-  if (handInRound(item) !== roundOf(item)) return `Back from the client — what you hand in now is ${roundLabel(handInRound(item))} by itself.`
-  if (!EDITOR_HOLDS_STATUSES.includes(status)) return `${roundLabel(roundOf(item))} is handed over — it can only move once the card is back with you.`
-  if (!handedIn) return `Nothing handed in for ${roundLabel(roundOf(item))} yet — replace those files instead.`
+  if (handInRound(item) !== roundOf(item)) return `Back from the client — what you hand in now is ${versionLabel(item, handInRound(item))} by itself.`
+  if (!EDITOR_HOLDS_STATUSES.includes(status)) return `${versionLabel(item, roundOf(item))} is handed over — it can only move once the card is back with you.`
+  if (!handedIn) return `Nothing handed in for ${versionLabel(item, roundOf(item))} yet — replace those files instead.`
   return null
 }
 
@@ -179,5 +213,6 @@ export function nextRoundWords(input: { item: RoundItem; handedIn: boolean }): {
   label: string
   why: string | null
 } {
-  return { label: `Start ${roundLabel(handInRound(input.item) + 1)}`, why: nextRoundRefusal(input.item, input.handedIn) }
+  // the next round inside the SAME version until the client has it (30 Sep 2026): "Start Version 1 · draft 2"
+  return { label: `Start ${versionLabel(input.item, handInRound(input.item) + 1)}`, why: nextRoundRefusal(input.item, input.handedIn) }
 }

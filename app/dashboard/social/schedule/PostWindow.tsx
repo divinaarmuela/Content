@@ -29,7 +29,7 @@ import {
   withWorkingCopy, workingBody, workingCopyOf,
   type Answers, type InstagramChoiceKey, type NoteInput, type PostWindowApi, type Question, type WorkingCopy,
 } from '@/app/lib/post-window-core'
-import type { SuggestedTime } from '@/app/lib/social-schedule-core'
+import type { SuggestedTime, VersionGroup } from '@/app/lib/social-schedule-core'
 import { clientRecipients, defaultRecipients } from '@/app/lib/client-recipients-core'
 import {
   autoKindFor, availableKinds, isPlatform, networkName,
@@ -106,6 +106,8 @@ export type PostWindowSeed = {
   slides: Slide[]
   /** every file of the piece — the media picker's first tab */
   pieceFiles: Slide[]
+  /** …and every version of it, newest first (the owner, 30 Sep 2026: "they can use from any version") */
+  pieceVersions?: VersionGroup[]
   versionNumber: number | null
   coverUrl: string | null
   /** the time a click on the calendar meant */
@@ -1271,6 +1273,7 @@ export default function PostWindow({
           onClose={() => setPicking(false)}
           itemId={itemId ?? ''}
           approved={seed?.pieceFiles ?? []}
+          versions={seed?.pieceVersions}
           versionLabel={title}
           slides={state.slides}
           platforms={platforms}

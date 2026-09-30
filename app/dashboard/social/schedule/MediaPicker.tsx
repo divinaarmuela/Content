@@ -17,6 +17,7 @@ import {
 import { INSTAGRAM_MAX } from '@/app/lib/post-stage-core'
 import { friendlyError } from '@/app/lib/support-core'
 import { slideTypeFromUrl, type Slide } from '@/app/lib/version-files-core'
+import type { VersionGroup } from '@/app/lib/social-schedule-core'
 
 /**
  * ADD MEDIA — the library on the left, the post on the right.
@@ -51,7 +52,7 @@ type DriveRow = { id: string; name: string; type: 'image' | 'video'; bytes: numb
 const DRAG_TYPE = 'application/x-md-slide'
 
 export default function MediaPicker({
-  open, onClose, itemId, approved, versionLabel, slides, platforms, onSave,
+  open, onClose, itemId, approved, versions, versionLabel, slides, platforms, onSave,
   onEditSlide, saving, allowUploads = true, saveProblems = [],
 }: {
   /** why the last Save was refused — shown HERE, not behind this window (28 Sep 2026), and only after a
@@ -62,6 +63,9 @@ export default function MediaPicker({
   itemId: string
   /** the files of the piece this post was made from */
   approved: Slide[]
+  /** EVERY VERSION of the piece, newest first (the owner, 30 Sep 2026: "they can use from any version"): when
+   *  there is more than one, "This piece" lists them under Version 3 (latest) / Version 2 / Version 1 */
+  versions?: VersionGroup[]
   /** "Menu carousel · version 3" */
   versionLabel: string
   slides: Slide[]
@@ -382,12 +386,12 @@ export default function MediaPicker({
                 onDragStart={dragOut}
               />
             ) : (
-              <LibraryGrid
+              <PieceLibrary
+                versions={versions}
                 files={library}
                 inTray={url => inPost(tray, url)}
                 onAdd={s => setTray(t => addToPost(t, s))}
                 onDragStart={dragOut}
-                empty="This piece has no files yet."
               />
             )}
           </div>
@@ -446,10 +450,9 @@ export default function MediaPicker({
                   inTray={url => inPost(tray, url)} onDragStart={dragOut}
                 />
               ) : (
-                <LibraryGrid
-                  files={library} inTray={url => inPost(tray, url)}
+                <PieceLibrary
+                  versions={versions} files={library} inTray={url => inPost(tray, url)}
                   onAdd={s => setTray(t => addToPost(t, s))} onDragStart={dragOut}
-                  empty="This piece has no files yet."
                 />
               )}
             </div>
@@ -685,6 +688,33 @@ export default function MediaPicker({
 }
 
 /** The grid of files on the left. Faded once they are in the post. */
+/**
+ * "THIS PIECE": the piece's files — or, when the card has more than one version, every version under its own
+ * heading, newest first, so an earlier cut can be put in the post (30 Sep 2026). One version reads as before.
+ */
+function PieceLibrary({ versions, files, inTray, onAdd, onDragStart }: {
+  versions?: VersionGroup[]
+  files: Slide[]
+  inTray: (url: string) => boolean
+  onAdd: (slide: Slide) => void
+  onDragStart: (e: React.DragEvent, slide: Slide, from: number | null) => void
+}) {
+  const groups = (versions ?? []).filter(g => g.slides.length > 0)
+  if (groups.length < 2) {
+    return <LibraryGrid files={files} inTray={inTray} onAdd={onAdd} onDragStart={onDragStart} empty="This piece has no files yet." />
+  }
+  return (
+    <div className="flex flex-col gap-3" data-piece-versions>
+      {groups.map(g => (
+        <section key={g.round} aria-label={g.label} className="flex flex-col gap-1.5">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{g.label}</p>
+          <LibraryGrid files={g.slides} inTray={inTray} onAdd={onAdd} onDragStart={onDragStart} empty="No files in this version." />
+        </section>
+      ))}
+    </div>
+  )
+}
+
 function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
   files: Slide[]
   inTray: (url: string) => boolean

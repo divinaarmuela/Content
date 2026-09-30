@@ -164,6 +164,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, onShow
       title: media?.title ?? fresh?.title ?? 'Post',
       slides: composing.slides?.length ? composing.slides : (media?.slides ?? fresh?.slides ?? []),
       pieceFiles: media?.slides ?? fresh?.slides ?? [],
+      pieceVersions: media?.versions,
       versionNumber: media?.versionNumber ?? null,
       coverUrl: media?.coverUrl ?? null,
       at: composing.at,
@@ -247,7 +248,7 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, onShow
         <PostWindow
           postId={composing.postId}
           seed={seed ?? (piece ? {
-            itemId: piece.itemId, title: piece.title, slides: piece.slides, pieceFiles: piece.slides,
+            itemId: piece.itemId, title: piece.title, slides: piece.slides, pieceFiles: piece.slides, pieceVersions: piece.versions,
             versionNumber: piece.versionNumber ?? null, coverUrl: piece.coverUrl ?? null, at: null,
           } : null)}
           context={context}

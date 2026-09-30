@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
   activity: [] as Record<string, unknown>[],
   events: [] as { name: string; data: Record<string, unknown> }[],
   driveCalls: [] as string[],
-  drive: {} as Record<string, { name: string; mime: string; bytes: number; modified: string; parent: string; unreadable?: boolean }>,
+  drive: {} as Record<string, { name: string; mime: string; bytes: number; modified: string; parent: string; unreadable?: boolean; md5?: string; revision?: string; publicOnly?: boolean }>,
   r2: new Map<string, Buffer[]>(),
 }))
 
@@ -53,7 +53,10 @@ vi.mock('../app/lib/drive-folder-list', () => ({
   listFolder: async (folderId: string) => {
     h.driveCalls.push(`list:${folderId}`)
     const entries = Object.entries(h.drive).filter(([, f]) => f.parent === folderId && !f.unreadable)
-      .map(([id, f]) => ({ id, name: f.name, mimeType: f.mime, size: f.bytes, modified: f.modified, ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null }))
+      .map(([id, f]) => f.publicOnly
+        // Google's public folder view: no size, no change time, no checksum (live, 30 Sep 2026)
+        ? { id, name: f.name, mimeType: f.mime, size: null, modified: null, ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null }
+        : { id, name: f.name, mimeType: f.mime, size: f.bytes, modified: f.modified, md5: f.md5 ?? null, revision: f.revision ?? null, ownerName: null, ownerEmail: null, hasThumbnail: false, webViewLink: null })
     return { entries, more: false, source: 'account', accountFailure: null }
   },
 }))
@@ -61,7 +64,9 @@ vi.mock('../app/lib/drive-stream', () => ({
   driveFileMeta: async (id: string) => {
     h.driveCalls.push(`meta:${id}`)
     const f = h.drive[id]
-    return f && !f.unreadable ? { name: f.name, mime: f.mime, size: f.bytes, modified: f.modified } : null
+    if (!f || f.unreadable) return null
+    // a file only the public view shows: its bytes can be read, Drive says nothing about which cut it is
+    return f.publicOnly ? { name: f.name, mime: f.mime, size: f.bytes, modified: null } : { name: f.name, mime: f.mime, size: f.bytes, modified: f.modified, md5: f.md5 ?? null, revision: f.revision ?? null }
   },
   driveFileSize: async (id: string) => { h.driveCalls.push(`size:${id}`); return h.drive[id]?.bytes ?? null },
   openDriveFile: async (id: string, range: string) => {
@@ -85,7 +90,8 @@ const { runPullList, runPullSlices, finishPull } = await import('../app/lib/driv
 const { filesOf } = await import('../app/lib/drive-pull-core')
 const { currentFiles, finalFilesOf, hasFinishedWork, stillToReplace, assetIdOf } = await import('../app/lib/final-files-core')
 const { asClientVersions, clipsAtRound, assetLine, clientRoundsOf } = await import('../app/lib/editing-portal-core')
-const { handInRound } = await import('../app/lib/edit-round-core')
+const { handInRound, versionLabel } = await import('../app/lib/edit-round-core')
+const { versionSnapshot } = await import('../app/lib/final-files-core')
 
 let fake: ReturnType<typeof seedDb>
 const card = () => fake.rows('content_items').find(r => r.id === ITEM) as Record<string, any>
@@ -345,5 +351,115 @@ describe('a card that was already Drive-linked (the old hand-in) takes a Drive v
     expect(currentFiles(card()).map(f => assetIdOf(f))).toEqual([CLIP1, CLIP3])
     // the old link is left exactly as it was — its earlier round still opens
     expect(card().link_url).toBe(`https://drive.google.com/drive/folders/${OLD}`)
+  })
+})
+
+describe('the editor hands in the WHOLE Drive link again (the owner, 30 Sep 2026: "submit the Drive link again and all will become Version 2")', () => {
+  const MD5 = (c: string) => c.repeat(32)
+  const setCard = async (patch: Record<string, unknown>) => {
+    const { table } = await import('@/lib/db')
+    await table('content_items').update(ITEM, patch as never)
+  }
+  const reads = (id: string) => h.driveCalls.filter(c => c === `read:${id}`).length
+  beforeEach(() => {
+    h.drive[CLIP1].md5 = MD5('a'); h.drive[CLIP2].md5 = MD5('b')
+  })
+
+  it('no picking: every picture and clip in the link is the version (the notes file is not)', async () => {
+    seed({ status: 'in_progress' })
+    const r = await handIn({ url: FOLDER_URL })
+    expect(r.status).toBe(200)
+    expect(r.json.hand_in).toMatchObject({ whole: true })
+    await runJob()
+    expect(finalFilesOf(card()).map(f => f.name).sort()).toEqual(['Script 1.mp4', 'Script 2.mp4'])
+    expect(finalFilesOf(card()).map(f => f.drive_md5).sort()).toEqual([MD5('a'), MD5('b')])
+  })
+
+  it('(a) the quality check sends it back; a clip RE-EXPORTED OVER ITSELF (same Drive id, same size, new checksum) is its new cut; the other is kept, not copied again; still Version 1', async () => {
+    seed({ status: 'in_progress' })
+    await handIn({ url: FOLDER_URL }); await runJob()
+    await setCard({ status: 'revision_required', change_note_at: new Date().toISOString() })
+    const before2 = reads(CLIP2)
+    h.drive[CLIP1].md5 = MD5('c'); h.drive[CLIP1].modified = MOD2
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const hi = card().drive_handins[1]
+    expect(hi.status).toBe('done')
+    expect(hi.carried).toEqual([CLIP2])
+    expect(hi.file_ids).toHaveLength(1)
+    expect(reads(CLIP2)).toBe(before2)
+    const snap = versionSnapshot(card(), 1)
+    expect(snap.map(f => [f.name, f.drive_md5])).toEqual([['Script 1.mp4', MD5('c')], ['Script 2.mp4', MD5('b')]])
+    // the earlier cut of Script 1 is kept, under its own id (the comments on it with it), in the piece's line
+    expect(finalFilesOf(card()).filter(f => f.drive_file_id === CLIP1).map(f => f.drive_md5)).toEqual([MD5('a'), MD5('c')])
+    expect(versionLabel(card() as never, handInRound(card() as never))).toBe('Version 1')
+    expect(hasFinishedWork(card() as never)).toBe(true)
+  })
+
+  it('(b) a different Drive file with a matching name replaces that piece', async () => {
+    seed({ status: 'in_progress' })
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const s2 = finalFilesOf(card()).find(f => f.name === 'Script 2.mp4')!
+    await setCard({ status: 'revision_required', change_note_at: new Date().toISOString() })
+    delete h.drive[CLIP2]
+    h.drive[CLIP3] = { name: 'Script 2.mp4', mime: 'video/mp4', bytes: 2100, modified: MOD2, parent: FOLDER, md5: MD5('d') }
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const fresh = finalFilesOf(card()).find(f => f.drive_file_id === CLIP3)!
+    expect(fresh).toMatchObject({ asset_id: s2.id, replaces: s2.id })
+    expect(currentFiles(card()).map(f => f.name)).toEqual(['Script 1.mp4', 'Script 2.mp4'])
+  })
+
+  it('(c) nothing changed: everything kept, nothing copied, nothing added', async () => {
+    seed({ status: 'in_progress' })
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const n = finalFilesOf(card()).length
+    const r1 = reads(CLIP1), r2 = reads(CLIP2)
+    await handIn({ url: FOLDER_URL }); await runJob()
+    expect(finalFilesOf(card())).toHaveLength(n)
+    expect([reads(CLIP1), reads(CLIP2)]).toEqual([r1, r2])
+    expect(card().drive_handins[1]).toMatchObject({ status: 'done', file_ids: [] })
+  })
+
+  it('a folder only Google’s public view shows (no checksum, no change time): the same clip again is a NEW cut, never silently kept', async () => {
+    seed({ status: 'in_progress' })
+    h.drive[CLIP1].publicOnly = true; h.drive[CLIP2].publicOnly = true
+    await handIn({ url: FOLDER_URL }); await runJob()
+    await setCard({ status: 'revision_required', change_note_at: new Date().toISOString() })
+    await handIn({ url: FOLDER_URL }); await runJob()
+    expect(card().drive_handins[1].file_ids).toHaveLength(2)
+    // each cut has its own copy: the earlier one still points at its own bytes
+    const urls = finalFilesOf(card()).map(f => f.url)
+    expect(new Set(urls).size).toBe(urls.length)
+  })
+
+  it('after the CLIENT sends it back: one replaced + one new + one removed → Version 2 is exactly the folder; earlier cuts and their comments stay in Version 1', async () => {
+    h.drive[CLIP3] = { name: 'Script 3.mp4', mime: 'video/mp4', bytes: 3000, modified: MOD1, parent: FOLDER, md5: MD5('e') }
+    seed({ status: 'in_progress' })
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const v1 = versionSnapshot(card(), 1)
+    expect(v1.map(f => f.name)).toEqual(['Script 1.mp4', 'Script 2.mp4', 'Script 3.mp4'])
+    // with the client, who comments on Script 1 and Script 3, then asks for changes
+    const comments = [{ video_file_id: v1[0].id }, { video_file_id: v1[2].id }]
+    await setCard({ status: 'client_changes_requested', edit_round: 1, client_round: 1, client_rounds: [1], change_note_at: new Date().toISOString() })
+    expect(versionLabel(card() as never, handInRound(card() as never))).toBe('Version 2')
+    // the folder now: Script 1 re-exported, Script 2 as it was, Script 3 gone, Script 4 new
+    h.drive[CLIP1].md5 = MD5('f'); h.drive[CLIP1].modified = MOD2
+    delete h.drive[CLIP3]
+    h.drive.driveClip00004 = { name: 'Script 4.mp4', mime: 'video/mp4', bytes: 4000, modified: MOD2, parent: FOLDER, md5: MD5('g') }
+    await handIn({ url: FOLDER_URL }); await runJob()
+    const v2 = versionSnapshot(card(), 2)
+    expect(v2.map(f => [f.name, f.version, f.changed, f.new_cut])).toEqual([
+      ['Script 1.mp4', 2, true, true],
+      ['Script 2.mp4', 1, false, false],
+      ['Script 4.mp4', 2, true, false],
+    ])
+    expect(card().drive_handins[1].retired).toEqual([v1[2].id])
+    expect(versionSnapshot(card(), 1).map(f => f.id)).toEqual(v1.map(f => f.id))
+    for (const c of comments) expect(versionSnapshot(card(), 1).some(f => f.id === c.video_file_id)).toBe(true)
+  })
+
+  it('a single-file link is the whole version: that one file', async () => {
+    seed({ status: 'in_progress' })
+    await handIn({ url: `https://drive.google.com/file/d/${CLIP2}/view` }); await runJob()
+    expect(versionSnapshot(card(), 1).map(f => f.drive_file_id)).toEqual([CLIP2])
   })
 })

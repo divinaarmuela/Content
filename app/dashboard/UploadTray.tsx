@@ -5,6 +5,8 @@ import { X } from 'lucide-react'
 import { awaitingPickup, clearFinishedUploads, dismissUpload, getUploads, subscribeUploads } from './uploadQueue'
 import { UploadOverall, UploadRows } from './UploadRows'
 import { isSettled, overallProgress } from '../lib/upload-progress-core'
+import { getDriveCopies, getNoDriveCopies, subscribeDriveCopies } from './driveCopyWatch'
+import { DriveCopyRows } from './DriveCopyRows'
 
 /**
  * Floating background-upload tray — visible on every dashboard page while
@@ -17,7 +19,18 @@ import { isSettled, overallProgress } from '../lib/upload-progress-core'
  */
 export default function UploadTray() {
   const uploads = useSyncExternalStore(subscribeUploads, getUploads, getUploads)
-  if (uploads.length === 0) return null
+  // A DRIVE HAND-IN'S COPY shows here too (30 Sep 2026) — it runs on the server, so it is watched, not uploaded
+  const driveCopies = useSyncExternalStore(subscribeDriveCopies, getDriveCopies, getNoDriveCopies)
+  if (uploads.length === 0 && driveCopies.length === 0) return null
+  if (uploads.length === 0) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 w-80 rounded-inner border border-border bg-surface shadow-lg" data-drive-copy-tray>
+        <div className="border-b border-border px-3 py-2"><span className="text-secondary-13 font-semibold">From Google Drive</span></div>
+        <div className="max-h-60 overflow-y-auto p-2"><DriveCopyRows watches={driveCopies} /></div>
+        <p className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">The copy runs on our side — you can close this tab.</p>
+      </div>
+    )
+  }
 
   const active = uploads.filter(u => !isSettled(u.status))
   const overall = overallProgress(uploads)
@@ -52,6 +65,9 @@ export default function UploadTray() {
       <div className="max-h-60 overflow-y-auto p-2">
         <UploadRows uploads={uploads} onDismiss={dismissUpload} compact />
       </div>
+      {driveCopies.length > 0 && (
+        <div className="border-t border-border p-2"><DriveCopyRows watches={driveCopies} /></div>
+      )}
 
       {active.length > 0 && (
         <p className="border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">

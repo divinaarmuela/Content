@@ -9,8 +9,12 @@ import {
   sanitiseMap, sanitisePicked, settledHandIn, withHandIn, type DriveHandIn, type MergeResult,
 } from './drive-handin-core'
 import { finalFilesChangeRefusal, finalFilesOf, needsAdoption } from './final-files-core'
-import { handInRound, roundLabel } from './edit-round-core'
+import { handInRound, versionLabel } from './edit-round-core'
 import { logActivity } from './workflow'
+import { kindOf, type FileKind } from './files-core'
+
+/** what a whole-link hand-in takes: what an upload takes (image/*, video/*, PDF) */
+const HANDIN_KINDS: FileKind[] = ['video', 'image', 'pdf']
 import { announceItemChange } from './production-live'
 
 /**
@@ -33,10 +37,10 @@ export async function listDriveHandIn(rawUrl: unknown): Promise<HandInListing> {
   const target = driveLinkTarget(rawUrl)
   if (!target.ok) return { ok: false, status: 400, error: target.error }
   let kind = target.kind
-  let files = await readDriveTarget(kind, target.id)
+  let files = await readDriveTarget(kind, target.id, { cuts: true })
   // an open?id= link names a folder as often as a file: a file Drive would not describe is asked for as a folder
   if (files.length === 0 && kind === 'file') {
-    const asFolder = await readDriveTarget('folder', target.id)
+    const asFolder = await readDriveTarget('folder', target.id, { cuts: true })
     if (asFolder.length > 0) { kind = 'folder'; files = asFolder }
   }
   if (files.length === 0) return { ok: false, status: 422, error: NOT_SHARED_WORDS }
@@ -52,9 +56,15 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   if (refusal) return { ok: false, status: 409, error: refusal }
   const listing = await listDriveHandIn(body.url)
   if (!listing.ok) return listing
-  const picked = sanitisePicked(body.ids, listing.files)
+  // THE WHOLE LINK IS THE VERSION (the owner, 30 Sep 2026: "they just need to know they need to submit the Drive link
+  // again and all will become Version 2"): no ids sent → every picture, clip and PDF in it, in Drive's order, matched
+  // to the card's pieces by Drive id then name when the copy lands. Ids sent (the older picker) still work.
+  const whole = !Array.isArray(body.ids)
+  const media = listing.files.filter(f => HANDIN_KINDS.includes(kindOf(f.mime, f.name)))
+  if (whole && media.length === 0) return { ok: false, status: 422, error: 'There are no pictures, clips or PDFs in that Drive link' }
+  const picked = sanitisePicked(whole ? media.map(f => f.id) : body.ids, listing.files)
   if (!picked.ok) return { ok: false, status: 400, error: picked.error }
-  const map = sanitiseMap(body.map, picked.ids, item as never)
+  const map = whole ? {} : sanitiseMap(body.map, picked.ids, item as never)
   const pull = handInPullId(listing.id, item.id)
   const now = new Date().toISOString()
   // one at a time on a card: a hand-in still copying is waited for, not raced
@@ -66,7 +76,7 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   const round = handInRound(item as never)
   const names = Object.fromEntries(listing.files.filter(f => picked.ids.includes(f.id)).map(f => [f.id, f.name]))
   const handIn: DriveHandIn = {
-    id: `${pull}#${now}`, pull_id: pull, link: listing.url, drive_ids: picked.ids, names, map, round,
+    id: `${pull}#${now}`, pull_id: pull, link: listing.url, drive_ids: picked.ids, names, map, round, ...(whole ? { whole: true } : {}),
     by: user.id, manager, requested_at: now, status: 'copying',
   }
   const items = table<ContentItem>('content_items')
@@ -90,7 +100,7 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   await logActivity({
     actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
     action: 'drive_handin_started', newValue: `v${round}`,
-    detail: `Handing in ${picked.ids.length} ${picked.ids.length === 1 ? 'file' : 'files'} from Google Drive as ${roundLabel(round)} — copying`,
+    detail: `Handing in ${picked.ids.length} ${picked.ids.length === 1 ? 'file' : 'files'} from Google Drive as ${versionLabel(item as never, round)} — copying`,
   })
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'updated' })
   return { ok: true, handIn, round }
@@ -165,15 +175,15 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
   })
   if (!put.claimed || !outcome) return { settled: false, reason: 'already settled' }
   const done = outcome as { result: MergeResult; handIn: DriveHandIn; round: number }
+  const fresh = put.row as ContentItem | null
   const by = done.handIn.by ? await table('team_users').get(done.handIn.by).catch(() => null) : null
   await logActivity({
     actor: (by as TeamUser | null) ?? null, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
     action: done.result.ok ? 'drive_handin_done' : 'drive_handin_failed', newValue: `v${done.round}`,
     detail: done.result.ok
-      ? `Handed in from Google Drive as ${roundLabel(done.round)}: ${done.result.added.length} ${done.result.added.length === 1 ? 'file' : 'files'}${done.result.carried.length ? `, ${done.result.carried.length} unchanged` : ''}`
+      ? `Handed in from Google Drive as ${versionLabel((fresh ?? item) as never, done.round)}: ${done.result.added.length} ${done.result.added.length === 1 ? 'file' : 'files'}${done.result.carried.length ? `, ${done.result.carried.length} unchanged` : ''}`
       : done.result.error,
   }).catch(() => undefined)
-  const fresh = put.row as ContentItem | null
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: String(fresh?.status ?? item.status), kind: 'updated' })
   return { settled: true, result: done.result }
 }

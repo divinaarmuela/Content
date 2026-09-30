@@ -34,7 +34,8 @@ describe('starting the next version', () => {
   })
 
   it('says what it will do, and why it is off when it is', () => {
-    expect(nextRoundWords({ item: card('draft_uploaded'), handedIn: true })).toEqual({ label: 'Start Version 2', why: null })
+    // the version number is the client's (the owner, 30 Sep 2026): re-work before the client has it is a draft of Version 1
+    expect(nextRoundWords({ item: card('draft_uploaded'), handedIn: true })).toEqual({ label: 'Start Version 1 · draft 2', why: null })
     expect(nextRoundWords({ item: card('draft_uploaded'), handedIn: false }).why)
       .toBe('Nothing handed in for Version 1 yet — replace those files instead.')
     expect(nextRoundWords({ item: card('quality_check'), handedIn: true }).why)

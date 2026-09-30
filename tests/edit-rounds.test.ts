@@ -60,8 +60,9 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(t).toContain("if (finished && finalFilesOf(item as never).length === 0) startPullSoon({ kind: 'item', scopeId: id, folderUrl: finished.url, version: round, by: user.id, purpose: 'finished' })")
     // a file already here keeps the round it arrived with; a new file gets the current one
     const p = src('app/lib/drive-pull.ts')
-    expect(p).toContain('const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
-    expect(p).toContain("parts: [], version: round, modified: f.modified })")
+    // (a Drive hand-in proves the cut by checksum, revision or change time instead — drive-handin-core.sameDriveCut, 30 Sep 2026)
+    expect(p).toContain(': !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)')
+    expect(p).toContain("parts: [], version: round, modified: f.modified, ")
   })
   it('the card page has a tab per finished edit handed in, beside the folder to work from — the newest open (16 Sep 2026)', async () => {
     const { finishedVersionsOf } = await import('../app/lib/edit-round-core')
@@ -100,7 +101,7 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(box).toContain("const shownVersion = tab === 'folder' ? null : (tab === null ? versionTabs[0] : versionTabs.find(v => v.round === tab)) ?? null")
     expect(box).toContain('Folder to work from')
     expect(box).toContain("{roundLabel(v.round)}{v === versionTabs[0] ? ' · latest' : ''}{v.inFlight ? ' · copying in' : ''}")
-    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />')
+    expect(box).toContain('<DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} labelOf={roundLabel} />')
     expect(src('app/dashboard/editor/[id]/page.tsx')).toContain('fallbackFolder={from.footage} wideFiles versions')
     // every pull says what it was: the row's purpose
     expect(src('app/lib/drive-pull.ts')).toContain("purpose: opts.purpose ?? (row as { purpose?: string | null } | null)?.purpose ?? null,")

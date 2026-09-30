@@ -43,6 +43,9 @@ export type FinalFile = {
   drive_file_id?: string
   /** Drive's last-changed time for that file when it was copied: the same id unchanged is the same cut */
   drive_modified?: string | null
+  /** Drive's checksum and head revision of that file when copied — which cut it was, for certain */
+  drive_md5?: string | null
+  drive_revision?: string | null
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -127,6 +130,8 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       ...(x.source === 'drive' || x.source === 'upload' ? { source: x.source } : {}),
       ...(typeof x.drive_file_id === 'string' && /^[A-Za-z0-9_-]{10,128}$/.test(x.drive_file_id) ? { drive_file_id: x.drive_file_id } : {}),
       ...(typeof x.drive_modified === 'string' && x.drive_modified.length <= 40 ? { drive_modified: x.drive_modified } : {}),
+      ...(typeof x.drive_md5 === 'string' && /^[a-f0-9]{32}$/i.test(x.drive_md5) ? { drive_md5: x.drive_md5 } : {}),
+      ...(typeof x.drive_revision === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(x.drive_revision) ? { drive_revision: x.drive_revision } : {}),
     })
   }
   return { ok: true, files: out }
@@ -250,6 +255,59 @@ export function needsAdoption(item: { final_files?: unknown; link_url?: string |
  */
 export function isRetiredAt(f: Pick<FinalFile, 'retired_round'>, round: number): boolean {
   return typeof f.retired_round === 'number' && f.retired_round <= round
+}
+
+/* ── EVERY VERSION IS THE WHOLE SET (the owner, 30 Sep 2026: "anything that gets sent back is the whole version of
+ * the files, so nothing is missed"; "in every step — client section, quality review — Version 1 all files, Version 2
+ * all files"; "even if the client approves all files, everything is saved") ─────────────────────────────────────────
+ * ONE answer to "what was Version N", used by the portal, the team's version tabs, the client's frozen copy, the
+ * approved files and the post's version picker: every piece of the card as it stood at N — its newest file up to N
+ * (the new cut where it was replaced, the untouched ones carried forward), the pieces dropped by N left out, in the
+ * order the pieces first appeared. Nothing is pruned: each earlier version is rebuilt from the same per-piece lines,
+ * with every file kept, so its comments and approvals (hung off the file ids) stay where they were written.
+ */
+export type SnapshotLike = { id: string; version: number; asset_id?: string | null; retired_round?: number | null; uploaded_at?: string | null }
+
+/** the whole set at a version, from any list of per-piece files (a tie in version: the later upload, else the later in the list) */
+export function snapshotOf<T extends SnapshotLike>(files: readonly T[], round: number): T[] {
+  const newest = new Map<string, T>()
+  for (const f of files) {
+    if (f.version > round) continue
+    const a = f.asset_id || f.id, have = newest.get(a)
+    if (!have || f.version > have.version || (f.version === have.version && (!f.uploaded_at || !have.uploaded_at || f.uploaded_at >= have.uploaded_at))) newest.set(a, f)
+  }
+  const order = [...new Set(files.map(f => f.asset_id || f.id))]
+  return order.map(a => newest.get(a)).filter((f): f is T => !!f && !(typeof f.retired_round === 'number' && f.retired_round <= round))
+}
+
+export type SnapshotFile = FinalFile & {
+  /** handed in AT this version: a new cut of a piece, or a new piece */
+  changed: boolean
+  /** a new cut of a piece that was there before (not a brand-new piece) */
+  new_cut: boolean
+}
+
+/** the card at Version N, every file, each marked changed-in-this-version or carried unchanged */
+export function versionSnapshot(item: { final_files?: unknown }, round: number): SnapshotFile[] {
+  const all = finalFilesOf(item)
+  return snapshotOf(all, round).map(f => ({
+    ...f,
+    changed: f.version === round,
+    new_cut: f.version === round && all.some(o => assetIdOf(o) === assetIdOf(f) && o.version < round),
+  }))
+}
+
+/** the versions a card's files make, newest first */
+export function versionRoundsOf(item: { final_files?: unknown }): number[] {
+  return [...new Set(finalFilesOf(item).map(f => f.version))].sort((a, b) => b - a)
+}
+
+/** every version of the card as the team's version tabs read them: each version's WHOLE set, tagged with that version */
+export function finalFilesAsVersionPulls(item: { final_files?: unknown }): (ReturnType<typeof finalFilesAsPulls>[number] & { changed: boolean; new_cut: boolean; from_version: number })[] {
+  return versionRoundsOf(item).flatMap(r => versionSnapshot(item, r).map(f => ({
+    id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const,
+    version: r, upload_id: null, parts: [] as never[], changed: f.changed, new_cut: f.new_cut, from_version: f.version,
+  })))
 }
 
 /** the assets the card carries at a round: the newest file of each, minus the ones dropped by then */

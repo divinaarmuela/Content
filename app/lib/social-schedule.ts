@@ -23,7 +23,7 @@ import {
 import {
   optionsFromExtras, readChannelExtras, type ChannelExtras } from './schedule-compose-core'
 import {
-  applySlideLimit, channelBlockReason, coverForSlide, eligibility,
+  anyVersionSlides, applySlideLimit, channelBlockReason, coverForSlide, eligibility,
   mayEditNote, mayPostPiece, postingEligibility, samePostKey, validateComposition,
   type CoverSource, type Eligibility } from './social-schedule-core'
 import {
@@ -502,9 +502,11 @@ function problemsWith(input: {
  * of "only approved media gets posted", and it is enforced here rather than
  * trusted to the screen that draws the picker.
  */
-function chooseSlides(approved: Slide[], chosen: unknown): Slide[] {
+function chooseSlides(approved: Slide[], chosen: unknown, anyVersion: readonly Slide[] = []): Slide[] {
+  // nothing chosen: the approved files, exactly as before (the hand-over's fresh post is made this way)
   if (!Array.isArray(chosen)) return approved
-  const byUrl = new Map(approved.map(s => [s.url, s]))
+  // …a choice may name a file of ANY version of this card (the owner, 30 Sep 2026), never another card's
+  const byUrl = new Map([...anyVersion, ...approved].map(s => [s.url, s]))
   const out: Slide[] = []
   for (const raw of chosen) {
     const url = String((raw as { url?: unknown })?.url ?? '')
@@ -547,10 +549,11 @@ export async function createPost(user: TeamUser, input: CreatePostInput): Promis
 
   // an account manager may build a post out of media the client has not seen
   // yet — the approval happens for them when the post goes out
-  const elig = await eligibleFor(user, item, await versionsOf(item.id))
+  const versions = await versionsOf(item.id)
+  const elig = await eligibleFor(user, item, versions)
   if (!elig.ok) throw new ComposeError([elig.reason])
 
-  const slides = chooseSlides(elig.slides, input.slides)
+  const slides = chooseSlides(elig.slides, input.slides, anyVersionSlides(item, versions))
   const channelIds = asArray<unknown>(input.channels).map(String)
   const accounts = await channelsFor(item.client_id, channelIds)
   const perChannel = readPerChannel(input.per_channel)
@@ -788,6 +791,8 @@ export async function updatePost(
   // NEW file has to come from the piece
   const onPost = post.slides
   const allowed = [...editableSlides, ...onPost.filter(s => !editableSlides.some(e => e.url === s.url))]
+  // …and any version of this card's files (the owner, 30 Sep 2026: "they can use from any version")
+  for (const s of anyVersionSlides(item, versions)) if (!allowed.some(a => a.url === s.url)) allowed.push(s)
   // …and a file uploaded through the app for this post — a client's change is made HERE (uploadedForPost)
   if (input.slides !== undefined) {
     const asked = asArray<{ url?: unknown }>(input.slides).map(r => String(r?.url ?? '')).filter(u => u && !allowed.some(a => a.url === u))

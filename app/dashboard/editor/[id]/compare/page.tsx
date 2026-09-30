@@ -11,7 +11,7 @@ import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, ContentItem, DrivePull, ItemComment, TeamUser } from '@/lib/db-types'
 import { driveTargetOf } from '../../../../lib/card-link-core'
 import { filesOf, pullId, type PullFile } from '../../../../lib/drive-pull-core'
-import { fileRound, roundLabel } from '../../../../lib/edit-round-core'
+import { fileRound, roundLabel, versionLabel } from '../../../../lib/edit-round-core'
 import { kindOf } from '../../../../lib/files-core'
 import { finalFilesAsPulls } from '../../../../lib/final-files-core'
 import { usePreviewRows } from '../../../../components/media/usePreviewRows'
@@ -46,7 +46,9 @@ export function parsePicks(f: string | null): { id: string; round: number | null
   })
 }
 
-function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one, fromFolder = false }: {
+function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient, one, fromFolder = false, labelOf = roundLabel }: {
+  /** the card's client-numbered version (edit-round-core.versionLabel, 30 Sep 2026) */
+  labelOf?: (round: number) => string
   itemId: string
   file: PullFile
   /** picked from the folder to work from: the pill says so, not a version */
@@ -87,7 +89,7 @@ function ClipPanel({ itemId, file, src, streamBase, comments, nameOf, fromClient
     <section className="flex min-w-0 flex-col gap-2 rounded-card border border-border bg-card p-3" aria-label={file.name} data-clip-panel>
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={file.name}>{file.name}</span>
-        <span className="rounded-full border border-border px-2.5 py-0.5 text-[12px] font-semibold">{fromFolder ? 'Folder to work from' : roundLabel(fileRound(file))}</span>
+        <span className="rounded-full border border-border px-2.5 py-0.5 text-[12px] font-semibold">{fromFolder ? 'Folder to work from' : labelOf(fileRound(file))}</span>
         <Link href={reviewPath(itemId, file.id, file.name)} className="text-[12px] text-muted-foreground underline-offset-4 hover:underline">Open on its own</Link>
       </div>
       {isImage ? (
@@ -180,7 +182,7 @@ export default function ComparePage() {
         {chosen.map(({ file: f, fromFolder }) => {
           const p = previews.get(f.url as string)
           const base = p && p.state === 'ready' ? streamBaseUrl(p) : null
-          return <ClipPanel key={`${f.id}@${fromFolder ? 'folder' : fileRound(f)}`} itemId={id} file={f} src={f.url} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} fromFolder={fromFolder} />
+          return <ClipPanel key={`${f.id}@${fromFolder ? 'folder' : fileRound(f)}`} itemId={id} file={f} src={f.url} streamBase={base} comments={commentsOnClip(visible as never, f.id) as ItemComment[]} nameOf={nameOf} fromClient={fromClient} one={one} fromFolder={fromFolder} labelOf={r => versionLabel(item as never, r)} />
         })}
       </div>
     </div>

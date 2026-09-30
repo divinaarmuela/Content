@@ -10,7 +10,7 @@ import { activeCommentId, commentsOnClip, formatStamp, markersFor } from '../../
 import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
 import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
-import { assetLine, clipsAtRound, pieceWords } from '../../lib/editing-portal-core'
+import { assetLine, changedAtRound, clipsAtRound, pieceWords } from '../../lib/editing-portal-core'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -110,6 +110,26 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
     router.refresh()
   }
 
+  // APPROVE THE WHOLE VERSION (the owner, 30 Sep 2026): every piece of the version shown, one tick each through the
+  // same per-piece approval — nothing else changes, and every earlier version stays as it was
+  const unapproved = clips.filter(c => !clipApproval(approvals, c.id))
+  const approveAll = async () => {
+    if (approving || unapproved.length === 0 || !name.trim()) return
+    setApproving(true); setError(null)
+    try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
+    for (const c of unapproved) {
+      const res = await fetch('/api/portal/clip', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, item: item.id, file_id: c.id, name: c.name, decision: 'approve', author_name: name }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) { setError(json?.error ?? `Could not approve ${c.name} — try again`); break }
+      if (Array.isArray(json?.approvals)) setApprovals(json.approvals)
+    }
+    setApproving(false)
+    router.refresh()
+  }
+
   const approve = async (undo: boolean) => {
     if (!clip || approving) return
     setApproving(true); setError(null)
@@ -194,6 +214,10 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold text-foreground" title={clip.name}>{clip.name}</p>
+                {/* the whole set at this version (30 Sep 2026): what changed in it, what was carried as it was */}
+                {data.rounds.length > 1 && !lookingBack && (
+                  <p data-version-mark className="text-[12px] font-semibold text-muted-foreground">{changedAtRound(clip, round) ? `New in ${roundLabel(round)}` : `Unchanged since ${roundLabel(clip.version)}`}</p>
+                )}
                 <p className="text-[12px] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
                   {current + 1} / {clips.length}{duration > 0 ? ` · ${formatStamp(now)} / ${formatStamp(duration)}` : ''}
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
@@ -255,6 +279,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                       {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">{n}</span>}
                     </span>
                     <span className="truncate px-0.5 text-[12px] text-foreground/80" title={c.name}>{c.name}</span>
+                    {data.rounds.length > 1 && <span className="px-0.5 text-[11px] text-muted-foreground">{changedAtRound(c, round) ? `New in ${roundLabel(round)}` : 'Unchanged'}</span>}
                   </button>
                 </li>
               )
@@ -262,6 +287,13 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
           </ul>
         )}
         {approvedWords && <p className="text-[13px] text-emerald-600 dark:text-emerald-300">{approvedWords}</p>}
+        {clips.length > 1 && unapproved.length > 0 && (
+          <button type="button" onClick={() => void approveAll()} disabled={approving || !name.trim()}
+            title={name.trim() ? undefined : 'Type your name first — the approval carries it'}
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
+            <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : `Approve all ${clips.length} ${words.many} in ${roundLabel(round)}`}
+          </button>
+        )}
       </section>
 
       {/* ── the comments on this clip ── */}

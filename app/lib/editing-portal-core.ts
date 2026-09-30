@@ -13,6 +13,7 @@ import { finishedEditOf, driveTargetOf } from './card-link-core'
 import { isClientFacing } from './portal-core'
 import { kindOf, type DriveEntry } from './files-core'
 import type { ItemStatus } from './workflow-core'
+import { snapshotOf } from './final-files-core'
 
 /** the client's page for one editing card */
 export function editingPortalPath(token: string, itemId: string): string {
@@ -126,18 +127,15 @@ export type VersionedClip = { id: string; version: number; asset_id?: string | n
  * A Drive-link round has no assets (a folder is one lump), so its clips belong to their own version only.
  */
 export function clipsAtRound<T extends VersionedClip>(clips: readonly T[], round: number): T[] {
-  const newest = new Map<string, T>()
-  const out: T[] = []
-  for (const c of clips) {
-    if (c.version > round) continue
-    if (!c.carries) { if (c.version === round) out.push(c); continue }
-    const a = c.asset_id || c.id, have = newest.get(a)
-    if (!have || c.version >= have.version) newest.set(a, c)
-  }
-  // dropped by this version: out (its earlier version still shows it)
-  for (const [a, c] of newest) if (typeof c.retired_round === 'number' && c.retired_round <= round) newest.delete(a)
-  const order = [...new Set(clips.filter(c => c.carries).map(c => c.asset_id || c.id))]
-  return [...out, ...order.map(a => newest.get(a)).filter((c): c is T => !!c)]
+  // a link round's clips are that round's own; the files are the WHOLE set at the version (final-files-core.snapshotOf,
+  // the one answer every screen uses — 30 Sep 2026)
+  const out = clips.filter(c => !c.carries && c.version === round)
+  return [...out, ...snapshotOf(clips.filter(c => c.carries), round)]
+}
+
+/** was this clip handed in at the version being looked at (a new cut or a new piece), or carried unchanged */
+export function changedAtRound(clip: VersionedClip, round: number): boolean {
+  return clip.version === round
 }
 
 /** one asset's versions the client may see, newest first — the tabs beside a replaced clip */

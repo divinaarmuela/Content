@@ -405,7 +405,7 @@ export async function revokePermission(
  *  not in bytes: a 100-file page fetched with `*` is a few hundred KB of JSON
  *  crossing the wire on every folder click. This list is what the page draws. */
 const ENTRY_FIELDS =
-  'id,name,mimeType,size,modifiedTime,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'
+  'id,name,mimeType,size,modifiedTime,md5Checksum,headRevisionId,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'
 
 type RawEntry = {
   id?: string
@@ -416,6 +416,8 @@ type RawEntry = {
   webViewLink?: string
   hasThumbnail?: boolean
   resourceKey?: string
+  md5Checksum?: string
+  headRevisionId?: string
   owners?: { displayName?: string; emailAddress?: string }[]
 }
 
@@ -433,6 +435,8 @@ function toEntry(raw: RawEntry): DriveEntry | null {
     hasThumbnail: Boolean(raw.hasThumbnail),
     webViewLink: raw.webViewLink ?? null,
     resourceKey: raw.resourceKey ?? null,
+    md5: raw.md5Checksum ?? null,
+    revision: raw.headRevisionId ?? null,
   }
 }
 

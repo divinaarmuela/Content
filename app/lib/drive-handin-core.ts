@@ -26,7 +26,7 @@
  * Google Drive is READ here and nowhere written (CLAUDE.md trap 13). Pure: no I/O.
  */
 import { driveTargetOf } from './card-link-core'
-import { LOCKED_STATUSES, LOOKING_STATUSES, assetIdOf, clipKey, currentFiles, finalFilesOf, mayReplaceAsset, withFinalFiles, withReplacement, type FinalFile } from './final-files-core'
+import { LOCKED_STATUSES, LOOKING_STATUSES, assetIdOf, clipKey, currentFiles, finalFilesOf, mayReplaceAsset, withFinalFiles, withReplacement, withRetired, type FinalFile } from './final-files-core'
 import { fileRound } from './edit-round-core'
 import { formatBytes, formatLeft, type PullFile, type PullRow } from './drive-pull-core'
 
@@ -85,6 +85,13 @@ export type DriveHandIn = {
   carried?: string[]
   /** Drive ids left out, with why */
   skipped?: { drive_id: string; why: string }[]
+  /** THE WHOLE LINK IS THE VERSION (30 Sep 2026): every file in it, matched to the card's pieces by Drive id then
+   *  name; a piece not in it is dropped from this version (kept in the ones before) */
+  whole?: boolean
+  /** the pieces dropped from this version because they were not in the link */
+  retired?: string[]
+  /** of file_ids, the ones that are new pieces (the rest are new cuts of pieces already on the card) */
+  new_ids?: string[]
   error?: string | null
 }
 
@@ -150,16 +157,30 @@ export function handInRefusal(item: { status?: unknown }, manager: boolean): str
   return null
 }
 
+/**
+ * IS IT THE SAME CUT? Only when Drive PROVES it (30 Sep 2026: an editor re-exports a clip over itself in the same
+ * folder — same Drive id, new bytes — and the old rule, which fell back to the size, could keep the old cut and
+ * miss the fix). Proof, strongest first: the same checksum; the same head revision; the same change time. When
+ * Drive told us none of these (a public folder view), it is a NEW cut: a repeated version is harmless, a missed fix
+ * is not. Sizes are never proof.
+ */
+export function sameDriveCut(
+  a: { md5?: string | null; revision?: string | null; modified?: string | null },
+  b: { md5?: string | null; revision?: string | null; modified?: string | null },
+): boolean {
+  if (a.md5 && b.md5) return a.md5 === b.md5
+  if (a.revision && b.revision) return a.revision === b.revision
+  if (a.modified && b.modified) return a.modified === b.modified
+  return false
+}
+
 /** the same Drive file, not changed since the copy on the card was made */
-function sameCut(f: FinalFile, driveId: string, copy: { modified?: string | null; size?: number | null; url?: string | null }): boolean {
+function sameCut(f: FinalFile, driveId: string, copy: { modified?: string | null; md5?: string | null; revision?: string | null; url?: string | null }): boolean {
   const idMatches = f.drive_file_id === driveId || (!f.drive_file_id && f.id === driveId)   // a copy adopted from an old link keeps the Drive id as its own
   if (!idMatches) return false
-  if (f.drive_modified && copy.modified) return f.drive_modified === copy.modified
+  // this very copy is on the card already — the pull reuses a copy only when Drive proved the cut (drive-pull listInto)
   if (copy.url && f.url === copy.url) return true
-  // no change time to go by: the size, but only for a copy this hand-in path made (it recorded the Drive id). A
-  // clip adopted from an old link carries no change time, so a new hand-in of it is taken as a new cut — a
-  // repeated version is harmless; a real re-export silently ignored would not be
-  return !!f.drive_file_id && typeof f.size === 'number' && typeof copy.size === 'number' && f.size === copy.size
+  return sameDriveCut({ md5: f.drive_md5, revision: f.drive_revision, modified: f.drive_modified }, copy)
 }
 
 /** may this piece take a new version in this hand-in: the rules the Replace button follows (mayReplaceAsset), or
@@ -210,7 +231,7 @@ export function copyFor(files: readonly PullFile[], driveId: string, round: numb
 }
 
 export type MergeResult =
-  | { ok: true; files: FinalFile[]; added: string[]; carried: string[]; skipped: { drive_id: string; why: string }[] }
+  | { ok: true; files: FinalFile[]; added: string[]; carried: string[]; skipped: { drive_id: string; why: string }[]; retired?: string[]; fresh?: string[] }
   | { ok: false; error: string; failed: string[] }
 
 /**
@@ -225,7 +246,7 @@ export type MergeResult =
 export function mergeDriveHandIn(
   list: readonly FinalFile[],
   pulled: readonly PullFile[],
-  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager'>,
+  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager' | 'whole'>,
   item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown },
   round: number,
   now: string,
@@ -242,12 +263,14 @@ export function mergeDriveHandIn(
     }
   }
   const manager = handIn.manager === true
+  const whole = handIn.whole === true
   let files = [...list]
-  const added: string[] = [], carried: string[] = [], skipped: { drive_id: string; why: string }[] = []
+  const added: string[] = [], carried: string[] = [], skipped: { drive_id: string; why: string }[] = [], retired: string[] = [], fresh: string[] = []
   const used = new Set<string>()
   for (const { d, c } of copies) {
     const copy = c as PullFile
-    const current = currentFiles({ final_files: files }).filter(f => !f.retired_round)
+    // a piece dropped from THIS version and back in the folder is brought back, not made again
+    const current = currentFiles({ final_files: files }).filter(f => !f.retired_round || (whole && f.retired_round === round))
     const base = copy.name.split('/').pop() || copy.name
     const said = handIn.map?.[d]
     let piece: FinalFile | null = null
@@ -257,13 +280,16 @@ export function mergeDriveHandIn(
         ?? current.find(f => !used.has(assetIdOf(f)) && clipKey(f.name) === clipKey(base))
         ?? null
     }
-    const extra = { source: 'drive' as const, drive_file_id: d, drive_modified: copy.modified ?? null }
+    const extra = { source: 'drive' as const, drive_file_id: d, drive_modified: copy.modified ?? null, ...(copy.md5 ? { drive_md5: copy.md5 } : {}), ...(copy.revision ? { drive_revision: copy.revision } : {}) }
     const file = { name: base, url: String(copy.url), mime: copy.mime, size: copy.size }
     if (piece) {
       const a = assetIdOf(piece)
       used.add(a)
+      if (piece.retired_round === round) files = withRetired(files, a, null)
       if (sameCut(piece, d, copy)) { carried.push(d); continue }
-      if (!mayTakeNewVersion(item, piece, round, manager)) {
+      // THE WHOLE FOLDER IS THE VERSION (the owner, 30 Sep 2026: "submit the Drive link again and all will become
+      // Version 2"): a changed file is its piece's new cut, whoever asked for what
+      if (!whole && !mayTakeNewVersion(item, piece, round, manager)) {
         skipped.push({ drive_id: d, why: `${piece.name} was not asked to change — it stays as it is` })
         continue
       }
@@ -274,20 +300,36 @@ export function mergeDriveHandIn(
       continue
     }
     // not a piece yet: the same Drive file already handed in at this very version is not doubled
-    if (files.some(f => f.version === round && sameCut(f, d, copy))) { carried.push(d); continue }
+    const dup = files.find(f => f.version === round && sameCut(f, d, copy))
+    if (dup) { used.add(assetIdOf(dup)); carried.push(d); continue }
     const before = files.length
     files = withFinalFiles(files, [file], round, handIn.by, now)
-    if (files.length === before) { carried.push(d); continue }   // this exact copy is on the card already
+    if (files.length === before) {   // this exact copy is on the card already
+      const same = files.find(f => f.url === file.url)
+      if (same) used.add(assetIdOf(same))
+      carried.push(d)
+      continue
+    }
     files[files.length - 1] = { ...files[files.length - 1], ...extra }
     added.push(files[files.length - 1].id)
+    fresh.push(files[files.length - 1].id)
   }
-  return { ok: true, files, added, carried, skipped }
+  // …and a piece no longer in the folder is out of this version — kept, with everything said on it, in the ones before
+  if (whole) {
+    for (const f of currentFiles({ final_files: files })) {
+      const a = assetIdOf(f)
+      if (used.has(a) || f.retired_round || added.includes(f.id)) continue
+      files = withRetired(files, a, round)
+      retired.push(a)
+    }
+  }
+  return { ok: true, files, added, carried, skipped, retired, fresh }
 }
 
 /** the hand-in record, settled */
 export function settledHandIn(h: DriveHandIn, result: MergeResult, round: number, now: string): DriveHandIn {
   if (!result.ok) return { ...h, status: 'failed', error: result.error, settled_at: now }
-  return { ...h, status: 'done', error: null, settled_at: now, settled_round: round, file_ids: result.added, carried: result.carried, skipped: result.skipped }
+  return { ...h, status: 'done', error: null, settled_at: now, settled_round: round, file_ids: result.added, carried: result.carried, skipped: result.skipped, ...(result.retired?.length ? { retired: result.retired } : {}), new_ids: result.fresh ?? [] }
 }
 
 /** the card's list with this record put in its place (by id), or appended */
@@ -309,22 +351,27 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     const n = h.file_ids?.length ?? 0
     const kept = h.carried?.length ?? 0
     const left = h.skipped?.length ?? 0
-    return { tone: 'done', words: [`Handed in from Drive: ${n} ${n === 1 ? 'file' : 'files'}`, kept ? `${kept} unchanged, kept as they were` : '', left ? `${left} left out (${h.skipped![0].why})` : ''].filter(Boolean).join(' · ') }
+    const dropped = h.retired?.length ?? 0
+    // "4 files handed in — 1 new, 3 updated" (the owner, 30 Sep 2026)
+    const total = n + kept
+    const fresh = Math.min(n, h.new_ids?.length ?? 0)
+    const head = `${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
+    return { tone: 'done', words: [head, left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }
   }
-  if (!row) return { tone: 'working', words: 'Waiting to start copying from Drive…' }
+  if (!row) return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
   if (row.status === 'unreadable') return { tone: 'failed', words: NOT_SHARED_WORDS }
   if (row.status === 'failed') return { tone: 'failed', words: row.error ? `The copy from Drive stopped: ${row.error}` : 'The copy from Drive stopped — try again.' }
   const picked = new Set(h.drive_ids)
   const mine = (Array.isArray(row.files) ? row.files as PullFile[] : []).filter(f => picked.has(f.id)).map(f => copyFor(row.files as PullFile[], f.id, h.round)).filter((f, i, a): f is PullFile => !!f && a.findIndex(g => g?.id === f.id) === i)
   const total = h.drive_ids.length
   const done = mine.filter(f => f.status === 'done').length
-  if (row.status === 'queued') return { tone: 'working', words: 'Waiting to start copying from Drive…' }
-  if (row.status === 'listing') return { tone: 'working', words: 'Reading Drive…' }
+  if (row.status === 'queued') return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
+  if (row.status === 'listing') return { tone: 'working', words: 'Reading Google Drive…' }
   if (row.status === 'done') return { tone: 'working', words: `Copied all ${total} — putting them on the card…` }
   const bytes = mine.reduce((n, f) => n + (f.size ?? 0), 0)
   const landed = mine.reduce((n, f) => n + Math.min(f.done, f.size ?? f.done), 0)
   const started = row.started_at ? Date.parse(row.started_at) : NaN
   const rate = Number.isFinite(started) && landed > 0 ? landed / Math.max(1, (nowMs - started) / 1000) : null
   const left = rate && bytes > landed ? formatLeft((bytes - landed) / rate) : null
-  return { tone: 'working', words: [`Copying ${Math.min(done + 1, total)} of ${total} from Drive…`, bytes > 0 ? `${formatBytes(landed)} of ${formatBytes(bytes)}` : '', left ?? ''].filter(Boolean).join(' · ') }
+  return { tone: 'working', words: [`Copying ${Math.min(done + 1, total)} of ${total} from Google Drive…`, bytes > 0 ? `${formatBytes(landed)} of ${formatBytes(bytes)}` : '', left ?? ''].filter(Boolean).join(' · ') }
 }
