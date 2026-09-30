@@ -1,4 +1,4 @@
-import { Space_Mono } from 'next/font/google'
+import { spaceMono } from '../components/space-mono'
 import LamaNav from '../components/lama/LamaNav'
 import LamaFooter from '../components/lama/LamaFooter'
 import LamaContact from '../components/lama/LamaContact'
@@ -8,7 +8,6 @@ import { archivo, sometype } from '../components/lama/fonts'
 import AboutTeam from './AboutTeam'
 import styles from './about.module.css'
 
-const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space-mono', display: 'swap' })
 
 const ACCENT = '#FFFFFF'
 const MONO = 'var(--font-space-mono), monospace'
