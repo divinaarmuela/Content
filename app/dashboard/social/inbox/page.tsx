@@ -110,6 +110,8 @@ export default function InboxPage() {
   const [clientId, setClientId] = useState<string>('')
   const [filter, setFilter] = useState<InboxFilter>('all')
   const [search, setSearch] = useState('')
+  // the commenter whose name was clicked, for the About panel on the Comments tab
+  const [aboutHandle, setAboutHandle] = useState<string | null>(null)
 
   // where the page opens: `?who=` (the People page), `?account=` (an account page), `?post=`, else the remembered client
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function InboxPage() {
 
   // who they are — the People page's row, for the clients it covers
   useEffect(() => {
-    if (tab !== 'messages' || people !== null || !clientId || !PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)) return
+    if (people !== null || !clientId || !PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)) return
     void (async () => {
       try {
         const res = await fetch(`/api/social/people-crm?clientId=${encodeURIComponent(clientId)}`)
@@ -192,7 +194,7 @@ export default function InboxPage() {
     setClientId(id)
     try { window.localStorage.setItem(CLIENT_KEY, id) } catch { /* private window */ }
     setConvos(null); setActiveConvo(null); setMessages(null); setWindowState(null); setPeople(null)
-    setActive(null); setComments(null)
+    setActive(null); setComments(null); setAboutHandle(null)
   }
 
   const openConvo = async (c: InboxConversation) => {
@@ -303,7 +305,7 @@ export default function InboxPage() {
   }, [tab, loadConvos, loadPosts])
 
   const openPost = async (p: PostRow) => {
-    setActive(p); setComments(null); setReplyTo(null); setDmTo(null)
+    setActive(p); setComments(null); setReplyTo(null); setDmTo(null); setAboutHandle(null)
     try {
       const res = await fetch(
         `/api/social/comments?postId=${encodeURIComponent(p.id)}&accountId=${encodeURIComponent(p.accountId ?? '')}`)
@@ -375,8 +377,44 @@ export default function InboxPage() {
   const visiblePosts = posts === null ? null : posts.filter(p => accountIds.has(p.accountId))
   const person = personOf(activeConvo)
   const tracked = PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)
-  const autoLines = person ? person.timeline.filter(e => e.what.startsWith(AUTO_PREFIX)) : []
   const lastWhen = (c: InboxConversation) => whenWords(c.updatedTime)
+
+  /** who this person is — the People page's row — for a conversation or a commenter */
+  const aboutCard = (who: PersonRow | null, emptyWords: string | null) => {
+    const lines = who ? who.timeline.filter(e => e.what.startsWith(AUTO_PREFIX)) : []
+    return (
+      <Card className="hidden h-fit xl:block">
+        <CardContent className="flex flex-col gap-2 p-4 text-[13px]">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">About this person</p>
+          {emptyWords ? (
+            <p className="text-muted-foreground">{emptyWords}</p>
+          ) : !tracked ? (
+            <p className="text-muted-foreground">The People page covers Justin Engelke, Jordan Wilson and the test client for now.</p>
+          ) : people === null ? (
+            <Skeleton className="h-20 w-full" />
+          ) : !who ? (
+            <p className="text-muted-foreground">Not on the People page yet — they have not followed, liked or commented where we can see it.</p>
+          ) : (
+            <>
+              <p className="font-semibold">@{who.username}</p>
+              <p>{who.following ? 'Follows this account' : 'Does not follow this account'}</p>
+              {who.md_lead && <p><span className="font-semibold">MD Media lead</span> — {who.md_lead}</p>}
+              {lines.length > 0 && (
+                <div className="flex flex-col gap-1 rounded-inner bg-foreground/[0.04] p-2">
+                  <p className="font-semibold">Automation</p>
+                  {lines.slice(0, 6).map((e, k) => (
+                    <p key={k}>{e.what.slice(AUTO_PREFIX.length)}{e.detail ? <span className="text-muted-foreground"> · {e.detail}</span> : null}</p>
+                  ))}
+                </div>
+              )}
+              <Link href="/dashboard/social/people" className="font-semibold underline underline-offset-2">Open the People page</Link>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+  const commenter = aboutHandle && people ? people.find(p => p.username.toLowerCase() === aboutHandle.toLowerCase()) ?? null : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -546,39 +584,10 @@ export default function InboxPage() {
           </CardContent>
         </Card>
 
-        {/* ── who this is ── */}
-        <Card className="hidden h-fit xl:block">
-          <CardContent className="flex flex-col gap-2 p-4 text-[13px]">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">About this person</p>
-            {!activeConvo ? (
-              <p className="text-muted-foreground">Open a conversation to see who they are.</p>
-            ) : !tracked ? (
-              <p className="text-muted-foreground">The People page covers Justin Engelke, Jordan Wilson and the test client for now.</p>
-            ) : people === null ? (
-              <Skeleton className="h-20 w-full" />
-            ) : !person ? (
-              <p className="text-muted-foreground">Not on the People page yet — they have not followed, liked or commented where we can see it.</p>
-            ) : (
-              <>
-                <p className="font-semibold">@{person.username}</p>
-                <p>{person.following ? 'Follows this account' : 'Does not follow this account'}</p>
-                {person.md_lead && <p><span className="font-semibold">MD Media lead</span> — {person.md_lead}</p>}
-                {autoLines.length > 0 && (
-                  <div className="flex flex-col gap-1 rounded-inner bg-foreground/[0.04] p-2">
-                    <p className="font-semibold">Automation</p>
-                    {autoLines.slice(0, 6).map((e, i) => (
-                      <p key={i}>{e.what.slice(AUTO_PREFIX.length)}{e.detail ? <span className="text-muted-foreground"> · {e.detail}</span> : null}</p>
-                    ))}
-                  </div>
-                )}
-                <Link href={`/dashboard/social/people`} className="font-semibold underline underline-offset-2">Open the People page</Link>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {aboutCard(person, activeConvo ? null : 'Open a conversation to see who they are.')}
       </div>
       ) : (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_280px]">
         {/* ── posts ─────────────────────────────────────────────────── */}
         <Card className={`h-fit ${listPane(active !== null)}`}>
           <CardContent className="p-2">
@@ -677,7 +686,7 @@ export default function InboxPage() {
                     {comments.map(c => (
                       <li key={c.id} className="rounded-inner border border-border p-3">
                         <div className="flex items-baseline gap-2">
-                          <span className="font-mono text-secondary-13 font-medium">@{author(c)}</span>
+                          <button type="button" onClick={() => setAboutHandle(author(c))} className="font-mono text-secondary-13 font-medium underline-offset-2 hover:underline">@{author(c)}</button>
                           <span className="text-secondary-13 text-muted-foreground">
                             {ago(c.createdTime ?? c.timestamp)}
                           </span>
@@ -758,6 +767,7 @@ export default function InboxPage() {
             )}
           </CardContent>
         </Card>
+        {aboutCard(commenter, aboutHandle ? null : 'Click a commenter’s name to see who they are.')}
       </div>
       )}
     </div>
