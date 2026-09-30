@@ -174,10 +174,18 @@ export default function InboxPage() {
     })()
   }, [tab, people, clientId])
   const automated = new Set((people ?? []).filter(p => p.auto_dms > 0 || p.timeline.some(e => e.what.startsWith(AUTO_PREFIX))).map(p => p.username.toLowerCase()))
+  // matched by their handle first (Zernio's participantName), never by Instagram's numeric id when a handle exists —
+  // the numeric id matched a bare "@2655487891576698" row and missed the person's automation trip (30 Sep 2026)
   const personOf = (c: InboxConversation | null): PersonRow | null => {
     if (!c || !people) return null
-    const names = [c.participantName, c.participantUsername].map(v => String(v ?? '').replace(/^@/, '').toLowerCase())
-    return people.find(p => names.includes(p.username.toLowerCase())) ?? null
+    const handles = [c.participantName, c.participantUsername]
+      .map(v => String(v ?? '').replace(/^@/, '').toLowerCase())
+      .filter(v => v && !/^\d+$/.test(v))
+    for (const h of handles) {
+      const hit = people.find(p => p.username.toLowerCase() === h)
+      if (hit) return hit
+    }
+    return null
   }
 
   const chooseClient = (id: string) => {

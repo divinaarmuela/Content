@@ -579,7 +579,14 @@ export function touchesFromConversations(raw: unknown): TouchSeen[] {
     if (!item || typeof item !== 'object') continue
     const c = item as Record<string, unknown>
     const p = (c.participant && typeof c.participant === 'object' ? c.participant : {}) as Record<string, unknown>
-    const username = text(c.participantUsername) ?? text(p.username)
+    // Instagram sometimes hands back only its numeric id as the "username" (30 Sep 2026: crestlineconsultants came
+    // through as 2655487891576698, a row of its own with none of her history). A number is never a handle: the
+    // participant's name is used when it reads as one, and otherwise the thread is not noted under a number.
+    const given = text(c.participantUsername) ?? text(p.username)
+    const named = text(c.participantName) ?? text(p.name)
+    const username = given && !/^\d+$/.test(given) ? given
+      : named && /^[A-Za-z0-9._]+$/.test(named) ? named
+      : null
     if (!username) continue
     out.push({
       username,

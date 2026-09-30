@@ -50,3 +50,15 @@ describe('the conversation list', () => {
     expect(filterConversations(list, 'all', '@nuria', new Set()).map(c => c.id)).toEqual(['2'])
   })
 })
+
+describe('a number is never a person’s handle (30 Sep 2026: crestlineconsultants showed as @2655487891576698)', () => {
+  it('the People notes take the name when the username is only Instagram’s number', async () => {
+    const { touchesFromConversations } = await import('../app/lib/people-analytics-core')
+    const got = touchesFromConversations({ data: [
+      { id: '1', participantUsername: '2655487891576698', participantName: 'crestlineconsultants', updatedTime: '2026-09-29T08:50:00Z' },
+      { id: '2', participantUsername: 'nuria_jewell', participantName: 'NURIA JEWELL' },
+      { id: '3', participantUsername: '999', participantName: 'Some Person' },
+    ] })
+    expect(got.map(t => t.username)).toEqual(['crestlineconsultants', 'nuria_jewell'])
+  })
+})
