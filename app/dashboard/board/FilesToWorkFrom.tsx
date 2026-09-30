@@ -45,7 +45,10 @@ function versionTabWords(files: readonly unknown[], label: string): string {
   const marked = files.filter(f => typeof (f as { changed?: unknown }).changed === 'boolean') as { changed: boolean }[]
   if (marked.length === 0) return `${files.length} ${files.length === 1 ? 'file' : 'files'} handed in as ${label}.`
   const changed = marked.filter(f => f.changed).length
-  return `${label} — all ${files.length} ${files.length === 1 ? 'file' : 'files'} as it stood: ${changed} changed in this version, ${files.length - changed} unchanged.`
+  const n = `${files.length} ${files.length === 1 ? 'file' : 'files'}`
+  // every file new (a first version): just the count — "4 changed, 0 unchanged" said nothing (the owner's rule, 30 Sep 2026)
+  if (changed === files.length) return `${label} — ${n}.`
+  return `${label} — ${n}: ${changed} new, ${files.length - changed} unchanged.`
 }
 
 export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false }: {

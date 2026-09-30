@@ -621,26 +621,20 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(handInRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
-        {/* a new cut is a new version, said deliberately — the number never runs ahead of the work */}
-        {nextRound && !frozen && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" className={outlineBtn} disabled={busy || !!nextRound.why} title={nextRound.why ?? undefined} onClick={() => void startNextRound()}>
-              {nextRound.label}
-            </Button>
-            <span className="text-[12px] text-muted-foreground">
-              {nextRound.why ?? `New files for a fresh cut go in as ${roundLabel(handInRound(item as never) + 1)}; replacing a file here stays on ${roundLabel(handInRound(item as never))}.`}
-            </span>
-          </div>
-        )}
+        {/* ("Start next version" is gone, 30 Sep 2026: the editor never raises the version — only a client send-back does;
+            handing the Drive link in again makes the new cut) */}
         {/* files only (the owner, 25 Sep 2026): the finished edit is never a Drive link */}
         {!linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
             {mayFile && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
-                {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) */}
-                <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(true)} data-drive-handin>
-                  <FolderDown className="h-4 w-4" aria-hidden /> {currentFiles(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in more from Google Drive'}
-                </Button>
+                {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) — not a second copy of the button
+                    already at the top of the card for its holder */}
+                {!(holder && submitting && !hasFinishedWork(item as never)) && (
+                  <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(true)} data-drive-handin>
+                    <FolderDown className="h-4 w-4" aria-hidden /> {currentFiles(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in again from Google Drive'}
+                  </Button>
+                )}
                 {/* THE UPLOAD, KEPT AS THE FALLBACK (no Drive access, or a file only on this computer) */}
                 <button type="button" disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)} className="inline-flex min-h-11 items-center gap-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">
                   <Upload className="h-3.5 w-3.5" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload instead — ${roundLabel(handInRound(item as never))}` : 'Upload another file instead')}
