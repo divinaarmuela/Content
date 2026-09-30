@@ -209,7 +209,9 @@ export function scheduleCounts(rows: readonly Counted[]): ScheduleCounts {
     if (r.stage === 'booked') out.booked++
     if (r.stage === 'posted') out.posted++
     if (r.facts.missed && showsOnSchedule(r.stage)) out.missed++
-    if (BEING_APPROVED.includes(r.stage)) out.beingApproved++
+    // a draft has its own line ("Drafts") and has not gone to anyone yet — counting it here too made one draft read
+    // "Being approved · 1" with nothing out for approval (Justin's Schedule, 30 Sep 2026)
+    if (BEING_APPROVED.includes(r.stage) && r.stage !== 'draft') out.beingApproved++
     if (r.stage === 'draft') out.drafts++
     if (r.stage === 'cancelled') out.cancelled++
   }

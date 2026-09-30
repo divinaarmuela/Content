@@ -356,6 +356,10 @@ describe('the 7-day rule', () => {
 /* ── no brief, no shoot — enforced on the route (11 Sep 2026) ── */
 
 describe('a plan shared late', () => {
+  // the day count is Melbourne's; dayShift() is UTC, so near Melbourne midnight "4 days" read "5" (30 Sep 2026,
+  // 11:30 pm) — the clock is held at a Melbourne midday for these
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-30T02:00:00Z')) })
+  afterEach(() => { vi.useRealTimers() })
   const SUPER = 'a5a5a5a5-0000-4000-8000-000000000001'
   const sharedLateReady = () => {
     fake.restore()

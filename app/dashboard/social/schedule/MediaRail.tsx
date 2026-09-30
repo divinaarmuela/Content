@@ -362,6 +362,7 @@ export default function MediaRail({
 
       {/* POSTS STILL BEING APPROVED live on Post approval (the owner's
           decision 1): this page only counts them and says where they are */}
+      {waiting > 0 && (
       <Link
         href={POST_APPROVAL_BOARD}
         className="flex min-h-11 flex-col items-center justify-center rounded-full border border-border bg-paper px-3 text-[13px] font-semibold hover:bg-muted"
@@ -369,6 +370,7 @@ export default function MediaRail({
         <span>Being approved · {waiting}</span>
         <span className="text-[12px] font-normal text-muted-foreground">On Post approval</span>
       </Link>
+      )}
       {drafts > 0 && (
         <button
           type="button"

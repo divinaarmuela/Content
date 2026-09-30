@@ -853,7 +853,9 @@ export async function performTransition(
   // …and a FILES card whose revisions are on it (a clip replaced in its slot, a clip dropped, a new file — final-files-core
   // hasFinishedWork) has its new version already; asset_versions is the posting pipeline's table and a files card
   // never writes it (the E2E walk of 22 Sep 2026: "Add a new version with the revisions first" on a card with b2.png on it)
-  const filesRevised = finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)
+  // …and a Drive hand-in still copying is that new version on its way (30 Sep 2026, the walk: a card the client sent
+  // back, handed in from Drive again, was refused here while it copied — the first gate above already let it through)
+  const filesRevised = (finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)) || !!pendingHandIn(item as never)
   if (!system && !isBriefTask && !hasLink && !filesRevised && from === 'revision_required' && (to === 'revision_complete' || to === 'quality_check')) {
     // fetched here rather than borrowed from the requirement branch above: if
     // this edge ever stops requiring a reviewable asset, a borrowed null would

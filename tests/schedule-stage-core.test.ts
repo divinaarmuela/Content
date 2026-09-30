@@ -197,8 +197,8 @@ describe('the counts and the List’s filters, off the stage', () => {
     { stage: 'cancelled' as const, facts: { missed: false } },
   ]
 
-  it('counts each stage once, and only schedule posts as missed', () => {
-    expect(scheduleCounts(rows)).toEqual({ ready: 2, booked: 1, posted: 1, missed: 1, beingApproved: 3, drafts: 1, cancelled: 1 })
+  it('counts each stage once, and only schedule posts as missed — a draft is a Draft, not Being approved', () => {
+    expect(scheduleCounts(rows)).toEqual({ ready: 2, booked: 1, posted: 1, missed: 1, beingApproved: 2, drafts: 1, cancelled: 1 })
   })
 
   it('"all" is the calendar; drafts and cancelled are lists of their own', () => {

@@ -663,7 +663,10 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
  *
  * `?card=` is what the card sheet on both boards reads (card-sheet-core).
  */
-export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review']
+export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review',
+  // the client asked for changes: the card is back on the Editor board (its re-hand-in is the next version), so the
+  // "client asked for changes" email opens it there, not on Post approval (the owner, 30 Sep 2026)
+  'client_changes_requested']
 /** HANDED TO A SCHEDULER (the owner, 15 Sep 2026: "when handed over make
  *  sure the scheduler can download the files from the Drive themselves,
  *  pick the files and upload them for post approval"): a card in Draft with

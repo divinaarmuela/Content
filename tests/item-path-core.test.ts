@@ -21,6 +21,8 @@ describe('itemPath — the reader’s own board, with the card open (14 Sep 2026
     for (const role of ['quality_checker', 'account_manager', 'super_admin', 'general', null]) {
       expect(itemPath({ id: 'x', status: 'quality_check' }, role), String(role)).toBe('/dashboard/editor?card=x')
       expect(itemPath({ id: 'x', status: 'revision_required' }, role), String(role)).toBe('/dashboard/editor?card=x')
+      // the client asked for changes: back on the Editor board, and its email opens it there (30 Sep 2026)
+      expect(itemPath({ id: 'x', status: 'client_changes_requested' }, role), String(role)).toBe('/dashboard/editor?card=x')
       expect(itemPath({ id: 'x', status: 'approved_for_scheduling' }, role), String(role)).toBe('/dashboard/scheduler?card=x')
       expect(itemPath({ id: 'x', status: 'published' }, role), String(role)).toBe('/dashboard/scheduler?card=x')
     }

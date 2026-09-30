@@ -47,15 +47,15 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const route = readFileSync('app/api/production/items/[id]/send-back/route.ts', 'utf8')
     expect(route).toContain('change_assets: named,')
     expect(route).toContain('video_file_id: a.file.id, video_file_name: a.file.name,')
+    // the send-back DIALOG names nothing any more (the owner, 30 Sep 2026: "no option, we can just send it back"):
+    // the whole card goes back and the editor hands the Drive folder in again; the route still takes named assets
     const dialog = readFileSync('app/dashboard/board/BoardDialogs.tsx', 'utf8')
-    expect(dialog).toContain("body: JSON.stringify({ note, assets: named.map(a => ({ asset_id: a, note: picked[a] ?? '' })) }),")
+    expect(dialog).toContain('body: JSON.stringify({ note, assets: [] }),')
+    expect(dialog).not.toContain('picked[a]')
+    // and the editor's card offers no per-file Replace / Drop / Approve — the whole folder is the version
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(drawer).toContain('const next = withReplacement(finalFilesOf(item as never), assetId,')
-    // an asset the client approved is not offered for replacing
-    expect(drawer).toContain("mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (")
-    // a super admin or account manager may upload and replace too, not only the holder (22 Sep 2026)
-    expect(drawer).toContain("const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'")
-    expect(drawer).toContain("{mayFile && !frozen && mayReplaceAsset(item as never, a, me?.role === 'super_admin' || me?.role === 'account_manager') && !okByClient && !dropped && (")
+    expect(drawer).toContain('no per-file Replace / Drop / Approve here (30 Sep 2026)')
+    expect(drawer).not.toContain("{okByClient ? 'Take approval back' : 'Approve for the client'}")
   })
 
   it('an existing link card’s copied clips become its assets, so one of them can be swapped (22 Sep 2026)', () => {
@@ -90,9 +90,10 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const backAgain = withRetired(dropped, 'b', null)
     expect(backAgain.find(x => x.id === 'b')?.retired_round).toBeUndefined()
     expect(backAgain).toHaveLength(3)
+    // the editor's card no longer drops clips one by one (30 Sep 2026): a clip left out of the Drive folder is dropped
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(drawer).toContain('Drop from {roundLabel(handInRound(item as never))}')
-    expect(drawer).toContain('>Bring back</Button>')
+    expect(drawer).not.toContain('Drop from {roundLabel(handInRound(item as never))}')
+    expect(drawer).not.toContain('>Bring back</Button>')
   })
 
   it('a manager marks a clip approved on the client’s behalf, signed as MD Media, or takes it back (22 Sep 2026)', () => {
@@ -100,13 +101,14 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     expect(route).toContain("const user = await requireRole('account_manager')")
     expect(route).toContain('const by = `${user.name || user.email} (MD Media)`')
     expect(route).toContain("? withClipApproved(current, { file_id: fileId, name: file.name, at, by, ip: from.ip, device: from.device })")
+    // the route stays (the card's dialogs and the video page still call it); the file list's per-file button is gone (30 Sep 2026)
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(drawer).toContain("{okByClient ? 'Take approval back' : 'Approve for the client'}")
+    expect(drawer).not.toContain("{okByClient ? 'Take approval back' : 'Approve for the client'}")
   })
 
   it('a files card with its revisions on it leaves revision without an asset_versions row (the E2E walk, 22 Sep 2026)', () => {
     const w = readFileSync('app/lib/workflow.ts', 'utf8')
-    expect(w).toContain('const filesRevised = finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)')
+    expect(w).toContain('const filesRevised = (finalFilesOf(item as never).length > 0 && hasFinishedWork(item as never)) || !!pendingHandIn(item as never)')
     expect(w).toContain("if (!system && !isBriefTask && !hasLink && !filesRevised && from === 'revision_required'")
     // the name box beside Approve stays while it is being typed in
     expect(readFileSync('app/components/portal/EditingReview.tsx', 'utf8')).toContain('{(!name.trim() || nameTyping) && (')

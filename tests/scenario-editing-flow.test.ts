@@ -139,6 +139,7 @@ describe('an OLD card handed in by Drive, sent back, comes back as files (the ow
     expect(hasFinishedWork(fixed as never)).toBe(true)
     // and the server route says so before anything moves
     const route = (await import('node:fs')).readFileSync('app/api/production/items/[id]/transition/route.ts', 'utf8')
-    expect(route).toContain("Upload the new files on the card first — a Drive link is only the folder to work from")
+    // (30 Sep 2026: the new files come from a Drive hand-in now, so the refusal asks for that)
+    expect(route).toContain("Hand the Drive link in again first — the new files are what the quality check looks at")
   })
 })
