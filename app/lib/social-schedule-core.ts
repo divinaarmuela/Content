@@ -34,7 +34,7 @@ import {
 } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
-import { finalFilesOf, liveFilesAt } from './final-files-core'
+import { assetIdOf, finalFilesOf, liveFilesAt, type FinalFile } from './final-files-core'
 import { roundOf } from './edit-round-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
 import type { ItemStatus } from './workflow-core'
@@ -78,12 +78,66 @@ export function approvedFilesVersion(item: ScheduleItem | null | undefined): Sch
   const round = roundOf(item as never)
   const live = liveFilesAt(item as never, round)
   if (live.length === 0) return null
-  const files = live.map(f => ({
+  const files = live.map(fileSlide)
+  return { id: `files-v${round}`, version_number: round, file_url: files[0].url, files } as ScheduleVersion
+}
+
+/** one of a card's files as a post's slide — a Drive hand-in keeps where it came from (drive-handin-core.ts, 30 Sep
+ *  2026), so the post knows the file is already in Drive and nothing ever copies it back */
+function fileSlide(f: FinalFile): Slide {
+  return {
     url: f.url, name: f.name,
     type: (/^video\//.test(String(f.mime ?? '')) || /\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : 'image') as Slide['type'],
     ...(typeof f.size === 'number' ? { bytes: f.size } : {}),
-  }))
-  return { id: `files-v${round}`, version_number: round, file_url: files[0].url, files } as ScheduleVersion
+    ...(f.source === 'drive' && f.drive_file_id ? { source: 'drive' as const, drive_file_id: f.drive_file_id } : {}),
+  }
+}
+
+/* ── ANY VERSION OF THE CARD (the owner, 30 Sep 2026: "make sure the handover feature sends files to the scheduling
+ * page, and they can use from any version") ─────────────────────────────────────────────────────────────────────
+ * A post starts with the card's approved files (approvedFilesVersion, unchanged). In Change media the scheduler may
+ * also reach back to any earlier version of THE SAME card — the card as it stood at each version: every piece's
+ * newest file up to that version, the pieces dropped by then left out. Files of another card, or a link from
+ * anywhere, are still refused; a file uploaded for the post stays allowed as before (uploadedForPost).
+ */
+export type VersionGroup = { round: number; label: string; latest: boolean; slides: Slide[] }
+
+/** a files card as it stood at one version */
+function filesCardAt(files: readonly FinalFile[], round: number): FinalFile[] {
+  const newest = new Map<string, FinalFile>()
+  for (const f of files) {
+    if (f.version > round) continue
+    const a = assetIdOf(f), have = newest.get(a)
+    if (!have || f.version > have.version || (f.version === have.version && f.uploaded_at >= have.uploaded_at)) newest.set(a, f)
+  }
+  const order = [...new Set(files.map(assetIdOf))]
+  return order.map(a => newest.get(a)).filter((f): f is FinalFile => !!f && !(typeof f.retired_round === 'number' && f.retired_round <= round))
+}
+
+/** every version of the card, newest first, each with its files */
+export function cardVersionGroups(item: ScheduleItem | null | undefined, versions: readonly ScheduleVersion[] | null | undefined): VersionGroup[] {
+  const files = item ? finalFilesOf(item as never) : []
+  const groups: { round: number; slides: Slide[] }[] = []
+  if (files.length > 0) {
+    const rounds = [...new Set(files.map(f => f.version))].sort((a, b) => b - a)
+    for (const r of rounds) groups.push({ round: r, slides: filesCardAt(files, r).map(fileSlide) })
+  } else {
+    const list = (Array.isArray(versions) ? versions.filter(Boolean) : [])
+      .map(v => ({ round: Number(v.version_number ?? 0), slides: slidesOf(v) }))
+      .filter(g => Number.isFinite(g.round) && g.round >= 1)
+      .sort((a, b) => b.round - a.round)
+    groups.push(...list)
+  }
+  const kept = groups.filter(g => g.slides.length > 0)
+  return kept.map((g, i) => ({ ...g, latest: i === 0, label: `Version ${g.round}${i === 0 ? ' (latest)' : ''}` }))
+}
+
+/** every file of every version of the card, each once — what the server lets a post of this card be made of */
+export function anyVersionSlides(item: ScheduleItem | null | undefined, versions: readonly ScheduleVersion[] | null | undefined): Slide[] {
+  const seen = new Set<string>()
+  const out: Slide[] = []
+  for (const g of cardVersionGroups(item, versions)) for (const s of g.slides) if (!seen.has(s.url)) { seen.add(s.url); out.push(s) }
+  return out
 }
 export type ScheduleVersion = VersionLike & {
   id?: string
