@@ -63,7 +63,8 @@ describe('starting the next version', () => {
     expect(route).toContain('return { ...cur, edit_round: round, updated_at: new Date().toISOString() }')
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain('/next-version`, { method: \'POST\' })')
-    expect(drawer).toContain('{nextRound.label}')
+    // the editor no longer starts a version by hand (30 Sep 2026: only a client send-back raises it); the route stays
+    expect(drawer).not.toContain('{nextRound.label}')
   })
 })
 
