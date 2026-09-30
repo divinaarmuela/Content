@@ -5,7 +5,7 @@ import { buildDedupeKey } from './identity-core'
 export { buildDedupeKey } from './identity-core'
 import { actorAlias, replyToFor } from './mailer-core'
 import { EMAIL_FOOTER, OPEN_ITEM_CTA } from './email-voice-core'
-import { CLIENT_OF_ENTITY, isTestClient, mayEmailAboutClient } from './test-clients-core'
+import { isTestClient, mayEmailAboutClient, rowsOfEmail } from './test-clients-core'
 
 /**
  * Notification outbox with exactly-once delivery, on a single transport.
@@ -227,14 +227,14 @@ export type NotifyInput = {
 /** Which client an email is about, read off the thing it concerns (a card, a post, a booking…). */
 async function clientOfEmail(input: Pick<NotifyInput, 'entityType' | 'entityId'>): Promise<string | null> {
   if (input.entityType === 'client') return input.entityId
-  const t = CLIENT_OF_ENTITY[input.entityType]
-  if (!t || !input.entityId) return null
-  const row = await table<{ id: string } & Record<string, unknown>>(t as never).get(input.entityId)
-  if (!row) return null
-  if (typeof row.client_id === 'string' && row.client_id) return row.client_id
-  if (typeof row.item_id === 'string' && row.item_id) {
-    const item = await table<{ id: string } & Record<string, unknown>>('content_items' as never).get(row.item_id)
-    return typeof item?.client_id === 'string' ? item.client_id : null
+  for (const at of rowsOfEmail(input.entityType, input.entityId)) {
+    const row = await table<{ id: string } & Record<string, unknown>>(at.table as never).get(at.id).catch(() => null)
+    if (!row) continue
+    if (typeof row.client_id === 'string' && row.client_id) return row.client_id
+    if (typeof row.item_id === 'string' && row.item_id) {
+      const item = await table<{ id: string } & Record<string, unknown>>('content_items' as never).get(row.item_id)
+      if (typeof item?.client_id === 'string') return item.client_id
+    }
   }
   return null
 }
