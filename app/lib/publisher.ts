@@ -53,11 +53,11 @@ export interface Publisher {
   /** Posts that have comments, across connected accounts. */
   listComments(): Promise<unknown>
   /** DM inbox: conversations across connected accounts. */
-  listConversations(): Promise<unknown>
+  listConversations(opts?: { accountId?: string; cursor?: string | null; limit?: number }): Promise<unknown>
   /** Messages inside one conversation. */
-  conversationMessages(conversationId: string, accountId: string): Promise<unknown>
+  conversationMessages(conversationId: string, accountId: string, opts?: { latest?: boolean }): Promise<unknown>
   /** Send a reply into a conversation. */
-  sendConversationMessage(conversationId: string, accountId: string, message: string): Promise<unknown>
+  sendConversationMessage(conversationId: string, accountId: string, message: string, tag?: 'HUMAN_AGENT' | null): Promise<unknown>
   markConversationRead(conversationId: string, accountId: string): Promise<unknown>
   /** Best posting slots from historical engagement. */
   bestTimes(providerAccountId?: string): Promise<unknown>
@@ -615,21 +615,31 @@ class ZernioPublisher implements Publisher {
   }
 
   /** DM inbox: every conversation across connected accounts (IG, Telegram…). */
-  listConversations() {
-    return this.getJson('/inbox/conversations')
+  listConversations(opts: { accountId?: string; cursor?: string | null; limit?: number } = {}) {
+    // one account, a page at a time: the whole list across every client was one page of 50, and a busy account
+    // pushed everyone else's conversations off it (30 Sep 2026: Jordan showed 1 of 5)
+    const q = new URLSearchParams()
+    if (opts.accountId) q.set('accountId', opts.accountId)
+    if (opts.limit) q.set('limit', String(opts.limit))
+    if (opts.cursor) q.set('cursor', opts.cursor)
+    const qs = q.toString()
+    return this.getJson(`/inbox/conversations${qs ? `?${qs}` : ''}`)
   }
 
   // the messages endpoints require the owning account as well as the
   // conversation — the conversation id alone is a 400
-  conversationMessages(conversationId: string, accountId: string) {
+  // `latest`: the newest 50 first (Zernio's default is oldest first) — what the reply window is counted from
+  conversationMessages(conversationId: string, accountId: string, opts: { latest?: boolean } = {}) {
     return this.getJson(
-      `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?accountId=${encodeURIComponent(accountId)}`)
+      `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?accountId=${encodeURIComponent(accountId)}${opts.latest ? '&sortOrder=desc&limit=50' : ''}`)
   }
 
-  sendConversationMessage(conversationId: string, accountId: string, message: string) {
+  // `tag`: a person's reply 24 h–7 d after the lead last wrote goes out as Meta's HUMAN_AGENT message tag
+  // (Zernio: messagingType MESSAGE_TAG + messageTag; "Instagram only supports HUMAN_AGENT")
+  sendConversationMessage(conversationId: string, accountId: string, message: string, tag: 'HUMAN_AGENT' | null = null) {
     return this.post(
       `/inbox/conversations/${encodeURIComponent(conversationId)}/messages?accountId=${encodeURIComponent(accountId)}`,
-      { message, accountId })
+      { message, accountId, ...(tag ? { messagingType: 'MESSAGE_TAG', messageTag: tag } : {}) })
   }
 
   /** Clears the provider-side unread count, so every surface agrees on

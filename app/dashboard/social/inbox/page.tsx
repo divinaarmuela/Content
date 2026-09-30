@@ -19,6 +19,10 @@ import PlatformIcon from '../PlatformIcon'
 import ConfirmAction from '../../ConfirmAction'
 import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
+import {
+  filterConversations, isMine, messageAt, type InboxConversation, type InboxFilter, type InboxMessage,
+} from '@/app/lib/inbox-core'
+import { AUTO_PREFIX, PEOPLE_CRM_CLIENTS } from '@/app/lib/people-crm-core'
 
 /**
  * Master/detail on a phone.
@@ -71,102 +75,120 @@ function ago(iso?: string): string {
 }
 
 /**
- * Inbox.
- *
- * Comments are where a client's audience actually talks to them, so this is a
- * working surface rather than a report: pick a post, read the thread, reply
- * publicly or send the author a DM without leaving the dashboard.
+ * INBOX (rebuilt 30 Sep 2026: "the social inbox is too slow and the layout is outdated"; Jordan showed 1 of his 5
+ * conversations). One client at a time, remembered — only that client's accounts load, every page of them — in three
+ * columns: the conversations (who, to which account, when, unread), the chat with Meta's reply window above the box,
+ * and who the person is (the People page's row: follows, their automation trip). Comments keep their own tab.
  */
-type Conversation = {
-  id: string
-  accountId?: string
-  platform?: string
-  participantName?: string
-  participantUsername?: string
-  participant?: { name?: string; username?: string }
-  lastMessage?: { text?: string; createdTime?: string } | string
-  updatedTime?: string
-  accountUsername?: string
-  unreadCount?: number
-}
-type Message = {
-  id: string
-  text?: string
-  message?: string
-  direction?: string
-  isFromMe?: boolean
-  from?: { username?: string; name?: string }
-  senderName?: string
-  createdTime?: string
-  createdAt?: string
-  timestamp?: string
+type ClientChoice = { id: string; name: string; accounts: { id: string; platform: string; username: string | null }[] }
+type Window = { state: 'open' | 'human' | 'closed'; words: string }
+type PersonRow = {
+  username: string; status: string; following: boolean; md_lead: string | null; auto_dms: number; auto_clicks: number
+  timeline: { what: string; detail: string | null; day: string }[]
 }
 
-const convName = (c: Conversation) =>
-  c.participantName ?? c.participant?.name ?? c.participantUsername ?? c.participant?.username ?? 'someone'
-const convPreview = (c: Conversation) =>
-  typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? ''
-const msgText = (m: Message) => m.text ?? m.message ?? ''
-const msgMine = (m: Message) =>
-  m.isFromMe === true || m.direction === 'outgoing' || m.direction === 'sent' || m.direction === 'outbound'
-
-type SocialAccount = {
-  id: string
-  provider_account_id: string
-  platform: string
-  username: string | null
-  name: string | null
+const convName = (c: InboxConversation) => c.participantName ?? c.participantUsername ?? 'someone'
+const convPreview = (c: InboxConversation) => (typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? '')
+const msgText = (m: InboxMessage) => m.text ?? m.message ?? ''
+const whenWords = (iso?: string | null): string => {
+  if (!iso) return ''
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return ''
+  if ((Date.now() - t) / 1000 < 86400) return ago(iso)
+  return new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
 }
+const CLIENT_KEY = 'inbox.client'
+const FILTERS: { key: InboxFilter; label: string }[] = [
+  { key: 'all', label: 'All' }, { key: 'unread', label: 'Unread' }, { key: 'automation', label: 'From automations' },
+]
 
 export default function InboxPage() {
   const [posts, setPosts] = useState<PostRow[] | null>(null)
   // comments | messages — comments are post threads, messages are DMs
-  const [tab, setTab] = useState<'comments' | 'messages'>('comments')
-  // one account, or every account — an account page links here pre-scoped
-  const [acct, setAcct] = useState<string>('all')
-  const [accounts, setAccounts] = useState<SocialAccount[]>([])
-  // one person, when the People table sent us here — `?who=<handle>`
-  const [who, setWho] = useState<string | null>(null)
+  const [tab, setTab] = useState<'comments' | 'messages'>('messages')
+  const [clients, setClients] = useState<ClientChoice[] | null>(null)
+  const [clientId, setClientId] = useState<string>('')
+  const [filter, setFilter] = useState<InboxFilter>('all')
+  const [search, setSearch] = useState('')
 
+  // where the page opens: `?who=` (the People page), `?account=` (an account page), `?post=`, else the remembered client
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const wanted = params.get('account')
-    if (wanted) { setAcct(wanted); setTab('messages') }
-    // `?who=<handle>` — the People table sends somebody here to see what this
-    // person actually said. The conversation list is narrowed to them, with a
-    // way back to everybody.
     const person = params.get('who')
-    if (person) { setWho(person.replace(/^@/, '')); setTab('messages') }
+    if (person) { setSearch(person.replace(/^@/, '')); setTab('messages') }
+    if (params.get('post')) setTab('comments')
     void (async () => {
       try {
-        const res = await fetch('/api/social/accounts')
+        const res = await fetch('/api/social/messages?clients=1')
         const json = await res.json()
-        if (res.ok) setAccounts(json.accounts ?? json.data ?? [])
-      } catch { /* the filter simply stays at "all accounts" */ }
+        if (!res.ok) throw new Error(json.error ?? 'Could not load your clients')
+        const list: ClientChoice[] = json.clients ?? []
+        setClients(list)
+        const wantedAccount = params.get('account')
+        let remembered = ''
+        try { remembered = window.localStorage.getItem(CLIENT_KEY) ?? '' } catch { /* private window */ }
+        const pick = (wantedAccount && list.find(c => c.accounts.some(a => a.id === wantedAccount))?.id)
+          || params.get('client') || (list.some(c => c.id === remembered) ? remembered : '') || list[0]?.id || 'all'
+        setClientId(pick)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not load your clients')
+        setClients([]); setClientId('all')
+      }
     })()
   }, [])
-  const [convos, setConvos] = useState<Conversation[] | null>(null)
-  const [activeConvo, setActiveConvo] = useState<Conversation | null>(null)
-  const [messages, setMessages] = useState<Message[] | null>(null)
+
+  const [convos, setConvos] = useState<InboxConversation[] | null>(null)
+  const [activeConvo, setActiveConvo] = useState<InboxConversation | null>(null)
+  const [messages, setMessages] = useState<InboxMessage[] | null>(null)
+  const [windowState, setWindowState] = useState<Window | null>(null)
   const [msgDraft, setMsgDraft] = useState('')
+  const [people, setPeople] = useState<PersonRow[] | null>(null)
+
+  const client = clients?.find(c => c.id === clientId) ?? null
+  const accountIds = new Set(client ? client.accounts.map(a => a.id) : (clients ?? []).flatMap(c => c.accounts.map(a => a.id)))
 
   const loadConvos = useCallback(async () => {
+    if (!clientId) return
     try {
-      const res = await fetch('/api/social/messages')
+      const res = await fetch(`/api/social/messages?clientId=${encodeURIComponent(clientId)}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load messages')
       const raw = json.conversations
-      const list: Conversation[] = raw?.data ?? raw?.conversations ?? (Array.isArray(raw) ? raw : [])
-      setConvos(list)
+      setConvos(raw?.data ?? (Array.isArray(raw) ? raw : []))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load messages')
       setConvos([])
     }
-  }, [])
-  useEffect(() => { if (tab === 'messages' && convos === null) void loadConvos() }, [tab, convos, loadConvos])
+  }, [clientId])
+  useEffect(() => { if (tab === 'messages' && convos === null && clientId) void loadConvos() }, [tab, convos, clientId, loadConvos])
 
-  const openConvo = async (c: Conversation) => {
-    setActiveConvo(c); setMessages(null)
+  // who they are — the People page's row, for the clients it covers
+  useEffect(() => {
+    if (tab !== 'messages' || people !== null || !clientId || !PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)) return
+    void (async () => {
+      try {
+        const res = await fetch(`/api/social/people-crm?clientId=${encodeURIComponent(clientId)}`)
+        const json = await res.json()
+        setPeople(res.ok ? (json.rows ?? []) : [])
+      } catch { setPeople([]) }
+    })()
+  }, [tab, people, clientId])
+  const automated = new Set((people ?? []).filter(p => p.auto_dms > 0 || p.timeline.some(e => e.what.startsWith(AUTO_PREFIX))).map(p => p.username.toLowerCase()))
+  const personOf = (c: InboxConversation | null): PersonRow | null => {
+    if (!c || !people) return null
+    const names = [c.participantName, c.participantUsername].map(v => String(v ?? '').replace(/^@/, '').toLowerCase())
+    return people.find(p => names.includes(p.username.toLowerCase())) ?? null
+  }
+
+  const chooseClient = (id: string) => {
+    setClientId(id)
+    try { window.localStorage.setItem(CLIENT_KEY, id) } catch { /* private window */ }
+    setConvos(null); setActiveConvo(null); setMessages(null); setWindowState(null); setPeople(null)
+    setActive(null); setComments(null)
+  }
+
+  const openConvo = async (c: InboxConversation) => {
+    setActiveConvo(c); setMessages(null); setWindowState(null)
     // opening = seeing: clear the badge here and tell the provider, so the
     // list agrees no matter which page it is loaded from next
     if (typeof c.unreadCount === 'number' && c.unreadCount > 0 && c.accountId) {
@@ -182,11 +204,11 @@ export default function InboxPage() {
         `/api/social/messages?conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId ?? '')}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load the conversation')
-      const raw = json.messages
-      const list: Message[] = raw?.data ?? raw?.messages ?? (Array.isArray(raw) ? raw : [])
-      // a slow response for a conversation you already left must not clobber
-      // the one now open
-      setActiveConvo(cur => { if (cur?.id === c.id) setMessages(list); return cur })
+      // a slow response for a conversation you already left must not clobber the one now open
+      setActiveConvo(cur => {
+        if (cur?.id === c.id) { setMessages(json.messages ?? []); setWindowState(json.window ?? null) }
+        return cur
+      })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load the conversation')
       setMessages([])
@@ -200,15 +222,11 @@ export default function InboxPage() {
       const res = await fetch('/api/social/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: activeConvo.id,
-          accountId: activeConvo.accountId,
-          message: msgDraft.trim(),
-        }),
+        body: JSON.stringify({ conversationId: activeConvo.id, accountId: activeConvo.accountId, message: msgDraft.trim() }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not send')
-      toast.success(`Message sent to ${convName(activeConvo)}`)
+      toast.success(json.window === 'human' ? `Sent to ${convName(activeConvo)} as a team reply` : `Message sent to ${convName(activeConvo)}`)
       setMsgDraft('')
       void openConvo(activeConvo)
     } catch (e) {
@@ -345,24 +363,12 @@ export default function InboxPage() {
     }
   }
 
-  const isWho = (c: Conversation) => {
-    if (!who) return true
-    const needle = who.toLowerCase()
-    return [c.participantUsername, c.participant?.username, c.participantName, c.participant?.name]
-      .some(v => typeof v === 'string' && v.toLowerCase().replace(/^@/, '') === needle)
-  }
-  const visibleConvos = convos === null ? null
-    : (acct === 'all' ? convos : convos.filter(c => c.accountId === acct)).filter(isWho)
-  const visiblePosts = posts === null ? null
-    : acct === 'all' ? posts : posts.filter(p => p.accountId === acct)
-  const acctLabel = (a: SocialAccount) => a.username ? `@${a.username}` : a.name ?? a.platform
-
-  const changeAccount = (v: string) => {
-    setAcct(v)
-    // whatever was open may belong to another account — don't show it scoped wrong
-    if (v !== 'all' && activeConvo && activeConvo.accountId !== v) { setActiveConvo(null); setMessages(null) }
-    if (v !== 'all' && active && active.accountId !== v) { setActive(null); setComments(null) }
-  }
+  const visibleConvos = convos === null ? null : filterConversations(convos, filter, search, automated)
+  const visiblePosts = posts === null ? null : posts.filter(p => accountIds.has(p.accountId))
+  const person = personOf(activeConvo)
+  const tracked = PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)
+  const autoLines = person ? person.timeline.filter(e => e.what.startsWith(AUTO_PREFIX)) : []
+  const lastWhen = (c: InboxConversation) => whenWords(c.updatedTime)
 
   return (
     <div className="flex flex-col gap-4">
@@ -375,94 +381,92 @@ export default function InboxPage() {
 
       <PageTitle
         title="Inbox"
-        summary="Comments and direct messages across every connected account, answered from one place."
-        actions={<>
+        summary="One client's direct messages and comments, answered from one place."
+        actions={
           <div className="flex flex-wrap items-center gap-2">
-          {/* The one filled button used to read "Schedule a post" and link to
-              /dashboard/social — which is the channels LIST, not a scheduler. A
-              primary action that goes somewhere else is worse than none. */}
-          {accounts.length > 0 && (
-            <Select value={acct} onValueChange={changeAccount}>
-              <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <Select value={clientId || undefined} onValueChange={chooseClient} disabled={clients === null}>
+              <SelectTrigger className="w-60" aria-label="Client"><SelectValue placeholder={clients === null ? 'Loading…' : 'Choose a client'} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All accounts</SelectItem>
-                {accounts.map(a => (
-                  <SelectItem key={a.id} value={a.provider_account_id}>{acctLabel(a)}</SelectItem>
-                ))}
+                {(clients ?? []).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                <SelectItem value="all">All clients</SelectItem>
               </SelectContent>
             </Select>
-          )}
-          <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
-            {(['comments', 'messages'] as const).map(t => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={`min-h-11 rounded-tile px-3 py-1.5 text-body-15 transition-colors ${
-                  tab === t
-                    ? 'bg-surface font-medium text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t === 'comments' ? 'Comments' : 'Direct messages'}
-              </button>
-            ))}
+            <div className="flex items-center gap-1 rounded-inner bg-foreground/[0.06] p-1">
+              {(['messages', 'comments'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`min-h-11 rounded-tile px-3 py-1.5 text-body-15 transition-colors ${
+                    tab === t ? 'bg-surface font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t === 'comments' ? 'Comments' : 'Direct messages'}
+                </button>
+              ))}
+            </div>
           </div>
-          </div>
-        </>}
+        }
       />
 
-      {who && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-tint-blue px-4 py-2.5">
-          <p className="text-body-15">
-            Showing <span className="font-medium">@{who}</span> only.
-            {tab === 'messages' && visibleConvos?.length === 0 &&
-              ' They have no direct message thread here — they may have commented instead.'}
-          </p>
-          <Button variant="ghost" size="sm" onClick={() => setWho(null)}>Show everyone</Button>
-        </div>
-      )}
-
       {tab === 'messages' ? (
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_280px]">
         {/* ── conversations ── */}
         <Card className={`h-fit ${listPane(activeConvo !== null)}`}>
-          <CardContent className="p-2">
+          <CardContent className="flex flex-col gap-2 p-2">
+            <div className="flex flex-col gap-2 p-1">
+              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search a name…" aria-label="Search conversations" />
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Show">
+                {FILTERS.filter(f => f.key !== 'automation' || tracked).map(f => (
+                  <button key={f.key} type="button" onClick={() => setFilter(f.key)}
+                    className={`min-h-9 rounded-full border px-3 text-[13px] font-medium ${filter === f.key ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-foreground/[0.04]'}`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {visibleConvos === null ? (
               <div className="flex flex-col gap-2 p-2">
-                {[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+                {[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
               </div>
             ) : visibleConvos.length === 0 ? (
               <EmptyState
                 icon={MessageSquare}
-                title={acct === 'all' ? 'No direct messages yet' : 'No direct messages for this account'}
-                body={acct === 'all'
-                  ? 'When someone messages a connected Instagram or Telegram account, the conversation lands here and you answer it from this page.'
-                  : 'Nobody has messaged this account yet. Switch to “All accounts” to see every conversation.'}
-                actionLabel={acct === 'all' ? 'See connected accounts' : 'Show all accounts'}
-                onAction={acct === 'all' ? undefined : () => changeAccount('all')}
-                actionHref={acct === 'all' ? '/dashboard/social' : undefined}
+                title={convos && convos.length > 0 ? 'Nothing matches' : 'No direct messages yet'}
+                body={convos && convos.length > 0
+                  ? 'No conversation matches this filter or search.'
+                  : 'When someone messages this client’s Instagram or Facebook, the conversation lands here.'}
                 className="border-0"
               />
             ) : (
-              <ul className="flex flex-col">
+              <ul className="flex max-h-[70vh] flex-col overflow-y-auto">
                 {visibleConvos.map(c => (
-                  <li key={c.id}>
+                  <li key={`${c.accountId}:${c.id}`}>
                     <button
                       type="button"
                       onClick={() => void openConvo(c)}
-                      className={`flex w-full flex-col gap-0.5 rounded-inner p-2.5 text-left transition-colors ${
+                      className={`flex w-full gap-2.5 rounded-inner p-2.5 text-left transition-colors ${
                         activeConvo?.id === c.id ? 'bg-foreground/[0.06]' : 'hover:bg-foreground/[0.04]'
                       }`}
                     >
-                      <span className="flex items-center gap-1.5">
-                        {c.platform && <PlatformIcon platform={c.platform} size={14} />}
-                        <span className="truncate text-body-15 font-medium">{convName(c)}</span>
-                        {typeof c.unreadCount === 'number' && c.unreadCount > 0 && (
-                          <span className="ml-auto rounded-full bg-accent-blue px-2.5 py-1.5 font-mono text-chip-12 text-white">{c.unreadCount}</span>
-                        )}
+                      {c.participantPicture
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={c.participantPicture} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                        : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[14px] font-semibold uppercase">{convName(c).slice(0, 1)}</span>}
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`truncate text-body-15 ${(c.unreadCount ?? 0) > 0 ? 'font-semibold' : 'font-medium'}`}>{convName(c)}</span>
+                          <span className="ml-auto shrink-0 text-[12px] text-muted-foreground">{lastWhen(c)}</span>
+                        </span>
+                        <span className="flex items-center gap-1 text-[12px] text-muted-foreground">
+                          {c.platform && <PlatformIcon platform={c.platform} size={12} />}
+                          <span className="truncate">to @{c.accountUsername ?? 'account'}</span>
+                          {(c.unreadCount ?? 0) > 0 && (
+                            <span className="ml-auto shrink-0 rounded-full bg-accent-blue px-2 py-0.5 font-mono text-[11px] text-white">{c.unreadCount}</span>
+                          )}
+                        </span>
+                        <span className="truncate text-secondary-13 text-muted-foreground">{convPreview(c)}</span>
                       </span>
-                      <span className="truncate text-secondary-13 text-muted-foreground">{convPreview(c)}</span>
                     </button>
                   </li>
                 ))}
@@ -471,57 +475,96 @@ export default function InboxPage() {
           </CardContent>
         </Card>
 
-        {/* ── thread ── */}
+        {/* ── the chat ── */}
         <Card className={threadPane(activeConvo !== null)}>
           <CardContent className="p-4">
             {!activeConvo ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
                 <MessageSquare className="h-6 w-6 text-muted-foreground" />
-                <p className="text-body-15 text-muted-foreground">
-                  {visibleConvos && visibleConvos.length > 0
-                    ? 'Choose a conversation on the left to read and reply.'
-                    : 'Conversations open here.'}
-                </p>
+                <p className="text-body-15 text-muted-foreground">Choose a conversation to read and reply.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2 border-b border-border pb-2">
                   <Button variant="ghost" size="sm" className="-ml-2 lg:hidden"
-                    onClick={() => { setActiveConvo(null); setMessages(null) }}>
+                    onClick={() => { setActiveConvo(null); setMessages(null); setWindowState(null) }}>
                     <ArrowLeft className="h-4 w-4" /> All conversations
                   </Button>
-                  <p className="min-w-0 truncate text-body-15 font-medium">{convName(activeConvo)}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-body-15 font-semibold">{convName(activeConvo)}</p>
+                    <p className="truncate text-[12px] text-muted-foreground">to @{activeConvo.accountUsername ?? 'account'}</p>
+                  </div>
+                  {activeConvo.url && (
+                    <a href={activeConvo.url} target="_blank" rel="noopener noreferrer"
+                      className="ml-auto inline-flex items-center gap-1 whitespace-nowrap text-secondary-13 text-muted-foreground hover:text-foreground">
+                      <ExternalLink className="h-3.5 w-3.5" /> Open in Instagram
+                    </a>
+                  )}
                 </div>
                 {messages === null ? (
-                  <div className="flex flex-col gap-2">{[0, 1].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                  <div className="flex flex-col gap-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
                 ) : messages.length === 0 ? (
-                  <p className="py-6 text-body-15 text-muted-foreground">
-                    Nothing in this conversation yet — write the first message below.
-                  </p>
+                  <p className="py-6 text-body-15 text-muted-foreground">No messages in this conversation yet.</p>
                 ) : (
-                  <div className="flex max-h-[480px] flex-col gap-2 overflow-y-auto">
-                    {messages.map(m => (
-                      <div key={m.id} className={`max-w-[80%] rounded-card px-3.5 py-2 text-body-15 ${
-                        msgMine(m)
-                          ? 'self-end bg-accent-blue text-white'
-                          : 'self-start bg-foreground/[0.06]'
+                  <div className="flex max-h-[56vh] flex-col gap-2 overflow-y-auto">
+                    {messages.map((m, i) => (
+                      <div key={m.id ?? i} className={`max-w-[80%] rounded-card px-3.5 py-2 text-body-15 ${
+                        isMine(m) ? 'self-end bg-accent-blue text-white' : 'self-start bg-foreground/[0.06]'
                       }`}>
-                        {msgText(m)}
-                        <span className={`mt-0.5 block text-[12px] ${msgMine(m) ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>
-                          {ago(m.createdTime ?? m.createdAt ?? m.timestamp)}
+                        <span className="whitespace-pre-wrap break-words">{msgText(m) || '[Attachment]'}</span>
+                        <span className={`mt-0.5 block text-[12px] ${isMine(m) ? 'text-white/75' : 'text-muted-foreground'}`}>
+                          {whenWords(messageAt(m))}
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
+                {windowState && (
+                  <p data-reply-window={windowState.state} className={`rounded-inner px-3 py-2 text-[13px] font-medium ${
+                    windowState.state === 'open' ? 'bg-tint-green' : windowState.state === 'human' ? 'bg-tint-amber' : 'bg-tint-red'
+                  }`}>{windowState.words}</p>
+                )}
                 <div className="flex gap-2 border-t border-border pt-3">
-                  <Textarea rows={1} value={msgDraft} placeholder={`Message ${convName(activeConvo)}…`}
+                  <Textarea rows={2} value={msgDraft} disabled={windowState?.state === 'closed'}
+                    placeholder={windowState?.state === 'closed' ? 'Replies open again when they write' : `Message ${convName(activeConvo)}…`}
                     onChange={e => setMsgDraft(e.target.value)} className="min-h-9" />
-                  <Button size="sm" onClick={() => void sendMessage()} disabled={!msgDraft.trim() || busy === 'send-dm'}>
+                  <Button size="sm" aria-label="Send" onClick={() => void sendMessage()}
+                    disabled={!msgDraft.trim() || busy === 'send-dm' || windowState?.state === 'closed'}>
                     {busy === 'send-dm' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   </Button>
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── who this is ── */}
+        <Card className="hidden h-fit xl:block">
+          <CardContent className="flex flex-col gap-2 p-4 text-[13px]">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">About this person</p>
+            {!activeConvo ? (
+              <p className="text-muted-foreground">Open a conversation to see who they are.</p>
+            ) : !tracked ? (
+              <p className="text-muted-foreground">The People page covers Justin Engelke, Jordan Wilson and the test client for now.</p>
+            ) : people === null ? (
+              <Skeleton className="h-20 w-full" />
+            ) : !person ? (
+              <p className="text-muted-foreground">Not on the People page yet — they have not followed, liked or commented where we can see it.</p>
+            ) : (
+              <>
+                <p className="font-semibold">@{person.username}</p>
+                <p>{person.following ? 'Follows this account' : 'Does not follow this account'}</p>
+                {person.md_lead && <p><span className="font-semibold">MD Media lead</span> — {person.md_lead}</p>}
+                {autoLines.length > 0 && (
+                  <div className="flex flex-col gap-1 rounded-inner bg-foreground/[0.04] p-2">
+                    <p className="font-semibold">Automation</p>
+                    {autoLines.slice(0, 6).map((e, i) => (
+                      <p key={i}>{e.what.slice(AUTO_PREFIX.length)}{e.detail ? <span className="text-muted-foreground"> · {e.detail}</span> : null}</p>
+                    ))}
+                  </div>
+                )}
+                <Link href={`/dashboard/social/people`} className="font-semibold underline underline-offset-2">Open the People page</Link>
+              </>
             )}
           </CardContent>
         </Card>
@@ -538,13 +581,8 @@ export default function InboxPage() {
             ) : visiblePosts.length === 0 ? (
               <EmptyState
                 icon={MessageSquare}
-                title={acct === 'all' ? 'No comments to answer yet' : 'No comments on this account yet'}
-                body={acct === 'all'
-                  ? 'Posts appear here as soon as someone comments on them. Until then there is nothing to reply to — check the schedule to see what is going out next.'
-                  : 'Nothing has been commented on for this account yet. Switch to “All accounts” to see every post.'}
-                actionLabel={acct === 'all' ? 'Open the posting calendar' : 'Show all accounts'}
-                onAction={acct === 'all' ? undefined : () => changeAccount('all')}
-                actionHref={acct === 'all' ? '/dashboard/scheduler/calendar' : undefined}
+                title="No comments to answer yet"
+                body="Posts on this client's accounts appear here as soon as someone comments on them."
                 className="border-0"
               />
             ) : (
