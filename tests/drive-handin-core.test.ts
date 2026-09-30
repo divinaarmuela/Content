@@ -138,10 +138,10 @@ describe('the popup’s guess at which piece each Drive file is', () => {
 
 describe('the line on the card', () => {
   const h = { id: 'h1', pull_id: 'p', link: 'l', drive_ids: ['a', 'b', 'c'], round: 2, by: 'u', requested_at: 't', status: 'copying' as const }
-  it('counts only the picked files: "Copying 2 of 3 from Drive…"', () => {
+  it('counts only the picked files: "Copying 2 of 3 from Google Drive…"', () => {
     const row = { id: 'p', folder_id: 'f', folder_url: 'u', kind: 'item', scope_id: 'c', status: 'copying', total_files: 3, total_bytes: 0, done_files: 1, done_bytes: 0, started_at: new Date(0).toISOString(),
       files: [copy('a', 'A', { version: 2 }), copy('b', 'B', { status: 'copying', done: 100, url: null, version: 2 }), copy('c', 'C', { status: 'waiting', done: 0, url: null, version: 2 })] }
-    expect(handInWords(row, h, 10_000)!.words).toMatch(/^Copying 2 of 3 from Drive…/)
+    expect(handInWords(row, h, 10_000)!.words).toMatch(/^Copying 2 of 3 from Google Drive…/)
   })
   it('an unreadable link says the owner’s words; done and failed say what happened', () => {
     expect(handInWords({ status: 'unreadable' } as never, h, 0)!.words).toBe(NOT_SHARED_WORDS)

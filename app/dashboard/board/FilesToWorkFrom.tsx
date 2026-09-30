@@ -13,7 +13,7 @@ import DrivePullBar from './DrivePullBar'
 import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
-import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
+import { finishedVersionsOf, handInRound, versionLabel } from '../../lib/edit-round-core'
 import { finalFilesAsVersionPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
@@ -81,6 +81,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
    *  per finished edit handed in beside the folder, newest first and open */
   versions?: boolean
 }) {
+  // THE VERSION NUMBER IS THE CLIENT'S (30 Sep 2026, edit-round-core.versionLabel): a tab reads the client's version
+  const roundLabel = (r: number) => versionLabel(item as never, r)
   const files = readRawAssets(item.raw_assets)
   const folder = item.raw_assets_url ?? fallbackFolder ?? null
   const [busy, setBusy] = useState<string | null>(null)
@@ -227,7 +229,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
           )}
           {/* an uploaded version has no folder — its files are the copies, drawn as they are (22 Sep 2026: the Version 2 tab was blank) */}
           {(shownVersion.folderUrl || shownVersion.files.length > 0) && (
-            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} />
+            <DriveFolderFiles url={shownVersion.folderUrl} wide={wideFiles} reviewHref={reviewHref} approvedIds={approvedIds} copies={shownVersion.files} selected={selecting ? pickedKeys : undefined} onSelect={selecting ? pick : undefined} labelOf={roundLabel} />
           )}
         </>
       ) : (

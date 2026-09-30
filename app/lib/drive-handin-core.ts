@@ -311,20 +311,20 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     const left = h.skipped?.length ?? 0
     return { tone: 'done', words: [`Handed in from Drive: ${n} ${n === 1 ? 'file' : 'files'}`, kept ? `${kept} unchanged, kept as they were` : '', left ? `${left} left out (${h.skipped![0].why})` : ''].filter(Boolean).join(' · ') }
   }
-  if (!row) return { tone: 'working', words: 'Waiting to start copying from Drive…' }
+  if (!row) return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
   if (row.status === 'unreadable') return { tone: 'failed', words: NOT_SHARED_WORDS }
   if (row.status === 'failed') return { tone: 'failed', words: row.error ? `The copy from Drive stopped: ${row.error}` : 'The copy from Drive stopped — try again.' }
   const picked = new Set(h.drive_ids)
   const mine = (Array.isArray(row.files) ? row.files as PullFile[] : []).filter(f => picked.has(f.id)).map(f => copyFor(row.files as PullFile[], f.id, h.round)).filter((f, i, a): f is PullFile => !!f && a.findIndex(g => g?.id === f.id) === i)
   const total = h.drive_ids.length
   const done = mine.filter(f => f.status === 'done').length
-  if (row.status === 'queued') return { tone: 'working', words: 'Waiting to start copying from Drive…' }
-  if (row.status === 'listing') return { tone: 'working', words: 'Reading Drive…' }
+  if (row.status === 'queued') return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
+  if (row.status === 'listing') return { tone: 'working', words: 'Reading Google Drive…' }
   if (row.status === 'done') return { tone: 'working', words: `Copied all ${total} — putting them on the card…` }
   const bytes = mine.reduce((n, f) => n + (f.size ?? 0), 0)
   const landed = mine.reduce((n, f) => n + Math.min(f.done, f.size ?? f.done), 0)
   const started = row.started_at ? Date.parse(row.started_at) : NaN
   const rate = Number.isFinite(started) && landed > 0 ? landed / Math.max(1, (nowMs - started) / 1000) : null
   const left = rate && bytes > landed ? formatLeft((bytes - landed) / rate) : null
-  return { tone: 'working', words: [`Copying ${Math.min(done + 1, total)} of ${total} from Drive…`, bytes > 0 ? `${formatBytes(landed)} of ${formatBytes(bytes)}` : '', left ?? ''].filter(Boolean).join(' · ') }
+  return { tone: 'working', words: [`Copying ${Math.min(done + 1, total)} of ${total} from Google Drive…`, bytes > 0 ? `${formatBytes(landed)} of ${formatBytes(bytes)}` : '', left ?? ''].filter(Boolean).join(' · ') }
 }

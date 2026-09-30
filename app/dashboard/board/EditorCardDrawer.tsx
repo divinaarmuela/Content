@@ -24,7 +24,7 @@ import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { withoutRepeatedNotes } from '../../lib/card-comment-core'
-import { handInRound, nextRoundWords, roundLabel, roundOf } from '../../lib/edit-round-core'
+import { handInRound, nextRoundWords, roundOf, versionLabel } from '../../lib/edit-round-core'
 import { earlierLinkVersions } from '../../lib/card-link-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
@@ -84,6 +84,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
 }) {
   const { me } = useRole()
   const { row: item } = useRow<ContentItem>('content_items', id)
+  // THE VERSION NUMBER IS THE CLIENT'S (30 Sep 2026, edit-round-core.versionLabel): every label on this screen reads a
+  // round as the client's version — "Version 1 · draft 2" for re-work before the client has it
+  const roundLabel = (r: number) => versionLabel(item as never, r)
   // the card's kind of work — the raw row carries only the id, and the
   // Designer's upload hangs off the graphics kind (17 Sep 2026)
   const { row: kind, loading: kindLoading } = useRow<WorkKind>('work_kinds', item?.work_kind_id ?? null)
@@ -873,7 +876,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       </section>
       </div>
 
-      {item && <DriveHandInDialog open={driveOpen} onOpenChange={setDriveOpen} item={item as never} round={handInRound(item as never)} />}
+      {item && <DriveHandInDialog open={driveOpen} onOpenChange={setDriveOpen} item={item as never} round={handInRound(item as never)} label={roundLabel(handInRound(item as never))} />}
       <Dialog open={uploadOpen} onOpenChange={o => { if (!o && uploading === null) { setUploadOpen(false); setQueued([]) } }}>
         <DialogContent className="bg-popover sm:max-w-lg">
           <DialogHeader>

@@ -35,7 +35,7 @@ import {
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
 import { finalFilesOf, versionSnapshot, type FinalFile } from './final-files-core'
-import { roundOf } from './edit-round-core'
+import { roundOf, versionLabel } from './edit-round-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
 import type { ItemStatus } from './workflow-core'
 
@@ -118,7 +118,9 @@ export function cardVersionGroups(item: ScheduleItem | null | undefined, version
     groups.push(...list)
   }
   const kept = groups.filter(g => g.slides.length > 0)
-  return kept.map((g, i) => ({ ...g, latest: i === 0, label: `Version ${g.round}${i === 0 ? ' (latest)' : ''}` }))
+  // a files card's rounds read as the client's versions (edit-round-core.versionLabel); older media versions by number
+  const name = (r: number) => (files.length > 0 ? versionLabel(item as never, r) : `Version ${r}`)
+  return kept.map((g, i) => ({ ...g, latest: i === 0, label: `${name(g.round)}${i === 0 ? ' (latest)' : ''}` }))
 }
 
 /** every file of every version of the card, each once — what the server lets a post of this card be made of */

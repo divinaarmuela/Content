@@ -11,7 +11,8 @@ import { assetIdOf, currentFiles } from '../../lib/final-files-core'
 import { handInWords, latestHandIn, pendingHandIn } from '../../lib/drive-handin-core'
 import { formatBytes } from '../../lib/drive-pull-core'
 import { kindOf } from '../../lib/files-core'
-import { roundLabel } from '../../lib/edit-round-core'
+import { roundLabel as plainRoundLabel } from '../../lib/edit-round-core'
+import { watchDriveCopy } from '../driveCopyWatch'
 
 /**
  * HAND IN FROM GOOGLE DRIVE (the owner, 30 Sep 2026) — drive-handin-core.ts has the rules.
@@ -27,12 +28,15 @@ const field = 'min-h-11 rounded-inner border border-border bg-surface px-3 text-
 
 type Listed = { id: string; name: string; mime: string; size: number | null }
 
-export function DriveHandInDialog({ open, onOpenChange, item, round }: {
+export function DriveHandInDialog({ open, onOpenChange, item, round, label }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   item: { id: string; final_files?: unknown; change_assets?: unknown; status?: unknown }
   round: number
+  /** the version as everybody reads it (edit-round-core.versionLabel) */
+  label?: string
 }) {
+  const roundLabel = (r: number) => (r === round && label ? label : plainRoundLabel(r))
   const [url, setUrl] = useState('')
   const [files, setFiles] = useState<Listed[] | null>(null)
   const [picked, setPicked] = useState<string[]>([])
@@ -70,8 +74,10 @@ export function DriveHandInDialog({ open, onOpenChange, item, round }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.trim(), ids: picked, map: Object.fromEntries(picked.map(id => [id, map[id] ?? 'new'])) }),
       })
-      const json = await res.json().catch(() => ({})) as { error?: string; round?: number }
+      const json = await res.json().catch(() => ({})) as { error?: string; round?: number; hand_in?: { id: string; pull_id: string } }
       if (!res.ok) throw new Error(json.error ?? 'Could not hand the files in')
+      // the progress tray watches the copy, on every page, until it is dismissed
+      if (json.hand_in) watchDriveCopy({ pullId: json.hand_in.pull_id, handInId: json.hand_in.id, itemId: item.id, title: String((item as { title?: unknown }).title ?? 'A card') })
       toast.success(`Copying ${picked.length} ${picked.length === 1 ? 'file' : 'files'} from Drive as ${roundLabel(json.round ?? round)} — you can close this page, it carries on`)
       onOpenChange(false)
     } catch (e) {
@@ -108,8 +114,9 @@ export function DriveHandInDialog({ open, onOpenChange, item, round }: {
                   {f.size !== null && <span className="shrink-0 text-[12px] text-muted-foreground">{formatBytes(f.size)}</span>}
                   {on && (
                     <>
-                      <select value={map[f.id] ?? 'new'} onChange={e => setMap(m => ({ ...m, [f.id]: e.target.value }))} aria-label={`Which piece ${f.name} is`} className={`${field} max-w-[12rem]`}>
-                        <option value="new">A new piece</option>
+                      <select value={map[f.id] ?? 'new'} onChange={e => setMap(m => ({ ...m, [f.id]: e.target.value }))} aria-label={`Does ${f.name} replace a file on the card, or add a new one`} className={`${field} max-w-[14rem]`}>
+                        {/* plain words (the owner, 30 Sep 2026): "Replaces clip 2" / "Adds a new clip" */}
+                        <option value="new">Adds a new {kindOf(f.mime, f.name) === 'video' ? 'clip' : kindOf(f.mime, f.name) === 'image' ? 'picture' : 'file'}</option>
                         {pieces.map(p => <option key={assetIdOf(p)} value={assetIdOf(p)}>Replaces {p.name}</option>)}
                       </select>
                       <button type="button" onClick={() => move(f.id, -1)} aria-label={`Move ${f.name} up`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"><ArrowUp className="h-4 w-4" aria-hidden /></button>

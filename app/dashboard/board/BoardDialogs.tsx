@@ -34,6 +34,7 @@ import type { BoardViewCard, BoardViewer } from '../../lib/board-view-core'
 import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
 import { assetIdOf, currentFiles, needsAdoption } from '../../lib/final-files-core'
+import { versionLabel } from '../../lib/edit-round-core'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 
 /**
@@ -324,7 +325,7 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
                     <label className="flex min-h-11 items-center gap-2.5 text-[14px]">
                       <input type="checkbox" checked={on} className="h-5 w-5" onChange={e => setPicked(p => ({ ...p, [a]: e.target.checked ? '' : undefined }))} />
                       <span className="min-w-0 flex-1 truncate font-semibold" title={f.name}>{f.name}</span>
-                      <span className="shrink-0 text-[12px] text-muted-foreground">Version {f.version}{approved.has(f.id) ? ' · approved by the client' : ''}</span>
+                      <span className="shrink-0 text-[12px] text-muted-foreground">{versionLabel(card as never, f.version)}{approved.has(f.id) ? ' · approved by the client' : ''}</span>
                     </label>
                     {on && <Textarea value={picked[a] ?? ''} onChange={e => setPicked(p => ({ ...p, [a]: e.target.value }))} rows={2} placeholder={`What to change in ${f.name}`} aria-label={`What to change in ${f.name}`} className="rounded-inner border-border bg-surface" />}
                   </li>

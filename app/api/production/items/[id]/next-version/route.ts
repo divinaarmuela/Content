@@ -6,7 +6,7 @@ import { loadItemForUser } from '../../../../../lib/production-access'
 import { canEditItemFields } from '../../../../../lib/item-edit-core'
 import { finishedEditOf } from '../../../../../lib/card-link-core'
 import { finalFilesOf } from '../../../../../lib/final-files-core'
-import { nextRoundWords, roundLabel, roundOf } from '../../../../../lib/edit-round-core'
+import { nextRoundWords, roundOf, versionLabel } from '../../../../../lib/edit-round-core'
 import { logActivity } from '../../../../../lib/workflow'
 
 /**
@@ -46,9 +46,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       // WHO MOVED IT, ON THE CARD'S HISTORY (29 Sep 2026: a round moved with no line saying who or when)
       await logActivity({
         actor: user, clientId: item.client_id ?? null, entityType: 'content_item', entityId: id,
-        action: 'version_started', oldValue: `v${round - 1}`, newValue: `v${round}`, detail: `Started ${roundLabel(round)}`,
+        action: 'version_started', oldValue: `v${round - 1}`, newValue: `v${round}`, detail: `Started ${versionLabel(item as never, round)}`,
       }).catch(() => {})
-      return NextResponse.json({ round })
+      return NextResponse.json({ round, label: versionLabel(item as never, round) })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
       return NextResponse.json({ error }, { status })

@@ -9,7 +9,7 @@ import {
   sanitiseMap, sanitisePicked, settledHandIn, withHandIn, type DriveHandIn, type MergeResult,
 } from './drive-handin-core'
 import { finalFilesChangeRefusal, finalFilesOf, needsAdoption } from './final-files-core'
-import { handInRound, roundLabel } from './edit-round-core'
+import { handInRound, versionLabel } from './edit-round-core'
 import { logActivity } from './workflow'
 import { announceItemChange } from './production-live'
 
@@ -90,7 +90,7 @@ export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: 
   await logActivity({
     actor: user, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
     action: 'drive_handin_started', newValue: `v${round}`,
-    detail: `Handing in ${picked.ids.length} ${picked.ids.length === 1 ? 'file' : 'files'} from Google Drive as ${roundLabel(round)} — copying`,
+    detail: `Handing in ${picked.ids.length} ${picked.ids.length === 1 ? 'file' : 'files'} from Google Drive as ${versionLabel(item as never, round)} — copying`,
   })
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: item.status, kind: 'updated' })
   return { ok: true, handIn, round }
@@ -165,15 +165,15 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
   })
   if (!put.claimed || !outcome) return { settled: false, reason: 'already settled' }
   const done = outcome as { result: MergeResult; handIn: DriveHandIn; round: number }
+  const fresh = put.row as ContentItem | null
   const by = done.handIn.by ? await table('team_users').get(done.handIn.by).catch(() => null) : null
   await logActivity({
     actor: (by as TeamUser | null) ?? null, clientId: item.client_id, entityType: 'content_item', entityId: item.id,
     action: done.result.ok ? 'drive_handin_done' : 'drive_handin_failed', newValue: `v${done.round}`,
     detail: done.result.ok
-      ? `Handed in from Google Drive as ${roundLabel(done.round)}: ${done.result.added.length} ${done.result.added.length === 1 ? 'file' : 'files'}${done.result.carried.length ? `, ${done.result.carried.length} unchanged` : ''}`
+      ? `Handed in from Google Drive as ${versionLabel((fresh ?? item) as never, done.round)}: ${done.result.added.length} ${done.result.added.length === 1 ? 'file' : 'files'}${done.result.carried.length ? `, ${done.result.carried.length} unchanged` : ''}`
       : done.result.error,
   }).catch(() => undefined)
-  const fresh = put.row as ContentItem | null
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: String(fresh?.status ?? item.status), kind: 'updated' })
   return { settled: true, result: done.result }
 }
