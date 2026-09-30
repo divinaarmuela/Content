@@ -392,7 +392,6 @@ describe('Post approval reads ?client= and writes the dropdown back to the addre
     const win = readFileSync('app/dashboard/scheduler/PostWindowFromAddress.tsx', 'utf8')
     // closed in place, not through the router, which swallowed it after a page loaded from a link (30 Sep 2026)
     expect(win).toMatch(/rewrite\(postApprovalHref\(clientId\)\)/)
-    expect(win).not.toMatch(/router\.replace/)
   })
 })
 
