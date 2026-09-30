@@ -51,7 +51,7 @@ export interface Publisher {
   /** One post's numbers day by day since it went up (needs the Analytics add-on). */
   postTimeline(postId: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
-  listComments(): Promise<unknown>
+  listComments(opts?: { accountId?: string; cursor?: string | null; limit?: number }): Promise<unknown>
   /** DM inbox: conversations across connected accounts. */
   listConversations(opts?: { accountId?: string; cursor?: string | null; limit?: number }): Promise<unknown>
   /** Messages inside one conversation. */
@@ -610,8 +610,15 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/posts/${encodeURIComponent(postId)}`)
   }
 
-  listComments() {
-    return this.getJson('/inbox/comments')
+  /** Posts with comments. Without an account it is ONE page of 50 across every client (30 Sep 2026: Jordan's
+   *  24 Sep reel with 4 comments was past it) — the Inbox asks one account at a time and follows the cursor. */
+  listComments(opts: { accountId?: string; cursor?: string | null; limit?: number } = {}) {
+    const q = new URLSearchParams()
+    if (opts.accountId) q.set('accountId', opts.accountId)
+    if (opts.limit) q.set('limit', String(opts.limit))
+    if (opts.cursor) q.set('cursor', opts.cursor)
+    const qs = q.toString()
+    return this.getJson(`/inbox/comments${qs ? `?${qs}` : ''}`)
   }
 
   /** DM inbox: every conversation across connected accounts (IG, Telegram…). */

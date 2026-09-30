@@ -62,7 +62,7 @@ export async function GET(
       publisher.followerStats(),
       publisher.listPosts({ limit: 20 }),
       publisher.postAnalytics(),
-      publisher.listComments(),
+      publisher.listComments({ accountId: providerId }),
     ])
 
     return NextResponse.json({

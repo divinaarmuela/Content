@@ -196,7 +196,7 @@ export default function InboxPage() {
     setClientId(id)
     try { window.localStorage.setItem(CLIENT_KEY, id) } catch { /* private window */ }
     setConvos(null); setActiveConvo(null); setMessages(null); setWindowState(null); setPeople(null)
-    setActive(null); setComments(null); setAboutHandle(null)
+    setActive(null); setComments(null); setAboutHandle(null); setPosts(null)
   }
 
   const openConvo = async (c: InboxConversation) => {
@@ -257,8 +257,9 @@ export default function InboxPage() {
   const [dmTo, setDmTo] = useState<Comment | null>(null)
 
   const loadPosts = useCallback(async () => {
+    if (!clientId) return
     try {
-      const res = await fetch('/api/social/inbox')
+      const res = await fetch(`/api/social/inbox?clientId=${encodeURIComponent(clientId)}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load inbox')
       setPosts(json.data ?? [])
@@ -266,7 +267,7 @@ export default function InboxPage() {
       toast.error(e instanceof Error ? e.message : 'Could not load inbox')
       setPosts([])
     }
-  }, [])
+  }, [clientId])
 
   useEffect(() => { loadPosts() }, [loadPosts])
 
@@ -666,7 +667,8 @@ export default function InboxPage() {
                       {p.picture
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={p.picture} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
-                        : <div className="h-12 w-12 shrink-0 rounded bg-foreground/[0.06]" />}
+                        // LinkedIn posts come back with no picture from Zernio — its logo, not an empty box
+                        : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-foreground/[0.06]"><PlatformIcon platform={p.platform} size={20} /></div>}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <PlatformIcon platform={p.platform} size={14} />
