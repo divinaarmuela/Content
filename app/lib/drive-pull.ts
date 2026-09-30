@@ -40,16 +40,21 @@ const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
 
 type Kind = 'batch' | 'item'
 /** what the link is: a folder to work from, or an edit handed in (16 Sep 2026) */
-export type PullPurpose = 'folder' | 'finished'
+export type PullPurpose = 'folder' | 'finished' | 'handin'
 
-export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: string; version?: number | null; by?: string | null; purpose?: PullPurpose }): Promise<{ id: string; started: boolean; reason?: string }> {
+export async function startPull(opts: {
+  kind: Kind; scopeId: string; folderUrl: string; version?: number | null; by?: string | null; purpose?: PullPurpose
+  /** A VERSION HANDED IN FROM DRIVE (drive-handin-core.ts, 30 Sep 2026): its own row, only the files the editor
+   *  picked, and the hand-in on the card it settles when the copy is done */
+  handIn?: { pullId: string; onlyIds: string[]; handInId: string }
+}): Promise<{ id: string; started: boolean; reason?: string }> {
   // a folder to list, or one file (16 Sep 2026: a single clip's link pasted as the folder)
   const target = driveTargetOf(opts.folderUrl)
   if (!target) return { id: '', started: false, reason: 'Not a Google Drive link' }
   const folderId = target.id
   const scopeKey = opts.kind === 'item' ? opts.scopeId : null
-  if (!r2Configured()) return { id: pullId(folderId, scopeKey), started: false, reason: 'File storage is not configured' }
-  const id = pullId(folderId, scopeKey)
+  const id = opts.handIn?.pullId ?? pullId(folderId, scopeKey)
+  if (!r2Configured()) return { id, started: false, reason: 'File storage is not configured' }
   const now = new Date().toISOString()
   const pulls = table<DrivePull>('drive_pulls')
   const claim = await pulls.claim(id, current => {
@@ -70,6 +75,8 @@ export async function startPull(opts: { kind: Kind; scopeId: string; folderUrl: 
       // a fresh start is never a cancelled one
       cancelled_at: null,
       requested_by: opts.by ?? null,
+      // a hand-in's picks and its record on the card; a plain pull has neither
+      ...(opts.handIn ? { only_ids: opts.handIn.onlyIds, handin_id: opts.handIn.handInId, version: opts.version ?? null } : {}),
       created_at: row?.created_at ?? now, updated_at: now,
     } as unknown as DrivePull
   })
@@ -134,29 +141,15 @@ export function cancelReplacedPullSoon(opts: Parameters<typeof cancelReplacedPul
   afterResponse('drive pull cancel', () => cancelReplacedPull(opts))
 }
 
-/** step one: what is in the folder now, merged with what is already here */
-export async function runPullList(id: string, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
-  const pulls = table<DrivePull>('drive_pulls')
-  const row = await pulls.get(id)
-  if (!row) return { files: 0, bytes: 0, note: 'no row' }
-  // called off before it began (the link was replaced) — nothing to read
-  if ((row as { cancelled_at?: string | null }).cancelled_at) return { files: 0, bytes: 0, note: 'cancelled' }
-  // WHAT WENT WRONG, ON THE ROW (16 Sep 2026): a step that throws is retried
-  // by Inngest, which keeps no words — the row keeps them, so the bar says why
-  try {
-    return await listInto(pulls, row, version)
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    await pulls.update(id, { status: 'failed', error: `Could not read the folder: ${message}`.slice(0, 500), finished_at: new Date().toISOString(), updated_at: new Date().toISOString() } as never).catch(() => undefined)
-    throw e
-  }
-}
+export type DriveTargetFile = { id: string; name: string; mime: string; size: number | null; modified: string | null }
 
-async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePull, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
-  const id = row.id
-  await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
-
-  const seen: { id: string; name: string; mime: string; size: number | null; modified: string | null }[] = []
+/**
+ * WHAT A DRIVE LINK HOLDS — read only (trap 13): one file's name, type and size from Drive; or a folder walked
+ * (subfolders three deep, 400 files at most, a subfolder's files named "Sub/Name"). The pull reads through here,
+ * and so does the Drive hand-in's picker, so the editor picks from exactly what the copy will find.
+ */
+export async function readDriveTarget(kind: 'folder' | 'file', driveId: string): Promise<DriveTargetFile[]> {
+  const seen: DriveTargetFile[] = []
   const walk = async (folderId: string, prefix: string, depth: number) => {
     if (seen.length >= MAX_FILES || depth > MAX_DEPTH) return
     const listing = await listFolder(folderId)
@@ -166,14 +159,52 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
       seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null })
     }
   }
-  const target = driveTargetOf(row.folder_url)
-  if (target?.kind === 'file') {
+  if (kind === 'file') {
     // one file: its name, type and size from Drive, nothing to walk
-    const meta = await driveFileMeta(target.id)
-    if (meta) seen.push({ id: target.id, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified })
+    const meta = await driveFileMeta(driveId)
+    if (meta) seen.push({ id: driveId, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified })
   } else {
-    await walk(row.folder_id, '', 0)
+    await walk(driveId, '', 0)
   }
+  return seen
+}
+
+/** step one: what is in the folder now, merged with what is already here */
+export async function runPullList(id: string, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
+  const pulls = table<DrivePull>('drive_pulls')
+  const row = await pulls.get(id)
+  if (!row) return { files: 0, bytes: 0, note: 'no row' }
+  // called off before it began (the link was replaced) — nothing to read
+  if ((row as { cancelled_at?: string | null }).cancelled_at) return { files: 0, bytes: 0, note: 'cancelled' }
+  // WHAT WENT WRONG, ON THE ROW (16 Sep 2026): a step that throws is retried
+  // by Inngest, which keeps no words — the row keeps them, so the bar says why
+  const handIn = (row as { purpose?: string | null }).purpose === 'handin'
+  try {
+    const listed = await listInto(pulls, row, version)
+    // a hand-in whose link could not be read says so on the card (drive-handin.ts)
+    if (handIn && listed.note === 'unreadable') {
+      const { failDriveHandIn } = await import('./drive-handin')
+      const { NOT_SHARED_WORDS } = await import('./drive-handin-core')
+      await failDriveHandIn(id, NOT_SHARED_WORDS).catch(() => undefined)
+    }
+    return listed
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    await pulls.update(id, { status: 'failed', error: `Could not read the folder: ${message}`.slice(0, 500), finished_at: new Date().toISOString(), updated_at: new Date().toISOString() } as never).catch(() => undefined)
+    // (a hand-in is NOT failed here: Inngest retries this step, and the card reads the row's words meanwhile)
+    throw e
+  }
+}
+
+async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePull, version: number | null): Promise<{ files: number; bytes: number; note?: string }> {
+  const id = row.id
+  await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
+
+  const target = driveTargetOf(row.folder_url)
+  const listed = await readDriveTarget(target?.kind === 'file' ? 'file' : 'folder', target?.kind === 'file' ? target.id : row.folder_id)
+  // A HAND-IN copies only what the editor picked (drive-handin-core.ts)
+  const only = Array.isArray((row as { only_ids?: unknown }).only_ids) ? new Set(((row as unknown as { only_ids: unknown[] }).only_ids).map(String)) : null
+  const seen = only ? listed.filter(f => only.has(f.id)) : listed
   // where the step has got to, on the row — so a stall says where it stalled
   await pulls.update(id, { total_files: seen.length, error: `Read the folder: ${seen.length} files`, updated_at: new Date().toISOString() } as never)
 
@@ -318,6 +349,17 @@ export async function finishPull(id: string): Promise<'done' | 'failed'> {
     status, finished_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     error: failed.length ? `${failed.length} ${failed.length === 1 ? 'file' : 'files'} could not be copied (${failed[0].name}${failed[0].error ? `: ${failed[0].error}` : ''})` : null,
   } as never)
+  // A VERSION HANDED IN FROM DRIVE (30 Sep 2026): the picked files, once all copied, go onto the card as its
+  // files through the same rules an upload follows — or, if any did not copy, nothing does and the card says which
+  if (row.kind === 'item' && (row as { purpose?: string | null }).purpose === 'handin') {
+    try {
+      const { settleDriveHandIn } = await import('./drive-handin')
+      await settleDriveHandIn(id)
+    } catch (e) {
+      console.error('[drive-pull] the Drive hand-in could not be put on the card:', e instanceof Error ? e.message : e)
+    }
+    return status
+  }
   // EVERY DRIVE HAND-IN BECOMES FILES (24 Sep 2026): a card's finished edit, once copied, is merged into its
   // files on the server — nobody has to open the card for it. Best effort: the copy is kept either way.
   if (row.kind === 'item' && (row as { purpose?: string | null }).purpose === 'finished') {

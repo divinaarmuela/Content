@@ -459,6 +459,12 @@ const GHOST_TABLES = {
     //     cancels"). Stamped by drive-pull.cancelReplacedPull; every step of the
     //     job reads it and stops; cleared when the same folder is pulled again.
     ['cancelled_at', col('string', true)],
+    //   only_ids / handin_id / version — A VERSION HANDED IN FROM DRIVE (30 Sep 2026, drive-handin-core.ts): the
+    //     picked Drive file ids (the listing copies only these), the hand-in record on the card this copy settles
+    //     (content_items.drive_handins[].id), and the card's version the copies are tagged with. Purpose 'handin'.
+    ['only_ids', col('unknown', true, true)],
+    ['handin_id', col('string', true)],
+    ['version', col('number', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
@@ -926,6 +932,11 @@ const GHOST_COLUMNS = {
     //   content_items.change_assets — WHICH ASSETS THE LAST SEND-BACK ASKED TO HAVE CHANGED (22 Sep 2026;
     //   final-files-core.ts): asset ids. Empty = the whole card. Written by every send-back.
     ['change_assets', col('unknown', true, true)],
+    //   content_items.drive_handins — EVERY VERSION HANDED IN FROM GOOGLE DRIVE (30 Sep 2026; drive-handin-core.ts):
+    //   [{ id, pull_id, link, drive_ids, map, round, by, status: copying|done|failed, settled_round, file_ids,
+    //   carried, skipped, error }]. The files themselves are ordinary final_files, each with drive_file_id and
+    //   source 'drive'; this is the record of what was asked for and what became of it.
+    ['drive_handins', col('unknown', true, true)],
     //   content_items.client_round — THE VERSION THE CLIENT WAS LAST GIVEN (22 Sep 2026): stamped each time
     //   the card goes to With client. The portal never shows a newer one: a version still with the team.
     ['client_round', col('number', true)],

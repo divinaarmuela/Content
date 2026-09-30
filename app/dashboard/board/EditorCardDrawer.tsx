@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, ExternalLink, Pencil, Upload, X } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
+import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
 import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import { managesClients, type Role } from '../../lib/identity-core'
@@ -257,6 +258,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // THE UPLOAD POPUP (the owner, 22 Sep 2026: "when uploading version 1, a popup — upload the file instead of
   // a Drive link"): pick, see what was picked, upload. The files land on the card, each one its own asset.
   const [uploadOpen, setUploadOpen] = useState(false)
+  // HAND IN FROM GOOGLE DRIVE (the owner, 30 Sep 2026: "make sure the card supports Drive link submission from now
+  // on, instead of files"): the way a version is handed in; the upload stays as the fallback (drive-handin-core.ts)
+  const [driveOpen, setDriveOpen] = useState(false)
   // A LINK CARD SENT BACK: its copied clips become its files, once, so one can be replaced (final-files-core.ts)
   const adoptTried = useRef<string | null>(null)
   useEffect(() => {
@@ -623,11 +627,17 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <div className="flex flex-col gap-2" data-final-files>
             {mayFile && !frozen && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" className={outlineBtn} disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)}>
-                  <Upload className="h-4 w-4" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload the finished files — ${roundLabel(handInRound(item as never))}` : 'Add another file')}
+                {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) */}
+                <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(true)} data-drive-handin>
+                  <FolderDown className="h-4 w-4" aria-hidden /> {currentFiles(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in more from Google Drive'}
                 </Button>
+                {/* THE UPLOAD, KEPT AS THE FALLBACK (no Drive access, or a file only on this computer) */}
+                <button type="button" disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)} className="inline-flex min-h-11 items-center gap-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">
+                  <Upload className="h-3.5 w-3.5" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload instead — ${roundLabel(handInRound(item as never))}` : 'Upload another file instead')}
+                </button>
               </div>
             )}
+            <DriveHandInStatus item={item as never} />
             {stillToReplace(item as never).length > 0 && (
               <p role="status" className="rounded-inner bg-tint-amber p-2.5 text-[13px] font-semibold">
                 {stillToReplace(item as never).length} {stillToReplace(item as never).length === 1 ? 'file needs' : 'files need'} a new version before this can go back. The others stay as they are.
@@ -860,6 +870,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       </section>
       </div>
 
+      {item && <DriveHandInDialog open={driveOpen} onOpenChange={setDriveOpen} item={item as never} round={handInRound(item as never)} />}
       <Dialog open={uploadOpen} onOpenChange={o => { if (!o && uploading === null) { setUploadOpen(false); setQueued([]) } }}>
         <DialogContent className="bg-popover sm:max-w-lg">
           <DialogHeader>

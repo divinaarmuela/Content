@@ -36,6 +36,13 @@ export type FinalFile = {
   /** DROPPED FROM THIS VERSION ON (22 Sep 2026): the asset is out of the card from round N; its earlier
    *  files stay, so the client's earlier version still shows it with what was said on it */
   retired_round?: number | null
+  /** HOW IT CAME: 'drive' = handed in from a Google Drive link and copied into our storage (the owner, 30 Sep
+   *  2026: "use the id to keep track of the version"); absent or 'upload' = uploaded from the editor's computer */
+  source?: 'drive' | 'upload'
+  /** the Drive file this copy was read from — never written to; the copy is ours (drive-handin-core.ts) */
+  drive_file_id?: string
+  /** Drive's last-changed time for that file when it was copied: the same id unchanged is the same cut */
+  drive_modified?: string | null
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -116,6 +123,10 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       ...(typeof x.asset_id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.asset_id) ? { asset_id: x.asset_id } : {}),
       ...(typeof x.replaces === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x.replaces) ? { replaces: x.replaces } : {}),
       ...(typeof x.retired_round === 'number' && x.retired_round >= 1 ? { retired_round: Math.floor(x.retired_round) } : {}),
+      // a Drive hand-in's record of where each copy came from survives every later save of the list
+      ...(x.source === 'drive' || x.source === 'upload' ? { source: x.source } : {}),
+      ...(typeof x.drive_file_id === 'string' && /^[A-Za-z0-9_-]{10,128}$/.test(x.drive_file_id) ? { drive_file_id: x.drive_file_id } : {}),
+      ...(typeof x.drive_modified === 'string' && x.drive_modified.length <= 40 ? { drive_modified: x.drive_modified } : {}),
     })
   }
   return { ok: true, files: out }
@@ -265,7 +276,7 @@ export function withRetired(list: readonly FinalFile[], assetId: string, round: 
  *   - a file whose name matches a clip on the card is that clip's next version;
  *   - anything else is a new clip.
  */
-function clipKey(name: string): string {
+export function clipKey(name: string): string {
   return String(name ?? '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/[\s_-]+/g, ' ').trim()
 }
 
@@ -305,8 +316,8 @@ export function mergeHandIn(
  *   - while the quality check or the client is looking, only a manager changes them;
  *   - a hand-in that has gone out (an earlier version) is history: its files are never removed or rewritten.
  */
-const LOCKED_STATUSES = ['approved_for_scheduling', 'scheduled', 'published']
-const LOOKING_STATUSES = ['quality_check', 'client_review']
+export const LOCKED_STATUSES = ['approved_for_scheduling', 'scheduled', 'published']
+export const LOOKING_STATUSES = ['quality_check', 'client_review']
 
 export function finalFilesChangeRefusal(
   before: readonly FinalFile[],
