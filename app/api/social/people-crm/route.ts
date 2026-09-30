@@ -4,7 +4,8 @@ import type { Client, SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { assertClientAccess } from '@/app/lib/social-schedule'
 import { loadPeople } from '@/app/lib/people-analytics'
-import { PEOPLE_CRM_CLIENTS, crmCounts, crmRow, crmSort } from '@/app/lib/people-crm-core'
+import { PEOPLE_CRM_CLIENTS, crmCounts, crmRow, crmSort, readAutomationTouches, withAutomationTouches, type AutomationTouch } from '@/app/lib/people-crm-core'
+import { getPublisher } from '@/app/lib/publisher'
 
 /**
  * THE PEOPLE CRM for one client (28 Sep 2026): every person on the client's Instagram, with every touch we have seen
@@ -31,7 +32,8 @@ export async function GET(req: Request) {
       ])
       // our own handles — the client's and the agency's accounts — are marked, not counted as audience
       const ours = new Set(accounts.map(a => String(a.username ?? '').replace(/^@/, '').toLowerCase()).filter(Boolean))
-      const rows = crmSort(people.rows.map(r => crmRow(r, ours)))
+      const touches = await automationTouches(accounts.filter(a => a.client_id === clientId))
+      const rows = crmSort(withAutomationTouches(people.rows.map(r => crmRow(r, ours)), touches))
       return NextResponse.json({
         state: people.state,
         client: { id: client.id, name: client.name },
@@ -45,4 +47,24 @@ export async function GET(req: Request) {
       return NextResponse.json({ error }, { status })
     }
   })
+}
+
+/**
+ * The comment-to-DM automations on this client's accounts, read from Zernio with each one's per-person log. Zernio not
+ * answering is not an error for the page: the rest of the CRM still shows, without the automation lines.
+ */
+async function automationTouches(accounts: readonly SocialAccount[]): Promise<AutomationTouch[]> {
+  const ids = new Set(accounts.map(a => String(a.provider_account_id ?? '')).filter(Boolean))
+  if (ids.size === 0) return []
+  try {
+    const publisher = getPublisher()
+    const list = await publisher.listAutomations() as { automations?: { id?: string; accountId?: string }[] } | null
+    const mine = (list?.automations ?? []).filter(a => a.id && ids.has(String(a.accountId ?? '')))
+    const logs: Record<string, unknown> = {}
+    await Promise.all(mine.map(async a => { logs[String(a.id)] = await publisher.automationLogs(String(a.id)).catch(() => null) }))
+    return readAutomationTouches(list, logs, ids)
+  } catch (e) {
+    console.error('[people-crm] automations:', e instanceof Error ? e.message : e)
+    return []
+  }
 }

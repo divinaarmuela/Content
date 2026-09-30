@@ -24,7 +24,7 @@ type Payload = {
   client: { id: string; name: string }
   today: string
   as_of: string | null
-  counts: { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number }
+  counts: { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number; auto_dms: number; auto_clicked: number }
   rows: CrmRow[]
 }
 
@@ -38,6 +38,7 @@ const FILTERS: { key: CrmFilter; label: string }[] = [
   { key: 'new', label: 'New followers' },
   { key: 'engaged', label: 'Liked or commented' },
   { key: 'dmed', label: 'DMed' },
+  { key: 'automation', label: 'From automations' },
   { key: 'all', label: 'All followers' },
 ]
 
@@ -107,6 +108,8 @@ export default function PeopleCrmPage() {
               ['DMed', data.counts.dmed],
               ['Likely from a post', data.counts.likely_from_posts],
               ['Unfollowed', data.counts.unfollowed],
+              ['Got an automation DM', data.counts.auto_dms],
+              ['Clicked its button', data.counts.auto_clicked],
             ].map(([label, n]) => (
               <div key={label as string} className="rounded-card border border-border bg-card p-3">
                 <p className="text-[12px] text-muted-foreground">{label}</p>
@@ -183,6 +186,8 @@ export default function PeopleCrmPage() {
                           <span className="flex flex-wrap items-center gap-1">
                             {r.md_lead && <span title={r.md_lead}><Chip tone="ink">MD Media lead</Chip></span>}
                             <Chip tone={STATUS_TONE[r.status]}>{CRM_STATUS_WORDS[r.status]}</Chip>
+                            {r.auto_clicks > 0 ? <Chip tone="green">Clicked{r.auto_clicks > 1 ? ` ×${r.auto_clicks}` : ''}</Chip>
+                              : r.auto_dms > 0 ? <Chip tone="muted">Automation DM</Chip> : null}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">{dayWords(r.first_seen, today)}</td>

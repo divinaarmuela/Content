@@ -9,7 +9,7 @@
  * for a like or a follow, so each is dated by the only honest day there is (the post's day; the look that first saw
  * them follow) and the page says so.
  */
-import { orderDay, type PeopleRow } from './people-analytics-core'
+import { inboxPersonHref, instagramProfileHref, orderDay, type PeopleRow } from './people-analytics-core'
 
 /**
  * The clients the page is for (the owner, 28 Sep 2026: "only for Justin and Jordan"). Add an id to open it to
@@ -18,6 +18,8 @@ import { orderDay, type PeopleRow } from './people-analytics-core'
 export const PEOPLE_CRM_CLIENTS: readonly { id: string; name: string }[] = [
   { id: '2e27f9e4-9cb5-43a6-a06b-f317f207a1e8', name: 'Justin Engelke' },
   { id: 'eb550318-b5a4-4dd6-81ea-9310588a55bb', name: 'Jordan Wilson' },
+  // the test client, so the page is checked on test data and never on a real client's (30 Sep 2026)
+  { id: '459e2564-1089-45ed-abd7-56d5f53c2cf6', name: '100 Hundred Million Group (test)' },
 ]
 
 /**
@@ -84,6 +86,9 @@ export type CrmRow = {
    * we made, and THEN followed or DMed. The reason says which — null when they are not one.
    */
   md_lead: string | null
+  /** comment-to-DM automations: DMs it sent this person, and taps on its button (Zernio's per-person log) */
+  auto_dms: number
+  auto_clicks: number
   /** newest first */
   timeline: CrmEvent[]
 }
@@ -151,11 +156,12 @@ export function crmRow(p: PeopleRow, ownAccounts: ReadonlySet<string> = new Set(
     from_post: p.from_us.likely ? p.from_us.title : null,
     first_seen: first, last_active: last,
     likes, comments, dmed, following, md_lead,
+    auto_dms: 0, auto_clicks: 0,
     timeline,
   }
 }
 
-export type CrmFilter = 'active' | 'all' | 'dmed' | 'new' | 'engaged' | 'md_lead'
+export type CrmFilter = 'active' | 'all' | 'dmed' | 'new' | 'engaged' | 'md_lead' | 'automation'
 
 /** "active" = anybody who did something we saw: followed since we started watching, liked, commented, wrote, left */
 export function crmFilter(rows: readonly CrmRow[], filter: CrmFilter, search = ''): CrmRow[] {
@@ -165,6 +171,7 @@ export function crmFilter(rows: readonly CrmRow[], filter: CrmFilter, search = '
     if (filter === 'all') return true
     if (filter === 'dmed') return r.dmed
     if (filter === 'md_lead') return r.md_lead !== null
+    if (filter === 'automation') return r.timeline.some(e => e.what.startsWith(AUTO_PREFIX))
     if (filter === 'new') return r.status !== 'ours' && r.timeline.some(e => e.what === 'Started following')
     if (filter === 'engaged') return r.likes + r.comments > 0 || r.dmed
     return r.timeline.length > 0
@@ -181,7 +188,7 @@ export function crmSort(rows: readonly CrmRow[]): CrmRow[] {
   })
 }
 
-export function crmCounts(rows: readonly CrmRow[]): { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number } {
+export function crmCounts(rows: readonly CrmRow[]): { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number; auto_dms: number; auto_clicked: number } {
   const real = rows.filter(r => r.status !== 'ours')
   return {
     md_leads: real.filter(r => r.md_lead).length,
@@ -191,6 +198,8 @@ export function crmCounts(rows: readonly CrmRow[]): { md_leads: number; people: 
     dmed: real.filter(r => r.dmed).length,
     likely_from_posts: real.filter(r => r.from_post).length,
     unfollowed: real.filter(r => r.status === 'unfollowed').length,
+    auto_dms: real.filter(r => r.auto_dms > 0).length,
+    auto_clicked: real.filter(r => r.auto_clicks > 0).length,
   }
 }
 
@@ -211,4 +220,110 @@ export function dayWords(day: string | null, today: string): string {
   if (t - d === 86_400_000) return 'Yesterday'
   const dt = new Date(d)
   return `${dt.getUTCDate()} ${'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[dt.getUTCMonth()]}`
+}
+
+/* ── comment-to-DM automations, per person (the owner, 29–30 Sep 2026: "tracking data in the followers page for
+ *    Justin and Jordan — which trigger, clicked, opened, read"; "there is no CRM part for the automation data") ── */
+
+/**
+ * One commenter's trip through an automation, as Zernio logs it: what they commented and when, whether the DM went
+ * (or why not), and their taps on its button. Zernio keeps "delivered" and "read" only as a total per automation,
+ * never per person, so neither is claimed here.
+ */
+export type AutomationTouch = {
+  username: string
+  comment: string
+  at: string
+  outcome: 'sent' | 'failed' | 'skipped'
+  why: string | null
+  clicked_at: string | null
+  clicks: number
+  post: string | null
+  keyword: string | null
+}
+
+/** every automation line in a timeline starts with this, so the filter and the page can find them */
+export const AUTO_PREFIX = 'Automation: '
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
+
+/** Zernio's automations on these accounts + each one's logs → one touch per logged comment. */
+export function readAutomationTouches(
+  automations: unknown, logsById: Readonly<Record<string, unknown>>, accountIds: ReadonlySet<string>,
+): AutomationTouch[] {
+  const list = Array.isArray((automations as { automations?: unknown })?.automations)
+    ? (automations as { automations: Record<string, unknown>[] }).automations : []
+  const out: AutomationTouch[] = []
+  for (const a of list) {
+    const id = str(a.id)
+    if (!id || !accountIds.has(String(a.accountId ?? ''))) continue
+    const logs = (logsById[id] as { logs?: Record<string, unknown>[] } | undefined)?.logs ?? []
+    const keywords = Array.isArray(a.keywords) ? a.keywords.map(String) : []
+    for (const l of logs) {
+      const username = str(l.commenterName)
+      const at = str(l.createdAt)
+      if (!username || !at) continue
+      const status = String(l.status ?? '')
+      out.push({
+        username: username.replace(/^@/, ''),
+        comment: String(l.commentText ?? ''),
+        at,
+        outcome: status === 'sent' ? 'sent' : status === 'skipped' ? 'skipped' : 'failed',
+        why: str(l.error),
+        clicked_at: str(l.clickedAt),
+        clicks: typeof l.clickCount === 'number' ? l.clickCount : 0,
+        post: str(a.postTitle),
+        keyword: keywords[0] ?? null,
+      })
+    }
+  }
+  return out
+}
+
+const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
+
+/**
+ * The automation touches laid onto the CRM: each commenter's row gets the comment, the DM (or why it did not go) and
+ * the button taps on its timeline, and counts of both. A commenter the other reads have not seen yet gets a row of
+ * their own — they commented on the client's post, which is a touch.
+ */
+export function withAutomationTouches(rows: readonly CrmRow[], touches: readonly AutomationTouch[]): CrmRow[] {
+  const byKey = new Map(rows.map(r => [r.key, { ...r, timeline: [...r.timeline] }]))
+  for (const t of touches) {
+    const k = t.username.toLowerCase()
+    let r = byKey.get(k)
+    if (!r) {
+      r = {
+        key: k, username: t.username, full_name: null, profile_pic: null,
+        profile_href: instagramProfileHref(t.username), inbox_href: inboxPersonHref(t.username),
+        status: 'commented', from_post: null, first_seen: null, last_active: null,
+        likes: 0, comments: 0, dmed: false, following: false, md_lead: null,
+        auto_dms: 0, auto_clicks: 0, timeline: [],
+      }
+      byKey.set(k, r)
+    }
+    const on = t.post ? `on ‘${t.post}’` : null
+    // the DM answers the comment: a millisecond after it, so newest-first never shows the reply above what it answers
+    const after = new Date(Date.parse(t.at) + 1).toISOString()
+    r.timeline.push({ what: `${AUTO_PREFIX}commented “${t.comment}”`, detail: on, day: dayOf(t.at), at: t.at, href: null, link: null, tone: 'strong' })
+    if (t.outcome === 'sent') {
+      r.auto_dms++
+      r.timeline.push({ what: `${AUTO_PREFIX}DM sent`, detail: t.keyword ? `keyword ${t.keyword}` : null, day: dayOf(t.at), at: after, href: r.inbox_href, link: 'View DM', tone: 'strong' })
+    } else {
+      r.timeline.push({ what: `${AUTO_PREFIX}${t.outcome === 'skipped' ? 'no DM' : 'DM failed'}`, detail: t.why, day: dayOf(t.at), at: after, href: null, link: null, tone: t.outcome === 'skipped' ? 'plain' : 'lost' })
+    }
+    if (t.clicks > 0 && t.clicked_at) {
+      r.auto_clicks += t.clicks
+      r.timeline.push({ what: `${AUTO_PREFIX}clicked the button${t.clicks > 1 ? ` ×${t.clicks}` : ''}`, detail: t.clicks > 1 ? 'first click shown' : null, day: dayOf(t.clicked_at), at: t.clicked_at, href: null, link: null, tone: 'strong' })
+    }
+    if (r.status !== 'ours' && r.status !== 'dmed' && t.outcome === 'sent') r.status = 'commented'
+  }
+  const out = [...byKey.values()]
+  for (const r of out) {
+    r.timeline.sort((a, b) => (a.day === b.day ? String(b.at ?? '').localeCompare(String(a.at ?? '')) : a.day < b.day ? 1 : -1))
+    const days = r.timeline.map(e => e.day)
+    r.first_seen = days.reduce<string | null>((m, d) => min(m, d), r.first_seen)
+    r.last_active = days.reduce<string | null>((m, d) => max(m, d), r.last_active)
+  }
+  return out
 }

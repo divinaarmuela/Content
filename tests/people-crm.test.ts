@@ -47,7 +47,7 @@ describe('one row per person, every touch dated', () => {
     expect(by('mdmedia._').status).toBe('ours')
   })
   it('the counts leave our own accounts out', () => {
-    expect(crmCounts(rows)).toEqual({ md_leads: 1, people: 4, new_followers: 1, engaged: 2, dmed: 1, likely_from_posts: 1, unfollowed: 1 })
+    expect(crmCounts(rows)).toEqual({ md_leads: 1, people: 4, new_followers: 1, engaged: 2, dmed: 1, likely_from_posts: 1, unfollowed: 1, auto_dms: 0, auto_clicked: 0 })
   })
   it('the filters and the newest-first order', () => {
     expect(crmFilter(rows, 'active').map(r => r.username)).not.toContain('old_friend')
@@ -67,7 +67,8 @@ describe('one row per person, every touch dated', () => {
 
 describe('the page and its wiring', () => {
   it('is for Justin and Jordan, team only, scoped by client', () => {
-    expect(PEOPLE_CRM_CLIENTS.map(c => c.name)).toEqual(['Justin Engelke', 'Jordan Wilson'])
+    // plus the test client, so the page is checked on test data (30 Sep 2026)
+    expect(PEOPLE_CRM_CLIENTS.map(c => c.name)).toEqual(['Justin Engelke', 'Jordan Wilson', '100 Hundred Million Group (test)'])
     const route = readFileSync('app/api/social/people-crm/route.ts', 'utf8')
     expect(route).toContain("requireRole('scheduler')")
     expect(route).toContain('assertClientAccess(user, clientId)')
