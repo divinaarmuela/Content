@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { table, withRequestCache } from '@/lib/db'
-import type { SocialAccount, Client } from '@/lib/db-types'
+import type { SocialAccount, SocialAccountsRetired, Client } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { getPublisher } from '../../../lib/publisher'
 import { SUPPORTED_PLATFORMS } from '../../../lib/publish-core'
@@ -107,6 +107,11 @@ export async function DELETE(req: Request) {
 
     await getPublisher().disconnectAccount(row.provider_account_id)
 
+    // kept, so a reconnect gets THIS row back and every post that names it stays connected (retired-accounts-core)
+    await table<SocialAccountsRetired>('social_accounts_retired').upsert({
+      id: row.id, client_id: row.client_id ?? null, platform: String(row.platform), provider_account_id: String(row.provider_account_id),
+      username: row.username ?? null, row: row as unknown as Record<string, unknown>, retired_at: new Date().toISOString(),
+    })
     await accounts.remove(id)
     return NextResponse.json({ ok: true })
   } catch (e) {

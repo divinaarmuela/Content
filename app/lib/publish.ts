@@ -2,8 +2,9 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import type {
-  ContentAsset, PublishJob as PublishJobRow, SocialAccount, SocialPost,
+  ContentAsset, PublishJob as PublishJobRow, SocialAccount, SocialAccountsRetired, SocialPost,
 } from '@/lib/db-types'
+import { retiredMatch } from './retired-accounts-core'
 import { readPostState } from './post-stage-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
@@ -1082,6 +1083,18 @@ export async function syncSocialAccounts(
     // Wilson's Instagram would have become a second row, its followers history left on the old one and the old one
     // still "needs reconnecting". The same handle on the same network for this client, whose old id the provider
     // no longer lists, IS that account: its row takes the new id, so everything keyed to it stays.
+    // …and a channel somebody DISCONNECTED comes back as the row it was, under its old id (30 Sep 2026)
+    if (isNew) {
+      const retired = await table<SocialAccountsRetired>('social_accounts_retired').list({ where: r => r.client_id === clientId })
+      const back = retiredMatch(retired, { clientId, platform: a.platform, providerAccountId: a.providerAccountId, username: a.username ?? null })
+      if (back && !(await table<SocialAccount>('social_accounts').get(back.id))) {
+        await table<SocialAccount>('social_accounts').insert({
+          ...(back.row as unknown as SocialAccount), id: back.id, provider_account_id: a.providerAccountId,
+        })
+        await table<SocialAccountsRetired>('social_accounts_retired').remove(back.id)
+        before.add(a.providerAccountId)
+      }
+    }
     if (isNew && a.username) {
       const handle = String(a.username).toLowerCase()
       const old = (await table<SocialAccount>('social_accounts').list({ by: { client_id: clientId } }))
