@@ -122,7 +122,9 @@ describe('where rounds are opened, tagged and shown (source pins)', () => {
     expect(src('app/lib/board-view-core.ts')).toContain('!hasFinishedWork(card as never)')
     // a submit while the copy is still landing goes through, and says so
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')
-    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)}')
+    // finished work, or a Drive hand-in still copying (submit while it copies, 30 Sep 2026)
+    expect(drawer).toContain('disabled={busy || !qcComplete(ticks) || !workIn}')
+    expect(drawer).toContain('hasFinishedWork(item as never) || driveCopying')
     expect(drawer).toContain('Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.')
   })
   it('the editing portal and the card show the newest round with pills for the others', () => {

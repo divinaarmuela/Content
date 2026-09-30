@@ -1,5 +1,6 @@
 'use client'
 
+import { pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
@@ -363,10 +364,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
    *  the final is on the card itself */
   // ABBY'S RULE: the maker's submit goes straight to the quality reviewer
   const submitting = item?.status === 'draft_uploaded' || item?.status === 'revision_required'
+  // handed in from Drive and still copying counts as handed in (the folder link's rule, 30 Sep 2026)
+  const driveCopying = !!(item && pendingHandIn(item as never))
+  const workIn = !!item && (hasFinishedWork(item as never) || driveCopying)
   const submit = async () => {
     if (!submitting) return
     // a designer hands in files, an editor a link — either counts as finished work
-    if (!item || !hasFinishedWork(item as never)) { toast.error(filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first'); return }
+    if (!item || !workIn) { toast.error(filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -753,8 +757,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !hasFinishedWork(item as never)} onClick={() => void submit()}
-                title={!hasFinishedWork(item as never) ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !workIn} onClick={() => void submit()}
+                title={!workIn ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
@@ -762,11 +766,14 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                   <AlertTriangle className="h-4 w-4" aria-hidden /> Something looks wrong — flag it
                 </Button>
               )}
+              {driveCopying && !copyingWords && (
+                <p className="basis-full text-[12px] text-muted-foreground" role="status">Your Drive files are still copying in. You can submit now — the reviewer sees the files as they land.</p>
+              )}
               {copyingWords && (
                 <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
-            {!hasFinishedWork(item as never) && <p className="text-[12px] text-muted-foreground">{filesCard ? 'Upload the finished files first.' : 'Add the link to your finished edit first.'}</p>}
+            {!workIn && <p className="text-[12px] text-muted-foreground">{filesCard ? 'Upload the finished files first.' : 'Add the link to your finished edit first.'}</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">

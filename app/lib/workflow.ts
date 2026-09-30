@@ -1,4 +1,5 @@
 import { deliverOnlyFor } from './deliver-only'
+import { pendingHandIn } from './drive-handin-core'
 import { DELIVERED_ACTION, DELIVERED_LINE, stageWordFor } from './deliver-only-core'
 import 'server-only'
 import { isQualityReviewer } from './identity-core'
@@ -795,7 +796,9 @@ export async function performTransition(
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)
       if (!ok.ok) throw new AuthzError(ok.missing, 400)
-    } else if (hasFiles || (hasLink && !folderOnly)) {
+    // A DRIVE HAND-IN STILL COPYING IS WORK HANDED IN (the owner, 30 Sep 2026: "we have a system where we can submit
+    // while it's uploading") — the folder link always could; the reviewer sees the files as they land
+    } else if (hasFiles || !!pendingHandIn(item as never) || (hasLink && !folderOnly)) {
       // A CARD WITH A LINK IS EVIDENCE ENOUGH — the link is the work.
       //
       // Since the board reset a card is one deliverable with one pasted link —

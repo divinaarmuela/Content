@@ -161,7 +161,10 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
     let result = mergeDriveHandIn(before, pulled, h, cur as never, round, now)
     if (result.ok) {
       // the same server rules a save of the list follows (the audit of 25 Sep 2026)
-      const refused = finalFilesChangeRefusal(before, result.files, cur as never, h.manager === true)
+      // a hand-in the editor made BEFORE submitting finishes landing at the quality check — the reviewer is waiting on
+      // exactly these files; only the client stage stays closed to it
+      const landingAtCheck = String((cur as { status?: unknown }).status ?? '') === 'quality_check'
+      const refused = finalFilesChangeRefusal(before, result.files, cur as never, h.manager === true || landingAtCheck)
       if (refused) result = { ok: false, error: `Nothing was handed in — ${refused}`, failed: [] }
     }
     const settled = settledHandIn(h, result, round, now)
