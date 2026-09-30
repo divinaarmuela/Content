@@ -63,6 +63,29 @@ export function DriveHandInDialog({ open, onOpenChange, item, round }: {
     const out = [...p]; [out[i], out[j]] = [out[j], out[i]]
     return out
   })
+  // ONE STEP (the owner, 30 Sep 2026: "I just want them to upload it" … "why do I have to pick"): paste the link,
+  // press Hand in — every picture and clip in it goes, in Drive's order, matched to the card's pieces automatically
+  const handIn = async () => {
+    setBusy('Handing in'); setError(null)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}/drive-handin?url=${encodeURIComponent(url.trim())}`)
+      const json = await res.json().catch(() => ({})) as { files?: Listed[]; map?: Record<string, string>; error?: string }
+      if (!res.ok || !json.files) throw new Error(json.error ?? 'Could not read that Drive link')
+      const ids = json.files.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => f.id)
+      if (ids.length === 0) throw new Error('There are no pictures or clips in that Drive link')
+      const auto = json.map ?? {}
+      const sent = await fetch(`/api/production/items/${item.id}/drive-handin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim(), ids, map: Object.fromEntries(ids.map(id => [id, auto[id] ?? 'new'])) }),
+      })
+      const out = await sent.json().catch(() => ({})) as { error?: string; round?: number }
+      if (!sent.ok) throw new Error(out.error ?? 'Could not hand the files in')
+      toast.success(`Copying ${ids.length} ${ids.length === 1 ? 'file' : 'files'} from Drive as ${roundLabel(out.round ?? round)} — you can close this page, it carries on`)
+      onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not hand the files in')
+    } finally { setBusy(null) }
+  }
   const submit = async () => {
     setBusy('Handing in'); setError(null)
     try {
@@ -86,45 +109,18 @@ export function DriveHandInDialog({ open, onOpenChange, item, round }: {
         <DialogHeader>
           <DialogTitle>Hand in from Google Drive — {roundLabel(round)}</DialogTitle>
           <DialogDescription>
-            Paste the Drive link to the finished file or folder. The files are copied onto the card — the card keeps its own copy, and nothing in Drive is changed. Each file is its own piece: if one needs changing later, only that one is replaced.
+            Paste the Drive link to the finished file or folder and press Hand in. Every picture and clip in it is copied onto the card; nothing in Drive is changed.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <input value={url} onChange={e => { setUrl(e.target.value); setFiles(null) }} placeholder="https://drive.google.com/…" aria-label="Google Drive link to the finished file or folder" className={`${field} min-w-0 flex-1`} />
-          <Button variant="outline" className={outlineBtn} disabled={!!busy || !url.trim()} onClick={() => void list()}>
-            <FolderDown className="h-4 w-4" aria-hidden /> {busy === 'Reading Drive' ? 'Reading…' : 'Show the files'}
-          </Button>
+
         </div>
         {error && <p role="alert" className="text-[13px] font-medium text-accent-red-deep">{error}</p>}
-        {files && (
-          <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto text-[13px]" aria-label="The files in that Drive link" data-drive-handin-files>
-            {[...picked.map(id => byId.get(id)).filter((f): f is Listed => !!f), ...files.filter(f => !picked.includes(f.id))].map(f => {
-              const on = picked.includes(f.id)
-              return (
-                <li key={f.id} className="flex min-h-11 flex-wrap items-center gap-2 py-1">
-                  <input type="checkbox" checked={on} aria-label={`Hand in ${f.name}`} className="h-5 w-5"
-                    onChange={() => setPicked(p => (on ? p.filter(x => x !== f.id) : [...p, f.id]))} />
-                  <span className="min-w-0 flex-1 truncate" title={f.name}>{on ? `${picked.indexOf(f.id) + 1}. ` : ''}{f.name}</span>
-                  {f.size !== null && <span className="shrink-0 text-[12px] text-muted-foreground">{formatBytes(f.size)}</span>}
-                  {on && (
-                    <>
-                      <select value={map[f.id] ?? 'new'} onChange={e => setMap(m => ({ ...m, [f.id]: e.target.value }))} aria-label={`Which piece ${f.name} is`} className={`${field} max-w-[12rem]`}>
-                        <option value="new">A new piece</option>
-                        {pieces.map(p => <option key={assetIdOf(p)} value={assetIdOf(p)}>Replaces {p.name}</option>)}
-                      </select>
-                      <button type="button" onClick={() => move(f.id, -1)} aria-label={`Move ${f.name} up`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"><ArrowUp className="h-4 w-4" aria-hidden /></button>
-                      <button type="button" onClick={() => move(f.id, 1)} aria-label={`Move ${f.name} down`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-muted"><ArrowDown className="h-4 w-4" aria-hidden /></button>
-                    </>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
         <DialogFooter>
           <Button variant="outline" disabled={!!busy} onClick={() => onOpenChange(false)} className={outlineBtn}>Cancel</Button>
-          <Button disabled={!files || picked.length === 0 || !!busy} className={primaryBtn} onClick={() => void submit()}>
-            {busy === 'Handing in' ? 'Handing in…' : `Hand in ${picked.length || ''} ${picked.length === 1 ? 'file' : 'files'} as ${roundLabel(round)}`.replace('  ', ' ')}
+          <Button disabled={!url.trim() || !!busy} className={primaryBtn} onClick={() => void handIn()}>
+            {busy === 'Handing in' ? 'Handing in…' : `Hand in as ${roundLabel(round)}`}
           </Button>
         </DialogFooter>
       </DialogContent>
