@@ -579,6 +579,12 @@ export function touchesFromConversations(raw: unknown): TouchSeen[] {
     if (!item || typeof item !== 'object') continue
     const c = item as Record<string, unknown>
     const p = (c.participant && typeof c.participant === 'object' ? c.participant : {}) as Record<string, unknown>
+    // ONLY A THREAD THEY WROTE IN (30 Sep 2026: every conversation counted as "they DMed", including the ones our
+    // own comment-to-DM automation opened — crestlineconsultants became an "MD Media lead … then DMed" without ever
+    // writing). From the list alone the one sure sign is a message of theirs still unread; a thread opened in the
+    // Inbox is noted from its messages (`touchFromThread`), and every new incoming DM from the webhook.
+    const unread = typeof c.unreadCount === 'number' ? c.unreadCount : 0
+    if (unread <= 0) continue
     // Instagram sometimes hands back only its numeric id as the "username" (30 Sep 2026: crestlineconsultants came
     // through as 2655487891576698, a row of its own with none of her history). A number is never a handle: the
     // participant's name is used when it reads as one, and otherwise the thread is not noted under a number.
@@ -775,4 +781,13 @@ export function analyticsPostHref(
     if (byItem.length === 1) return postPageHref(byItem[0].id)
   }
   return null
+}
+
+/** A thread just read in the Inbox: a touch only when THEY wrote in it, dated by their last message. */
+export function touchFromThread(
+  convo: { id?: string; accountId?: string; participantName?: string; participantUsername?: string },
+  lastTheirs: string | null,
+): TouchSeen[] {
+  if (!lastTheirs) return []
+  return touchesFromConversations({ data: [{ ...convo, unreadCount: 1, updatedTime: lastTheirs }] })
 }

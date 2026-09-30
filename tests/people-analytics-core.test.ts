@@ -282,8 +282,8 @@ describe('reading the Inbox’s own answers', () => {
   it('reads DM threads however they are wrapped', () => {
     const seen = touchesFromConversations({
       data: [
-        { id: 'c1', accountId: 'acc', participantUsername: 'mika', participantName: 'Mika R', updatedTime: '2026-09-06T00:00:00Z' },
-        { id: 'c2', accountId: 'acc', participant: { username: 'zoe', name: 'Zoe' }, updatedTime: '2026-09-05T00:00:00Z' },
+        { id: 'c1', accountId: 'acc', participantUsername: 'mika', participantName: 'Mika R', updatedTime: '2026-09-06T00:00:00Z', unreadCount: 1 },
+        { id: 'c2', accountId: 'acc', participant: { username: 'zoe', name: 'Zoe' }, updatedTime: '2026-09-05T00:00:00Z', unreadCount: 3 },
       ],
     })
     expect(seen.map(t => t.username)).toEqual(['mika', 'zoe'])

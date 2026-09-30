@@ -4,7 +4,7 @@ import type { Client, SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { assertClientAccess } from '@/app/lib/social-schedule'
 import { loadPeople } from '@/app/lib/people-analytics'
-import { PEOPLE_CRM_CLIENTS, crmCounts, crmRow, crmSort, readAutomationTouches, withAutomationTouches, type AutomationTouch } from '@/app/lib/people-crm-core'
+import { PEOPLE_CRM_CLIENTS, crmCounts, crmRow, crmSort, readAtFromThread, readAutomationTouches, withAutomationTouches, type AutomationTouch } from '@/app/lib/people-crm-core'
 import { getPublisher } from '@/app/lib/publisher'
 
 /**
@@ -62,7 +62,14 @@ async function automationTouches(accounts: readonly SocialAccount[]): Promise<Au
     const mine = (list?.automations ?? []).filter(a => a.id && ids.has(String(a.accountId ?? '')))
     const logs: Record<string, unknown> = {}
     await Promise.all(mine.map(async a => { logs[String(a.id)] = await publisher.automationLogs(String(a.id)).catch(() => null) }))
-    return readAutomationTouches(list, logs, ids)
+    const touches = readAutomationTouches(list, logs, ids)
+    // whether each DM was read — on Instagram the conversation's id is the commenter's; capped, one read per DM sent
+    const sent = touches.filter(t => t.outcome === 'sent' && t.commenter_id).slice(0, 60)
+    await Promise.all(sent.map(async t => {
+      const thread = await publisher.conversationMessages(String(t.commenter_id), t.account_id, { latest: true }).catch(() => null)
+      t.read_at = readAtFromThread(thread, t.at)
+    }))
+    return touches
   } catch (e) {
     console.error('[people-crm] automations:', e instanceof Error ? e.message : e)
     return []

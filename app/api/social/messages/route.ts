@@ -3,10 +3,10 @@ import { table, withRequestCache } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
 import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
-import { noteConversations } from '@/app/lib/inbox-people'
+import { noteConversations, noteThread } from '@/app/lib/inbox-people'
 import { assertClientAccess } from '@/app/lib/social-schedule'
 import { accessibleClientIds } from '@/app/lib/production-access'
-import { mergeConversations, messageAt, nextCursor, replyWindow, type InboxMessage } from '@/app/lib/inbox-core'
+import { lastInboundAt, mergeConversations, messageAt, nextCursor, replyWindow, type InboxMessage } from '@/app/lib/inbox-core'
 
 /**
  * Connecting an account imports its whole DM history as thread stubs, but
@@ -68,6 +68,12 @@ export async function GET(req: Request) {
       const raw = await publisher.conversationMessages(conversationId, accountId, { latest: true }) as { data?: InboxMessage[]; messages?: InboxMessage[] } | InboxMessage[] | null
       const newestFirst: InboxMessage[] = Array.isArray(raw) ? raw : raw?.data ?? raw?.messages ?? []
       const messages = [...newestFirst].sort((a, b) => Date.parse(messageAt(a) ?? '') - Date.parse(messageAt(b) ?? ''))
+      // a People touch only when they wrote in this thread (the list alone cannot tell who started it)
+      const theirs = lastInboundAt(messages)
+      if (theirs) {
+        const convo = { id: conversationId, accountId, participantName: params.get('name') ?? undefined, participantUsername: params.get('username') ?? undefined }
+        await noteThread(convo, theirs)
+      }
       return NextResponse.json({ messages, window: replyWindow(messages, Date.now()) })
     }
     // ONE CLIENT'S ACCOUNTS, EVERY PAGE (30 Sep 2026: the whole inbox was one page of 50 across every client — slow,

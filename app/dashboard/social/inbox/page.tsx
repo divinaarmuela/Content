@@ -211,7 +211,7 @@ export default function InboxPage() {
     }
     try {
       const res = await fetch(
-        `/api/social/messages?conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId ?? '')}`)
+        `/api/social/messages?conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId ?? '')}&name=${encodeURIComponent(c.participantName ?? '')}&username=${encodeURIComponent(c.participantUsername ?? '')}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Could not load the conversation')
       // a slow response for a conversation you already left must not clobber the one now open

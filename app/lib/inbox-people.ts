@@ -4,7 +4,7 @@ import { encodeKey } from '@/lib/db-types'
 import type { Client, InboxTouch as InboxTouchRow, SocialAccount } from '@/lib/db-types'
 import {
   canonicalAccount, foldTouches, nextTouch, touchHandle, touchesFromComments, touchesFromConversations,
-  type InboxTouch, type TouchSeen,
+  type InboxTouch, type TouchSeen, touchFromThread,
 } from './people-analytics-core'
 
 /**
@@ -108,6 +108,16 @@ export async function recordTouches(seen: readonly TouchSeen[], now: Date = new 
 export async function noteConversations(raw: unknown): Promise<void> {
   try {
     await recordTouches(touchesFromConversations(raw))
+  } catch { /* a note, never a blocker */ }
+}
+
+/** a thread just opened in the Inbox — noted only when they wrote in it */
+export async function noteThread(
+  convo: { id?: string; accountId?: string; participantName?: string; participantUsername?: string },
+  lastTheirs: string | null,
+): Promise<void> {
+  try {
+    await recordTouches(touchFromThread(convo, lastTheirs))
   } catch { /* a note, never a blocker */ }
 }
 

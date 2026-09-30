@@ -227,10 +227,15 @@ export function dayWords(day: string | null, today: string): string {
 
 /**
  * One commenter's trip through an automation, as Zernio logs it: what they commented and when, whether the DM went
- * (or why not), and their taps on its button. Zernio keeps "delivered" and "read" only as a total per automation,
- * never per person, so neither is claimed here.
+ * (or why not), and their taps on its button — and whether they read it, which the log does not say but the DM
+ * itself does (`deliveryStatus: 'read'`, `readAt`; read off the conversation, 30 Sep 2026).
  */
 export type AutomationTouch = {
+  /** Instagram's id for the commenter — on Instagram also the id of the DM conversation with them */
+  commenter_id: string | null
+  account_id: string
+  /** when they opened the DM, from the DM itself (Zernio's message deliveryStatus), when it was read */
+  read_at: string | null
   username: string
   comment: string
   at: string
@@ -265,6 +270,9 @@ export function readAutomationTouches(
       if (!username || !at) continue
       const status = String(l.status ?? '')
       out.push({
+        commenter_id: str(l.commenterId),
+        account_id: String(a.accountId ?? ''),
+        read_at: null,
         username: username.replace(/^@/, ''),
         comment: String(l.commentText ?? ''),
         at,
@@ -312,6 +320,9 @@ export function withAutomationTouches(rows: readonly CrmRow[], touches: readonly
     } else {
       r.timeline.push({ what: `${AUTO_PREFIX}${t.outcome === 'skipped' ? 'no DM' : 'DM failed'}`, detail: t.why, day: dayOf(t.at), at: after, href: null, link: null, tone: t.outcome === 'skipped' ? 'plain' : 'lost' })
     }
+    if (t.outcome === 'sent' && t.read_at) {
+      r.timeline.push({ what: `${AUTO_PREFIX}read the DM`, detail: null, day: dayOf(t.read_at), at: t.read_at, href: null, link: null, tone: 'plain' })
+    }
     if (t.clicks > 0 && t.clicked_at) {
       r.auto_clicks += t.clicks
       r.timeline.push({ what: `${AUTO_PREFIX}clicked the button${t.clicks > 1 ? ` ×${t.clicks}` : ''}`, detail: t.clicks > 1 ? 'first click shown' : null, day: dayOf(t.clicked_at), at: t.clicked_at, href: null, link: null, tone: 'strong' })
@@ -326,4 +337,19 @@ export function withAutomationTouches(rows: readonly CrmRow[], touches: readonly
     r.last_active = days.reduce<string | null>((m, d) => max(m, d), r.last_active)
   }
   return out
+}
+
+/** When they read the automation's DM, from the conversation's messages: the automation's own message nearest after
+ *  their comment. Null when it was not read, or the messages do not say. */
+export function readAtFromThread(messages: unknown, commentAt: string): string | null {
+  const r = messages as { messages?: unknown; data?: unknown } | null
+  const list = (Array.isArray(r?.messages) ? r.messages : Array.isArray(r?.data) ? r.data : Array.isArray(messages) ? messages : []) as Record<string, unknown>[]
+  const from = Date.parse(commentAt)
+  const ours = list
+    .filter(m => (m.sentVia === 'comment_automation' || (m.metadata as { sentVia?: string } | undefined)?.sentVia === 'comment_automation'))
+    .filter(m => Date.parse(String(m.createdAt ?? m.sentAt ?? '')) >= from - 60_000)
+    .sort((x, y) => Date.parse(String(x.createdAt ?? '')) - Date.parse(String(y.createdAt ?? '')))
+  const hit = ours[0]
+  if (!hit || hit.deliveryStatus !== 'read') return null
+  return str(hit.readAt) ?? str(hit.createdAt)
 }

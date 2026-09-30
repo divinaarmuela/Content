@@ -50,3 +50,28 @@ describe('automation touches on the People page', () => {
     expect(JSON.stringify(rows)).not.toMatch(/read|delivered/i)
   })
 })
+
+describe('whether they read the automation DM (the DM itself says so)', () => {
+  it('reads the automation’s own message after their comment; unread or someone else’s message is not "read"', async () => {
+    const { readAtFromThread } = await import('../app/lib/people-crm-core')
+    const thread = { messages: [
+      { message: 'Hey!', direction: 'outgoing', createdAt: '2026-09-30T02:27:24.871Z', deliveryStatus: 'read', readAt: '2026-09-30T02:27:24.872Z', sentVia: 'comment_automation' },
+    ] }
+    expect(readAtFromThread(thread, '2026-09-30T02:27:20.000Z')).toBe('2026-09-30T02:27:24.872Z')
+    expect(readAtFromThread({ messages: [{ ...thread.messages[0], deliveryStatus: 'delivered' }] }, '2026-09-30T02:27:20.000Z')).toBeNull()
+    expect(readAtFromThread({ messages: [{ ...thread.messages[0], sentVia: undefined }] }, '2026-09-30T02:27:20.000Z')).toBeNull()
+  })
+})
+
+describe('a DM counts only when they wrote (30 Sep 2026: the automation’s own DM made people "DMed")', () => {
+  it('the conversation list notes only threads with a message of theirs unread', async () => {
+    const { touchesFromConversations, touchFromThread } = await import('../app/lib/people-analytics-core')
+    const got = touchesFromConversations({ data: [
+      { id: 'a', participantUsername: 'yusuf.munshi.52035', unreadCount: 0 },
+      { id: 'b', participantUsername: 'nuria_jewell', unreadCount: 2 },
+    ] })
+    expect(got.map(t => t.username)).toEqual(['nuria_jewell'])
+    expect(touchFromThread({ id: 'a', participantUsername: 'yusuf.munshi.52035' }, null)).toEqual([])
+    expect(touchFromThread({ id: 'a', participantUsername: 'yusuf.munshi.52035' }, '2026-09-30T02:00:00Z').map(t => t.username)).toEqual(['yusuf.munshi.52035'])
+  })
+})
