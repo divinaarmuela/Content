@@ -27,6 +27,12 @@ export type PullFile = {
   /** Drive's last-changed time when the copy was made — a file replaced under
    *  the same link is told apart from one merely handed in again */
   modified?: string | null
+  /** a hand-in's proof of which cut this is: Drive's checksum and head revision (drive-handin-core.sameDriveCut) */
+  md5?: string | null
+  revision?: string | null
+  /** a hand-in copy's own mark in its storage key, so a re-exported cut in the same version lands BESIDE the cut
+   *  before it and never over it (the card's earlier file keeps pointing at its own bytes) */
+  key_tag?: string | null
   /** R2's multipart upload in flight, and the parts landed so far */
   upload_id?: string | null
   parts?: { n: number; etag: string }[]
@@ -85,12 +91,13 @@ export function filesOf(row: { files?: unknown } | null | undefined): PullFile[]
 }
 
 /** where a copy lands — readable, collision-proof, safe in a URL */
-export function pullObjectKey(folderId: string, file: { id: string; name: string; version?: number | null }): string {
+export function pullObjectKey(folderId: string, file: { id: string; name: string; version?: number | null; key_tag?: string | null }): string {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)
   // a later round's copy of a file replaced in Drive sits beside the first,
   // never over it — version 1 stays playable (16 Sep 2026)
   const round = typeof file.version === 'number' && file.version >= 2 ? `-v${file.version}` : ''
-  return `pulls/${folderId}/${file.id}${round}-${safe}`
+  const tag = file.key_tag && /^[a-z0-9]{1,16}$/.test(file.key_tag) ? `-${file.key_tag}` : ''
+  return `pulls/${folderId}/${file.id}${round}${tag}-${safe}`
 }
 
 /** the next slice of a file to move: [start, end] inclusive, or null when it is all there */

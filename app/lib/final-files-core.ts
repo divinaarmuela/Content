@@ -43,6 +43,9 @@ export type FinalFile = {
   drive_file_id?: string
   /** Drive's last-changed time for that file when it was copied: the same id unchanged is the same cut */
   drive_modified?: string | null
+  /** Drive's checksum and head revision of that file when copied — which cut it was, for certain */
+  drive_md5?: string | null
+  drive_revision?: string | null
 }
 
 export function finalFilesOf(item: { final_files?: unknown } | null | undefined): FinalFile[] {
@@ -127,6 +130,8 @@ export function sanitiseFinalFiles(raw: unknown, item: { edit_round?: unknown; s
       ...(x.source === 'drive' || x.source === 'upload' ? { source: x.source } : {}),
       ...(typeof x.drive_file_id === 'string' && /^[A-Za-z0-9_-]{10,128}$/.test(x.drive_file_id) ? { drive_file_id: x.drive_file_id } : {}),
       ...(typeof x.drive_modified === 'string' && x.drive_modified.length <= 40 ? { drive_modified: x.drive_modified } : {}),
+      ...(typeof x.drive_md5 === 'string' && /^[a-f0-9]{32}$/i.test(x.drive_md5) ? { drive_md5: x.drive_md5 } : {}),
+      ...(typeof x.drive_revision === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(x.drive_revision) ? { drive_revision: x.drive_revision } : {}),
     })
   }
   return { ok: true, files: out }

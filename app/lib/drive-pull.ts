@@ -10,6 +10,7 @@ import {
   PARTS_PER_STEP, PULL_REPLACED_WORDS, canStartPull, filesOf, nextSlice, pullId, pullInFlight, pullLooksStuck, pullObjectKey, type PullFile,
 } from './drive-pull-core'
 import { driveTargetOf } from './card-link-core'
+import { sameDriveCut } from './drive-handin-core'
 import { afterResponse } from './after-response'
 import { fileRound } from './edit-round-core'
 import { previewVideos } from './stream'
@@ -141,14 +142,14 @@ export function cancelReplacedPullSoon(opts: Parameters<typeof cancelReplacedPul
   afterResponse('drive pull cancel', () => cancelReplacedPull(opts))
 }
 
-export type DriveTargetFile = { id: string; name: string; mime: string; size: number | null; modified: string | null }
+export type DriveTargetFile = { id: string; name: string; mime: string; size: number | null; modified: string | null; md5?: string | null; revision?: string | null }
 
 /**
  * WHAT A DRIVE LINK HOLDS — read only (trap 13): one file's name, type and size from Drive; or a folder walked
  * (subfolders three deep, 400 files at most, a subfolder's files named "Sub/Name"). The pull reads through here,
  * and so does the Drive hand-in's picker, so the editor picks from exactly what the copy will find.
  */
-export async function readDriveTarget(kind: 'folder' | 'file', driveId: string): Promise<DriveTargetFile[]> {
+export async function readDriveTarget(kind: 'folder' | 'file', driveId: string, opts: { cuts?: boolean } = {}): Promise<DriveTargetFile[]> {
   const seen: DriveTargetFile[] = []
   const walk = async (folderId: string, prefix: string, depth: number) => {
     if (seen.length >= MAX_FILES || depth > MAX_DEPTH) return
@@ -156,15 +157,28 @@ export async function readDriveTarget(kind: 'folder' | 'file', driveId: string):
     for (const e of listing.entries) {
       if (seen.length >= MAX_FILES) break
       if (kindOf(e.mimeType, e.name) === 'folder') { await walk(e.id, `${prefix}${e.name}/`, depth + 1); continue }
-      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null })
+      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null, md5: e.md5 ?? null, revision: e.revision ?? null })
     }
   }
   if (kind === 'file') {
     // one file: its name, type and size from Drive, nothing to walk
     const meta = await driveFileMeta(driveId)
-    if (meta) seen.push({ id: driveId, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified })
+    if (meta) seen.push({ id: driveId, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified, md5: meta.md5 ?? null, revision: meta.revision ?? null })
   } else {
     await walk(driveId, '', 0)
+    // WHICH CUT EACH FILE IS (30 Sep 2026): a folder read through Google's public view carries no change time and no
+    // checksum (live: four .MOV files came back size null, modified null), so each such file is asked for by id — read
+    // only. What Drive still will not say stays unknown, and an unknown cut is treated as a new one (drive-handin-core)
+    // (only for a hand-in, which has to tell cuts apart — a footage folder of 400 clips is not asked 400 times)
+    for (const f of opts.cuts ? seen : []) {
+      if (f.modified || f.md5) continue
+      const meta = await driveFileMeta(f.id).catch(() => null)
+      if (!meta) continue
+      f.size = f.size ?? meta.size
+      f.modified = meta.modified ?? null
+      f.md5 = meta.md5 ?? null
+      f.revision = meta.revision ?? null
+    }
   }
   return seen
 }
@@ -201,7 +215,8 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
   await pulls.update(id, { status: 'listing', updated_at: new Date().toISOString() } as never)
 
   const target = driveTargetOf(row.folder_url)
-  const listed = await readDriveTarget(target?.kind === 'file' ? 'file' : 'folder', target?.kind === 'file' ? target.id : row.folder_id)
+  const handIn = (row as { purpose?: string | null }).purpose === 'handin'
+  const listed = await readDriveTarget(target?.kind === 'file' ? 'file' : 'folder', target?.kind === 'file' ? target.id : row.folder_id, { cuts: handIn })
   // A HAND-IN copies only what the editor picked (drive-handin-core.ts)
   const only = Array.isArray((row as { only_ids?: unknown }).only_ids) ? new Set(((row as unknown as { only_ids: unknown[] }).only_ids).map(String)) : null
   const seen = only ? listed.filter(f => only.has(f.id)) : listed
@@ -236,7 +251,12 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
     const olds = before.filter(b => b.id === f.id && b.status === 'done' && !!b.url)
     const latest = [...olds].sort((a, b) => fileRound(b) - fileRound(a))[0]
     const round = version ?? null
-    const same = !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)
+    // A HAND-IN copies again unless Drive PROVES it is the same cut — the same checksum, revision or change time
+    // (30 Sep 2026: a clip re-exported over itself keeps its id and, on a public folder, its size is all we had). Any
+    // other pull keeps its old rule.
+    const same = handIn
+      ? !!latest && sameDriveCut(latest, f)
+      : !!latest && latest.size === f.size && (!f.modified || !latest.modified || latest.modified === f.modified)
     // earlier rounds' copies stay as they are, one per round
     const kept = new Map<number, PullFile>()
     for (const o of olds) if (round === null || fileRound(o) !== round) kept.set(fileRound(o), o)
@@ -245,7 +265,7 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
       else kept.set(round, { ...latest, name: f.name, version: round })
     }
     files.push(...[...kept.values()].sort((a, b) => fileRound(a) - fileRound(b)))
-    if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified })
+    if (!same) files.push({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: 0, url: null, status: 'waiting', upload_id: null, parts: [], version: round, modified: f.modified, ...(handIn ? { md5: f.md5 ?? null, revision: f.revision ?? null, key_tag: Date.now().toString(36) } : {}) })
   }
   const total_bytes = files.reduce((n, f) => n + (f.size ?? 0), 0)
   const done_bytes = files.reduce((n, f) => n + (f.status === 'done' ? (f.size ?? 0) : 0), 0)
@@ -267,7 +287,9 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
   // called off (the link was replaced): nothing more is moved, nothing written
   if ((row as { cancelled_at?: string | null }).cancelled_at) return { done: true, cancelled: true }
   const files = filesOf(row)
-  const file = files.find(f => f.id === fileId)
+  // the copy still to make: a file changed in Drive has its new-round copy listed beside its earlier one (same id),
+  // and it is the new one this step is for — the earlier copy is done and stays as it is (30 Sep 2026)
+  const file = files.find(f => f.id === fileId && f.status !== 'done') ?? files.find(f => f.id === fileId)
   if (!file) return { done: true, error: 'no such file' }
   if (file.status === 'done') return { done: true }
   const key = pullObjectKey(row.folder_id, file)

@@ -167,6 +167,10 @@ export type DriveEntry = {
    *  the public folder view and carried no key; those files are described as anyone with the link instead,
    *  see drive-public-file-core.ts.) */
   resourceKey?: string | null
+  /** WHICH CUT THIS IS (30 Sep 2026): Drive's checksum of the bytes and its head revision — a file re-exported over
+   *  itself keeps its id and changes these. Absent for Google's own formats and on the public folder view. */
+  md5?: string | null
+  revision?: string | null
 }
 
 /** the header Google wants with a by-id call on a link-shared file: `<id>/<key>` */
