@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import type { SocialPost } from '@/lib/db-types'
@@ -12,24 +12,61 @@ import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostW
 /**
  * THE POST WINDOW, ON POST APPROVAL (review fix, 29 Sep 2026).
  *
- * Every card, list row and Waiting row on this page opens `?post=<id>` here —
- * the same window, with the same buttons, that opens anywhere else (the
- * owner's decision 2). It used to open only on the Schedule page, which the
- * quality checker cannot see, so they were asked to pass posts whose slides,
- * caption and notes they could not open.
+ * Every card, list row and Waiting row on this page links to `?post=<id>` and
+ * opens here — the same window, with the same buttons, that opens anywhere
+ * else (the owner's decision 2).
  *
- * A post whose stage belongs to Schedule when the link is followed (Ready to
- * post, Booked in, Posted) is handed on to Schedule — nothing is booked here
- * (decision 1). A post that moves on while the window is open stays here
- * until the window closes, so the person reads the answer to their own press.
+ * THE WINDOW IS OPENED AND CLOSED HERE, NOT BY THE ROUTER (30 Sep 2026). Loaded
+ * from any link with a query (an email, the bell, a refresh on `?post=`), this
+ * page's router swallowed every later move on the same page: the X, a card
+ * click, `router.replace` to a new query — the address was written straight
+ * back and the window stayed open (the owner: "I can't close the modal with
+ * X"). Other pages were not affected; the cause is inside Next's navigation,
+ * and nothing here waits on it any more. A left click on a post link on this
+ * page, and the X, set the window's post directly and rewrite the address in
+ * place (keeping Next's own history state). The links stay real links, so a
+ * middle click or ⌘-click still opens a new tab.
  */
+const postOf = (href: string): string | null | undefined => {
+  try {
+    const u = new URL(href, window.location.origin)
+    if (u.origin !== window.location.origin || u.pathname !== POST_APPROVAL_BOARD) return undefined
+    return u.searchParams.get('post')
+  } catch { return undefined }
+}
+
+const rewrite = (href: string) => {
+  try { window.history.replaceState(window.history.state, '', href) } catch { /* the window still follows the state */ }
+}
+
 export default function PostWindowFromAddress({ clientId = '' }: {
   /** the client the page is narrowed to — closing the window goes back to it (`?client=`) */
   clientId?: string
 } = {}) {
   const params = useSearchParams()
-  const router = useRouter()
-  const postId = params.get('post')
+  const [postId, setPostId] = useState<string | null>(() => params.get('post'))
+  // a move that DID go through the router (the bell, a link from another page) still opens its post
+  const fromRouter = params.get('post')
+  useEffect(() => { setPostId(fromRouter) }, [fromRouter])
+
+  // a plain left click on a post link on this page opens it here, without a navigation
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a || (a.target && a.target !== '_self')) return
+      const id = postOf(a.getAttribute('href') ?? '')
+      if (!id) return
+      e.preventDefault()
+      setPostId(id)
+      rewrite(a.getAttribute('href') ?? '')
+    }
+    const onPop = () => setPostId(new URLSearchParams(window.location.search).get('post'))
+    document.addEventListener('click', onClick, true)
+    window.addEventListener('popstate', onPop)
+    return () => { document.removeEventListener('click', onClick, true); window.removeEventListener('popstate', onPop) }
+  }, [])
+
   const live = useRow<SocialPost>('social_posts', postId)
   // a row from the post the address named a moment ago is not this post's
   const row = live.row && live.row.id === postId ? live.row : null
@@ -46,13 +83,19 @@ export default function PostWindowFromAddress({ clientId = '' }: {
     toast.error('That post is not there any more. It may have been deleted.')
   }, [postId, loading, row])
 
+  const close = useCallback(() => {
+    setPostId(null)
+    rewrite(postApprovalHref(clientId))
+  }, [clientId])
+
   if (!postId || !row) return null
 
-  const close = () => router.replace(postApprovalHref(clientId), { scroll: false })
   const done = (outcome: PostWindowOutcome) => {
     toast.success(outcome.link ? `${outcome.words}. The link to send: ${outcome.link}` : outcome.words)
-    if (outcome.createdPostId) router.replace(`${POST_APPROVAL_BOARD}?post=${encodeURIComponent(outcome.createdPostId)}`, { scroll: false })
-    else close()
+    if (outcome.createdPostId) {
+      setPostId(outcome.createdPostId)
+      rewrite(`${POST_APPROVAL_BOARD}?post=${encodeURIComponent(outcome.createdPostId)}`)
+    } else close()
   }
   return <OpenPostWindow key={postId} postId={postId} onClose={close} onDone={done} />
 }

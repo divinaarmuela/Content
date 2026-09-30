@@ -1231,7 +1231,9 @@ export default function PostWindow({
                 // a reason shared by several buttons is said once, under the first of them (the owner's check
                 // of 30 Sep 2026: "Choose at least one channel" printed three times in a row)
                 const saidBy = buttons.find(b => b.offered.blocked === offered.blocked)?.offered.action ?? offered.action
-                const sayReason = !!offered.blocked && buttons.findIndex(b => b.offered.blocked === offered.blocked) === i
+                // …and not at all when the red list above the buttons already says it
+                const listed = (editable ? composition : []).includes(offered.blocked ?? '') || caps.stops.includes(offered.blocked ?? '')
+                const sayReason = !!offered.blocked && !listed && buttons.findIndex(b => b.offered.blocked === offered.blocked) === i
                 return (
                 <span key={offered.action} className="flex flex-col items-end gap-0.5">
                   <button
@@ -1239,7 +1241,7 @@ export default function PostWindow({
                     data-action={offered.action}
                     data-kind={kind}
                     disabled={busy || !!offered.blocked}
-                    aria-describedby={offered.blocked ? `why-${saidBy}` : undefined}
+                    aria-describedby={offered.blocked && !listed ? `why-${saidBy}` : undefined}
                     onClick={() => press(offered)}
                     className={cn(
                       'flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-50',
