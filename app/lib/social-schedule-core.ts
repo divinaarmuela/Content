@@ -34,7 +34,7 @@ import {
 } from './publish-core'
 import { dayKeyInZone, formatInZone, fromZonedInput, safeZone, wallTimeIn } from './timezone-core'
 import { postSlides, slidesOf, type Slide, type VersionLike } from './version-files-core'
-import { assetIdOf, finalFilesOf, liveFilesAt, type FinalFile } from './final-files-core'
+import { finalFilesOf, versionSnapshot, type FinalFile } from './final-files-core'
 import { roundOf } from './edit-round-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
 import type { ItemStatus } from './workflow-core'
@@ -76,7 +76,8 @@ export type ScheduleItem = {
 export function approvedFilesVersion(item: ScheduleItem | null | undefined): ScheduleVersion | null {
   if (!item || finalFilesOf(item as never).length === 0) return null
   const round = roundOf(item as never)
-  const live = liveFilesAt(item as never, round)
+  // the whole set at the card's version — the one answer every screen uses (final-files-core.versionSnapshot)
+  const live = versionSnapshot(item as never, round)
   if (live.length === 0) return null
   const files = live.map(fileSlide)
   return { id: `files-v${round}`, version_number: round, file_url: files[0].url, files } as ScheduleVersion
@@ -102,25 +103,13 @@ function fileSlide(f: FinalFile): Slide {
  */
 export type VersionGroup = { round: number; label: string; latest: boolean; slides: Slide[] }
 
-/** a files card as it stood at one version */
-function filesCardAt(files: readonly FinalFile[], round: number): FinalFile[] {
-  const newest = new Map<string, FinalFile>()
-  for (const f of files) {
-    if (f.version > round) continue
-    const a = assetIdOf(f), have = newest.get(a)
-    if (!have || f.version > have.version || (f.version === have.version && f.uploaded_at >= have.uploaded_at)) newest.set(a, f)
-  }
-  const order = [...new Set(files.map(assetIdOf))]
-  return order.map(a => newest.get(a)).filter((f): f is FinalFile => !!f && !(typeof f.retired_round === 'number' && f.retired_round <= round))
-}
-
 /** every version of the card, newest first, each with its files */
 export function cardVersionGroups(item: ScheduleItem | null | undefined, versions: readonly ScheduleVersion[] | null | undefined): VersionGroup[] {
   const files = item ? finalFilesOf(item as never) : []
   const groups: { round: number; slides: Slide[] }[] = []
   if (files.length > 0) {
     const rounds = [...new Set(files.map(f => f.version))].sort((a, b) => b - a)
-    for (const r of rounds) groups.push({ round: r, slides: filesCardAt(files, r).map(fileSlide) })
+    for (const r of rounds) groups.push({ round: r, slides: versionSnapshot(item as never, r).map(fileSlide) })
   } else {
     const list = (Array.isArray(versions) ? versions.filter(Boolean) : [])
       .map(v => ({ round: Number(v.version_number ?? 0), slides: slidesOf(v) }))

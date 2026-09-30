@@ -71,6 +71,8 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
       return { id: f.id, name: f.name, kind, thumb: kind === 'image' ? (f.url as string) : null, preview: f.url as string, open: f.url as string }
     })
   const fromCopies = done.length > 0
+  const markOf = new Map(done.filter(f => fileRound(f) === shownRound && typeof (f as { changed?: unknown }).changed === 'boolean')
+    .map(f => { const m = f as unknown as { changed: boolean; new_cut?: boolean; from_version?: number }; return [f.id, { changed: m.changed, newCut: m.new_cut === true, from: m.from_version ?? fileRound(f) }] as const }))
   const isCopy = (t: FolderTile) => fromCopies && done.some(f => f.id === t.id)
   // the preview copies (Cloudflare Stream) of the video copies: a still and
   // hover frames the moment they are ready (16 Sep 2026)
@@ -194,6 +196,12 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                       )}
                     </button>
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
+                    {/* the whole set at a version (30 Sep 2026): what changed in it, and what was carried */}
+                    {markOf.has(t.id) && (
+                      <span data-version-mark className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
+                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'New cut in this version' : 'New in this version') : `Unchanged — from ${roundLabel(markOf.get(t.id)!.from)}`}
+                      </span>
+                    )}
                     {dl && (
                       <a href={dl} download={t.name} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
                         <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>

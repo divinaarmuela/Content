@@ -14,7 +14,7 @@ import { filesOf, type PullFile } from '../../lib/drive-pull-core'
 import { uploadFiles } from '../uploadQueue'
 import { driveTargetOf, finishedEditOf, linkKindOf } from '../../lib/card-link-core'
 import { finishedVersionsOf, handInRound, roundLabel } from '../../lib/edit-round-core'
-import { finalFilesAsPulls } from '../../lib/final-files-core'
+import { finalFilesAsVersionPulls } from '../../lib/final-files-core'
 import { useTable } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
 import {
@@ -39,6 +39,15 @@ import {
  * file above the grid, where a clip plays (SafeVideo, mounted only on the
  * press) and a still shows large. Open still downloads the file.
  */
+/** THE WHOLE SET AT A VERSION, said (30 Sep 2026): "Version 2 — all 5 files: 1 changed in this version, 4 unchanged".
+ *  A link round's copies carry no mark and read as before. */
+function versionTabWords(files: readonly unknown[], label: string): string {
+  const marked = files.filter(f => typeof (f as { changed?: unknown }).changed === 'boolean') as { changed: boolean }[]
+  if (marked.length === 0) return `${files.length} ${files.length === 1 ? 'file' : 'files'} handed in as ${label}.`
+  const changed = marked.filter(f => f.changed).length
+  return `${label} — all ${files.length} ${files.length === 1 ? 'file' : 'files'} as it stood: ${changed} changed in this version, ${files.length - changed} unchanged.`
+}
+
 export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = false, showFolderFiles = true, fallbackFolder = null, wideFiles = false, holder = false, reviewHref, approvedIds, versions = false, filesOnly = false }: {
   item: { id: string; raw_assets?: unknown; raw_assets_url?: string | null; link_url?: string | null; link_kind?: string | null; link_final?: boolean | null; adhoc_post?: boolean | null; final_files?: unknown }
   isManager: boolean
@@ -138,7 +147,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   const { rows: pullRows } = useTable<DrivePull>('drive_pulls', { by: { scope_id: item.id } as never, enabled: versions })
   const finished = finishedEditOf(item)
   const versionTabs = versions
-    ? finishedVersionsOf<PullFile>([...pullRows, { id: 'uploads', kind: 'item', scope_id: item.id, folder_id: 'uploads', folder_url: '', status: 'done', purpose: 'finished', files: finalFilesAsPulls(item), started_at: '' }] as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r), currentRound: handInRound(item as never) })
+    ? finishedVersionsOf<PullFile>([...pullRows, { id: 'uploads', kind: 'item', scope_id: item.id, folder_id: 'uploads', folder_url: '', status: 'done', purpose: 'finished', files: finalFilesAsVersionPulls(item), started_at: '' }] as never, { itemId: item.id, finishedFolderId: driveTargetOf(finished?.url)?.id ?? null, filesOf: r => filesOf(r), currentRound: handInRound(item as never) })
     : []
   const [tab, setTab] = useState<'folder' | number | null>(null)
   useEffect(() => { setTab(null) }, [item.id])
@@ -203,7 +212,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <>
           <p className="text-[13px] text-muted-foreground">
             {shownVersion.files.length > 0
-              ? `${shownVersion.files.length} ${shownVersion.files.length === 1 ? 'file' : 'files'} handed in as ${roundLabel(shownVersion.round)}.`
+              ? versionTabWords(shownVersion.files, roundLabel(shownVersion.round))
               : `${roundLabel(shownVersion.round)} is being copied in — its files show here as they land.`}
           </p>
           {shownVersion.folderUrl && (

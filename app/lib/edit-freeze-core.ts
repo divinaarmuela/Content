@@ -16,7 +16,7 @@
  * writes a new one.
  */
 
-import { assetIdOf, liveFilesAt, type FinalFile } from './final-files-core'
+import { assetIdOf, versionSnapshot, type FinalFile } from './final-files-core'
 import { roundOf } from './edit-round-core'
 
 export type FrozenFile = {
@@ -67,7 +67,8 @@ function finishedLink(card: CardShape): { url: string; kind: string | null } | n
  */
 export function clientFrozenFor(card: CardShape, at: string): ClientFrozen {
   const round = roundOf(card as { edit_round?: unknown })
-  const files: FrozenFile[] = liveFilesAt(card, round).map((f: FinalFile) => ({
+  // the WHOLE set at this version (final-files-core.versionSnapshot): the new cuts and the pieces carried forward
+  const files: FrozenFile[] = versionSnapshot(card, round).map((f: FinalFile) => ({
     id: f.id,
     asset_id: assetIdOf(f),
     version: f.version,
