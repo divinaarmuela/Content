@@ -20,7 +20,7 @@ import ConfirmAction from '../../ConfirmAction'
 import EmptyState from '../../EmptyState'
 import PageTitle from '../../ui/PageTitle'
 import {
-  filterConversations, isMine, messageAt, type InboxConversation, type InboxFilter, type InboxMessage,
+  attachmentView, byAutomation, clockWords, dayLabel, deliveryWords, filterConversations, isMine, messageAt, messageButtons, previewWords, type InboxConversation, type InboxFilter, type InboxMessage,
 } from '@/app/lib/inbox-core'
 import { AUTO_PREFIX, PEOPLE_CRM_CLIENTS } from '@/app/lib/people-crm-core'
 
@@ -88,7 +88,7 @@ type PersonRow = {
 }
 
 const convName = (c: InboxConversation) => c.participantName ?? c.participantUsername ?? 'someone'
-const convPreview = (c: InboxConversation) => (typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? '')
+const convPreview = (c: InboxConversation) => previewWords(typeof c.lastMessage === 'string' ? c.lastMessage : c.lastMessage?.text ?? '')
 const msgText = (m: InboxMessage) => m.text ?? m.message ?? ''
 const whenWords = (iso?: string | null): string => {
   if (!iso) return ''
@@ -144,6 +144,8 @@ export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[] | null>(null)
   const [windowState, setWindowState] = useState<Window | null>(null)
   const [msgDraft, setMsgDraft] = useState('')
+  const chatEnd = useRef<HTMLDivElement>(null)
+  useEffect(() => { const el = chatEnd.current; if (el) el.scrollTop = el.scrollHeight }, [messages])
   const [people, setPeople] = useState<PersonRow[] | null>(null)
 
   const client = clients?.find(c => c.id === clientId) ?? null
@@ -552,17 +554,61 @@ export default function InboxPage() {
                 ) : messages.length === 0 ? (
                   <p className="py-6 text-body-15 text-muted-foreground">No messages in this conversation yet.</p>
                 ) : (
-                  <div className="flex max-h-[56vh] flex-col gap-2 overflow-y-auto">
-                    {messages.map((m, i) => (
-                      <div key={m.id ?? i} className={`max-w-[80%] rounded-card px-3.5 py-2 text-body-15 ${
-                        isMine(m) ? 'self-end bg-accent-blue text-white' : 'self-start bg-foreground/[0.06]'
-                      }`}>
-                        <span className="whitespace-pre-wrap break-words">{msgText(m) || '[Attachment]'}</span>
-                        <span className={`mt-0.5 block text-[12px] ${isMine(m) ? 'text-white/75' : 'text-muted-foreground'}`}>
-                          {whenWords(messageAt(m))}
-                        </span>
-                      </div>
-                    ))}
+                  <div ref={chatEnd} className="flex max-h-[56vh] flex-col gap-1 overflow-y-auto pr-1" data-chat>
+                    {messages.map((m, i) => {
+                      const mine = isMine(m)
+                      const at = messageAt(m)
+                      const prev = i > 0 ? messages[i - 1] : null
+                      const newDay = !prev || dayLabel(messageAt(prev), Date.now()) !== dayLabel(at, Date.now())
+                      const sameSideAsPrev = !!prev && !newDay && isMine(prev) === mine
+                      const buttons = messageButtons(m)
+                      const auto = byAutomation(m)
+                      const lastOfMine = mine && !messages.slice(i + 1).some(isMine)
+                      return (
+                        <div key={m.id ?? i} className="flex flex-col">
+                          {newDay && (
+                            <p className="my-2 self-center rounded-full bg-foreground/[0.06] px-3 py-0.5 text-[12px] font-medium text-muted-foreground">{dayLabel(at, Date.now())}</p>
+                          )}
+                          <div className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'} ${sameSideAsPrev ? 'mt-0.5' : 'mt-2'}`}>
+                            {!mine && (
+                              sameSideAsPrev
+                                ? <span className="w-7 shrink-0" />
+                                : activeConvo.participantPicture
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  ? <img src={activeConvo.participantPicture} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                                  : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.08] text-[12px] font-semibold uppercase">{convName(activeConvo).slice(0, 1)}</span>
+                            )}
+                            <div className={`flex max-w-[78%] flex-col ${mine ? 'items-end' : 'items-start'}`}>
+                              {auto && !sameSideAsPrev && <span className="mb-0.5 text-[11px] font-medium text-muted-foreground">Sent by automation</span>}
+                              <div className={`rounded-[18px] px-3.5 py-2 text-body-15 ${mine ? 'rounded-br-md bg-foreground text-background' : 'rounded-bl-md bg-foreground/[0.07]'}`}>
+                                {m.noRenderableContent
+                                  ? <span className="italic">Instagram does not show this message to apps — open it in Instagram.</span>
+                                  : msgText(m) && <span className="whitespace-pre-wrap break-words">{msgText(m)}</span>}
+                                {m.isStoryMention && !(m.attachments ?? []).length && <span className="block italic">Mentioned the account in their story</span>}
+                                {(m.attachments ?? []).map((a, k) => {
+                                  const v = attachmentView(a)
+                                  if (v.url && v.kind === 'image') {
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    return <img key={k} src={v.url} alt={v.words} className="mt-1 max-h-72 rounded-xl object-contain" />
+                                  }
+                                  if (v.url && v.kind === 'video') return <video key={k} src={v.url} controls className="mt-1 max-h-72 rounded-xl" />
+                                  if (v.url && v.kind === 'audio') return <audio key={k} src={v.url} controls className="mt-1 w-56" />
+                                  return v.url
+                                    ? <a key={k} href={v.url} target="_blank" rel="noopener noreferrer" className="mt-1 block font-medium underline underline-offset-2">{v.words} — open</a>
+                                    : <span key={k} className="mt-1 block italic">{v.words}</span>
+                                })}
+                              </div>
+                              {buttons.map((b, k) => (
+                                <span key={k} className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-1.5 text-center text-[13px] font-semibold">{b.title}</span>
+                              ))}
+                              <span className="mt-0.5 px-1 text-[11px] text-muted-foreground">
+                                {clockWords(at)}{lastOfMine && deliveryWords(m) ? ` · ${deliveryWords(m)}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
                 {windowState && (
@@ -572,8 +618,10 @@ export default function InboxPage() {
                 )}
                 <div className="flex gap-2 border-t border-border pt-3">
                   <Textarea rows={2} value={msgDraft} disabled={windowState?.state === 'closed'}
-                    placeholder={windowState?.state === 'closed' ? 'Replies open again when they write' : `Message ${convName(activeConvo)}…`}
-                    onChange={e => setMsgDraft(e.target.value)} className="min-h-9" />
+                    placeholder={windowState?.state === 'closed' ? 'Replies open again when they write' : `Message ${convName(activeConvo)}… (Enter to send)`}
+                    onChange={e => setMsgDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendMessage() } }}
+                    className="min-h-9 rounded-2xl" />
                   <Button size="sm" aria-label="Send" onClick={() => void sendMessage()}
                     disabled={!msgDraft.trim() || busy === 'send-dm' || windowState?.state === 'closed'}>
                     {busy === 'send-dm' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}

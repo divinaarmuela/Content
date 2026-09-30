@@ -62,3 +62,25 @@ describe('a number is never a person’s handle (30 Sep 2026: crestlineconsultan
     expect(got.map(t => t.username)).toEqual(['crestlineconsultants', 'nuria_jewell'])
   })
 })
+
+describe('the chat view (30 Sep 2026: "we need to fix chat ui"; attachments read "[Attachment]")', () => {
+  it('attachments are drawn by kind; a story mention and a share say what they are', async () => {
+    const { attachmentView, previewWords } = await import('../app/lib/inbox-core')
+    expect(attachmentView({ type: 'image', url: 'https://x/a.jpg' })).toMatchObject({ kind: 'image', url: 'https://x/a.jpg' })
+    expect(attachmentView({ type: 'video', originalType: 'ig_reel', url: 'u' }).words).toBe('Shared a Reel')
+    expect(attachmentView({ type: 'share', originalType: 'story_mention', url: 'u' }).words).toBe('Mentioned the account in their story')
+    expect(attachmentView({ type: 'audio', url: 'u' }).kind).toBe('audio')
+    expect(previewWords('[Attachment]')).toBe('Sent an attachment')
+    expect(previewWords('hi')).toBe('hi')
+  })
+  it('an automation’s DM is marked, with its button; our last message says Read', async () => {
+    const { byAutomation, messageButtons, deliveryWords, dayLabel } = await import('../app/lib/inbox-core')
+    const m = { sentVia: 'comment_automation', deliveryStatus: 'read', metadata: { metaInteractive: { buttons: [{ title: 'Book a call', url: 'https://x' }] } } }
+    expect(byAutomation(m)).toBe(true)
+    expect(messageButtons(m)).toEqual([{ title: 'Book a call', url: 'https://x' }])
+    expect(deliveryWords(m)).toBe('Read')
+    const now = Date.parse('2026-09-30T02:00:00Z')
+    expect(dayLabel('2026-09-30T01:00:00Z', now)).toBe('Today')
+    expect(dayLabel('2026-09-29T01:00:00Z', now)).toBe('Yesterday')
+  })
+})

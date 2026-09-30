@@ -10,8 +10,26 @@
  *       after 7 d nothing, until they write again.
  */
 
+/** A DM's media as Zernio hands it back (its `url` is a signed Meta link that works when the message is read). */
+export type InboxAttachment = {
+  type?: string
+  originalType?: string
+  url?: string
+  refreshUrl?: string | null
+  previewUrl?: string | null
+  filename?: string | null
+}
+
 export type InboxMessage = {
   id?: string
+  attachments?: InboxAttachment[]
+  isStoryMention?: boolean
+  noRenderableContent?: boolean
+  /** "comment_automation" when an automation sent it (Zernio, on the message and in its metadata) */
+  sentVia?: string
+  metadata?: { sentVia?: string; metaInteractive?: { buttons?: { title?: string; url?: string }[] } }
+  /** our messages only: sent, delivered, read, failed */
+  deliveryStatus?: string | null
   text?: string
   message?: string
   direction?: string
@@ -107,4 +125,50 @@ export function filterConversations(
     if (filter === 'automation') return names.some(n => automated.has(n.replace(/^@/, '')))
     return true
   })
+}
+
+/** How one attachment is drawn in the chat (30 Sep 2026: every photo, video and shared post read "[Attachment]"). */
+export function attachmentView(a: InboxAttachment): { kind: 'image' | 'video' | 'audio' | 'link'; url: string | null; words: string } {
+  const url = a.url || a.previewUrl || a.refreshUrl || null
+  const t = String(a.type ?? '')
+  if (a.originalType === 'story_mention') return { kind: 'link', url, words: 'Mentioned the account in their story' }
+  if (t === 'image' || t === 'sticker' || t === 'gif') return { kind: 'image', url, words: 'Photo' }
+  if (t === 'video') return { kind: 'video', url, words: a.originalType === 'ig_reel' || a.originalType === 'reel' ? 'Shared a Reel' : 'Video' }
+  if (t === 'audio') return { kind: 'audio', url, words: 'Voice message' }
+  if (t === 'share') return { kind: 'link', url, words: 'Shared a post' }
+  return { kind: 'link', url, words: a.filename ? `File: ${a.filename}` : 'Attachment' }
+}
+
+/** The list's one-line preview: Zernio says "[Attachment]", a person says what it is. */
+export function previewWords(text: string): string {
+  return text.trim() === '[Attachment]' ? 'Sent an attachment' : text
+}
+
+export const byAutomation = (m: InboxMessage): boolean =>
+  m.sentVia === 'comment_automation' || m.metadata?.sentVia === 'comment_automation'
+
+/** The buttons an automation's DM carried, as the person sees them. */
+export const messageButtons = (m: InboxMessage): { title: string; url: string | null }[] =>
+  (m.metadata?.metaInteractive?.buttons ?? []).map(b => ({ title: String(b.title ?? 'Button'), url: b.url ?? null }))
+
+/** "Today", "Yesterday", or "28 Sep" in Melbourne — the separator over a day's messages. */
+export function dayLabel(iso: string | null, now: number): string {
+  if (!iso) return ''
+  const f = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
+  const d = f(Date.parse(iso))
+  if (d === f(now)) return 'Today'
+  if (d === f(now - 86_400_000)) return 'Yesterday'
+  return new Date(Date.parse(iso)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
+}
+
+/** "9:41 pm" in Melbourne. */
+export function clockWords(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(Date.parse(iso)).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' }).toLowerCase()
+}
+
+/** Sent / Delivered / Read / Failed for our own message, in words. */
+export function deliveryWords(m: InboxMessage): string | null {
+  const s = m.deliveryStatus
+  return s === 'read' ? 'Read' : s === 'delivered' ? 'Delivered' : s === 'failed' ? 'Not delivered' : s === 'sent' ? 'Sent' : null
 }
