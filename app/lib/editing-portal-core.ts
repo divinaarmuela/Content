@@ -53,6 +53,16 @@ export function portalHasWork(card: Parameters<typeof editingPortalFolder>[0] & 
   return Array.isArray(card.final_files) && card.final_files.length > 0
 }
 
+/** STILL ARRIVING (1 Oct 2026, the editor walk): a Drive hand-in can be passed by the quality check while it copies,
+ *  so the card reaches the client before any file has landed — and the link said "page not found". A card at a
+ *  client-facing stage with a hand-in but no files yet is ON ITS WAY, not missing. */
+export function portalWaitingOnFiles(card: { status?: string | null; delivered_at?: string | null; adhoc_post?: boolean | null; drive_handins?: unknown; final_files?: unknown }): boolean {
+  if (card.adhoc_post === true || !portalOpenFor(card)) return false
+  const handIns = Array.isArray(card.drive_handins) ? card.drive_handins : []
+  const files = Array.isArray(card.final_files) ? card.final_files : []
+  return handIns.length > 0 && files.length === 0
+}
+
 /** the clips on the finished edit: the videos, in name order, nothing else */
 export function clipsOf(entries: readonly (DriveEntry & { thumbUrl?: string | null })[]): PortalClip[] {
   return entries

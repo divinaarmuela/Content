@@ -30,7 +30,7 @@ describe('raw assets on a card', () => {
 
   it('says how much there is to work from, in plain words', () => {
     expect(FILES_TO_WORK_FROM).toBe('Files to work from')
-    expect(filesToWorkFromWords(0, false)).toMatch(/^Nothing yet/)
+    expect(filesToWorkFromWords(0, false)).toBe('Nothing to work from yet.')
     expect(filesToWorkFromWords(1, false)).toBe('1 file to work from.')
     expect(filesToWorkFromWords(3, true)).toBe('3 files and a folder link to work from.')
     expect(filesToWorkFromWords(0, true)).toBe('A folder link to work from.')

@@ -9,7 +9,7 @@ import { listFolder, type FolderListing } from './drive-folder-list'
 import { driveFileMeta } from './drive-stream'
 import { previewsFor } from './stream'
 import { streamBaseUrl } from './stream-core'
-import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound, asClientVersions, clientRoundsOf } from './editing-portal-core'
+import { clipsOf, clipSignature, editingPortalFolder, portalHasWork, portalWaitingOnFiles, portalStreamPath, type PortalClip, clientMayApprove, clientSeenRound, asClientVersions, clientRoundsOf } from './editing-portal-core'
 import { finalFilesOf, assetIdOf } from './final-files-core'
 import { clipApprovalsOf, type ClipApproval } from './clip-approvals-core'
 import { filesOf, pullId } from './drive-pull-core'
@@ -59,6 +59,16 @@ const SECRET = () => process.env.CREDENTIALS_KEY ?? ''
 
 export function signedClipStream(token: string, itemId: string, clip: { id: string; name: string }): string {
   return portalStreamPath(token, itemId, clip, clipSignature(SECRET(), itemId, clip.id))
+}
+
+/** The card's title when its files are still arriving (portalWaitingOnFiles) — the page says so instead of a 404. */
+export async function editingPortalWaiting(rawToken: string, itemId: string): Promise<{ title: string; portal_name: string } | null> {
+  const owner = await portalOwnerByToken(rawToken)
+  if (!owner) return null
+  const item = await table<ContentItem>('content_items').get(itemId)
+  if (!item || item.client_id !== owner.client.id || !belongsToPortal(item, owner.scope)) return null
+  if (!portalWaitingOnFiles(item as never)) return null
+  return { title: item.title, portal_name: portalName(owner.client.name, owner.scope) }
 }
 
 /** the card, if this token may see it on the editing portal */

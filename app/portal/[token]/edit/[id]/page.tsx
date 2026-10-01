@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
-import { getEditingPortal } from '../../../../lib/editing-portal'
+import { getEditingPortal, editingPortalWaiting } from '../../../../lib/editing-portal'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import EditingReview from '../../../../components/portal/EditingReview'
@@ -24,7 +24,22 @@ export const dynamic = 'force-dynamic'
 export default async function EditingPortalPage({ params }: { params: Promise<{ token: string; id: string }> }) {
   const { token: raw, id } = await params
   const data = await getEditingPortal(raw, id)
-  if (!data) notFound()
+  if (!data) {
+    // the files are still copying in from Drive: say so, and look again shortly (1 Oct 2026)
+    const waiting = await editingPortalWaiting(raw, id)
+    if (!waiting) notFound()
+    return (
+      <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
+        <meta httpEquiv="refresh" content="30" />
+        <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-6 text-center text-foreground"
+          style={{ fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif' }}>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">MD Media · {waiting.portal_name}</p>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight">{waiting.title}</h1>
+          <p className="max-w-md text-[15px] text-muted-foreground">Your edit is on its way — the files are still arriving. This page checks again every 30 seconds.</p>
+        </div>
+      </PortalShell>
+    )
+  }
   // every file a picture: a designer's work, named as one (1 Oct 2026, the designer walk)
   const designs = data.clips.length > 0 && data.clips.every(c => c.kind === 'image')
 

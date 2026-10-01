@@ -209,7 +209,7 @@ export const EDITOR_TOUR: Tour = {
     {
       target: 'board-card',
       title: 'One card, one shoot’s work',
-      body: 'The card says which shoot it is from, the deadline, and how many finals are in. Press Acknowledge the day it lands.',
+      body: 'The card says which shoot it is from, the deadline, and how many finals are in. Press "I am on it" the day it lands.',
     },
     {
       target: 'board-card-action',

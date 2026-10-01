@@ -42,19 +42,19 @@ const EDITOR: GettingStartedPanel = {
   steps: [
     {
       title: 'Find your work',
-      body: 'Every card handed to you is on your board, in five columns: In Progress, Quality check, With client, For Handoff, Done. One card is one shoot’s work. Press Acknowledge on a new one so the team knows you are on it.',
+      body: 'Every card handed to you is on your board, in five columns: In Progress, Quality check, With client, For Handoff, Done. One card is one shoot’s work. Press "I am on it" on a new one so the team knows you are on it.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
       title: 'Put the final on the card, then hand it on',
-      body: 'Under Versions, upload the export or press "Pick the final from Google Drive", add the Dropbox link to the source files, then press "Ready for checking". The account manager checks it, then the quality reviewer.',
+      body: 'Press "Hand in from Google Drive" for the finished edit (a designer uploads the finished files instead), tick your checks, then press "Submit for quality check". It goes straight to the quality reviewer, then the client.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
     {
       title: 'Watch for changes, and flag a risk early',
-      body: 'A card that comes back shows what to change, in the reviewer’s words, right on the card. If a date is at risk, press "Flag a deadline risk" the moment you see it.',
+      body: 'A card that comes back shows what to change, in the reviewer’s words, right on the card. If a date is at risk, press "Something looks wrong — flag it" the moment you see it.',
       href: '/dashboard/notifications',
       linkLabel: 'See what came back',
     },
@@ -214,7 +214,7 @@ const SCHEDULER_PAGE_FOR_GENERAL: GettingStartedPanel = {
     },
     {
       title: 'You make, others check',
-      body: 'Press "Ready for checking" on your card and the account manager checks it, then the quality reviewer, then the client. You are emailed at each step.',
+      body: 'Press "Submit for quality check" on your card and the quality reviewer checks it, then the client. You are emailed at each step.',
       href: '/dashboard/editor',
       linkLabel: 'Open the Editor page',
     },

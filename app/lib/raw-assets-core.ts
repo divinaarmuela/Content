@@ -63,7 +63,8 @@ export function rawAssetKind(a: Pick<RawAsset, 'url' | 'name'>): 'image' | 'vide
 
 /** The line under the heading: how much there is to work from. */
 export function filesToWorkFromWords(count: number, hasFolder: boolean): string {
-  if (count === 0 && !hasFolder) return 'Nothing yet — add files or a folder link for the editor.'
+  // the same words for everyone (1 Oct 2026: the editor read "…for the editor" on their own card)
+  if (count === 0 && !hasFolder) return 'Nothing to work from yet.'
   const files = count === 0 ? null : `${count} ${count === 1 ? 'file' : 'files'}`
   const folder = hasFolder ? 'a folder link' : null
   const what = [files, folder].filter(Boolean).join(' and ')

@@ -136,3 +136,20 @@ describe('the designer walk, second pass (1 Oct 2026)', () => {
     expect(read('app/dashboard/board/DriveFolderFiles.tsx')).toMatch(/newCut && t\.kind !== 'image' \? 'New cut' : 'New'/)
   })
 })
+
+describe('the editor walk (1 Oct 2026)', () => {
+  it('a card with the client whose Drive hand-in is still copying is on its way, not a 404', async () => {
+    const { portalWaitingOnFiles } = await import('../app/lib/editing-portal-core')
+    const handIn = [{ id: 'h', drive_ids: ['x'] }]
+    expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: handIn, final_files: [] })).toBe(true)
+    expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: handIn, final_files: [{ id: 'f' }] })).toBe(false)
+    expect(portalWaitingOnFiles({ status: 'draft_uploaded', drive_handins: handIn, final_files: [] })).toBe(false)
+    expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: [], final_files: [] })).toBe(false)
+    const page = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/portal/[token]/edit/[id]/page.tsx'), 'utf8')
+    expect(page).toMatch(/const waiting = await editingPortalWaiting\(raw, id\)\s*if \(!waiting\) notFound\(\)/)
+  })
+  it('the editor intro names the real buttons', async () => {
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/lib/getting-started-core.ts'), 'utf8')
+    expect(src).not.toMatch(/press "Ready for checking"|Press "Ready for checking"|Pick the final from Google Drive|Flag a deadline risk|Press Acknowledge/)
+  })
+})
