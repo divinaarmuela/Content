@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRow } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
-import { driveLinkTarget, handInWords, latestHandIn, pendingHandIn } from '../../lib/drive-handin-core'
+import { handInOutdated, driveLinkTarget, handInWords, latestHandIn, pendingHandIn } from '../../lib/drive-handin-core'
 import { roundLabel as plainRoundLabel } from '../../lib/edit-round-core'
 import { watchDriveCopy } from '../driveCopyWatch'
 
@@ -81,8 +81,8 @@ export function DriveHandInDialog({ open, onOpenChange, item, round, label }: {
 }
 
 /** THE LINE ON THE CARD for the newest Drive hand-in: copying (live, from the pull row), done, or what stopped it */
-export function DriveHandInStatus({ item }: { item: { drive_handins?: unknown } }) {
-  const latest = latestHandIn(item)
+export function DriveHandInStatus({ item }: { item: { drive_handins?: unknown; change_note_at?: unknown } }) {
+  const latest = handInOutdated(item) ? null : latestHandIn(item)
   const pending = pendingHandIn(item)
   const { row } = useRow<DrivePull>('drive_pulls', pending ? pending.pull_id : null)
   const [now, setNow] = useState(() => Date.now())

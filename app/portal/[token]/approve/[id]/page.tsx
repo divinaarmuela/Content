@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { getPortalApproval, portalPostForItem } from '../../../../lib/portal-thread'
 import { portalPostHref } from '../../../../lib/post-page-core'
+import { editingPortalItem } from '../../../../lib/editing-portal'
+import { editingPortalPath } from '../../../../lib/editing-portal-core'
 import { archivo, sometype } from '../../../../components/lama/fonts'
 import PortalShell from '../../../../components/portal/PortalShell'
 import PostReview from '../../../../components/portal/PostReview'
@@ -29,6 +31,11 @@ export default async function PortalApprovePage({ params }: {
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const postId = await portalPostForItem(raw, id).catch(() => null)
   if (postId) redirect(portalPostHref(token, postId))
+  // AN EDIT OPENS ITS VERSIONS PAGE (the owner, 30 Sep 2026: "versions page + ask for a change"): the email and the
+  // board link here, and this page has no versions, no earlier cut with its comments, no approval per clip — the
+  // editing page has all of it and the answer on the whole piece too. A post uploaded for approval stays here.
+  const edit = await editingPortalItem(raw, id).catch(() => null)
+  if (edit) redirect(editingPortalPath(raw, id))
   const data = await getPortalApproval(raw, id)
   if (!data) notFound()
   const { slides, caption, state, typeLine, whenLine, whereLine, kind } = data

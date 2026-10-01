@@ -72,11 +72,17 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   const [sending, setSending] = useState(false)
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // THE CLIENT'S ANSWER ON THE WHOLE PIECE lives here too (the owner, 30 Sep 2026): the email opens this page, so
+  // "Ask for a change" and the approval of the version are here, beside the clips — the same /api/portal/act
+  const [asking, setAsking] = useState(false)
+  const [changeNote, setChangeNote] = useState('')
+  const [answered, setAnswered] = useState<'approved' | 'changes' | null>(null)
   useEffect(() => { try { setName(localStorage.getItem('mdm-portal-name') ?? '') } catch { /* fine */ } }, [])
   useEffect(() => { setNow(0); setDuration(0) }, [current])
 
   const onClip = useMemo(() => (clip ? commentsOnClip(comments as never, clip.id) : []) as unknown as EditingPortalComment[], [comments, clip])
   const markers = useMemo(() => markersFor(onClip as never, duration), [onClip, duration])
+  const onPiece = useMemo(() => comments.filter(c => !c.video_file_id), [comments])
   const active = activeCommentId(onClip as never, now)
   const approved = clip ? clipApproval(approvals, clip.id) : null
   const approvedWords = approvedClipsWords(clips.filter(c => clipApproval(approvals, c.id)).length, clips.length, words)
@@ -113,8 +119,28 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
   // APPROVE THE WHOLE VERSION (the owner, 30 Sep 2026): every piece of the version shown, one tick each through the
   // same per-piece approval — nothing else changes, and every earlier version stays as it was
   const unapproved = clips.filter(c => !clipApproval(approvals, c.id))
+  // only the LATEST version is approved; an earlier one is there to look back at, with what was said on it
+  const latest = round === (data.rounds[0] ?? data.round)
+  // with the client now: their answer moves the piece (the same rule as the server's portalActions)
+  const decides = item.status === 'client_review' && latest && !answered
+  const actOnPiece = async (action: 'approve' | 'request_changes', comment = '') => {
+    const res = await fetch('/api/portal/act', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, item_id: item.id, action, comment, author_name: name.trim().slice(0, 60) }),
+    })
+    const json = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(String(json?.error ?? 'That did not go through — try again in a moment'))
+  }
+  const askForChange = async () => {
+    if (sending || !changeNote.trim()) return
+    setSending(true); setError(null)
+    try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
+    try { await actOnPiece('request_changes', changeNote.trim()); setAnswered('changes'); setAsking(false); router.refresh() }
+    catch (e) { setError(e instanceof Error ? e.message : 'That did not go through — try again in a moment') }
+    setSending(false)
+  }
   const approveAll = async () => {
-    if (approving || unapproved.length === 0 || !name.trim()) return
+    if (approving || !name.trim() || (unapproved.length === 0 && !decides)) return
     setApproving(true); setError(null)
     try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
     for (const c of unapproved) {
@@ -125,6 +151,11 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
       const json = await res.json().catch(() => null)
       if (!res.ok) { setError(json?.error ?? `Could not approve ${c.name} — try again`); break }
       if (Array.isArray(json?.approvals)) setApprovals(json.approvals)
+    }
+    // …and, with the client now, the piece itself is approved — what the old page's Approve did
+    if (decides) {
+      try { await actOnPiece('approve'); setAnswered('approved') }
+      catch (e) { setError(e instanceof Error ? e.message : 'That did not go through — try again in a moment') }
     }
     setApproving(false)
     router.refresh()
@@ -215,7 +246,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold text-foreground" title={clip.name}>{clip.name}</p>
                 {/* the whole set at this version (30 Sep 2026): what changed in it, what was carried as it was */}
-                {data.rounds.length > 1 && !lookingBack && (
+                {data.rounds.length > 1 && !lookingBack && round !== data.rounds[data.rounds.length - 1] && (
                   <p data-version-mark className="text-[12px] font-semibold text-muted-foreground">{changedAtRound(clip, round) ? `New in ${roundLabel(round)}` : `Unchanged since ${roundLabel(clip.version)}`}</p>
                 )}
                 <p className="text-[12px] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
@@ -223,7 +254,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                   {onClip.length > 0 ? ` · ${onClip.length} ${onClip.length === 1 ? 'comment' : 'comments'}` : ''}
                 </p>
               </div>
-              {approved ? (
+              {/* an earlier version or an earlier cut is looked at, not approved — the approval is on the latest */}
+              {(!latest || lookingBack) ? null : approved ? (
                 <button type="button" onClick={() => void approve(true)} disabled={approving}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full bg-emerald-400 px-5 text-[14px] font-semibold text-black hover:bg-emerald-300 disabled:opacity-60"
                   title={`Approved by ${approved.by}, ${when(approved.at)} — press to take it back`}>
@@ -279,7 +311,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                       {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">{n}</span>}
                     </span>
                     <span className="truncate px-0.5 text-[12px] text-foreground/80" title={c.name}>{c.name}</span>
-                    {data.rounds.length > 1 && <span className="px-0.5 text-[11px] text-muted-foreground">{changedAtRound(c, round) ? `New in ${roundLabel(round)}` : 'Unchanged'}</span>}
+                    {data.rounds.length > 1 && round !== data.rounds[data.rounds.length - 1] && <span className="px-0.5 text-[11px] text-muted-foreground">{changedAtRound(c, round) ? `New in ${roundLabel(round)}` : 'Unchanged'}</span>}
                   </button>
                 </li>
               )
@@ -287,12 +319,50 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
           </ul>
         )}
         {approvedWords && <p className="text-[13px] text-emerald-600 dark:text-emerald-300">{approvedWords}</p>}
-        {clips.length > 1 && unapproved.length > 0 && (
-          <button type="button" onClick={() => void approveAll()} disabled={approving || !name.trim()}
-            title={name.trim() ? undefined : 'Type your name first — the approval carries it'}
-            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
-            <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : `Approve all ${clips.length} ${words.many} in ${roundLabel(round)}`}
-          </button>
+        {answered && (
+          <p role="status" className="rounded-xl border border-border bg-card p-3 text-[14px]">
+            <span className="font-semibold">{answered === 'approved' ? 'Approved — thank you. ' : 'Thanks — we have your note. '}</span>
+            {answered === 'approved' ? 'The team takes it from here.' : 'We’ll make the change and send the new version here, on this same link.'}
+          </p>
+        )}
+        {/* only while the piece waits on them: once they have answered (or the team has it back), approving the
+            whole set beside a note asking for changes would say two things */}
+        {decides && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* the approval carries a name: the box is here, beside the button, not only in the comments panel
+                (30 Sep 2026, the walk: the button looked greyed out for no reason) */}
+            {(!name.trim() || nameTyping) && (
+              <input value={name} onChange={e => setName(e.target.value)} onFocus={() => setNameTyping(true)} onBlur={() => setNameTyping(false)} placeholder="Your name, to approve" aria-label="Your name, to approve"
+                className="h-11 w-44 rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50" />
+            )}
+            <button type="button" onClick={() => void approveAll()} disabled={approving || !name.trim()}
+              title={name.trim() ? undefined : 'Type your name first — the approval carries it'}
+              className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-foreground/30 px-5 text-[14px] font-semibold text-foreground hover:border-foreground hover:bg-foreground/10 disabled:opacity-60">
+              <Check className="h-4 w-4" aria-hidden /> {approving ? 'Saving…' : decides ? `Approve ${roundLabel(round)} — all ${clips.length} ${clips.length === 1 ? words.one : words.many}` : `Approve all ${clips.length} ${words.many} in ${roundLabel(round)}`}
+            </button>
+            {decides && !asking && (
+              <button type="button" onClick={() => { setAsking(true); setError(null) }}
+                className="inline-flex min-h-11 w-fit items-center rounded-full border border-border px-5 text-[14px] font-semibold hover:bg-muted">
+                Ask for a change
+              </button>
+            )}
+          </div>
+        )}
+        {decides && asking && (
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+            <label className="flex flex-col gap-1 text-[13px] font-medium text-muted-foreground">
+              What should we change? A note on one {words.one} can also go in the comments beside it.
+              <textarea autoFocus rows={3} value={changeNote} maxLength={2000} onChange={e => setChangeNote(e.target.value)}
+                className={`${input} rounded-2xl py-3`} />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void askForChange()} disabled={sending || !changeNote.trim()}
+                className="inline-flex min-h-11 items-center rounded-full bg-foreground px-5 text-[14px] font-semibold text-background disabled:opacity-50">
+                {sending ? 'Sending…' : 'Send my note'}
+              </button>
+              <button type="button" onClick={() => setAsking(false)} className="inline-flex min-h-11 items-center rounded-full border border-border px-5 text-[14px] font-semibold hover:bg-muted">Back</button>
+            </div>
+          </div>
         )}
       </section>
 
@@ -304,6 +374,24 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 lg:max-h-[52vh]">
           {onClip.length === 0 && <p className="text-[14px] text-muted-foreground">Nothing said on this {words.one} yet.</p>}
+          {/* NOTES ON THE WHOLE PIECE (30 Sep 2026, the walk): what was said about the piece, not one clip — "Ask for a
+              change", and notes written before this page was the client's — showed nowhere here */}
+          {onPiece.length > 0 && (
+            <div className="mt-4 flex flex-col gap-2 border-t border-border pt-3">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>On the whole piece</p>
+              <ul className="flex flex-col gap-2">
+                {onPiece.map(c => (
+                  <li key={c.id} className="rounded-xl border border-border p-3">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-[13px] font-semibold text-foreground">{c.author_name}</span>
+                      <span className="text-[12px] text-muted-foreground">{when(c.created_at)}</span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-[14px] text-foreground/90">{c.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <ul className="flex flex-col gap-2">
             {onClip.map(c => (
               <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-border'}`}>

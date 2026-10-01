@@ -132,8 +132,19 @@ describe('the routes and the pages (source pins)', () => {
     expect(c).toContain("fetch('/api/portal/clip'")
     expect(c).toContain("fetch('/api/portal/comment'")
     expect(c).toContain('video_file_id: clip.id, video_file_name: clip.name')
-    expect(c).not.toContain('/api/portal/act')
+    // THE ANSWER ON THE WHOLE PIECE IS HERE NOW (the owner, 30 Sep 2026: "versions page + ask for a change"): the
+    // client's email opens this page, so Approve and Ask for a change go through /api/portal/act — only while it is
+    // with them, only on the latest version
+    expect(c).toContain("fetch('/api/portal/act'")
+    expect(c).toContain("const decides = item.status === 'client_review' && latest && !answered")
+    expect(c).toContain('Ask for a change')
+    // an earlier version is looked at, not approved; Version 1 carries no "New in" tag
+    expect(c).toContain('{(!latest || lookingBack) ? null : approved ? (')
+    expect(c).toContain('round !== data.rounds[data.rounds.length - 1]')
     expect(c).toContain('Approve this ${words.one}')
+    // and the old page sends an edit here, whichever link the client followed
+    const approve = src('app/portal/[token]/approve/[id]/page.tsx')
+    expect(approve).toContain('if (edit) redirect(editingPortalPath(raw, id))')
     const lib = src('app/lib/editing-portal.ts')
     expect(lib).toContain("where: r => r.visibility === 'client'")
     expect(lib).toContain('if (!belongsToPortal(item, owner.scope)) return null')

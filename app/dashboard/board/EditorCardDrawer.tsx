@@ -1,11 +1,11 @@
 'use client'
 
-import { pendingHandIn } from '../../lib/drive-handin-core'
+import { lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
 import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
-import { canReadClientComments, visibleComments } from '../../lib/comment-access-core'
+import { seesClientWords, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
 import { managesClients, type Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
@@ -626,7 +626,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         {/* files only (the owner, 25 Sep 2026): the finished edit is never a Drive link */}
         {!linkMode ? (
           <div className="flex flex-col gap-2" data-final-files>
-            {mayFile && !frozen && (
+            {/* the client asked for changes: an account manager decides first — a hand-in now would not count
+                (30 Sep 2026, the walk) */}
+            {mayFile && !frozen && item?.status !== 'client_changes_requested' && (
               <div className="flex flex-wrap items-center gap-2">
                 {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) — not a second copy of the button
                     already at the top of the card for its holder */}
@@ -658,7 +660,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     const okByClient = !!tick
                     const isManager = me?.role === 'super_admin' || me?.role === 'account_manager'
                     const dropped = typeof f.retired_round === 'number'
-                    const earlier = assetHistory(item as never, a).filter(x => x.id !== f.id)
+                    const earlier = lastCutPerVersion(assetHistory(item as never, a).filter(x => x.id !== f.id && x.version < f.version))
                     return (
                       <li key={a} className="flex flex-col gap-1 py-2 text-[13px]" data-asset={a}>
                         <div className="flex min-h-11 flex-wrap items-center gap-2">
@@ -771,7 +773,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </div>
           </div>
         )}
-        {(item as { change_note?: string | null }).change_note && (
+        {/* while the client's request waits on the account manager, the note here is the one before it — it goes
+            (30 Sep 2026); the manager's send-back writes the new one, in the client's words */}
+        {(item as { change_note?: string | null }).change_note && item?.status !== 'client_changes_requested' && (
           <div className="rounded-inner border border-border bg-tint-amber p-3 text-[13px]">
             <p className="font-semibold">What to change</p>
             <p className="whitespace-pre-line">{(item as { change_note?: string | null }).change_note}</p>
@@ -832,7 +836,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           rows={cardThread as never}
           nameOf={nameOf} roleOf={uid => team.find(u => u.id === uid)?.role ?? null} meId={me?.id}
           when={iso => formatInZone(iso, zone, 'short') ?? ''}
-          isManager={isManager} clientName={client?.name} readsClient={canReadClientComments(me?.role ?? null)}
+          isManager={isManager} clientName={client?.name} readsClient={seesClientWords(me?.role ?? null)}
           draft={note} setDraft={setNote} sending={sendingNote} onSend={() => void sendNote()}
           toClient={toClient} setToClient={setToClient}
           mentionable={cardPeople(item, team as never, clientLinks as never, me?.id)}

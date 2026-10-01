@@ -67,5 +67,13 @@ export function visibleComments<T extends VisibilityComment>(
   // card itself is what access is checked on. Only the client's own
   // comments stay with the managers.
   void viewerId
+  // …and the EDITOR reads the client's own words too (the owner, 1 Oct 2026: "should see everywhere"): the client
+  // comments per clip and per version now, and passing that on by hand is where it got lost. A scheduler still does not.
+  if (seesClientWords(role)) return comments
   return comments.filter(c => c.visibility === 'internal')
+}
+
+/** Who reads what the client wrote — on the card and on each clip. Not who may act on it (canReadClientComments). */
+export function seesClientWords(role: Role | null | undefined): boolean {
+  return role === 'editor' || (!!role && FULL_ACCESS.includes(role))
 }

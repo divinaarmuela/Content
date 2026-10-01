@@ -42,7 +42,9 @@ export function getNoDriveCopies(): DriveCopyWatch[] {
 }
 
 export function watchDriveCopy(w: DriveCopyWatch): void {
-  save([...watches.filter(x => x.handInId !== w.handInId), w].slice(-10))
+  // one row per card: a new hand-in on a card takes the place of that card's earlier one (30 Sep 2026, the walk:
+  // three finished copies of one card stacked over the page)
+  save([...watches.filter(x => x.handInId !== w.handInId && x.itemId !== w.itemId), w].slice(-10))
 }
 
 export function dismissDriveCopy(handInId: string): void {

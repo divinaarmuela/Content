@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
-import { canReadClientComments, clientCommentsFor, visibleComments } from '../app/lib/comment-access-core'
+import { canReadClientComments, clientCommentsFor, seesClientWords, visibleComments } from '../app/lib/comment-access-core'
 import type { Role } from '../app/lib/identity-core'
 
 /**
@@ -77,13 +77,17 @@ describe('the pure rule', () => {
     expect(clientCommentsFor('scheduler', rows)).toEqual([])
     expect(clientCommentsFor('client', rows)).toEqual([])
   })
-  it('the item page thread agrees: an editor or scheduler never sees a client row', () => {
+  it('the item page thread: the EDITOR reads the client too (the owner, 1 Oct 2026: "should see everywhere"); a scheduler still does not', () => {
     const rows = [
       { id: '1', author_id: 'u-client', visibility: 'client', assigned_to: 'u-editor', parent_id: null },
       { id: '2', author_id: 'u-am', visibility: 'internal', assigned_to: 'u-editor', parent_id: null },
     ]
-    expect(visibleComments('editor', 'u-editor', rows).map(r => r.id)).toEqual(['2'])
+    expect(visibleComments('editor', 'u-editor', rows).map(r => r.id)).toEqual(['1', '2'])
     expect(visibleComments('scheduler', 'u-editor', rows).map(r => r.id)).toEqual(['2'])
+    expect(seesClientWords('editor')).toBe(true)
+    expect(seesClientWords('scheduler')).toBe(false)
+    // reading is not acting: sending back on the client's words stays the managers'
+    expect(canReadClientComments('editor')).toBe(false)
   })
 })
 

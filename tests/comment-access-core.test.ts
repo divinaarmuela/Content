@@ -34,15 +34,15 @@ describe('visibleComments', () => {
     expect(visibleComments('scheduler', SCHEDULER, rows).map(r => r.id)).toEqual(['1', '2', '3', '4'])
   })
 
-  it('client rows never reach an editor or scheduler, even tagged', () => {
+  it('client rows reach the editor (the owner, 1 Oct 2026: "should see everywhere"), never a scheduler', () => {
     const rows = [c('1', AM, { visibility: 'client', assigned_to: EDITOR })]
-    expect(visibleComments('editor', EDITOR, rows)).toEqual([])
+    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1'])
     expect(visibleComments('scheduler', SCHEDULER, rows)).toEqual([])
   })
 
-  it('only the client’s own rows are kept from the working roles', () => {
+  it('the client’s rows are kept from the scheduler only; the editor reads the whole thread', () => {
     const rows = [c('1', AM), c('2', AM2, { parent_id: '1' }), c('3', AM, { visibility: 'client' })]
-    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1', '2'])
+    expect(visibleComments('editor', EDITOR, rows).map(r => r.id)).toEqual(['1', '2', '3'])
     expect(visibleComments('scheduler', SCHEDULER, rows).map(r => r.id)).toEqual(['1', '2'])
   })
 })

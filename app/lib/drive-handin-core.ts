@@ -114,6 +114,25 @@ export function latestHandIn(item: { drive_handins?: unknown } | null | undefine
   return list[list.length - 1] ?? null
 }
 
+/**
+ * A HAND-IN THE CARD WAS SENT BACK AFTER no longer answers anything (30 Sep 2026, the walk: the card said "7 files
+ * handed in" in green under a greyed Submit that said to hand in first). Its line is not shown once a send-back is
+ * newer than it; the files stay on the card as the version before.
+ */
+export function handInOutdated(item: { drive_handins?: unknown; change_note_at?: unknown } | null | undefined): boolean {
+  const h = latestHandIn(item)
+  const back = typeof item?.change_note_at === 'string' ? item.change_note_at : null
+  if (!h || h.status === 'copying' || !back) return false
+  return h.requested_at < back
+}
+
+/** EACH EARLIER VERSION ONCE: a version handed in twice (the quality check sent it back) keeps its last cut only */
+export function lastCutPerVersion<T extends { version: number }>(earlier: readonly T[]): T[] {
+  const by = new Map<number, T>()
+  for (const x of earlier) by.set(x.version, x)
+  return [...by.values()].sort((a, b) => b.version - a.version)
+}
+
 /** the Drive ids a version was made from — "which files did Version 2 come from" */
 export function driveIdsOfRound(item: { final_files?: unknown }, round: number): string[] {
   return [...new Set(finalFilesOf(item).filter(f => f.version === round && typeof f.drive_file_id === 'string').map(f => f.drive_file_id as string))]
@@ -165,22 +184,26 @@ export function handInRefusal(item: { status?: unknown }, manager: boolean): str
  * is not. Sizes are never proof.
  */
 export function sameDriveCut(
-  a: { md5?: string | null; revision?: string | null; modified?: string | null },
-  b: { md5?: string | null; revision?: string | null; modified?: string | null },
+  a: { md5?: string | null; revision?: string | null; modified?: string | null; size?: number | null },
+  b: { md5?: string | null; revision?: string | null; modified?: string | null; size?: number | null },
 ): boolean {
   if (a.md5 && b.md5) return a.md5 === b.md5
   if (a.revision && b.revision) return a.revision === b.revision
   if (a.modified && b.modified) return a.modified === b.modified
+  // a link Drive shows only publicly gives none of those (30 Sep 2026, the walk: an unchanged 7-clip folder handed
+  // in again was copied again whole, 1.9 GB, and the client was shown every clip as "New in Version 2"). The same
+  // Drive file at the same byte size is the same cut — an export landing on exactly the same size is not a real case
+  if (typeof a.size === 'number' && typeof b.size === 'number' && a.size > 0) return a.size === b.size
   return false
 }
 
 /** the same Drive file, not changed since the copy on the card was made */
-function sameCut(f: FinalFile, driveId: string, copy: { modified?: string | null; md5?: string | null; revision?: string | null; url?: string | null }): boolean {
+function sameCut(f: FinalFile, driveId: string, copy: { modified?: string | null; md5?: string | null; revision?: string | null; url?: string | null; size?: number | null }): boolean {
   const idMatches = f.drive_file_id === driveId || (!f.drive_file_id && f.id === driveId)   // a copy adopted from an old link keeps the Drive id as its own
   if (!idMatches) return false
   // this very copy is on the card already — the pull reuses a copy only when Drive proved the cut (drive-pull listInto)
   if (copy.url && f.url === copy.url) return true
-  return sameDriveCut({ md5: f.drive_md5, revision: f.drive_revision, modified: f.drive_modified }, copy)
+  return sameDriveCut({ md5: f.drive_md5, revision: f.drive_revision, modified: f.drive_modified, size: f.size ?? null }, copy)
 }
 
 /** may this piece take a new version in this hand-in: the rules the Replace button follows (mayReplaceAsset), or

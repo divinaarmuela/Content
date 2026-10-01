@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { seedDb } from './helpers/fake-db'
 import type { Row } from '@/lib/db-types'
 
@@ -339,7 +340,7 @@ describe('a card that was already Drive-linked (the old hand-in) takes a Drive v
       ],
       created_at: '2026-09-18T00:00:00.000Z', updated_at: '2026-09-18T00:00:00.000Z',
     } as never)
-    h.drive[CLIP1].modified = MOD2   // Script 1 re-exported in Drive under the same file
+    h.drive[CLIP1].modified = MOD2; h.drive[CLIP1].bytes = 1100   // Script 1 re-exported in Drive under the same file (a new export is a new size)
     await handIn({ url: FOLDER_URL, ids: [CLIP1] })
     await runJob()
     const all = finalFilesOf(card())
@@ -419,13 +420,18 @@ describe('the editor hands in the WHOLE Drive link again (the owner, 30 Sep 2026
     expect(card().drive_handins[1]).toMatchObject({ status: 'done', file_ids: [] })
   })
 
-  it('a folder only Google’s public view shows (no checksum, no change time): the same clip again is a NEW cut, never silently kept', async () => {
+  it('a folder only Google’s public view shows (no checksum, no change time): the same clip at the same size is KEPT, a re-export is a new cut (30 Sep 2026: an unchanged 1.9 GB folder was copied again whole)', async () => {
     seed({ status: 'in_progress' })
     h.drive[CLIP1].publicOnly = true; h.drive[CLIP2].publicOnly = true
     await handIn({ url: FOLDER_URL }); await runJob()
     await setCard({ status: 'revision_required', change_note_at: new Date().toISOString() })
+    const before2 = reads(CLIP2)
+    h.drive[CLIP1].bytes = (h.drive[CLIP1].bytes ?? 0) + 57      // Script 1 re-exported: a new size
     await handIn({ url: FOLDER_URL }); await runJob()
-    expect(card().drive_handins[1].file_ids).toHaveLength(2)
+    const hi = card().drive_handins[1]
+    expect(hi.carried).toEqual([CLIP2])                           // Script 2 as it was: not copied again
+    expect(hi.file_ids).toHaveLength(1)                           // Script 1: its new cut
+    expect(reads(CLIP2)).toBe(before2)
     // each cut has its own copy: the earlier one still points at its own bytes
     const urls = finalFilesOf(card()).map(f => f.url)
     expect(new Set(urls).size).toBe(urls.length)
@@ -461,5 +467,35 @@ describe('the editor hands in the WHOLE Drive link again (the owner, 30 Sep 2026
     seed({ status: 'in_progress' })
     await handIn({ url: `https://drive.google.com/file/d/${CLIP2}/view` }); await runJob()
     expect(versionSnapshot(card(), 1).map(f => f.drive_file_id)).toEqual([CLIP2])
+  })
+})
+
+describe('the card after a send-back (30 Sep 2026, the walk)', () => {
+  it('a hand-in made before the send-back no longer says "handed in"; one still copying, or made after, does', async () => {
+    const { handInOutdated } = await import('../app/lib/drive-handin-core')
+    const h = (requested_at: string, status = 'done') => ({ drive_handins: [{ id: 'h', pull_id: 'p', link: 'l', drive_ids: [], round: 1, by: null, requested_at, status }] })
+    expect(handInOutdated({ ...h('2026-09-30T12:50:00Z'), change_note_at: '2026-09-30T13:10:00Z' })).toBe(true)
+    expect(handInOutdated({ ...h('2026-09-30T13:20:00Z'), change_note_at: '2026-09-30T13:10:00Z' })).toBe(false)
+    expect(handInOutdated({ ...h('2026-09-30T12:50:00Z', 'copying'), change_note_at: '2026-09-30T13:10:00Z' })).toBe(false)
+    expect(handInOutdated(h('2026-09-30T12:50:00Z'))).toBe(false)
+  })
+  it('each earlier version is listed once — its last cut', async () => {
+    const { lastCutPerVersion } = await import('../app/lib/drive-handin-core')
+    expect(lastCutPerVersion([{ id: 'a', version: 1 }, { id: 'b', version: 1 }, { id: 'c', version: 2 }]).map(x => x.id)).toEqual(['c', 'b'])
+  })
+  it('the card: no hand-in while the client’s request waits on the manager, no old note, the status line knows', () => {
+    const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(d).toContain("{mayFile && !frozen && item?.status !== 'client_changes_requested' && (")
+    expect(d).toContain("change_note && item?.status !== 'client_changes_requested' && (")
+    expect(d).toContain('const earlier = lastCutPerVersion(')
+    expect(readFileSync('app/dashboard/board/DriveHandIn.tsx', 'utf8')).toContain('const latest = handInOutdated(item) ? null : latestHandIn(item)')
+  })
+})
+
+describe('the progress tray clears itself (30 Sep 2026: finished copies stacked over the card)', () => {
+  it('a finished copy leaves after a few seconds; a new hand-in on a card replaces its old row', () => {
+    const rows = readFileSync('app/dashboard/DriveCopyRows.tsx', 'utf8')
+    expect(rows).toContain('const t = setTimeout(() => dismissDriveCopy(watch.handInId), DONE_SHOWN_MS)')
+    expect(readFileSync('app/dashboard/driveCopyWatch.ts', 'utf8')).toContain('x.handInId !== w.handInId && x.itemId !== w.itemId')
   })
 })

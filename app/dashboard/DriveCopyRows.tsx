@@ -7,6 +7,9 @@ import type { ContentItem, DrivePull } from '@/lib/db-types'
 import { driveHandInsOf, handInWords } from '../lib/drive-handin-core'
 import { dismissDriveCopy, type DriveCopyWatch } from './driveCopyWatch'
 
+/** how long a finished copy's "7 files handed in" stays in the tray */
+export const DONE_SHOWN_MS = 8000
+
 /** THE DRIVE COPIES IN THE PROGRESS TRAY (30 Sep 2026): one line each, read live from the card and its pull row */
 export function DriveCopyRows({ watches }: { watches: readonly DriveCopyWatch[] }) {
   return (
@@ -26,6 +29,14 @@ function DriveCopyRow({ watch }: { watch: DriveCopyWatch }) {
     const t = setInterval(() => setNow(Date.now()), 2000)
     return () => clearInterval(t)
   }, [handIn?.status])
+  // A FINISHED COPY LEAVES THE TRAY on its own once it has been read (30 Sep 2026: finished rows sat over the card's
+  // files); one that stopped stays until it is closed — that one needs doing something about
+  const done = handIn?.status === 'done'
+  useEffect(() => {
+    if (!done) return
+    const t = setTimeout(() => dismissDriveCopy(watch.handInId), DONE_SHOWN_MS)
+    return () => clearTimeout(t)
+  }, [done, watch.handInId])
   const said = handInWords(pull as never, handIn, now)
   const tone = !said ? 'text-muted-foreground' : said.tone === 'failed' ? 'text-accent-red-deep' : said.tone === 'done' ? 'text-foreground' : 'text-muted-foreground'
   return (
