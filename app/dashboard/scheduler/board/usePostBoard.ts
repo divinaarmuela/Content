@@ -57,7 +57,7 @@ export function usePostBoard(person: ScopeViewer | null) {
   const { rows: contacts } = useTable<ClientContact>('client_contacts', { enabled: person !== null })
 
   /** the client's connected channels, for the logos and the send check */
-  const [accounts, setAccounts] = useState<AccountRef[] | null>(null)
+  const [accounts, setAccounts] = useState<(AccountRef & { client_id: string })[] | null>(null)
   useEffect(() => {
     if (!person) return
     let cancelled = false
@@ -65,8 +65,8 @@ export function usePostBoard(person: ScopeViewer | null) {
       try {
         const res = await fetch('/api/social/accounts', { cache: 'no-store' })
         if (!res.ok) return
-        const json = await res.json() as { accounts?: { id: string; platform: string; active: boolean; name?: string | null }[] }
-        if (!cancelled) setAccounts((json.accounts ?? []).map(a => ({ id: a.id, platform: a.platform, live: a.active, name: a.name ?? null })))
+        const json = await res.json() as { accounts?: { id: string; client_id: string; platform: string; active: boolean; name?: string | null }[] }
+        if (!cancelled) setAccounts((json.accounts ?? []).map(a => ({ id: a.id, client_id: String(a.client_id ?? ''), platform: a.platform, live: a.active, name: a.name ?? null })))
       } catch { /* the board still draws; the rules that need channels say they were not loaded */ }
     })()
     return () => { cancelled = true }
@@ -152,8 +152,17 @@ export function usePostBoard(person: ScopeViewer | null) {
       .map(decorate)
   }, [visible, clock.now, decorate])
 
+  /** the batch planner's channels: this client's connected accounts (null while they load) */
+  const channelsOf = useCallback(
+    (clientId: string) => (accounts ? accounts.filter(a => a.client_id === clientId) : null), [accounts])
+  /** the client's own time zone — every posting time is the client's */
+  const zoneOf = useCallback(
+    (clientId: string) => (clientById.get(clientId)?.timezone as string | null | undefined) ?? null, [clientById])
+
   return {
     clock,
+    channelsOf,
+    zoneOf,
     loading: live.loading || postsLoading,
     onLanes,
     cancelled,

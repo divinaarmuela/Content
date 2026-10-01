@@ -1171,7 +1171,7 @@ export async function clientActOnPost(
  * A NEW DRAFT POST. The only way a post row is born with a stage (a Schedule upload, the composer, a
  * piece's leftover files). Nobody is emailed about a draft (audit V12).
  */
-export async function insertDraftPost(input: {
+export type DraftPostInput = {
   id?: string
   client_id: string
   item_id: string
@@ -1186,9 +1186,15 @@ export async function insertDraftPost(input: {
   version_number?: number | null
   approval_steps?: 'team' | 'team_then_client' | null
   automation?: PostAutomation | null
-}): Promise<SocialPost> {
+  /** the person who acts next on it — the scheduler a card is handed to */
+  assigned_to?: string | null
+  /** one of a card's posts (post-batch-core PostBatch) */
+  batch?: Record<string, unknown> | null
+}
+
+function draftRow(input: DraftPostInput): SocialPost {
   const at = deps.now().toISOString()
-  return posts().insert({
+  return {
     id: input.id ?? randomUUID(),
     client_id: input.client_id,
     item_id: input.item_id,
@@ -1211,7 +1217,25 @@ export async function insertDraftPost(input: {
     draft_version: 1,
     approval_steps: input.approval_steps ?? null,
     ...(input.automation ? { automation: input.automation } : {}),
-  } as unknown as SocialPost)
+    ...(input.assigned_to ? { assigned_to: input.assigned_to } : {}),
+    ...(input.batch ? { batch: input.batch } : {}),
+  } as unknown as SocialPost
+}
+
+export async function insertDraftPost(input: DraftPostInput): Promise<SocialPost> {
+  return posts().insert(draftRow(input) as never)
+}
+
+/**
+ * A NEW DRAFT, AT MOST ONCE (a card's batch, post-batch.ts). The id is worked out from the card, the
+ * version and the file, and the row is CLAIMED against "nothing there yet": the first writer makes it,
+ * every later one — a retried hand-over, the automatic hand-over beside a manual one — finds it and
+ * makes nothing. `created: false` names the post that was already there.
+ */
+export async function claimDraftPost(input: DraftPostInput & { id: string }): Promise<{ created: boolean; row: SocialPost | null }> {
+  const row = draftRow(input)
+  const res = await posts().claim(input.id, cur => (cur ? null : row))
+  return res.claimed ? { created: true, row: res.row } : { created: false, row: res.current }
 }
 
 /**

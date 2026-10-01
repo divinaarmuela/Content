@@ -157,6 +157,8 @@ export default function SchedulePage() {
     forContact: ownerContact,
     // "Show on calendar" from the window that follows a press
     onShowDay: key => setAnchor(key),
+    // …and after a cancel, the list of cancelled posts it went to (1 Oct 2026)
+    onShowCancelled: () => showList('cancelled'),
   })
 
   /** …and the piece that link named, opened once the page knows about it */

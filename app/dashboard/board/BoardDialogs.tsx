@@ -25,7 +25,8 @@ import {
   briefAfterHandover, handToGroups, personLabel, whoMakesIt, type HandTo,
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
-import { folderOf, linkKindOf } from '../../lib/card-link-core'
+import { linkKindOf } from '../../lib/card-link-core'
+import { handoverNotice } from '../../lib/post-batch-core'
 import { contactIdOf, ownerChoices } from '../../lib/account-owner-core'
 import { findKindByName, kindIdForContentType, normaliseKindName } from '../../lib/work-kinds-core'
 import { canReadClientComments } from '../../lib/comment-access-core'
@@ -372,12 +373,9 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
   // without a reader.
   const { rows: team } = useTable<TeamUser>('team_users', { enabled: open })
 
-  /** the Drive or Dropbox folder the scheduler posts from (the owner, 11 Sep
-   *  2026: "we might assign the scheduler by giving them the drive link") */
-  const [postFolder, setPostFolder] = useState('')
-  // the approved Drive the scheduler works from, prefilled from the card so
-  // the hand-over carries it without retyping (the owner, 14 Sep 2026)
-  useEffect(() => { setTo(''); setNote(''); setPostFolder(card ? (folderOf(card as never)?.url ?? '') : '') }, [card])
+  // NO "DRIVE FOLDER THEY POST FROM" any more (the owner, 1 Oct 2026): the approved files are on the
+  // card, and the hand-over makes the scheduler's draft posts out of them — one per file
+  useEffect(() => { setTo(''); setNote('') }, [card])
 
   // A CARD IS HANDED TO A SCHEDULER (the owner, 14 Sep 2026: "the AM or
   // super admin hands over to a scheduler, who picks the files from the link
@@ -392,28 +390,23 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
     if (!card || !chosen) return
     setBusy(true)
     try {
-      // the folder first, so the hand-over email can name it — saved as the
-      // card's folder to work from, never over the editor's finished edit
-      // (the item PATCH keeps a handed-in link as it is); unchanged, untouched
-      if (postFolder.trim() && postFolder.trim() !== (folderOf(card as never)?.url ?? '')) {
-        const check = linkKindOf(postFolder)
-        if (!check.ok) throw new Error(check.reason)
-        const put = await fetch(`/api/production/items/${card.id}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_assets_url: check.url }),
-        })
-        if (!put.ok) throw new Error(await readError(put, 'Could not save the folder'))
-      }
       // APPROVE AND HAND, ONE ROUTE: the hand-over route performs the
       // approval (its history, the client's decision recorded) and lands the
       // card in this scheduler's Draft — it is never in Ready to post
-      let postProblem: string | null = null
+      // what the hand-over made: how many draft posts — one per approved file (1 Oct 2026) — or why none
+      const seatSaid: { problem: string | null; posts: number | null } = { problem: null, posts: null }
+      const readSeat = async (seat: Response) => {
+        const j = (await seat.json().catch(() => ({}))) as { post_problem?: string; posts?: number }
+        seatSaid.problem = j.post_problem ?? null
+        seatSaid.posts = typeof j.posts === 'number' ? j.posts : null
+      }
       if (approve) {
         const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ scheduler_ids: [chosen.id], approve: true }),
         })
         if (!seat.ok) throw new Error(await readError(seat, 'Could not approve and hand it over'))
-        postProblem = ((await seat.json().catch(() => ({}))) as { post_problem?: string }).post_problem ?? null
+        await readSeat(seat)
       }
       const words = note.trim()
       const brief = briefAfterHandover(
@@ -443,13 +436,12 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
           body: JSON.stringify({ scheduler_ids: [chosen.id] }),
         })
         if (!seat.ok) throw new Error(await readError(seat, 'Could not hand the posting over'))
-        postProblem = ((await seat.json().catch(() => ({}))) as { post_problem?: string }).post_problem ?? null
+        await readSeat(seat)
       }
-      // the hand-over makes a fresh draft POST from the edit's files, on Post approval (30 Sep 2026)
-      if (postProblem) toast.error(`Handed to ${personLabel(chosen)}, but the post could not be made: ${postProblem}`)
-      else toast.success(approve || card.status === 'approved_for_scheduling'
-        ? `Handed to ${personLabel(chosen)} — a draft post is waiting for them on Post approval.`
-        : `Handed to ${personLabel(chosen)}.`)
+      // the hand-over makes the card's draft POSTS from the edit's files, on Post approval — one per
+      // approved file (1 Oct 2026): "Handed to Test Scheduler — 8 draft posts on Post approval"
+      if (seatSaid.problem) toast.error(`Handed to ${personLabel(chosen)}, but the posts could not be made: ${seatSaid.problem}`)
+      else toast.success(handoverNotice(personLabel(chosen), approve || card.status === 'approved_for_scheduling' ? (seatSaid.posts ?? 0) : 0))
       onHanded?.()
       onClose()
     } catch (e) {
@@ -466,7 +458,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
           <DialogTitle>{approve ? 'Approve and hand it to a scheduler' : 'Hand this to someone'}</DialogTitle>
           <DialogDescription>
             {approve
-              ? 'The approval is logged and a draft post is made from its files, waiting for them on Post approval. Close this without picking anyone and nothing changes.'
+              ? 'The approval is logged and a draft post is made for each approved file, waiting for them on Post approval. Close this without picking anyone and nothing changes.'
               : 'They become the person on it, and they are told — with whatever you write here.'}
           </DialogDescription>
         </DialogHeader>
@@ -497,18 +489,10 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
           <div className="flex flex-col gap-2">
             <Label htmlFor="hand-to-note">What you want them to do (optional)</Label>
             <Textarea id="hand-to-note" rows={4} value={note} onChange={e => setNote(e.target.value)}
-              placeholder="What you want them to do — cut a 30s version for Reels…"
+              placeholder="What you want them to do — post one a day from Monday…"
               className="rounded-[20px] border-border bg-surface px-4 py-3" />
             <p className="text-[13px] text-muted-foreground">
               This is added to “what needs doing” on the card. Nothing already there is replaced.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="hand-to-folder">Drive folder they post from (optional)</Label>
-            <Input id="hand-to-folder" value={postFolder} onChange={e => setPostFolder(e.target.value)}
-              placeholder="https://drive.google.com/drive/folders/…" className={field} />
-            <p className="text-[13px] text-muted-foreground">
-              It goes on the card and in their email, and the post window’s Drive tab opens on it.
             </p>
           </div>
         </div>

@@ -47,6 +47,59 @@ function rank(platform: string | null | undefined): number {
   return i === -1 ? PREFER.length : i
 }
 
+/* ── WHAT THE POST WINDOW SHOWS FOR A VIDEO (1 Oct 2026) ──────────────────────────────────────────
+ * A draft made from an edit card's .mov original drew an empty black box with a film icon: Chrome
+ * cannot decode the .mov, and a draft with no channels has no encoder copy yet. The editor's card
+ * already has a Cloudflare Stream preview of the same file (usePreviewRows), so the window shows that;
+ * with none yet it shows the file's still and says the preview is being made. ONLY WHAT IS SHOWN —
+ * what is published is the post's slides, untouched.
+ */
+
+/** the originals a browser cannot be trusted to decode — a camera .mov above all */
+const NEEDS_COPY_EXT = /\.(mov|avi|mkv|mts|m2ts)(\?|#|$)/i
+export function needsPreviewCopy(url: string): boolean {
+  return NEEDS_COPY_EXT.test(String(url ?? ''))
+}
+
+export const MOV_PREVIEW_WAIT = 'Preview being made — the original is a .mov'
+
+/** A Cloudflare Stream preview row, as much of it as this needs (stream-core PreviewRow). */
+export type StreamRowLike = {
+  state?: string | null
+  playback_hls?: string | null
+  thumbnail_url?: string | null
+}
+
+export type ShownVideo =
+  /** the encoder's .mp4 copy, or an original the browser plays */
+  | { kind: 'file'; src: string }
+  /** Cloudflare Stream's preview of the original — an adaptive stream every browser plays */
+  | { kind: 'stream'; hls: string; poster: string | null }
+  /** a .mov with no copy and no preview yet: its still, if there is one, and the words */
+  | { kind: 'waiting'; poster: string | null; words: string }
+
+const STREAM_BASE = /^(https:\/\/customer-[a-z0-9]+\.cloudflarestream\.com\/[A-Za-z0-9]+)\//
+
+/**
+ * Which picture of a video the window draws: the encoder's copy when there is one, else Cloudflare's
+ * preview when it is ready, else — for a .mov — its still (`thumb`: the Drive thumbnail of a file handed
+ * in from Drive) and MOV_PREVIEW_WAIT; anything else plays as it is.
+ */
+export function shownVideo(input: {
+  url: string
+  encodeRows?: readonly EncodeRowLike[] | null
+  stream?: StreamRowLike | null
+  thumb?: string | null
+}): ShownVideo {
+  const copy = playableUrl(input.url, input.encodeRows)
+  if (copy !== input.url) return { kind: 'file', src: copy }
+  const row = input.stream
+  const base = row?.state === 'ready' ? STREAM_BASE.exec(String(row.playback_hls || row.thumbnail_url || ''))?.[1] ?? null : null
+  if (base) return { kind: 'stream', hls: `${base}/manifest/video.m3u8`, poster: `${base}/thumbnails/thumbnail.jpg?time=1s` }
+  if (needsPreviewCopy(input.url)) return { kind: 'waiting', poster: input.thumb ?? null, words: MOV_PREVIEW_WAIT }
+  return { kind: 'file', src: input.url }
+}
+
 /** what to say under a video the browser cannot decode */
 export const CANNOT_PLAY_HERE =
   'This file cannot be played in the browser (a camera .mov, usually). It still posts — each channel gets an .mp4 copy.'

@@ -571,7 +571,7 @@ describe('a New post on Post approval is handed to a scheduler (14 Sep 2026)', (
 })
 
 describe('logging the client’s approval hands the card to a scheduler on the spot (14 Sep 2026)', () => {
-  it('the approve move opens the Hand to dialog for a manager, prefilled with the approved Drive, and the folder never overwrites the finished edit', () => {
+  it('the approve move opens the Hand to dialog for a manager — with no Drive folder to type (the files are on the card, 1 Oct 2026)', () => {
     const acts = src('app/dashboard/board/useCardActs.tsx')
     // 15 Sep 2026: the dialog opens BEFORE any move, and the hand-over
     // approves — the card never rests in Ready to post
@@ -580,9 +580,10 @@ describe('logging the client’s approval hands the card to a scheduler on the s
     expect(acts).toContain('setHandFor({ card, approve: true }); return')
     expect(acts).not.toContain("setHandFor({ ...card, status: to }")
     const dialogs = src('app/dashboard/board/BoardDialogs.tsx')
-    expect(dialogs).toContain("setPostFolder(card ? (folderOf(card as never)?.url ?? '') : '')")
-    // the folder is saved as the folder to work from through the item PATCH, not as the card link
-    expect(dialogs).toMatch(/method: 'PATCH', headers: \{ 'Content-Type': 'application\/json' \}, body: JSON\.stringify\(\{ raw_assets_url: check\.url \}\)/)
+    // the owner, 1 Oct 2026: "remove the Drive folder they post from field — files are on the card"
+    const block = dialogs.slice(dialogs.indexOf('export function HandToDialog'), dialogs.indexOf('export type ClientChoice'))
+    expect(block).not.toContain('postFolder')
+    expect(block).not.toContain('hand-to-folder')
     expect(dialogs).not.toMatch(/\/link`, \{\s*method: 'PUT'[^}]*url: check\.url/)
   })
 })

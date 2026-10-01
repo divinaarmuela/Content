@@ -233,7 +233,13 @@ export type WindowHeader = {
   changeNote: string | null
   /** why it came back from booked, a network that did not go out */
   problem: string | null
+  /** what the quality check of a card's post is for — the caption, the channels and the time; the files
+   *  were checked and approved on the edit (the owner, 1 Oct 2026) */
+  checkLine: string | null
 }
+
+/** The quality check of a post made from an approved card: it checks the post, not the files again. */
+export const BATCH_CHECK_LINE = 'This check is for the caption, the channels and the time. The files were checked and approved on the edit.'
 
 /**
  * THE TOP OF THE WINDOW: the stage and what happens next (decision 2). Read
@@ -275,6 +281,7 @@ export function windowHeader(
     changeLine: ca ? changesAskedLine(ca, nameOf) : null,
     changeNote: ca?.note?.trim() ? ca.note.trim() : null,
     problem: post.problem && post.stage !== 'cancelled' ? post.problem : null,
+    checkLine: post.batch && (post.stage === 'quality_check' || post.stage === 'draft') ? BATCH_CHECK_LINE : null,
   }
 }
 

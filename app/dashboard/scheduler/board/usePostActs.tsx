@@ -13,7 +13,8 @@ import {
   type AgreedVia, type ApprovalSteps, type OfferedAction, type PostState,
 } from '../../../lib/post-stage-core'
 import { postAct, type PostActRequest } from '../../../lib/post-act-contract'
-import { postWindowHref } from '../../../lib/post-board-core'
+import { CANCELLED_NOTICE, postWindowHref } from '../../../lib/post-board-core'
+import { rebookPost } from './rebook'
 import { defaultRecipients, type ClientRecipient } from '../../../lib/client-recipients-core'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { DEFAULT_TZ, fromZonedInput, toZonedInput } from '../../../lib/timezone-core'
@@ -83,6 +84,16 @@ export function usePostActs(deps: PostActDeps): {
     try {
       const json = await postAct(post.id, body)
       if (json.ok) {
+        // CANCELLED IS NOT GONE (1 Oct 2026): the card leaves its lane for the folded Cancelled list —
+        // say where it went, and offer Re-book (T22) right here; the board opens the list itself
+        if (json.stage === 'cancelled') {
+          const landed = json.post ?? null
+          toast.success(CANCELLED_NOTICE, {
+            duration: 12_000,
+            action: { label: 'Re-book', onClick: () => { void rebookPost(post.id, landed?.rev ?? null) } },
+          })
+          return null
+        }
         // back to Draft to be changed: the change is made in the post window
         const reopen = (action.action === 'edit' || action.action === 'rebook') && json.stage === 'draft'
         if (json.link) {

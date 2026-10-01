@@ -54,6 +54,7 @@ import { STAND_IN_MARK } from './card-history-core'
 import { type RawAsset as WorkFile, rawAssetKind } from './raw-assets-core'
 import type { Slide } from './version-files-core'
 import { DASHBOARD_URL } from './app-url'
+import { autoHandoverTargets } from './post-batch-core'
 
 export type ContentItem = {
   id: string
@@ -210,6 +211,52 @@ export async function defaultSchedulersOf(clientId: string): Promise<string[]> {
   } catch (e) {
     console.error('default schedulers: could not read the client', e instanceof Error ? e.message : e)
     return []
+  }
+}
+
+/** The ids given that are active team members (never a client account) — a stale pick is dropped. */
+async function activeTeamIds(ids: readonly string[]): Promise<string[]> {
+  const wanted = [...new Set(ids.filter(x => typeof x === 'string' && x))].slice(0, 20)
+  if (wanted.length === 0) return []
+  const rows = await table<TeamUserRow>('team_users').list({ where: u => wanted.includes(u.id) }).catch(() => [] as TeamUserRow[])
+  return wanted.filter(id => rows.some(u => u.id === id && u.active_status && u.role !== 'client'))
+}
+
+/**
+ * THE AUTOMATIC HAND-OVER (the owner, 1 Oct 2026) — a follow-on of the approve move, never a second
+ * writer of it. The card's posts are made first (one draft per approved file, claimed per file, so a
+ * retry makes nothing twice); then the card itself is CLAIMED from approved_for_scheduling into the
+ * scheduler's Draft — the same place Hand to… puts it. A claim that finds the card already moved
+ * (somebody handed it by hand a moment earlier) stands down and tells nobody: their notice stands.
+ * Any failure leaves the card approved and the Hand to… button working; it never fails the approval.
+ */
+async function autoHandOver(actor: TeamUser, item: ContentItemRow, targets: string[]): Promise<{ posts: number } | null> {
+  try {
+    const { createBatchForCard } = await import('./post-batch')
+    const batch = await createBatchForCard(item as never, { scheduler: targets[0] })
+    if (!batch.ok) {
+      console.warn('auto hand-over: no posts made', item.id, batch.reason)
+      return null
+    }
+    const moved = await table<ContentItemRow>('content_items').claim(item.id, cur =>
+      (cur && cur.status === 'approved_for_scheduling'
+        ? { ...cur, status: 'draft_uploaded', scheduler_ids: targets } as ContentItemRow
+        : null))
+    if (!moved.claimed) return null
+    await logActivity({
+      actor, clientId: item.client_id,
+      entityType: 'content_item', entityId: item.id,
+      action: 'schedule_handoff',
+      detail: `handed automatically to the client's scheduler — ${batch.total} draft post${batch.total === 1 ? '' : 's'}`,
+    })
+    announceItemChange({ item_id: item.id, client_id: item.client_id, status: 'draft_uploaded', kind: 'updated' })
+    const handedItem = { ...(item as unknown as ContentItem), status: 'draft_uploaded' as ItemStatus, scheduler_ids: targets }
+    afterResponse('auto hand-over notification', () =>
+      notifyScheduleHandoff(actor, handedItem, targets, 'work', { posts: batch.total, auto: true }))
+    return { posts: batch.total }
+  } catch (e) {
+    console.error('auto hand-over failed — the card stays approved for Hand to…', item.id, e instanceof Error ? e.message : e)
+    return null
   }
 }
 
@@ -499,6 +546,10 @@ export async function notifyScheduleHandoff(
   // from the files and sends the post for the quality check (14 Sep 2026);
   // 'schedule' — a signed-off card that only needs a posting date
   mode: 'work' | 'schedule' = 'schedule',
+  /** THE CARD'S BATCH (1 Oct 2026): how many draft posts the hand-over made, said in the one notice —
+   *  never one notice per post; `auto` when nobody pressed Hand to… (the client approved, and the
+   *  client has a scheduler set) */
+  batch?: { posts: number; auto?: boolean },
 ): Promise<number> {
   const ids = schedulerIds.filter(x => typeof x === 'string').slice(0, 20)
   if (ids.length === 0) return 0
@@ -521,7 +572,11 @@ export async function notifyScheduleHandoff(
     subject: mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
     bodyHtml: renderEmail(
       mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
-      (mode === 'work'
+      (mode === 'work' && batch && batch.posts > 0
+        ? `<p>${batch.auto
+          ? `<strong>${escapeHtml(item.title)}</strong> was approved, and it is handed to you as this client\u2019s scheduler.`
+          : `${escapeHtml(actor.name || actor.email)} handed you <strong>${escapeHtml(item.title)}</strong>.`} ${batch.posts === 1 ? 'A draft post is' : `${batch.posts} draft posts are`} waiting for you on Post approval, with the approved files already on ${batch.posts === 1 ? 'it' : 'them'}. Set the channels, the times and the captions, then send ${batch.posts === 1 ? 'it' : 'them'} for the quality check.</p>`
+        : mode === 'work'
         ? `<p>${escapeHtml(actor.name || actor.email)} handed you <strong>${escapeHtml(item.title)}</strong> to work on. The folder below is what you work from — make the post, then send it for the quality check.</p>`
         : `<p><strong>${escapeHtml(item.title)}</strong> is signed off, and ${escapeHtml(actor.name || actor.email)} picked you to schedule it.</p>`) +
       folderLine(item as { link_url?: string | null; link_kind?: string | null }) +
@@ -698,6 +753,9 @@ export async function performTransition(
      *  is wrong"): the history records the move, nobody is emailed — not the
      *  reviewers, not the schedulers, and no "passed in your place". */
     quiet?: boolean
+    /** THE CALLER HANDS THE CARD OVER ITSELF (the Hand to… popup's "approve and hand", 1 Oct 2026): the
+     *  automatic hand-over to the client's scheduler stands down, so the card goes to the person picked */
+    callerHandsOver?: boolean
   },
 ): Promise<ContentItem> {
   const from = item.status
@@ -930,8 +988,26 @@ export async function performTransition(
   const selfPosts = !isBriefTask && !isInternal && await deliverOnlyFor(item)
   // …only once it is SIGNED OFF (25 Sep 2026): a card going to the client is not handed to anyone yet — Jordan
   // Wilson's First Shoot sat "Handed to Cath" while the client had not answered
-  const defaults = (to === 'approved_for_scheduling' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal && !selfPosts)
+  // …and never when the caller hands it to someone itself (1 Oct 2026: "approve and hand" to Kim also
+  // put Cath on the card and emailed her "needs a posting date")
+  const defaults =(to === 'approved_for_scheduling' && schedulerIdsOf(item).length === 0 && !isBriefTask && !isInternal && !selfPosts && !opts?.callerHandsOver)
     ? await defaultSchedulersOf(item.client_id)
+    : []
+  // THE CARD GOES TO THE POSTING SIDE BY ITSELF (the owner, 1 Oct 2026): approved, and the client has
+  // somebody under "Who schedules for this client" — the card's posts are made and handed to them
+  // straight after this move (autoHandOver below), so nobody has to press Hand to…. Worked out before
+  // the claim; done only by the request whose claim lands, and claimed again on its own, so it cannot fire twice.
+  const autoTargets = (to === 'approved_for_scheduling' && !system && !isBriefTask && !isInternal && !selfPosts && !opts?.callerHandsOver)
+    ? autoHandoverTargets({
+      to,
+      workCard: true,
+      selfPosts,
+      adhoc: (before as { adhoc_post?: unknown }).adhoc_post === true,
+      callerHandsOver: opts?.callerHandsOver === true,
+      clientSchedulers: defaults.length > 0 ? defaults : await defaultSchedulersOf(item.client_id),
+      picked: opts?.schedulerIds?.length ? await activeTeamIds(opts.schedulerIds) : [],
+      onCard: schedulerIdsOf(item),
+    })
     : []
   let updated: ContentItemRow | null
   const movePatch = {
@@ -1009,6 +1085,9 @@ export async function performTransition(
       action: DELIVERED_ACTION, detail: DELIVERED_LINE,
     })
   }
+  // the card's batch, handed over — null when it was not (no scheduler set, or it could not be made:
+  // the card then waits for Hand to…, exactly as before)
+  const handed = !system && autoTargets.length > 0 ? await autoHandOver(actor as TeamUser, updated, autoTargets) : null
   if (defaults.length > 0) {
     await logActivity({
       actor: system ? null : actor, clientId: item.client_id,
@@ -1021,7 +1100,8 @@ export async function performTransition(
     // client's yes was the wrong email at the wrong time (the live role-play
     // of 11 Sep 2026). They hold the card now and are told at the approval
     // (the `assigned_schedulers` audience on client_review → approved).
-    if (!system && to === 'approved_for_scheduling') {
+    // …unless the batch was handed to them just now: that hand-over sent the one notice
+    if (!system && to === 'approved_for_scheduling' && !handed) {
       afterResponse('default scheduler handoff notification', () => notifyScheduleHandoff(actor, { ...item, scheduler_ids: defaults, status: to }, defaults))
     }
   }
@@ -1083,6 +1163,8 @@ export async function performTransition(
   // after-response.ts); the outbox dedupe makes retries safe
   const skip = new Set(opts?.skipAudiences ?? [])
   if (selfPosts) { skip.add('assigned_schedulers'); skip.add('schedulers') }
+  // the scheduler handed the batch was told once, by the hand-over — not again by the move
+  if (handed) { skip.add('assigned_schedulers'); skip.add('schedulers') }
   const audiences = opts?.quiet ? [] : (TRANSITION_NOTIFICATIONS[`${from}>${to}`] ?? []).filter(a => !skip.has(a))
   const isClientFacing = to === 'client_review'
   const reviewerIds = (opts?.reviewerIds ?? []).filter(x => typeof x === 'string').slice(0, 20)

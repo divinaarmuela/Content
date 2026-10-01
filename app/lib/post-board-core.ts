@@ -518,5 +518,24 @@ function faceNetworks(
   return settled ? named : [...named, { ...UNKNOWN_NETWORK }]
 }
 
+/* ── a cancelled post is not lost (1 Oct 2026) ──────────────────────────── */
+
+/**
+ * WHERE A CANCELLED POST WENT. Cancel post (T20) takes the card out of its lane into the folded
+ * "Cancelled · N" list at the foot of the board — which looked like a delete. The press now says
+ * where it went, offers Re-book (T22) on the spot, and the list is opened.
+ */
+export const CANCELLED_NOTICE = 'Cancelled — it’s in Cancelled at the bottom of this page'
+/** …and on the Schedule page, where cancelled posts are a filter of the list */
+export const CANCELLED_NOTICE_SCHEDULE = 'Cancelled — it’s under Cancelled in the list'
+
+/**
+ * The posts that were on a lane a moment ago and are in the cancelled list now — the board opens its
+ * Cancelled list for them, whether the cancel was pressed on a card or in the post window.
+ */
+export function newlyCancelled(before: ReadonlySet<string>, cancelledNow: readonly { id: string }[]): string[] {
+  return cancelledNow.filter(p => before.has(p.id)).map(p => p.id)
+}
+
 /* ── edits ready to become posts (the tray above the board) ─────────────── */
 

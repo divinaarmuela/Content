@@ -13,6 +13,8 @@ import PostWindow, { type PostWindowContext, type PostWindowOutcome, type PostWi
 import NewPostSources from './NewPostSources'
 import type { RailMedia, ScheduleData } from './useSchedulePosts'
 import type { Slide } from '@/app/lib/version-files-core'
+import { CANCELLED_NOTICE_SCHEDULE } from '@/app/lib/post-board-core'
+import { rebookPost } from '../../scheduler/board/rebook'
 
 /**
  * ONE ACTION: ADD THE MEDIA, SEE IT, SEND IT — WHEREVER YOU ARE STANDING.
@@ -67,7 +69,9 @@ function draftOf(posts: ScheduleData['posts'], itemId: string) {
   return posts.find(p => ((p as { source_item_id?: string | null }).source_item_id ?? p.item_id) === itemId && p.stage === 'draft') ?? null
 }
 
-export function useComposeFlow({ clientId, data, role, userId, suggested, onShowDay, forContact = null }: {
+export function useComposeFlow({ clientId, data, role, userId, suggested, onShowDay, onShowCancelled, forContact = null }: {
+  /** after a cancel: the page shows its list of cancelled posts (1 Oct 2026) */
+  onShowCancelled?: () => void
   clientId: string | null
   /** whom a new upload is for: null for the business, a contact's id for a person (15 Sep 2026) */
   forContact?: string | null
@@ -289,7 +293,20 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, onShow
                 </div>
               )}
               <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-                {done.postId && stage && (
+                {/* CANCELLED IS NOT GONE (1 Oct 2026): it left the calendar for the Cancelled list — say so,
+                    and offer Re-book (T22) here */}
+                {stage === 'cancelled' && done.postId && (
+                  <>
+                    <p className="w-full text-[13px] text-muted-foreground">{CANCELLED_NOTICE_SCHEDULE}.</p>
+                    <button type="button" onClick={() => { const id = done.postId!; setDone(null); void rebookPost(id) }}
+                      className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">Re-book</button>
+                    {onShowCancelled && (
+                      <button type="button" onClick={() => { setDone(null); onShowCancelled() }}
+                        className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">Show cancelled posts</button>
+                    )}
+                  </>
+                )}
+                {done.postId && stage && stage !== 'cancelled' && (
                   <button type="button" onClick={reopen} className="min-h-11 rounded-full border border-border px-4 text-[13px] font-semibold">Open the post</button>
                 )}
                 {done.createdPostId && (

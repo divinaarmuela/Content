@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import type { SocialPost } from '@/lib/db-types'
-import { postApprovalHref } from '../../lib/post-board-core'
+import { CANCELLED_NOTICE, postApprovalHref } from '../../lib/post-board-core'
+import { rebookPost } from './board/rebook'
 import { POST_APPROVAL_BOARD } from '../../lib/overview-links-core'
 import { OpenPostWindow, type PostWindowOutcome } from '../social/schedule/PostWindow'
 
@@ -91,6 +92,13 @@ export default function PostWindowFromAddress({ clientId = '' }: {
   if (!postId || !row) return null
 
   const done = (outcome: PostWindowOutcome) => {
+    // cancelled in the window: say where it went, with Re-book on the spot (1 Oct 2026)
+    if (outcome.stage === 'cancelled' && outcome.postId) {
+      const cancelledId = outcome.postId
+      toast.success(CANCELLED_NOTICE, { duration: 12_000, action: { label: 'Re-book', onClick: () => { void rebookPost(cancelledId) } } })
+      close()
+      return
+    }
     toast.success(outcome.link ? `${outcome.words}. The link to send: ${outcome.link}` : outcome.words)
     if (outcome.createdPostId) {
       setPostId(outcome.createdPostId)

@@ -154,6 +154,8 @@ export default function PostApprovalPage() {
             onPress={acts.press}
             initialLane={initialLane}
             focus={focus}
+            channelsOf={data.channelsOf}
+            zoneOf={data.zoneOf}
           />
         </>
       )}
