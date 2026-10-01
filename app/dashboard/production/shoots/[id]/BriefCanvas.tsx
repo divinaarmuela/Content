@@ -941,6 +941,15 @@ export default function BriefCanvas({
   const commitText = (card: CanvasCard, text: string) => {
     setEditing(null)
     interactingRef.current = false
+    // A NOTE LEFT EMPTY IS NOT KEPT (1 Oct 2026): a double-click on the board saves a blank note at
+    // once, so clicking about a board that looked empty left ten "Write it down…" notes scattered
+    // across Jordan 9th October's plan — nobody wrote them, and they hid the real cards
+    if ((card.kind === 'note' || card.kind === 'label') && !text.trim()) {
+      setCards(prev => prev.filter(c => c.id !== card.id))
+      setSelected(sel => (sel === card.id ? null : sel))
+      persist([], [card.id])
+      return
+    }
     const trimmed = text.slice(0, card.kind === 'label' ? 120 : card.kind === 'mockup' ? 500 : 4000)
     if (trimmed === (card.text ?? '')) return
     const next = { ...card, text: trimmed }

@@ -84,4 +84,8 @@ describe('a shoot brief opens for whoever made it or assigned its review (1 Oct 
     const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/dashboard/production/shoots/[id]/BriefCanvas.tsx'), 'utf8')
     expect(src).toMatch(/const framed = filled\.length > 0 \? filled : visible/)
   })
+  it('a note left empty is removed when its editing ends, never saved blank', () => {
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/dashboard/production/shoots/[id]/BriefCanvas.tsx'), 'utf8')
+    expect(src).toMatch(/\(card\.kind === 'note' \|\| card\.kind === 'label'\) && !text\.trim\(\)\) \{\s*setCards\(prev => prev\.filter\(c => c\.id !== card\.id\)\)[\s\S]{0,120}persist\(\[\], \[card\.id\]\)/)
+  })
 })
