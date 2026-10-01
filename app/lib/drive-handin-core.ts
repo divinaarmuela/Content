@@ -27,7 +27,7 @@
  */
 import { driveTargetOf } from './card-link-core'
 import { LOCKED_STATUSES, LOOKING_STATUSES, assetIdOf, clipKey, currentFiles, finalFilesOf, mayReplaceAsset, withFinalFiles, withReplacement, withRetired, type FinalFile } from './final-files-core'
-import { fileRound } from './edit-round-core'
+import { fileRound, handInRound } from './edit-round-core'
 import { formatBytes, formatLeft, type PullFile, type PullRow } from './drive-pull-core'
 
 /** the most files one hand-in may pick — a card's set, never a camera card's dump */
@@ -119,10 +119,14 @@ export function latestHandIn(item: { drive_handins?: unknown } | null | undefine
  * handed in" in green under a greyed Submit that said to hand in first). Its line is not shown once a send-back is
  * newer than it; the files stay on the card as the version before.
  */
-export function handInOutdated(item: { drive_handins?: unknown; change_note_at?: unknown } | null | undefined): boolean {
+export function handInOutdated(item: { drive_handins?: unknown; change_note_at?: unknown; edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown } | null | undefined): boolean {
   const h = latestHandIn(item)
+  if (!h || h.status === 'copying') return false
+  // …or it went on as an earlier version than the one now being made (1 Oct 2026, the walk: once the client asked for
+  // changes the card read "Your finished edit — Version 3" over "7 files handed in", and those were Version 2's)
+  if (item && typeof h.settled_round === 'number' && h.settled_round < handInRound(item)) return true
   const back = typeof item?.change_note_at === 'string' ? item.change_note_at : null
-  if (!h || h.status === 'copying' || !back) return false
+  if (!back) return false
   return h.requested_at < back
 }
 
@@ -367,6 +371,17 @@ export function withHandIn(list: readonly DriveHandIn[], h: DriveHandIn): DriveH
  * THE LINE ON THE CARD while a hand-in is on its way ("Copying 3 of 8 from Drive…"), from the pull row the page
  * watches live. Counts only the files this hand-in picked.
  */
+export function unchangedWords(kept: number): string {
+  return `Nothing changed — ${kept === 1 ? 'the file is' : `all ${kept} files are`} the same as before. Change ${kept === 1 ? 'it' : 'them'} in Google Drive, then hand the link in again.`
+}
+
+/** WHY SUBMIT WAITS, in the editor's words: a Drive hand-in that changed nothing says so; otherwise hand the link in */
+export function submitWaitsWords(item: { drive_handins?: unknown } | null | undefined): string {
+  const h = latestHandIn(item)
+  if (h && h.status === 'done' && (h.file_ids?.length ?? 0) === 0 && (h.carried?.length ?? 0) > 0 && (h.retired?.length ?? 0) === 0) return unchangedWords(h.carried!.length)
+  return 'Hand in from Google Drive first.'
+}
+
 export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | null, nowMs: number): { tone: 'working' | 'done' | 'failed'; words: string } | null {
   if (!h) return null
   if (h.status === 'failed') return { tone: 'failed', words: h.error ?? 'The Drive hand-in stopped — try again.' }
@@ -377,6 +392,9 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     const dropped = h.retired?.length ?? 0
     // "4 files handed in — 1 new, 3 updated" (the owner, 30 Sep 2026)
     const total = n + kept
+    // NOTHING CHANGED IS NOT A HAND-IN (1 Oct 2026, the walk: "7 files handed in — 0 new, 0 updated, 7 unchanged" in
+    // green over a greyed Submit) — it says so, and what to do
+    if (n === 0 && kept > 0 && dropped === 0) return { tone: 'working', words: unchangedWords(kept) }
     const fresh = Math.min(n, h.new_ids?.length ?? 0)
     const head = `${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
     return { tone: 'done', words: [head, left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }

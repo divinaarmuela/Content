@@ -105,7 +105,7 @@ export default function TransferEditingDialog({ open, itemId, itemTitle, current
             <Textarea id="transfer-note" rows={3} value={note} onChange={e => setNote(e.target.value)}
               placeholder={currentOwnerId ? 'Why it is moving, and what to pick up first…' : 'What to pick up first…'}
               className="rounded-[20px] border-border bg-surface px-4 py-3" />
-            <p className="text-[13px] text-muted-foreground">It goes in their email. The card itself is not changed.</p>
+            <p className="text-[13px] text-muted-foreground">This note goes in their email only.</p>
           </div>
         </div>
         <DialogFooter>

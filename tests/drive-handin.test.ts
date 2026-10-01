@@ -499,3 +499,32 @@ describe('the progress tray clears itself (30 Sep 2026: finished copies stacked 
     expect(readFileSync('app/dashboard/driveCopyWatch.ts', 'utf8')).toContain('x.handInId !== w.handInId && x.itemId !== w.itemId')
   })
 })
+
+describe('after the client asks for changes, before the manager decides (1 Oct 2026, the walk)', () => {
+  it('the files section names the version the client answered, and its old "handed in" line is not shown', async () => {
+    const { handInOutdated } = await import('../app/lib/drive-handin-core')
+    const { shownRound, handInRound } = await import('../app/lib/edit-round-core')
+    const card = { status: 'client_changes_requested', edit_round: 2, client_round: 2, client_rounds: [1, 2],
+      drive_handins: [{ id: 'h', pull_id: 'p', link: 'l', drive_ids: [], round: 2, settled_round: 2, by: null, requested_at: '2026-09-30T13:00:00Z', status: 'done' }] }
+    expect(handInRound(card)).toBe(3)
+    expect(shownRound(card)).toBe(2)
+    expect(handInOutdated(card)).toBe(true)
+    // the manager sends it back: Version 3 is being made, and the editor's new hand-in line shows once it lands
+    expect(shownRound({ ...card, status: 'revision_required' })).toBe(3)
+    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain('Your finished edit — {roundLabel(shownRound(item as never))}')
+  })
+})
+
+describe('a Drive hand-in that changed nothing (1 Oct 2026, the walk)', () => {
+  it('says so, in amber, and Submit says why it waits', async () => {
+    const { handInWords, submitWaitsWords } = await import('../app/lib/drive-handin-core')
+    const h = { id: 'h', pull_id: 'p', link: 'l', drive_ids: [], round: 3, settled_round: 3, by: null, requested_at: 'x', status: 'done' as const, file_ids: [], carried: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], new_ids: [] }
+    expect(handInWords(null, h, 0)).toEqual({ tone: 'working', words: 'Nothing changed — all 7 files are the same as before. Change them in Google Drive, then hand the link in again.' })
+    expect(submitWaitsWords({ drive_handins: [h] })).toBe('Nothing changed — all 7 files are the same as before. Change them in Google Drive, then hand the link in again.')
+    expect(submitWaitsWords({ drive_handins: [] })).toBe('Hand in from Google Drive first.')
+    // one clip re-exported: a real hand-in, in the usual words
+    expect(handInWords(null, { ...h, file_ids: ['x'], carried: ['b', 'c', 'd', 'e', 'f', 'g'] }, 0)?.words).toBe('7 files handed in — 0 new, 1 updated, 6 unchanged')
+    const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(d).not.toContain("'Upload the finished files first'")
+  })
+})

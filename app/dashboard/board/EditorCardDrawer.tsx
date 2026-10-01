@@ -1,6 +1,6 @@
 'use client'
 
-import { lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
+import { submitWaitsWords, lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
@@ -25,7 +25,7 @@ import { assetHistory, assetIdOf, currentFiles, finalFilesForRound, finalFilesOf
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { clipApprovalsOf } from '../../lib/clip-approvals-core'
 import { withoutRepeatedNotes } from '../../lib/card-comment-core'
-import { handInRound, nextRoundWords, roundOf, versionLabel } from '../../lib/edit-round-core'
+import { shownRound, handInRound, nextRoundWords, roundOf, versionLabel } from '../../lib/edit-round-core'
 import { earlierLinkVersions } from '../../lib/card-link-core'
 import { uploadFiles } from '../uploadQueue'
 import { kindOf } from '../../lib/files-core'
@@ -370,7 +370,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const submit = async () => {
     if (!submitting) return
     // a designer hands in files, an editor a link — either counts as finished work
-    if (!item || !workIn) { toast.error(filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first'); return }
+    if (!item || !workIn) { toast.error(filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -618,7 +618,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           or Dropbox link"): one box for the link, nothing else ── */}
       <section className="flex flex-col gap-3 border-b border-border px-5 py-4" aria-labelledby="ed-versions">
         <div className="flex items-center justify-between">
-          <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(handInRound(item as never))}</p>
+          <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(shownRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
         {/* ("Start next version" is gone, 30 Sep 2026: the editor never raises the version — only a client send-back does;
@@ -741,7 +741,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </ul>
             <div className="flex flex-wrap items-center gap-2">
               <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !workIn} onClick={() => void submit()}
-                title={!workIn ? (filesCard ? 'Upload the finished files first' : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+                title={!workIn ? (filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
@@ -756,7 +756,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
-            {!workIn && <p className="text-[12px] text-muted-foreground">{filesCard ? 'Upload the finished files first.' : 'Add the link to your finished edit first.'}</p>}
+            {!workIn && <p className="text-[12px] text-muted-foreground">{filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first.'}</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">

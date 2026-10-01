@@ -244,13 +244,15 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
     let cancelled = false
     fetch(`/api/production/items/${card.id}/client-comments`)
       .then(r => (r.ok ? r.json() : { comments: [] }))
-      .then((json: { comments?: ClientComment[] }) => {
+      .then((json: { comments?: ClientComment[]; change_note_at?: string | null }) => {
         if (cancelled) return
-        const words = (json.comments ?? []).filter(c => c.body?.trim())
+        // ONLY WHAT THEY SAID SINCE THE LAST SEND-BACK (1 Oct 2026, the walk: the popup listed the notes on Version 1,
+        // already answered by Version 2, above the one new note) — the rest is in the card's Comments
+        const since = json.change_note_at ?? ''
+        const words = (json.comments ?? []).filter(c => c.body?.trim() && String(c.created_at ?? '') > since)
         setClientWords(words)
-        // the newest thing the client said is the likeliest thing to change
-        const latest = words[words.length - 1]
-        if (latest) setNote(latest.body.trim())
+        // what they asked for this time, as the start of the note
+        if (words.length) setNote(words.map(c => c.body.trim()).join('\n'))
       })
       .catch(() => { /* the box still works without them */ })
     return () => { cancelled = true }

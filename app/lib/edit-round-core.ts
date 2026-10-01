@@ -46,6 +46,13 @@ export function handInRound(item: { edit_round?: unknown; status?: unknown; clie
   return SENT_BACK_STATUSES.includes(String(item.status ?? '')) && roundSeenByClient(item) ? nextRound(item) : roundOf(item)
 }
 
+/** THE VERSION THE CARD'S FILES SECTION NAMES: the one being made — except while the client's request waits on the
+ *  account manager, when nothing new is being made yet and the section shows the version the client answered
+ *  (1 Oct 2026: it read "Version 3" over Version 2's files) */
+export function shownRound(item: { edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown }): number {
+  return String(item.status ?? '') === 'client_changes_requested' ? roundOf(item) : handInRound(item)
+}
+
 export function roundLabel(n: number): string {
   return `Version ${n}`
 }

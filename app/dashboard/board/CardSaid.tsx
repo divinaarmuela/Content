@@ -79,7 +79,8 @@ export default function CardSaid({
               <span className="font-semibold text-foreground">{c.author_id === meId ? 'You' : (nameOf(c.author_id) ?? 'Someone')}</span>
               <span>{c.created_at ? when(String(c.created_at)) : ''}</span>
               {label && <span className="italic">on {label.toLowerCase()}</span>}
-              {c.visibility === 'client' && <Chip tone="blue" className="px-2 py-0.5">Client sees this</Chip>}
+              {/* on the client's own words it says nothing new (1 Oct 2026) — it marks what the TEAM wrote to the client */}
+              {c.visibility === 'client' && roleOf(c.author_id) !== 'client' && <Chip tone="blue" className="px-2 py-0.5">Client sees this</Chip>}
               {roleOf(c.author_id) === 'client' && <Chip tone="amber" className="px-2 py-0.5">Client</Chip>}
             </p>
             <p className="mt-1 whitespace-pre-wrap">{rest}</p>
