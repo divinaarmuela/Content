@@ -48,6 +48,7 @@ export default function SiteFooter({ vol, tagline }: { vol: string; tagline?: Re
         <div className="footer-bottom">
           <span>&copy; 2026 MD Media Marketing Pty Ltd &middot; ABN 75 681 730 512</span>
           <span>{vol}</span>
+          <span><a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></span>
         </div>
       </div>
     </footer>

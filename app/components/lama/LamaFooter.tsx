@@ -66,6 +66,10 @@ export default function LamaFooter({ vol }: { vol: string }) {
           <div className="mt-12 border-t border-cream/15 pt-5 flex flex-wrap justify-between gap-3 font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
             <span>© 2026 MD Media Marketing Pty Ltd · ABN 75 681 730 512</span>
             <span>{vol}</span>
+            <span className="flex gap-4">
+              <a href="/privacy" className="text-cream-faint visited:text-cream-faint no-underline hover:text-cream transition-colors">Privacy</a>
+              <a href="/terms" className="text-cream-faint visited:text-cream-faint no-underline hover:text-cream transition-colors">Terms</a>
+            </span>
             <span>Melbourne, Australia</span>
           </div>
         </div>

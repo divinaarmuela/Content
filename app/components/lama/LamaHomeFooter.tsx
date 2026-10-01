@@ -66,6 +66,10 @@ export default function LamaHomeFooter() {
 
       <div className="flex flex-wrap justify-between gap-4 border-t border-cream/10 pt-6">
         <span className="font-lamam text-[11px] text-cream/40">AUSTRALIA · EST. 2024</span>
+        <span className="flex gap-4 font-lamam text-[11px]">
+          <a href="/privacy" className="text-cream/40 no-underline transition-colors hover:text-cream">Privacy</a>
+          <a href="/terms" className="text-cream/40 no-underline transition-colors hover:text-cream">Terms</a>
+        </span>
         <span className="font-lamam text-[11px] text-cream/40">© MD MEDIA, all rights reserved</span>
       </div>
     </footer>
