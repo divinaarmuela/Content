@@ -211,7 +211,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             {line.map(v => (
               <button key={v.id} type="button" role="tab" aria-selected={v.id === clip?.id} onClick={() => setOlderId(v.id === newest?.id ? null : v.id)}
                 className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-semibold ${v.id === clip?.id ? 'border-amber-300 bg-amber-300 text-black' : 'border-border text-foreground hover:border-foreground/50'}`}>
-                {v === line[0] ? `Newest cut — ${roundLabel(v.version)}` : `Earlier cut — ${roundLabel(v.version)}`}
+                {/* a design is not a cut (1 Oct 2026) */}{v === line[0] ? `${isImage ? 'Newest' : 'Newest cut'} — ${roundLabel(v.version)}` : `${isImage ? 'Earlier' : 'Earlier cut'} — ${roundLabel(v.version)}`}
                 {commentsOnClip(comments as never, v.id).length > 0 && <span className="rounded-full bg-black/15 px-1.5 text-[11px]">{commentsOnClip(comments as never, v.id).length}</span>}
               </button>
             ))}

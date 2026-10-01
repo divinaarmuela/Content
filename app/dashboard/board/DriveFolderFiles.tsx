@@ -207,7 +207,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                       <span data-version-mark
                         title={markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'A new cut in this version' : 'New in this version') : `Unchanged — the same file as ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
                         className={`w-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
-                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'New cut' : 'New') : 'Unchanged'}
+                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut && t.kind !== 'image' ? 'New cut' : 'New') : 'Unchanged'}
                       </span>
                     )}
                     {dl && (

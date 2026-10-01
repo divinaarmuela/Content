@@ -383,7 +383,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   }
 
 
-  if (!item) {
+  // NOT UNTIL THE CARD'S KIND IS KNOWN (1 Oct 2026, the designer walk): a graphics card drew as a video card for a
+  // second or two — "Hand in from Google Drive" and "Audio levels and sync" — before its work kind loaded
+  if (!item || (kindLoading && item.work_kind_id && !(item as { work_kinds?: unknown }).work_kinds)) {
     return (
       <div role="status" aria-busy="true" className="flex h-full min-h-[320px] items-center justify-center p-5 text-[14px] text-muted-foreground">Loading…</div>
     )
@@ -767,7 +769,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       {/* ── 4. quality check, then submit (§4) ── */}
       <section className="flex flex-col gap-2 border-b border-border px-5 py-4" aria-labelledby="ed-qc">
         {/* the editor's OWN list from the SOP — not Joy's quality check, which is the next column (the owner, 13 Sep 2026: "how come editor can see the quality check checkbox") */}
-        <p id="ed-qc" className={H2}>Your checks before you submit</p>
+        <p id="ed-qc" className={H2}>{holder ? 'Your checks before you submit' : 'Checks before submitting'}</p>
         {/* the holder submits; so does a manager who put the files on (22 Sep 2026: a super admin replaced two clips and had no submit) */}
         {submitting && mayFile ? (
           <>

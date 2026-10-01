@@ -125,3 +125,14 @@ describe('the designer walk (1 Oct 2026)', () => {
     expect(reviewWords('client_review')).toBeNull()
   })
 })
+
+describe('the designer walk, second pass (1 Oct 2026)', () => {
+  const read = (p: string) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', p), 'utf8') as string
+  it('the card waits for its kind before drawing, so a design never flashes as a video card', () => {
+    expect(read('app/dashboard/board/EditorCardDrawer.tsx')).toMatch(/if \(!item \|\| \(kindLoading && item\.work_kind_id && !\(item as \{ work_kinds\?: unknown \}\)\.work_kinds\)\)/)
+  })
+  it('a design is never a "cut"', () => {
+    expect(read('app/components/portal/EditingReview.tsx')).toMatch(/isImage \? 'Newest' : 'Newest cut'/)
+    expect(read('app/dashboard/board/DriveFolderFiles.tsx')).toMatch(/newCut && t\.kind !== 'image' \? 'New cut' : 'New'/)
+  })
+})
