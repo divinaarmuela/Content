@@ -9,7 +9,6 @@ import { postLiveLinks, postedAt, readFrozenPost, reviewFiles } from './portal-c
 import {
   portalPerformance, readPerformance, type PortalPerformance,
 } from './post-performance-core'
-import { readInteractors, settingsOf } from './followers-core'
 import { safeZone } from './timezone-core'
 
 /**
@@ -20,28 +19,14 @@ import { safeZone } from './timezone-core'
  * client sees what went out, when, where, how it did, and how the account
  * moved around it.
  *
- * NAMES ARE THE ONE CONDITIONAL THING. Who liked a post and who followed from
- * it are only carried when THIS client's Followers switch is on — the same
- * switch that decides whether the portal has a Followers section at all. With
- * it off the counts still go out (they are the client's own numbers) and not
- * one handle does.
+ * NO NAMES. The comment count goes out (it is the client's own number) and not
+ * one handle does. (Until 1 Oct 2026 a per-client Followers switch could add
+ * the commenters', likers' and new followers' names; that switch was removed
+ * with the third-party follower read it belonged to.)
  *
  * Read tolerantly, like the intake tab: anything that fails is a section the
  * page does not draw, never a portal that will not load.
  */
-
-export type PortalPostPerson = {
-  name: string
-  picture: string | null
-}
-
-export type PortalPostComment = {
-  id: string
-  /** the commenter's handle — only when the Followers switch is on */
-  name: string | null
-  text: string
-  at: string | null
-}
 
 export type PortalPost = {
   client: { id: string; name: string }
@@ -63,17 +48,8 @@ export type PortalPost = {
     likes: number | null; comments: number | null; shares: number | null; saves: number | null
     sync_status: string | null; synced_at?: string
   } | null
-  /** how many people said something, and — with the switch on — what they said */
+  /** how many people said something */
   comment_count: number
-  comments: PortalPostComment[]
-  /** how many liked, and — with the switch on — who */
-  liked_count: number
-  liked: PortalPostPerson[]
-  /** who followed and then liked or commented; names only with the switch on */
-  followed_count: number
-  followed: PortalPostPerson[]
-  /** is this client allowed to see the people at all */
-  shows_people: boolean
 }
 
 /**
@@ -111,11 +87,9 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
           : Promise.resolve([] as PostAnalytic[]),
     ])
 
-    const showsPeople = settingsOf(clientRow).onPortal
     const rows = analyticsForPost(analyticRows, { item_id: post.source_item_id ?? '', publish_job_ids: jobIds })
     const main = rows[0] ?? null
     const performance = readPerformance(main?.performance)
-    const interactors = readInteractors(main?.interactors)
 
     // what went out: the frozen version, or — for a post from before versions
     // were kept — the post as it went. Never the edit card's newest cut.
@@ -127,15 +101,6 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
     const links = postLiveLinks(post)
     const live = liveNetworks(post).map(networkName)
     const networks = live.length > 0 ? live : [...new Set(rows.map(r => networkName(r.platform)).filter(Boolean))]
-
-    const person = (p: { username: string; full_name: string | null; profile_pic: string | null }): PortalPostPerson => ({
-      name: p.full_name?.trim() || `@${p.username}`,
-      picture: p.profile_pic,
-    })
-    const likedAll = (interactors?.likers ?? [])
-      .map(u => interactors?.people?.[u])
-      .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    const followedAll = interactors?.followed ?? []
 
     return {
       client: { id: who.id, name: who.name },
@@ -155,16 +120,6 @@ export async function getPortalPost(rawToken: string, postId: string): Promise<P
         }
         : null,
       comment_count: performance?.comments.length ?? 0,
-      comments: showsPeople
-        ? (performance?.comments ?? []).map(c => ({
-          id: c.id, name: `@${c.author}`, text: c.text, at: c.at,
-        }))
-        : [],
-      liked_count: likedAll.length,
-      liked: showsPeople ? likedAll.slice(0, 60).map(person) : [],
-      followed_count: followedAll.length,
-      followed: showsPeople ? followedAll.slice(0, 60).map(person) : [],
-      shows_people: showsPeople,
     }
   } catch {
     return null

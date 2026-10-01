@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import {
   accountIdentity, canonicalAccount, onePerIdentity, preferredAccount, type AccountForPick,
-} from '@/app/lib/people-analytics-core'
+} from '@/app/lib/inbox-people-core'
 
 /**
  * 29 Sep 2026 live test: testbusinessaccount2026 was connected in Zernio twice (6aa7e25a…, 6aa8a054…)
@@ -99,9 +99,5 @@ describe('wiring', () => {
     expect(src).toMatch(/canonicalAccount\(accounts, a\.provider_account_id/)
     expect(src).toMatch(/const accountId = home\?\.account_id \?\? t\.account_id/)
     expect(src).toMatch(/client_id: home\?\.client_id/)
-  })
-  it('the morning follower look goes through onePerIdentity', () => {
-    const src = readFileSync('app/lib/followers.ts', 'utf8')
-    expect(src).toMatch(/for \(const a of onePerIdentity\(accounts,/)
   })
 })

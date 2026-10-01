@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ClientContact, ContentItem, EncodeJob, FollowerSnapshot, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
+import type { ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { useRow, useTable } from '@/lib/db-client'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
-import { TRIAL_CHOICES, TRIAL_SENTENCE, latestFollowerCount, postTrial, trialFollowersProblem } from '@/app/lib/trial-reel-core'
+import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
 import { coverPatchFor, currentCover } from '@/app/lib/cover-core'
 import CoverPicker from './CoverPicker'
 import Tour, { useTourOnce } from './Tour'
@@ -403,14 +403,6 @@ export default function PostWindow({
   const trial = postTrial(shown.perChannel, instagramChannels)
   const trialPossible = editable && instagramChannels.length > 0
     && media.length === 1 && media[0].type === 'video' && availableKinds('instagram', media).includes('reel')
-  const followerRows = useTable<FollowerSnapshot>('follower_snapshots')
-  const trialBlocked = useMemo(() => {
-    for (const a of instagramChannels) {
-      const why = trialFollowersProblem(latestFollowerCount(followerRows.rows, a.id), a.username)
-      if (why) return why
-    }
-    return null
-  }, [followerRows.rows, instagramChannels])
   const setTrial = (strategy: 'MANUAL' | 'SS_PERFORMANCE' | '') => {
     for (const a of instagramChannels) dispatch({ type: 'extra', channel: a.id, patch: { kind: 'reel', trialGraduation: strategy || undefined } })
   }
@@ -859,10 +851,7 @@ export default function PostWindow({
                     {POST_KIND_WORD[k]}
                   </MenuItem>
                 ))}
-                {trialPossible && trialBlocked && (
-                  <p className="px-2 py-2 text-[12px] leading-snug text-muted-foreground"><span className="font-semibold text-foreground">Trial Reel</span> — {trialBlocked}</p>
-                )}
-                {trialPossible && !trialBlocked && TRIAL_CHOICES.filter(c => c.value !== '').map(c => (
+                {trialPossible && TRIAL_CHOICES.filter(c => c.value !== '').map(c => (
                   <MenuItem key={c.value} onClick={() => setTrial(c.value)}>
                     <span className="flex flex-col items-start leading-tight">
                       <span>Trial Reel — {c.label.replace(/^Non-followers first — /, '')}</span>
@@ -1028,11 +1017,9 @@ export default function PostWindow({
             )}
 
             {trial && (
-              <p className={cn('rounded-inner border px-3 py-2 text-[12px] leading-snug', trialBlocked ? 'border-accent-red/40 bg-accent-red/10' : 'border-accent-blue/40 bg-accent-blue/10')}>
+              <p className="rounded-inner border border-accent-blue/40 bg-accent-blue/10 px-3 py-2 text-[12px] leading-snug">
                 <strong>Trial Reel.</strong>{' '}
-                {trialBlocked
-                  ? `${trialBlocked} Pick Reel in the type menu.`
-                  : `${TRIAL_SENTENCE} ${trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}`}
+                {`${TRIAL_SENTENCE} ${trial === 'MANUAL' ? 'Somebody graduates it by hand in the Instagram app.' : 'Instagram graduates it on its own if it performs well.'}`}
               </p>
             )}
             {editable && (copiesLine

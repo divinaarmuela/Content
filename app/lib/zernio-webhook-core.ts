@@ -129,7 +129,7 @@ export type ZernioAction =
       platform: string | null
       platformPostId: string | null
       text: string
-      /** who wrote it (28 Sep 2026: the People page tracks every touch) — absent when the payload names nobody */
+      /** who wrote it (28 Sep 2026: every touch is noted) — absent when the payload names nobody */
       authorUsername?: string
       /** their network id — the steadiest name for a person (their handle can change) */
       authorId?: string

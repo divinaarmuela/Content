@@ -1,5 +1,20 @@
 # Project state — as at 4 September 2026
 
+## Follower scan and People page — REMOVED 1 Oct 2026
+
+The third-party (HikerAPI) read of each client Instagram account's followers
+and of who liked or commented on a post is gone from the code, with
+everything built on it: the People page, the per-account Followers page, the
+post's "Who it brought in" page and "Read who liked now" button, "Followed
+from this post" on the card and the board, the portal's Followers section and
+names on the portal post page, the client's follower settings, the Trial Reel
+follower-count check, the Inngest jobs `followers-daily` /
+`followers-snapshot`, and the `followers`, `follower_snapshots`,
+`post_analytics.interactors` and `clients.followers_*` types. `HIKER_API_KEY`
+is read by nothing. The data already in the database was left where it is.
+`tests/no-follower-scan.test.ts` keeps it out. Follower COUNTS from Zernio
+(`followerStats`) are unrelated and stay.
+
 ## Playbook build — 11 September 2026
 
 The Team's Playbook (July 2026) and Abby's rule of 11 Sep (AM/designer/editor

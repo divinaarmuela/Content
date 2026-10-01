@@ -124,44 +124,12 @@ export default async function PortalPostPage({ params }: {
               </section>
 
               <section className="flex flex-col gap-3">
-                <h2 className="text-[18px] font-semibold">People</h2>
+                <h2 className="text-[18px] font-semibold">Comments</h2>
                 <p className="text-[14px]">
                   {live.comment_count === 0
                     ? 'Nobody has commented yet.'
                     : live.comment_count === 1 ? '1 person commented' : `${live.comment_count} people commented`}
-                  {live.liked_count > 0 && (
-                    <> · {live.liked_count === 1 ? '1 person liked it' : `${live.liked_count} people liked it`}</>
-                  )}
-                  {live.followed_count > 0 && (
-                    <> · {live.followed_count === 1
-                      ? '1 of them followed you from this post'
-                      : `${live.followed_count} of them followed you from this post`}</>
-                  )}
                 </p>
-                {live.shows_people ? (
-                  <>
-                    {live.comments.length > 0 && (
-                      <ul className="flex flex-col gap-1.5">
-                        {live.comments.map(c => (
-                          <li key={c.id} className="rounded-tile bg-foreground/[0.04] px-3 py-2 text-[14px]">
-                            {c.name && <span className="font-semibold">{c.name}</span>}{' '}
-                            <span>{c.text}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {live.liked.length > 0 && (
-                      <p className="text-[14px] text-muted-foreground">Liked by {live.liked.map(p => p.name).join(', ')}</p>
-                    )}
-                    {live.followed.length > 0 && (
-                      <p className="text-[14px] text-muted-foreground">Followed you from this post: {live.followed.map(p => p.name).join(', ')}</p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-[13px] text-muted-foreground">
-                    We keep the names to ourselves unless you ask for them — say the word and they appear here.
-                  </p>
-                )}
               </section>
             </div>
           )}

@@ -5,22 +5,21 @@ import type { Client, InboxTouch as InboxTouchRow, SocialAccount } from '@/lib/d
 import {
   canonicalAccount, foldTouches, nextTouch, touchHandle, touchesFromComments, touchesFromConversations,
   type InboxTouch, type TouchSeen, touchFromThread,
-} from './people-analytics-core'
+} from './inbox-people-core'
 
 /**
  * A NOTE OF WHO HAS BEEN IN THE INBOX.
  *
  * The Inbox stores nothing: it reads conversations and comments live from the
  * publisher on every load, draws them and forgets them. That is fine for
- * answering somebody, and useless for the question the People table asks —
- * "did this follower also reach out?" — because there is nothing to join
- * against.
+ * answering somebody, and useless for asking later "has this person written
+ * to the client?" — because there is nothing to look back at.
  *
  * So this writes the smallest possible note beside the answers the Inbox has
  * ALREADY fetched for its own reasons: a handle, a name, whether it was a
  * comment or a DM, and when they were last seen. NOTHING HERE FETCHES
  * ANYTHING. No message text and no comment body is kept — the words belong to
- * the Inbox, and a table of people needs only the fact that words happened.
+ * the Inbox, and a note of people needs only the fact that words happened.
  *
  * What it therefore catches, honestly:
  *
@@ -28,12 +27,13 @@ import {
  *     tab — the conversation list names its participants, so one load records
  *     everyone in it;
  *   • the comments on a post, when somebody opens that post's thread. A post
- *     nobody has opened has commenters we have not noted here (though the
- *     daily interactor read still knows they commented — that is the "What
- *     they did" column, not this one).
+ *     nobody has opened has commenters we have not noted here — except those
+ *     the Zernio webhook delivered as they arrived.
  *
- * A blank "Reached out" cell means "not seen in the Inbox", never "never
- * wrote". The page says so in words.
+ * No row means "not seen in the Inbox", never "never wrote".
+ *
+ * (Until 1 Oct 2026 the People page read these notes beside a third-party
+ * follower list; that page was removed. The notes are still written.)
  */
 
 const touches = () => table<InboxTouchRow>('inbox_touches')
@@ -47,7 +47,7 @@ export function touchId(accountId: string, username: string): string {
  * that is ours. ONE HANDLE, ONE ROW (29 Sep 2026): the same Instagram account connected twice under two
  * clients made Zernio deliver one comment twice, once per connection, and each became its own row. A
  * touch on either connection is now recorded under the preferred one (`canonicalAccount`), so both
- * deliveries land on the same row, on the real client's People page.
+ * deliveries land on the same row, under the real client.
  */
 async function accountMap(): Promise<{ homeOf: Map<string, { account_id: string; client_id: string | null }>; ours: string[] }> {
   const [accounts, clients] = await Promise.all([
@@ -129,7 +129,7 @@ export async function noteComments(raw: unknown, ctx: { accountId: string | null
   } catch { /* a note, never a blocker */ }
 }
 
-/** everybody noted for one client, in the shape the join wants */
+/** everybody noted for one client */
 export async function inboxTouchesFor(clientId: string): Promise<InboxTouch[]> {
   const rows = await touches().list({ where: r => r.client_id === clientId }).catch(() => [] as InboxTouchRow[])
   return rows.map(r => ({

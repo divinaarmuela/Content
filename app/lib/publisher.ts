@@ -69,7 +69,7 @@ export interface Publisher {
   updateAutomation(id: string, body: Record<string, unknown>): Promise<unknown>
   deleteAutomation(id: string): Promise<unknown>
   /** Comments on one post. `accountId` is REQUIRED by the provider (its docs, GET /v1/inbox/comments/{postId}) —
-   *  without it nothing came back, and no comment ever reached a post page or the People page (28 Sep 2026). */
+   *  without it nothing came back, and no comment ever reached a post page (28 Sep 2026). */
   postComments(postId: string, accountId?: string | null): Promise<unknown>
   /** Public reply, visible under the comment. */
   replyToComment(postId: string, commentId: string, message: string): Promise<unknown>

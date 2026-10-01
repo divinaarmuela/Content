@@ -6,7 +6,7 @@ import { table } from '@/lib/db'
 import { announceAfter } from '@/lib/live'
 import type {
   Asset,
-  AssetVersion, Batch, Client, ContentItem, EncodeJob, FollowerSnapshot, PublishJob,
+  AssetVersion, Batch, Client, ContentItem, EncodeJob, PublishJob,
   ScheduleNote, SocialAccount, SocialPost, TeamUserClient, WorkKind,
 } from '@/lib/db-types'
 import { NextResponse } from 'next/server'
@@ -36,7 +36,6 @@ import { previewVideos } from './stream'
 import { ourStorageUrl } from './storage-core'
 import { formatInZone, safeZone } from './timezone-core'
 import { copiesLateWords, copiesReadyAt, earliestSafeTime } from './encode-eta-core'
-import { isTrialTarget, latestFollowerCount, trialFollowersProblem } from './trial-reel-core'
 import { networkName } from './publish-core'
 import {
   insertDraftPost, loadPostState, mayActOn, postLockKey, saveWorkingCopy, teamActorFor,
@@ -364,25 +363,6 @@ async function copiesNotReadyBy(
       .map(r => String(r.platform)),
   )
   return copiesLateWords([...open].map(networkName), readyAt, safeAt, fmt)
-}
-
-/** Instagram's floor for a Trial Reel, judged on the latest follower count
- *  we hold; null when the post is not a trial, the account clears it, or
- *  nobody has counted yet. */
-async function trialReelProblem(
-  post: Pick<SocialPost, 'per_channel'>,
-  accounts: readonly SocialAccount[],
-): Promise<string | null> {
-  const perChannel = readPerChannel(post.per_channel)
-  for (const a of accounts) {
-    if (!isTrialTarget(String(a.platform), perChannel[a.id])) continue
-    const rows = await table<FollowerSnapshot>('follower_snapshots')
-      .list({ where: r => r.account_id === a.id && typeof r.count === 'number' })
-      .catch(() => [] as FollowerSnapshot[])
-    const why = trialFollowersProblem(latestFollowerCount(rows, a.id), a.username)
-    if (why) return why
-  }
-  return null
 }
 
 /** The client's connected accounts, by id — a channel that is not this
@@ -1107,8 +1087,10 @@ async function claimPostSlides(
  * Both are thin: they pick the move the rules name and hand it to the one writer.
  */
 
-/** Refuse a booking the provider could not keep: a video's copies not ready by then, or a Trial Reel
- *  on an account under Instagram's floor. Null when there is nothing in the way. */
+/** Refuse a booking the provider could not keep: a video's copies not ready by then. Null when there is
+ *  nothing in the way. (A Trial Reel on an account under Instagram's 1,000-follower floor used to be refused here
+ *  from the third-party follower count; that count was removed on 1 Oct 2026, and Meta's own refusal is put into
+ *  words by publish-core.) */
 export async function bookingProblem(
   copy: { slides: Slide[]; per_channel: Record<string, ChannelExtras>; timezone: string | null },
   accounts: readonly SocialAccount[],
@@ -1116,7 +1098,7 @@ export async function bookingProblem(
 ): Promise<string | null> {
   const late = await copiesNotReadyBy({ slides: copy.slides, timezone: copy.timezone ?? 'Australia/Melbourne' } as never, accounts, whenMs)
   if (late) return late
-  return trialReelProblem({ per_channel: copy.per_channel } as never, accounts)
+  return null
 }
 
 /** A refusal from the one writer, as the error this module's routes answer with. */

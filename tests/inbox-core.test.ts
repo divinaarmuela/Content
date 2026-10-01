@@ -52,8 +52,8 @@ describe('the conversation list', () => {
 })
 
 describe('a number is never a person’s handle (30 Sep 2026: crestlineconsultants showed as @2655487891576698)', () => {
-  it('the People notes take the name when the username is only Instagram’s number', async () => {
-    const { touchesFromConversations } = await import('../app/lib/people-analytics-core')
+  it('the Inbox notes take the name when the username is only Instagram’s number', async () => {
+    const { touchesFromConversations } = await import('../app/lib/inbox-people-core')
     const got = touchesFromConversations({ data: [
       { id: '1', participantUsername: '2655487891576698', participantName: 'crestlineconsultants', updatedTime: '2026-09-29T08:50:00Z', unreadCount: 1 },
       { id: '2', participantUsername: 'nuria_jewell', participantName: 'NURIA JEWELL', unreadCount: 2 },

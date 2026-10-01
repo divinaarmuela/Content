@@ -46,26 +46,6 @@ export const TRIAL_SENTENCE =
  *  followers. Publish as a regular Reel instead." */
 export const TRIAL_MIN_FOLLOWERS = 1000
 
-/** The latest follower count we hold for an account, from its snapshots. */
-export function latestFollowerCount(
-  rows: readonly { account_id?: string | null; count?: number | null; taken_at?: string | null }[] | null | undefined,
-  accountId: string,
-): number | null {
-  const mine = (rows ?? [])
-    .filter(r => r && r.account_id === accountId && typeof r.count === 'number')
-    .sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')))
-  return mine[0]?.count ?? null
-}
-
-/** Why this account cannot post a trial reel, or null when it can (or when
- *  nobody has counted its followers yet — the network is the judge then). */
-export function trialFollowersProblem(count: number | null | undefined, username?: string | null): string | null {
-  if (typeof count !== 'number') return null
-  if (count >= TRIAL_MIN_FOLLOWERS) return null
-  const who = username ? `@${String(username).replace(/^@/, '')}` : 'This account'
-  return `${who} has ${count.toLocaleString('en-AU')} followers — Instagram only allows Trial Reels on accounts with ${TRIAL_MIN_FOLLOWERS.toLocaleString('en-AU')} or more. Post it as a Reel instead.`
-}
-
 export function isTrialStrategy(v: unknown): v is TrialStrategy {
   return v === 'MANUAL' || v === 'SS_PERFORMANCE'
 }

@@ -26,7 +26,6 @@ import { NETWORK_LABEL } from './social-schedule-core'
 import type { TileTone } from './social-schedule-core'
 import { STAGE_LABEL, STAGE_MEANING, STAGE_TONE, postedWords, type PostStage, type PostState } from './post-stage-core'
 import { extraLabel, extraValueWords, type ChannelExtras } from './schedule-compose-core'
-import type { Interactor, Interactors } from './followers-core'
 import type { SparkPoint } from './post-performance-core'
 
 /* ── the address ───────────────────────────────────────────────────────── */
@@ -159,57 +158,10 @@ export function channelExtraLines(
   return out
 }
 
-/* ── who liked, who said something ─────────────────────────────────────── */
-
-/** The faces and names behind a list of handles, in the order they were read. */
-export function peopleFrom(
-  interactors: Interactors | null | undefined,
-  which: 'likers' | 'commenters',
-): Interactor[] {
-  const handles = interactors?.[which] ?? []
-  const known = interactors?.people ?? {}
-  const seen = new Set<string>()
-  const out: Interactor[] = []
-  for (const raw of handles) {
-    const username = String(raw ?? '').trim()
-    if (!username || seen.has(username)) continue
-    seen.add(username)
-    out.push(known[username] ?? { username, full_name: null, profile_pic: null })
-  }
-  return out
-}
-
-/** "18 people liked it" · "1 person liked it" · null for none. */
-export function likedLine(n: number): string | null {
-  if (n <= 0) return null
-  return n === 1 ? '1 person liked it' : `${n} people liked it`
-}
-
-/* ── the four kinds of nothing ─────────────────────────────────────────── */
-
-/**
- * WHO liked is a different question from HOW MANY, and only one platform
- * answers it. The count comes from the posting service for every network;
- * the names come from the follower reader, which reads public Instagram
- * profiles and nothing else. So a TikTok post has a likes number and no
- * names, and saying so is better than an empty box.
- */
-export function whoLikedNote(platform: string | null | undefined): string | null {
-  const key = String(platform ?? '').toLowerCase()
-  if (key === 'instagram') return null
-  return `Likes aren’t available for ${networkName(platform)} — only Instagram says who liked a post.`
-}
-
-/** The account is private, so nobody outside it can be read. */
-export const PRIVATE_ACCOUNT_NOTE =
-  'This account is private, so who liked and who commented cannot be read from outside it. '
-  + 'The totals are still the platform’s own.'
+/* ── when there is nothing to show ─────────────────────────────────────── */
 
 /** Nobody has said anything under the post yet. */
 export const NO_COMMENTS_LINE = 'Nobody has commented yet.'
-
-/** The names have not been read yet — the daily look has not come round. */
-export const NAMES_PENDING_LINE = 'Who liked and who commented is read once a day — check back tomorrow.'
 
 /* ── the day-by-day graph ──────────────────────────────────────────────── */
 

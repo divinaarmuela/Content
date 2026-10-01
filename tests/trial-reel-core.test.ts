@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { TRIAL_CHOICES, TRIAL_MIN_FOLLOWERS, isTrialTarget, latestFollowerCount, postTrial, trialFollowersProblem, trialWords } from '../app/lib/trial-reel-core'
+import { TRIAL_CHOICES, TRIAL_MIN_FOLLOWERS, isTrialTarget, postTrial, trialWords } from '../app/lib/trial-reel-core'
 import { cardBookingLine, jobIsTrial, outcomesForJob, type OutcomeJob } from '../app/lib/post-outcome-core'
 import { buildPostPreview, forClient } from '../app/lib/post-preview-core'
 
@@ -66,20 +67,10 @@ describe('the preview frame', () => {
 })
 
 describe('Instagram’s floor: 1,000 followers', () => {
-  it('reads the newest count for the account, and only that account', () => {
-    const rows = [
-      { account_id: 'ig', count: 3, taken_at: '2026-09-10T02:00:00Z' },
-      { account_id: 'ig', count: 2, taken_at: '2026-09-09T02:00:00Z' },
-      { account_id: 'other', count: 4361, taken_at: '2026-09-10T03:00:00Z' },
-    ]
-    expect(latestFollowerCount(rows, 'ig')).toBe(3)
-    expect(latestFollowerCount(rows, 'nobody')).toBeNull()
-  })
-  it('refuses under the floor with the count in the sentence, and says nothing above it or when nobody has counted', () => {
+  // the app no longer counts followers itself (the third-party follower read was removed, 1 Oct 2026): Meta refuses
+  // a Trial Reel under the floor, and publish-core puts that refusal into words
+  it('the floor, and Meta’s refusal in plain words', () => {
     expect(TRIAL_MIN_FOLLOWERS).toBe(1000)
-    expect(trialFollowersProblem(3, 'testbusinessaccount2026')).toBe(
-      '@testbusinessaccount2026 has 3 followers — Instagram only allows Trial Reels on accounts with 1,000 or more. Post it as a Reel instead.')
-    expect(trialFollowersProblem(1709, 'x')).toBeNull()
-    expect(trialFollowersProblem(null, 'x')).toBeNull()
+    expect(readFileSync('app/lib/publish-core.ts', 'utf8')).toContain('Instagram only allows Trial Reels on accounts with 1,000 or more followers.')
   })
 })
