@@ -31,6 +31,7 @@ const isProtectedRoute = createRouteMatcher([
   // (Meta calls it; its signature is the authority) must stay public.
   '/api/meta/instagram/connect(.*)',
   '/api/meta/instagram/accounts(.*)',
+  '/api/meta/instagram/subscribe(.*)',
 ])
 
 /**
@@ -156,6 +157,7 @@ export const config = {
     // and the webhook are absent on purpose: Meta calls them, Clerk-free.
     '/api/meta/instagram/connect',
     '/api/meta/instagram/accounts',
+    '/api/meta/instagram/subscribe',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/posts/:path*',

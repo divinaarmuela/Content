@@ -210,3 +210,15 @@ export async function accountInsights(
 export async function mediaInsights(token: string, mediaId: string, metrics: string[]): Promise<unknown> {
   return get(token, `${mediaId}/insights`, { metric: metrics.join(',') })
 }
+
+/** The webhook fields an Instagram account sends this app (comments, messages and the rest of the messaging events). */
+export const WEBHOOK_FIELDS = ['comments', 'messages', 'message_reactions', 'messaging_postbacks', 'messaging_seen', 'messaging_referral'] as const
+
+/**
+ * TELL INSTAGRAM TO SEND THIS ACCOUNT'S EVENTS TO THE APP (1 Oct 2026: the webhook was saved and verified, but
+ * no account was subscribed, so nothing would ever arrive). One call per connected account, with its own token.
+ */
+export async function subscribeAccount(token: string, fields: readonly string[] = WEBHOOK_FIELDS): Promise<{ success: boolean }> {
+  const out = await post(token, 'me/subscribed_apps', { subscribed_fields: fields.join(',') }) as { success?: unknown }
+  return { success: out?.success === true }
+}

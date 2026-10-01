@@ -74,7 +74,23 @@ export async function connectAccount(
     last_error: null,
   }))
   if (!result.claimed) throw new ig.MetaIgError('Could not save the connection — please try again')
+  // …and its events come to our webhook (comments, messages). A failure here does not undo the connection: it is
+  // written on the row, and subscribeWebhooksFor can be run again
+  await subscribeWebhooksFor(me.userId).catch(() => { /* recorded on the row by subscribeWebhooksFor */ })
   return publicRow(result.row)
+}
+
+/** Subscribe a connected account to this app's webhooks; the outcome is kept on its row (last_error). */
+export async function subscribeWebhooksFor(igUserId: string): Promise<{ success: boolean }> {
+  try {
+    const out = await ig.subscribeAccount(await accessTokenFor(igUserId))
+    await table<MetaIgAccount>('meta_ig_accounts').update(igUserId, { last_error: out.success ? null : 'Instagram did not confirm the webhook subscription' } as never)
+    return out
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'The webhook subscription failed'
+    await table<MetaIgAccount>('meta_ig_accounts').update(igUserId, { last_error: msg } as never).catch(() => {})
+    throw e
+  }
 }
 
 export async function listClientAccounts(clientId: string): Promise<PublicIgAccount[]> {
