@@ -7,7 +7,6 @@ import type { TeamUser } from './authz'
 import { loadPostOrRecordForUser, type PlannedPost } from './social-schedule'
 import { analyticsForPost } from './post-page-core'
 import { safeZone } from './timezone-core'
-import { instagramUrlOf } from './followers-core'
 
 /**
  * A PAGE FOR EVERY POST — the server half.
@@ -19,9 +18,8 @@ import { instagramUrlOf } from './followers-core'
  *
  * NOTHING HERE FETCHES ANYTHING. Every figure on the page was written by a
  * sweep that already runs: `post_analytics.performance` (the half-hourly
- * refresh) and `post_analytics.interactors` (the once-a-day look at who
- * liked and who commented). This page reads those rows and nothing else — no
- * provider, no follower reader, no new job. A post the sweeps have not
+ * refresh). This page reads those rows and nothing else — no provider, no new
+ * job. A post the sweeps have not
  * reached yet says so on screen; it does not go and ask.
  */
 
@@ -56,9 +54,7 @@ export type PostPageData = {
   channels: PostChannel[]
   jobs: PostJob[]
   /** the cached rows for this post, newest first — one per provider post */
-  analytics: (PostAnalytic & { instagram_url?: string | null })[]
-  /** may this viewer ask for who liked / who commented to be read now */
-  may_read_people: boolean
+  analytics: PostAnalytic[]
   /** the card behind this post was deleted; the post is read as a record */
   card_gone: boolean
 }
@@ -96,7 +92,6 @@ export async function loadPostPage(user: TeamUser, id: string): Promise<PostPage
   })
 
   return {
-    may_read_people: (user.role === 'account_manager' || user.role === 'super_admin') && Boolean(process.env.HIKER_API_KEY),
     card_gone: cardGone,
     post,
     item: { id: item.id, title: item.title, client_id: item.client_id, status: item.status },
@@ -119,14 +114,8 @@ export async function loadPostPage(user: TeamUser, id: string): Promise<PostPage
       attempts: typeof j.attempts === 'number' ? j.attempts : 0,
       created_at: j.created_at,
     })),
-    // each row with its Instagram address, whichever network the row names (28 Sep 2026: Justin's Reel went out beside
-    // TikTok and LinkedIn, its row said TikTok, and the page hid "Who it brought in" and "Read now")
     analytics: analyticsForPost(analyticRows, {
       item_id: item.id, publish_job_ids: post.publish_job_ids,
-    }).map(r => ({
-      ...r,
-      instagram_url: instagramUrlOf(r as never,
-        (jobRows.find(j => j.id === (r as { publish_job_id?: string | null }).publish_job_id) as { platform_results?: unknown } | undefined)?.platform_results),
-    })),
+    }),
   }
 }

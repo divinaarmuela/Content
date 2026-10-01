@@ -4,7 +4,6 @@ import SocialChannels from '../../SocialChannels'
 import LinktreeCard from '../../LinktreeCard'
 import InstagramLocations from '../../InstagramLocations'
 import ClientApproval from '../../ClientApproval'
-import FollowerSettings from '../../FollowerSettings'
 import MetaDirectInstagram from '../../MetaDirectInstagram'
 import { useRole } from '../../../useRole'
 
@@ -26,8 +25,6 @@ export default function ClientSocialPage() {
           because it is the same kind of thing — a setting about this client's
           accounts that the composer then just uses. */}
       <InstagramLocations clientId={id} />
-      {/* Who follows: on the portal or not, and how often the list is read. */}
-      <FollowerSettings clientId={id} mayEdit={can('account_manager')} />
       {/* The agency's own Instagram Login, for testing (1 Oct 2026). Last,
           and drawn for super admins only, so it stays out of the way of the
           channels above, which is where posting still happens. */}

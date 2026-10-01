@@ -1,18 +1,15 @@
 /**
- * THE PEOPLE CRM — one row per person on a client's Instagram, every touch on a timeline (the owner, 28 Sep 2026:
- * "a page like this — rows, data per user: new follower, interactions — only for Justin and Jordan — a CRM based on
- * post liked etc — if DMed — track every touch point — view DM — interacted").
+ * WHO A PERSON IN THE INBOX IS (the owner, 28–30 Sep 2026): for the clients below, each person's trip through the
+ * comment-to-DM automations — what they commented, whether the DM went, whether they read it, their taps on its
+ * button — read from Zernio's per-person automation log. The Inbox's "About this person" card shows it.
  *
- * Pure: it reshapes the rows `buildPeople` (people-analytics-core) already joins — followers, the likes and comments
- * on our posts, and the Inbox — into the screenshot's shape: a status, first seen, last active, the counts, and a
- * dated activity list. Nothing is invented: a day we do not know is left out, never guessed. Instagram gives no time
- * for a like or a follow, so each is dated by the only honest day there is (the post's day; the look that first saw
- * them follow) and the page says so.
+ * (Until 1 Oct 2026 this also joined a third-party read of followers and of who liked a post — the People page. That
+ * read, and the page, were removed; only the Zernio side is here.)
  */
-import { inboxPersonHref, instagramProfileHref, orderDay, type PeopleRow } from './people-analytics-core'
+import { inboxPersonHref, instagramProfileHref } from './inbox-people-core'
 
 /**
- * The clients the page is for (the owner, 28 Sep 2026: "only for Justin and Jordan"). Add an id to open it to
+ * The clients this covers (the owner, 28 Sep 2026: "only for Justin and Jordan"). Add an id to open it to
  * another client — everything below works for any client with Instagram connected.
  */
 export const PEOPLE_CRM_CLIENTS: readonly { id: string; name: string }[] = [
@@ -21,33 +18,6 @@ export const PEOPLE_CRM_CLIENTS: readonly { id: string; name: string }[] = [
   // the test client, so the page is checked on test data and never on a real client's (30 Sep 2026)
   { id: '459e2564-1089-45ed-abd7-56d5f53c2cf6', name: '100 Hundred Million Group (test)' },
 ]
-
-/**
- * NOT A LEAD, WHATEVER THEY DO (28 Sep 2026: Manal and Renée liked Justin's Reel and followed, and TurnKey's own page
- * liked Jordan's — all three came up as MD Media leads). The team's own Instagram handles, matched to the team's
- * logins (Manal Rizwan, Renée YY, Karly Merau, Joy Armuela, Divina), and the client side's own business pages. They
- * show on the list as the team, and never count. Add a handle here when somebody new joins.
- */
-export const TEAM_HANDLES: readonly string[] = ['mdmedia._', 'manal.rzn', 'renee.svt', 'karly_merau', 'joyarmuela', 'divina.armuela']
-/** the client's own business, and its staff pages named after it */
-export const CLIENT_SIDE_PATTERN = /turnkeybuildinggroup/i
-
-export function isTeamOrClientSide(handle: string): boolean {
-  const h = handle.replace(/^@/, '').toLowerCase()
-  return TEAM_HANDLES.includes(h) || CLIENT_SIDE_PATTERN.test(h)
-}
-
-export type CrmStatus = 'dmed' | 'commented' | 'liked' | 'new_follower' | 'follower' | 'unfollowed' | 'ours'
-
-export const CRM_STATUS_WORDS: Record<CrmStatus, string> = {
-  dmed: 'DMed',
-  commented: 'Commented',
-  liked: 'Liked',
-  new_follower: 'New follower',
-  follower: 'Follower',
-  unfollowed: 'Unfollowed',
-  ours: 'Team or client',
-}
 
 export type CrmEvent = {
   /** what happened, as a person says it */
@@ -58,7 +28,7 @@ export type CrmEvent = {
   day: string
   /** the exact instant, when the provider gave one (a comment, a DM) — a time is shown beside the day */
   at?: string | null
-  /** where the detail opens — the post's page, or the Inbox on this person */
+  /** where the detail opens — the Inbox on this person */
   href: string | null
   /** a word for the link */
   link: string | null
@@ -72,20 +42,9 @@ export type CrmRow = {
   profile_pic: string | null
   profile_href: string
   inbox_href: string
-  status: CrmStatus
-  /** the post they touched before they followed — "Likely from ‘Title’" */
-  from_post: string | null
+  status: 'commented'
   first_seen: string | null
   last_active: string | null
-  likes: number
-  comments: number
-  dmed: boolean
-  following: boolean
-  /**
-   * AN MD MEDIA LEAD (the owner, 28 Sep 2026: "where is a tag for MD Media lead"): they liked or commented on a post
-   * we made, and THEN followed or DMed. The reason says which — null when they are not one.
-   */
-  md_lead: string | null
   /** comment-to-DM automations: DMs it sent this person, and taps on its button (Zernio's per-person log) */
   auto_dms: number
   auto_clicks: number
@@ -96,88 +55,6 @@ export type CrmRow = {
 const max = (a: string | null, b: string | null) => (a === null ? b : b === null ? a : a > b ? a : b)
 const min = (a: string | null, b: string | null) => (a === null ? b : b === null ? a : a < b ? a : b)
 
-/** one person, as the CRM draws them. `ours` = handles that are the team's or the client's own accounts */
-export function crmRow(p: PeopleRow, ownAccounts: ReadonlySet<string> = new Set()): CrmRow {
-  const ours = { has: (k: string) => ownAccounts.has(k) || isTeamOrClientSide(k) }
-  const timeline: CrmEvent[] = []
-  let likes = 0
-  let comments = 0
-  for (const a of p.actions) {
-    const liked = a.kind === 'liked' || a.kind === 'liked and commented'
-    const commented = a.kind === 'commented' || a.kind === 'liked and commented'
-    if (liked) likes++
-    if (commented) comments++
-    if (!a.day) continue
-    if (commented) timeline.push({ what: a.text ? `Commented “${a.text}”` : 'Commented on a post', detail: a.title, day: a.day, at: a.at ?? null, href: a.href, link: a.href ? 'Open the post' : null, tone: 'strong' })
-    if (liked) timeline.push({ what: 'Liked a post', detail: a.title, day: a.day, href: a.href, link: a.href ? 'Open the post' : null, tone: 'plain' })
-  }
-  const dmed = p.reached_out_how === 'message' || p.reached_out_how === 'both'
-  const inboxComment = p.reached_out_how === 'comment' || p.reached_out_how === 'both'
-  if (p.reached_out_on) {
-    if (dmed) timeline.push({ what: 'Sent a DM', detail: p.reached_out_first_on && p.reached_out_first_on !== p.reached_out_on ? `first on ${p.reached_out_first_on}` : null, day: p.reached_out_on, href: p.inbox_href, link: 'View DM', tone: 'strong' })
-    else if (inboxComment) timeline.push({ what: 'Commented (seen in the Inbox)', detail: null, day: p.reached_out_on, href: p.inbox_href, link: 'Open in Inbox', tone: 'plain' })
-  }
-  if (p.followed_on) timeline.push({ what: 'Started following', detail: p.from_us.likely && p.from_us.title ? `after ${p.from_us.title}` : null, day: p.followed_on, href: null, link: null, tone: 'strong' })
-  if (p.gone_on) timeline.push({ what: 'Unfollowed', detail: null, day: p.gone_on, href: null, link: null, tone: 'lost' })
-  timeline.sort((a, b) => (a.day === b.day ? String(b.at ?? '').localeCompare(String(a.at ?? '')) : a.day < b.day ? 1 : -1))
-
-  const days = timeline.map(e => e.day)
-  const first = days.reduce<string | null>((m, d) => min(m, d), p.reached_out_first_on ?? null)
-  const last = days.reduce<string | null>((m, d) => max(m, d), null)
-  const following = p.follows === true
-
-  // the lead rule: our post first, then the follow or the DM. Every action here is on a post we made.
-  // ordered by `orderDay`: a like by its post's day (our read may have seen it days late), a comment by its own time
-  const ourTouches = p.actions.filter(a => orderDay(a)).sort((a, b) => (orderDay(a)! < orderDay(b)! ? -1 : 1))
-  const firstOurs = ourTouches[0] ?? null
-  const touched = (after: string | null | undefined) => firstOurs && after && orderDay(firstOurs)! <= after ? firstOurs : null
-  const byFollow = touched(p.followed_on)
-  const byDm = dmed ? touched(p.reached_out_first_on ?? p.reached_out_on) : null
-  const verb = (a: { kind: string }) => (a.kind === 'liked' ? 'Liked' : a.kind === 'commented' ? 'Commented on' : 'Liked and commented on')
-  const md_lead = ours.has(p.key) ? null
-    : byFollow && byDm ? `${verb(byFollow)} ‘${byFollow.title}’, then followed and DMed`
-    : byFollow ? `${verb(byFollow)} ‘${byFollow.title}’, then followed`
-    : byDm ? `${verb(byDm)} ‘${byDm.title}’, then DMed`
-    : null
-
-  const status: CrmStatus = ours.has(p.key) ? 'ours'
-    : dmed ? 'dmed'
-    : comments > 0 || inboxComment ? 'commented'
-    : likes > 0 ? 'liked'
-    : p.gone_on ? 'unfollowed'
-    : p.followed_on ? 'new_follower'
-    : following ? 'follower'
-    : 'liked'
-
-  return {
-    key: p.key, username: p.username, full_name: p.full_name, profile_pic: p.profile_pic,
-    profile_href: p.profile_href, inbox_href: p.inbox_href,
-    status,
-    from_post: p.from_us.likely ? p.from_us.title : null,
-    first_seen: first, last_active: last,
-    likes, comments, dmed, following, md_lead,
-    auto_dms: 0, auto_clicks: 0,
-    timeline,
-  }
-}
-
-export type CrmFilter = 'active' | 'all' | 'dmed' | 'new' | 'engaged' | 'md_lead' | 'automation'
-
-/** "active" = anybody who did something we saw: followed since we started watching, liked, commented, wrote, left */
-export function crmFilter(rows: readonly CrmRow[], filter: CrmFilter, search = ''): CrmRow[] {
-  const q = search.trim().replace(/^@/, '').toLowerCase()
-  return rows.filter(r => {
-    if (q && !r.username.toLowerCase().includes(q) && !(r.full_name ?? '').toLowerCase().includes(q)) return false
-    if (filter === 'all') return true
-    if (filter === 'dmed') return r.dmed
-    if (filter === 'md_lead') return r.md_lead !== null
-    if (filter === 'automation') return r.timeline.some(e => e.what.startsWith(AUTO_PREFIX))
-    if (filter === 'new') return r.status !== 'ours' && r.timeline.some(e => e.what === 'Started following')
-    if (filter === 'engaged') return r.likes + r.comments > 0 || r.dmed
-    return r.timeline.length > 0
-  })
-}
-
 /** newest activity first; nothing dated last */
 export function crmSort(rows: readonly CrmRow[]): CrmRow[] {
   return [...rows].sort((a, b) => {
@@ -186,40 +63,6 @@ export function crmSort(rows: readonly CrmRow[]): CrmRow[] {
     if (b.last_active === null) return -1
     return a.last_active < b.last_active ? 1 : -1
   })
-}
-
-export function crmCounts(rows: readonly CrmRow[]): { md_leads: number; people: number; new_followers: number; engaged: number; dmed: number; likely_from_posts: number; unfollowed: number; auto_dms: number; auto_clicked: number } {
-  const real = rows.filter(r => r.status !== 'ours')
-  return {
-    md_leads: real.filter(r => r.md_lead).length,
-    people: real.filter(r => r.timeline.length > 0).length,
-    new_followers: real.filter(r => r.timeline.some(e => e.what === 'Started following')).length,
-    engaged: real.filter(r => r.likes + r.comments > 0).length,
-    dmed: real.filter(r => r.dmed).length,
-    likely_from_posts: real.filter(r => r.from_post).length,
-    unfollowed: real.filter(r => r.status === 'unfollowed').length,
-    auto_dms: real.filter(r => r.auto_dms > 0).length,
-    auto_clicked: real.filter(r => r.auto_clicks > 0).length,
-  }
-}
-
-/** the time of day in Melbourne, "9:51 pm" */
-export function timeWords(at: string | null | undefined): string | null {
-  if (!at) return null
-  const d = new Date(at)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Melbourne', hour: 'numeric', minute: '2-digit' }).replace(/\s+/g, ' ').toLowerCase()
-}
-
-/** "Today", "Yesterday", or "27 Sep" — against a Melbourne today */
-export function dayWords(day: string | null, today: string): string {
-  if (!day) return '—'
-  if (day === today) return 'Today'
-  const t = new Date(`${today}T00:00:00Z`).getTime()
-  const d = new Date(`${day}T00:00:00Z`).getTime()
-  if (t - d === 86_400_000) return 'Yesterday'
-  const dt = new Date(d)
-  return `${dt.getUTCDate()} ${'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[dt.getUTCMonth()]}`
 }
 
 /* ── comment-to-DM automations, per person (the owner, 29–30 Sep 2026: "tracking data in the followers page for
@@ -304,8 +147,7 @@ export function withAutomationTouches(rows: readonly CrmRow[], touches: readonly
       r = {
         key: k, username: t.username, full_name: null, profile_pic: null,
         profile_href: instagramProfileHref(t.username), inbox_href: inboxPersonHref(t.username),
-        status: 'commented', from_post: null, first_seen: null, last_active: null,
-        likes: 0, comments: 0, dmed: false, following: false, md_lead: null,
+        status: 'commented', first_seen: null, last_active: null,
         auto_dms: 0, auto_clicks: 0, timeline: [],
       }
       byKey.set(k, r)
@@ -327,7 +169,6 @@ export function withAutomationTouches(rows: readonly CrmRow[], touches: readonly
       r.auto_clicks += t.clicks
       r.timeline.push({ what: `${AUTO_PREFIX}clicked the button${t.clicks > 1 ? ` ×${t.clicks}` : ''}`, detail: t.clicks > 1 ? 'first click shown' : null, day: dayOf(t.clicked_at), at: t.clicked_at, href: null, link: null, tone: 'strong' })
     }
-    if (r.status !== 'ours' && r.status !== 'dmed' && t.outcome === 'sent') r.status = 'commented'
   }
   const out = [...byKey.values()]
   for (const r of out) {

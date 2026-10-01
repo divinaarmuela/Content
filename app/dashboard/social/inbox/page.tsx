@@ -78,12 +78,12 @@ function ago(iso?: string): string {
  * INBOX (rebuilt 30 Sep 2026: "the social inbox is too slow and the layout is outdated"; Jordan showed 1 of his 5
  * conversations). One client at a time, remembered — only that client's accounts load, every page of them — in three
  * columns: the conversations (who, to which account, when, unread), the chat with Meta's reply window above the box,
- * and who the person is (the People page's row: follows, their automation trip). Comments keep their own tab.
+ * and who the person is (their trip through the comment-to-DM automations). Comments keep their own tab.
  */
 type ClientChoice = { id: string; name: string; accounts: { id: string; platform: string; username: string | null }[] }
 type Window = { state: 'open' | 'human' | 'closed'; words: string }
 type PersonRow = {
-  username: string; status: string; following: boolean; md_lead: string | null; auto_dms: number; auto_clicks: number
+  username: string; status: string; auto_dms: number; auto_clicks: number
   timeline: { what: string; detail: string | null; day: string }[]
 }
 
@@ -113,7 +113,7 @@ export default function InboxPage() {
   // the commenter whose name was clicked, for the About panel on the Comments tab
   const [aboutHandle, setAboutHandle] = useState<string | null>(null)
 
-  // where the page opens: `?who=` (the People page), `?account=` (an account page), `?post=`, else the remembered client
+  // where the page opens: `?who=` (a person), `?account=` (an account page), `?post=`, else the remembered client
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const person = params.get('who')
@@ -166,7 +166,7 @@ export default function InboxPage() {
   }, [clientId])
   useEffect(() => { if (tab === 'messages' && convos === null && clientId) void loadConvos() }, [tab, convos, clientId, loadConvos])
 
-  // who they are — the People page's row, for the clients it covers
+  // who they are — their automation trip, for the clients it covers
   useEffect(() => {
     if (people !== null || !clientId || !PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)) return
     void (async () => {
@@ -382,7 +382,7 @@ export default function InboxPage() {
   const tracked = PEOPLE_CRM_CLIENTS.some(c => c.id === clientId)
   const lastWhen = (c: InboxConversation) => whenWords(c.updatedTime)
 
-  /** who this person is — the People page's row — for a conversation or a commenter */
+  /** who this person is — their automation trip — for a conversation or a commenter */
   const aboutCard = (who: PersonRow | null, emptyWords: string | null) => {
     const lines = who ? who.timeline.filter(e => e.what.startsWith(AUTO_PREFIX)) : []
     return (
@@ -400,7 +400,6 @@ export default function InboxPage() {
           ) : (
             <>
               <p className="font-semibold">@{who.username}</p>
-              {who.md_lead && <p><span className="font-semibold">MD Media lead</span> — {who.md_lead}</p>}
               {lines.length > 0 && (
                 <div className="flex flex-col gap-1 rounded-inner bg-foreground/[0.04] p-2">
                   <p className="font-semibold">Automation</p>

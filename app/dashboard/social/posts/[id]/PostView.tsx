@@ -1,11 +1,10 @@
 'use client'
 
 import { useMemo } from 'react'
-import ReadPeopleButton from './ReadPeopleButton'
 import Link from 'next/link'
 import { ExternalLink, MessageCircle } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
-import type { FollowerSnapshot, PostAnalytic } from '@/lib/db-types'
+import type { PostAnalytic } from '@/lib/db-types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import PlatformIcon from '../../PlatformIcon'
@@ -21,12 +20,8 @@ import {
   type PostPerformance,
 } from '../../../../lib/post-performance-core'
 import {
-  fromThisPostLine, readInteractors, type FollowedFromPost, type Interactor,
-} from '../../../../lib/followers-core'
-import {
-  analyticsForPost, channelExtraLines, clientTone, inboxHref, likedLine, networkName,
-  NAMES_PENDING_LINE, NO_COMMENTS_LINE, peopleFrom, postPageStatus, PRIVATE_ACCOUNT_NOTE,
-  whoLikedNote,
+  analyticsForPost, channelExtraLines, clientTone, inboxHref, networkName,
+  NO_COMMENTS_LINE, postPageStatus,
 } from '../../../../lib/post-page-core'
 import { formatWithZone } from '../../../../lib/timezone-core'
 import { jobWords } from '../../../../lib/publish-activity-core'
@@ -44,12 +39,12 @@ import { postedAt } from '../../../../lib/portal-core'
  *
  * So the page NEVER FETCHES. The server handed it the post, the card, the
  * channels and the cached rows; from there it subscribes to those rows
- * (`post_analytics` for this card) and to the follower looks, and everything
+ * (`post_analytics` for this card), and everything
  * on screen moves when a sweep writes. There is no refresh button because
  * there is nothing for a person to do.
  *
  * Read in the order somebody asks: what is this and where did it go, what
- * was posted, how did it do, and who were the people.
+ * was posted, how did it do, and who commented.
  */
 export default function PostView({ data }: { data: PostPageData }) {
   const { post, item, client, channels, jobs } = data
@@ -63,17 +58,8 @@ export default function PostView({ data }: { data: PostPageData }) {
     return mine.length > 0 ? mine : data.analytics
   }, [liveRows, item.id, post.publish_job_ids, data.analytics])
 
-  // LIVE: the follower looks, so "as of" moves when the morning read lands
-  const byClient = useMemo(() => ({ client_id: client.id }), [client.id])
-  const { rows: looks } = useTable<FollowerSnapshot>('follower_snapshots', { by: byClient })
-  const lastLook = useMemo(() => {
-    const done = looks.filter(l => l.status === 'done' || l.status === 'private')
-    return done.sort((a, b) => (b.taken_at ?? '').localeCompare(a.taken_at ?? ''))[0] ?? null
-  }, [looks])
-
   const main = rows[0] ?? null
   const performance: PostPerformance | null = readPerformance(main?.performance)
-  const interactors = readInteractors(main?.interactors)
   const platform = main?.platform ?? channels[0]?.platform ?? null
   const tz = client.timezone
 
@@ -195,41 +181,11 @@ export default function PostView({ data }: { data: PostPageData }) {
         </CardContent>
       </Card>
 
-      {/* ── the people ─────────────────────────────────────────────────── */}
+      {/* ── who commented ─────────────────────────────────────────────── */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle>People</CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* who the post brought in — judged against the follower list and the Inbox */}
-            {main && (String(main.platform) === 'instagram' || !!(main as { instagram_url?: string | null }).instagram_url) && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/dashboard/social/posts/${encodeURIComponent(post.id)}/leads`}>Who it brought in</Link>
-              </Button>
-            )}
-            {/* the morning look reads these once a day at 6 am; a manager can
-                ask for them now instead of being told to come back tomorrow */}
-            {data.may_read_people && main && (String(main.platform) === 'instagram' || !!(main as { instagram_url?: string | null }).instagram_url) && (
-              <ReadPeopleButton
-                postId={post.id}
-                analyticsId={main.id}
-                running={interactors?.status === 'running'}
-                readBefore={Boolean(interactors)}
-              />
-            )}
-          </div>
-        </CardHeader>
+        <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-5 pt-0">
           <Commented p={performance} />
-          <Liked
-            people={peopleFrom(interactors, 'likers')}
-            platform={platform}
-            unread={interactors === null}
-            privateAccount={lastLook?.status === 'private'}
-          />
-          <Followed
-            followed={interactors?.followed ?? []}
-            p={performance}
-          />
         </CardContent>
       </Card>
     </div>
@@ -360,7 +316,7 @@ function Numbers({ p }: { p: PostPerformance }) {
   )
 }
 
-/* ── the people ────────────────────────────────────────────────────────── */
+/* ── the comments ──────────────────────────────────────────────────────── */
 
 function Commented({ p }: { p: PostPerformance | null }) {
   const comments = p?.comments ?? []
@@ -395,92 +351,5 @@ function Commented({ p }: { p: PostPerformance | null }) {
         </ul>
       )}
     </section>
-  )
-}
-
-function Liked({ people, platform, unread, privateAccount }: {
-  people: Interactor[]
-  platform: string | null
-  unread: boolean
-  privateAccount: boolean
-}) {
-  const note = whoLikedNote(platform)
-  const line = likedLine(people.length)
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-secondary-13 font-semibold">Who liked</h3>
-      {note ? (
-        <p className="text-body-15 text-muted-foreground">{note}</p>
-      ) : privateAccount ? (
-        <p className="text-body-15 text-muted-foreground">{PRIVATE_ACCOUNT_NOTE}</p>
-      ) : people.length === 0 ? (
-        <p className="text-body-15 text-muted-foreground">
-          {unread ? NAMES_PENDING_LINE : 'Nobody yet.'}
-        </p>
-      ) : (
-        <details className="group">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-body-15 [&::-webkit-details-marker]:hidden">
-            <Faces people={people} />
-            <span className="font-medium underline-offset-4 group-open:underline">{line}</span>
-          </summary>
-          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-            {people.map(f => (
-              <li key={f.username} className="flex min-h-11 items-center gap-2 text-body-15 md:min-h-0">
-                <span className="font-medium">{f.full_name || f.username}</span>
-                <span className="font-mono text-secondary-13 text-muted-foreground">@{f.username}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
-  )
-}
-
-function Followed({ followed, p }: { followed: FollowedFromPost[]; p: PostPerformance | null }) {
-  const line = fromThisPostLine(followed)
-  const since = followersLine(shownFollowers(p))
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-secondary-13 font-semibold">Followed from this post</h3>
-      {line ? (
-        <details className="group">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-body-15 [&::-webkit-details-marker]:hidden">
-            <Faces people={followed} />
-            <span className="font-medium underline-offset-4 group-open:underline">{line}</span>
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1">
-            {followed.map(f => (
-              <li key={f.username} className="flex min-h-11 items-center gap-2 text-body-15 md:min-h-0">
-                <span className="font-medium">{f.full_name || f.username}</span>
-                <span className="font-mono text-secondary-13 text-muted-foreground">@{f.username} · {f.how}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : (
-        <p className="text-body-15 text-muted-foreground">
-          Nobody who followed since this went up has liked or commented on it.
-        </p>
-      )}
-      {since && <p className="text-body-15 font-medium">{since}</p>}
-    </section>
-  )
-}
-
-function Faces({ people }: { people: Interactor[] }) {
-  return (
-    <span className="flex -space-x-2" aria-hidden>
-      {people.slice(0, 8).map(f => f.profile_pic ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img key={f.username} src={f.profile_pic} alt="" loading="lazy"
-          className="h-7 w-7 rounded-full border-2 border-surface object-cover" />
-      ) : (
-        <span key={f.username}
-          className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface bg-foreground/[0.08] text-[11px] font-semibold">
-          {f.username.slice(0, 1).toUpperCase()}
-        </span>
-      ))}
-    </span>
   )
 }

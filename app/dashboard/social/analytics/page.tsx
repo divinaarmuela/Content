@@ -8,9 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Clock, ExternalLink, TrendingUp, Users } from 'lucide-react'
-import People from './People'
-import { emptyLine } from '@/app/lib/people-analytics-core'
+import { ArrowLeft, Clock, ExternalLink, TrendingUp } from 'lucide-react'
 import PlatformIcon, { brandFor } from '../PlatformIcon'
 import { LoadFailed } from '../../NotSetUp'
 import EmptyState from '../../EmptyState'
@@ -141,9 +139,6 @@ export default function SocialAnalyticsPage() {
   } | null>(null)
   const [clientId, setClientId] = useState<string>('all')
   const [failed, setFailed] = useState<string | null>(null)
-  // two views of the same client, not two pages: the numbers, and the people
-  // behind them
-  const [view, setView] = useState<'numbers' | 'people'>('numbers')
 
   // refetched per client: daily and best-times come from the provider already
   // scoped to that client's accounts, not filtered after the fact
@@ -220,9 +215,7 @@ export default function SocialAnalyticsPage() {
 
       <PageTitle
         title="Social analytics"
-        summary={view === 'people'
-          ? 'Who engaged, who followed and who has written to the client — one row per person.'
-          : 'Performance across every connected account. Figures come from the platforms themselves and can lag by up to 48 hours.'}
+        summary="Performance across every connected account. Figures come from the platforms themselves and can lag by up to 48 hours."
         actions={<>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={clientId} onValueChange={setClientId}>
@@ -235,19 +228,6 @@ export default function SocialAnalyticsPage() {
           </div>
         </>}
       />
-
-      {view === 'people' ? (
-        clientId === 'all'
-          ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-2 px-6 py-14 text-center">
-                <Users className="h-6 w-6 text-muted-foreground" />
-                <p className="max-w-xl text-body-15 text-muted-foreground">{emptyLine('pick_client', null)}</p>
-              </CardContent>
-            </Card>
-          )
-          : <People clientId={clientId} clientName={data.clients.find(c => c.id === clientId)?.name ?? null} />
-      ) : (<>
 
       {/* headline numbers ── */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -398,8 +378,6 @@ export default function SocialAnalyticsPage() {
           )}
         </CardContent>
       </Card>
-
-      </>)}
     </div>
   )
 }

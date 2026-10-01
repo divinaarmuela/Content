@@ -256,7 +256,7 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
         })
       }
       // EVERY TOUCH IS NOTED AS IT HAPPENS (28 Sep 2026: "track every touch point"): who commented, on which account,
-      // for the People page — not only when somebody opens the Inbox. The words are not kept here.
+      // as it arrives — not only when somebody opens the Inbox. The words are not kept here.
       if (action.authorUsername && action.accountId && !action.own) {
         await noteTouch({ username: action.authorUsername, name: action.authorName ?? null, kind: 'comment', account_id: action.accountId, conversation_id: null, post_id: action.platformPostId })
       }
@@ -268,7 +268,7 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
       // AN INCOMING DM WAKES THE ACQUISITION AGENT AT ONCE (21 Sep 2026; acq-agent.ts). Only the fact and
       // the handle travel: the job checks the account is MD Media's own, and reads the thread itself.
       // Best effort — a webhook is never failed because a job could not be queued.
-      // …and every incoming DM is a touch on the People page, whoever's account it came to (28 Sep 2026)
+      // …and every incoming DM is a touch noted, whoever's account it came to (28 Sep 2026)
       if (action.detail === 'message.received' && action.incoming !== false && action.senderUsername && action.accountId) {
         await noteTouch({ username: action.senderUsername, name: action.senderName ?? null, kind: 'message', account_id: action.accountId, conversation_id: action.conversationId, post_id: null })
       }
@@ -301,7 +301,7 @@ export async function handleZernioWebhook(req: Request): Promise<Response> {
   }
 }
 
-/** a touch for the People page — best effort: a webhook never fails because a note could not be written */
+/** a touch noted — best effort: a webhook never fails because a note could not be written */
 async function noteTouch(t: { username: string; name: string | null; kind: 'comment' | 'message'; account_id: string; conversation_id: string | null; post_id: string | null }): Promise<void> {
   try {
     const { recordTouches } = await import('./inbox-people')

@@ -6,7 +6,6 @@ import { pickPortalTheme } from '../../lib/portal-theme'
 import { PortalCardView, type Surface } from './PortalBoard'
 import ShootBoard from './ShootBoard'
 import { SectionHeading } from './PortalSections'
-import PortalFollowersView from './PortalFollowers'
 import PortalPostApprovals from './PortalPostApproval'
 
 /**
@@ -120,8 +119,6 @@ export default function PortalSectionsView({ data, surface, initialCardId }: {
           appears when it comes to them, and again once approved and live */}
       {grid('approved')}
       {grid('published')}
-      {/* the client's followers — only when their manager switched it on */}
-      {data.followers && <PortalFollowersView data={data.followers} />}
     </div>
   )
 }

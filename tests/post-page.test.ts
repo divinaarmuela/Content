@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { seedDb } from './helpers/fake-db'
 import {
-  analyticsForPost, channelExtraLines, chartLabel, dayChart, likedLine, networkName,
-  peopleFrom, portalPostHref, postPageHref, postPageStatus, shortDate, whoLikedNote,
+  analyticsForPost, channelExtraLines, chartLabel, dayChart, networkName,
+  portalPostHref, postPageHref, postPageStatus, shortDate,
 } from '../app/lib/post-page-core'
 import { CHANNEL_EXTRA_KEYS, extraLabel, extraValueWords } from '../app/lib/schedule-compose-core'
 import { STAGE_LABEL, STAGE_MEANING } from '../app/lib/post-stage-core'
@@ -21,9 +21,9 @@ import { STAGE_LABEL, STAGE_MEANING } from '../app/lib/post-stage-core'
  *      "First Comment" with string munging; every name a channel's settings
  *      wear now comes from the composer's own option rows, and a field with
  *      no row is drawn as nothing rather than as a database key.
- *   3. It leaks names to a client who never asked for them. The portal page
- *      carries counts always and handles only when that client's Followers
- *      switch is on.
+ *   3. It leaks names to a client. The portal page carries counts, never a
+ *      handle (the per-client Followers switch that could add them was
+ *      removed with the follower read, 1 Oct 2026).
  *   4. The links into it go nowhere. The card, the board and Posts all point
  *      at the address the route actually lives at.
  */
@@ -189,31 +189,11 @@ describe('where the post got to, and the four kinds of nothing', () => {
     expect(view).not.toMatch(/'published'|'scheduled'|postStatusWords/)
   })
 
-  it('who liked is an Instagram-only question, said so by name', () => {
-    expect(whoLikedNote('instagram')).toBeNull()
-    expect(whoLikedNote('tiktok')).toContain('Likes aren’t available for TikTok')
-  })
-
   it('the network wears its own name', () => {
     expect(networkName('tiktok')).toBe('TikTok')
     expect(networkName(null)).toBe('The platform')
   })
 
-  it('counts read as sentences', () => {
-    expect(likedLine(0)).toBeNull()
-    expect(likedLine(1)).toBe('1 person liked it')
-    expect(likedLine(4)).toBe('4 people liked it')
-  })
-
-  it('a handle with no face still becomes a person', () => {
-    const people = peopleFrom({
-      media_id: null, likers: ['ana', 'zeddix', 'ana'], commenters: [],
-      people: { ana: { username: 'ana', full_name: 'Ana', profile_pic: null } },
-      fetched_at: null, fetched_day: null, reads: 0, followed: [], status: 'done', error: null,
-    }, 'likers')
-    expect(people.map(p => p.username)).toEqual(['ana', 'zeddix'])
-    expect(people[0].full_name).toBe('Ana')
-  })
 })
 
 /* ── the graph ─────────────────────────────────────────────────────────── */
@@ -282,10 +262,10 @@ describe('the client’s copy of the page', () => {
   let fake: ReturnType<typeof seedDb> | null = null
   afterEach(() => { fake?.restore(); fake = null })
 
-  const base = (onPortal: boolean) => ({
+  const base = () => ({
     clients: [{
       id: 'c1', name: 'Acme', share_token: '11111111-1111-4111-8111-111111111111',
-      timezone: 'Australia/Melbourne', followers_on_portal: onPortal,
+      timezone: 'Australia/Melbourne',
     }],
     content_items: [{ id: 'i1', client_id: 'c1', title: 'Hero reel', status: 'published' }],
     social_posts: [{
@@ -307,18 +287,11 @@ describe('the client’s copy of the page', () => {
         comments: [{ id: 'k1', author: 'ana', text: 'love this', at: null }],
         provider_post_id: 'z1', computed_at: '',
       },
-      interactors: {
-        media_id: 'm1', likers: ['zeddix'], commenters: ['ana'],
-        people: { zeddix: { username: 'zeddix', full_name: 'Zeddix', profile_pic: null } },
-        fetched_at: null, fetched_day: null, reads: 1,
-        followed: [{ username: 'zeddix', full_name: 'Zeddix', profile_pic: null, how: 'liked', followed_on: '2026-09-04' }],
-        status: 'done', error: null,
-      },
     }],
   })
 
-  const load = async (onPortal: boolean) => {
-    fake = seedDb(base(onPortal) as never)
+  const load = async () => {
+    fake = seedDb(base() as never)
     const { getPortalPost } = await import('../app/lib/portal-post')
     return getPortalPost('11111111-1111-4111-8111-111111111111', 'p1')
   }
@@ -326,36 +299,21 @@ describe('the client’s copy of the page', () => {
   // the first load of `portal-post` pulls the whole portal module graph in,
   // which is over the 5-second default when the full suite is running (it
   // passed alone every time, 10 Sep 2026) — so this one waits longer
-  it('carries the numbers with the switch OFF, and not one handle', () => {
-    return load(false).then(post => {
+  it('carries the numbers, and not one handle', () => {
+    return load().then(post => {
       expect(post).not.toBeNull()
       expect(post!.performance?.interactions).toBe(14)
-      expect(post!.liked_count).toBe(1)
-      expect(post!.followed_count).toBe(1)
       expect(post!.comment_count).toBe(1)
       // the counts are the client's own; the people are not theirs to have
-      expect(post!.liked).toEqual([])
-      expect(post!.followed).toEqual([])
-      expect(post!.comments).toEqual([])
-      expect(post!.shows_people).toBe(false)
-      expect(JSON.stringify(post)).not.toContain('zeddix')
       expect(JSON.stringify(post)).not.toContain('ana')
+      expect(JSON.stringify(post)).not.toContain('love this')
     })
   }, 30_000)
 
-  it('carries the people once the client’s Followers switch is on', () => {
-    return load(true).then(post => {
-      expect(post!.shows_people).toBe(true)
-      expect(post!.liked.map(p => p.name)).toEqual(['Zeddix'])
-      expect(post!.followed.map(p => p.name)).toEqual(['Zeddix'])
-      expect(post!.comments.map(c => c.text)).toEqual(['love this'])
-    })
-  })
-
   it('a post that is not this token’s client is not found', async () => {
     fake = seedDb({
-      ...base(false),
-      social_posts: [{ ...base(false).social_posts[0], client_id: 'other' }],
+      ...base(),
+      social_posts: [{ ...base().social_posts[0], client_id: 'other' }],
     } as never)
     const { getPortalPost } = await import('../app/lib/portal-post')
     expect(await getPortalPost('11111111-1111-4111-8111-111111111111', 'p1')).toBeNull()

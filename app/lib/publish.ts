@@ -1101,7 +1101,7 @@ export async function syncSocialAccounts(
         .find(r => r.platform === a.platform && String(r.username ?? '').toLowerCase() === handle && !current.has(String(r.provider_account_id)))
       if (old) await table<SocialAccount>('social_accounts').update(old.id, { provider_account_id: a.providerAccountId } as Partial<SocialAccount>)
     }
-    const row = await table<SocialAccount>('social_accounts').upsert({
+    await table<SocialAccount>('social_accounts').upsert({
       client_id: clientId,
       platform: a.platform,
       provider_account_id: a.providerAccountId,
@@ -1115,11 +1115,6 @@ export async function syncSocialAccounts(
       active: true,
       last_synced_at: new Date().toISOString(),
     }, { onConflict: 'provider_account_id' })
-    // "when we connect an account, that's where the scraper should start
-    // collecting": an Instagram account that has never been looked at gets
-    // its baseline — the whole list — now, not at the next 06:00. Once, by
-    // the snapshot claim; nothing for anyone to press; best-effort.
-    if (a.platform === 'instagram' && a.username) await firstFollowerLook(row.id).catch(() => undefined)
   }
   // read the accounts' health again straight away: a reconnected account stops saying "needs reconnecting" on the
   // Overview now, not at tomorrow morning's check (26 Sep 2026). Best effort; nobody is emailed from here.
@@ -1128,17 +1123,4 @@ export async function syncSocialAccounts(
     await refreshClientAccountsHealth(clientId, { tell: false })
   } catch { /* the morning check will catch up */ }
   return accounts.length
-}
-
-async function firstFollowerLook(accountId: string): Promise<void> {
-  const { followersEnabled, snapshotsOf } = await import('./followers')
-  if (!followersEnabled()) return
-  if ((await snapshotsOf(accountId)).length > 0) return
-  const { dayKey, snapshotId } = await import('./followers-core')
-  const { inngest } = await import('../inngest/client')
-  const day = dayKey(new Date())
-  await inngest.send({
-    name: 'app/followers.snapshot.requested',
-    data: { accountId, mode: 'full' as const, trigger: 'scheduled' as const, dedupe: snapshotId(accountId, 'full', day) },
-  })
 }
