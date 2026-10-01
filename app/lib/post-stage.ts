@@ -19,6 +19,7 @@ import { portalPostHref } from './post-page-core'
 import type { ChannelExtras } from './schedule-compose-core'
 import type { Slide } from './version-files-core'
 import { CANCELLED_REASON, TAKEN_OFF_REASON, readPostAutomation, type PostAutomation } from './comment-automation-core'
+import { META_PROVIDER } from './meta-route-core'
 
 /**
  * THE ONE WRITER OF A POST'S STAGE (the posting rebuild, 29 Sep 2026 — SPEC §3.1, §5).
@@ -177,7 +178,9 @@ export type PostEngineDeps = {
    *  a test of Book in itself switches it off */
   autoBook: boolean
   /** Hand the frozen copy to the provider. May throw; the engine treats a throw like a refusal. */
-  queuePublish: (input: QueueInput) => Promise<{ id: string } | { error: string; issues?: string[] }>
+  /** `ids`: every job the booking made — two when the post's Instagram goes through our own Meta app and
+   *  its other networks through Zernio (meta-route-core.ts); absent means just `id` */
+  queuePublish: (input: QueueInput) => Promise<{ id: string; ids?: string[] } | { error: string; issues?: string[] }>
   /**
    * Pull one job back from the provider, then mark it cancelled. ok for a job that never went anywhere;
    * NOT ok (`live`) for a job that says a network already went out — a "cancelled" row over a live post
@@ -967,7 +970,7 @@ async function runBooking(
   // the frozen version is what was approved — its channels too, never the working copy's
   const copy: FrozenCopy = { ...version, scheduled_for: forTime, channels: version.channels.length ? version.channels : post.channels }
   const accounts = loaded.accounts.filter(a => copy.channels.includes(a.id))
-  let queued: { id: string } | { error: string; issues?: string[] }
+  let queued: { id: string; ids?: string[] } | { error: string; issues?: string[] }
   try {
     queued = accounts.length === 0
       ? { error: 'None of this post\'s channels are connected — choose its channels again.' }
@@ -977,10 +980,11 @@ async function runBooking(
   }
 
   if ('id' in queued) {
-    const done = await performSystemTransition(post.id, 'booking_done', { job_ids: [queued.id] })
+    const jobIds = queued.ids?.length ? queued.ids : [queued.id]
+    const done = await performSystemTransition(post.id, 'booking_done', { job_ids: jobIds })
     if (done.ok) return { post: done.post, problem: null }
     // somebody cancelled or took it off while it was being queued: the job must not go out on its own
-    await safeCancel(queued.id)
+    for (const id of jobIds) await safeCancel(id)
     return { post: done.post, problem: done.reason }
   }
   const problem = [queued.error, ...(queued.issues ?? [])].filter(Boolean).join(' — ')
@@ -1321,7 +1325,7 @@ export async function clientManagers(clientId: string): Promise<{ id: string; em
 
 /* ── the real provider and mailer (the defaults) ─────────────────────────── */
 
-async function defaultQueuePublish(input: QueueInput): Promise<{ id: string } | { error: string; issues?: string[] }> {
+async function defaultQueuePublish(input: QueueInput): Promise<{ id: string; ids?: string[] } | { error: string; issues?: string[] }> {
   const [{ queuePublishJob }, schedule, { inngest }] = await Promise.all([
     import('./publish'), import('./social-schedule'), import('../inngest/client'),
   ])
@@ -1335,19 +1339,47 @@ async function defaultQueuePublish(input: QueueInput): Promise<{ id: string } | 
     { slides: input.copy.slides, per_channel: input.copy.per_channel } as never,
     input.accounts, itemVersions as never,
   )
-  const queued = await queuePublishJob({
+  const media = input.copy.slides.map(s => ({ url: s.url, type: s.type === 'video' ? 'video' as const : 'image' as const }))
+  const common = {
     clientId: input.post.client_id,
     contentItemId: input.post.source_item_id,
     // the door asks the POST: booked, holding an approval of this version (P2: publish-core.publishDoorRefusal)
     postId: input.post.id,
     caption: input.copy.caption,
-    media: input.copy.slides.map(s => ({ url: s.url, type: s.type === 'video' ? 'video' as const : 'image' as const })),
-    targets,
+    media,
     scheduledFor: input.now ? null : input.forTime,
     timezone: input.copy.timezone ?? input.post.timezone ?? 'Australia/Melbourne',
     createdBy: input.actor.email ?? undefined,
-  })
-  if ('error' in queued) return { error: queued.error, issues: queued.issues }
+  }
+  /* INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish): with the client's switch on and
+   * its Instagram connected directly, the Instagram target becomes its own job in the 'meta_ig' lane,
+   * and the other networks go to Zernio exactly as before. Switch off (every client but a test one):
+   * `meta` is null and this is the one job it always was. The Meta job is queued FIRST — it is held
+   * until its time, so nothing can send it before the Zernio job is in too — and taken back if the
+   * Zernio job is refused, so a booking is never half made. */
+  const { splitBookingForMeta } = await import('./meta-ig-publish')
+  const split = await splitBookingForMeta({ clientId: input.post.client_id, targets, accounts: input.accounts, media })
+    .catch(e => {
+      console.error('could not ask the Meta routing — everything goes through Zernio:', (e as Error).message)
+      return { meta: null, rest: targets }
+    })
+  const ids: string[] = []
+  if (split.meta) {
+    const metaJob = await queuePublishJob({
+      ...common, targets: [split.meta.target], lane: { provider: META_PROVIDER, state: split.meta.state },
+    })
+    if ('error' in metaJob) return { error: metaJob.error, issues: metaJob.issues }
+    ids.push(metaJob.id)
+  }
+  if (split.rest.length > 0) {
+    const queued = await queuePublishJob({ ...common, targets: split.rest })
+    if ('error' in queued) {
+      for (const id of ids) await defaultCancelJob(id).catch(() => {})
+      return { error: queued.error, issues: queued.issues }
+    }
+    ids.push(queued.id)
+  }
+  if (ids.length === 0) return { error: 'None of this post\'s channels could be booked.' }
   // the schedule rows the portal and the board read, per network — bookkeeping, best effort
   if (input.actor.user && input.post.source_item_id) {
     const item = await table('content_items').get(input.post.source_item_id).catch(() => null)
@@ -1357,9 +1389,11 @@ async function defaultQueuePublish(input: QueueInput): Promise<{ id: string } | 
         .catch(e => console.error('could not record the schedule for a booked post:', (e as Error).message))
     }
   }
-  await inngest.send({ name: 'app/post.publish.requested', data: { jobId: queued.id } })
-    .catch(e => console.error('booking dispatch failed:', (e as Error).message))
-  return { id: queued.id }
+  for (const jobId of ids) {
+    await inngest.send({ name: 'app/post.publish.requested', data: { jobId } })
+      .catch(e => console.error('booking dispatch failed:', (e as Error).message))
+  }
+  return ids.length > 1 ? { id: ids[ids.length - 1], ids } : { id: ids[0] }
 }
 
 /**

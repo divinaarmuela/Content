@@ -5,11 +5,13 @@ connection to Instagram, through the Meta app **Social Scheduler** (App ID
 `2142902776443404`) and its Instagram app **Social Scheduler-IG** (Instagram
 app ID `843035665085991`). It uses "API setup with Instagram login".
 
-**Today it is for testing only.** Posting, comments, DMs and automations all
-still go through Zernio, and nothing in that flow has changed. The new code
-can connect an account, keep its token fresh and store what Meta's webhook
-sends. It does not post, reply or send messages, because nothing calls those
-functions yet.
+**Today it is for testing only.** Comments, DMs and automations all still go
+through Zernio. Posting goes through Zernio too, for every client, UNLESS a
+super admin has switched a client's Instagram onto Meta (section 6, branch
+`meta-publish`) — and then only that client's Instagram, and only for an
+account connected here. The code can connect an account, keep its token
+fresh, store what Meta's webhook sends, and publish. It does not reply or send
+messages.
 
 Until the env vars below are set, every new route answers **503** with the
 reason, and the daily job does nothing.
@@ -92,6 +94,81 @@ Do not connect a real client's account. Test on 100M or MD Media only.
 None of this has been run against Meta yet. Everything in it was tested with
 Meta mocked.
 
+## 6. Publishing 100M's Instagram through Meta (branch `meta-publish`)
+
+### The rule (`app/lib/meta-route-core.ts`, pure, `tests/meta-route-core.test.ts`)
+
+A post's Instagram goes through Meta only when all four hold; otherwise it
+goes through Zernio exactly as before:
+
+1. the client's switch `clients.instagram_via_meta` is on (off by default);
+2. the client has an **active** `meta_ig_accounts` row whose username is the
+   post's Instagram channel's username;
+3. the post asks for nothing this road does not send yet — collaborators,
+   tagged accounts, a location, a Trial Reel, music / a sound name, the
+   paid-partnership label, sponsors, muted sound, comments off, the AI label,
+   a cover frame time;
+4. its files are what Instagram's own API takes: **JPEG** pictures, **MP4 or
+   MOV** video (and a JPEG cover). Zernio converts a PNG or WebP on the way;
+   this road does not, so such a post stays on Zernio. A URL with no
+   extension is checked by its Content-Type just before sending.
+
+The road is decided when the post is **booked**: the Instagram target becomes
+its own `publish_jobs` row with `provider: 'meta_ig'` (the other networks get
+the ordinary Zernio job, same booking). At its time the switch and the
+connection are asked again; switched off in between, it goes through Zernio.
+
+### Timing
+
+Instagram's API cannot schedule. A Meta job waits in `queued` until its time
+(Zernio jobs are still handed over at once). The 10-minute dispatcher hands it
+over once it is within 12 minutes of its time, and the existing `publish-post`
+function sleeps until the minute (`step.sleepUntil`) and publishes. No new
+Inngest function, so no re-sync is needed (CLAUDE.md trap 5b) — but the
+existing function's code changed, so the deploy must be live.
+
+### Never twice
+
+The job is claimed queued → publishing as before. Then everything Meta hands
+back is written onto `publish_jobs.meta_ig` as it exists — carousel item
+containers, then the container id **before** `media_publish`, then the media
+id. A retry asks Instagram about the recorded container: `PUBLISHED` is
+recorded as out (never re-sent), `FINISHED` is published with the same
+container. A refused first comment is noted on the job; the post stays out.
+
+### Switch 100M on
+
+1. Sections 1–5 done: env vars set, 100M's Instagram (@testbusinessaccount2026,
+   id `17841425316746644`) connected and listed **active** on the card.
+2. Clients → 100M → Social → the "Direct — testing" card → turn on **Post this
+   client's Instagram through Meta (testing)**. (Super admins only; it writes
+   `clients.instagram_via_meta = true`.)
+3. On Schedule, open a 100M post with its Instagram channel and a JPEG (or an
+   MP4 reel). As a super admin the channel line shows the amber mark
+   **Instagram · direct (Meta)**. A dashed grey mark says why a post would go
+   through Zernio instead (PNG, a location, another account…).
+4. Book it a few minutes ahead (or Post now).
+
+### What to check
+
+- `publish_jobs`: two rows for the booking if it has other networks; the
+  Instagram one has `provider: "meta_ig"`, `status: "queued"` until its time,
+  then `published`, with `permalink` (instagram.com/p/…) and `meta_ig`
+  holding `creation_id`, `media_id`, `published_at`.
+- The post moves to Posted with Instagram's link, as with Zernio.
+- The post is on @testbusinessaccount2026, once.
+- A failure: `status: "failed"`, `error` starts "Instagram (direct, Meta): …".
+- The Inngest run of `publish-post` for the job: `{ status: "held", until }`
+  then, after the sleep, `{ status: "published" }`.
+
+Switch it off the same way. Jobs already booked into Meta go through Zernio
+at their time once it is off.
+
+**Not verified live:** nothing has been published through this road for real.
+Every Graph call here was mocked (`tests/meta-publish.test.ts`). The error
+code → sentence table in `metaFailure` is from Meta's documented
+content-publishing errors, not from answers seen.
+
 ---
 
 ## Which files are the portable part (the owner: may be reused in unlk.ai)
@@ -113,11 +190,14 @@ The MD Media wiring, which another product would rewrite:
 | `app/lib/meta-ig.ts` | The `meta_ig_accounts` / `meta_ig_events` tables, token encryption (`secret-box`), the refresh job's body, webhook record-keeping, and the `*For(igUserId)` wrappers that look up a stored token. |
 | `app/api/meta/instagram/connect/route.ts` | Account manager or super admin. Redirects to Instagram with a signed state. |
 | `app/api/meta/instagram/callback/route.ts` | Public. Its only authority is the signed state. |
-| `app/api/meta/instagram/accounts/route.ts` | Super admin. Lists a client's direct connections, without the token. |
+| `app/api/meta/instagram/accounts/route.ts` | Super admin. Lists a client's direct connections, without the token, and the switch (GET ?clientId=); which road a post's Instagram takes (GET ?postId=); sets the switch (PATCH). |
 | `app/api/meta/webhook/route.ts` | Public. Its only authority is the signature. |
 | `app/inngest/functions.ts` → `metaIgTokenRefresh` | The daily refresh job. |
 | `app/dashboard/clients/MetaDirectInstagram.tsx` | The "Direct — testing" card, shown to super admins only. |
-| `scripts/gen-db-types.mjs` | Ghost tables `meta_ig_accounts`, `meta_ig_events`. |
+| `app/lib/meta-route-core.ts` | Pure: which road a post's Instagram takes, the request Meta gets, holding a job until its time, Meta's errors in words. |
+| `app/lib/meta-ig-publish.ts` | The publishing road: the client's switch and connections, splitting a booking, publishing one job without ever publishing twice. Called from `publish.ts` (runPublishJob) and `post-stage.ts` (defaultQueuePublish). |
+| `app/dashboard/social/schedule/MetaRouteMark.tsx` | "Instagram · direct (Meta)" on the post window's channel line, super admins only. |
+| `scripts/gen-db-types.mjs` | Ghost tables `meta_ig_accounts`, `meta_ig_events`; columns `clients.instagram_via_meta`, `publish_jobs.provider`, `publish_jobs.meta_ig`. |
 | `middleware.ts` | `/connect` and `/accounts` are gated. `/callback` and `/webhook` are public. |
 
 ## Notes

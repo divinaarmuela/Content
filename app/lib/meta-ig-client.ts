@@ -1,8 +1,8 @@
 import {
   META_IG_TOKEN_URL, carouselItemParams, carouselParentParams, codeExchangeBody, containerParams,
-  containerState, graphErrorMessage, graphUrl, longLivedTokenUrl, messageBody, parseLongToken, parseMe,
+  containerState, graphErrorDetail, graphErrorMessage, graphUrl, longLivedTokenUrl, messageBody, parseLongToken, parseMe,
   parseShortToken, publishingRoom, redactUrl, refreshTokenUrl, validatePublish,
-  type IgMe, type LongToken, type PublishRequest, type ShortToken,
+  type GraphErrorDetail, type IgMe, type LongToken, type PublishItem, type PublishRequest, type ShortToken,
 } from './meta-ig-core'
 
 /**
@@ -25,7 +25,11 @@ import {
 export type MetaIgAppConfig = { appId: string; appSecret: string; redirectUri: string }
 
 export class MetaIgError extends Error {
-  constructor(message: string, public status?: number) { super(message); this.name = 'MetaIgError' }
+  /** Meta's code / subcode / is_transient / error_user_msg, when Meta answered with an error envelope */
+  public detail: GraphErrorDetail | null
+  constructor(message: string, public status?: number, detail?: GraphErrorDetail | null) {
+    super(message); this.name = 'MetaIgError'; this.detail = detail ?? null
+  }
 }
 
 async function call(url: string, init?: RequestInit): Promise<any> {
@@ -37,7 +41,7 @@ async function call(url: string, init?: RequestInit): Promise<any> {
   }
   const json = await res.json().catch(() => null)
   if (!res.ok || (json && typeof json === 'object' && 'error' in json && json.error)) {
-    throw new MetaIgError(graphErrorMessage(json, res.status), res.status)
+    throw new MetaIgError(graphErrorMessage(json, res.status), res.status, graphErrorDetail(json))
   }
   return json
 }
@@ -107,21 +111,65 @@ export async function publishingLimit(token: string, igUserId: string): Promise<
   return publishingRoom(await get(token, `${igUserId}/content_publishing_limit`, { fields: 'quota_usage,config' }))
 }
 
-async function waitForContainer(token: string, id: string, opts: { tries: number; delayMs: number }): Promise<void> {
+/** A container's `status_code` (IN_PROGRESS, FINISHED, PUBLISHED, ERROR, EXPIRED), as Meta wrote it. */
+export async function containerStatus(token: string, id: string): Promise<string | null> {
+  const json = await get(token, id, { fields: 'status_code' })
+  return typeof json?.status_code === 'string' ? json.status_code : null
+}
+
+/** Poll a container until it is FINISHED (or PUBLISHED). ERROR/EXPIRED throw; running out of tries throws a "still processing". */
+export async function waitForContainer(token: string, id: string, opts: { tries: number; delayMs: number }): Promise<void> {
   for (let i = 0; i < opts.tries; i++) {
-    const json = await get(token, id, { fields: 'status_code' })
-    const s = containerState(json?.status_code)
+    const code = await containerStatus(token, id)
+    const s = containerState(code)
     if (s === 'ready') return
-    if (s === 'failed') throw new MetaIgError(`Instagram could not process the media (${String(json?.status_code)})`)
+    if (s === 'failed') throw new MetaIgError(`Instagram could not process the media (${String(code)})`)
     if (opts.delayMs > 0) await new Promise(r => setTimeout(r, opts.delayMs))
   }
   throw new MetaIgError('Instagram is still processing the media — try publishing again shortly')
+}
+
+/** One `POST /{ig-user-id}/media` for a carousel item. Returns the child container id. */
+export async function createCarouselItem(token: string, igUserId: string, item: PublishItem): Promise<string> {
+  return String((await post(token, `${igUserId}/media`, carouselItemParams(item))).id)
+}
+
+/** The container a post is published from: the carousel parent from its children, or the single container. */
+export async function createContainer(token: string, igUserId: string, req: PublishRequest, childIds: string[] = []): Promise<string> {
+  const params = req.kind === 'CAROUSEL' ? carouselParentParams(childIds, req.caption) : containerParams(req)
+  return String((await post(token, `${igUserId}/media`, params)).id)
+}
+
+/** `POST /{ig-user-id}/media_publish` — the one call that makes a post. Instagram publishes a container once. */
+export async function publishContainer(token: string, igUserId: string, creationId: string): Promise<{ mediaId: string }> {
+  const published = await post(token, `${igUserId}/media_publish`, { creation_id: creationId })
+  return { mediaId: String(published.id) }
+}
+
+/** The public link of a published media, or null if Instagram did not give one. */
+export async function mediaPermalink(token: string, mediaId: string): Promise<string | null> {
+  const json = await get(token, mediaId, { fields: 'permalink' })
+  return typeof json?.permalink === 'string' && json.permalink ? json.permalink : null
+}
+
+/** A comment on a media, written by the account itself — how a post's "first comment" is made. */
+export async function commentOnMedia(token: string, mediaId: string, message: string): Promise<{ id: string }> {
+  return { id: String((await post(token, `${mediaId}/comments`, { message })).id) }
+}
+
+/** Does this request make a video container that has to be waited on? */
+export function isVideoRequest(req: PublishRequest): boolean {
+  return req.kind === 'REELS' || req.kind === 'CAROUSEL' || (req.kind === 'STORIES' && req.media.type === 'video')
 }
 
 /**
  * Container → media_publish, for IMAGE, REELS, STORIES and CAROUSEL. The
  * publishing quota is read first, and a full quota refuses before anything
  * is created. Video containers are polled until FINISHED.
+ *
+ * Stateless: a caller that must never publish twice (MD Media's publish jobs,
+ * meta-ig-publish.ts) uses the pieces above instead, and records the
+ * container id before media_publish.
  */
 export async function publish(
   token: string,
@@ -138,22 +186,17 @@ export async function publish(
     throw new MetaIgError(`Instagram's publishing limit is reached (${room.used} of ${room.total} in 24 hours)`)
   }
 
-  let creationId: string
+  const children: string[] = []
   if (req.kind === 'CAROUSEL') {
-    const children: string[] = []
     for (const item of req.items) {
-      const child = await post(token, `${igUserId}/media`, carouselItemParams(item))
-      if (item.type === 'video') await waitForContainer(token, String(child.id), wait)
-      children.push(String(child.id))
+      const child = await createCarouselItem(token, igUserId, item)
+      if (item.type === 'video') await waitForContainer(token, child, wait)
+      children.push(child)
     }
-    creationId = String((await post(token, `${igUserId}/media`, carouselParentParams(children, req.caption))).id)
-  } else {
-    creationId = String((await post(token, `${igUserId}/media`, containerParams(req))).id)
   }
-  const isVideo = req.kind === 'REELS' || req.kind === 'CAROUSEL' || (req.kind === 'STORIES' && req.media.type === 'video')
-  if (isVideo) await waitForContainer(token, creationId, wait)
-  const published = await post(token, `${igUserId}/media_publish`, { creation_id: creationId })
-  return { mediaId: String(published.id) }
+  const creationId = await createContainer(token, igUserId, req, children)
+  if (isVideoRequest(req)) await waitForContainer(token, creationId, wait)
+  return publishContainer(token, igUserId, creationId)
 }
 
 /* ── comments ─────────────────────────────────────────────────────────── */

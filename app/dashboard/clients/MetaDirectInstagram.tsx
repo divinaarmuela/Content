@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { useRole } from '../useRole'
 import PlatformIcon from '../social/PlatformIcon'
 
@@ -10,8 +11,13 @@ import PlatformIcon from '../social/PlatformIcon'
  * THE AGENCY'S OWN INSTAGRAM CONNECTION, FOR TESTING (1 Oct 2026, branch
  * meta-instagram-login). Super admins only, and badged "Direct — testing":
  * posting, comments and DMs still go through the channels above (Zernio).
- * Nothing here posts or replies — it connects an account straight to our
- * Meta app and shows what is connected. The token never reaches this page.
+ * It connects an account straight to our Meta app and shows what is
+ * connected. The token never reaches this page.
+ *
+ * The switch underneath (branch meta-publish, 1 Oct 2026) sends THIS
+ * client's Instagram posts through our own Meta app instead of Zernio, for
+ * testing — off by default, and only effective with an active connection
+ * here for the same account (app/lib/meta-route-core.ts).
  */
 
 type Row = {
@@ -24,7 +30,7 @@ type Row = {
   status: string
   last_error: string | null
 }
-type State = { configured: boolean; reason: string | null; accounts: Row[] } | { error: string }
+type State = { configured: boolean; reason: string | null; accounts: Row[]; viaMeta?: boolean } | { error: string }
 
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
@@ -33,6 +39,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
   const { can, loading } = useRole()
   const superAdmin = can('super_admin')
   const [state, setState] = useState<State | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -58,11 +65,28 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }, [superAdmin])
 
+  const setViaMeta = async (on: boolean) => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/meta/instagram/accounts', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId, viaMeta: on }),
+      })
+      const json = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) { toast.error(json.error ?? 'Could not change it'); return }
+      toast.success(on ? 'Instagram posts for this client now go through Meta' : 'Instagram posts for this client go through Zernio again')
+      await load()
+    } catch { toast.error('Could not reach the server') } finally { setSaving(false) }
+  }
+
   if (loading || !superAdmin) return null
 
   const H = 'font-mono text-[12px] uppercase tracking-widest text-muted-foreground'
   const configured = state && 'configured' in state ? state.configured : false
   const accounts = state && 'accounts' in state ? state.accounts : []
+  const viaMeta = state && 'viaMeta' in state ? state.viaMeta === true : false
+  const anyActive = accounts.some(a => a.status === 'active')
 
   return (
     <div className="flex flex-col gap-2 rounded-inner border border-dashed border-border p-3" data-meta-ig="direct">
@@ -104,6 +128,23 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
           </Button>
         )}
       </div>
+
+      <label className="flex min-h-11 items-center gap-3 border-t border-border pt-2 text-[13px]">
+        <Switch
+          checked={viaMeta}
+          disabled={saving || !state || 'error' in state || (!viaMeta && !anyActive)}
+          onCheckedChange={v => void setViaMeta(v)}
+          aria-label="Post this client's Instagram through Meta (testing)"
+        />
+        <span className="flex flex-col">
+          <span className="font-semibold">Post this client’s Instagram through Meta (testing)</span>
+          <span className="text-[12px] text-muted-foreground">
+            {viaMeta
+              ? 'On: Instagram posts booked from now on go through our own Meta app. Other networks still go through Zernio.'
+              : anyActive ? 'Off: everything goes through Zernio.' : 'Connect Instagram directly first.'}
+          </span>
+        </span>
+      </label>
     </div>
   )
 }

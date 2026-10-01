@@ -3,8 +3,9 @@ import { table, withRequestCache } from '@/lib/db'
 import { scanSingleMailbox } from '../lib/email-lead'
 import { getScanSettings, enabledMailboxEmails } from '../lib/scan-settings'
 import {
-  dueJobIds, runPublishJob, reclaimStalePublishing, reconcilePublishedJobs,
+  dueJobIds, heldUntilOf, runPublishJob, reclaimStalePublishing, reconcilePublishedJobs,
 } from '../lib/publish'
+import { META_SLEEP_MAX_MS } from '../lib/meta-route-core'
 import { runLeadsReportTick } from '../lib/report-send'
 import { reconcileAll } from '../lib/asana-sync'
 
@@ -264,7 +265,20 @@ export const publishPost = inngest.createFunction(
   async ({ event, step }) => withRequestCache(async () => {
     const jobId = String(event.data?.jobId ?? '')
     if (!jobId) return { skipped: 'no jobId' }
-    return step.run('publish', async () => ({ status: await runPublishJob(jobId) }))
+    const first = await step.run('publish', async () => {
+      const status = await runPublishJob(jobId)
+      return { status, until: status === 'held' ? await heldUntilOf(jobId) : null }
+    })
+    /* INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish): Instagram's API cannot
+     * schedule, so a Meta job is 'held' until its time (meta-route-core.metaHold). Close to it — the
+     * dispatcher hands it over within META_DISPATCH_LEAD_MS — this run sleeps until the minute and
+     * publishes then. Further out it simply ends, and the dispatcher brings it back later. Steps inside
+     * THIS function: no new function, so no re-sync (CLAUDE.md trap 5b). A Zernio job never gets here. */
+    if (first.status !== 'held' || !first.until) return { status: first.status }
+    if (Date.parse(first.until) - Date.now() > META_SLEEP_MAX_MS) return { status: 'held', until: first.until }
+    // two seconds past it, so a clock a hair behind Inngest's does not find the job still held
+    await step.sleepUntil('until-its-time', new Date(Date.parse(first.until) + 2000))
+    return step.run('publish-at-its-time', async () => ({ status: await runPublishJob(jobId) }))
   })
 )
 

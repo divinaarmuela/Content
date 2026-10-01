@@ -21,6 +21,7 @@ import {
   type RemotePlatformRow,
 } from './publish-core'
 import type { PlatformOutcome } from './post-outcome-core'
+import { META_PROVIDER, dueForDispatch, metaHold, type MetaJobState } from './meta-route-core'
 
 /**
  * Publishing a client's post is the least reversible thing this system does —
@@ -79,8 +80,12 @@ export function mediaKeyOf(urls: readonly string[]): string {
   return `${urls.length}x${h.toString(36)}`
 }
 
-export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown }) =>
-  publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)))
+/** A Meta job (Instagram through our own Meta app) holds its own lane's lock: the booking's Zernio job for
+ *  the SAME files on the OTHER networks is not a second post of it (meta-route-core.ts). */
+export const laneSuffix = (provider: unknown) => provider === META_PROVIDER ? `__${META_PROVIDER}` : ''
+
+export const jobLockKey = (job: { content_item_id?: unknown; media?: unknown; targets?: unknown; provider?: unknown }) =>
+  publishLockKey(String(job.content_item_id), mediaKeyOf(jobMediaUrls(job)) + laneSuffix(job.provider))
 
 /** The platform names off a job's stored targets, however loosely typed. */
 function platformsOf(targets: unknown): string[] {
@@ -103,7 +108,11 @@ export async function queuePublishJob(input: {
   scheduledFor?: string | null
   timezone?: string
   createdBy?: string
+  /** Instagram through the agency's own Meta app: the job is in the 'meta_ig' lane and remembers which
+   *  account (meta-route-core.ts). Absent = Zernio, as every job always was. */
+  lane?: { provider: typeof META_PROVIDER; state: MetaJobState } | null
 }): Promise<{ id: string } | { error: string; issues?: string[]; blocked?: boolean }> {
+  const provider = input.lane?.provider ?? null
   const platforms = input.targets.map(t => t.platform).filter(isPlatform)
   // carry each target's intent into validation, so a Reel with a still image
   // or a Story with a carousel is refused here rather than by the platform
@@ -174,9 +183,13 @@ export async function queuePublishJob(input: {
     // a live job of this item that carries ANY of the same files is the
     // same post going twice; one carrying other files is a part-booking
     const mine = new Set(jobMediaUrls({ media: input.media, targets: input.targets }))
+    const myPlatforms = new Set(platformsOf(input.targets))
     const live = await table<PublishJobRow>('publish_jobs').list({
       where: j => j.content_item_id === input.contentItemId
         && LIVE_JOB_STATUSES.includes(j.status)
+        // the other lane's job of the same booking (Meta's Instagram beside Zernio's other networks) is not
+        // the same post going twice — unless they share a network
+        && ((j.provider ?? null) === provider || platformsOf(j.targets).some(p => myPlatforms.has(p)))
         // a job with no files on record (text, or from before files were
         // recorded) still holds the whole card
         && (mine.size === 0 || jobMediaUrls(j).length === 0 || jobMediaUrls(j).some(u => mine.has(u))),
@@ -189,7 +202,7 @@ export async function queuePublishJob(input: {
     if (live.length > 0) return { error: 'These files are already queued to publish on this card' }
 
     const gate = await takeClaimLock(
-      publishLockKey(input.contentItemId, mediaKeyOf([...mine])), jobId,
+      publishLockKey(input.contentItemId, mediaKeyOf([...mine]) + laneSuffix(provider)), jobId,
       async holder => {
         const held = await table<PublishJobRow>('publish_jobs').get(holder, { fresh: true })
         // A HOLDER THAT IS READ AND FINISHED FREES THE LOCK AT ANY AGE (live test, 29 Sep 2026): Change time on a
@@ -222,11 +235,12 @@ export async function queuePublishJob(input: {
       request_id: randomUUID(),
       attempts: 0,
       updated_at: now,
+      ...(provider ? { provider, meta_ig: input.lane!.state } : {}),
     })
     return { id: row.id }
   } catch (e) {
     // the lock is only worth holding while there is a job behind it
-    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets }))), jobId).catch(() => {})
+    if (input.contentItemId) await releaseClaimLock(publishLockKey(input.contentItemId, mediaKeyOf(jobMediaUrls({ media: input.media, targets: input.targets })) + laneSuffix(provider)), jobId).catch(() => {})
     return { error: e instanceof Error ? e.message : 'Could not queue this post' }
   }
 }
@@ -331,8 +345,17 @@ export async function tellThePost(jobId: string, opts: { lost?: boolean } = {}):
  */
 export async function runPublishJob(jobId: string): Promise<string | null> {
   const status = await attemptPublishJob(jobId)
-  if (status !== null && status !== 'queued') await tellThePost(jobId)
+  // 'held': a Meta job before its time — nothing has happened yet, like 'queued'
+  if (status !== null && status !== 'queued' && status !== 'held') await tellThePost(jobId)
   return status
+}
+
+/** When a held Meta job is due, or null if the job is not held (meta-route-core.metaHold). */
+export async function heldUntilOf(jobId: string): Promise<string | null> {
+  const job = await table<PublishJobRow>('publish_jobs').get(jobId, { fresh: true }).catch(() => null)
+  if (!job || job.status !== 'queued') return null
+  const h = metaHold(job, Date.now())
+  return h.held ? h.until : null
 }
 
 async function attemptPublishJob(jobId: string): Promise<string | null> {
@@ -346,11 +369,17 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
   // anything that has sat in 'publishing' for 15 minutes by that column. A
   // claim that left it at the job's queue time would look abandoned the
   // moment it was taken, and the same post would be dispatched twice.
-  const taken = await table<PublishJobRow>('publish_jobs').claim(jobId, cur =>
-    cur && cur.status === 'queued'
-      ? { ...cur, status: 'publishing', updated_at: new Date().toISOString() }
-      : null)
-  if (!taken.claimed) return null                            // ← the gate; not queued means we lost
+  // A META JOB IS NOT TAKEN BEFORE ITS TIME: Instagram's API has no scheduling, so the job waits in
+  // 'queued' and is published at its time (meta-route-core.metaHold). Asked inside the claim, so the
+  // answer and the write are one.
+  let held = false
+  const taken = await table<PublishJobRow>('publish_jobs').claim(jobId, cur => {
+    held = false
+    if (!cur || cur.status !== 'queued') return null
+    if (metaHold(cur, Date.now()).held) { held = true; return null }
+    return { ...cur, status: 'publishing', updated_at: new Date().toISOString() }
+  })
+  if (!taken.claimed) return held ? 'held' : null            // ← the gate; not queued means we lost
   const claimed = taken.row
 
   const job = claimed as unknown as PublishJob & { attempts: number }
@@ -360,7 +389,7 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
    *  now, written with every status change (post-outcome-core) */
   const perChannel = (
     status: 'queued' | 'scheduled' | 'published' | 'failed',
-    detail: { reason?: string | null; at?: string | null } = {},
+    detail: { reason?: string | null; at?: string | null; url?: string | null } = {},
   ) => resultsForAll(job as unknown as OutcomeJob, status, { at: new Date().toISOString(), ...detail })
 
   const settle = async (fields: Record<string, unknown>) => {
@@ -440,6 +469,41 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
     if (waited.clearMedia && (job.media?.length ?? 0) > 0) {
       job.media = []
       await settle({ media: [] })
+    }
+
+    /**
+     * INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish). A job booked into the Meta
+     * lane goes to Instagram's own API here, at its time — no relay (Instagram fetches our public
+     * storage URLs itself), no Zernio. Recorded like any outcome, so the post, the Schedule and the
+     * posted pages read it unchanged. If the switch was turned off (or the connection lost) since it
+     * was booked, it carries on below and goes through Zernio after all.
+     */
+    if (claimed.provider === META_PROVIDER) {
+      const { metaStillRouted, publishJobToInstagram } = await import('./meta-ig-publish')
+      const still = await metaStillRouted(claimed)
+      if (still.ok) {
+        const out = await publishJobToInstagram({
+          id: jobId, caption: job.caption, media: job.media ?? [], targets: (job.targets ?? []) as Target[], meta_ig: claimed.meta_ig,
+        })
+        const at = new Date().toISOString()
+        switch (out.kind) {
+          case 'published':
+            await settle({
+              status: 'published', published_at: at, attempts: job.attempts + 1,
+              // the first comment is a courtesy: its failure is said, and the post is still out
+              error: out.note,
+              ...(out.permalink ? { permalink: out.permalink } : {}),
+              platform_results: perChannel('published', { at, url: out.permalink }),
+            })
+            return 'published'
+          case 'retryable':
+            return tryAgain(out.message)
+          case 'permanent':
+            await settle({ status: 'failed', attempts: job.attempts + 1, error: out.message, platform_results: perChannel('failed', { reason: out.message }) })
+            return 'failed'
+        }
+      }
+      console.warn(`[publish ${jobId}] booked for Instagram via Meta, sent through Zernio instead: ${still.reason}`)
     }
 
     // relay first, and persist the provider URLs so a retry does not re-upload
@@ -1056,7 +1120,9 @@ export async function dueJobIds(): Promise<string[]> {
   const rows = await table<PublishJobRow>('publish_jobs').list({
     by: { status: 'queued' },
     // stop hammering a job that keeps failing (the last try settles it as not posted)
-    where: j => j.attempts < MAX_PUBLISH_ATTEMPTS,
+    where: j => j.attempts < MAX_PUBLISH_ATTEMPTS
+      // a Meta job far from its time is not handed over yet: nothing could take it (meta-route-core)
+      && dueForDispatch(j, Date.now()),
     orderBy: [['created_at', 'asc']],
     limit: 50,
   })
