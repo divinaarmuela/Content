@@ -143,10 +143,14 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
     if (approving || !name.trim() || (unapproved.length === 0 && !decides)) return
     setApproving(true); setError(null)
     try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
-    for (const c of unapproved) {
+    for (const [i, c] of unapproved.entries()) {
+      // one email for the whole press: quiet ticks, then one summary on the last — or none when the piece's own
+      // approval below tells the manager (1 Oct 2026)
+      const last = i === unapproved.length - 1
       const res = await fetch('/api/portal/clip', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, item: item.id, file_id: c.id, name: c.name, decision: 'approve', author_name: name }),
+        body: JSON.stringify({ token, item: item.id, file_id: c.id, name: c.name, decision: 'approve', author_name: name,
+          quiet: decides || !last, ...(last && !decides ? { summary_of: unapproved.length } : {}) }),
       })
       const json = await res.json().catch(() => null)
       if (!res.ok) { setError(json?.error ?? `Could not approve ${c.name} — try again`); break }

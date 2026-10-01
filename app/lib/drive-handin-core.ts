@@ -119,12 +119,15 @@ export function latestHandIn(item: { drive_handins?: unknown } | null | undefine
  * handed in" in green under a greyed Submit that said to hand in first). Its line is not shown once a send-back is
  * newer than it; the files stay on the card as the version before.
  */
-export function handInOutdated(item: { drive_handins?: unknown; change_note_at?: unknown; edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown } | null | undefined): boolean {
+export function handInOutdated(item: { drive_handins?: unknown; change_note_at?: unknown; edit_round?: unknown; status?: unknown; client_round?: unknown; client_rounds?: unknown; final_files?: unknown } | null | undefined): boolean {
   const h = latestHandIn(item)
   if (!h || h.status === 'copying') return false
   // …or it went on as an earlier version than the one now being made (1 Oct 2026, the walk: once the client asked for
   // changes the card read "Your finished edit — Version 3" over "7 files handed in", and those were Version 2's)
   if (item && typeof h.settled_round === 'number' && h.settled_round < handInRound(item)) return true
+  // …or files were uploaded after it (1 Oct 2026, the walk: "Nothing changed" stayed up under a successful upload)
+  const after = h.settled_at ?? h.requested_at
+  if (after && finalFilesOf(item as never).some(f => f.source !== 'drive' && String(f.uploaded_at ?? '') > after)) return true
   const back = typeof item?.change_note_at === 'string' ? item.change_note_at : null
   if (!back) return false
   return h.requested_at < back

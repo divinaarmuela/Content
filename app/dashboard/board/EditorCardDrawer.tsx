@@ -874,7 +874,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <DialogHeader>
             <DialogTitle>Upload the finished files — {item ? roundLabel(handInRound(item as never)) : ''}</DialogTitle>
             <DialogDescription>
-              The clips, pictures or PDFs themselves, not a link. Each file is its own piece: if one needs changing later, only that one is replaced and the rest stay as they are. Up to 5GB a file.
+              The clips, pictures or PDFs themselves, if they are not in Google Drive. They join this version with the files already handed in. Up to 5GB a file.
             </DialogDescription>
           </DialogHeader>
           <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-inner border border-dashed border-border bg-surface p-4 text-center text-[14px] hover:bg-muted"

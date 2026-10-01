@@ -28,6 +28,10 @@ export async function POST(req: Request) {
     const fileId = String(body.file_id ?? '')
     const name = String(body.name ?? '').trim().slice(0, 200)
     const decision = body.decision === 'undo' ? 'undo' : 'approve'
+    // ONE EMAIL FOR "APPROVE VERSION" (1 Oct 2026, the walk: one press sent the manager 7): the page ticks each clip
+    // quietly and asks for one summary on the last — or none, when approving the piece sends its own
+    const quiet = body.quiet === true
+    const summaryOf = typeof body.summary_of === 'number' && body.summary_of > 1 ? Math.min(200, Math.floor(body.summary_of)) : null
     const authorName = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
     if (!isDriveId(fileId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     // A TICK IS SIGNED (the owner, 16 Sep 2026: "who clicked approve?" — an
@@ -64,12 +68,14 @@ export async function POST(req: Request) {
         : `${name || fileId} — approval taken back by ${by} from ${from.ip ?? 'an unknown address'}`,
     })
     announceItemChange({ item_id: item.id, client_id: client.id, status: item.status, kind: 'updated' })
-    if (decision === 'approve') {
+    if (decision === 'approve' && !quiet) {
       await notifyManagersOfComment({
         clientId: client.id,
         speaker: authorName ? `${authorName} · ${client.name}` : client.name,
-        subjectTitle: `${item.title} — a clip approved`,
-        body: `Approved: ${name || 'a clip'} (${next.length} of the clips so far). The card stays where it is until you log the approval or send it back.`,
+        subjectTitle: summaryOf ? `${item.title} — all ${summaryOf} approved` : `${item.title} — a clip approved`,
+        body: summaryOf
+          ? `Approved all ${summaryOf} in this version. The card stays where it is until you log the approval or send it back.`
+          : `Approved: ${name || 'a clip'} (${next.length} of the clips so far). The card stays where it is until you log the approval or send it back.`,
         dashboardPath: reviewPath(item.id, fileId, name || undefined),
       }).catch(e => console.error('clip approval notify error:', e))
     }

@@ -202,8 +202,12 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
                     <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
                     {/* the whole set at a version (30 Sep 2026): what changed in it, and what was carried */}
                     {markOf.has(t.id) && !allNew && (
-                      <span data-version-mark className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
-                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'New cut in this version' : 'New in this version') : `Unchanged — from ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
+                      // ONE WORD, the sentence on hover (1 Oct 2026, the walk: "Unchanged — from Version 2" wrapped to three lines
+                      // in the narrow column and ran over the thumbnails)
+                      <span data-version-mark
+                        title={markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'A new cut in this version' : 'New in this version') : `Unchanged — the same file as ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
+                        className={`w-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
+                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'New cut' : 'New') : 'Unchanged'}
                       </span>
                     )}
                     {dl && (
