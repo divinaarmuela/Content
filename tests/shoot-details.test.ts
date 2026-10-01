@@ -42,7 +42,7 @@ describe('what was typed when the shoot was made can be changed and copied (21 S
 
   it('a manager who HOLDS the card still has Transfer on it (21 Sep 2026)', () => {
     const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
-    expect(page).toContain('{maker && me && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}')
+    expect(page).toContain('{maker && me && <HolderTransfer design={filesOnly} item={item} viewer={{ id: me.id, role: me.role }} />}')
   })
 
   it('What happened says who transferred the editing job, from whom, to whom (21 Sep 2026)', () => {

@@ -515,7 +515,7 @@ describe('the editor’s card, every button, live', () => {
     expect(after.status).toBe('client_review')
     expect(after.scheduler_ids).toEqual([scheduler.id])
     expect(after.delivered_at).toBeTruthy()
-    expect(reviewWords(after.status)).toBe('With the client')
+    expect(reviewWords(after.status)).toBeNull()
     expect(EDITOR_LANES.find(l => l.columns.includes(columnOf('client_review')))?.key).toBe('quality_check')
     const portal = (await getPortalData(TEST_CLIENT_ID))?.cards.find(c => c.id === itemId)
     expect(portal).toBeTruthy()

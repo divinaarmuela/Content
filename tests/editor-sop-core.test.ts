@@ -20,7 +20,7 @@ describe('§6 the four stages', () => {
   it('inside For Review the editor is told who has it, in small words', () => {
     expect(reviewWords('internal_review')).toBe('With the account manager')
     expect(reviewWords('quality_check')).toBe('With the quality reviewer')
-    expect(reviewWords('client_review')).toBe('With the client')
+    expect(reviewWords('client_review')).toBeNull()
     expect(reviewWords('client_changes_requested')).toBe('The client asked for changes')
     expect(reviewWords('draft_uploaded')).toBeNull()
   })

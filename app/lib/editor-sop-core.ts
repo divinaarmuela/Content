@@ -57,7 +57,7 @@ export function reviewWords(status: ItemStatus | string, reviewerName?: string |
   switch (status) {
     case 'internal_review': return 'With the account manager'
     case 'quality_check': return first ? `With ${first}` : 'With the quality reviewer'
-    case 'client_review': return 'With the client'
+    // nothing for client_review: the column already says With client (1 Oct 2026: "With client · With the client")
     case 'client_changes_requested': return 'The client asked for changes'
     default: return null
   }
@@ -225,14 +225,24 @@ export const QC_CHECKLIST: readonly { key: string; label: string }[] = [
 
 export const QC_KEYS = QC_CHECKLIST.map(c => c.key)
 
-/** Submit is allowed only when every check is ticked. */
-export function qcComplete(ticked: readonly string[]): boolean {
-  return QC_KEYS.every(k => ticked.includes(k))
+/** A DESIGNER'S CHECKS (1 Oct 2026, the designer walk: a graphics card asked its designer to tick
+ *  "Watched the full export", "Audio levels and sync" and "Transitions"). */
+export const DESIGN_QC_CHECKLIST: readonly { key: string; label: string }[] = [
+  { key: 'looked', label: 'Looked at every design at full size' },
+  { key: 'text', label: 'Spelling and on-screen text checked against the brief' },
+  { key: 'branding', label: 'Branding — logo, colours and fonts' },
+  { key: 'ratio', label: 'Correct size and aspect ratio for the platform' },
+  { key: 'quality', label: 'Image quality — nothing blurry or cut off' },
+]
+
+/** Submit is allowed only when every check is ticked — a designer's list on a graphics card. */
+export function qcComplete(ticked: readonly string[], design = false): boolean {
+  return (design ? DESIGN_QC_CHECKLIST : QC_CHECKLIST).every(c => ticked.includes(c.key))
 }
 
 /** The ticks as one history line: "QC done: watched, text, …". */
 export function qcDetail(ticked: readonly string[]): string {
-  return `QC done: ${QC_CHECKLIST.filter(c => ticked.includes(c.key)).map(c => c.label).join('; ')}`
+  return `QC done: ${[...QC_CHECKLIST, ...DESIGN_QC_CHECKLIST.filter(d => !QC_KEYS.includes(d.key))].filter(c => ticked.includes(c.key)).map(c => c.label).join('; ')}`
 }
 
 /** Is the quality check on record for THIS version of the files? */

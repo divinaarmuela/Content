@@ -511,7 +511,7 @@ describe('after the client asks for changes, before the manager decides (1 Oct 2
     expect(handInOutdated(card)).toBe(true)
     // the manager sends it back: Version 3 is being made, and the editor's new hand-in line shows once it lands
     expect(shownRound({ ...card, status: 'revision_required' })).toBe(3)
-    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain('Your finished edit — {roundLabel(shownRound(item as never))}')
+    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain("{designCard ? 'files' : 'edit'} — {roundLabel(shownRound(item as never))}")
   })
 })
 

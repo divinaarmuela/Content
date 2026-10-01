@@ -117,7 +117,7 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
       {state.at === 'ready' && (
         <>
           <p className="text-[13px] text-muted-foreground">
-            {fromCopies ? folderFilesWords(tiles.length, 0) : `${state.note ?? folderFilesWords(state.tiles.length, state.folders)}${state.more ? ' — the first 60 are shown; open the folder for the rest' : ''}`}
+            {fromCopies ? `${tiles.length} ${tiles.length === 1 ? 'file' : 'files'} on the card` : `${state.note ?? folderFilesWords(state.tiles.length, state.folders)}${state.more ? ' — the first 60 are shown; open the folder for the rest' : ''}`}
           </p>
           {fromCopies && rounds.length > 1 && (
             <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Versions">

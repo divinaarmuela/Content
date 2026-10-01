@@ -221,7 +221,9 @@ export function KindDialog({ card, kinds, onClose, onSaved }: {
   )
 }
 
-type ClientComment = { id: string; created_at: string; body: string; author_name: string | null }
+type ClientComment = { id: string; created_at: string; body: string; author_name: string | null; file_name?: string | null }
+/** a client's note as the send-back carries it: the file it was left on, then their words */
+const clientLine = (c: ClientComment) => (c.file_name ? `On ${c.file_name}: ${c.body.trim()}` : c.body.trim())
 
 /**
  * Send a card back with what needs changing. The client's own words are
@@ -253,7 +255,7 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
         const words = (json.comments ?? []).filter(c => c.body?.trim() && String(c.created_at ?? '') > since)
         setClientWords(words)
         // what they asked for this time, as the start of the note
-        if (words.length) setNote(words.map(c => c.body.trim()).join('\n'))
+        if (words.length) setNote(words.map(clientLine).join('\n'))
       })
       .catch(() => { /* the box still works without them */ })
     return () => { cancelled = true }
@@ -314,7 +316,7 @@ export function SendBackDialog({ card, viewer, onClose, onSent }: {
           <div className="flex flex-col gap-1.5 rounded-inner bg-paper p-3">
             <span className="text-[12px] font-semibold uppercase tracking-[0.02em] text-muted-foreground">The client said</span>
             {clientWords.slice(-3).map(c => (
-              <p key={c.id} className="text-[14px]">{c.body}</p>
+              <p key={c.id} className="text-[14px]">{clientLine(c)}</p>
             ))}
           </div>
         )}
@@ -696,7 +698,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
         })
         if (!put.ok) toast.error('The card is made, but the link did not save — add it from the card')
       }
-      toast.success('Card made — it is in Draft')
+      toast.success(forPosting ? 'Card made' : 'Card made — it is in the In Progress column')
       if (id) onCreated?.(id)
       onOpenChange(false)
     } catch (e) {
@@ -749,7 +751,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                 2026: "why is the title and what needs doing for Post approval
                 the same as Editor?") */}
             <Label htmlFor="new-title">{forPosting ? 'What is the post' : 'Title'}</Label>
-            <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder={forPosting ? 'Spring reel — Instagram and TikTok' : 'Spring reel 2'} className={field} autoFocus />
+            <Input id="new-title" value={title} onChange={e => setTitle(e.target.value)} placeholder={forPosting ? 'Spring reel — Instagram and TikTok' : filesOnly ? 'Spring sale — feed graphics' : 'Spring reel 2'} className={field} autoFocus />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="new-brief">{forPosting ? 'Notes for the scheduler' : 'What needs doing'}</Label>
@@ -826,7 +828,12 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
                   Choose files
                 </Button>
                 <input id="new-work-files" ref={workInput} type="file" multiple accept="image/*,video/*" className="hidden"
-                  onChange={e => { setWorkFiles(w => [...w, ...Array.from(e.target.files ?? [])]); e.target.value = '' }} />
+                  onChange={e => {
+                    // read the files NOW: the updater runs later, after the clear below has emptied the list
+                    // (1 Oct 2026, the designer walk: New card's files to work from came out empty)
+                    const picked = Array.from(e.target.files ?? [])
+                    setWorkFiles(w => [...w, ...picked]); e.target.value = ''
+                  }} />
                 {workFiles.length > 0 && (
                   <span className="text-[13px] text-muted-foreground">{workFiles.length} {workFiles.length === 1 ? 'file' : 'files'} chosen</span>
                 )}

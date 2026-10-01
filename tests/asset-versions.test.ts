@@ -90,9 +90,10 @@ describe('one asset, its versions (22 Sep 2026): "2 get approved, 1 needs changi
     const backAgain = withRetired(dropped, 'b', null)
     expect(backAgain.find(x => x.id === 'b')?.retired_round).toBeUndefined()
     expect(backAgain).toHaveLength(3)
-    // the editor's card no longer drops clips one by one (30 Sep 2026): a clip left out of the Drive folder is dropped
+    // the editor's card no longer drops clips one by one (30 Sep 2026): a clip left out of the Drive folder is dropped.
+    // A DESIGNER'S card does (1 Oct 2026): they have no folder to hand in again, so Drop sits behind designCard
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(drawer).not.toContain('Drop from {roundLabel(handInRound(item as never))}')
+    expect(drawer).toMatch(/designCard && \(holder \|\| isManager\) && !frozen[\s\S]{0,2500}Drop from \{roundLabel\(handInRound\(item as never\)\)\}/)
     expect(drawer).not.toContain('>Bring back</Button>')
   })
 

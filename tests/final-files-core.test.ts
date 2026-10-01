@@ -51,7 +51,7 @@ describe('finished work handed in as files (17 Sep 2026)', () => {
     expect(src('app/lib/people-filter-core.ts')).toContain('return hasFinishedWork(c as never)')
     // …the card as it stands at this round: carried-forward clips count, dropped ones do not (22 Sep 2026)
     expect(src('app/lib/workflow.ts')).toContain('const hasFiles = liveFilesAt(item as never, handInRound(item as never)).length > 0')
-    expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("disabled={busy || !qcComplete(ticks) || !workIn}")
+    expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain("disabled={busy || !qcComplete(ticks, designCard) || !workIn}")
     expect(src('app/dashboard/board/EditorCardDrawer.tsx')).toContain('hasFinishedWork(item as never) || driveCopying')
     expect(src('app/dashboard/board/FilesToWorkFrom.tsx')).toContain("purpose: 'finished', files: finalFilesAsVersionPulls(item)")
     expect(src('app/lib/editing-portal.ts')).toContain('const uploadedAll = finalFilesOf(item).filter(f => f.version <= seen)')

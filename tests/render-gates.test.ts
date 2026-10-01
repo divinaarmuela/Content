@@ -142,7 +142,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
     expect(page).toContain('const maker = usesMakerDrawer(me, item)')
     // …and a manager gets the same brief, with their buttons above it (15 Sep 2026)
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
-    expect(page).toContain('<ManagerActions item={item} client={client ?? null} viewer=')
+    expect(page).toContain('<ManagerActions design={filesOnly} item={item} client={client ?? null} viewer=')
     // the top bar's box asks the assistant (the AI search, 16 Sep 2026)
     const shell = src('app/dashboard/ui/Shell.tsx')
     expect(shell).not.toContain('Search — coming soon')
@@ -208,7 +208,7 @@ describe('the editor\u2019s card draws every SOP section, empty or not', () => {
   it('submit is behind the seven checks and a file', () => {
     const s = src(EDITOR_DRAWER)
     // the link is the work: no files gate the submit (14 Sep 2026)
-    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks\) \|\| !workIn\}/)
+    expect(s).toMatch(/disabled=\{busy \|\| !qcComplete\(ticks, designCard\) \|\| !workIn\}/)
     expect(s).not.toMatch(/asset_versions|slidesOf|<Thumb /)
     // the submit goes straight to the quality reviewer (Abby's rule), never to a manager's check
     expect(s).toMatch(/\{ to: 'quality_check' \}/)

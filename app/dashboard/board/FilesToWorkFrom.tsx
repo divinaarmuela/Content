@@ -174,7 +174,7 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
   return (
     <div className="flex flex-col gap-3 border-b border-border px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{shownVersion ? `${roundLabel(shownVersion.round)} — the finished edit` : FILES_TO_WORK_FROM}</p>
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">{shownVersion ? `${roundLabel(shownVersion.round)} — the finished ${filesOnly ? 'files' : 'edit'}` : FILES_TO_WORK_FROM}</p>
         {versions && (
           <Button variant="outline" className={`inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-[13px] font-semibold ${selecting ? 'border-foreground bg-foreground text-background hover:bg-foreground/90' : 'border-border hover:bg-muted'}`}
             aria-pressed={selecting} onClick={() => { setSelecting(s => !s); if (selecting) setPicked(new Map()) }}>
@@ -203,7 +203,8 @@ export default function FilesToWorkFrom({ item, isManager, frozen, linkOnly = fa
         <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="The folder to work from, and each finished edit" data-version-tabs>
           <button type="button" role="tab" aria-selected={!shownVersion} onClick={() => setTab('folder')}
             className={`inline-flex min-h-10 items-center rounded-full border px-3.5 text-[13px] font-semibold ${!shownVersion ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'}`}>
-            Folder to work from
+            {/* a designer works from uploaded files, never a folder (1 Oct 2026, the designer walk) */}
+            {filesOnly ? 'Files to work from' : 'Folder to work from'}
           </button>
           {versionTabs.map(v => (
             <button key={v.round} type="button" role="tab" aria-selected={shownVersion?.round === v.round} onClick={() => setTab(v.round)}

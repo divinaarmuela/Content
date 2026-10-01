@@ -54,24 +54,24 @@ const folderUrl = (folderId: string) => `https://drive.google.com/drive/folders/
  * link box, the submit — and the manager's buttons, Transfer among them, were
  * left off it. The one press they need is here; the route decides as before.
  */
-function HolderTransfer({ item, viewer }: { item: ContentItem; viewer: { id: string; role: string } }) {
+function HolderTransfer({ item, viewer, design = false }: { item: ContentItem; viewer: { id: string; role: string }; design?: boolean }) {
   const [open, setOpen] = useState(false)
   if (!canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)) return null
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
-      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">You hold this card. Someone else can take the editing, with everything on it.</p>
+      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">You hold this card. Someone else can take the {design ? 'design' : 'editing'}, with everything on it.</p>
       <Button variant="outline" onClick={() => setOpen(true)} className="h-11 rounded-full px-4 text-[14px] font-semibold">
-        <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> Transfer the editing job
+        <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> {design ? 'Transfer the design job' : 'Transfer the editing job'}
       </Button>
       <TransferEditingDialog open={open} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
-        viewerId={viewer.id} onClose={() => setOpen(false)} />
+        viewerId={viewer.id} onClose={() => setOpen(false)} design={design} />
     </div>
   )
 }
 
 /** The manager's or checker's answers on the card, above the brief: the
  *  board's own buttons and dialogs, so a press here is a press on the board. */
-function ManagerActions({ item, viewer, portalLink, client }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null }) {
+function ManagerActions({ item, viewer, portalLink, client, design = false }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null; design?: boolean }) {
   const card = item as unknown as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
   const { primary, more } = cardActions(card, viewer)
@@ -149,18 +149,18 @@ function ManagerActions({ item, viewer, portalLink, client }: { item: ContentIte
       {unassigned && (
         <Button disabled={busy} onClick={() => setTransferOpen(true)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full bg-foreground px-4 py-2 text-left text-[13px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
-          <UserPlus className="mr-1.5 h-4 w-4" aria-hidden /> Assign an editor
+          <UserPlus className="mr-1.5 h-4 w-4" aria-hidden /> {design ? 'Assign a designer' : 'Assign an editor'}
         </Button>
       )}
       {transferable && !unassigned && (
         <Button variant="outline" disabled={busy} onClick={() => setTransferOpen(true)}
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
-          <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> Transfer the editing job
+          <ArrowRightLeft className="mr-1.5 h-4 w-4" aria-hidden /> {design ? 'Transfer the design job' : 'Transfer the editing job'}
         </Button>
       )}
       {transferable && (
         <TransferEditingDialog open={transferOpen} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
-          viewerId={viewer.id} onClose={() => setTransferOpen(false)} />
+          viewerId={viewer.id} onClose={() => setTransferOpen(false)} design={design} />
       )}
       {isManager && !frozen && (
         <label className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-[13px]" data-deliver-only>
@@ -270,14 +270,14 @@ export default function EditorCardPage() {
             : (
               <>
                 {!maker && me && me.role !== 'client' && (
-                  <ManagerActions item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
+                  <ManagerActions design={filesOnly} item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
                     // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
                     // its clips and comments; an uploaded post keeps the board link
                     portalLink={client?.share_token
                       ? `${window.location.origin}${portalHasWork(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
                       : null} />
                 )}
-                {maker && me && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}
+                {maker && me && <HolderTransfer design={filesOnly} item={item} viewer={{ id: me.id, role: me.role }} />}
                 <EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />
               </>
             )}

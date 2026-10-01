@@ -36,6 +36,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       id: c.id,
       created_at: c.created_at,
       body: c.body,
+      // which file the note was left on — "the background" means nothing without it (1 Oct 2026)
+      file_name: (c as { video_file_name?: string | null }).video_file_name ?? null,
       author_id: c.author_id,
       author_name: c.author_id ? personName.get(c.author_id) ?? null : null,
       resolved: c.resolved === true,

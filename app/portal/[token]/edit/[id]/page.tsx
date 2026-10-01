@@ -7,7 +7,7 @@ import PortalShell from '../../../../components/portal/PortalShell'
 import EditingReview from '../../../../components/portal/EditingReview'
 
 export const metadata: Metadata = {
-  title: 'Your edit — MD Media',
+  title: 'Your review — MD Media',
   robots: 'noindex, nofollow',
 }
 export const dynamic = 'force-dynamic'
@@ -25,6 +25,8 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
   const { token: raw, id } = await params
   const data = await getEditingPortal(raw, id)
   if (!data) notFound()
+  // every file a picture: a designer's work, named as one (1 Oct 2026, the designer walk)
+  const designs = data.clips.length > 0 && data.clips.every(c => c.kind === 'image')
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -32,7 +34,7 @@ export default async function EditingPortalPage({ params }: { params: Promise<{ 
         style={{ fontFamily: 'var(--font-archivo), Helvetica, Arial, sans-serif', ['--p-mono-font' as string]: 'var(--font-sometype), monospace' }}>
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
           <div className="mx-auto flex min-h-14 w-full max-w-[1500px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2 pr-16 sm:px-8 sm:pr-8">
-            <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>MD Media · Editing review · {data.portal_name}</span>
+            <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>MD Media · {designs ? 'Design review' : 'Editing review'} · {data.portal_name}</span>
             {/* "Open in Drive" stood here until 22 Sep 2026 — the clips play on this page, and a card handed in as files has no folder */}
           </div>
         </header>

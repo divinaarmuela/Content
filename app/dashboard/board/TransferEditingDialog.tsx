@@ -24,7 +24,9 @@ import { friendlyError } from '../../lib/support-core'
  * the card — brief, scripts, folder, footage, versions, comments — is theirs.
  * On a card from a shoot, the shoot's editor follows.
  */
-export default function TransferEditingDialog({ open, itemId, itemTitle, currentOwnerId, viewerId, onClose, onDone }: {
+export default function TransferEditingDialog({ open, itemId, itemTitle, currentOwnerId, viewerId, onClose, onDone, design = false }: {
+  /** a graphics card: a designer's job, in a designer's words (1 Oct 2026, the designer walk) */
+  design?: boolean
   open: boolean
   itemId: string
   itemTitle: string
@@ -73,19 +75,23 @@ export default function TransferEditingDialog({ open, itemId, itemTitle, current
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           {/* NOBODY ON IT YET: the first editor, not a transfer (16 Sep 2026) */}
-          <DialogTitle>{currentOwnerId ? 'Transfer the editing job' : 'Assign an editor'}</DialogTitle>
+          <DialogTitle>{currentOwnerId ? (design ? 'Transfer the design job' : 'Transfer the editing job') : (design ? 'Assign a designer' : 'Assign an editor')}</DialogTitle>
           <DialogDescription>
-            {currentOwnerId
+            {design
+              ? (currentOwnerId
+                ? 'The card moves to them with everything on it — the brief, the files to work from, the versions and the comments. Nothing is copied or lost.'
+                : 'Nobody is on this card yet. Whoever you pick gets it with everything on it — the brief and the files to work from — and is told.')
+              : currentOwnerId
               ? 'The card moves to them with everything on it — the brief, the scripts, the folder, the footage, the versions and the comments. Nothing is copied or lost. On a card from a shoot, the shoot’s editor becomes them too.'
               : 'Nobody is on this card yet. Whoever you pick gets it with everything on it — the brief, the scripts, the folder and the footage — and is told. On a card from a shoot, they become the shoot’s editor too.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="transfer-to">{currentOwnerId ? 'Who edits it now' : 'Who edits it'}</Label>
+            <Label htmlFor="transfer-to">{design ? (currentOwnerId ? 'Who designs it now' : 'Who designs it') : currentOwnerId ? 'Who edits it now' : 'Who edits it'}</Label>
             <Select value={to} onValueChange={v => v && setTo(v)}>
               <SelectTrigger id="transfer-to" className="h-11 rounded-full border-border bg-surface px-4">
-                <SelectValue placeholder="Pick the editor" />
+                <SelectValue placeholder={design ? 'Pick the designer' : 'Pick the editor'} />
               </SelectTrigger>
               <SelectContent>
                 {groups.map(g => (
@@ -111,7 +117,7 @@ export default function TransferEditingDialog({ open, itemId, itemTitle, current
         <DialogFooter>
           <Button disabled={busy || !chosen} onClick={() => void transfer()}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
-            {busy ? (currentOwnerId ? 'Transferring…' : 'Assigning…') : currentOwnerId ? 'Transfer the editing' : 'Assign the editing'}
+            {busy ? (currentOwnerId ? 'Transferring…' : 'Assigning…') : currentOwnerId ? (design ? 'Transfer the design' : 'Transfer the editing') : (design ? 'Assign the design' : 'Assign the editing')}
           </Button>
         </DialogFooter>
       </DialogContent>

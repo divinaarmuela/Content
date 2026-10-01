@@ -89,3 +89,39 @@ describe('a shoot brief opens for whoever made it or assigned its review (1 Oct 
     expect(src).toMatch(/\(card\.kind === 'note' \|\| card\.kind === 'label'\) && !text\.trim\(\)\) \{\s*setCards\(prev => prev\.filter\(c => c\.id !== card\.id\)\)[\s\S]{0,120}persist\(\[\], \[card\.id\]\)/)
   })
 })
+
+describe('the designer walk (1 Oct 2026)', () => {
+  const read = (p: string) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', p), 'utf8') as string
+  it('New card reads the picked files before clearing the input', () => {
+    const src = read('app/dashboard/board/BoardDialogs.tsx')
+    expect(src).toMatch(/const picked = Array\.from\(e\.target\.files \?\? \[\]\)\s*setWorkFiles\(w => \[\.\.\.w, \.\.\.picked\]\); e\.target\.value = ''/)
+    expect(src).not.toMatch(/setWorkFiles\(w => \[\.\.\.w, \.\.\.Array\.from\(e\.target\.files/)
+  })
+  it('a graphics card offers Replace, Drop and Take off per file', () => {
+    const src = read('app/dashboard/board/EditorCardDrawer.tsx')
+    expect(src).toMatch(/designCard && \(holder \|\| isManager\) && !frozen/)
+    expect(src).toMatch(/>Replace</)
+    expect(src).toMatch(/Drop from \{roundLabel/)
+    expect(src).toMatch(/>Take off</)
+  })
+  it('a designer ticks a designer\'s checks, and the server takes them', async () => {
+    const { qcComplete, DESIGN_QC_CHECKLIST, QC_CHECKLIST } = await import('../app/lib/editor-sop-core')
+    const design = DESIGN_QC_CHECKLIST.map(c => c.key)
+    expect(DESIGN_QC_CHECKLIST.some(c => /audio|transition|export/i.test(c.label))).toBe(false)
+    expect(qcComplete(design, true)).toBe(true)
+    expect(qcComplete(design)).toBe(false)
+    expect(qcComplete(QC_CHECKLIST.map(c => c.key))).toBe(true)
+    const { flagCheck } = await import('../app/lib/card-flag-core')
+    expect(flagCheck({ kind: 'qc_done', viewer: { id: 'u', role: 'editor' }, ownerId: 'u', ticks: design } as never).ok).toBe(true)
+  })
+  it('the portal shows no timeline or stamp under a picture', () => {
+    const src = read('app/components/portal/EditingReview.tsx')
+    expect(src).toMatch(/const at = stamp && !isImage/)
+    expect(src).toMatch(/\{!isImage && <div className="relative mx-5 my-4 h-8"/)
+    expect(src).toMatch(/\{!isImage && \(\s*<label/)
+  })
+  it('no "With client · With the client"', async () => {
+    const { reviewWords } = await import('../app/lib/editor-sop-core')
+    expect(reviewWords('client_review')).toBeNull()
+  })
+})

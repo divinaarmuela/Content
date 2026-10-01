@@ -40,7 +40,7 @@ import { historyLines, type HistoryJob, HISTORY_PREVIEW, NO_HISTORY } from '../.
 import { DEFAULT_TZ, formatInZone } from '../../lib/timezone-core'
 import { flagsOf } from '../../lib/card-flag-core'
 import {
-  EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST,
+  EDITOR_LANES, NOT_GIVEN, QC_CHECKLIST, DESIGN_QC_CHECKLIST,
   briefRowsFor, handoverState, planMissingWords, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
@@ -608,7 +608,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
         <p id="ed-from" className={H2}>Work from</p>
         {/* on the card's page the files box stands on the left, said once (15 Sep 2026) */}
         {hideFolderFiles ? (
-          <p className="text-[13px] text-muted-foreground">The footage folder and its files are on the left.</p>
+          <p className="text-[13px] text-muted-foreground">{designCard ? 'The files to work from are on the left.' : 'The footage folder and its files are on the left.'}</p>
         ) : (
         <p className="text-[13px]">
           <span className="font-semibold">Footage folder: </span>
@@ -633,7 +633,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           or Dropbox link"): one box for the link, nothing else ── */}
       <section className="flex flex-col gap-3 border-b border-border px-5 py-4" aria-labelledby="ed-versions">
         <div className="flex items-center justify-between">
-          <p id="ed-versions" className={H2}>Your finished edit — {roundLabel(shownRound(item as never))}</p>
+          <p id="ed-versions" className={H2}>{holder ? 'Your finished' : 'The finished'} {designCard ? 'files' : 'edit'} — {roundLabel(shownRound(item as never))}</p>
           {working && <p role="status" className="text-[12px] text-muted-foreground">{working}…</p>}
         </div>
         {/* ("Start next version" is gone, 30 Sep 2026: the editor never raises the version — only a client send-back does;
@@ -690,6 +690,32 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                           {tick && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-semibold" title={`${tick.by}, ${new Date(tick.at).toLocaleString('en-AU')}`}>{/\(MD Media\)$/.test(tick.by) ? `Approved by ${tick.by.replace(/ \(MD Media\)$/, '')} for the client` : 'Approved by the client'}</span>}
                           {/* no per-file Replace / Drop / Approve here (30 Sep 2026): the editor hands the whole Drive folder
                               in again, and approving is the client's — or the quality check's — step, not the editor card's */}
+                          {/* …BUT A DESIGNER HAS NO FOLDER TO HAND IN AGAIN (1 Oct 2026, the designer walk: a new design A
+                              landed BESIDE the old one, and Version 2 offered the client both). On a graphics card each
+                              file can be replaced by its new version, dropped from this version on, or — uploaded this
+                              round by mistake — taken off. */}
+                          {designCard && (holder || isManager) && !frozen && (
+                            dropped ? (
+                              f.retired_round === handInRound(item as never) && (
+                                <button type="button" disabled={busy || uploading !== null} onClick={() => void dropAsset(a, true)}
+                                  className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4 disabled:opacity-50">Bring back</button>
+                              )
+                            ) : (
+                              <>
+                                {mayReplaceAsset(item as never, a, isManager) && (
+                                  <button type="button" disabled={busy || uploading !== null} onClick={() => { setReplacing(a); replaceInput.current?.click() }}
+                                    className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4 disabled:opacity-50">Replace</button>
+                                )}
+                                {f.version < handInRound(item as never) ? (
+                                  <button type="button" disabled={busy || uploading !== null} onClick={() => void dropAsset(a, false)}
+                                    className="inline-flex min-h-11 items-center px-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">Drop from {roundLabel(handInRound(item as never))}</button>
+                                ) : !f.replaces && (
+                                  <button type="button" disabled={busy || uploading !== null} onClick={() => void removeFinalFile(f.id)}
+                                    className="inline-flex min-h-11 items-center px-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">Take off</button>
+                                )}
+                              </>
+                            )
+                          )}
                         </div>
                         {earlier.length > 0 && (
                           <p className="pl-1 text-[12px] text-muted-foreground">Earlier: {earlier.map(x => <a key={x.id} href={x.url} target="_blank" rel="noreferrer noopener" className="mr-2 underline underline-offset-4">{roundLabel(x.version)} — {x.name}</a>)}</p>
@@ -747,7 +773,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <>
             <p className="text-[12px] text-muted-foreground">Tick each one, then submit.</p>
             <ul className="flex flex-col gap-1">
-              {QC_CHECKLIST.map(c => (
+              {(designCard ? DESIGN_QC_CHECKLIST : QC_CHECKLIST).map(c => (
                 <li key={c.key}>
                   <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
                     <input type="checkbox" className="h-5 w-5" checked={ticks.includes(c.key)}
@@ -758,8 +784,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-2">
-              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !workIn} onClick={() => void submit()}
-                title={!workIn ? (designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+              <Button className={primaryBtn} disabled={busy || !qcComplete(ticks, designCard) || !workIn} onClick={() => void submit()}
+                title={!workIn ? (designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks, designCard) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
@@ -892,7 +918,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <DialogHeader>
             <DialogTitle>Upload the finished files — {item ? roundLabel(handInRound(item as never)) : ''}</DialogTitle>
             <DialogDescription>
-              The clips, pictures or PDFs themselves, if they are not in Google Drive. They join this version with the files already handed in. Up to 5GB a file.
+              {designCard
+                ? 'The finished pictures or PDFs. They join this version with the designs already handed in — to change one, use Replace beside it instead. Up to 5GB a file.'
+                : 'The clips, pictures or PDFs themselves, if they are not in Google Drive. They join this version with the files already handed in. Up to 5GB a file.'}
             </DialogDescription>
           </DialogHeader>
           <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-inner border border-dashed border-border bg-surface p-4 text-center text-[14px] hover:bg-muted"

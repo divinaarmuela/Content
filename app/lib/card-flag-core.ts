@@ -37,7 +37,8 @@ export function flagCheck(input: {
   if (kind === 'deadline_risk' && !note) return { ok: false, reason: 'Say in a line why the date is at risk', status: 400 }
   const ticks = Array.isArray(input.ticks) ? input.ticks.map(String) : []
   // §4: every check ticked, or it does not count
-  if (kind === 'qc_done' && !qcComplete(ticks)) return { ok: false, reason: 'Tick every check before you submit', status: 400 }
+  // the editor's list, or a designer's (1 Oct 2026)
+  if (kind === 'qc_done' && !qcComplete(ticks) && !qcComplete(ticks, true)) return { ok: false, reason: 'Tick every check before you submit', status: 400 }
   const need = kind === 'blocked' ? (blockerNeed(input.need)?.key ?? null) : null
   if (kind === 'blocked' && !need) return { ok: false, reason: 'Pick what you need from the list', status: 400 }
   if (kind === 'blocked' && !note) return { ok: false, reason: 'Say in a line what is blocked', status: 400 }

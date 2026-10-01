@@ -98,7 +98,8 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
     if (!clip || !draft.trim() || sending) return
     setSending(true); setError(null)
     try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
-    const at = stamp ? Math.floor(video.current?.currentTime ?? 0) : null
+    // a picture has no second to stamp (1 Oct 2026, the designer walk: a design's comment read "0:00")
+    const at = stamp && !isImage ? Math.floor(video.current?.currentTime ?? 0) : null
     const res = await fetch('/api/portal/comment', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -230,8 +231,9 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                 onLoadedMetadata={e => setDuration(e.currentTarget.duration || 0)}
                 onDurationChange={e => setDuration(e.currentTarget.duration || 0)} />
               )}
-              {/* the markers: one circle per comment, lit as the playhead reaches it — on the player, so always on black */}
-              <div className="relative mx-5 my-4 h-8" role="group" aria-label="Your comments on the timeline">
+              {/* the markers: one circle per comment, lit as the playhead reaches it — on the player, so always on black.
+                  None under a picture: it has no timeline (1 Oct 2026) */}
+              {!isImage && <div className="relative mx-5 my-4 h-8" role="group" aria-label="Your comments on the timeline">
                 <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 rounded bg-white/15" />
                 {duration > 0 && (
                   <div className="absolute top-1/2 h-3 w-0.5 -translate-y-1/2 bg-white/70" style={{ left: `${Math.min(100, (now / duration) * 100)}%` }} aria-hidden />
@@ -244,7 +246,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
                     <span className="sr-only">{m.stamp}</span>
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -400,7 +402,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             {onClip.map(c => (
               <li key={c.id} className={`rounded-xl border p-3 ${active === c.id ? 'border-amber-300 bg-amber-300/10' : 'border-border'}`}>
                 <div className="flex flex-wrap items-baseline gap-2">
-                  {typeof c.video_timestamp_sec === 'number' && (
+                  {typeof c.video_timestamp_sec === 'number' && !isImage && (
                     <button type="button" onClick={() => seek(c.video_timestamp_sec as number)}
                       className="rounded-full bg-foreground px-2 py-0.5 text-[12px] font-semibold text-background" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>
                       {formatStamp(c.video_timestamp_sec)}
@@ -416,10 +418,12 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
         </div>
         <div className="flex flex-col gap-2 border-t border-border px-5 py-4">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name" className={`h-11 ${input}`} />
+          {!isImage && (
           <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <input type="checkbox" checked={stamp} onChange={e => setStamp(e.target.checked)} className="h-4 w-4 accent-amber-300" />
             Stamp the current second{stamp && duration > 0 ? `: ${formatStamp(now)}` : ''}
           </label>
+          )}
           <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={clip?.kind === 'image' ? 'Your thoughts on this design — anything you’d like us to change' : 'Your thoughts on this clip — a note at this second, or anything you’d like us to know'}
             onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void send() }}
             className={`${input} rounded-2xl py-3`} />
