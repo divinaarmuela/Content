@@ -352,6 +352,13 @@ export function isAskedToReview(b: Pick<SopShoot, 'review_asked_to'>, userId: st
   return Array.isArray(b.review_asked_to) && b.review_asked_to.map(String).includes(userId)
 }
 
+/** Did this person MAKE the shoot or HAND its plan to a reviewer? Either way
+ *  they see the brief, whoever owns it now (the owner, 1 Oct 2026: "doesn't
+ *  matter who creates or who assigns, they should see the brief"). */
+export function madeOrAssignedShoot(b: { created_by?: unknown; review_asked_by?: unknown }, userId: string): boolean {
+  return (!!b.created_by && String(b.created_by) === userId) || (!!b.review_asked_by && String(b.review_asked_by) === userId)
+}
+
 export const REVIEW_OUT_WORDS = 'Only the quality checker passes a plan — use Pass the plan on the shoot page'
 export const NOT_GATED_WORDS = 'This plan does not need a quality review'
 

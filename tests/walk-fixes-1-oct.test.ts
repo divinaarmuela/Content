@@ -69,3 +69,19 @@ describe('a designer uploads; the Drive hand-in is the editors’ (1 Oct 2026)',
     expect(d).toContain('{!designCard && !(holder && submitting && !hasFinishedWork(item as never)) && (')
   })
 })
+
+describe('a shoot brief opens for whoever made it or assigned its review (1 Oct 2026)', () => {
+  it('created_by and review_asked_by hold the shoot', async () => {
+    const { madeOrAssignedShoot } = await import('../app/lib/shoot-sop-core')
+    const { heldBatchIdsOf } = await import('../app/lib/scope-client')
+    expect(madeOrAssignedShoot({ created_by: 'u1' }, 'u1')).toBe(true)
+    expect(madeOrAssignedShoot({ review_asked_by: 'u2' }, 'u2')).toBe(true)
+    expect(madeOrAssignedShoot({ created_by: null, review_asked_by: null }, 'u3')).toBe(false)
+    const viewer = { id: 'u2', role: 'account_manager' } as Parameters<typeof heldBatchIdsOf>[0]
+    expect(heldBatchIdsOf(viewer, [], [{ id: 'b', client_id: 'c', review_asked_by: 'u2' }]).has('b')).toBe(true)
+  })
+  it('the canvas frames only cards with something in them', () => {
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/dashboard/production/shoots/[id]/BriefCanvas.tsx'), 'utf8')
+    expect(src).toMatch(/const framed = filled\.length > 0 \? filled : visible/)
+  })
+})

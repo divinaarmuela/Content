@@ -993,10 +993,14 @@ export default function BriefCanvas({
   const fitToCards = useCallback(() => {
     const rect = viewportRef.current?.getBoundingClientRect()
     if (!rect || visible.length === 0) return
-    const xs = visible.map(c => c.x); const ys = visible.map(c => c.y)
+    // FRAME WHAT HAS SOMETHING IN IT (1 Oct 2026: Manal's Jordan plan opened blank — 10 cards together and 7 empty
+    // "Write it down…" notes thousands of units away, so the frame hit the 25% floor and centred on nothing)
+    const filled = visible.filter(c => !(c.kind === 'note' && !String((c as { text?: unknown }).text ?? '').trim()))
+    const framed = filled.length > 0 ? filled : visible
+    const xs = framed.map(c => c.x); const ys = framed.map(c => c.y)
     const minX = Math.min(...xs) - 64
     const minY = Math.min(...ys) - 64
-    const maxX = Math.max(...visible.map(c => c.x + c.w)) + 64
+    const maxX = Math.max(...framed.map(c => c.x + c.w)) + 64
     const maxY = Math.max(...ys) + 64 + 240
     const s = clampScale(Math.min(rect.width / (maxX - minX), rect.height / (maxY - minY), 1))
     camRef.current = {
