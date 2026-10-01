@@ -8,7 +8,7 @@ import {
   NOT_SHARED_WORDS, driveHandInsOf, driveLinkTarget, handInPullId, handInRefusal, mergeDriveHandIn, pendingHandIn,
   sanitiseMap, sanitisePicked, settledHandIn, withHandIn, type DriveHandIn, type MergeResult,
 } from './drive-handin-core'
-import { finalFilesChangeRefusal, finalFilesOf, needsAdoption } from './final-files-core'
+import { LOOKING_STATUSES, finalFilesChangeRefusal, finalFilesOf, needsAdoption } from './final-files-core'
 import { handInRound, versionLabel } from './edit-round-core'
 import { logActivity } from './workflow'
 import { kindOf, type FileKind } from './files-core'
@@ -164,6 +164,9 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
       // a hand-in the editor made BEFORE submitting finishes landing at the quality check — the reviewer is waiting on
       // exactly these files; only the client stage stays closed to it
       const landingAtCheck = String((cur as { status?: unknown }).status ?? '') === 'quality_check'
+        // …or at the client's stage when the card has NOTHING for this version yet (1 Oct 2026): the piece went
+        // ahead of its files, and refusing them left the client a link with nothing on it
+        || (LOOKING_STATUSES.includes(String((cur as { status?: unknown }).status ?? '')) && !before.some(f => f.version === round))
       const refused = finalFilesChangeRefusal(before, result.files, cur as never, h.manager === true || landingAtCheck)
       if (refused) result = { ok: false, error: `Nothing was handed in — ${refused}`, failed: [] }
     }

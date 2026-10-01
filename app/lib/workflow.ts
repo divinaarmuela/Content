@@ -853,6 +853,13 @@ export async function performTransition(
   // is only the folder to work from is not a finished edit
   const folderOnly = hasLink && linked.link_final !== true
     && linked.link_url === (linked.raw_assets_url ?? null)
+  // NOT PASSED UNSEEN (1 Oct 2026, the editor walk): the editor may submit while a Drive hand-in copies, but the
+  // quality check cannot pass what has not landed — it went to the client with no files, and the copy, finishing
+  // later, was refused at the client's stage. The reviewer waits for the files, then passes.
+  if (!system && String(item.status) === 'quality_check' && (to === 'client_review' || to === 'approved_for_scheduling')
+    && !hasFiles && pendingHandIn(item as never)) {
+    throw new AuthzError('The finished files are still copying in from Google Drive — pass it once they have landed', 400)
+  }
   if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {
       const ok = briefSatisfiesSubmission(item as { brief_url?: string | null }, briefBatch)

@@ -153,3 +153,14 @@ describe('the editor walk (1 Oct 2026)', () => {
     expect(src).not.toMatch(/press "Ready for checking"|Press "Ready for checking"|Pick the final from Google Drive|Flag a deadline risk|Press Acknowledge/)
   })
 })
+
+describe('submit while copying, carried through (1 Oct 2026, the editor walk)', () => {
+  const read = (p: string) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', p), 'utf8') as string
+  it('the quality check cannot pass a card whose Drive files have not landed', () => {
+    expect(read('app/lib/workflow.ts')).toMatch(/String\(item\.status\) === 'quality_check' && \(to === 'client_review' \|\| to === 'approved_for_scheduling'\)\s*&& !hasFiles && pendingHandIn\(item as never\)\)/)
+    expect(read('app/lib/board-view-core.ts')).toMatch(/const stillCopying = card\.status === 'quality_check' && finalFilesOf\(card as never\)\.length === 0 && !!pendingHandIn\(card as never\)/)
+  })
+  it('a copy that finishes after the card moved on still lands when the version has no files', () => {
+    expect(read('app/lib/drive-handin.ts')).toMatch(/LOOKING_STATUSES\.includes\(String\(\(cur as \{ status\?: unknown \}\)\.status \?\? ''\)\) && !before\.some\(f => f\.version === round\)/)
+  })
+})

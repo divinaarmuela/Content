@@ -24,7 +24,8 @@ import {
   BOARD_COLUMNS, boardColumn, canMoveTo, columnOf, isOut, OUT_COLUMNS, type BoardColumnKey, cardColumn } from './board-core'
 import { cardLinkOf, finishedEditOf, folderOf, versionWord } from './card-link-core'
 import { roundOf } from './edit-round-core'
-import { hasFinishedWork } from './final-files-core'
+import { finalFilesOf, hasFinishedWork } from './final-files-core'
+import { pendingHandIn } from './drive-handin-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
 import { STATUS_TURN } from './workflow-core'
 import type { Role } from './identity-core'
@@ -337,7 +338,10 @@ export function cardActions(
   const nothingHandedIn = !isBriefTask && (card as { adhoc_post?: unknown }).adhoc_post !== true && !hasFinishedWork(card as never)
   const handInOf = (a: CardAction) => a.kind === 'transition' && a.to === 'quality_check' && editingStage
     && ((!!card.owner_id && card.owner_id !== viewer.id) || nothingHandedIn)
-  const push = (raw: CardAction) => { if (handInOf(raw)) return; const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
+  // NOT PASSED BEFORE THE FILES LAND (1 Oct 2026): the server refuses it (workflow.ts); the card does not offer it
+  const stillCopying = card.status === 'quality_check' && finalFilesOf(card as never).length === 0 && !!pendingHandIn(card as never)
+  const passOf = (a: CardAction) => stillCopying && a.kind === 'transition' && (a.to === 'client_review' || a.to === 'approved_for_scheduling')
+  const push = (raw: CardAction) => { if (handInOf(raw) || passOf(raw)) return; const a = versioned(raw); if (!all.some(b => sameAction(a, b))) all.push(a) }
   const first = primary ? actionFor(primary.to, primary.label, hats) : null
   if (first) push(first)
   for (const s of secondary) push(actionFor(s.to, s.label, hats))
