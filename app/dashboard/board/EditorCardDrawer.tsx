@@ -244,6 +244,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // FINISHED FILES (the Designer page, 17 Sep 2026): a graphics card hands in
   // files, not a link — uploaded onto the card, stamped with the round
   const filesCard = item ? handsInFiles({ ...item, work_kinds: (item as { work_kinds?: { slug?: string } | null }).work_kinds ?? kind } as never) : false
+  // A DESIGNER UPLOADS (the owner, 17 Sep 2026: "for designers it's files, not Drive links"; 1 Oct 2026: "why is it
+  // Google Drive on the designer page for submission"). The Drive hand-in is the editors'; a graphics card uploads
+  const designCard = ((item as { work_kinds?: { slug?: string } | null } | null)?.work_kinds?.slug ?? (kind as { slug?: string } | null)?.slug ?? '') === 'graphics'
   const uploadInput = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const addFinalFiles = async (picked: File[]) => {
@@ -372,7 +375,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const submit = async () => {
     if (!submitting) return
     // a designer hands in files, an editor a link — either counts as finished work
-    if (!item || !workIn) { toast.error(filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first'); return }
+    if (!item || !workIn) { toast.error(designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -458,12 +461,15 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <Button className={primaryBtn} disabled={busy}
                   onClick={() => {
                     // the hand-in is a Drive link now (the owner, 30 Sep 2026) — the upload is the fallback lower down
+                    if (designCard) { setUploadOpen(true); return }
                     if (filesCard) { setDriveOpen(true); return }
                     const box = document.getElementById('ed-source')
                     box?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     box?.focus()
                   }}>
-                  {filesCard
+                  {designCard
+                    ? <><Upload className="h-4 w-4" aria-hidden /> Upload the finished files — {roundLabel(handInRound(item as never))}</>
+                    : filesCard
                     ? <><FolderDown className="h-4 w-4" aria-hidden /> Hand in from Google Drive — {roundLabel(handInRound(item as never))}</>
                     : <><Upload className="h-4 w-4" aria-hidden /> Add the {roundLabel(handInRound(item as never))} link</>}
                 </Button>
@@ -641,7 +647,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               <div className="flex flex-wrap items-center gap-2">
                 {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) — not a second copy of the button
                     already at the top of the card for its holder */}
-                {!(holder && submitting && !hasFinishedWork(item as never)) && (
+                {!designCard && !(holder && submitting && !hasFinishedWork(item as never)) && (
                   <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(true)} data-drive-handin>
                     <FolderDown className="h-4 w-4" aria-hidden /> {/* "again" only after a Drive hand-in (1 Oct 2026: it said again on a card whose files were uploaded) */}
                     {driveHandInsOf(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in again from Google Drive'}
@@ -649,7 +655,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 )}
                 {/* THE UPLOAD, KEPT AS THE FALLBACK (no Drive access, or a file only on this computer) */}
                 <button type="button" disabled={busy || uploading !== null} onClick={() => setUploadOpen(true)} className="inline-flex min-h-11 items-center gap-1 text-[12px] text-muted-foreground underline underline-offset-4 disabled:opacity-50">
-                  <Upload className="h-3.5 w-3.5" aria-hidden /> {uploading ?? (currentFiles(item as never).length === 0 ? `Upload instead — ${roundLabel(handInRound(item as never))}` : 'Upload another file instead')}
+                  <Upload className="h-3.5 w-3.5" aria-hidden /> {uploading ?? (designCard
+                    ? (currentFiles(item as never).length === 0 ? `Upload the finished files — ${roundLabel(handInRound(item as never))}` : 'Upload more files')
+                    : currentFiles(item as never).length === 0 ? `Upload instead — ${roundLabel(handInRound(item as never))}` : 'Upload another file instead')}
                 </button>
               </div>
             )}
@@ -751,7 +759,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </ul>
             <div className="flex flex-wrap items-center gap-2">
               <Button className={primaryBtn} disabled={busy || !qcComplete(ticks) || !workIn} onClick={() => void submit()}
-                title={!workIn ? (filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
+                title={!workIn ? (designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {!riskOpen && (
@@ -766,7 +774,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
-            {!workIn && <p className="text-[12px] text-muted-foreground">{filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first.'}</p>}
+            {!workIn && <p className="text-[12px] text-muted-foreground">{designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first.'}</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">

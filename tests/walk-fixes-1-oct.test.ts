@@ -59,3 +59,13 @@ describe('a link to one thing never lands on How this works (1 Oct 2026)', () =>
     expect(readFileSync('app/dashboard/layout.tsx', 'utf8')).toContain('if (!isPlainVisit(window.location.pathname, window.location.search)) return')
   })
 })
+
+describe('a designer uploads; the Drive hand-in is the editors’ (1 Oct 2026)', () => {
+  it('a graphics card’s main button uploads, and it offers no Drive hand-in', () => {
+    const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(d).toContain("=== 'graphics'")
+    expect(d).toContain('if (designCard) { setUploadOpen(true); return }')
+    expect(d).toContain('Upload the finished files — {roundLabel(handInRound(item as never))}')
+    expect(d).toContain('{!designCard && !(holder && submitting && !hasFinishedWork(item as never)) && (')
+  })
+})
