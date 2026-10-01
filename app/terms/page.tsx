@@ -45,7 +45,7 @@ export default function TermsPage() {
       <Section title="4. Your content and ours">
         <UL>
           <LI>You keep ownership of the content and materials you give us. You grant us the right to use them to provide our services to you.</LI>
-          <LI>Ownership of the content we create for you is set out in your client agreement. <Fill>[CONFIRM IP TERMS]</Fill></LI>
+          <LI>Ownership of the content we create for you is set out in your client agreement.</LI>
           <LI>Everything else on the website (text, design, logos) belongs to MD Media and may not be reused without permission.</LI>
         </UL>
       </Section>
@@ -57,7 +57,7 @@ export default function TermsPage() {
       <Section title="6. Liability">
         <UL>
           <LI>We work to keep the website and app available and accurate, but we do not promise they will always be uninterrupted or error-free, and social networks may change or refuse a post outside our control.</LI>
-          <LI>Nothing in these terms excludes rights you have under the Australian Consumer Law that cannot be excluded. Otherwise, to the extent the law allows, our liability is limited as set out in your client agreement <Fill>[CONFIRM LIABILITY CAP]</Fill>, and we are not liable for indirect or consequential loss.</LI>
+          <LI>Nothing in these terms excludes rights you have under the Australian Consumer Law that cannot be excluded. Otherwise, to the extent the law allows, our liability is limited as set out in your client agreement, and we are not liable for indirect or consequential loss.</LI>
         </UL>
       </Section>
 

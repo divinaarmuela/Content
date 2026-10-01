@@ -133,9 +133,9 @@ export default function PrivacyPage() {
 
       <Section id="retention" title="5. How long we keep it">
         <UL>
-          <LI>Client and project information: for as long as we work together, then for <Fill>[RETENTION PERIOD — e.g. 7 years for financial records]</Fill>.</LI>
-          <LI>Leads and prospects who do not become clients: <Fill>[RETENTION PERIOD]</Fill> after our last contact.</LI>
-          <LI>Comment and automation records for a client&rsquo;s account: while we manage that account, and deleted within <Fill>[PERIOD]</Fill> after the client leaves us.</LI>
+          <LI>Client and project information: for as long as we work together, then for 7 years.</LI>
+          <LI>Leads and prospects who do not become clients: 2 years after our last contact.</LI>
+          <LI>Comment and automation records for a client&rsquo;s account: while we manage that account, and deleted within 90 days after the client leaves us.</LI>
           <LI>Records of data deletion requests: kept so we can show the request was handled.</LI>
         </UL>
         <P>We do not yet delete data automatically on a timetable; a person on our team removes it. You can ask us to delete your information at any time (see below).</P>

@@ -25,9 +25,9 @@ export default function SupportPage() {
       <Section title="Contact us">
         <UL>
           <LI>Email: <A href={MAIL}>{LEGAL_EMAIL}</A></LI>
-          <LI>Phone: <Fill>[PHONE]</Fill></LI>
+          <LI>Phone: 0447 764 477</LI>
           <LI>Post: MD Media Marketing Pty Ltd, Unit 56/23 Chambers Rd, Altona North VIC 3025</LI>
-          <LI>We reply within <Fill>[e.g. 2 business days]</Fill>, Monday to Friday, Melbourne time.</LI>
+          <LI>We reply within 2 business days, Monday to Friday, Melbourne time.</LI>
         </UL>
       </Section>
 

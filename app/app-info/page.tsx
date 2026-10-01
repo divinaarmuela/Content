@@ -51,8 +51,8 @@ export default function AppInfoPage() {
         </UL>
       </Section>
 
-      <Section title="How accounts are connected today">
-        <P>Today the app connects to social networks through Zernio, a social media management service. We are preparing our own Meta app so clients can connect directly with Instagram or Facebook Login <Fill>[OWNER: confirm before submission]</Fill>.</P>
+      <Section title="How accounts are connected">
+        <P>A client&rsquo;s Instagram professional account connects directly to this app with Instagram Login: the client (or their account manager, with the client present) signs in on Instagram&rsquo;s own screen and chooses what to allow. Other networks the agency posts to &mdash; LinkedIn, TikTok and YouTube &mdash; connect through Zernio, a social media management service.</P>
       </Section>
 
       <Section title="Contact and policies">
