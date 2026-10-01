@@ -569,7 +569,10 @@ export async function notifyScheduleHandoff(
     entityId: `${item.id}#handoff#${p.id}#v${item.current_version_number}`,
     recipientId: p.id,
     recipientEmail: p.email,
-    subject: mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
+    // the batch says what is waiting and where (1 Oct 2026, the walk: "is yours to work on" over 3 drafts)
+    subject: mode === 'work' && batch && batch.posts > 0
+      ? `${item.title} — ${batch.posts === 1 ? 'a draft post' : `${batch.posts} draft posts`} on Post approval`
+      : mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
     bodyHtml: renderEmail(
       mode === 'work' ? `${item.title} is yours to work on` : `${item.title} needs a posting date`,
       (mode === 'work' && batch && batch.posts > 0

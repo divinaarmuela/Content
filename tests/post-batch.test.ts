@@ -255,7 +255,7 @@ describe('approved with a scheduler set: the batch is made and handed over by it
     // told ONCE for the batch — not eight times, and never "needs a posting date"
     const toCath = mailsTo(CATH)
     expect(toCath).toHaveLength(1)
-    expect(toCath[0].subject).toBe('WALK TEST is yours to work on')
+    expect(toCath[0].subject).toBe('WALK TEST — 8 draft posts on Post approval')
     expect(toCath[0].bodyHtml).toContain('8 draft posts are waiting for you on Post approval')
     expect(h.emails.some(e => /posting date/.test(e.subject))).toBe(false)
     expect(mailsTo(KIM)).toHaveLength(0)

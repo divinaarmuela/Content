@@ -1,6 +1,6 @@
 'use client'
 
-import { submitWaitsWords, lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
+import { driveHandInsOf, submitWaitsWords, lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
@@ -643,7 +643,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                     already at the top of the card for its holder */}
                 {!(holder && submitting && !hasFinishedWork(item as never)) && (
                   <Button variant="outline" className={outlineBtn} disabled={busy} onClick={() => setDriveOpen(true)} data-drive-handin>
-                    <FolderDown className="h-4 w-4" aria-hidden /> {currentFiles(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in again from Google Drive'}
+                    <FolderDown className="h-4 w-4" aria-hidden /> {/* "again" only after a Drive hand-in (1 Oct 2026: it said again on a card whose files were uploaded) */}
+                    {driveHandInsOf(item as never).length === 0 ? `Hand in from Google Drive — ${roundLabel(handInRound(item as never))}` : 'Hand in again from Google Drive'}
                   </Button>
                 )}
                 {/* THE UPLOAD, KEPT AS THE FALLBACK (no Drive access, or a file only on this computer) */}

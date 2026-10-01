@@ -609,13 +609,15 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
     if (!open) { openedRef.current = false; return }
     if (openedRef.current) return
     openedRef.current = true
-    setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients[0]?.id ?? ''))
+    // NO CLIENT PICKED FOR YOU (1 Oct 2026, the walk: it opened on a real client the person was not even on): the
+    // page's own client, or the only one there is — otherwise the person chooses
+    setClientId(defaultClientId && defaultClientId !== 'all' ? defaultClientId : (clients.length === 1 ? clients[0].id : ''))
     setTitle(''); setKind(''); setLink(''); setBrief(''); setDue(''); setOwner(forPosting ? '' : viewer.id)
     setShootId(''); setGroupId(''); setShootText(''); setWorkFiles([]); setUploadGroup(null); setFolder('')
   }, [open, defaultClientId, clients, viewer.id, forPosting])
   // a late clients load still seeds the picker, without clobbering a choice
   useEffect(() => {
-    if (open && !clientId && !defaultClientId && clients.length > 0) setClientId(clients[0].id)
+    if (open && !clientId && !defaultClientId && clients.length === 1) setClientId(clients[0].id)
   }, [open, clientId, defaultClientId, clients])
   useEffect(() => { setShootId(''); setGroupId(''); setShootText(''); setPostFor('company') }, [clientId])
   useEffect(() => { setGroupId('') }, [shootId])

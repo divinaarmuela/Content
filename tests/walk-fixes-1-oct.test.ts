@@ -22,3 +22,17 @@ describe('fixes from the 1 Oct walk', () => {
     expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).not.toContain('only that one is replaced and the rest stay as they are')
   })
 })
+
+describe('fixes from the batch walk (1 Oct 2026)', () => {
+  it('New card does not pick a client for you unless there is only one', () => {
+    const d = readFileSync('app/dashboard/board/BoardDialogs.tsx', 'utf8')
+    expect(d).toContain("(clients.length === 1 ? clients[0].id : '')")
+    expect(d).not.toContain("(clients[0]?.id ?? '')")
+  })
+  it('the scheduler’s email subject names the drafts waiting on Post approval', () => {
+    expect(readFileSync('app/lib/workflow.ts', 'utf8')).toContain("draft posts`} on Post approval`")
+  })
+  it('"Hand in again" only after a Drive hand-in', () => {
+    expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain('{driveHandInsOf(item as never).length === 0 ? `Hand in from Google Drive')
+  })
+})
