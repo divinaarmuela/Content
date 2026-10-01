@@ -23,7 +23,7 @@ export default function TermsPage() {
       intro={<p style={{ margin: 0 }}>These terms apply when you use our website, our client portal or our app. Our marketing services themselves are provided under the separate agreement we sign with each client; if that agreement and these terms disagree, the agreement wins.</p>}
     >
       <Section title="1. Who we are">
-        <P>These terms are between you and MD Media Marketing Pty Ltd (ABN <Fill>[ABN]</Fill>) of <Fill>[ADDRESS]</Fill> (&ldquo;MD Media&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). Contact: <A href={MAIL}>{LEGAL_EMAIL}</A>.</P>
+        <P>These terms are between you and MD Media Marketing Pty Ltd (ABN 75 681 730 512) of Unit 56/23 Chambers Rd, Altona North VIC 3025 (&ldquo;MD Media&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). Contact: <A href={MAIL}>{LEGAL_EMAIL}</A>.</P>
       </Section>
 
       <Section title="2. Using the website and app">
@@ -64,7 +64,7 @@ export default function TermsPage() {
       <Section title="7. Changes and governing law">
         <UL>
           <LI>We may update these terms; the date at the top shows the latest version.</LI>
-          <LI>These terms are governed by the laws of Victoria, Australia <Fill>[CONFIRM STATE]</Fill>, and the courts there have jurisdiction.</LI>
+          <LI>These terms are governed by the laws of Victoria, Australia, and the courts there have jurisdiction.</LI>
         </UL>
       </Section>
 

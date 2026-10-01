@@ -152,9 +152,9 @@ Rules (owner's): test on 100M only — never a real client's account; test accou
 
 - [ ] Legal name exactly as registered: MD Media Marketing Pty Ltd `[confirm]`
 - [ ] ABN / ACN — ASIC company extract or ABN registration printout (the site footer currently
-      shows ABN 75 681 730 512 — **confirm it is correct**; the policies carry `[ABN]` until then)
+      shows ABN 75 681 730 512 — confirmed by the owner on 1 Oct 2026 and on the policies)
 - [ ] Proof of address matching the Business Manager address: utility bill, bank statement or
-      ASIC extract `[ADDRESS]`
+      ASIC extract: Unit 56/23 Chambers Rd, Altona North VIC 3025
 - [ ] Business phone that can receive a call/SMS code `[PHONE]`
 - [ ] Domain verification of `mdmmarketing.com.au` in Business Settings (DNS TXT record or meta tag)
 - [ ] Business email on the domain (hello@mdmmarketing.com.au) able to receive a code
@@ -163,7 +163,7 @@ Rules (owner's): test on 100M only — never a real client's account; test accou
 
 ## 7. Placeholders still open
 
-`[ABN]`, `[ADDRESS]`, `[PHONE]`, retention periods (privacy §5), the fate of the follower records
+`[PHONE]`, retention periods (privacy §5), the fate of the follower records
 collected before 30 Sep 2026 (privacy §2), the Platform-Data matching confirmation (privacy §8),
 IP terms, liability cap and governing state (terms), support response time, the Zernio → own-app
 sentence (/app-info), and every credential in §5.

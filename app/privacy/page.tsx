@@ -29,7 +29,7 @@ export default function PrivacyPage() {
     >
       <Section id="who" title="1. Who we are">
         <P>
-          MD Media Marketing Pty Ltd (ABN <Fill>[ABN]</Fill>), trading as MD Media (&ldquo;MD Media&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;), is a social media and content marketing agency based in Melbourne, Australia. Our address is <Fill>[ADDRESS]</Fill>.
+          MD Media Marketing Pty Ltd (ABN 75 681 730 512), trading as MD Media (&ldquo;MD Media&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;), is a social media and content marketing agency based in Melbourne, Australia. Our address is Unit 56/23 Chambers Rd, Altona North VIC 3025.
         </P>
         <P>
           This policy covers our website <A href="https://www.mdmmarketing.com.au">mdmmarketing.com.au</A>, our client and team app at app.mdmmarketing.com.au, and the social media work we do for our clients. We handle personal information in line with the <em>Privacy Act 1988</em> (Cth) and the Australian Privacy Principles (APPs).
@@ -206,7 +206,7 @@ export default function PrivacyPage() {
       <Section id="contact" title="11. Contact us">
         <P>
           MD Media Marketing Pty Ltd<br />
-          <Fill>[ADDRESS]</Fill><br />
+          Unit 56/23 Chambers Rd, Altona North VIC 3025<br />
           Email: <A href={MAIL}>{LEGAL_EMAIL}</A>
         </P>
       </Section>
