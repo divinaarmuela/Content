@@ -986,9 +986,24 @@ const GHOST_COLUMNS = {
     //     queue the same one (app/lib/publish-core.ts resendPlanFor).
     ['resend_of', col('string', true)],
     ['resent_platforms', col('unknown', true, true, true)],
+    //   publish_jobs.provider / meta_ig — INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish).
+    //     `provider` is null for every ordinary job (Zernio, exactly as before) and 'meta_ig' for a job booked
+    //     to go to Instagram through the agency's own Meta connection (app/lib/meta-route-core.ts decides,
+    //     at booking). Such a job is held in 'queued' until its time — Instagram's API has no scheduling —
+    //     and `meta_ig` is its own record of the trip: { ig_user_id, creation_id, children, media_id,
+    //     permalink, first_comment_id, first_comment_error }. The container id is written BEFORE
+    //     media_publish, so a retry publishes the same container (which Instagram takes once) instead of
+    //     making a second post (app/lib/meta-ig-publish.ts).
+    ['provider', col('string', true)],
+    ['meta_ig', col('unknown', true, true)],
   ],
   clients: [
     ['instagram_locations', col('unknown', false, true, true)],
+    //   clients.instagram_via_meta — post THIS client's Instagram through the agency's own Meta app
+    //     instead of Zernio (1 Oct 2026, for Meta App Review; testing). Super admin switch on the client's
+    //     Social page. Unset/false = Zernio, as always. Only takes effect with an ACTIVE meta_ig_accounts
+    //     row for the same Instagram account (app/lib/meta-route-core.ts).
+    ['instagram_via_meta', col('boolean', true)],
     //   clients.client_approval_required — does THIS CLIENT sign every post
     //     off themselves. Unset on almost everybody, and that is the point:
     //     the owner's ruling of 5 Sep 2026 is that an account manager or a

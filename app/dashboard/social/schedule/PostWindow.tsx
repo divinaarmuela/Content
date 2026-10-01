@@ -50,6 +50,7 @@ import { formatInZone, safeZone } from '@/app/lib/timezone-core'
 import type { Slide } from '@/app/lib/version-files-core'
 import Chip from '../../ui/Chip'
 import PlatformIcon from '../PlatformIcon'
+import MetaRouteMark from './MetaRouteMark'
 import { useRole } from '../../useRole'
 import { useTeamMembers } from '../../production/workHooks'
 import type { ImageEditorTarget } from './ImageEditor'
@@ -845,6 +846,12 @@ export default function PostWindow({
               ))}
             </Dropdown>
           </div>
+
+          <MetaRouteMark
+            postId={id ?? null}
+            hasInstagram={chosen.some(a => String(a.platform) === 'instagram')}
+            refreshKey={`${saved?.rev ?? ''}|${saved?.stage ?? ''}|${shown.channels.join(',')}`}
+          />
 
           {kinds.length > 0 && (
             <div data-tour="post-kind">

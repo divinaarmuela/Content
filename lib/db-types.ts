@@ -571,6 +571,7 @@ export interface Client {
   status: string
   notes: string | null
   instagram_locations: unknown
+  instagram_via_meta: boolean | null
   client_approval_required: boolean | null
   drive_folder_id: string | null
   drive_folder_origin: string | null
@@ -1297,6 +1298,8 @@ export interface PublishJob {
   updated_at: string
   published_at: string | null
   platform_results: unknown | null
+  provider: string | null
+  meta_ig: unknown | null
 }
 
 export interface ReportSetting {
@@ -1664,7 +1667,7 @@ export const TABLE_COLUMNS = {
   client_contacts: ['id', 'created_at', 'updated_at', 'client_id', 'name', 'role', 'email', 'phone', 'is_primary', 'notes', 'share_token'],
   client_credentials: ['id', 'created_at', 'updated_at', 'client_id', 'platform', 'label', 'username', 'secret_cipher', 'url', 'notes', 'updated_by', 'updated_by_name'],
   client_notes: ['id', 'created_at', 'updated_at', 'client_id', 'body', 'author_id', 'author_name', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'id', 'created_at', 'name', 'slug', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'status', 'notes', 'instagram_locations', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
@@ -1702,7 +1705,7 @@ export const TABLE_COLUMNS = {
   prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['id', 'business', 'lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results', 'provider', 'meta_ig'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
   room_invite_requests: ['id', 'name', 'email', 'about', 'created_at'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
@@ -1760,7 +1763,7 @@ export const NULLABLE_COLUMNS = {
   client_contacts: ['share_token'],
   client_credentials: ['secret_cipher', 'updated_by'],
   client_notes: ['author_id', 'visibility'],
-  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
+  clients: ['brand_profile', 'brand_profile_updated_at', 'brand_profile_updated_by', 'timezone', 'posts_own_content', 'website', 'source', 'default_scheduler_ids', 'share_token', 'social_profile_id', 'industry', 'contact_name', 'email', 'phone', 'clerk_user_id', 'notes', 'instagram_via_meta', 'client_approval_required', 'drive_folder_id', 'drive_folder_origin'],
   comment_automations: ['zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
@@ -1798,7 +1801,7 @@ export const NULLABLE_COLUMNS = {
   prospect_events: ['by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results', 'provider', 'meta_ig'],
   report_settings: ['data_from', 'last_sent_for'],
   room_invite_requests: ['about'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'label', 'updated_by'],
@@ -1901,7 +1904,7 @@ export const JSON_COLUMNS = {
   prospect_events: [],
   prospects: ['weakness_tags'],
   provider_webhooks: ['events'],
-  publish_jobs: ['resent_platforms', 'media', 'targets', 'platform_results'],
+  publish_jobs: ['resent_platforms', 'media', 'targets', 'platform_results', 'meta_ig'],
   report_settings: [],
   room_invite_requests: [],
   scan_mailboxes: [],

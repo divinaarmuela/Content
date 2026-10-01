@@ -180,6 +180,21 @@ export function redactUrl(url: string): string {
   }
 }
 
+/**
+ * The parts of Meta's error envelope a caller decides on: the numeric code and
+ * subcode, Meta's own `is_transient` flag, and the sentence Meta wrote for a
+ * person (`error_user_msg`) when it wrote one. Never carries a token.
+ */
+export type GraphErrorDetail = { code: number | null; subcode: number | null; transient: boolean; userMessage: string | null }
+
+export function graphErrorDetail(json: unknown): GraphErrorDetail {
+  const e = ((json ?? {}) as Record<string, any>).error
+  if (!e || typeof e !== 'object') return { code: null, subcode: null, transient: false, userMessage: null }
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : null)
+  const userMessage = typeof e.error_user_msg === 'string' && e.error_user_msg.trim() ? e.error_user_msg.trim().slice(0, 300) : null
+  return { code: num(e.code), subcode: num(e.error_subcode), transient: e.is_transient === true, userMessage }
+}
+
 /* ── response parsing ─────────────────────────────────────────────────── */
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
