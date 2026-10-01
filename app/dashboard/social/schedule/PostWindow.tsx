@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
+import type { AssetVersion, ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { useRow, useTable } from '@/lib/db-client'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
@@ -29,7 +29,7 @@ import {
   withWorkingCopy, workingBody, workingCopyOf,
   type Answers, type InstagramChoiceKey, type NoteInput, type PostWindowApi, type Question, type WorkingCopy,
 } from '@/app/lib/post-window-core'
-import type { SuggestedTime, VersionGroup } from '@/app/lib/social-schedule-core'
+import { cardVersionGroups, type SuggestedTime, type VersionGroup } from '@/app/lib/social-schedule-core'
 import { clientRecipients, defaultRecipients } from '@/app/lib/client-recipients-core'
 import {
   autoKindFor, availableKinds, isPlatform, networkName,
@@ -1456,6 +1456,22 @@ export function OpenPostWindow({ postId, onClose, onDone, onEditMedia }: {
     contacts: contacts.rows.filter(c => c.client_id === clientId),
     locations: readLocations((client as { instagram_locations?: unknown } | null)?.instagram_locations),
   } : null), [clientId, client, all, contacts.rows])
+  // THE CARD'S FILES, EVERY VERSION, for "Change media" (1 Oct 2026, the walk: on Post approval the picker said "This
+  // piece has no files yet" for a card with three versions — the Schedule page passed the piece in, this window did not)
+  const itemId = (row as { source_item_id?: string | null; item_id?: string | null } | null)?.source_item_id
+    ?? (row as { item_id?: string | null } | null)?.item_id ?? null
+  const { row: item } = useRow<ContentItem>('content_items', itemId)
+  const byItem = useMemo(() => ({ item_id: itemId ?? '' }), [itemId])
+  const itemVersions = useTable<AssetVersion>('asset_versions', { by: byItem, enabled: !!itemId })
+  const seed: PostWindowSeed | null = useMemo(() => {
+    if (!item || !itemId) return null
+    const groups = cardVersionGroups(item as never, itemVersions.rows.filter(v => v.item_id === itemId) as never)
+    const latest = groups[0]?.slides ?? []
+    return {
+      itemId, title: String((item as { title?: unknown }).title ?? 'Post'), slides: latest, pieceFiles: latest,
+      pieceVersions: groups, versionNumber: groups[0]?.round ?? null, coverUrl: null, at: null,
+    }
+  }, [item, itemId, itemVersions.rows])
   if (!context) return null
-  return <PostWindow postId={postId} context={context} onClose={onClose} onDone={onDone} onEditMedia={onEditMedia} />
+  return <PostWindow postId={postId} seed={seed} context={context} onClose={onClose} onDone={onDone} onEditMedia={onEditMedia} />
 }

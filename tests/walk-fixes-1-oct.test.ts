@@ -36,3 +36,12 @@ describe('fixes from the batch walk (1 Oct 2026)', () => {
     expect(readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')).toContain('{driveHandInsOf(item as never).length === 0 ? `Hand in from Google Drive')
   })
 })
+
+describe('Post approval’s post window offers the card’s files, every version (1 Oct 2026)', () => {
+  it('OpenPostWindow builds the piece from the post’s own card, as the Schedule page does', () => {
+    const w = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+    expect(w).toContain("const { row: item } = useRow<ContentItem>('content_items', itemId)")
+    expect(w).toContain('const groups = cardVersionGroups(item as never')
+    expect(w).toContain('<PostWindow postId={postId} seed={seed} context={context}')
+  })
+})
