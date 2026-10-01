@@ -564,6 +564,19 @@ export function shouldOpenTutorial(
   return !(dismissedPages ?? []).includes(tutorialKey(role))
 }
 
+/**
+ * A LINK TO ONE THING IS NEVER HIJACKED BY THE TUTORIAL (13 Sep 2026 for ?card=; 1 Oct 2026 for the rest: a card
+ * email's ?card= link forwards to /dashboard/editor/<card>, where the tutorial then fired, and ?post= links from
+ * Post approval and Schedule emails were never covered). Only a plain visit to a section — /dashboard or
+ * /dashboard/<section>, with no card, post or client named — may open How this works.
+ */
+export function isPlainVisit(path: string, search: string): boolean {
+  const q = new URLSearchParams(search)
+  if (q.has('card') || q.has('post') || q.has('client') || q.has('item')) return false
+  const parts = String(path ?? '').split('/').filter(Boolean)
+  return parts.length <= 2
+}
+
 /** Which step to show, clamped to the tutorial. */
 export function clampStep(step: number, total: number): number {
   if (!Number.isFinite(step) || total <= 0) return 0

@@ -14,7 +14,7 @@ import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
 import Shell, { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_LEADS_CHILDREN, NAV_TOOLS } from './ui/Shell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
-import { shouldOpenTutorial } from '@/app/lib/tutorial-core'
+import { isPlainVisit, shouldOpenTutorial } from '@/app/lib/tutorial-core'
 
 // the shell's markup lives in ./ui/Shell; the nav data and the active-entry
 // rule live there with it, and are re-exported here for anything that used to
@@ -102,7 +102,7 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
     // "received the email and when he opened it the page is taking them to
     // the How it works page"). Somebody who arrived with ?card= came to do
     // one thing; the tutorial waits for a plain visit.
-    try { if (new URLSearchParams(window.location.search).has('card')) return } catch { /* no window */ }
+    try { if (!isPlainVisit(window.location.pathname, window.location.search)) return } catch { /* no window */ }
     let live = true
     try {
       if (sessionStorage.getItem('md-tutorial-offered') === '1') return

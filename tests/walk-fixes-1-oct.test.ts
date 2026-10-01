@@ -45,3 +45,17 @@ describe('Post approval’s post window offers the card’s files, every version
     expect(w).toContain('<PostWindow postId={postId} seed={seed} context={context}')
   })
 })
+
+describe('a link to one thing never lands on How this works (1 Oct 2026)', () => {
+  it('only a plain visit to a section may open the tutorial', async () => {
+    const { isPlainVisit } = await import('../app/lib/tutorial-core')
+    expect(isPlainVisit('/dashboard', '')).toBe(true)
+    expect(isPlainVisit('/dashboard/editor', '')).toBe(true)
+    expect(isPlainVisit('/dashboard/editor', '?card=abc')).toBe(false)
+    expect(isPlainVisit('/dashboard/editor/abc', '')).toBe(false)
+    expect(isPlainVisit('/dashboard/scheduler', '?post=p1')).toBe(false)
+    expect(isPlainVisit('/dashboard/social/schedule', '?client=c&post=p')).toBe(false)
+    expect(isPlainVisit('/dashboard/clients/c1/social', '')).toBe(false)
+    expect(readFileSync('app/dashboard/layout.tsx', 'utf8')).toContain('if (!isPlainVisit(window.location.pathname, window.location.search)) return')
+  })
+})

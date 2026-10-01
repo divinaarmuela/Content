@@ -273,9 +273,10 @@ function BatchBox({ title, count, open, onToggle, onPlan, children }: {
     <div role="listitem" className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-2.5" data-batch>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" aria-expanded={open} onClick={onToggle}
-          className="inline-flex min-h-11 flex-1 items-center gap-2 rounded-inner px-2 text-left text-[14px] font-semibold hover:bg-foreground/[0.04]">
-          <span aria-hidden className={`transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
-          <span className="min-w-0 flex-1 truncate">{title}</span>
+          // min-w-0 so a long card title wraps inside the column instead of running out of it (1 Oct 2026, the walk)
+          className="inline-flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-inner px-2 py-1 text-left text-[14px] font-semibold hover:bg-foreground/[0.04]">
+          <span aria-hidden className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+          <span className="min-w-0 flex-1 break-words">{title}</span>
         </button>
         {onPlan && (
           <button type="button" onClick={onPlan}

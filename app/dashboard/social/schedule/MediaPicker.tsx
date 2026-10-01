@@ -5,6 +5,8 @@ import {
   ArrowLeft, ArrowRight, FolderOpen, Layers, Upload, Wand2, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePreviewRows } from '@/app/components/media/usePreviewRows'
+import { needsPreviewCopy } from '@/app/lib/playable-core'
 import { Thumb } from './tiles'
 import { clearGroup, dismissUpload, uploadFiles } from '../../uploadQueue'
 import { unplacedUploads } from '@/app/lib/post-window-core'
@@ -722,6 +724,11 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
   onDragStart: (e: React.DragEvent, slide: Slide, from: number | null) => void
   empty: string
 }) {
+  // A .MOV TILE SHOWS ITS STILL (1 Oct 2026, the walk: every clip of a Drive hand-in was a black box with a film
+  // icon and no name — Chrome cannot decode the original). The Cloudflare preview the editor card already made
+  // gives the still; the name is written on every tile
+  const movUrls = useMemo(() => files.filter(s => s.type === 'video' && needsPreviewCopy(s.url)).map(s => s.url), [files])
+  const previews = usePreviewRows(movUrls)
   if (files.length === 0) {
     return <p className="px-0.5 text-[13px] text-muted-foreground">{empty}</p>
   }
@@ -729,6 +736,7 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
     <div className="grid grid-cols-3 gap-2.5">
       {files.map(slide => {
         const used = inTray(slide.url)
+        const still = previews.get(slide.url)?.thumbnail_url ?? null
         return (
           <button
             key={slide.url}
@@ -743,7 +751,11 @@ function LibraryGrid({ files, inTray, onAdd, onDragStart, empty }: {
               used && 'opacity-40',
             )}
           >
-            <Thumb slide={slide} label={slide.name} className="h-full w-full" />
+            {still
+              // eslint-disable-next-line @next/next/no-img-element -- Cloudflare's still, not a site asset
+              ? <img src={still} alt={slide.name} className="h-full w-full object-cover" />
+              : <Thumb slide={slide} label={slide.name} className="h-full w-full" />}
+            <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-1 text-left text-[11px] font-medium text-white">{slide.name}</span>
           </button>
         )
       })}

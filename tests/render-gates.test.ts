@@ -425,7 +425,8 @@ describe('the home page loader covers the hero from the first paint (13 Sep 2026
 describe('a link to a card is never hijacked by the tutorial (13 Sep 2026)', () => {
   it('the dashboard layout skips the first-run tutorial when the URL carries ?card=', () => {
     const s = src('app/dashboard/layout.tsx')
-    const gate = s.indexOf("new URLSearchParams(window.location.search).has('card')")
+    // since 1 Oct 2026 the rule is wider (isPlainVisit: ?card=, ?post=, ?client= and any page below a section)
+    const gate = s.indexOf("if (!isPlainVisit(window.location.pathname, window.location.search)) return")
     const offer = s.indexOf("router.replace('/dashboard/start')")
     expect(gate).toBeGreaterThan(0)
     expect(gate).toBeLessThan(offer)
