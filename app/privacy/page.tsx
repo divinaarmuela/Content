@@ -85,7 +85,6 @@ export default function PrivacyPage() {
         <UL>
           <LI><strong>Comments and direct messages.</strong> Our team reads and answers comments and direct messages sent to our clients&rsquo; accounts through Zernio. These are shown live and are not copied into our database in bulk. We keep a short note that a person was in touch: their username, display name, whether it was a comment or a message, and when. We do not keep the words of the message in that note.</LI>
           <LI><strong>Comment-to-message automations.</strong> A client may switch on an automation for one specific post: if you comment a chosen keyword on that post, you receive a direct message (usually with a link) and a public reply to your comment. We keep a record of each one sent: your username and display name, your comment, the message we sent, and whether it was delivered. This record makes sure you are only ever messaged once per post. Nothing is sent unless a person switched the automation on for that post.</LI>
-          <LI><strong>Followers and engagement on Instagram (switched off 30 September 2026).</strong> Until 30 September 2026, for some clients, we kept a list of the people who followed the client&rsquo;s Instagram account and who liked or commented on the client&rsquo;s posts: username, full name, profile picture link, whether the account was private or verified, and the dates we first and last saw them following. <strong>This information did not come from Meta&rsquo;s API.</strong> It was obtained from HikerAPI, a third-party service that reads publicly available Instagram profile information. We have stopped this: we no longer request follower or engagement lists from HikerAPI or anyone else. The records collected before then are still held in our database, and some of our app&rsquo;s pages may still show them to our team or to that client, <Fill>[OWNER: keep until DATE / delete by DATE]</Fill>. You can ask us to delete any record about you (see section 7).</LI>
           <LI><strong>Public post previews.</strong> To show a preview of a public Instagram post or video, we may fetch it through Apify (a third-party service) or Meta&rsquo;s oEmbed service.</LI>
         </UL>
 
@@ -125,7 +124,6 @@ export default function PrivacyPage() {
           <LI><strong>SMTP2GO</strong> — sending email;</LI>
           <LI><strong>Stripe</strong> — taking booking payments;</LI>
           <LI><strong>Apify and ScrapeCreators</strong> — reading publicly available Instagram posts and profiles as described above;</LI>
-          <LI><strong>HikerAPI</strong> — used until 30 September 2026 to read public Instagram follower and engagement lists; no longer used;</LI>
           <LI><strong>Microsoft Clarity</strong> — website analytics;</LI>
           <LI><strong>Asana</strong> and <strong>Linktree</strong> — project tasks and link pages, where used for a client;</LI>
           <LI><strong>Meta, LinkedIn, TikTok and other social networks</strong> — when we publish or reply on a client&rsquo;s account, the content goes to that network.</LI>
@@ -137,7 +135,7 @@ export default function PrivacyPage() {
         <UL>
           <LI>Client and project information: for as long as we work together, then for <Fill>[RETENTION PERIOD — e.g. 7 years for financial records]</Fill>.</LI>
           <LI>Leads and prospects who do not become clients: <Fill>[RETENTION PERIOD]</Fill> after our last contact.</LI>
-          <LI>Follower, engagement, comment and automation records for a client&rsquo;s account: while we manage that account, and deleted within <Fill>[PERIOD]</Fill> after the client leaves us.</LI>
+          <LI>Comment and automation records for a client&rsquo;s account: while we manage that account, and deleted within <Fill>[PERIOD]</Fill> after the client leaves us.</LI>
           <LI>Records of data deletion requests: kept so we can show the request was handled.</LI>
         </UL>
         <P>We do not yet delete data automatically on a timetable; a person on our team removes it. You can ask us to delete your information at any time (see below).</P>
@@ -184,9 +182,6 @@ export default function PrivacyPage() {
           <LI>only to provide our social media management service to the client who connected the account: publishing their content, reporting on its results, and replying to comments and messages on their behalf;</LI>
           <LI>we do not sell Platform Data, use it for advertising profiles, or share it with anyone other than the processors listed in section 4 who help us provide the service.</LI>
         </UL>
-        <P>
-          Separately from Platform Data: the follower and engagement lists described in section 2 came from HikerAPI&rsquo;s reading of public Instagram information, not from Meta, and that collection stopped on 30 September 2026. Our app has used those lists to show our team which of the people who commented or messaged also followed them, by matching usernames across the two; we will not use Platform Data received through our own Meta app for that matching <Fill>[OWNER: confirm]</Fill>.
-        </P>
         <H3>How to ask us to delete your data</H3>
         <UL>
           <LI>Email <A href={MAIL}>{LEGAL_EMAIL}</A> with the subject &ldquo;Data deletion&rdquo; and your Instagram or Facebook username; or</LI>
