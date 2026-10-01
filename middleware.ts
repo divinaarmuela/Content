@@ -24,6 +24,13 @@ const isProtectedRoute = createRouteMatcher([
   // "act as this person" — signed-in only; the route itself then refuses
   // every address but tech@
   '/api/act-as(.*)',
+  // the agency's own Instagram Login (1 Oct 2026): starting a connect and
+  // listing the direct connections are signed-in only. NOT the whole of
+  // /api/meta — /api/meta/instagram/callback (the redirect URI Meta sends the
+  // person back to; its signed state is the authority) and /api/meta/webhook
+  // (Meta calls it; its signature is the authority) must stay public.
+  '/api/meta/instagram/connect(.*)',
+  '/api/meta/instagram/accounts(.*)',
 ])
 
 /**
@@ -145,6 +152,10 @@ export const config = {
     // every route calling auth() is matched.
     '/api/link-preview',
     '/api/link-preview/:path*',
+    // the two Instagram Login routes that ask who is calling. The callback
+    // and the webhook are absent on purpose: Meta calls them, Clerk-free.
+    '/api/meta/instagram/connect',
+    '/api/meta/instagram/accounts',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/posts/:path*',

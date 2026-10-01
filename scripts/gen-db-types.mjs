@@ -66,6 +66,7 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 
 // Tables the code queries but no SQL ever created.
 //   website        — the CMS singleton node
+//   meta_ig_accounts, meta_ig_events — the agency's own Instagram Login (see below)
 //   claim_locks    — one row per "exactly one winner" rule that spans rows
 //                    (id = `<rule>__<key>`), compare-and-set by lib/db.ts's
 //                    claim(). Never migrated: it holds no history.
@@ -800,6 +801,39 @@ const GHOST_TABLES = {
     ['dm_text', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
+  ],
+  // THE AGENCY'S OWN INSTAGRAM CONNECTION (Instagram API with Instagram Login, 1 Oct 2026 — branch
+  // meta-instagram-login; nothing in the posting flow reads it yet). One row per Instagram professional
+  // account, id = Instagram's user id (`/me` user_id, the id webhooks name), so connecting the same account
+  // again is the same row, written with a claim. The token is AES-GCM ciphertext (app/lib/secret-box.ts):
+  // the database rules are open-read, so a plaintext token here would be readable by anyone with the URL.
+  // It is never returned to a browser. status: active | expired | revoked.
+  meta_ig_accounts: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['username', col('string', true)],
+    ['account_type', col('string', true)],
+    ['access_token_encrypted', col('string', false)],
+    ['token_expires_at', col('string', true)],
+    ['scopes', col('unknown', false, true, true)],
+    ['connected_by', col('string', true)],
+    ['connected_at', col('string', false)],
+    ['refreshed_at', col('string', true)],
+    ['status', col('string', false)],
+    ['last_error', col('string', true)],
+  ],
+  // What Meta's webhook told us about a directly connected account: comments, messages and mentions ONLY,
+  // stored and nothing more — nothing replies on its own (the owner's rule). id is derived from the event
+  // itself (app/lib/meta-ig-core.ts webhookEventKey) and taken with a claim, so a redelivery is one row.
+  meta_ig_events: [
+    ['id', col('string', false)],
+    ['ig_user_id', col('string', false)],
+    ['client_id', col('string', true)],
+    ['kind', col('string', false)],              // comments | mentions | messages
+    ['payload', col('unknown', false, true, false)],
+    ['occurred_at', col('string', true)],
+    ['received_at', col('string', false)],
+    ['delivery_id', col('string', true)],
   ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {

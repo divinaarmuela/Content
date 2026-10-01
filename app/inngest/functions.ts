@@ -848,6 +848,31 @@ export const accountHealthDaily = inngest.createFunction(
 )
 
 /**
+ * THE AGENCY'S OWN INSTAGRAM TOKENS (1 Oct 2026, branch meta-instagram-login):
+ * once a day, every directly connected account whose long-lived token is over
+ * 24 hours old and inside 15 days of expiry is refreshed; a refresh Meta
+ * refuses, or a token already past expiry, marks the row 'expired' so a person
+ * reconnects. A no-op while META_IG_APP_SECRET is unset. A NEW function —
+ * after deploying, `curl -X PUT https://app.mdmmarketing.com.au/api/inngest`
+ * (CLAUDE.md trap 5b) or it never runs.
+ */
+export const metaIgTokenRefresh = inngest.createFunction(
+  {
+    id: 'meta-ig-token-refresh',
+    name: 'Instagram (direct): refresh tokens',
+    triggers: [{ cron: 'TZ=Australia/Melbourne 15 4 * * *' }],
+    retries: 1,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => withRequestCache(async () => {
+    return step.run('refresh', async () => {
+      const { refreshDueTokens } = await import('../lib/meta-ig')
+      return refreshDueTokens(Date.now())
+    })
+  })
+)
+
+/**
  * The Shoot Brief SOP's 7-day rule, every morning: a shoot inside seven
  * days whose brief is still being written is late, and the AM and Ops are
  * told once (the stamp is claimed before the mail goes). A NEW function —
@@ -1077,5 +1102,6 @@ export const functions = [
   followersDaily,
   drivePullFolder,
   followersSnapshot,
+  metaIgTokenRefresh,
 ]
 
