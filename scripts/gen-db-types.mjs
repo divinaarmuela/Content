@@ -181,6 +181,12 @@ const GHOST_TABLES = {
     //                  made at Zernio when the post is booked (app/lib/comment-automation.ts), bound to
     //                  THIS post only. Rules: app/lib/comment-automation-core.ts readPostAutomation.
     ['automation', col('unknown', true, true)],
+    //   batch          ONE OF A CARD'S POSTS (the owner, 1 Oct 2026: "the posting side gets THE CARD ITSELF, as a
+    //                  batch"): {key: '<item>_v<round>', item_id, round, index, total, title} — set when the
+    //                  hand-over makes one draft per approved file (app/lib/post-batch.ts). Post approval groups
+    //                  the posts sharing a key ("WALK TEST · 8 posts"); `title` is "WALK TEST · 1 of 8". Null on
+    //                  every other post. Rules: app/lib/post-batch-core.ts.
+    ['batch', col('unknown', true, true)],
   ],
   // post_versions — A FROZEN POST (SPEC §2.2). Written once, never changed:
   //   id `<post_id>_v<n>`, claimed against a null current so the first writer

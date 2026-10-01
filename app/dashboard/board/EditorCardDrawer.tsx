@@ -7,7 +7,7 @@ import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } fro
 import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
 import { seesClientWords, visibleComments } from '../../lib/comment-access-core'
 import CardSaid from './CardSaid'
-import { managesClients, type Role } from '../../lib/identity-core'
+import { managesClients, personLabel, type Role } from '../../lib/identity-core'
 import { Button } from '@/components/ui/button'
 import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ClientContact, ContentItem, ItemComment, TeamUser, TeamUserClient, WorkKind, WorkflowActivity } from '@/lib/db-types'
@@ -44,6 +44,8 @@ import {
   briefRowsFor, handoverState, planMissingWords, planReadState, qcComplete, qcDoneFor, reviewWords, reviewerNameOf, showsHandover, workFrom,
 } from '../../lib/editor-sop-core'
 import { columnOf } from '../../lib/board-core'
+import { handedToScheduler } from '../../lib/workflow-core'
+import { handedToWords } from '../../lib/board-view-core'
 
 /**
  * THE EDITOR'S CARD, IN THE ORDER THE VIDEO EDITORS SOP READS (11 Sep 2026,
@@ -394,6 +396,11 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const mayFile = holder || me?.role === 'super_admin' || me?.role === 'account_manager'
   const frozen = ['scheduled', 'published'].includes(status)
   const review = reviewWords(status, reviewerNameOf(team as never))
+  // HANDED TO A SCHEDULER (the owner, 1 Oct 2026): the card is Draft again for the posting job, but the
+  // edit is finished — the chip says who has it, never "In Progress"
+  const handedTo = handedToScheduler(item as never)
+    ? handedToWords(item as never, new Map(team.map(u => [u.id, personLabel(u.name, u.email)])))
+    : null
   const platforms = (Array.isArray(item.platform_targets) ? item.platform_targets.map(String) : []).filter((p): p is Platform => p in PLATFORM_MEDIA)
   const specs = channelSpecs({ platforms, types: ['video'] })
     .map(s => ({ platform: s.label, lines: s.groups.flatMap(g => g.lines) }))
@@ -431,7 +438,9 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <p className={H2}>{client?.name ?? ''}{(() => { const who = (item as { for_contact_id?: string | null }).for_contact_id; const p = who ? clientPeople.find(c => c.id === who) : null; return p ? ` · for ${p.name}` : '' })()}{shoot ? ` · From the shoot: ${shoot.title}` : ''}</p>
           <h2 className="text-section-title">{item.title}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>
+            {handedTo
+              ? <Chip tone="green">{handedTo}</Chip>
+              : <Chip tone="surface">{lane.label}{review ? ` · ${review}` : ''}</Chip>}
             <Chip tone="muted">{dueWords}</Chip>
             {priorityChip(item) && <Chip tone={priorityChip(item)!.tone}>{priorityChip(item)!.label}</Chip>}
             {flags.risk && <Chip tone="red">At risk: {flags.risk}</Chip>}

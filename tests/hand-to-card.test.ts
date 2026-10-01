@@ -154,7 +154,8 @@ describe('handing a card to a scheduler puts it in front of them', () => {
   it('is never drawn on Post approval, and the hand-over makes a draft post from its files', () => {
     expect(pageCards('scheduler', ['draft_uploaded', 'approved_for_scheduling'].map(card), viewer, '2026-09-07')).toEqual([])
     const route = require('node:fs').readFileSync('app/api/production/items/[id]/handoff/route.ts', 'utf8') as string
-    expect(route).toMatch(/await createPost\(user, \{ item_id: id \}\)/)
+    // since 1 Oct 2026 one draft per approved file — the card itself, as a batch (post-batch.ts)
+    expect(route).toMatch(/await createBatchForCard\(item as never, \{ scheduler: valid\[0\] \}\)/)
   })
 
   it('and the words handed with it travel on the card itself', () => {
@@ -219,7 +220,9 @@ describe('"Hand to…" is offered where it belongs and nowhere else', () => {
   it('the picker starts on nobody, and the button says what it does', () => {
     expect(dialogs).toMatch(/const \[to, setTo\] = useState\(''\)/)
     expect(dialogs).toContain('Hand it over')
-    expect(dialogs).toContain('What you want them to do — cut a 30s version for Reels…')
+    // a scheduler's example, and no Drive folder to type: the files are on the card (1 Oct 2026)
+    expect(dialogs).toContain('What you want them to do — post one a day from Monday…')
+    expect(dialogs).not.toContain('Drive folder they post from')
   })
 
   it('every control in the dialog clears the 44px floor', () => {

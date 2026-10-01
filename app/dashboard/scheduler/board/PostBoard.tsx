@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { LayoutGrid, List as ListIcon } from 'lucide-react'
-import { STAGE_MEANING, type OfferedAction, type PostState } from '../../../lib/post-stage-core'
+import { STAGE_MEANING, type AccountRef, type OfferedAction, type PostState } from '../../../lib/post-stage-core'
 import {
-  boardActions, dropOnPostLane, groupPosts, postMoveTargets, postApprovalWindowHref, scheduleLink,
+  boardActions, dropOnPostLane, groupPosts, newlyCancelled, offeredList, postMoveTargets, postApprovalWindowHref, scheduleLink,
 } from '../../../lib/post-board-core'
+import { groupBatches } from '../../../lib/post-batch-core'
+import { BatchPlanner } from './BatchPlanner'
 import { SCHEDULE_PAGE } from '../../../lib/page-access-core'
 import { usePersistedChoice } from '../../production/workHooks'
 import { LaneBoard, type Lane as BoardLane } from '../../production/LaneBoard'
@@ -46,7 +48,7 @@ const LANE_MEANING: Record<string, string> = {
  * (audit B10). Cancelled posts sit folded under the board, each with Re-book.
  */
 export function PostBoard({
-  posts, cancelled, now, busyId, errorFor, onPress, initialLane, focus,
+  posts, cancelled, now, busyId, errorFor, onPress, initialLane, focus, channelsOf, zoneOf,
 }: {
   posts: readonly BoardPost[]
   cancelled: readonly BoardPost[]
@@ -57,11 +59,22 @@ export function PostBoard({
   initialLane?: string | null
   /** posts named in the address (`?post=`, `?item=`): outlined so they are found */
   focus?: ReadonlySet<string>
+  /** the batch planner's channels for a client — null while they load */
+  channelsOf?: (clientId: string) => readonly AccountRef[] | null
+  /** the client's time zone, for the planner's times */
+  zoneOf?: (clientId: string) => string | null
 }) {
   const [view, setView] = usePersistedChoice('post-board-view', VIEWS, 'columns', 'view')
   const [dragging, setDragging] = useState<BoardPost | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const justDragged = useRef(false)
+  /** A CARD'S BATCH (1 Oct 2026): which batch boxes are open, by `<lane>:<batch key>` */
+  const [openBatches, setOpenBatches] = useState<ReadonlySet<string>>(() => new Set())
+  /** the batch the planner is open on */
+  const [planning, setPlanning] = useState<{ title: string; posts: BoardPost[] } | null>(null)
+  /** a batch can be planned while one of its drafts may be sent for the quality check by this person */
+  const plannable = (list: readonly BoardPost[]) => list.some(bp => bp.post.stage === 'draft'
+    && offeredList(boardActions(bp.post, bp.hats, now, bp.ctx)).some(a => a.action === 'send_to_qc'))
 
   const grouped = useMemo(
     () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, bp }))),
@@ -70,6 +83,20 @@ export function PostBoard({
     dragging ? postMoveTargets(dragging.post, dragging.hats, now, dragging.ctx).map(m => m.lane) : []),
   [dragging, now])
   const firstId = grouped.find(g => g.posts.length > 0)?.posts[0]?.id ?? null
+
+  // A CANCELLED POST IS NOT LOST (1 Oct 2026): when a post that was on a lane turns up in the Cancelled
+  // list — cancelled on its card or in its window — the list is opened and brought into view, so the
+  // card is seen where it went (closed by default otherwise)
+  const [cancelledOpen, setCancelledOpen] = useState(false)
+  const onLaneIds = useRef<ReadonlySet<string>>(new Set())
+  const cancelledBox = useRef<HTMLDetailsElement | null>(null)
+  useEffect(() => {
+    const moved = newlyCancelled(onLaneIds.current, cancelled.map(bp => bp.post))
+    onLaneIds.current = new Set(posts.map(bp => bp.post.id))
+    if (moved.length === 0) return
+    setCancelledOpen(true)
+    try { cancelledBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) } catch { /* nothing to scroll */ }
+  }, [posts, cancelled])
 
   // a post named in the address is brought into view once it is drawn
   useEffect(() => {
@@ -121,7 +148,41 @@ export function PostBoard({
           dragging ? active ? over === key ? 'bg-tint-green ring-2 ring-accent-green' : 'bg-tint-green' : 'opacity-60' : ''
         }`}
       >
-        {inLane.map(({ id, bp }) => (
+        {groupBatches(inLane, x => x.bp.post.batch).map(g => (g.kind === 'post' ? item(g.item) : (
+          <BatchBox
+            key={g.key}
+            title={g.title}
+            count={g.items.length}
+            open={openBatches.has(`${key}:${g.key}`) || g.items.some(x => focus?.has(x.id) === true)}
+            onToggle={() => setOpenBatches(s => { const n = new Set(s); const k = `${key}:${g.key}`; if (n.has(k)) n.delete(k); else n.add(k); return n })}
+            onPlan={plannable(g.items.map(x => x.bp))
+              ? () => setPlanning({ title: g.title, posts: g.items.map(x => x.bp) })
+              : null}
+          >
+            {g.items.map(item)}
+          </BatchBox>
+        )))}
+        {inLane.length === 0 && (
+          <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
+            {LANE_EMPTY[key] ?? 'Nothing here.'}
+          </div>
+        )}
+      </div>
+    )
+    return {
+      key,
+      title: lane.label,
+      count: inLane.length,
+      empty: LANE_EMPTY[key] ?? 'Nothing here.',
+      cards: [],
+      replace: zone,
+      hint: <span className="sr-only">{LANE_MEANING[key]}</span>,
+    }
+  })
+
+  /** one card in a lane, draggable — on its own, or inside its batch */
+  function item({ id, bp }: { id: string; bp: BoardPost }) {
+    return (
             <div
               key={id}
               role="listitem"
@@ -143,24 +204,8 @@ export function PostBoard({
             >
               {card(bp)}
             </div>
-        ))}
-        {inLane.length === 0 && (
-          <div className="rounded-inner border border-dashed border-border px-3 py-7 text-center text-[13px] text-muted-foreground">
-            {LANE_EMPTY[key] ?? 'Nothing here.'}
-          </div>
-        )}
-      </div>
     )
-    return {
-      key,
-      title: lane.label,
-      count: inLane.length,
-      empty: LANE_EMPTY[key] ?? 'Nothing here.',
-      cards: [],
-      replace: zone,
-      hint: <span className="sr-only">{LANE_MEANING[key]}</span>,
-    }
-  })
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -185,7 +230,9 @@ export function PostBoard({
       )}
 
       {cancelled.length > 0 && (
-        <details className="group rounded-card border border-border bg-surface px-4 py-2">
+        <details ref={cancelledBox} open={cancelledOpen}
+          onToggle={e => setCancelledOpen((e.currentTarget as HTMLDetailsElement).open)}
+          className="group rounded-card border border-border bg-surface px-4 py-2">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[14px] font-semibold">
             Cancelled · {cancelled.length}
             <span aria-hidden className="transition-transform group-open:rotate-90">›</span>
@@ -196,6 +243,48 @@ export function PostBoard({
           </div>
         </details>
       )}
+
+      <BatchPlanner
+        title={planning?.title ?? null}
+        posts={planning?.posts ?? []}
+        channels={planning && channelsOf ? channelsOf(planning.posts[0]?.post.client_id ?? '') : null}
+        zone={planning && zoneOf ? zoneOf(planning.posts[0]?.post.client_id ?? '') : null}
+        onClose={() => setPlanning(null)}
+      />
+    </div>
+  )
+}
+
+/**
+ * ONE CARD'S POSTS, DRAWN TOGETHER (the owner, 1 Oct 2026): "WALK TEST · 8 posts", folded until it is
+ * opened, with the batch planner beside it. Each post inside is the ordinary card with its own buttons —
+ * the box only groups them.
+ */
+function BatchBox({ title, count, open, onToggle, onPlan, children }: {
+  title: string
+  count: number
+  open: boolean
+  onToggle: () => void
+  /** null when this person has no draft here they could send */
+  onPlan: (() => void) | null
+  children: React.ReactNode
+}) {
+  return (
+    <div role="listitem" className="flex flex-col gap-2 rounded-inner border border-border bg-surface p-2.5" data-batch>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-expanded={open} onClick={onToggle}
+          className="inline-flex min-h-11 flex-1 items-center gap-2 rounded-inner px-2 text-left text-[14px] font-semibold hover:bg-foreground/[0.04]">
+          <span aria-hidden className={`transition-transform ${open ? 'rotate-90' : ''}`}>›</span>
+          <span className="min-w-0 flex-1 truncate">{title}</span>
+        </button>
+        {onPlan && (
+          <button type="button" onClick={onPlan}
+            className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-[13px] font-semibold hover:bg-foreground/[0.04]">
+            Plan all {count}
+          </button>
+        )}
+      </div>
+      {open && <div role="list" className="flex flex-col gap-2.5">{children}</div>}
     </div>
   )
 }

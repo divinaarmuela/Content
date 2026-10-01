@@ -73,14 +73,20 @@ export function PreviewTabs({ previews, active, onPick, className }: {
 
 /* ── the picture, in the network's own crop ─────────────────────────────── */
 
-function Frame({ media, aspect, label, playable }: {
+/** What to draw for a video the browser cannot play as it is (a .mov): Cloudflare's preview, or its still
+ *  and "Preview being made" — null to play the file as before (1 Oct 2026). Shown only; never published. */
+export type VideoFor = (url: string, label: string) => React.ReactNode | null
+
+function Frame({ media, aspect, label, playable, videoFor }: {
   media: PreviewFrameData['media'][number] | undefined
   aspect: string
   label: string
   /** the file a browser can play for a master (the encoder's copy) */
   playable?: (url: string) => string
+  videoFor?: VideoFor
 }) {
   const [broken, setBroken] = useState(false)
+  const instead = media && media.type === 'video' && videoFor ? videoFor(media.url, label) : null
   return (
     <div
       style={{ aspectRatio: aspect }}
@@ -91,6 +97,8 @@ function Frame({ media, aspect, label, playable }: {
           <ImageIcon className="h-5 w-5" strokeWidth={1.8} aria-hidden />
           <span className="text-[12px]">Nothing picked yet</span>
         </span>
+      ) : media.type === 'video' && instead ? (
+        <span className="relative flex h-full w-full">{instead}</span>
       ) : media.type === 'video' ? (
         // THE VIDEO ITSELF, playable. This was a black box with a film icon
         // and "Video — it plays here", which read as a broken preview (the
@@ -157,10 +165,11 @@ function Caption({ caption }: { caption: PreviewFrameData['caption'] }) {
 
 /* ── one network's whole frame ──────────────────────────────────────────── */
 
-export function PostPreviewFrame({ preview, className, playable }: {
+export function PostPreviewFrame({ preview, className, playable, videoFor }: {
   preview: PreviewFrameData
   className?: string
   playable?: (url: string) => string
+  videoFor?: VideoFor
 }) {
   const [slide, setSlide] = useState(0)
   // the set can shrink under the picked slide while somebody is editing
@@ -217,7 +226,7 @@ export function PostPreviewFrame({ preview, className, playable }: {
 
       {preview.captionAbove && <div className="pb-3">{caption}</div>}
 
-      <Frame media={shown} aspect={preview.aspect} label={preview.name} playable={playable} />
+      <Frame media={shown} aspect={preview.aspect} label={preview.name} playable={playable} videoFor={videoFor} />
 
       {/* the dots under a carousel — and they move it */}
       {preview.dots && (
@@ -269,10 +278,11 @@ export function PostPreviewFrame({ preview, className, playable }: {
 
 /* ── the whole pane: the marks, the frame, and anything wrong ───────────── */
 
-export default function PostPreviewPane({ previews, intro, empty, className, playable }: {
+export default function PostPreviewPane({ previews, intro, empty, className, playable, videoFor }: {
   previews: readonly PreviewFrameData[]
   /** the file a browser can play for a master (the encoder's copy) */
   playable?: (url: string) => string
+  videoFor?: VideoFor
   /** the sentence over the frame */
   intro?: string
   /** what to say when no channel is picked yet */
@@ -317,7 +327,7 @@ export default function PostPreviewPane({ previews, intro, empty, className, pla
         </div>
       )}
 
-      <PostPreviewFrame preview={shown} playable={playable} />
+      <PostPreviewFrame preview={shown} playable={playable} videoFor={videoFor} />
     </div>
   )
 }

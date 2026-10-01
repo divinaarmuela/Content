@@ -55,6 +55,7 @@ import { optionsFromExtras, readChannelExtras, type ChannelExtras } from './sche
 import type { PostKind } from './publish-core'
 import type { Slide } from './version-files-core'
 import { readPostAutomation, type PostAutomation } from './comment-automation-core'
+import { readPostBatch, type PostBatch } from './post-batch-core'
 
 /* ── stages ─────────────────────────────────────────────────────────────── */
 
@@ -362,6 +363,8 @@ export type PostState = {
   assigned_to: string | null
   source_item_id: string | null
   source_deleted: boolean
+  /** one of a card's posts, made by the hand-over (post-batch-core) — absent on every other post */
+  batch?: PostBatch | null
 }
 
 /* ── reading a raw row ──────────────────────────────────────────────────── */
@@ -471,6 +474,8 @@ export function readPostState(row: Record<string, unknown> | null | undefined): 
     source_deleted: row.source_deleted === true,
     // only when there is one, so a post without an automation reads exactly as it always did
     ...(readPostAutomation(row.automation) ? { automation: readPostAutomation(row.automation) } : {}),
+    // …and its batch, only when it is one of a card's posts
+    ...(readPostBatch(row.batch) ? { batch: readPostBatch(row.batch) } : {}),
   }
 }
 
@@ -684,7 +689,9 @@ const joinNames = (names: string[]) =>
   names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 
 /** What a post is called — on a card and in an email: the edit it came from, else its caption's first line. */
-export function postTitle(post: Pick<PostState, 'caption'>, sourceTitle?: string | null): string {
+export function postTitle(post: Pick<PostState, 'caption'> & { batch?: PostBatch | null }, sourceTitle?: string | null): string {
+  // one of a card's batch: "WALK TEST · 3 of 8", so eight posts of one card are told apart
+  if (post.batch?.title?.trim()) return post.batch.title.trim()
   const title = String(sourceTitle ?? '').trim()
   if (title) return title
   const line = String(post.caption ?? '').split('\n').map(l => l.trim()).find(Boolean) ?? ''

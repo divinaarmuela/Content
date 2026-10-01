@@ -59,6 +59,7 @@ import AutomationSection from './AutomationSection'
 import { Dropdown, ExtraRow, MenuItem } from './PostOptionRows'
 import TimePicker from './TimePicker'
 import { Thumb } from './tiles'
+import { ShownVideoBox, useShownVideos } from './ShownVideo'
 import { addPostNote, postWindowApi } from './post-window-api'
 
 /**
@@ -411,6 +412,14 @@ export default function PostWindow({
   const groups = groupOptions(options)
   const picked = chosenSlide < shown.slides.length ? chosenSlide : 0
   const shownSlide = shown.slides[picked] ?? null
+  // a .mov original: Cloudflare's preview of it, or its still and "Preview being made" — never a black
+  // box. What is SHOWN only; the slides that are published are untouched (1 Oct 2026)
+  const shownFor = useShownVideos(shown.slides)
+  const videoView = (s: { url: string; type?: string; name?: string } | null, label: string, className: string, compact = false) => {
+    if (!s || s.type !== 'video') return null
+    const v = shownFor(s.url)
+    return v.kind === 'file' ? null : <ShownVideoBox shown={v} label={label} className={className} compact={compact} />
+  }
 
   /* the lists only the network knows — playlists, pages, privacy levels, today's cap. Drafts only. */
   const [lists, setLists] = useState<Record<string, ChannelOptions>>({})
@@ -770,6 +779,7 @@ export default function PostWindow({
           {header && (
             <div className="flex flex-col gap-0.5 text-[13px]">
               <p className="font-medium" data-waiting-line>{header.line}</p>
+              {header.checkLine && <p className="text-muted-foreground" data-check-line>{header.checkLine}</p>}
               {header.changeLine && (
                 <p className="text-foreground"><span className="font-semibold">{header.changeLine}:</span> {header.changeNote ?? 'no note left'}</p>
               )}
@@ -922,7 +932,7 @@ export default function PostWindow({
         <div className="flex flex-col gap-5 p-3.5 sm:flex-row">
           <div className="flex w-full shrink-0 flex-col gap-2.5 sm:w-[240px]">
             <div className="relative aspect-square w-full overflow-hidden rounded-inner border border-border bg-foreground/[0.06]">
-              <Thumb slide={shownSlide} label={title} className="h-full w-full" />
+              {videoView(shownSlide, title, 'h-full w-full') ?? <Thumb slide={shownSlide} label={title} className="h-full w-full" />}
               {shown.slides.length > 0 && (
                 <span className="absolute right-2 top-2 rounded-full bg-ink/60 px-2 py-0.5 text-[11px] font-bold text-cream">{picked + 1}/{shown.slides.length}</span>
               )}
@@ -944,7 +954,7 @@ export default function PostWindow({
                     aria-pressed={i === picked}
                     className={cn('h-[56px] w-[44px] shrink-0 overflow-hidden rounded-tile bg-foreground/[0.06]', i === picked && 'outline outline-2 outline-offset-2 outline-accent-blue')}
                   >
-                    <Thumb slide={s} label={s.name} className="h-full w-full" />
+                    {videoView(s, s.name, 'h-full w-full', true) ?? <Thumb slide={s} label={s.name} className="h-full w-full" />}
                   </button>
                 ))}
               </div>
@@ -1056,7 +1066,7 @@ export default function PostWindow({
             </div>
 
             {pane === 'preview' && (
-              <PostPreviewPane playable={playable} previews={preview.networks} intro={PREVIEW_INTRO}
+              <PostPreviewPane playable={playable} videoFor={(url, label) => videoView({ url, type: 'video' }, label, 'h-full w-full')} previews={preview.networks} intro={PREVIEW_INTRO}
                 empty="Pick a channel and the post appears here as that network will show it." />
             )}
             {pane === 'preview' && grid && grid.length > 0 && (
@@ -1066,7 +1076,8 @@ export default function PostWindow({
                   {grid.slice(0, 9).map((g, i) => (
                     <li key={`${g.url}-${i}`} className={cn('relative aspect-[4/5] overflow-hidden bg-foreground/[0.06]', i === 0 && 'ring-2 ring-foreground ring-offset-1 ring-offset-background')}>
                       {g.type === 'video'
-                        ? <video src={g.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                        ? (videoView(g, i === 0 ? 'This post' : '', 'h-full w-full', true)
+                          ?? <video src={playable(g.url)} muted playsInline preload="metadata" className="h-full w-full object-cover" />)
                         // eslint-disable-next-line @next/next/no-img-element
                         : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
                     </li>

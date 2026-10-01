@@ -310,7 +310,12 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
     case 'send_to_qc':
       return {
         subject: `Quality check: ${title}`,
-        lines: [`${actor} sent ${title} for the quality check${v != null ? ` (version ${v})` : ''}.`, 'Open it, then press Passed, or Ask for a change.'],
+        lines: [
+          `${actor} sent ${title} for the quality check${v != null ? ` (version ${v})` : ''}.`,
+          // one of a card's posts: the files were approved on the edit — the check is the post itself (1 Oct 2026)
+          ...(post.batch ? ['Check the caption, the channels and the time — the files were checked and approved on the edit.'] : []),
+          'Open it, then press Passed, or Ask for a change.',
+        ],
         cta: 'Check the post',
       }
     case 'pass':

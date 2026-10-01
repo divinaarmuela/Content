@@ -955,7 +955,9 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
   /** the stage, as the board names it: the column, then the status where the
    *  column holds more than one */
   const columnLabel = BOARD_COLUMNS.find(c => c.key === columnOf(detail.status))?.label ?? statusWord
-  const stageText = columnLabel === statusWord ? columnLabel : `${columnLabel} · ${statusWord}`
+  // handed to a scheduler: the edit is done and the posts are theirs — never "Draft" (1 Oct 2026)
+  const stageText = handedDraft && role !== 'client' ? 'With the scheduler'
+    : columnLabel === statusWord ? columnLabel : `${columnLabel} · ${statusWord}`
   /** the columns the More menu can move this card to — the same list the
    *  board's own menu offers, judged by the same rules */
   const menuMoves: Move[] = isTeam && !isBrief
