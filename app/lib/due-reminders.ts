@@ -53,6 +53,20 @@ const FAILED_LOOKBACK_DAYS = 30
  * Team-facing only: the client is never emailed about this (client email is
  * off by design), and the words are the ones a scheduler can act on.
  */
+/** Each card whose newest publish job failed, with that job — a later job, whatever became of it, supersedes it. */
+export function newestFailedByItem<J extends { content_item_id?: unknown; status?: unknown; created_at?: unknown }>(jobs: readonly J[]): Map<string, J> {
+  const newest = new Map<string, J>()
+  for (const j of jobs) {
+    const id = String(j.content_item_id ?? '')
+    if (!id) continue
+    const cur = newest.get(id)
+    if (!cur || String(j.created_at ?? '') > String(cur.created_at ?? '')) newest.set(id, j)
+  }
+  const out = new Map<string, J>()
+  for (const [id, j] of newest) if (j.status === 'failed') out.set(id, j)
+  return out
+}
+
 export async function runDueReminders(): Promise<{ items: number; emails: number }> {
   const today = melbourneToday()
   const tomorrow = new Date(Date.now() + 86_400_000)
@@ -83,11 +97,18 @@ export async function runDueReminders(): Promise<{ items: number; emails: number
     where: j => Boolean(j.content_item_id) && String(j.updated_at ?? '') >= failedSince,
     limit: 200,
   })
+  // A FAILURE A LATER SEND PUT RIGHT IS NOT A POST THAT DID NOT GO OUT (1 Oct 2026: "Jordan self flimed" failed
+  // once for LinkedIn at 2:28 pm, was booked again and went out at 3:33 pm — and seven people were told at 8 am it
+  // did not go out, with 29 more mornings of the same to come). Only a card whose NEWEST job failed is told about.
+  const failedItemIds = [...new Set(failedJobs.map(j => String(j.content_item_id)))]
+  const laterJobs = failedItemIds.length
+    ? await table<PublishJobRow>('publish_jobs').list({
+        where: j => failedItemIds.includes(String(j.content_item_id)) && j.status !== 'failed',
+        limit: 1000,
+      })
+    : []
   const reasonByItem = new Map<string, string>()
-  for (const j of failedJobs) {
-    const id = String(j.content_item_id)
-    if (!reasonByItem.has(id)) reasonByItem.set(id, String(j.error ?? '').trim())
-  }
+  for (const [id, j] of newestFailedByItem([...failedJobs, ...laterJobs])) reasonByItem.set(id, String(j.error ?? '').trim())
   const seen = new Set(items.map(i => i.id))
   const stuckIds = [...reasonByItem.keys()].filter(id => !seen.has(id))
   const stuckRows = stuckIds.length

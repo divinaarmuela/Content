@@ -20,6 +20,9 @@ import type { Row } from '@/lib/db-types'
  * secret nested one level deeper inside a join is still a leak.
  */
 
+// a lead from two days ago: the tool reads the last 30 days, so a fixed date fell out of it on 1 Oct 2026
+const RECENT = new Date(Date.now() - 2 * 86_400_000).toISOString()
+
 const { assistantTools } = await import('../app/lib/assistant-tools')
 
 const SHARE_TOKEN = 'share-tok-must-never-leak'
@@ -46,7 +49,7 @@ beforeEach(() => {
       created_at: '2026-01-02T00:00:00.000Z', answers: {}, definition: { sections: [] },
     }] as unknown as Row[],
     leads: [{
-      id: 'lead-1', created_at: '2026-09-01T00:00:00.000Z', fname: 'Sam',
+      id: 'lead-1', created_at: RECENT, fname: 'Sam',
       lname: 'Lee', email: 'sam@example.invalid', biz: 'Sam Co',
       need: 'reels', budget: '5k', timeline: 'Q4', source: 'web_form',
     }] as unknown as Row[],
@@ -81,7 +84,7 @@ describe('the assistant never sees a secret', () => {
       team_users: [{ id: 'u-1', email: 'ryan@example.invalid', name: 'Ryan', role: 'editor', active_status: true, clerk_user_id: 'clerk_secret_id' }] as unknown as Row[],
       content_items: [{ id: 'c-1', title: 'Shan Minor Edits', client_id: 'client-1', owner_id: 'u-1', status: 'client_review', edit_round: 1 }] as unknown as Row[],
       batches: [{ id: 'b-1', title: 'August Shoot', client_id: 'client-1', shoot_date: '2026-08-20', status: 'wrapped', editor_id: 'u-1', footage_handed_at: '2026-08-21T00:00:00.000Z', location: 'Docklands' }] as unknown as Row[],
-      leads: [{ id: 'lead-1', fname: 'Sam', lname: 'Lee', biz: 'Capila Partners', email: 'sam@example.invalid', need: 'reels', created_at: '2026-09-01T00:00:00.000Z' }] as unknown as Row[],
+      leads: [{ id: 'lead-1', fname: 'Sam', lname: 'Lee', biz: 'Capila Partners', email: 'sam@example.invalid', need: 'reels', created_at: RECENT }] as unknown as Row[],
     })
     const r = await run('search_all', { query: 'capila' }) as { total: number; clients: { open: string }[]; cards: { open: string; who: string }[]; shoots: { open: string; editor: string; footage_in: boolean }[]; leads: { open: string }[]; team: unknown[] }
     expect(r.total).toBe(4)

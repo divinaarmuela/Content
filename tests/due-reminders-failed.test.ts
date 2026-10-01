@@ -98,3 +98,22 @@ describe('the morning sweep', () => {
       .toEqual(['u-owner@example.invalid', 'u-sched@example.invalid'])
   })
 })
+
+describe('a failure a later send put right (1 Oct 2026: "Jordan self flimed" went out at 3:33 pm, seven people were told at 8 am it had not)', () => {
+  it('is not said: the newest job for the card went out', async () => {
+    fake = base({ publish_jobs: [
+      publishJob({ id: 'pj-1', created_at: '2026-09-30T04:28:30.789Z', error: 'Could not prepare a copy for LinkedIn' }),
+      publishJob({ id: 'pj-2', status: 'published', error: null, created_at: '2026-09-30T04:36:12.122Z' }),
+    ] })
+    await runDueReminders()
+    expect(emails.filter(e => e.eventType === 'publish_failed')).toEqual([])
+  })
+  it('is still said when the newest attempt failed too', async () => {
+    fake = base({ publish_jobs: [
+      publishJob({ id: 'pj-1', status: 'published', error: null, created_at: '2026-09-29T00:00:00.000Z' }),
+      publishJob({ id: 'pj-2', created_at: '2026-09-30T00:00:00.000Z' }),
+    ] })
+    await runDueReminders()
+    expect(emails.filter(e => e.eventType === 'publish_failed').length).toBeGreaterThan(0)
+  })
+})
