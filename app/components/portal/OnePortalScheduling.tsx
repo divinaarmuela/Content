@@ -34,7 +34,10 @@ function Cover({ tile, className }: { tile: { cover?: ScheduledTile['cover']; th
   return video
     ? <video src={url.includes('#') ? url : `${url}#t=0.001`} muted playsInline preload="metadata" className={`object-cover ${className ?? ''}`} />
     // eslint-disable-next-line @next/next/no-img-element
-    : <img src={url} alt="" loading="lazy" className={`object-cover ${className ?? ''}`} />
+    // EAGER, NOT LAZY (the owner, 2 Oct 2026: "in portal preview it's showing grey box"): a phone's scrolling grid
+    // left all 25 pictures waiting to be "in view" and drew empty tiles; 25 small pictures load at once without harm.
+    // No referrer, so Instagram's picture servers never refuse a request for coming from another site.
+    : <img src={url} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" className={`object-cover ${className ?? ''}`} />
 }
 
 function StateMark({ t }: { t: ScheduledTile }) {
