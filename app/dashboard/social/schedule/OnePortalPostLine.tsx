@@ -48,7 +48,8 @@ export default function OnePortalPostLine({ post, editable, onMoved }: {
         <p>
           <span className="font-semibold">The client:</span>{' '}
           {state === 'not_approved' && review
-            ? <>Not approved{review.by && review.by !== 'the client' ? ` by ${review.by}` : ''}{review.note ? ` — “${review.note}”` : ''}</>
+            // on a Draft the note is already the header's "The client asked for a change" line — not twice
+            ? <>Not approved{review.by && review.by !== 'the client' ? ` by ${review.by}` : ''}{review.note && post.stage !== 'draft' ? ` — “${review.note}”` : ''}</>
             : REVIEW_WORDS[state]}
           {state === 'approved' && review?.by && review.by !== 'the client' ? ` by ${review.by}` : ''}
         </p>

@@ -699,8 +699,8 @@ export default function SchedulePage() {
             // the Schedule popover offers Reconnect and Check again only.
           />
 
-          {/* date bar */}
-          <div className="flex items-center gap-3 py-2">
+          {/* date bar — wraps rather than squeezing its buttons into three-line pills (2 Oct 2026, the one portal walk) */}
+          <div className="flex flex-wrap items-center gap-3 py-2">
             <button
               type="button"
               onClick={() => setAnchor(todayKey)}
@@ -724,11 +724,11 @@ export default function SchedulePage() {
             >
               <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
             </button>
-            <span className="text-[16px] font-semibold">
+            <span className="whitespace-nowrap text-[16px] font-semibold">
               {monthView ? monthLabel(anchor ?? todayKey ?? '') : rangeLabel(grid.days)}
             </span>
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2 [&>*]:whitespace-nowrap">
               {view === 'Week' && (
                 <button
                   type="button"

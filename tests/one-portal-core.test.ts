@@ -32,6 +32,9 @@ describe('where the client\'s word stands', () => {
     expect(reviewState({})).toBe('not_reviewed')
     expect(reviewState({ client_review: approved(2) })).toBe('approved')
     expect(reviewState({ client_review: { ...approved(2), verdict: 'not_approved', note: 'no' } })).toBe('not_approved')
+    // the team fixed it and booked Version 3: that one has no answer yet
+    expect(reviewState({ client_review: { ...approved(2), verdict: 'not_approved', note: 'no' }, sent_version: 3 })).toBe('not_reviewed')
+    expect(reviewState({ client_review: { ...approved(2), verdict: 'not_approved', note: 'no' }, sent_version: 2 })).toBe('not_approved')
   })
   it('a change after approval keeps it (R9) until the team asks again', () => {
     expect(reviewState({ client_review: approved(2), review_asked: { version: 2, at: '2026-10-01T00:00:00.000Z' } })).toBe('approved')

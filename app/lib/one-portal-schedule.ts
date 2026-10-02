@@ -113,7 +113,7 @@ export async function loadScheduling(
     .filter(p => p.stage === 'booked'
       || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && !p.client_review && p.sent_version != null)
       || (p.stage === 'draft' && p.client_review?.verdict === 'not_approved'))
-  const versionIds = posts.flatMap(p => (p.client_review?.verdict === 'not_approved' ? [p.client_review.version] : p.sent_version != null ? [p.sent_version] : [])
+  const versionIds = posts.flatMap(p => (p.stage === 'draft' && p.client_review?.verdict === 'not_approved' ? [p.client_review.version] : p.sent_version != null ? [p.sent_version] : [])
     .map(n => postVersionId(p.id, n)))
   const versions = versionIds.length
     ? await table<PostVersion>('post_versions').list({ where: v => versionIds.includes(v.id) })
@@ -122,7 +122,8 @@ export async function loadScheduling(
   const accountById = new Map(accounts.map(a => [a.id, a]))
 
   const tileOf = (p: PostState): ScheduledTile | null => {
-    const n = p.client_review?.verdict === 'not_approved' ? p.client_review.version : p.sent_version
+    // the version the client sees: the one they said no to while it is off (Draft); otherwise the one booked
+    const n = p.stage === 'draft' && p.client_review?.verdict === 'not_approved' ? p.client_review.version : p.sent_version
     const raw = n != null ? versionById.get(postVersionId(p.id, n)) : null
     const v: FrozenPost | null = raw ? readFrozenPost(raw as unknown as Record<string, unknown>) : null
     if (!v || n == null) return null
@@ -164,7 +165,7 @@ export async function loadScheduling(
       answerable,
       last_slot: p.stage === 'booked' && insideLastSlot(p.scheduled_for, now.getTime()),
       waiting_for_them: ifNoAnswerOf(p) === 'wait',
-      note: p.client_review?.verdict === 'not_approved' ? p.client_review.note : null,
+      note: state === 'not_approved' ? p.client_review?.note ?? null : null,
       preview,
     }
   }

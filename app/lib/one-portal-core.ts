@@ -60,11 +60,14 @@ export function readReviewAsked(v: unknown): ReviewAsked | null {
  *   not_reviewed   — booked, no word yet
  */
 export type ReviewState = 'approved' | 'asked_again' | 'not_approved' | 'not_reviewed'
-export function reviewState(post: { client_review?: unknown; review_asked?: unknown }): ReviewState {
+export function reviewState(post: { client_review?: unknown; review_asked?: unknown; sent_version?: unknown }): ReviewState {
   const r = readClientReview(post.client_review)
   const asked = readReviewAsked(post.review_asked)
   if (!r) return 'not_reviewed'
-  if (r.verdict === 'not_approved') return 'not_approved'
+  // a no is about the version it was given on: once the team re-books a NEWER version, that one is unanswered
+  // (2 Oct 2026, the walk: a fixed, re-booked post still read "Not approved — off the schedule")
+  const sent = Number(post.sent_version)
+  if (r.verdict === 'not_approved') return Number.isInteger(sent) && sent > r.version ? 'not_reviewed' : 'not_approved'
   if (asked && asked.version > r.version && asked.at > r.at) return 'asked_again'
   return 'approved'
 }
