@@ -123,7 +123,7 @@ export default function PortalPostReview({ token, data, accent }: {
                 {data.grid.slice(0, 9).map((g, i) => (
                   <li key={`${g.url}-${i}`} className={`relative aspect-[4/5] overflow-hidden bg-foreground/[0.06] ${i === 0 ? 'ring-2 ring-foreground ring-offset-1 ring-offset-background' : ''}`}>
                     {g.type === 'video'
-                      ? <video src={g.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                      ? <video src={`${g.url}#t=0.001`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
                       // eslint-disable-next-line @next/next/no-img-element
                       : <img src={g.url} alt={i === 0 ? 'This post' : ''} loading="lazy" className="h-full w-full object-cover" />}
                   </li>

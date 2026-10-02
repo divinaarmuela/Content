@@ -132,7 +132,7 @@ function WaitingPostCard({ item, surface, accent }: {
       ) : item.cover ? (
         <div className="overflow-hidden rounded-tile bg-foreground/[0.06]">
           {item.cover.type === 'video'
-            ? <video src={item.cover.url} muted playsInline preload="metadata" className="max-h-[420px] w-full object-contain" />
+            ? <video src={`${item.cover.url}#t=0.001`} muted playsInline preload="metadata" className="max-h-[420px] w-full object-contain" />
             // eslint-disable-next-line @next/next/no-img-element
             : <img src={item.cover.url} alt="" loading="lazy" className="max-h-[420px] w-full object-contain" />}
         </div>

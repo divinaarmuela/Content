@@ -26,10 +26,13 @@ const STATE_TONE: Record<ScheduledTile['state'], string> = {
 
 function Cover({ tile, className }: { tile: { cover?: ScheduledTile['cover']; thumbnail?: string | null; mediaType?: string | null }; className?: string }) {
   const url = 'cover' in tile && tile.cover ? tile.cover.url : (tile as PostedTile).thumbnail ?? null
-  const video = 'cover' in tile && tile.cover ? tile.cover.type === 'video' : false
+  // a posted tile's "thumbnail" can itself be a video file (an Instagram reel) — drawn as a video too
+  const video = 'cover' in tile && tile.cover ? tile.cover.type === 'video' : /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url ?? '')
   if (!url) return <div className={`bg-muted ${className ?? ''}`} />
+  // A PHONE DRAWS NOTHING FOR A VIDEO UNTIL IT PLAYS (the owner, 2 Oct 2026: "on phone the feed for videos … not
+  // showing unless I clicked it"): asking for the frame at 0.001 s makes iOS Safari paint the first frame on load
   return video
-    ? <video src={url} muted playsInline preload="metadata" className={`object-cover ${className ?? ''}`} />
+    ? <video src={url.includes('#') ? url : `${url}#t=0.001`} muted playsInline preload="metadata" className={`object-cover ${className ?? ''}`} />
     // eslint-disable-next-line @next/next/no-img-element
     : <img src={url} alt="" loading="lazy" className={`object-cover ${className ?? ''}`} />
 }
@@ -84,7 +87,9 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
             <Avatar url={profile.avatar_url} letter={(profile.name ?? profile.handle ?? '?').replace(/^@/, '').slice(0, 1).toUpperCase()} />
             <div className="min-w-0">
               <p className="truncate text-[16px] font-semibold">{profile.handle ? `@${profile.handle.replace(/^@/, '')}` : profile.name}</p>
-              <p className="text-[13px] text-muted-foreground">{profile.booked.length} booked · {profile.posted.length} posted · {NETWORK_WORD[profile.network]}</p>
+              {/* the feed is their profile as the network shows it — every recent post, not only ours (2 Oct 2026: "why is
+                  justin showing as 25 posted"); 25 is how many we show, not how many we posted */}
+              <p className="text-[13px] text-muted-foreground">{profile.booked.length} booked · {profile.posted.length > 0 ? `your latest ${profile.posted.length} ${profile.posted.length === 1 ? 'post' : 'posts'} on ${NETWORK_WORD[profile.network]}` : NETWORK_WORD[profile.network]}</p>
             </div>
           </div>
 

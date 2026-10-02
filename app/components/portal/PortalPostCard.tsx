@@ -37,7 +37,7 @@ export default function PortalPostCard({ card, surface, className }: {
 
   const cover = face.cover && (
     face.cover.type === 'video'
-      ? <video src={face.cover.url} muted playsInline preload="metadata" className="max-h-[320px] w-full object-cover" />
+      ? <video src={`${face.cover.url}#t=0.001`} muted playsInline preload="metadata" className="max-h-[320px] w-full object-cover" />
       // eslint-disable-next-line @next/next/no-img-element
       : <img src={face.cover.url} alt="" loading="lazy" className="max-h-[320px] w-full object-cover" />
   )
