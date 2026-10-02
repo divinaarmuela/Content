@@ -138,12 +138,6 @@ export default function ShootAnswer({
               ? 'Locked in ✓ — we have it in our calendar'
               : 'Declined — we’ll propose another date'}
           </p>
-          {status === 'accepted' && (
-            <a href={`/api/shoot/${token}/ics`} download="shoot.ics"
-              className="inline-flex min-h-11 items-center rounded-full bg-cream px-6 font-lamam text-[11px] uppercase tracking-widest text-ink transition-opacity hover:opacity-85">
-              Add to my calendar
-            </a>
-          )}
           {beaten && (
             <p className="max-w-[42ch] font-lamah text-[14px] leading-relaxed text-cream-dim">
               Someone from your side answered just before you, so their answer stands.

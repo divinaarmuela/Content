@@ -72,9 +72,7 @@ describe('Forms is its own tab (the owner, 2 Oct 2026: "usually we would have mu
     expect(page).toContain("{tab === 'shoot' && dateRows.length > 0 && <OnePortalList heading=\"Shoot dates\" rows={dateRows} />}")
     expect(page).toContain("if (tab === 'forms' && pick('intake')) {")
   })
-  it('an accepted shoot date offers the calendar file on the page, since the client is never emailed', () => {
-    expect(readFileSync('app/shoot/[token]/ShootAnswer.tsx', 'utf8')).toContain('Add to my calendar')
-    const route = readFileSync('app/api/shoot/[token]/ics/route.ts', 'utf8')
-    expect(route).toContain("proposal.status !== 'accepted'")
+  it('no calendar file for the client (the owner, 2 Oct 2026: "we dont need a calendar invite")', () => {
+    expect(readFileSync('app/shoot/[token]/ShootAnswer.tsx', 'utf8')).not.toContain('Add to my calendar')
   })
 })
