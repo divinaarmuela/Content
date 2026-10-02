@@ -21,7 +21,7 @@ describe('the engine and the dispatcher are wired to it', () => {
     const rebook = src.indexOf("if (effect.when === 'after' && effect.kind === 'queue_publish')")
     expect(pause).toBeGreaterThan(0)
     expect(pause).toBeLessThan(rebook)
-    expect(src).toContain("const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel']")
+    expect(src).toContain("const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel', 'client_not_approved', 'hold_for_client']")  // + the one portal's take-offs (2 Oct 2026)
   })
 
   it('the post hears its job, then the automation is armed (publish.ts tellThePost)', async () => {

@@ -209,6 +209,17 @@ export const publishDispatcher = inngest.createFunction(
           return -1
         }
       })(),
+      // ONE PORTAL (docs/ONE_PORTAL_SPEC.md R7): a "Wait for the client" post the client has not approved comes
+      // off 15 minutes before its time. Reads only clients on the one portal; nobody else is touched.
+      held_for_client: await (async () => {
+        try {
+          const { sweepOnePortal } = await import('../lib/one-portal-sweep')
+          return (await sweepOnePortal()).held
+        } catch (e) {
+          console.error('[publish dispatcher] one portal sweep failed:', e instanceof Error ? e.message : e)
+          return -1
+        }
+      })(),
       ids: await dueJobIds(),
     }))
     // `synced` is a deliberate canary: it appears in a run's output only once

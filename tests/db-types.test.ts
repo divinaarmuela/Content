@@ -118,6 +118,8 @@ describe('db-types (generated)', () => {
       'automation',
       // one of a card's posts, made by the hand-over — the card itself, as a batch (1 Oct 2026)
       'batch',
+      // the one portal: the team's choice, the client's word on a booked post, the ask, the history (2 Oct 2026)
+      'if_no_answer', 'client_review', 'review_asked', 'client_reviews',
     ])
     // a post always belongs to a client and an item; a draft may not have
     // picked its version, its time or its words yet
@@ -133,9 +135,10 @@ describe('db-types (generated)', () => {
     // the jsonb columns lib/db.ts has to put back when they read empty
     expect(JSON_COLUMNS.social_posts)
       .toEqual(['slides', 'per_channel', 'channels', 'publish_job_ids',
-        'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending', 'automation', 'batch'])
+        'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'cancelled', 'sending', 'automation', 'batch',
+        'client_review', 'review_asked', 'client_reviews'])
     expect(JSON_ARRAY_COLUMNS.social_posts)
-      .toEqual(['slides', 'channels', 'publish_job_ids'])
+      .toEqual(['slides', 'channels', 'publish_job_ids', 'client_reviews'])
     expect(JSON_ARRAY_COLUMNS.social_posts).not.toContain('per_channel')
     expect(UPDATED_AT_TABLES.has('social_posts')).toBe(true)
   })

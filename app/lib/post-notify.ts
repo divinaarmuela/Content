@@ -401,8 +401,10 @@ export async function sendPostNotice(notice: {
   post: PostState
   actor: { id: string | null; name: string | null }
   event: PostEventRow
+  previous_time?: string | null
 }): Promise<void> {
   await notifyPostMove({
+    previousTime: notice.previous_time ?? null,
     plan: {
       action: notice.action,
       from: notice.event.from,

@@ -170,6 +170,14 @@ export function factProblem(action: PostAction | string, post: PostState, versio
       return at('posted') ?? (failedNetworks(post).length > 0 && liveNetworks(post).length > 0 ? null : 'It did not go out in part')
     case 'record_failed':
       return at('ready') ?? (post.problem ? null : 'The post does not say what did not go out')
+    // ONE PORTAL (docs/ONE_PORTAL_SPEC.md): the client's word is on the post before anyone is told about it
+    case 'client_ok':
+    case 'client_ok_book':
+      return at('booked') ?? (post.client_review?.verdict === 'approved' ? null : 'The client has not approved it')
+    case 'client_not_approved':
+      return at('draft') ?? (post.client_review?.verdict === 'not_approved' ? null : 'The client has not said no')
+    case 'hold_for_client':
+      return at('ready') ?? (post.booking == null ? null : 'It is still booked')
     default: {
       const to = ROW_OF[action].to
       if (to === 'deleted') return 'The post is gone'
@@ -384,6 +392,42 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
         subject: `Did not go out: ${title}`,
         lines: [`${title} did not go out. ${post.problem ?? ''}`.trim(), 'It is back in Ready to post. Pick a time and book it again.'],
         cta: 'Book it again',
+      }
+    // ── ONE PORTAL (docs/ONE_PORTAL_SPEC.md) ──
+    case 'client_ok':
+    case 'client_ok_book': {
+      const who = post.client_review?.by && post.client_review.by !== 'the client' ? post.client_review.by : 'The client'
+      return {
+        subject: `The client approved: ${title}`,
+        lines: [
+          `${who} approved ${title} on their portal.`,
+          action === 'client_ok_book'
+            ? `It was waiting for them, so it is now booked for the next free time: ${when ?? 'its new time'}.`
+            : w.previousWhen ? `It was due in under 15 minutes, so it moved to ${when}.` : 'It stays booked. Nothing is needed from you.',
+        ],
+        cta: 'See the post',
+      }
+    }
+    case 'client_not_approved': {
+      const who = post.client_review?.by && post.client_review.by !== 'the client' ? post.client_review.by : 'The client'
+      const said = quoted(post.client_review?.note ?? null)
+      return {
+        subject: `Not approved by the client: ${title}`,
+        lines: [
+          `${who} did not approve ${title}${said ? `: ${said}` : '.'}`,
+          'It has been taken off the schedule and is back in Draft. Change it, then send it for quality check again — Team only, or Share with client.',
+        ],
+        cta: 'Make the change',
+      }
+    }
+    case 'hold_for_client':
+      return {
+        subject: `Waiting for the client: ${title}`,
+        lines: [
+          `The client has not approved ${title}, and it was set to wait for them, so it has been taken off the schedule.`,
+          'When they approve on their portal it is booked for the next free 15-minute slot. Chase them, or switch it to "Post anyway".',
+        ],
+        cta: 'See the post',
       }
     case 'change_time':
       if (target !== 'client') return null

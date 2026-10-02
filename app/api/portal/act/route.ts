@@ -20,6 +20,7 @@ import { belongsToPortal, type PortalScope } from '../../../lib/portal-owner-cor
 import { postVersionId, readPostState, type PostState } from '../../../lib/post-stage-core'
 import { refusalStatus, type PostActRefused } from '../../../lib/post-act-contract'
 import { clientActOnPost } from '../../../lib/post-stage'
+import { ANSWER_NOTE_NEEDED, onePortal } from '../../../lib/one-portal-core'
 
 
 /**
@@ -113,7 +114,55 @@ async function postOnPortal(post: PostState, scope: PortalScope): Promise<boolea
   return belongsToPortal(item as { for_contact_id?: string | null }, scope)
 }
 
+/**
+ * THE ONE PORTAL'S ANSWER (docs/ONE_PORTAL_SPEC.md R3-R8): the client's word on a BOOKED post — Approve, or Not
+ * approved with a note. Its own branch, so today's "approve before booking" path is untouched; refused for a
+ * client not on the one portal. A "wait" post that came off unanswered is approved through `client_ok_book`.
+ */
+async function answerBookedPost(body: PostBody, client: Client, scope: PortalScope): Promise<NextResponse> {
+  if (!onePortal(client)) return NextResponse.json({ error: NOT_WITH_YOU }, { status: 404 })
+  const postId = String(body.post_id ?? '')
+  const verdict = body.action === 'client_not_approved' ? 'not_approved' : 'approved'
+  const version = typeof body.version === 'number' ? body.version : Number(body.version)
+  if (!Number.isInteger(version) || version < 1) {
+    return NextResponse.json({ error: 'This page did not say which version you saw — reload it and try again.' }, { status: 400 })
+  }
+  const note = String(body.note ?? '').trim().slice(0, 2000)
+  const name = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
+  // a name on every answer (one portal L2): the link has no login, so the answer says who gave it
+  if (!name) return NextResponse.json({ error: 'Add your name so the team knows who answered.' }, { status: 400 })
+  if (verdict === 'not_approved' && !note) return NextResponse.json({ error: ANSWER_NOTE_NEEDED }, { status: 400 })
+
+  const row = await table('social_posts').get(postId, { fresh: true }).catch(() => null)
+  const post = readPostState(row as Record<string, unknown> | null)
+  if (!post || post.client_id !== client.id || !(await postOnPortal(post, scope))) {
+    return NextResponse.json({ error: NOT_WITH_YOU }, { status: 404 })
+  }
+  const action = verdict === 'not_approved' ? 'client_not_approved' : post.stage === 'ready' ? 'client_ok_book' : 'client_ok'
+  const result = await clientActOnPost(client.id, post.id, { action, version, note: note || null, answered_by: name })
+  if (!result.ok) {
+    // the engine's refusals for this path are written for the client already (one-portal-core ANSWER_*)
+    const plain = ['live', 'note', 'version', 'time', 'wrong_stage', 'invalid', 'jobs'].includes(result.code)
+    return NextResponse.json({ error: plain ? result.reason : 'That did not go through — reload the page and try again.', code: result.code }, { status: refusalStatus(result.code) })
+  }
+  // their words also sit in the post's Client thread, for this version
+  if (note) {
+    const actor = await portalActor(client.id, client.name)
+    const at = new Date().toISOString()
+    await table<PostComment>('post_comments').insert({
+      id: `${post.id}_r${result.post.rev}_client`,
+      post_id: post.id, client_id: client.id, version,
+      file_url: null, slide_index: null, visibility: 'client',
+      author_id: actor.id, author_name: name, author_role: 'client',
+      body: note, assigned_to: null, resolved_at: null, resolved_by: null,
+      created_at: at, updated_at: at,
+    } as PostComment).catch(e => console.error('one portal answer note:', e))
+  }
+  return NextResponse.json({ ok: true, stage: result.stage, scheduled_for: result.post.scheduled_for })
+}
+
 async function actOnClientPost(body: PostBody, client: Client, scope: PortalScope): Promise<NextResponse> {
+  if (body.action === 'client_ok' || body.action === 'client_not_approved') return answerBookedPost(body, client, scope)
   const postId = String(body.post_id ?? '')
   const action = String(body.action ?? '')
   if (action !== 'client_approve' && action !== 'client_ask_change' && action !== 'post_note') {

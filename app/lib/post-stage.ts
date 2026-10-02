@@ -20,6 +20,7 @@ import type { ChannelExtras } from './schedule-compose-core'
 import type { Slide } from './version-files-core'
 import { CANCELLED_REASON, TAKEN_OFF_REASON, readPostAutomation, type PostAutomation } from './comment-automation-core'
 import { META_PROVIDER } from './meta-route-core'
+import { insideLastSlot, nextFreeSlot, onePortal } from './one-portal-core'
 
 /**
  * THE ONE WRITER OF A POST'S STAGE (the posting rebuild, 29 Sep 2026 — SPEC §3.1, §5).
@@ -170,6 +171,8 @@ export type PostNotice = {
   post: PostState
   actor: { id: string | null; name: string | null; hat: PostHat }
   event: PostEventRow
+  /** the posting time before the move, when the move changed it (a bump to the next 15-minute slot) */
+  previous_time?: string | null
 }
 
 export type PostEngineDeps = {
@@ -411,7 +414,36 @@ function contextOf(loaded: Loaded, now: Date, via: 'email' | 'link'): Transition
     now,
     accounts: accountRefs(loaded.accounts),
     clientHasContact: via === 'link' ? !!loaded.client?.share_token : loaded.recipients.length > 0,
-    client: loaded.client ? { client_approval_required: loaded.client.client_approval_required === true } : null,
+    client: loaded.client ? {
+      client_approval_required: loaded.client.client_approval_required === true,
+      // the one portal (docs/ONE_PORTAL_SPEC.md): only an explicit true; everyone else reads exactly as before
+      ...(onePortal(loaded.client) ? { portal_one: true } : {}),
+    } : null,
+  }
+}
+
+/** Moves that may bump a post to the next free 15-minute slot (one portal R8). */
+const MAY_BUMP: readonly PostAction[] = ['client_ok', 'client_ok_book', 'auto_book']
+
+/**
+ * THE NEXT FREE 15-MINUTE SLOT for this post (one portal R8): the first quarter hour 15 minutes out that no other
+ * booked post on any of its channels holds. Worked out only when the move could bump, for a client on the one
+ * portal; null when it cannot be read (the move is then refused rather than guessed).
+ */
+async function bumpSlotFor(post: PostState, action: PostAction | string, loaded: Loaded, now: Date): Promise<string | null | undefined> {
+  if (!onePortal(loaded.client) || !MAY_BUMP.includes(action as PostAction)) return undefined
+  if (action !== 'client_ok_book' && !insideLastSlot(post.scheduled_for, now.getTime())) return undefined
+  try {
+    const mine = new Set(post.channels)
+    const others = await posts().list({ where: r => r.client_id === post.client_id && r.id !== post.id && r.stage === 'booked' })
+    const taken = others
+      .filter(r => (Array.isArray(r.channels) ? r.channels : []).some(c => mine.has(String(c))))
+      .map(r => Date.parse(String(r.scheduled_for ?? '')))
+      .filter(t => Number.isFinite(t))
+    return new Date(nextFreeSlot(now.getTime(), taken)).toISOString()
+  } catch (e) {
+    console.error('could not work out the next free slot', post.id, e instanceof Error ? e.message : e)
+    return null
   }
 }
 
@@ -420,7 +452,7 @@ function contextOf(loaded: Loaded, now: Date, via: 'email' | 'link'): Transition
 const CLIENT_SENDS: readonly PostAction[] = ['pass_send_client', 'send_to_client', 'resend_new_time', 'remind_client']
 
 /** Moves that take a booked post off the provider — refused once any network went out (audit V11, S5). */
-const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel']
+const TAKES_OFF: readonly PostAction[] = ['unbook', 'edit_booked', 'cancel', 'client_not_approved', 'hold_for_client']
 
 /**
  * How long a claimed client send holds the post (review fix, 29 Sep 2026). The email goes while the
@@ -557,8 +589,11 @@ async function attemptMove(
 
   const loaded = await loadAround(post)
   const ctx: TransitionContext = contextOf(loaded, now, 'email')
-  // a booked post live somewhere, by its jobs, even before the recorder has written it (audit V11, S5)
-  if (TAKES_OFF.includes(action)) ctx.liveOnJobs = await liveOnBooking(post)
+  // a booked post live somewhere, by its jobs, even before the recorder has written it (audit V11, S5) — and
+  // before the client's answer on a booked post, which must never land on one already gone (one portal L4)
+  if (TAKES_OFF.includes(action) || action === 'client_ok') ctx.liveOnJobs = await liveOnBooking(post)
+  const bump = await bumpSlotFor(post, action, loaded, now)
+  if (bump !== undefined) ctx.bumpTo = bump
 
   // 2. the dry run
   const dry = planPostTransition(post, action, actor, input, ctx)
@@ -618,7 +653,7 @@ async function attemptMove(
     return box.refused ? fromRefusal(box.refused, after) : refusal('stale', STALE, after)
   }
 
-  return afterLanded(box.plan, claimed.row, actor, input, loaded, at, null)
+  return afterLanded(box.plan, claimed.row, actor, input, loaded, at, null, post.scheduled_for)
 }
 
 /** Every freeze a move plans, in order, before its claim. */
@@ -769,6 +804,7 @@ async function finishClientSend(prep: PreparedSend, delivered: readonly string[]
 /** The event, the after steps and the notices of a move that has landed; the answer the page draws from. */
 async function afterLanded(
   done: Plan, row: SocialPost, actor: EngineActor, input: MoveInput, loaded: Loaded, at: string, link: string | null,
+  timeBefore: string | null = null,
 ): Promise<PostActResult> {
   const landed = readPostState(row as unknown as Record<string, unknown>)!
   await writeEvent(done.event)
@@ -810,7 +846,8 @@ async function afterLanded(
   if (!input.quiet) {
     for (const effect of done.effects) {
       if (effect.when === 'after' && effect.kind === 'notify') {
-        await sendNotice(effect.to, effect.action, effect.person_id ?? null, landed, actor, done.event)
+        await sendNotice(effect.to, effect.action, effect.person_id ?? null, landed, actor, done.event,
+          timeBefore && timeBefore !== landed.scheduled_for ? timeBefore : null)
       }
     }
   }
@@ -1092,9 +1129,13 @@ async function deleteDraftRow(post: PostState): Promise<void> {
 
 async function sendNotice(
   to: NotifyTarget, action: PostAction, personId: string | null, post: PostState, actor: EngineActor, event: PostEventRow,
+  previousTime: string | null = null,
 ): Promise<void> {
   try {
-    await deps.notify({ to, action, person_id: personId, post, actor: { id: actor.id, name: actor.name ?? null, hat: event.hat }, event })
+    await deps.notify({
+      to, action, person_id: personId, post, actor: { id: actor.id, name: actor.name ?? null, hat: event.hat }, event,
+      ...(previousTime ? { previous_time: previousTime } : {}),
+    })
   } catch (e) {
     console.error('post notice failed', post.id, action, e instanceof Error ? e.message : e)
   }
@@ -1159,13 +1200,19 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
 export async function clientActOnPost(
   clientId: string,
   postId: string,
-  request: { action: 'client_approve' | 'client_ask_change'; version: number; note?: string | null },
+  request: {
+    action: 'client_approve' | 'client_ask_change' | 'client_ok' | 'client_not_approved' | 'client_ok_book'
+    version: number; note?: string | null
+    /** the one portal: the name the client typed, kept with the answer (L2) */
+    answered_by?: string | null
+  },
 ): Promise<PostActResult> {
   const { row, post } = await loadPostState(postId)
   if (!row || !post || post.client_id !== clientId) return refusal('not_found', NOT_FOUND, null)
   if (!CLIENT_ACTIONS.includes(request.action)) return refusal('not_allowed', 'That is not something you can do here.', null)
   return performPostTransition(postId, request.action, { id: null, hats: ['client'], name: 'the client' }, {
     version: request.version, note: request.note ?? null,
+    ...(request.answered_by ? { answered_by: request.answered_by } : {}),
   })
 }
 

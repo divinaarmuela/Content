@@ -60,11 +60,26 @@ function post(stage: PostStage, over: Partial<PostState> = {}): PostState {
 
 const actorFor = (hat: PostHat): PostActor => ({ id: hat === 'creator' ? 'u-maker' : `u-${hat}`, hats: [hat] })
 
+/** The one portal's context (docs/ONE_PORTAL_SPEC.md): the switch on, and a free slot to bump to. */
+const PORTAL_CTX: TransitionContext = { ...CTX, client: { portal_one: true }, bumpTo: at(1) }
+const ONE_PORTAL_ROWS: readonly PostAction[] = ['client_ok', 'client_not_approved', 'client_ok_book', 'hold_for_client', 'set_if_no_answer']
+
 /** The post and input that make `action` legal from `stage`. */
-function goodCase(action: PostAction, stage: PostStage): { p: PostState; input: TransitionInput } {
+function goodCase(action: PostAction, stage: PostStage): { p: PostState; input: TransitionInput; ctx: TransitionContext } {
   const input: TransitionInput = { expect_rev: 5, version: 1, confirm: true }
   let p = post(stage)
+  const ctx = ONE_PORTAL_ROWS.includes(action) ? PORTAL_CTX : CTX
   switch (action) {
+    case 'client_ok':
+      input.agreed_via = 'call'; break
+    case 'client_not_approved':
+      input.agreed_via = 'call'; input.note = 'The logo is the old one'; break
+    case 'client_ok_book':
+      input.agreed_via = 'call'; p = post('ready', { if_no_answer: 'wait' }); break
+    case 'hold_for_client':
+      p = post('booked', { if_no_answer: 'wait', scheduled_for: at(0.1) }); break
+    case 'set_if_no_answer':
+      input.if_no_answer = 'wait'; break
     case 'pass_send_client': case 'send_to_client':
       input.delivered_to = ['jordan@example.invalid']; break
     case 'resend_new_time':
@@ -101,7 +116,7 @@ function goodCase(action: PostAction, stage: PostStage): { p: PostState; input: 
     case 'record_failed':
       input.outcomes = { instagram: pub('failed'), linkedin: pub('failed') }; input.platforms = ['instagram', 'linkedin']; break
   }
-  return { p, input }
+  return { p, input, ctx }
 }
 
 const TEAM_ROLES = ['scheduler', 'general', 'account_manager', 'super_admin'] as const
@@ -127,11 +142,11 @@ describe('the transition table', () => {
     for (const stage of row.from) {
       for (const hat of row.who) {
         it(`${row.spec} ${row.action}: ${stage} → ${row.to} as ${hat}`, () => {
-          const { p, input } = goodCase(row.action, stage)
+          const { p, input, ctx } = goodCase(row.action, stage)
           const actor = actorFor(hat)
-          const checked = checkPostTransition(p, row.action, actor, input, CTX)
+          const checked = checkPostTransition(p, row.action, actor, input, ctx)
           expect(checked).toMatchObject({ ok: true })
-          const plan = planPostTransition(p, row.action, actor, input, CTX)
+          const plan = planPostTransition(p, row.action, actor, input, ctx)
           if (!plan.ok) throw new Error(`${row.action} refused: ${plan.reason}`)
           const want = row.to === 'same' ? p.stage : row.to
           expect(plan.to).toBe(want)
@@ -148,8 +163,8 @@ describe('the transition table', () => {
 
       for (const hat of POST_HATS.filter(h => !row.who.includes(h))) {
         it(`${row.action} from ${stage} is refused for ${hat}`, () => {
-          const { p, input } = goodCase(row.action, stage)
-          expect(checkPostTransition(p, row.action, actorFor(hat), input, CTX)).toMatchObject({ ok: false, code: 'not_allowed' })
+          const { p, input, ctx } = goodCase(row.action, stage)
+          expect(checkPostTransition(p, row.action, actorFor(hat), input, ctx)).toMatchObject({ ok: false, code: 'not_allowed' })
         })
       }
     }

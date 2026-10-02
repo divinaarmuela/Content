@@ -56,6 +56,10 @@ import type { PostKind } from './publish-core'
 import type { Slide } from './version-files-core'
 import { readPostAutomation, type PostAutomation } from './comment-automation-core'
 import { readPostBatch, type PostBatch } from './post-batch-core'
+import {
+  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, insideLastSlot, onePortal, readClientReview, readReviewAsked,
+  type ClientReview, type ClientVerdict, type IfNoAnswer, type ReviewAsked,
+} from './one-portal-core'
 
 /* ── stages ─────────────────────────────────────────────────────────────── */
 
@@ -259,8 +263,10 @@ export function isApprovalSteps(v: unknown): v is ApprovalSteps {
 
 export function approvalStepsOf(
   post: Pick<PostState, 'approval_steps'>,
-  client?: { client_approval_required?: boolean | null } | null,
+  client?: { client_approval_required?: boolean | null; portal_one?: boolean | null } | null,
 ): ApprovalSteps {
+  // ONE PORTAL (docs/ONE_PORTAL_SPEC.md R2): booked first, the client answers after — never a client step before booking
+  if (onePortal(client)) return 'team'
   if (isApprovalSteps(post.approval_steps)) return post.approval_steps
   return client?.client_approval_required === true ? 'team_then_client' : 'team'
 }
@@ -365,6 +371,11 @@ export type PostState = {
   source_deleted: boolean
   /** one of a card's posts, made by the hand-over (post-batch-core) — absent on every other post */
   batch?: PostBatch | null
+  // ── ONE PORTAL (docs/ONE_PORTAL_SPEC.md) — present only when written, so every other post reads as before ──
+  if_no_answer?: IfNoAnswer | null
+  client_review?: ClientReview | null
+  review_asked?: ReviewAsked | null
+  client_reviews?: ClientReview[]
 }
 
 /* ── reading a raw row ──────────────────────────────────────────────────── */
@@ -476,6 +487,12 @@ export function readPostState(row: Record<string, unknown> | null | undefined): 
     ...(readPostAutomation(row.automation) ? { automation: readPostAutomation(row.automation) } : {}),
     // …and its batch, only when it is one of a card's posts
     ...(readPostBatch(row.batch) ? { batch: readPostBatch(row.batch) } : {}),
+    // …and the one portal's records, only when there are some
+    ...(row.if_no_answer === 'wait' || row.if_no_answer === 'post' ? { if_no_answer: row.if_no_answer } : {}),
+    ...(readClientReview(row.client_review) ? { client_review: readClientReview(row.client_review) } : {}),
+    ...(readReviewAsked(row.review_asked) ? { review_asked: readReviewAsked(row.review_asked) } : {}),
+    ...(list(row.client_reviews).map(readClientReview).some(Boolean)
+      ? { client_reviews: list(row.client_reviews).map(readClientReview).filter((r): r is ClientReview => !!r) } : {}),
   }
 }
 
@@ -717,6 +734,8 @@ export const POST_ACTIONS = [
   'edit', 'edit_booked', 'cancel', 'rebook', 'missing_networks', 'duplicate', 'delete_draft', 'set_steps',
   'booking_done', 'booking_failed', 'link_jobs', 'record_posted', 'record_partial', 'record_failed',
   'auto_book',
+  // ONE PORTAL (docs/ONE_PORTAL_SPEC.md) — refused unless the client is on it
+  'client_ok', 'client_not_approved', 'client_ok_book', 'hold_for_client', 'set_if_no_answer',
 ] as const
 export type PostAction = (typeof POST_ACTIONS)[number]
 export function isPostAction(v: unknown): v is PostAction {
@@ -724,7 +743,7 @@ export function isPostAction(v: unknown): v is PostAction {
 }
 
 /** What a person has to give with the press, so the window asks for it next to the button. */
-export type InputNeed = 'note' | 'time' | 'agreed_via' | 'assign_to' | 'confirm' | 'recipients' | 'steps'
+export type InputNeed = 'note' | 'time' | 'agreed_via' | 'assign_to' | 'confirm' | 'recipients' | 'steps' | 'if_no_answer'
 
 export type TransitionRow = {
   action: PostAction
@@ -809,6 +828,13 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   { action: 'record_posted', spec: 'T16', from: ['booked', 'posted'], to: 'posted', who: ['system'], label: 'Posted' },
   { action: 'record_partial', spec: 'T17', from: ['booked', 'posted'], to: 'posted', who: ['system'], label: 'Posted in part' },
   { action: 'record_failed', spec: 'T18', from: ['booked'], to: 'ready', who: ['system'], label: 'Did not go out' },
+  // ── ONE PORTAL (docs/ONE_PORTAL_SPEC.md R3-R8): the client answers a BOOKED post; a manager may record it for them ──
+  { action: 'client_ok', spec: 'one portal R3', from: ['booked'], to: 'same', who: ['client', 'am', 'sa'], label: 'Approve', versioned: true },
+  { action: 'client_not_approved', spec: 'one portal R4', from: ['booked'], to: 'draft', who: ['client', 'am', 'sa'], label: 'Not approved', versioned: true, needs: ['note'] },
+  // a "wait" post that came off unanswered, approved late: booked for the next free 15-minute slot (R8)
+  { action: 'client_ok_book', spec: 'one portal R8', from: ['ready'], to: 'booked', who: ['client', 'am', 'sa'], label: 'Approve', versioned: true },
+  { action: 'hold_for_client', spec: 'one portal R7', from: ['booked'], to: 'ready', who: ['system'], label: 'Waiting for the client' },
+  { action: 'set_if_no_answer', spec: 'one portal R5', from: ['draft', 'quality_check', 'ready', 'booked'], to: 'same', who: TEAM_BUILD, label: "If the client hasn't approved", needs: ['if_no_answer'] },
 ]
 
 /**
@@ -849,6 +875,10 @@ export type TransitionInput = {
   assign_to?: string | null
   confirm?: boolean | null
   steps?: ApprovalSteps | null
+  /** one portal: the team's choice for an unanswered post */
+  if_no_answer?: IfNoAnswer | null
+  /** one portal: who answered (the name the client gave, or the manager's) */
+  answered_by?: string | null
   /** client sends: the addresses something actually reached — set only AFTER delivery */
   delivered_to?: readonly string[] | null
   via?: 'email' | 'link' | null
@@ -868,7 +898,13 @@ export type TransitionContext = {
   /** false when the client has nobody to send to */
   clientHasContact?: boolean | null
   /** the client's own default (clients.client_approval_required) */
-  client?: { client_approval_required?: boolean | null } | null
+  client?: { client_approval_required?: boolean | null; portal_one?: boolean | null } | null
+  /**
+   * ONE PORTAL: the next free 15-minute slot on this post's channels (one-portal-core nextFreeSlot), worked out
+   * by the writer — the time an answer inside the last 15 minutes, a late approval, or a pass too close to its
+   * time books instead (R8). Absent = no bump possible.
+   */
+  bumpTo?: string | null
   /**
    * The networks the booking's publish jobs (re-sends included) say already went out, read by the
    * writer from `publish_jobs` BEFORE the move. The recorder writes `outcomes` only once every network
@@ -883,7 +919,7 @@ export type RefusalCode =
   | 'invalid' | 'time' | 'channels' | 'context' | 'contact' | 'delivery'
   | 'note' | 'agreed_via' | 'assignee' | 'confirm' | 'steps'
   | 'missed' | 'unchecked' | 'unapproved' | 'already' | 'live'
-  | 'use_delete' | 'use_cancel' | 'nothing_missing' | 'jobs' | 'outcome'
+  | 'use_delete' | 'use_cancel' | 'nothing_missing' | 'jobs' | 'outcome' | 'portal'
 
 export type Refusal = { ok: false; code: RefusalCode; reason: string; problems?: string[] }
 export type Allowed = { ok: true; row: TransitionRow; hat: PostHat }
@@ -908,6 +944,11 @@ const VERSION_MISSING = 'This page did not say which version you saw — reload 
 const VERSION_CHANGED = 'This is not the version you looked at — it has changed since. Reload and look again.'
 export const MISSED_FOR_CLIENT = 'The time for this post has passed — the team will send you a new time.'
 export const REMIND_MISSED = 'Its time has passed, so the client can no longer answer — set a new time and resend instead.'
+
+/** The one portal's own moves (docs/ONE_PORTAL_SPEC.md) — refused for every client not on it. */
+export const ONE_PORTAL_ACTIONS: readonly PostAction[] = ['client_ok', 'client_not_approved', 'client_ok_book', 'hold_for_client', 'set_if_no_answer']
+export const NOT_ON_ONE_PORTAL = 'This client is not on the one portal yet.'
+export const BOOKED_FIRST = 'This client answers on their portal once the post is booked — pass it and it is booked.'
 
 /** `lenient`: skip the guards that need data a board may not have loaded (channels). Only `postActions` uses it. */
 type CheckOpts = { lenient?: boolean }
@@ -971,7 +1012,51 @@ export function checkPostTransition(
   const approvedNow = post.approval != null && post.approval.version === post.sent_version
   const liveNow = () => [...new Set([...liveNetworks(post), ...(ctx.liveOnJobs ?? [])])]
 
+  // ONE PORTAL (docs/ONE_PORTAL_SPEC.md): its moves exist only for a client on it; and for such a client the
+  // client never looks BEFORE booking — the pass books, and they answer on their portal after (R2)
+  const onPortal = onePortal(ctx.client)
+  if (ONE_PORTAL_ACTIONS.includes(action) && !onPortal) return refuse('portal', NOT_ON_ONE_PORTAL)
+  if (onPortal && (action === 'pass_send_client' || action === 'send_to_client' || action === 'set_steps')) {
+    return refuse('portal', BOOKED_FIRST)
+  }
+  // the 15-minute bump (R8): an answer, a late approval or a pass inside the last 15 minutes books the next free slot
+  const bumping = onPortal && (action === 'client_ok_book'
+    || ((action === 'client_ok' || action === 'auto_book') && insideLastSlot(post.scheduled_for, ms(now))))
+
   switch (action) {
+    case 'client_ok':
+    case 'client_not_approved':
+    case 'client_ok_book': {
+      const verdict: ClientVerdict = action === 'client_not_approved' ? 'not_approved' : 'approved'
+      const problem = clientAnswerProblem(post, { version: input.version ?? -1, verdict, note: input.note }, liveNow())
+      if (problem) return refuse(problem === ANSWER_LIVE ? 'live' : problem === ANSWER_NOTE_NEEDED ? 'note' : 'wrong_stage', problem)
+      // a manager recording it for the client says how the client answered, as Approve for the client does
+      if (hat !== 'client') {
+        if (!isAgreedVia(input.agreed_via)) return refuse('agreed_via', 'Say how the client answered — on a call, by email, on WhatsApp, in person, or another way.')
+        if (input.agreed_via === 'other' && !note) return refuse('note', 'Say how the client answered.')
+      }
+      if (bumping) {
+        if (!ctx.bumpTo) return refuse('time', 'There is no free time in the next while to move it to — the team has been told.')
+        if (action === 'client_ok_book') {
+          if (!approvedNow) return refuse('unapproved', 'This version has not passed the quality check.')
+          const c = channelsProblem()
+          if (c) return c
+        }
+      }
+      break
+    }
+
+    case 'hold_for_client': {
+      if (!holdDue(post, ms(now))) return refuse('time', 'It is not time to take it off yet, or the client has approved it.')
+      const live = liveNow()
+      if (live.length > 0) return refuse('live', `It has already gone out on ${joinNames(live.map(networkName))}.`)
+      break
+    }
+
+    case 'set_if_no_answer':
+      if (input.if_no_answer !== 'post' && input.if_no_answer !== 'wait') return refuse('invalid', 'Choose "Post anyway" or "Wait for the client".')
+      break
+
     case 'save':
     case 'take_back':
     case 'rebook':
@@ -1049,7 +1134,8 @@ export function checkPostTransition(
     case 'book':
     case 'auto_book': {
       if (!approvedNow) return refuse('unapproved', 'This version is not approved yet.')
-      const b = bookingProblem(post.scheduled_for, true)
+      if (action === 'auto_book' && bumping && !ctx.bumpTo) return refuse('time', 'There is no free time in the next while to book it — pick a time.')
+      const b = bookingProblem(action === 'auto_book' && bumping ? ctx.bumpTo! : post.scheduled_for, true)
       if (b) return b
       break
     }
@@ -1167,7 +1253,8 @@ export type NotifyTarget = 'quality_checkers' | 'account_managers' | 'schedulers
 export type StagePatch = Partial<Pick<PostState,
   'stage' | 'rev' | 'stage_at' | 'draft_version' | 'sent_version' | 'scheduled_for' | 'approval_steps'
   | 'approval' | 'qc_pass' | 'changes_asked' | 'client_send' | 'last_client_send' | 'booking'
-  | 'outcomes' | 'problem' | 'cancelled' | 'assigned_to'>>
+  | 'outcomes' | 'problem' | 'cancelled' | 'assigned_to'
+  | 'if_no_answer' | 'client_review' | 'client_reviews' | 'review_asked'>>
 
 export type PostEventRow = {
   id: string
@@ -1267,8 +1354,76 @@ export function planPostTransition(
     if (post.client_send) { patch.client_send = null; patch.last_client_send = post.client_send }
   }
   const jobs = post.booking?.job_ids ?? []
+  // ONE PORTAL: the client's word, appended to the history (two people may answer — the latest wins, L1)
+  const bumpPlanned = onePortal(ctx.client) && !!ctx.bumpTo && (act === 'client_ok_book'
+    || ((act === 'client_ok' || act === 'auto_book') && insideLastSlot(post.scheduled_for, ms(ctx.now))))
+  const answer = (verdict: ClientVerdict): ClientReview => {
+    const r: ClientReview = {
+      version: post.sent_version!, verdict, note,
+      by: String(input.answered_by ?? '').trim() || (hat === 'client' ? 'the client' : String(actor.name ?? actor.id ?? '')), at,
+    }
+    patch.client_review = r
+    patch.client_reviews = [...(post.client_reviews ?? []), r]
+    return r
+  }
+  /** move the post to the bump slot: a new time is not new content (as Change time) */
+  const bumpTime = () => {
+    const when = ctx.bumpTo!
+    patch.scheduled_for = when
+    const n = freeze('retime', when)
+    if (post.approval) patch.approval = { ...post.approval, version: n }
+    if (post.qc_pass && post.qc_pass.version === post.sent_version) patch.qc_pass = { ...post.qc_pass, version: n }
+    return when
+  }
+  const tellMakerAndHolder = () => {
+    const holder = post.assigned_to ?? post.created_by
+    if (post.created_by) notify('person', post.created_by)
+    if (holder && holder !== post.created_by) notify('person', holder)
+  }
 
   switch (act) {
+    case 'client_ok':
+      answer('approved')
+      if (bumpPlanned) {
+        const when = bumpTime()
+        effects.unshift({ when: 'before', kind: 'reschedule_jobs', job_ids: jobs, for_time: when })
+        patch.booking = { ...(post.booking ?? { job_ids: [], pending: false, at }), for_time: when }
+        notify('schedulers')
+      }
+      notify('account_managers')
+      break
+    case 'client_not_approved': {
+      // off the schedule at once (R4): the jobs are pulled BEFORE the claim; it needs the quality check again
+      effects.push({ when: 'before', kind: 'cancel_jobs', job_ids: jobs })
+      answer('not_approved')
+      const holder = post.assigned_to ?? post.created_by
+      patch.booking = null
+      patch.approval = null
+      patch.changes_asked = { version: post.sent_version, by: actor.id, who: 'client', to: holder, note: note ?? '', at }
+      patch.assigned_to = holder
+      tellMakerAndHolder()
+      notify('account_managers')
+      break
+    }
+    case 'client_ok_book': {
+      answer('approved')
+      const when = bumpTime()
+      patch.booking = { job_ids: [], pending: true, at, for_time: when }
+      patch.problem = null
+      effects.push({ when: 'after', kind: 'queue_publish', for_time: when, now: false })
+      notify('schedulers')
+      notify('account_managers')
+      break
+    }
+    case 'hold_for_client':
+      // a "wait" post the client has not approved, 15 minutes out (R7): off, and it keeps waiting on their link
+      effects.push({ when: 'before', kind: 'cancel_jobs', job_ids: jobs })
+      patch.booking = null
+      tellMakerAndHolder()
+      break
+    case 'set_if_no_answer':
+      patch.if_no_answer = input.if_no_answer as IfNoAnswer
+      break
     case 'save':
       break
     case 'send_to_qc':
@@ -1346,7 +1501,8 @@ export function planPostTransition(
     case 'book':
     case 'auto_book':
     case 'post_now': {
-      const forTime = act === 'post_now' ? at : post.scheduled_for!
+      // a pass inside the last 15 minutes books the next free slot instead of missing (R8, the one portal only)
+      const forTime = act === 'post_now' ? at : act === 'auto_book' && bumpPlanned ? bumpTime() : post.scheduled_for!
       if (act === 'post_now') patch.scheduled_for = at
       patch.booking = { job_ids: [], pending: true, at, for_time: forTime }
       patch.problem = null

@@ -874,3 +874,84 @@ describe('auto-booking', () => {
     expect(deps.queuePublish).toHaveBeenCalledTimes(1)
   })
 })
+
+/* ── the one portal: booked first, the client answers after (docs/ONE_PORTAL_SPEC.md) ── */
+
+describe('the one portal', () => {
+  const onPortal = () => {
+    fake.restore()
+    fake = seed({
+      clients: [{ id: CLIENT, name: 'Acme', timezone: 'Australia/Melbourne', share_token: 'tok-1', email: 'owner@acme.invalid', client_approval_required: true, portal_one: true }] as unknown as Row[],
+    })
+  }
+  const retime = async (id: string, when: string) => {
+    const { table } = await import('@/lib/db')
+    await table('social_posts').claim(id, (cur: any) => cur ? { ...cur, scheduled_for: when, booking: cur.booking ? { ...cur.booking, for_time: when } : cur.booking } : null)
+  }
+
+  it('a client not on it cannot use its answers — today\'s order is untouched', async () => {
+    const id = await newDraft()
+    const p = await toBooked(id)
+    const r = await engine.clientActOnPost(CLIENT, id, { action: 'client_ok', version: p.sent_version!, answered_by: 'Jordan' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('portal')
+    expect(rowOf(id)?.client_review ?? null).toBeNull()
+  })
+
+  it('a sign-off client on it: the pass is all it needs, and the client approves the booked post', async () => {
+    onPortal()
+    const id = await newDraft()
+    const p = await toBooked(id)
+    expect(p.stage).toBe('booked')
+    const r = await engine.clientActOnPost(CLIENT, id, { action: 'client_ok', version: p.sent_version!, answered_by: 'Jordan' })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    expect(rowOf(id)).toMatchObject({ stage: 'booked', client_review: { verdict: 'approved', by: 'Jordan', version: p.sent_version } })
+    expect(deps.cancelJob).not.toHaveBeenCalled()
+  })
+
+  it('Not approved pulls the booking, lands in Draft with the note, and tells the maker', async () => {
+    onPortal()
+    const id = await newDraft()
+    const p = await toBooked(id)
+    const r = await engine.clientActOnPost(CLIENT, id, { action: 'client_not_approved', version: p.sent_version!, note: 'Old logo', answered_by: 'Jordan' })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    expect(deps.cancelJob).toHaveBeenCalledTimes(1)
+    expect(rowOf(id)).toMatchObject({ stage: 'draft', client_review: { verdict: 'not_approved', note: 'Old logo' } })
+    expect(rowOf(id)?.booking ?? null).toBeNull()
+    expect(rowOf(id)?.approval ?? null).toBeNull()
+    const told = deps.notify.mock.calls.map(c => (c as unknown as [{ action: string; to: string; person_id: string | null }])[0])
+    expect(told).toContainEqual(expect.objectContaining({ action: 'client_not_approved', to: 'person', person_id: SCHED.id }))
+  })
+
+  it('an approval inside the last 15 minutes moves the post to the next free slot first', async () => {
+    onPortal()
+    const id = await newDraft()
+    const p = await toBooked(id)
+    const soon = new Date(Date.now() + 5 * 60_000).toISOString()
+    await retime(id, soon)
+    const r = await engine.clientActOnPost(CLIENT, id, { action: 'client_ok', version: p.sent_version!, answered_by: 'Jordan' })
+    expect(r.ok, r.ok ? '' : r.reason).toBe(true)
+    const moved = Date.parse(String(rowOf(id)?.scheduled_for))
+    expect(moved % (15 * 60_000)).toBe(0)
+    expect(moved - Date.now()).toBeGreaterThanOrEqual(15 * 60_000)
+    expect(rowOf(id)?.stage).toBe('booked')
+  })
+
+  it('a "wait" post the client has not approved comes off 15 minutes before; approved late it is booked again', async () => {
+    onPortal()
+    const id = await newDraft()
+    const p = await toBooked(id)
+    const set = await performPostTransition(id, 'set_if_no_answer', await as(SCHED, id), { if_no_answer: 'wait' })
+    expect(set.ok, set.ok ? '' : set.reason).toBe(true)
+    await retime(id, new Date(Date.now() + 10 * 60_000).toISOString())
+    const { sweepOnePortal } = await import('../app/lib/one-portal-sweep')
+    expect((await sweepOnePortal()).held).toBe(1)
+    expect(rowOf(id)?.stage).toBe('ready')
+    expect(rowOf(id)?.booking ?? null).toBeNull()
+    expect(deps.cancelJob).toHaveBeenCalledTimes(1)
+    const late = await engine.clientActOnPost(CLIENT, id, { action: 'client_ok_book', version: (await stateOf(id)).sent_version!, answered_by: 'Jordan' })
+    expect(late.ok, late.ok ? '' : late.reason).toBe(true)
+    expect(rowOf(id)?.stage).toBe('booked')
+    expect(Date.parse(String(rowOf(id)?.scheduled_for)) % (15 * 60_000)).toBe(0)
+  })
+})
