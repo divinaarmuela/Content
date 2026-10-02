@@ -29,6 +29,7 @@ import { deliverOnly } from '../../../lib/deliver-only-core'
 import { useEffect, useState } from 'react'
 import { ColourGradePanel } from '../../board/ColourGradePanel'
 import { SplitPanel } from '../../board/SplitPanel'
+import { onePortalPath, workTab } from '../../../lib/one-portal-core'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -304,8 +305,9 @@ export default function EditorCardPage() {
                   <ManagerActions design={filesOnly} item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true }} kindSlug={(kind as { slug?: string } | null)?.slug ?? null}
                     // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
                     // its clips and comments; an uploaded post keeps the board link
+                    // …on the one portal, this card's own page in its tab (the owner, 2 Oct 2026: "we can copy it and send it for that page in that card")
                     portalLink={client?.share_token
-                      ? `${window.location.origin}${portalHasWork(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
+                      ? `${window.location.origin}${(client as { portal_one?: unknown }).portal_one === true ? onePortalPath(client.share_token, workTab((kind as { slug?: string } | null)?.slug ?? null), id) : portalHasWork(item as never) ? editingPortalPath(client.share_token, id) : `/portal/${client.share_token}?card=${encodeURIComponent(id)}`}`
                       : null} />
                 )}
                 {maker && me && <HolderTransfer design={filesOnly} item={item} viewer={{ id: me.id, role: me.role }} />}
