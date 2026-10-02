@@ -60,7 +60,8 @@ export function portalWaitingOnFiles(card: { status?: string | null; delivered_a
   if (card.adhoc_post === true || !portalOpenFor(card)) return false
   const handIns = Array.isArray(card.drive_handins) ? card.drive_handins : []
   const files = Array.isArray(card.final_files) ? card.final_files : []
-  return handIns.length > 0 && files.length === 0
+  // only a copy still running is "on its way" — a failed one never arrives, and must not say it will
+  return handIns.some(h => (h as { status?: unknown } | null)?.status === 'copying') && files.length === 0
 }
 
 /** the clips on the finished edit: the videos, in name order, nothing else */

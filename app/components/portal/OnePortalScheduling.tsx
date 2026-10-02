@@ -81,10 +81,7 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
         <section className="mx-auto flex w-full max-w-[640px] flex-col gap-4" data-network={profile.network}>
           {/* the profile header, as the network draws it */}
           <div className="flex items-center gap-4">
-            {profile.avatar_url
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" className="h-16 w-16 rounded-full object-cover" />
-              : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-[20px] font-semibold">{(profile.name ?? profile.handle ?? '?').slice(0, 1).toUpperCase()}</div>}
+            <Avatar url={profile.avatar_url} letter={(profile.name ?? profile.handle ?? '?').replace(/^@/, '').slice(0, 1).toUpperCase()} />
             <div className="min-w-0">
               <p className="truncate text-[16px] font-semibold">{profile.handle ? `@${profile.handle.replace(/^@/, '')}` : profile.name}</p>
               <p className="text-[13px] text-muted-foreground">{profile.booked.length} booked · {profile.posted.length} posted · {NETWORK_WORD[profile.network]}</p>
@@ -125,6 +122,16 @@ export default function OnePortalScheduling({ token, profiles, openPostId }: {
       {open && 'posted' in open && <PostedSheet tile={open.posted} network={net} onClose={() => setOpen(null)} />}
     </div>
   )
+}
+
+/** The profile picture, or the first letter when there is none or it will not load (TikTok's links expire). */
+function Avatar({ url, letter }: { url: string | null; letter: string }) {
+  const [broken, setBroken] = useState(false)
+  useEffect(() => { setBroken(false) }, [url])
+  return url && !broken
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="h-16 w-16 rounded-full object-cover" />
+    : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-[20px] font-semibold" aria-hidden>{letter}</div>
 }
 
 function Grid({ profile, tall, onOpen }: { profile: NetworkProfile; tall: boolean; onOpen: (o: { booked: ScheduledTile } | { posted: PostedTile }) => void }) {

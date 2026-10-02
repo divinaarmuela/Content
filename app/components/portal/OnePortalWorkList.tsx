@@ -28,16 +28,22 @@ export default function OnePortalWorkList({ token, tab, cards, empty }: {
           <Link key={card.id} href={onePortalPath(token, tab, card.id)}
             className="group flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/40"
             data-one-portal-tile={card.id}>
-            <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
-              {cover && (/\.(mp4|webm|mov)(\?|$)/i.test(cover)
-                ? <video src={cover} muted playsInline preload="metadata" className="h-full w-full object-cover" />
-                // eslint-disable-next-line @next/next/no-img-element
-                : <img src={cover} alt="" className="h-full w-full object-cover" />)}
-              {waiting && (
-                <span className="absolute left-3 top-3 rounded-full bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background">Needs your review</span>
-              )}
-            </div>
+            {/* a picture only when there is one — no empty grey box (1 Oct 2026, the walk) */}
+            {cover && (
+              <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+                {/\.(mp4|webm|mov)(\?|$)/i.test(cover)
+                  ? <video src={cover} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  : <img src={cover} alt="" className="h-full w-full object-cover" />}
+              </div>
+            )}
             <div className="flex flex-1 flex-col gap-1 p-4">
+              {waiting && (
+                <span className="mb-1 w-fit rounded-full bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background">Needs your review</span>
+              )}
+              {!waiting && card.column === 'approved' && (
+                <span className="mb-1 w-fit rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Approved</span>
+              )}
               <p className="text-[15px] font-semibold leading-snug">{card.title}</p>
               {card.line && <p className="text-[13px] text-muted-foreground">{card.line}</p>}
               {count && <p className="text-[12px] text-muted-foreground" style={{ fontFamily: 'var(--p-mono-font, monospace)' }}>{count}</p>}

@@ -34,6 +34,31 @@ export const waitsOnClient = (c: PortalCard) => c.actions.approve === true || c.
 export const workShown = (c: PortalCard) =>
   c.kind === 'work' && (c.editing === true || c.column === 'your_review' || c.column === 'approved' || c.column === 'posted')
 
+/** Did the client approve the newest version they were given? (accepted_round, stamped by their approval) */
+export function clientApprovedLatest(item: { accepted_round?: unknown; client_round?: unknown } | null | undefined): boolean {
+  const accepted = Number(item?.accepted_round), given = Number(item?.client_round)
+  return Number.isInteger(accepted) && Number.isInteger(given) && given >= 1 && accepted >= given
+}
+
+/** The first picture (or playable video) of the version the client was given, for the tile. */
+export function clientCover(item: { client_frozen?: unknown } | null | undefined): string | null {
+  const files = (item?.client_frozen as { files?: { url?: unknown; mime?: unknown; name?: unknown }[] } | null)?.files ?? []
+  const pic = files.find(f => String(f.mime ?? '').startsWith('image/') && typeof f.url === 'string')
+  if (pic) return String(pic.url)
+  const vid = files.find(f => /\.(mp4|webm)(\?|$)/i.test(String(f.url ?? f.name ?? '')) && typeof f.url === 'string')
+  return vid ? String(vid.url) : null
+}
+
+function withClientFace(card: PortalCard, item: ContentItem | undefined): PortalCard {
+  const raw = item as unknown as Record<string, unknown> | undefined
+  const approved = clientApprovedLatest(raw as never) && card.status !== 'client_review'
+  return {
+    ...card,
+    ...(approved ? { line: 'Approved — the team is scheduling it.', column: 'approved' as const } : {}),
+    preview_url: card.preview_url ?? clientCover(raw as never),
+  }
+}
+
 export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | null> {
   const token = decodeURIComponent(rawToken).split('--').pop() ?? rawToken
   const owner = await portalOwnerByToken(token)
@@ -53,8 +78,12 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   ])
   const slugOf = new Map(kinds.map(k => [k.id, k.slug]))
   const tabOf = new Map(items.map(i => [i.id, workTab(i.work_kind_id ? slugOf.get(String(i.work_kind_id)) : null)]))
-  const editing = work.filter(c => (tabOf.get(c.id) ?? 'editing') === 'editing')
-  const designing = work.filter(c => tabOf.get(c.id) === 'designing')
+  // the piece as the client knows it (1 Oct 2026, the walk: an approved design handed to the scheduler read
+  // "Being made now" — the hand-over moves the CARD back to draft for posting, the client's answer stands)
+  const itemById = new Map(items.map(i => [i.id, i]))
+  const shown = work.map(c => withClientFace(c, itemById.get(c.id)))
+  const editing = shown.filter(c => (tabOf.get(c.id) ?? 'editing') === 'editing')
+  const designing = shown.filter(c => tabOf.get(c.id) === 'designing')
 
   return {
     token,

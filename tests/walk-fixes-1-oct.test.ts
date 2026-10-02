@@ -140,11 +140,13 @@ describe('the designer walk, second pass (1 Oct 2026)', () => {
 describe('the editor walk (1 Oct 2026)', () => {
   it('a card with the client whose Drive hand-in is still copying is on its way, not a 404', async () => {
     const { portalWaitingOnFiles } = await import('../app/lib/editing-portal-core')
-    const handIn = [{ id: 'h', drive_ids: ['x'] }]
+    const handIn = [{ id: 'h', drive_ids: ['x'], status: 'copying' }]
     expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: handIn, final_files: [] })).toBe(true)
     expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: handIn, final_files: [{ id: 'f' }] })).toBe(false)
     expect(portalWaitingOnFiles({ status: 'draft_uploaded', drive_handins: handIn, final_files: [] })).toBe(false)
     expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: [], final_files: [] })).toBe(false)
+    // a copy that failed never arrives — not "on its way"
+    expect(portalWaitingOnFiles({ status: 'client_review', drive_handins: [{ id: 'h', drive_ids: ['x'], status: 'failed' }], final_files: [] })).toBe(false)
     const page = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'app/portal/[token]/edit/[id]/page.tsx'), 'utf8')
     expect(page).toMatch(/const waiting = await editingPortalWaiting\(raw, id\)\s*if \(!waiting\) notFound\(\)/)
   })
