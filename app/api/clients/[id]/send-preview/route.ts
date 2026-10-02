@@ -49,7 +49,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         unanswered: unansweredBooked(posts).map(p => ({ id: p.id, scheduled_for: p.scheduled_for })),
       })
     } catch (e) {
-      return authzErrorResponse(e)
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
     }
   })
 }
@@ -70,7 +71,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
       return NextResponse.json(result)
     } catch (e) {
-      return authzErrorResponse(e)
+      const { error, status } = authzErrorResponse(e)
+      return NextResponse.json({ error }, { status })
     }
   })
 }
