@@ -187,6 +187,17 @@ const GHOST_TABLES = {
     //                  the posts sharing a key ("WALK TEST · 8 posts"); `title` is "WALK TEST · 1 of 8". Null on
     //                  every other post. Rules: app/lib/post-batch-core.ts.
     ['batch', col('unknown', true, true)],
+    // ── ONE PORTAL (docs/ONE_PORTAL_SPEC.md, 2 Oct 2026) — read only when clients.portal_one is on ──
+    //   if_no_answer   'post' | 'wait' — the team's choice for a booked post the client has not approved
+    //                  (null = 'post'). 'wait' comes off the schedule 15 min before its time.
+    //   client_review  {version, verdict: 'approved'|'not_approved', note, by, at} — the client's word on a
+    //                  BOOKED post. Separate from `approval` (the team's pass, which booking needs).
+    //   review_asked   {version, at, by} — Send the preview / Share with client asked them to look
+    //   client_reviews the history of every answer (two people may answer; the latest wins)
+    ['if_no_answer', col('string', true)],
+    ['client_review', col('unknown', true, true)],
+    ['review_asked', col('unknown', true, true)],
+    ['client_reviews', col('unknown', true, true, true)],
   ],
   // post_versions — A FROZEN POST (SPEC §2.2). Written once, never changed:
   //   id `<post_id>_v<n>`, claimed against a null current so the first writer
@@ -998,6 +1009,10 @@ const GHOST_COLUMNS = {
     ['meta_ig', col('unknown', true, true)],
   ],
   clients: [
+    //   clients.portal_one — ONE PORTAL, ONE LINK (docs/ONE_PORTAL_SPEC.md, 2 Oct 2026): the tabbed portal and
+    //     the booked-first posting order with the client's answer after. Unset/false = today's portal and
+    //     posting order, untouched. On for the test clients during the build; for everyone at launch.
+    ['portal_one', col('boolean', true)],
     ['instagram_locations', col('unknown', false, true, true)],
     //   clients.instagram_via_meta — post THIS client's Instagram through the agency's own Meta app
     //     instead of Zernio (1 Oct 2026, for Meta App Review; testing). Super admin switch on the client's
