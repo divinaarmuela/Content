@@ -39,11 +39,13 @@ describe('which channels get the smaller copy', () => {
     })).toEqual([])
   })
 
-  it('does not bother LinkedIn with a copy of a file the provider can move', () => {
+  // 2 Oct 2026: this was the rule that sent Jordan's 333 MB .mov to LinkedIn, where it timed out twice — LinkedIn
+  // now always gets its own copy, whatever the master weighs
+  it('gives LinkedIn a copy even of a file the provider could move', () => {
     expect(channelsNeedingCopy({
       probes: [{ ...master, bytes: 340 * MB }],
       platforms: ['instagram', 'tiktok', 'linkedin', 'youtube'],
-    })).toEqual(['instagram', 'tiktok'])
+    })).toEqual(['instagram', 'tiktok', 'linkedin'])
   })
 
   // 30 Sep 2026: Justin's 507 MB .mov was booked for LinkedIn as it was — under
@@ -134,5 +136,15 @@ describe('which channel the one copy is made for', () => {
     // and that sentence is what the channel's row shows
     expect(copyWords('TikTok', { status: 'encoding', percent: null, note: cleanCopyWords('TikTok') }))
       .toBe('Making a clean copy for TikTok — usually a few minutes')
+  })
+})
+
+describe('LinkedIn always gets its own copy (2 Oct 2026, Jordan Wilson: a 333 MB .mov timed out twice on LinkedIn)', () => {
+  it('a master under the 350 MB relay line still gets a LinkedIn copy', async () => {
+    const { channelsNeedingCopy } = await import('../app/lib/shrink-core')
+    const probe = [{ url: 'https://x.invalid/Jordan_2.mov', type: 'video' as const, bytes: 349_111_055 }]
+    expect(channelsNeedingCopy({ probes: probe, platforms: ['linkedin', 'tiktok', 'instagram'] as never })).toEqual(expect.arrayContaining(['linkedin', 'tiktok']))
+    // a small master too — LinkedIn re-encodes anyway, and the transfer is what fails
+    expect(channelsNeedingCopy({ probes: [{ ...probe[0], bytes: 20_000_000 }], platforms: ['linkedin'] as never })).toEqual(['linkedin'])
   })
 })

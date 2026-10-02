@@ -59,8 +59,13 @@ describe('which copies a post needs', () => {
   it('asks for nothing when the file already fits every channel', () => {
     expect(copiesToPrepare({
       probes: [{ url: SMALL, type: 'video', bytes: 12 * MB, seconds: 20 }],
-      platforms: ['instagram', 'facebook', 'linkedin'],
+      platforms: ['instagram', 'facebook'],
     })).toEqual([])
+    // …except LinkedIn, which always gets its own copy (2 Oct 2026)
+    expect(copiesToPrepare({
+      probes: [{ url: SMALL, type: 'video', bytes: 12 * MB, seconds: 20 }],
+      platforms: ['instagram', 'facebook', 'linkedin'],
+    }).map(c => c.platform)).toEqual(['linkedin'])
   })
 
   it('asks for nothing for a photo, a carousel, or a size nobody knows', () => {

@@ -58,7 +58,11 @@ const TAKES_THE_MASTER: readonly Platform[] = ['youtube', 'tiktok']
  * owner, 9 Sep 2026: "give it the same way too"). The 2 GB "still
  * processing" lesson above still stands for YouTube.
  */
-const ALWAYS_COPY: readonly Platform[] = ['tiktok']
+// LINKEDIN TOO (2 Oct 2026): Jordan Wilson's 3:30 pm post sent LinkedIn the 333 MB .mov master — just under the
+// 350 MB relay line, so no copy was made — and Zernio's transfer to LinkedIn timed out twice, the retry with it
+// (24 Sep 2026 it timed out on an 81 MB copy the same way). LinkedIn re-encodes everything anyway; it always gets
+// its own small copy, and publishing waits for it (publish.ts awaitCleanCopies) rather than sending the master.
+const ALWAYS_COPY: readonly Platform[] = ['tiktok', 'linkedin']
 
 /** Channels the SHARED video is too big for — by the platform's rule or by
  *  what the provider can actually move — that have no file of their own yet.
