@@ -40,7 +40,7 @@ describe('the page', () => {
   })
   it('opens a piece inside the page with today\'s review, and only a piece in that tab', () => {
     expect(page).toMatch(/\.find\(c => c\.id === id\) \?\? null\s*if \(!card\) notFound\(\)/)
-    expect(page).toContain('<EditingReview data={review} />')
+    expect(page).toContain("<EditingReview data={review} approved={card.column === 'approved'} />")
   })
   it('the tabs are links, so every email can open one', () => {
     expect(readFileSync('app/components/portal/OnePortalTabs.tsx', 'utf8')).toContain('href={onePortalPath(token, t.key)}')

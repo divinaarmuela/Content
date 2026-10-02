@@ -56,7 +56,7 @@ const TONE: Record<NonNullable<PortalCard['tone']>, string> = {
 }
 
 const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 type CardProps = {
   card: PortalCard

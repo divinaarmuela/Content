@@ -75,9 +75,9 @@ export default async function OnePortalPage({ params, searchParams }: {
         </Link>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{card.title}</h1>
-          {review && <p className="pb-1 text-[13px] text-muted-foreground">{review.item.status_label}</p>}
+          {review && <p className="pb-1 text-[13px] text-muted-foreground">{card.column === 'approved' ? 'Approved' : review.item.status_label}</p>}
         </div>
-        {review ? <EditingReview data={review} />
+        {review ? <EditingReview data={review} approved={card.column === 'approved'} />
           : waiting ? <p className="max-w-md text-[15px] text-muted-foreground">Your edit is on its way — the files are still arriving. Refresh in a minute.</p>
           : <PortalCardView card={card} amName={data.am_name} surface={{ token }} className="max-w-3xl" />}
       </div>
@@ -91,7 +91,6 @@ export default async function OnePortalPage({ params, searchParams }: {
     opened = (
       <div className="flex flex-col gap-5" data-one-portal-open={id}>
         {back('All shoots')}
-        {title(card.title, card.shoot?.date_label ?? null)}
         <OnePortalShoots token={token} data={data} shoots={[card]} initialCardId={typeof sp.card === 'string' ? sp.card : null} />
       </div>
     )
@@ -174,7 +173,8 @@ export default async function OnePortalPage({ params, searchParams }: {
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
           <div className="flex flex-col gap-1 px-5 pt-3 pr-14 sm:px-10 sm:pr-10">
-            <div className="flex items-center gap-3">
+            {/* min-h-11: as tall as PortalShell's fixed light/dark pill, so on a phone the tabs start below it */}
+            <div className="flex min-h-11 items-center gap-3">
               <div className="flex shrink-0 items-center rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 px-2 py-1.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/MDLogo-trim.png" alt="MD Media" className="h-2.5 w-auto" />

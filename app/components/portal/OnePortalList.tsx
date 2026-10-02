@@ -32,8 +32,8 @@ export default function OnePortalList({ heading, rows, empty }: { heading?: stri
             <li key={r.key}>
               <Link href={r.href} className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-muted" data-row={r.key}>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold">{r.title}</span>
-                  {r.line && <span className="block truncate text-[13px] text-muted-foreground">{r.line}</span>}
+                  <span className="line-clamp-2 block text-[15px] font-semibold">{r.title}</span>
+                  {r.line && <span className="line-clamp-2 block text-[13px] text-muted-foreground">{r.line}</span>}
                 </span>
                 {r.chip && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${CHIP[r.chip.tone]}`}>{r.chip.words}</span>}
                 <span aria-hidden className="shrink-0 text-muted-foreground">›</span>

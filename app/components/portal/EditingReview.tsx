@@ -28,11 +28,16 @@ import { assetLine, changedAtRound, clipsAtRound, pieceWords } from '../../lib/e
  * moves the whole page; the player itself stays black in both.
  */
 const when = (iso: string) =>
-  new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+  new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 const input = 'w-full rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50'
 
-export default function EditingReview({ data }: { data: EditingPortal }) {
+export default function EditingReview({ data, approved: clientApproved = false }: {
+  data: EditingPortal
+  /** the one portal: the client approved the newest version; the card's own stage (back with the team for
+   *  posting) is not "making changes" to them (2 Oct 2026, the phone walk) */
+  approved?: boolean
+}) {
   const router = useRouter()
   const { token, item } = data
   // VERSION 1, VERSION 2 (16 Sep 2026): the newest round opens; the pills
@@ -199,7 +204,7 @@ export default function EditingReview({ data }: { data: EditingPortal }) {
             <span className="shrink-0 text-[12px] text-muted-foreground">{clips.length} {clips.length === 1 ? words.one : words.many}</span>
           </div>
         )}
-        {!data.can_approve && (
+        {!data.can_approve && !clientApproved && (
           <p role="status" className="rounded-xl border border-border bg-card p-3 text-[14px]">
             <span className="font-semibold">The team is making changes. </span>
             This is the version you were sent, with everything you said on it. You can still comment, approve a clip or take an approval back; the new cut will appear here, on this same link, when it is ready for you.

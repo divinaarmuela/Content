@@ -47,7 +47,7 @@ describe('one link per card, open the whole way (22 Sep 2026)', () => {
     expect(ui).toContain('const clips = useMemo(() => clipsAtRound(data.clips, round), [data.clips, round])')
     expect(ui).toContain('aria-label="Versions of this piece"')
     expect(ui).toContain('aria-label="Versions of the whole set"')
-    expect(ui).toContain('{!data.can_approve && (')
+    expect(ui).toContain('{!data.can_approve && !clientApproved && (')
     // …and a tick, or taking one back, is taken at any time on the open link (the owner, 22 Sep 2026: "the client may suddenly change their minds")
     expect(readFileSync('app/api/portal/clip/route.ts', 'utf8')).not.toContain('clientMayApprove(')
   })

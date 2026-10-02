@@ -38,7 +38,7 @@ function StateMark({ t }: { t: ScheduledTile }) {
   return (
     <span className="absolute left-1.5 top-1.5 inline-flex max-w-[calc(100%-12px)] items-center gap-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_TONE[t.state]}`} aria-hidden />
-      <span className="truncate">{t.when ?? 'Booked'}</span>
+      <span className="truncate">{t.when ? t.when.split(',').slice(0, 1).join('') : 'Booked'}</span>
     </span>
   )
 }
@@ -326,7 +326,7 @@ function Comments({ token, tile, name }: { token: string; tile: ScheduledTile; n
           <div key={n.id} className="rounded-inner bg-muted/60 p-2.5">
             <p className="text-[12px] text-muted-foreground">
               <span className="font-semibold text-foreground">{n.author_name}</span>
-              {n.from_team ? ' · MD Media' : ''} · {new Date(n.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              {n.from_team ? ' · MD Media' : ''} · {new Date(n.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Melbourne', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
               {n.version != null && n.version !== tile.version ? ` · on an earlier version` : ''}
             </p>
             <p className="mt-0.5 whitespace-pre-wrap break-words text-[14px]">{n.body}</p>
