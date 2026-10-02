@@ -176,7 +176,9 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
     outcome = { result, handIn: settled, round }
     return {
       ...cur,
-      ...(result.ok && result.added.length > 0 ? { final_files: result.files } : {}),
+      // a hand-in that only DROPS files is saved too (2 Oct 2026, the colour-grade walk: "1 no longer in the folder — left
+      // out of this version" was said and never written, so the client still saw it)
+      ...(result.ok && (result.added.length > 0 || (result.retired?.length ?? 0) > 0) ? { final_files: result.files } : {}),
       // THE GRADED CUT LANDED (C5): a hand-in settled at colour grade is the graded set for this version — what
       // "Put it on the client's portal" waits for
       ...(result.ok && String((cur as { status?: unknown }).status ?? '') === 'colour_grade' ? { graded_round: round } : {}),

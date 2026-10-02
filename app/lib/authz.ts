@@ -24,6 +24,8 @@ export type TeamUser = {
   quality_reviewer?: boolean | null
   /** the ops contact the 24-hour blocker ladder copies (Abby) */
   ops_contact?: boolean | null
+  /** grades video edits at Colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C3) */
+  colourist?: boolean | null
   /**
    * Set ONLY while somebody is acting as this person, and it describes the
    * REAL signed-in account, not this row. Everything else about the TeamUser

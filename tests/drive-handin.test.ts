@@ -537,3 +537,10 @@ describe('a slice Drive refuses is asked again before the hand-in fails (2 Oct 2
     expect(src).toContain('const bytes = await readSlice(file.id, slice.start, slice.end, want)')
   })
 })
+
+describe('a hand-in that only drops files is saved (2 Oct 2026, the colour-grade walk)', () => {
+  it('writes the card when files left the version, not only when files were added', () => {
+    const src = require('node:fs').readFileSync('app/lib/drive-handin.ts', 'utf8') as string
+    expect(src).toContain('...(result.ok && (result.added.length > 0 || (result.retired?.length ?? 0) > 0) ? { final_files: result.files } : {}),')
+  })
+})

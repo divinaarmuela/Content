@@ -872,7 +872,8 @@ export async function performTransition(
   }
   // COLOUR GRADE (docs/COLOUR_GRADE_SPLIT_SPEC.md C1, C5): a video edit's quality check passes to the colourist, never
   // straight to the client; nothing else goes to colour grade; and the graded cut goes on only once it has landed
-  if (!system && String(item.status) === 'quality_check' && needsColourGrade(kindSlug) && (to === 'client_review' || to === 'approved_for_scheduling')) {
+  // …a super admin may take it straight to the client (the owner, 2 Oct 2026: "they have an option … go with client")
+  if (!system && actor.role !== 'super_admin' && String(item.status) === 'quality_check' && needsColourGrade(kindSlug) && (to === 'client_review' || to === 'approved_for_scheduling')) {
     throw new AuthzError('A video edit goes to colour grade first — press "Passed — to colour grade"', 400)
   }
   if (to === 'colour_grade' && !needsColourGrade(kindSlug)) {

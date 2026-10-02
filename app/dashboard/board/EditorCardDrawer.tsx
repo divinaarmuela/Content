@@ -389,13 +389,15 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // a pass never sends the client a card with no files.
   const isSuper = me?.role === 'super_admin'
   const gradeNext = needsColourGrade(((item as { work_kinds?: { slug?: string } | null } | null)?.work_kinds?.slug ?? (kind as { slug?: string } | null)?.slug) ?? null)
-  const skipCheck = async () => {
+  // a SUPER ADMIN chooses where a video edit goes (the owner, 2 Oct 2026: "when they upload they can straight go either to
+  // color grade or go with client which puts it in the portal"); everyone else's video edit always goes to colour grade
+  const skipCheck = async (straightToClient = false) => {
     if (!submitting || !item || !workIn) return
     if (driveCopying) { toast.error('The files are still copying in from Google Drive — skip the check once they have landed.'); return }
     const into = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, 'Skipping the quality check…', 'Sending')
     if (!into) return
     // a video edit skips to colour grade, never past it (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
-    const to = gradeNext ? 'colour_grade' : item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'
+    const to = gradeNext && !straightToClient ? 'colour_grade' : item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'
     const passed = await post(`/api/production/items/${id}/transition`, { to, note: `Quality check skipped by ${me?.name ?? 'a super admin'}.` },
       to === 'colour_grade' ? 'Quality check skipped — it is with the colourist now' : to === 'client_review' ? 'Quality check skipped — it is with the client now' : 'Quality check skipped — ready to schedule', 'Sending')
     if (!passed) toast.error('It is in the quality check — pass it from there, or the reviewer will.')
@@ -812,8 +814,14 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               </Button>
               {isSuper && (
                 <Button variant="outline" className={ghostBtn} disabled={busy || !workIn || driveCopying} onClick={() => void skipCheck()}
-                  title={driveCopying ? 'The files are still copying in from Google Drive' : !workIn ? 'Put the finished work on the card first' : 'Super admins only: no quality check — straight to the client'}>
+                  title={driveCopying ? 'The files are still copying in from Google Drive' : !workIn ? 'Put the finished work on the card first' : 'Super admins only: no quality check'}>
                   Skip quality check — send {gradeNext ? 'to colour grade' : item.client_approval_required === false ? 'to schedule' : 'to client'}
+                </Button>
+              )}
+              {isSuper && gradeNext && (
+                <Button variant="outline" className={ghostBtn} disabled={busy || !workIn || driveCopying} onClick={() => void skipCheck(true)} data-skip-to-client
+                  title="Super admins only: no quality check and no colour grade — straight onto the client's portal">
+                  Skip quality check — send {item.client_approval_required === false ? 'to schedule' : 'to client'}
                 </Button>
               )}
               {!riskOpen && (

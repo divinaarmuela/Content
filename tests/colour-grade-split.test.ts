@@ -25,7 +25,7 @@ describe('C1 — which cards are graded', () => {
   })
   it('the server refuses a video edit past colour grade, and anything else into it', () => {
     const src = readFileSync('app/lib/workflow.ts', 'utf8')
-    expect(src).toContain("if (!system && String(item.status) === 'quality_check' && needsColourGrade(kindSlug) && (to === 'client_review' || to === 'approved_for_scheduling')) {")
+    expect(src).toContain("if (!system && actor.role !== 'super_admin' && String(item.status) === 'quality_check' && needsColourGrade(kindSlug) && (to === 'client_review' || to === 'approved_for_scheduling')) {")
     expect(src).toContain("if (to === 'colour_grade' && !needsColourGrade(kindSlug)) {")
   })
 })
@@ -116,5 +116,13 @@ describe('the colourist\'s desk, whatever their role (2 Oct 2026, the walk: an e
     const { usesMakerDrawer } = await import('../app/lib/card-sheet-core')
     expect(usesMakerDrawer({ id: 'e1', role: 'editor', colourist: true }, { owner_id: 'someone', status: 'colour_grade' })).toBe(false)
     expect(usesMakerDrawer({ id: 'e1', role: 'editor', colourist: true }, { owner_id: 'e1', status: 'draft_uploaded' })).toBe(true)
+  })
+})
+
+describe('a super admin chooses: colour grade, or straight to the client (the owner, 2 Oct 2026)', () => {
+  it('two skip buttons on a video edit; the server lets only a super admin past colour grade', () => {
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(drawer).toContain("const to = gradeNext && !straightToClient ? 'colour_grade' : item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'")
+    expect(drawer).toContain('onClick={() => void skipCheck(true)} data-skip-to-client')
   })
 })
