@@ -39,7 +39,8 @@ describe('the page', () => {
     expect(loader).toMatch(/getPortalData\(client\.id, owner\.scope\)/)
   })
   it('opens a piece inside the page with today\'s review, and only a piece in that tab', () => {
-    expect(page).toMatch(/\.find\(c => c\.id === id\) \?\? null\s*if \(!card\) notFound\(\)/)
+    // a piece not on that tab opens the tab's list, never a 404 (2 Oct 2026, the rollout's link test)
+    expect(page).toMatch(/\.find\(c => c\.id === id\) \?\? null\s*if \(!card\) redirect\(onePortalPath\(token, tab\)\)/)
     expect(page).toContain("<EditingReview data={review} approved={card.column === 'approved'} />")
   })
   it('the tabs are links, so every email can open one', () => {

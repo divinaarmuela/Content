@@ -24,6 +24,7 @@ import {
 } from '../../../lib/team-board-core'
 import { clientLinkWords, mayShareTeamBoard, portalTeamBoardLink } from '../../../lib/team-board-comments-core'
 import TeamBoardComments from './TeamBoardComments'
+import { NotifyClientButton } from '../../board/NotifyClientDialog'
 
 /**
  * ONE INSPO BOARD (the owner, 21–22 Sep 2026): the shoot brief's own canvas
@@ -156,6 +157,10 @@ export default function TeamBoardPage() {
                 title={board.shared_with_client ? 'The client can open this board and comment on its cards' : 'Share the board with the client and copy their link'}>
                 <Users className="mr-1.5 h-4 w-4" aria-hidden /> {board.shared_with_client ? 'Copy client link' : 'Share with client'}
               </Button>
+            )}
+            {/* NOTIFY THE CLIENT (2 Oct 2026): sharing emails nobody; this press emails the board's own link */}
+            {mayShareTeamBoard(me, board) && board.shared_with_client && board.client_id && (
+              <NotifyClientButton clientId={board.client_id} tab="boards" id={board.id} className="h-11 rounded-full px-4 text-[13px] font-semibold" />
             )}
           </div>
         }

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Toaster } from 'sonner'
 import { archivo, sometype } from '../../../components/lama/fonts'
 import PortalShell from '../../../components/portal/PortalShell'
@@ -71,13 +71,13 @@ export default async function OnePortalPage({ params, searchParams }: {
   const pick = (k: keyof typeof FORM_PARAM) => (typeof sp[FORM_PARAM[k]] === 'string' ? String(sp[FORM_PARAM[k]]) : null)
   const fullScreen = tab === 'forms' ? (pick('intake') || pick('monthly')) : tab === 'shoot' ? pick('proposal') : null
   if (fullScreen) {
-    if (page.scope.kind !== 'business') notFound()
+    if (page.scope.kind !== 'business') redirect(onePortalPath(token, tab))
     const backHref = onePortalPath(token, tab)
     const fonts = `${archivo.variable} ${sometype.variable}`
     if (tab === 'forms' && pick('intake')) {
       const row = await portalFormById<{ client_id: string }>('intake', pick('intake')!, page.client.id)
       const form = row ? await getIntakeByToken(row.token) : null
-      if (!form || form.status === 'draft') notFound()
+      if (!form || form.status === 'draft') redirect(onePortalPath(token, tab))
       return (
         <div className={fonts}>
           <IntakeForm token={form.token} clientName={data.client.name} title={form.title || 'Intake'} definition={form.definition}
@@ -88,7 +88,7 @@ export default async function OnePortalPage({ params, searchParams }: {
     if (tab === 'forms' && pick('monthly')) {
       const row = await portalFormById<{ client_id: string }>('monthly', pick('monthly')!, page.client.id)
       const form = row ? await getMonthlyByToken(row.token) : null
-      if (!form || form.status === 'draft') notFound()
+      if (!form || form.status === 'draft') redirect(onePortalPath(token, tab))
       const period = monthLabel(form.month, form.year)
       return (
         <div className={fonts}>
@@ -99,7 +99,7 @@ export default async function OnePortalPage({ params, searchParams }: {
     }
     const row = await portalFormById<{ client_id: string }>('proposal', pick('proposal')!, page.client.id)
     const proposal = row ? await getShootByToken(row.token) : null
-    if (!proposal) notFound()
+    if (!proposal) redirect(onePortalPath(token, tab))
     return (
       <div className={fonts}>
         <ShootAnswer token={proposal.token} clientName={data.client.name} title={proposal.title} startsAt={proposal.starts_at}
@@ -122,7 +122,7 @@ export default async function OnePortalPage({ params, searchParams }: {
   let opened: React.ReactNode = null
   if (id && (tab === 'editing' || tab === 'designing')) {
     const card = (tab === 'editing' ? page.editing : page.designing).find(c => c.id === id) ?? null
-    if (!card) notFound()
+    if (!card) redirect(onePortalPath(token, tab))
     const review = card.editing ? await getEditingPortal(token, id) : null
     const waiting = !review && card.editing ? await editingPortalWaiting(token, id) : null
     opened = (
@@ -144,7 +144,7 @@ export default async function OnePortalPage({ params, searchParams }: {
   // SHOOT BRIEF — one shoot, or one board, on its own page (the owner, 2 Oct 2026: "mini pages… October shoot")
   if (tab === 'shoot' && id) {
     const card = page.shoots.find(c => c.id === id) ?? null
-    if (!card) notFound()
+    if (!card) redirect(onePortalPath(token, tab))
     opened = (
       <div className="flex flex-col gap-5" data-one-portal-open={id}>
         {back('All shoots')}
@@ -155,7 +155,7 @@ export default async function OnePortalPage({ params, searchParams }: {
   const answersId = tab === 'forms' && page.scope.kind === 'business' ? pick('answers') : null
   if (answersId) {
     const form = (data.intake ?? []).find(f => f.id === answersId) ?? null
-    if (!form) notFound()
+    if (!form) redirect(onePortalPath(token, tab))
     opened = (
       <div className="flex flex-col gap-5" data-one-portal-open={answersId}>
         {back('All forms')}
@@ -166,9 +166,9 @@ export default async function OnePortalPage({ params, searchParams }: {
   // BOARDS — its own tab; an old `tab=shoot&board=` link still lands on the board
   const openBoard = tab === 'boards' ? id : tab === 'shoot' ? boardId : null
   if (openBoard) {
-    if (!page.boards.some(b => b.id === openBoard)) notFound()
+    if (!page.boards.some(b => b.id === openBoard)) redirect(onePortalPath(token, tab))
     const board = await getPortalTeamBoardDetail(token, openBoard)
-    if (!board) notFound()
+    if (!board) redirect(onePortalPath(token, tab))
     opened = (
       <div className="flex flex-col gap-5" data-one-portal-board={openBoard}>
         <Link href={onePortalPath(token, 'boards')} className="inline-flex min-h-10 w-fit items-center text-[13px] font-semibold underline-offset-4 hover:underline">← All boards</Link>
@@ -193,7 +193,7 @@ export default async function OnePortalPage({ params, searchParams }: {
     const postWork = askedPost ? allTiles.find(t => t.post_id === askedPost)?.work_id ?? null : null
     const workId = id && id !== askedPost ? id : postWork ?? 'feed'
     const work = works.find(w => w.id === workId) ?? null
-    if (workId !== 'feed' && !work) notFound()
+    if (workId !== 'feed' && !work) redirect(onePortalPath(token, tab))
     opened = (
       <div className="flex flex-col gap-5" data-one-portal-work-page={workId}>
         {back('All posts')}

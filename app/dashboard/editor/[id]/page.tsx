@@ -30,6 +30,7 @@ import { useEffect, useState } from 'react'
 import { ColourGradePanel } from '../../board/ColourGradePanel'
 import { SplitPanel } from '../../board/SplitPanel'
 import { onePortalPath, workTab } from '../../../lib/one-portal-core'
+import { NotifyClientButton } from '../../board/NotifyClientDialog'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -155,6 +156,11 @@ function ManagerActions({ item, viewer, portalLink, client, design = false, kind
           className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold">
           <LinkIcon className="mr-1.5 h-4 w-4" aria-hidden /> Copy the client’s portal link
         </Button>
+      )}
+      {/* NOTIFY THE CLIENT (2 Oct 2026): putting it on the portal emails nobody; this press does — that card's own link */}
+      {withClient && (client as { portal_one?: unknown } | null)?.portal_one === true && (
+        <NotifyClientButton clientId={item.client_id} tab={design ? 'designing' : 'editing'} id={item.id}
+          className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border px-4 py-2 text-left text-[13px] font-semibold" />
       )}
       {awaitingHand && (
         <Button disabled={busy} onClick={() => setHandOpen(true)}

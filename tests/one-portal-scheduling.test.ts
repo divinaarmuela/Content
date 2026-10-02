@@ -79,7 +79,8 @@ describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
     expect(page).toContain("<OnePortalList heading={dateRows.length > 0 ? 'Shoots' : undefined} rows={shootRows}")
     expect(page).toContain('<OnePortalList heading="By the work" rows={workRows}')
-    expect(page).toMatch(/if \(!page\.boards\.some\(b => b\.id === openBoard\)\) notFound\(\)/)
+    // a piece no longer there opens the tab's list, never a 404 (2 Oct 2026, the rollout's link test)
+    expect(page).toContain('if (!page.boards.some(b => b.id === openBoard)) redirect(onePortalPath(token, tab))')
   })
 })
 

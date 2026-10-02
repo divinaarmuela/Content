@@ -16,6 +16,7 @@ import type { Answers, Completion, TemplateDefinition } from '@/app/lib/intake-c
 import { publicUrl } from '@/app/lib/public-url'
 import ManagersCard from './ManagersCard'
 import IntakeEditor from './IntakeEditor'
+import { NotifyClientButton } from '../../board/NotifyClientDialog'
 
 type Status = 'draft' | 'sent' | 'in_progress' | 'submitted'
 
@@ -420,6 +421,8 @@ export default function IntakePanel({ clientId }: { clientId: string }) {
               <Button size="sm" variant="secondary" onClick={() => void copy(form)}>
                 <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
               </Button>
+              {/* NOTIFY THE CLIENT (2 Oct 2026): one email with the form's link on their portal — once it has been sent to them */}
+              {form.status !== 'draft' && form.status !== 'submitted' && <NotifyClientButton clientId={clientId} tab="forms" id={form.id} className="h-9 rounded-full px-3 text-[13px] font-semibold" />}
               <Button size="sm" variant="ghost" asChild>
                 <a href={url} target="_blank" rel="noreferrer noopener">
                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Preview

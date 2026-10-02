@@ -52,7 +52,7 @@ describe('the old form links send a one-portal client into the one link, and onl
     const lib = readFileSync('app/lib/one-portal-forms.ts', 'utf8')
     expect(lib).toContain("if (scope.kind !== 'business') return []")
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
-    expect(page).toContain("if (page.scope.kind !== 'business') notFound()")
+    expect(page).toContain("if (page.scope.kind !== 'business') redirect(onePortalPath(token, tab))")
   })
   it('each full-screen form has the way back to the portal', () => {
     for (const f of ['app/intake/[token]/IntakeForm.tsx', 'app/monthly/[token]/MonthlyForm.tsx', 'app/shoot/[token]/ShootAnswer.tsx']) {

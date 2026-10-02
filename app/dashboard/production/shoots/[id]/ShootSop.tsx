@@ -28,6 +28,7 @@ import Chip from '../../../ui/Chip'
 import LocationSearch from './LocationSearch'
 import DrivePullBar from '../../../board/DrivePullBar'
 import { copyText } from '../../../../lib/copy-text-client'
+import { NotifyClientButton } from '../../../board/NotifyClientDialog'
 
 /**
  * THE SHOOT PAGE, AS THE SHOOT BRIEF SOP §3 READS (rebuilt 13 Sep 2026 —
@@ -905,7 +906,8 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
           <Button variant="outline" className={outlineBtn}
             onClick={() => {
               // the copy is claimed inside the press; the link follows (Karly, 22 Sep 2026: "it's not copying")
-              const link = portalLinkFor()
+              // this shoot's own page, not the portal's front door (the owner, 2 Oct 2026: "copy it and send it for that page")
+              const link = portalLinkFor().then(l => `${l}/shoot/${batch.id}`)
               void copyText(link)
                 .then(ok => ok ? setCopied(forWho ? 'Their portal link copied — send it to them' : 'Portal link copied — send it to the client') : link.then(l => setCopied(`Could not copy it here — select it: ${l}`)))
                 .catch(() => setCopied('Could not make their link — copy it from the Clients page'))
@@ -913,6 +915,8 @@ export function ClientBlock({ batch, portalToken, busy, shareReady, clientLine, 
             <LinkIcon className="h-4 w-4" aria-hidden /> Copy portal link
           </Button>
         )}
+        {/* NOTIFY THE CLIENT (2 Oct 2026): sharing emails nobody; this press emails the plan's own link (the business's plans) */}
+        {portalToken && !forWho && <NotifyClientButton clientId={batch.client_id} tab="shoot" id={batch.id} className={outlineBtn} />}
         {/* JUST THE BOARD (13 Sep 2026): the canvas on its own page, same
             token, the client's comments land on this shoot. The board is
             switched on if an older page turned it off. */}
