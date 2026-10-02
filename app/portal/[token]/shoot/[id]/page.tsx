@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../../lib/one-portal-redirect'
 import { Toaster } from 'sonner'
 import { getPortalShootDetail } from '../../../../lib/portal-thread'
 import { getPortalDataByToken } from '../../../../lib/portal-data'
@@ -28,6 +29,9 @@ export default async function PortalShootPage({ params, searchParams }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { token: raw, id } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'shoot', id })
+  if (moved) redirect(moved)
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const [data, portal] = await Promise.all([getPortalShootDetail(raw, id), getPortalDataByToken(token)])
   if (!data || !portal) notFound()

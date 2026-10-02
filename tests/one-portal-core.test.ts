@@ -127,3 +127,32 @@ describe('who sees what', () => {
     expect(onePortalPath('tok')).toBe('/portal/tok/home')
   })
 })
+
+describe('old links open inside the one link (launch)', async () => {
+  const { oldLinkTarget } = await import('../app/lib/one-portal-core')
+  const T = 'tok'
+  it('maps every old address to its tab', () => {
+    expect(oldLinkTarget(T, { kind: 'root' })).toBe('/portal/tok/home')
+    expect(oldLinkTarget(T, { kind: 'posts' })).toBe('/portal/tok/home?tab=scheduling')
+    expect(oldLinkTarget(T, { kind: 'shoot', id: 's1' })).toBe('/portal/tok/home?tab=shoot&id=s1')
+    expect(oldLinkTarget(T, { kind: 'board', id: 's1' })).toBe('/portal/tok/home?tab=shoot&id=s1')
+    expect(oldLinkTarget(T, { kind: 'team-board', id: 'b1' })).toBe('/portal/tok/home?tab=boards&id=b1')
+    expect(oldLinkTarget(T, { kind: 'post', id: 'p1' })).toBe('/portal/tok/home?tab=scheduling&post=p1')
+    expect(oldLinkTarget(T, { kind: 'edit', id: 'i1' }, 'reel')).toBe('/portal/tok/home?tab=editing&id=i1')
+    expect(oldLinkTarget(T, { kind: 'approve', id: 'i1' }, 'graphics')).toBe('/portal/tok/home?tab=designing&id=i1')
+    expect(oldLinkTarget(T, { kind: 'item', id: 'i1' }, null)).toBe('/portal/tok/home?tab=editing&id=i1')
+  })
+})
+
+describe('every old portal page sends a one-portal client into the one link, and only them', () => {
+  const { readFileSync } = require('node:fs') as typeof import('node:fs')
+  const pages = ['page.tsx', 'posts/page.tsx', 'approve/[id]/page.tsx', 'board/[id]/page.tsx', 'edit/[id]/page.tsx', 'item/[id]/page.tsx', 'post/[id]/page.tsx', 'shoot/[id]/page.tsx', 'team-board/[id]/page.tsx']
+  it.each(pages)('%s', p => {
+    const src = readFileSync(`app/portal/[token]/${p}`, 'utf8')
+    expect(src).toMatch(/const moved = await onePortalRedirect\(raw, \{ kind: '[a-z-]+'(, id)? \}\)\r?\n\s+if \(moved\) redirect\(moved\)/)
+  })
+  it('the helper does nothing for a client not on the one portal', () => {
+    const src = readFileSync('app/lib/one-portal-redirect.ts', 'utf8')
+    expect(src).toContain('if (!owner || !onePortal(owner.client)) return null')
+  })
+})

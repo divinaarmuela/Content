@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../../lib/one-portal-redirect'
 import { Toaster } from 'sonner'
 import { getPortalTeamBoardDetail } from '../../../../lib/portal-team-board'
 import { getPortalDataByToken } from '../../../../lib/portal-data'
@@ -28,6 +29,9 @@ export default async function PortalTeamBoardPage({ params, searchParams }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { token: raw, id } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'team-board', id })
+  if (moved) redirect(moved)
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const [data, portal] = await Promise.all([getPortalTeamBoardDetail(raw, id), getPortalDataByToken(token)])
   if (!data || !portal) notFound()

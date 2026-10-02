@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../../lib/one-portal-redirect'
 import { Toaster } from 'sonner'
 import { getEditingPortal, editingPortalWaiting } from '../../../../lib/editing-portal'
 import { archivo, sometype } from '../../../../components/lama/fonts'
@@ -23,6 +24,9 @@ export const dynamic = 'force-dynamic'
  */
 export default async function EditingPortalPage({ params }: { params: Promise<{ token: string; id: string }> }) {
   const { token: raw, id } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'edit', id })
+  if (moved) redirect(moved)
   const data = await getEditingPortal(raw, id)
   if (!data) {
     // the files are still copying in from Drive: say so, and look again shortly (1 Oct 2026)

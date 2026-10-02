@@ -205,3 +205,26 @@ export function onePortalPath(token: string, tab?: PortalTab, id?: string | null
   const qs = q.toString()
   return `/portal/${encodeURIComponent(token)}/home${qs ? `?${qs}` : ''}`
 }
+
+/**
+ * THE OLD LINKS (launch, docs/ONE_PORTAL_SPEC.md): every address a client of the one portal was ever sent — the
+ * old portal, a shoot, its board, a team board, an edit, a piece, an approval, a post, the posts list — opens the
+ * same thing inside the one link. A piece's tab comes from its work kind (graphics → Designing).
+ */
+export type OldPortalLink =
+  | { kind: 'root' | 'posts' }
+  | { kind: 'shoot' | 'board' | 'team-board' | 'post' | 'item' | 'edit' | 'approve'; id: string }
+
+export function oldLinkTarget(token: string, link: OldPortalLink, workKindSlug?: string | null): string {
+  switch (link.kind) {
+    case 'root': return onePortalPath(token)
+    case 'posts': return onePortalPath(token, 'scheduling')
+    case 'shoot':
+    case 'board': return onePortalPath(token, 'shoot', link.id)
+    case 'team-board': return onePortalPath(token, 'boards', link.id)
+    case 'post': return `${onePortalPath(token, 'scheduling')}&post=${encodeURIComponent(link.id)}`
+    case 'item':
+    case 'edit':
+    case 'approve': return onePortalPath(token, workTab(workKindSlug), link.id)
+  }
+}

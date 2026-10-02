@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../lib/one-portal-redirect'
 import { Check } from 'lucide-react'
 import { getPortalDataByToken } from '../../../lib/portal-data'
 import { portalPostHref } from '../../../lib/post-page-core'
@@ -27,6 +28,9 @@ export const dynamic = 'force-dynamic'
  */
 export default async function PortalWaitingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token: raw } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'posts' })
+  if (moved) redirect(moved)
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const data = await getPortalDataByToken(token)
   if (!data) notFound()

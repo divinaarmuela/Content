@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../../lib/one-portal-redirect'
 import { Toaster } from 'sonner'
 import { getPortalPost } from '../../../../lib/portal-post'
 import { getPortalPostPage } from '../../../../lib/portal-thread'
@@ -44,6 +45,9 @@ export default async function PortalPostPage({ params }: {
   params: Promise<{ token: string; id: string }>
 }) {
   const { token: raw, id } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'post', id })
+  if (moved) redirect(moved)
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const data = await getPortalPostPage(raw, id)
   if (!data) notFound()

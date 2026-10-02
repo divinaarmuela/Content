@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
+import { onePortalRedirect } from '../../../../lib/one-portal-redirect'
 import { getPortalApproval, portalPostForItem } from '../../../../lib/portal-thread'
 import { portalPostHref } from '../../../../lib/post-page-core'
 import { editingPortalItem } from '../../../../lib/editing-portal'
@@ -28,6 +29,9 @@ export default async function PortalApprovePage({ params }: {
   params: Promise<{ token: string; id: string }>
 }) {
   const { token: raw, id } = await params
+  // a client on the one portal: this old address opens the same thing inside their one link
+  const moved = await onePortalRedirect(raw, { kind: 'approve', id })
+  if (moved) redirect(moved)
   const token = decodeURIComponent(raw).split('--').pop() ?? raw
   const postId = await portalPostForItem(raw, id).catch(() => null)
   if (postId) redirect(portalPostHref(token, postId))

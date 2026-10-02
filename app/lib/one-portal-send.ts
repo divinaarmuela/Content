@@ -162,8 +162,7 @@ export async function sendOnePortalReminders(now = new Date()): Promise<{ sent: 
     const items = await table<ContentItem>('content_items').list({ where: r => r.client_id === c.id }).catch(() => [] as ContentItem[])
     const tz = c.timezone || 'Australia/Melbourne'
     const words = due.map(p => {
-      const title = String(items.find(i => i.id === p.source_item_id)?.title ?? '').trim() || p.caption.split('
-')[0].slice(0, 60) || 'A post'
+      const title = String(items.find(i => i.id === p.source_item_id)?.title ?? '').trim() || p.caption.split('\n')[0].slice(0, 60) || 'A post'
       return `${title} — ${whenIn(p.scheduled_for, tz) ?? 'no time set'}`
     })
     const subject = `${c.name} has not answered ${due.length === 1 ? 'a booked post' : `${due.length} booked posts`}`
