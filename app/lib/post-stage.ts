@@ -1173,7 +1173,9 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
   if (!post) return refusal('wrong_stage', NOT_MIGRATED, null)
   if (user.role === 'client') return refusal('not_allowed', 'Clients answer posts on their own page, not here.', null)
   if (!(await mayActOn(user, post))) return refusal('not_allowed', 'That client is not one of yours.', null)
-  if (SYSTEM_ACTIONS.includes(request.action) || CLIENT_ACTIONS.includes(request.action)) {
+  // a move only the client or the app makes; the one portal's answers are the client's OR a manager's for them
+  const teamMay = ROW_OF[request.action].who.some(h => h !== 'client' && h !== 'system')
+  if (SYSTEM_ACTIONS.includes(request.action) || (CLIENT_ACTIONS.includes(request.action) && !teamMay)) {
     return refusal('not_allowed', `Only ${ROW_OF[request.action].who.includes('client') ? 'the client' : 'the app'} can do that.`, post)
   }
   return performPostTransition(postId, request.action, teamActorFor(user, post), {
@@ -1189,6 +1191,7 @@ export async function actOnPost(user: TeamUser, postId: string, request: PostAct
     via: request.via ?? null,
     reason: request.reason ?? null,
     send_to: request.send_to ?? null,
+    ...(request.if_no_answer ? { if_no_answer: request.if_no_answer } : {}),
   })
 }
 

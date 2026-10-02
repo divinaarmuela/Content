@@ -58,7 +58,9 @@ export async function postAct(postId: string, request: PostActRequest): Promise<
 
 /** The moves a TEAM member makes through the act route. The client's go through the portal; the app's never come in over HTTP. */
 export const TEAM_ACT_ACTIONS: readonly PostAction[] =
-  POST_ACTIONS.filter(a => !SYSTEM_ACTIONS.includes(a) && !CLIENT_ACTIONS.includes(a))
+  POST_ACTIONS.filter(a => !SYSTEM_ACTIONS.includes(a) && (!CLIENT_ACTIONS.includes(a)
+    // the one portal: a manager records the client's answer on a booked post (said on a call, by email…)
+    || ['client_ok', 'client_not_approved', 'client_ok_book'].includes(a)))
 
 /** The body of `POST /api/posts/<id>/act`. */
 export type PostActRequest = {
@@ -80,6 +82,8 @@ export type PostActRequest = {
   confirm?: boolean | null
   /** Change approval steps */
   steps?: ApprovalSteps | null
+  /** the one portal: if the client has not approved — post anyway, or wait for them */
+  if_no_answer?: 'post' | 'wait' | null
   /** client sends: who to email (the server delivers, THEN moves the post) */
   send_to?: string[] | null
   /** client sends: 'link' when the person copies the link instead of emailing */
@@ -176,6 +180,10 @@ export function parsePostActRequest(body: unknown): { ok: true; request: PostAct
   if (body.steps !== undefined && body.steps !== null) {
     if (!(APPROVAL_STEPS as readonly unknown[]).includes(body.steps)) return { ok: false, reason: 'Choose team only, or team then the client.' }
     request.steps = body.steps as ApprovalSteps
+  }
+  if (body.if_no_answer !== undefined && body.if_no_answer !== null) {
+    if (body.if_no_answer !== 'post' && body.if_no_answer !== 'wait') return { ok: false, reason: 'Choose "Post anyway" or "Wait for the client".' }
+    request.if_no_answer = body.if_no_answer
   }
   if (body.confirm !== undefined && body.confirm !== null) {
     if (typeof body.confirm !== 'boolean') return { ok: false, reason: '"confirm" has to be yes or no.' }

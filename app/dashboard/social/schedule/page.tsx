@@ -1,5 +1,6 @@
 'use client'
 
+import SendPreview from './SendPreview'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { contactIdOf } from '../../../lib/account-owner-core'
 import Link from 'next/link'
@@ -767,6 +768,8 @@ export default function SchedulePage() {
                 onEdit={flow.edit}
                 className="hidden md:flex"
               />
+              {/* the one portal's email to the client: shown only for a client on it (docs/ONE_PORTAL_SPEC.md R12) */}
+              <SendPreview clientId={clientId} className="hidden md:flex" />
               <Link
                 href="/dashboard/social/schedule/access"
                 className="hidden min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted md:flex"

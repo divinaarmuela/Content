@@ -241,7 +241,9 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
       <p className="mb-3 text-[13px] text-muted-foreground">
         {tile.when ? `Goes out ${tile.when}` : 'Booked'} · <span className="font-semibold text-foreground">{REVIEW_WORDS[tile.state]}</span>
       </p>
-      {frame ? <PostPreviewFrame preview={frame as never} /> : <Cover tile={tile} className="aspect-square w-full rounded" />}
+      <div className="mx-auto w-full max-w-[420px]">
+        {frame ? <PostPreviewFrame preview={frame as never} /> : <Cover tile={tile} className="aspect-square w-full rounded" />}
+      </div>
 
       {tile.state === 'not_approved' ? (
         <p className="mt-4 rounded-inner bg-muted p-3 text-[14px]">You asked for a change{tile.note ? `: “${tile.note}”` : ''}. The team is on it — the new version will show here.</p>

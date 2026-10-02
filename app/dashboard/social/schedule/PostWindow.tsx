@@ -5,6 +5,7 @@ import { Clock, Eye, Pencil, Plus, Trash2, Wand2, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AssetVersion, ClientContact, ContentItem, EncodeJob, PostComment, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { useRow, useTable } from '@/lib/db-client'
+import OnePortalPostLine from './OnePortalPostLine'
 import { accountSections, ownerLabel } from '../../../lib/account-owner-core'
 import { copiesReadyAt, earliestSafeTime } from '@/app/lib/encode-eta-core'
 import { TRIAL_CHOICES, TRIAL_SENTENCE, postTrial } from '@/app/lib/trial-reel-core'
@@ -791,6 +792,8 @@ export default function PostWindow({
               {header.versionLine && <p className="text-[12px] text-muted-foreground" data-version-line>{header.versionLine}</p>}
             </div>
           )}
+          {/* the one portal: the client's word and "if the client hasn't approved" (docs/ONE_PORTAL_SPEC.md §5) */}
+          {saved && !unsaved && <OnePortalPostLine post={saved} editable={!!saved} />}
           {gone && <p role="alert" className="text-[13px] font-medium">This post no longer exists.</p>}
           {notMigrated && <p role="alert" className="text-[13px] font-medium">This post has not been moved onto the new stages yet. It opens here once that is done.</p>}
           {movedUnder && (

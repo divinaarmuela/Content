@@ -329,8 +329,11 @@ export function moveWords(action: PostAction | string, target: MoveEmail['target
     case 'pass':
       return {
         subject: `Ready to post: ${title}`,
-        lines: [`${actor} passed the quality check on ${title}. It is approved.`, `Book it in${atWhen(when)} on the Schedule page.`],
-        cta: 'Book it in',
+        // a pass with a time books itself (the owner, 30 Sep 2026) — the email said "Book it in" for a post already
+        // booking (2 Oct 2026, the one portal walk); if the booking cannot be made, the booking-failed email says so
+        lines: [`${actor} passed the quality check on ${title}. It is approved.`,
+          when ? `It books itself${atWhen(when)} — nothing to do. If it cannot be booked, you will be told.` : 'It has no time yet — pick one and book it in on the Schedule page.'],
+        cta: when ? 'See it' : 'Book it in',
       }
     case 'ask_change':
     case 'client_ask_change': {
