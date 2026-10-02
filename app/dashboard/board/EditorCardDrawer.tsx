@@ -381,6 +381,23 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
     if (moved) setTicks([])
   }
+  // SKIP THE QUALITY CHECK (the owner, 2 Oct 2026: "make super admin an option skip quality check or go through quality
+  // check for the card"). The same two moves a super admin could always make — into the check, then passed — in one
+  // press, so everything a pass does still happens: the client's round is frozen, the flagged reviewers are told
+  // what went past them, and the history says it was skipped and by whom. Not while Drive files are still copying —
+  // a pass never sends the client a card with no files.
+  const isSuper = me?.role === 'super_admin'
+  const skipCheck = async () => {
+    if (!submitting || !item || !workIn) return
+    if (driveCopying) { toast.error('The files are still copying in from Google Drive — skip the check once they have landed.'); return }
+    const into = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, 'Skipping the quality check…', 'Sending')
+    if (!into) return
+    const to = item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'
+    const passed = await post(`/api/production/items/${id}/transition`, { to, note: `Quality check skipped by ${me?.name ?? 'a super admin'}.` },
+      to === 'client_review' ? 'Quality check skipped — it is with the client now' : 'Quality check skipped — ready to schedule', 'Sending')
+    if (!passed) toast.error('It is in the quality check — pass it from there, or the reviewer will.')
+    else setTicks([])
+  }
 
 
   // NOT UNTIL THE CARD'S KIND IS KNOWN (1 Oct 2026, the designer walk): a graphics card drew as a video card for a
@@ -790,6 +807,12 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 title={!workIn ? (designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks, designCard) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
+              {isSuper && (
+                <Button variant="outline" className={ghostBtn} disabled={busy || !workIn || driveCopying} onClick={() => void skipCheck()}
+                  title={driveCopying ? 'The files are still copying in from Google Drive' : !workIn ? 'Put the finished work on the card first' : 'Super admins only: no quality check — straight to the client'}>
+                  Skip quality check — send {item.client_approval_required === false ? 'to schedule' : 'to client'}
+                </Button>
+              )}
               {!riskOpen && (
                 <Button variant="ghost" className={ghostBtn} disabled={busy} onClick={() => setRiskOpen(true)}>
                   <AlertTriangle className="h-4 w-4" aria-hidden /> Something looks wrong — flag it
