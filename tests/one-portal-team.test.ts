@@ -38,12 +38,14 @@ describe('Send the preview', () => {
     expect(out.map(x => (x as { id: string }).id)).toEqual(['soon', 'changed', 'later'])
   })
   it('the email: one link, the posts by time, and what Not approved does', () => {
-    const m = previewEmail({ clientName: 'Acme', hello: 'Jordan', senderName: 'Divina', posts: [{ title: 'Launch', when: 'Thu 8 Oct, 10:00 am' }] })
+    const m = previewEmail({ clientName: 'Acme', hello: 'Jordan', amName: 'Renée', posts: [{ title: 'Launch', when: 'Thu 8 Oct, 10:00 am' }] })
     expect(m.subject).toBe('Your next post is scheduled — have a look')
     expect(m.lines).toContain('• Launch — Thu 8 Oct, 10:00 am')
     expect(m.lines.join(' ')).toMatch(/not approved comes off the schedule straight away/)
     expect(m.cta).toBe('See my scheduled posts')
-    const r = previewEmail({ clientName: 'Acme', hello: 'Jordan', senderName: 'Divina', posts: [{ title: 'Launch', when: null }], reminder: true })
+    // no-reply (2 Oct 2026): it says so, and who to contact instead
+    expect(m.lines.join(' ')).toMatch(/Please don't reply to this email — it is not read\. Answer or comment on your portal, and for anything else contact Renée, your account manager\./)
+    const r = previewEmail({ clientName: 'Acme', hello: 'Jordan', posts: [{ title: 'Launch', when: null }], reminder: true })
     expect(r.subject).toMatch(/^Reminder:/)
   })
   it('the route: managers and schedulers, on a client they may work on, on the one portal; a deliberate send', () => {
@@ -53,6 +55,7 @@ describe('Send the preview', () => {
     const lib = readFileSync('app/lib/one-portal-send.ts', 'utf8')
     expect(lib).toContain("if (!onePortal(client)) return { ok: false, status: 409")
     expect(lib).toContain('deliberateClientSend: true')
+    expect(lib).toMatch(/actorName: 'MD Media',\s+actorEmail: null,\s+replyTo: `no-reply@\$\{NO_REPLY_DOMAIN\(\)\}`,/)
     // a failed email asks nobody
     expect(lib).toContain('if (delivered.length > 0 && !input.reminder)')
   })

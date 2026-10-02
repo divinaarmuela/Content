@@ -5,7 +5,7 @@ import { notify, renderEmail, escapeHtml, type NotifyResult } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { formatWithZone, safeZone } from './timezone-core'
 import { clientRecipients, pickRecipients } from './client-recipients-core'
-import { clientFacingSender } from './post-notify'
+import { accountManagerName } from './portal-data'
 import { roundOutcomeWords } from './post-notify-core'
 import { readPostState, type PostState } from './post-stage-core'
 import { onePortal, onePortalPath, readClientReview, reminderDue } from './one-portal-core'
@@ -34,8 +34,12 @@ export function unansweredBooked(posts: readonly PostState[]): PostState[] {
     .sort((a, b) => String(a.scheduled_for ?? '').localeCompare(String(b.scheduled_for ?? '')))
 }
 
+/** NO-REPLY (the owner, 2 Oct 2026: "send it as no reply"): the portal's emails come from MD Media's no-reply
+ *  address; the client answers on their portal, and questions go to their account manager. */
+export const NO_REPLY_DOMAIN = () => (process.env.NOTIFY_FROM_DOMAIN ?? 'mdmmarketing.com.au').toLowerCase()
+
 export function previewEmail(input: {
-  clientName: string; hello: string; senderName: string
+  clientName: string; hello: string; amName?: string | null
   posts: readonly { title: string; when: string | null }[]
   note?: string | null; reminder?: boolean
 }): { subject: string; heading: string; lines: string[]; cta: string } {
@@ -52,7 +56,8 @@ export function previewEmail(input: {
     ...(n > 12 ? [`…and ${n - 12} more on your portal.`] : []),
     ...(input.note?.trim() ? [input.note.trim()] : []),
     'Approve each one, or tell us what to change — anything you say is not approved comes off the schedule straight away. Posts go out at their time unless you say otherwise.',
-    `— ${input.senderName}, MD Media`,
+    `Please don't reply to this email — it is not read. Answer or comment on your portal${input.amName ? `, and for anything else contact ${input.amName}, your account manager` : ''}.`,
+    '— MD Media',
   ]
   return { subject, heading: input.reminder ? 'A reminder from MD Media' : 'Your scheduled posts', lines, cta: 'See my scheduled posts' }
 }
@@ -88,7 +93,7 @@ export async function sendSchedulingPreview(input: {
   if (!picked.ok) return { ok: false, status: 400, error: picked.error }
   if (picked.emails.length === 0) return { ok: false, status: 409, error: 'This client has nobody to send to — add a contact on the client\'s page first.' }
 
-  const sender = await clientFacingSender(input.pressedBy)
+  const amName = await accountManagerName(client.id).catch(() => null)
   const link = `${DASHBOARD_URL}${onePortalPath(token, 'scheduling')}`
   const stamp = now.toISOString()
   const results: { email: string; result: NotifyResult | 'failed' }[] = []
@@ -96,7 +101,7 @@ export async function sendSchedulingPreview(input: {
     const who = allowed.find(r => r.email === email)
     const hello = who && who.name !== email ? who.name.split(' ')[0] : client.name
     const mail = previewEmail({
-      clientName: client.name, hello, senderName: sender.name, note: input.note, reminder: !!input.reminder,
+      clientName: client.name, hello, amName, note: input.note, reminder: !!input.reminder,
       posts: posts.map(p => ({ title: titleOf(p), when: whenIn(p.scheduled_for, tz) })),
     })
     const result = await notify({
@@ -109,8 +114,10 @@ export async function sendSchedulingPreview(input: {
       recipientEmail: email,
       toClient: true,
       deliberateClientSend: true,
-      actorName: sender.name,
-      actorEmail: sender.email,
+      // from MD Media's no-reply address, replies going nowhere — the portal is where they answer
+      actorName: 'MD Media',
+      actorEmail: null,
+      replyTo: `no-reply@${NO_REPLY_DOMAIN()}`,
       subject: mail.subject,
       bodyHtml: renderEmail(escapeHtml(mail.heading), mail.lines.map(l => `<p>${escapeHtml(l)}</p>`).join(''), mail.cta, link),
     }).catch(() => 'failed' as const)
