@@ -67,6 +67,7 @@ for (const f of fs.readdirSync(SQL_DIR).filter(f => f.endsWith('.sql'))) {
 // Tables the code queries but no SQL ever created.
 //   website        — the CMS singleton node
 //   meta_ig_accounts, meta_ig_events — the agency's own Instagram Login (see below)
+//   portal_feeds — the one portal's copy of each account's posted feed (see below)
 //   claim_locks    — one row per "exactly one winner" rule that spans rows
 //                    (id = `<rule>__<key>`), compare-and-set by lib/db.ts's
 //                    claim(). Never migrated: it holds no history.
@@ -787,6 +788,18 @@ const GHOST_TABLES = {
   // What Meta's webhook told us about a directly connected account: comments, messages and mentions ONLY,
   // stored and nothing more — nothing replies on its own (the owner's rule). id is derived from the event
   // itself (app/lib/meta-ig-core.ts webhookEventKey) and taken with a claim, so a redelivery is one row.
+  // THE ONE PORTAL'S FEED COPY (docs/ONE_PORTAL_SPEC.md §3, 2 Oct 2026): each connected account's 25 newest posts
+  // as Zernio lists them (GET /accounts/{id}/posts — every network, including posts made outside the app), kept so
+  // the client's Scheduling tab never calls the platforms on every visit. The id IS the social_accounts id;
+  // refreshed when older than 15 minutes, one writer by a claim on fetched_at. `error` keeps the last failure.
+  portal_feeds: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['platform', col('string', false)],
+    ['tiles', col('unknown', false, true, true)],
+    ['fetched_at', col('string', false)],
+    ['error', col('string', true)],
+  ],
   meta_ig_events: [
     ['id', col('string', false)],
     ['ig_user_id', col('string', false)],

@@ -12,6 +12,8 @@ import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
 import { loadOnePortal } from '../../../lib/one-portal-page'
+import { loadScheduling, schedulingWaiting } from '../../../lib/one-portal-schedule'
+import OnePortalScheduling from '../../../components/portal/OnePortalScheduling'
 import { getEditingPortal, editingPortalWaiting } from '../../../lib/editing-portal'
 import { PORTAL_TABS, onePortalPath, readTab } from '../../../lib/one-portal-core'
 
@@ -35,6 +37,10 @@ export default async function OnePortalPage({ params, searchParams }: {
   const page = await loadOnePortal(raw)
   if (!page) notFound()
   const sp = (await searchParams) ?? {}
+  const askedTab = typeof sp.tab === 'string' ? readTab(sp.tab) : null
+  // the booked posts always (the tab's badge); the posted feeds only when the Scheduling tab is open
+  const profiles = await loadScheduling(page.client.id, page.scope, page.data.client.timezone, new Date(), askedTab === 'scheduling' || askedTab === null)
+  page.waiting.scheduling = schedulingWaiting(profiles)
   // no tab asked for: the first one with something waiting on them, else Scheduling (what goes out next)
   const tab = typeof sp.tab === 'string' ? readTab(sp.tab) : (PORTAL_TABS.find(t => page.waiting[t.key] > 0)?.key ?? 'scheduling')
   const id = typeof sp.id === 'string' ? sp.id : null
@@ -104,11 +110,7 @@ export default async function OnePortalPage({ params, searchParams }: {
               {tab === 'shoot' && <OnePortalShoots token={token} data={data} shoots={page.shoots} initialCardId={typeof sp.card === 'string' ? sp.card : null} />}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}
               {tab === 'designing' && <OnePortalWorkList token={token} tab="designing" cards={page.designing} empty="No designs to look at yet. When a design is ready for you, it shows here." />}
-              {tab === 'scheduling' && (
-                <p className="rounded-inner border border-dashed border-border px-4 py-10 text-center text-[14px] text-muted-foreground" data-one-portal-scheduling>
-                  Your scheduled posts will show here.
-                </p>
-              )}
+              {tab === 'scheduling' && <OnePortalScheduling token={token} profiles={profiles} openPostId={id} />}
             </>
           )}
         </main>
