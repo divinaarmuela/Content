@@ -5,6 +5,7 @@ import { portalOwnerByToken } from './portal-owner'
 import { getPortalData, type PortalCard, type PortalData } from './portal-data'
 import { onePortal, workTab, type PortalTab } from './one-portal-core'
 import type { PortalScope } from './portal-owner-core'
+import { clientMaySeeTeamBoard } from './team-board-comments-core'
 
 /**
  * THE ONE PORTAL'S PAGE DATA (docs/ONE_PORTAL_SPEC.md §3). Built on today's portal payload (`getPortalData`, which
@@ -17,6 +18,8 @@ export type OnePortalPage = {
   scope: PortalScope
   data: PortalData
   shoots: PortalCard[]
+  /** the team boards shared with this client (business link only) — listed in the Shoot brief tab */
+  boards: { id: string; name: string; updated_at: string | null }[]
   editing: PortalCard[]
   designing: PortalCard[]
   /** how many things wait on the client in each tab — the tab's badge */
@@ -85,12 +88,19 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   const editing = shown.filter(c => (tabOf.get(c.id) ?? 'editing') === 'editing')
   const designing = shown.filter(c => tabOf.get(c.id) === 'designing')
 
+  // the boards the team shares with the client (2 Oct 2026: "boards is also something that we send to clients")
+  const boards = owner.scope.kind !== 'business' ? [] : (await table<{ id: string; name?: string | null; client_id?: string | null; shared_with_client?: boolean | null; updated_at?: string | null }>('team_boards')
+    .list({ where: b => clientMaySeeTeamBoard(b, client.id) }).catch(() => []))
+    .map(b => ({ id: b.id, name: String(b.name ?? '').trim() || 'Board', updated_at: b.updated_at ?? null }))
+    .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+
   return {
     token,
     client: { id: client.id, name: client.name },
     scope: owner.scope,
     data,
     shoots,
+    boards,
     editing,
     designing,
     waiting: {

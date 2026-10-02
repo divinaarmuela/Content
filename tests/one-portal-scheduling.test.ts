@@ -59,3 +59,27 @@ describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comm
     expect((ui.match(/placeholder="Your name"/g) ?? []).length).toBe(1)
   })
 })
+
+describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by the work")', () => {
+  it('groups booked posts by the work they came from, waiting first, "Other posts" last; one post on two networks counts once', async () => {
+    const { schedulingWorks, profilesForWork } = await import('../app/lib/one-portal-schedule')
+    const t = (post_id: string, work_id: string, over: Record<string, unknown> = {}) =>
+      ({ post_id, work_id, work_title: work_id === 'other' ? 'Other posts' : `Work ${work_id}`, state: 'approved', answerable: true, scheduled_for: '2026-10-09T00:00:00.000Z', ...over }) as never
+    const ig = { network: 'instagram', booked: [t('p1', 'w1'), t('p2', 'w2', { state: 'not_reviewed' }), t('p3', 'other')], off: [t('p4', 'w1', { state: 'not_approved', answerable: false })], posted: [{ id: 'x' }] } as never
+    const li = { network: 'linkedin', booked: [t('p2', 'w2', { state: 'not_reviewed' })], off: [], posted: [] } as never
+    const works = schedulingWorks([ig, li])
+    expect(works.map(w => w.id)).toEqual(['w2', 'w1', 'other'])
+    expect(works.find(w => w.id === 'w2')).toMatchObject({ booked: 1, waiting: 1 })
+    expect(works.find(w => w.id === 'w1')).toMatchObject({ booked: 1, off: 1, waiting: 0 })
+    const only = profilesForWork([ig, li], 'w2')
+    expect(only.map(p => p.network)).toEqual(['instagram', 'linkedin'])
+    expect(only[0].posted).toEqual([])
+  })
+  it('the page: Shoot brief lists shoots and boards, Scheduling lists Your feed and the works; each opens its own page', () => {
+    const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
+    expect(page).toContain('<OnePortalList heading="Shoots" rows={shootRows}')
+    expect(page).toContain('{boardRows.length > 0 && <OnePortalList heading="Boards" rows={boardRows} />}')
+    expect(page).toContain('<OnePortalList heading="By the work" rows={workRows}')
+    expect(page).toMatch(/if \(!page\.boards\.some\(b => b\.id === boardId\)\) notFound\(\)/)
+  })
+})

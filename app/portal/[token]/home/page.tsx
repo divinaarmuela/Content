@@ -12,7 +12,11 @@ import OnePortalTabs from '../../../components/portal/OnePortalTabs'
 import OnePortalWorkList from '../../../components/portal/OnePortalWorkList'
 import OnePortalShoots from '../../../components/portal/OnePortalShoots'
 import { loadOnePortal } from '../../../lib/one-portal-page'
-import { loadScheduling, schedulingWaiting } from '../../../lib/one-portal-schedule'
+import { loadScheduling, profilesForWork, schedulingWaiting, schedulingWorks } from '../../../lib/one-portal-schedule'
+import OnePortalList, { type ListRow } from '../../../components/portal/OnePortalList'
+import ShootBoard from '../../../components/portal/ShootBoard'
+import { getPortalTeamBoardDetail } from '../../../lib/portal-team-board'
+import { waitsOnClient } from '../../../lib/one-portal-page'
 import OnePortalScheduling from '../../../components/portal/OnePortalScheduling'
 import { getEditingPortal, editingPortalWaiting } from '../../../lib/editing-portal'
 import { PORTAL_TABS, onePortalPath, readTab } from '../../../lib/one-portal-core'
@@ -44,8 +48,18 @@ export default async function OnePortalPage({ params, searchParams }: {
   // no tab asked for: the first one with something waiting on them, else Scheduling (what goes out next)
   const tab = typeof sp.tab === 'string' ? readTab(sp.tab) : (PORTAL_TABS.find(t => page.waiting[t.key] > 0)?.key ?? 'scheduling')
   const id = typeof sp.id === 'string' ? sp.id : null
+  const boardId = typeof sp.board === 'string' ? sp.board : null
   const { token, data } = page
   const tabLabel = PORTAL_TABS.find(t => t.key === tab)!.label
+  const back = (words: string) => (
+    <Link href={onePortalPath(token, tab)} className="inline-flex min-h-10 w-fit items-center text-[13px] font-semibold underline-offset-4 hover:underline">← {words}</Link>
+  )
+  const title = (words: string, line?: string | null) => (
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+      <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{words}</h1>
+      {line && <p className="pb-1 text-[13px] text-muted-foreground">{line}</p>}
+    </div>
+  )
 
   // one piece opened inside Editing / Designing: today's review, on this page
   let opened: React.ReactNode = null
@@ -69,6 +83,75 @@ export default async function OnePortalPage({ params, searchParams }: {
       </div>
     )
   }
+
+  // SHOOT BRIEF — one shoot, or one board, on its own page (the owner, 2 Oct 2026: "mini pages… October shoot")
+  if (tab === 'shoot' && id) {
+    const card = page.shoots.find(c => c.id === id) ?? null
+    if (!card) notFound()
+    opened = (
+      <div className="flex flex-col gap-5" data-one-portal-open={id}>
+        {back('All shoots')}
+        {title(card.title, card.shoot?.date_label ?? null)}
+        <OnePortalShoots token={token} data={data} shoots={[card]} initialCardId={typeof sp.card === 'string' ? sp.card : null} />
+      </div>
+    )
+  }
+  if (tab === 'shoot' && boardId) {
+    if (!page.boards.some(b => b.id === boardId)) notFound()
+    const board = await getPortalTeamBoardDetail(token, boardId)
+    if (!board) notFound()
+    opened = (
+      <div className="flex flex-col gap-5" data-one-portal-board={boardId}>
+        {back('All shoots and boards')}
+        {title(board.board.name, 'Board')}
+        {board.board.canvas_cards.length > 0 ? (
+          <ShootBoard shootId={board.board.id} thread="team_board" boardName={board.board.name} cards={board.board.canvas_cards}
+            comments={board.comments} surface={{ token }} clientName={board.client.name} amName={board.am_name}
+            initialCardId={typeof sp.card === 'string' ? sp.card : null} />
+        ) : (
+          <p className="rounded-card border border-border bg-card p-6 text-[15px] text-muted-foreground">Nothing on the board yet — {board.am_name ?? 'your account manager'} will add to it.</p>
+        )}
+      </div>
+    )
+  }
+
+  // SCHEDULING — "by the work" (the owner, 2 Oct 2026): one page per piece the posts came from, plus Your feed.
+  // `post=` opens one post on top wherever it is (the email links); an old `id=<post>` link still lands on it.
+  const allTiles = profiles.flatMap(p => [...p.booked, ...p.off])
+  const askedPost = typeof sp.post === 'string' ? sp.post : (id && allTiles.some(t => t.post_id === id) ? id : null)
+  const works = schedulingWorks(profiles)
+  if (tab === 'scheduling' && (id || askedPost)) {
+    const postWork = askedPost ? allTiles.find(t => t.post_id === askedPost)?.work_id ?? null : null
+    const workId = id && id !== askedPost ? id : postWork ?? 'feed'
+    const work = works.find(w => w.id === workId) ?? null
+    if (workId !== 'feed' && !work) notFound()
+    opened = (
+      <div className="flex flex-col gap-5" data-one-portal-work-page={workId}>
+        {back('All posts')}
+        {title(workId === 'feed' ? 'Your feed' : work!.title, workId === 'feed' ? 'Everything booked, and what is already posted' : `${work!.booked} booked${work!.off ? ` · ${work!.off} off the schedule` : ''}`)}
+        <OnePortalScheduling token={token} profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)} openPostId={askedPost} />
+      </div>
+    )
+  }
+
+  // the tab's own list pages
+  const shootRows: ListRow[] = page.shoots.map(c => ({
+    key: c.id,
+    href: `${onePortalPath(token, 'shoot', c.id)}`,
+    title: c.title,
+    line: [c.shoot?.date_label ?? null, c.line].filter(Boolean).join(' · ') || null,
+    chip: waitsOnClient(c) ? { words: 'Waiting on you', tone: 'waiting' } : c.column === 'approved' ? { words: 'Approved', tone: 'done' } : null,
+  }))
+  const boardRows: ListRow[] = page.boards.map(b => ({
+    key: b.id, href: `${onePortalPath(token, 'shoot')}&board=${encodeURIComponent(b.id)}`, title: b.name, line: 'A board from the team',
+  }))
+  const workRows: ListRow[] = works.map(w => ({
+    key: w.id,
+    href: onePortalPath(token, 'scheduling', w.id),
+    title: w.title,
+    line: `${w.booked} booked${w.off ? ` · ${w.off} off the schedule` : ''}`,
+    chip: w.waiting > 0 ? { words: `${w.waiting} to look at`, tone: 'waiting' } : w.booked > 0 ? { words: 'All answered', tone: 'done' } : null,
+  }))
 
   return (
     <PortalShell className={`dbx ${archivo.variable} ${sometype.variable}`}>
@@ -107,10 +190,20 @@ export default async function OnePortalPage({ params, searchParams }: {
           {opened ?? (
             <>
               <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{tabLabel}</h1>
-              {tab === 'shoot' && <OnePortalShoots token={token} data={data} shoots={page.shoots} initialCardId={typeof sp.card === 'string' ? sp.card : null} />}
+              {tab === 'shoot' && (
+                <div className="flex flex-col gap-6">
+                  <OnePortalList heading="Shoots" rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
+                  {boardRows.length > 0 && <OnePortalList heading="Boards" rows={boardRows} />}
+                </div>
+              )}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}
               {tab === 'designing' && <OnePortalWorkList token={token} tab="designing" cards={page.designing} empty="No designs to look at yet. When a design is ready for you, it shows here." />}
-              {tab === 'scheduling' && <OnePortalScheduling token={token} profiles={profiles} openPostId={id} />}
+              {tab === 'scheduling' && (
+                <div className="flex flex-col gap-6">
+                  <OnePortalList rows={[{ key: 'feed', href: onePortalPath(token, 'scheduling', 'feed'), title: 'Your feed', line: 'Everything booked, and what is already posted — as each network shows it' }]} />
+                  <OnePortalList heading="By the work" rows={workRows} empty="Nothing is booked yet. When a post is booked, it shows here." />
+                </div>
+              )}
             </>
           )}
         </main>

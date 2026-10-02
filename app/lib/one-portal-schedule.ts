@@ -25,6 +25,9 @@ export type SchedulingNetwork = (typeof SCHEDULING_NETWORKS)[number]
 export type ScheduledTile = {
   kind: 'booked'
   post_id: string
+  /** the piece of work it came from (its card) — the Scheduling tab's mini pages; 'other' when there is none */
+  work_id: string
+  work_title: string
   /** the version the client answers — the act route refuses any other */
   version: number
   title: string
@@ -164,6 +167,8 @@ export async function loadScheduling(
     return {
       kind: 'booked',
       post_id: p.id,
+      work_id: item ? item.id : 'other',
+      work_title: item ? (String(item.title ?? '').trim() || 'Untitled work') : 'Other posts',
       version: n,
       title: String(item?.title ?? '').trim() || 'Your post',
       when: scheduledWhen(p.scheduled_for, tz),
@@ -213,6 +218,37 @@ export async function loadScheduling(
     })
   }
   return out
+}
+
+/** THE WORKS (the owner, 2 Oct 2026: "each tab has mini pages… by the work"): one entry per piece the booked
+ *  posts came from, with how many are booked, wait on the client, and came off; "Other posts" last. */
+export type SchedulingWork = { id: string; title: string; booked: number; waiting: number; off: number; next: string | null }
+export function schedulingWorks(profiles: readonly NetworkProfile[]): SchedulingWork[] {
+  const seen = new Map<string, { t: ScheduledTile; off: boolean }>()
+  for (const p of profiles) {
+    for (const t of p.booked) if (!seen.has(t.post_id)) seen.set(t.post_id, { t, off: false })
+    for (const t of p.off) if (!seen.has(t.post_id)) seen.set(t.post_id, { t, off: true })
+  }
+  const works = new Map<string, SchedulingWork>()
+  for (const { t, off } of seen.values()) {
+    const w = works.get(t.work_id) ?? { id: t.work_id, title: t.work_title, booked: 0, waiting: 0, off: 0, next: null }
+    if (off) w.off += 1
+    else {
+      w.booked += 1
+      if (!w.next || String(t.scheduled_for ?? '') < String(w.next)) w.next = t.scheduled_for
+    }
+    if (t.answerable && (t.state === 'not_reviewed' || t.state === 'asked_again')) w.waiting += 1
+    works.set(t.work_id, w)
+  }
+  return [...works.values()].sort((a, b) =>
+    (a.id === 'other' ? 1 : 0) - (b.id === 'other' ? 1 : 0) || (b.waiting - a.waiting) || String(a.next ?? '~').localeCompare(String(b.next ?? '~')))
+}
+
+/** The profiles holding only one work's posts (its mini page); the posted feed is the "Your feed" page's. */
+export function profilesForWork(profiles: readonly NetworkProfile[], workId: string): NetworkProfile[] {
+  return profiles
+    .map(p => ({ ...p, booked: p.booked.filter(t => t.work_id === workId), off: p.off.filter(t => t.work_id === workId), posted: [], feed_problem: null }))
+    .filter(p => p.booked.length + p.off.length > 0)
 }
 
 /** How many booked posts wait on the client's word — the tab's badge. */
