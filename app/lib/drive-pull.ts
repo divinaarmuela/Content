@@ -279,6 +279,34 @@ async function listInto(pulls: ReturnType<typeof table<DrivePull>>, row: DrivePu
   return { files: files.length, bytes: total_bytes }
 }
 
+/**
+ * ONE SLICE FROM DRIVE, ASKED AGAIN WHEN DRIVE REFUSES IT (2 Oct 2026, Justin's September Videos: one refused slice
+ * of one 700 MB file failed the whole 8-file hand-in, and the same press 13 minutes later copied everything). A
+ * refusal or a short read is asked again after a pause, up to SLICE_TRIES times; a slice that overran its four
+ * minutes is not, so a stuck Drive still ends the step in time.
+ */
+export const SLICE_TRIES = 3
+const SLICE_PAUSE_MS = [3_000, 10_000]
+async function readSlice(fileId: string, start: number, end: number, want: number): Promise<Buffer> {
+  let last: unknown = null
+  for (let attempt = 0; attempt < SLICE_TRIES; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, SLICE_PAUSE_MS[attempt - 1] ?? 10_000))
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 240_000)
+    try {
+      const res = await openDriveFile(fileId, `bytes=${start}-${end}`, ctrl.signal)
+      if (!res || !res.body) throw new Error('Drive stopped handing the file out')
+      const bytes = Buffer.from(await res.arrayBuffer())
+      if (bytes.length !== want) throw new Error(`Drive sent ${bytes.length} bytes for a slice of ${want}`)
+      return bytes
+    } catch (e) {
+      last = e
+      if (ctrl.signal.aborted) break
+    } finally { clearTimeout(timer) }
+  }
+  throw last instanceof Error ? last : new Error('Drive stopped handing the file out')
+}
+
 /** a few slices of one file — returns whether the file is complete */
 export async function runPullSlices(id: string, fileId: string): Promise<{ done: boolean; error?: string; cancelled?: boolean }> {
   const pulls = table<DrivePull>('drive_pulls')
@@ -324,16 +352,8 @@ export async function runPullSlices(id: string, fileId: string): Promise<{ done:
         }
       }
       // one slice, one request, abandoned if it overruns — never the whole file
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 240_000)
-      let bytes: Buffer
-      try {
-        const res = await openDriveFile(file.id, `bytes=${slice.start}-${slice.end}`, ctrl.signal)
-        if (!res || !res.body) throw new Error('Drive stopped handing the file out')
-        bytes = Buffer.from(await res.arrayBuffer())
-      } finally { clearTimeout(timer) }
       const want = slice.end - slice.start + 1
-      if (bytes.length !== want) throw new Error(`Drive sent ${bytes.length} bytes for a slice of ${want}`)
+      const bytes = await readSlice(file.id, slice.start, slice.end, want)
       const etag = await putMultipartPart(key, file.upload_id!, slice.n, bytes)
       await save({ done: file.done + bytes.length, parts: [...(file.parts ?? []), { n: slice.n, etag }] })
     }

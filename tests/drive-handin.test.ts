@@ -528,3 +528,12 @@ describe('a Drive hand-in that changed nothing (1 Oct 2026, the walk)', () => {
     expect(d).not.toContain("'Upload the finished files first'")
   })
 })
+
+describe('a slice Drive refuses is asked again before the hand-in fails (2 Oct 2026, Justin\'s September Videos)', () => {
+  const src = require('node:fs').readFileSync('app/lib/drive-pull.ts', 'utf8') as string
+  it('three tries with a pause; an overrun slice is not retried', () => {
+    expect(src).toContain('export const SLICE_TRIES = 3')
+    expect(src).toContain('if (ctrl.signal.aborted) break')
+    expect(src).toContain('const bytes = await readSlice(file.id, slice.start, slice.end, want)')
+  })
+})
