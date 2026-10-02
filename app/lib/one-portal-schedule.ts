@@ -98,6 +98,9 @@ async function feedFor(account: SocialAccount, now: Date): Promise<{ tiles: Live
 const sameUrl = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase()
 
+/** Not answered for the version they were sent — an old no on an earlier version does not count (2 Oct 2026, the live hold test). */
+const unanswered = (p: PostState) => { const s = reviewState(p); return s === 'not_reviewed' || s === 'asked_again' }
+
 export async function loadScheduling(
   clientId: string, scope: PortalScope, tz: string, now = new Date(),
   /** false: the booked posts only (the tab's badge on another tab) — no feed is read, Zernio is not called */
@@ -118,7 +121,7 @@ export async function loadScheduling(
     .map(r => readPostState(r as unknown as Record<string, unknown>))
     .filter((p): p is PostState => !!p && postOnPortal(contactOf(p), scope))
     .filter(p => p.stage === 'booked'
-      || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && !p.client_review && p.sent_version != null)
+      || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && unanswered(p) && p.sent_version != null)
       || (p.stage === 'draft' && p.client_review?.verdict === 'not_approved'))
   const versionIds = posts.flatMap(p => (p.stage === 'draft' && p.client_review?.verdict === 'not_approved' ? [p.client_review.version] : p.sent_version != null ? [p.sent_version] : [])
     .map(n => postVersionId(p.id, n)))
@@ -163,7 +166,7 @@ export async function loadScheduling(
     } catch { preview = [] }
     const item = p.source_item_id ? itemById.get(p.source_item_id) : null
     const state = reviewState(p as never)
-    const answerable = p.stage === 'booked' || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && !p.client_review)
+    const answerable = p.stage === 'booked' || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && unanswered(p))
     return {
       kind: 'booked',
       post_id: p.id,

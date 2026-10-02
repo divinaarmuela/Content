@@ -156,3 +156,20 @@ describe('every old portal page sends a one-portal client into the one link, and
     expect(src).toContain('if (!owner || !onePortal(owner.client)) return null')
   })
 })
+
+describe('a held "wait" post with an old no on an earlier version is still open (2 Oct 2026, the live hold test)', async () => {
+  const { clientAnswerProblem } = await import('../app/lib/one-portal-core')
+  const held = { stage: 'ready', if_no_answer: 'wait', sent_version: 3, client_review: { at: '2026-10-02T02:27:01.927Z', by: 'X', verdict: 'not_approved', version: 1, note: 'n' } }
+  it('the client may still answer the version they were sent', () => {
+    expect(clientAnswerProblem(held, { version: 3, verdict: 'approved' }, [])).toBeNull()
+  })
+  it('but not once they said no to this very version', () => {
+    expect(clientAnswerProblem({ ...held, client_review: { ...held.client_review, version: 3 } }, { version: 3, verdict: 'approved' }, [])).not.toBeNull()
+  })
+  it('the Scheduling tab draws it as came off, unanswered', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    const src = readFileSync('app/lib/one-portal-schedule.ts', 'utf8')
+    expect(src).not.toContain('!p.client_review')
+    expect(src).toContain("ifNoAnswerOf(p) === 'wait' && unanswered(p) && p.sent_version != null")
+  })
+})

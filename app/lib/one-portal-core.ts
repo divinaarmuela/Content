@@ -124,7 +124,9 @@ export function clientAnswerProblem(
   input: { version: number; verdict: ClientVerdict; note?: string | null },
   liveOn: readonly string[],
 ): string | null {
-  const heldWaiting = post.stage === 'ready' && ifNoAnswerOf(post) === 'wait' && !readClientReview(post.client_review)
+  // unanswered FOR THIS VERSION: an old no on an earlier version does not close it (2 Oct 2026, the live hold test)
+  const state = reviewState(post)
+  const heldWaiting = post.stage === 'ready' && ifNoAnswerOf(post) === 'wait' && (state === 'not_reviewed' || state === 'asked_again')
   if (post.stage === 'posted' || liveOn.length > 0) return ANSWER_LIVE
   if (post.stage !== 'booked' && !heldWaiting) return ANSWER_NOT_OPEN
   if (post.sent_version == null || input.version !== post.sent_version) return ANSWER_STALE
