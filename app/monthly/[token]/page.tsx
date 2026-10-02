@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalFormRedirect } from '../../lib/one-portal-forms'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { table, withRequestCache } from '@/lib/db'
 import type { Client } from '@/lib/db-types'
@@ -28,6 +29,9 @@ export const dynamic = 'force-dynamic'
 export default async function MonthlyPage({ params }: { params: Promise<{ token: string }> }) {
  return withRequestCache(async () => {
   const { token } = await params
+  // a client on the one portal: this old link opens the same form inside their one link (Shoot brief tab)
+  const moved = await onePortalFormRedirect('monthly', token)
+  if (moved) redirect(moved)
   const form = await getMonthlyByToken(token)
   if (!form) notFound()
 

@@ -24,9 +24,11 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
  * the top.
  */
 export default function IntakeForm({
-  token, clientName, title, definition, initialAnswers, initialStatus, files: initialFiles,
+  token, clientName, title, definition, initialAnswers, initialStatus, files: initialFiles, backHref,
 }: {
   token: string
+  /** on the one portal: the way back to it (app/portal/[token]/home) */
+  backHref?: string | null
   clientName: string
   title: string
   definition: TemplateDefinition
@@ -172,6 +174,7 @@ export default function IntakeForm({
       <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
+        {backHref && <a href={backHref} className="mb-6 inline-flex min-h-11 items-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
         <h1 className="max-w-[18ch] text-center font-lamah text-[34px] font-medium leading-[1.1] tracking-[-0.03em] sm:text-[44px]">
           Thank you. This is with us now.
         </h1>
@@ -196,6 +199,7 @@ export default function IntakeForm({
               so any filter here destroys it */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
+          {backHref && <a href={backHref} className="inline-flex min-h-11 items-center font-lamam text-[10px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
           <p className="hidden font-lamam text-[10px] uppercase tracking-widest text-cream-dim sm:block">
             {clientName || title}
           </p>

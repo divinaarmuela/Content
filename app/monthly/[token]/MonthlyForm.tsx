@@ -22,9 +22,11 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error'
  * back lands on the first section still missing answers rather than at the top.
  */
 export default function MonthlyForm({
-  token, clientName, title, period, definition, initialAnswers, initialStatus,
+  token, clientName, title, period, definition, initialAnswers, initialStatus, backHref,
 }: {
   token: string
+  /** on the one portal: the way back to it (app/portal/[token]/home) */
+  backHref?: string | null
   clientName: string
   title: string
   period: string
@@ -129,6 +131,7 @@ export default function MonthlyForm({
       <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-cream">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/MDLogo-trim.png" alt="MD Media" className="mb-10 h-6 w-auto" />
+        {backHref && <a href={backHref} className="mb-6 inline-flex min-h-11 items-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
         <h1 className="max-w-[18ch] text-center font-lamah text-[34px] font-medium leading-[1.1] tracking-[-0.03em] sm:text-[44px]">
           Thank you. We&apos;ll plan around this.
         </h1>
@@ -151,6 +154,7 @@ export default function MonthlyForm({
         <div className="mx-auto flex h-16 max-w-5xl items-center gap-4 px-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/MDLogo-trim.png" alt="MD Media" className="h-5 w-auto" />
+          {backHref && <a href={backHref} className="inline-flex min-h-11 items-center font-lamam text-[10px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
           <p className="hidden font-lamam text-[10px] uppercase tracking-widest text-cream-dim sm:block">
             {clientName ? `${clientName} · ${period}` : period}
           </p>

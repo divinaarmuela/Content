@@ -20,6 +20,16 @@ import { waitsOnClient } from '../../../lib/one-portal-page'
 import OnePortalScheduling from '../../../components/portal/OnePortalScheduling'
 import { getEditingPortal, editingPortalWaiting } from '../../../lib/editing-portal'
 import { PORTAL_TABS, onePortalPath, readTab } from '../../../lib/one-portal-core'
+import { loadPortalForms, portalFormById } from '../../../lib/one-portal-forms'
+import { FORM_PARAM } from '../../../lib/one-portal-forms-core'
+import { getIntakeByToken, listIntakeFiles } from '../../../lib/intake'
+import { getMonthlyByToken } from '../../../lib/monthly'
+import { monthLabel } from '../../../lib/monthly-core'
+import { getShootByToken } from '../../../lib/shoots'
+import IntakeForm from '../../../intake/[token]/IntakeForm'
+import MonthlyForm from '../../../monthly/[token]/MonthlyForm'
+import ShootAnswer from '../../../shoot/[token]/ShootAnswer'
+import { PortalIntakeView } from '../../../components/portal/PortalIntake'
 
 export const metadata: Metadata = {
   title: 'Your portal — MD Media',
@@ -45,11 +55,56 @@ export default async function OnePortalPage({ params, searchParams }: {
   // the booked posts always (the tab's badge); the posted feeds only when the Scheduling tab is open
   const profiles = await loadScheduling(page.client.id, page.scope, page.data.client.timezone, new Date(), askedTab === 'scheduling' || askedTab === null)
   page.waiting.scheduling = schedulingWaiting(profiles)
+  // THE FORMS (2 Oct 2026: "all this links should redirect to their one portal"): intake forms, monthly updates and
+  // shoot-date proposals are rows on the Shoot brief tab; the business's only, never on a person's portal
+  const forms = await loadPortalForms(page.client.id, page.scope, page.data.client.timezone || 'Australia/Melbourne')
+  page.waiting.shoot += forms.filter(f => f.waiting).length
   // no tab asked for: the first one with something waiting on them, else Scheduling (what goes out next)
   const tab = typeof sp.tab === 'string' ? readTab(sp.tab) : (PORTAL_TABS.find(t => page.waiting[t.key] > 0)?.key ?? 'scheduling')
   const id = typeof sp.id === 'string' ? sp.id : null
   const boardId = typeof sp.board === 'string' ? sp.board : null
   const { token, data } = page
+
+  // ONE FORM, FULL SCREEN, AT A PORTAL ADDRESS — the same page its old link opened, with the way back to the portal.
+  // Saving goes through the form's own routes as before; only where it is opened from changed.
+  const pick = (k: keyof typeof FORM_PARAM) => (typeof sp[FORM_PARAM[k]] === 'string' ? String(sp[FORM_PARAM[k]]) : null)
+  if (tab === 'shoot' && (pick('intake') || pick('monthly') || pick('proposal'))) {
+    if (page.scope.kind !== 'business') notFound()
+    const backHref = onePortalPath(token, 'shoot')
+    const fonts = `${archivo.variable} ${sometype.variable}`
+    if (pick('intake')) {
+      const row = await portalFormById<{ client_id: string }>('intake', pick('intake')!, page.client.id)
+      const form = row ? await getIntakeByToken(row.token) : null
+      if (!form || form.status === 'draft') notFound()
+      return (
+        <div className={fonts}>
+          <IntakeForm token={form.token} clientName={data.client.name} title={form.title || 'Intake'} definition={form.definition}
+            initialAnswers={form.answers} initialStatus={form.status} files={await listIntakeFiles(form.id)} backHref={backHref} />
+        </div>
+      )
+    }
+    if (pick('monthly')) {
+      const row = await portalFormById<{ client_id: string }>('monthly', pick('monthly')!, page.client.id)
+      const form = row ? await getMonthlyByToken(row.token) : null
+      if (!form || form.status === 'draft') notFound()
+      const period = monthLabel(form.month, form.year)
+      return (
+        <div className={fonts}>
+          <MonthlyForm token={form.token} clientName={data.client.name} title={form.title || `Monthly update — ${period}`} period={period}
+            definition={form.definition} initialAnswers={form.answers} initialStatus={form.status} backHref={backHref} />
+        </div>
+      )
+    }
+    const row = await portalFormById<{ client_id: string }>('proposal', pick('proposal')!, page.client.id)
+    const proposal = row ? await getShootByToken(row.token) : null
+    if (!proposal) notFound()
+    return (
+      <div className={fonts}>
+        <ShootAnswer token={proposal.token} clientName={data.client.name} title={proposal.title} startsAt={proposal.starts_at}
+          endsAt={proposal.ends_at} location={proposal.location} note={proposal.note} initialStatus={proposal.status} backHref={backHref} />
+      </div>
+    )
+  }
   const tabLabel = PORTAL_TABS.find(t => t.key === tab)!.label
   const back = (words: string) => (
     <Link href={onePortalPath(token, tab)} className="inline-flex min-h-10 w-fit items-center text-[13px] font-semibold underline-offset-4 hover:underline">← {words}</Link>
@@ -92,6 +147,17 @@ export default async function OnePortalPage({ params, searchParams }: {
       <div className="flex flex-col gap-5" data-one-portal-open={id}>
         {back('All shoots')}
         <OnePortalShoots token={token} data={data} shoots={[card]} initialCardId={typeof sp.card === 'string' ? sp.card : null} />
+      </div>
+    )
+  }
+  const answersId = tab === 'shoot' && page.scope.kind === 'business' ? pick('answers') : null
+  if (answersId) {
+    const form = (data.intake ?? []).find(f => f.id === answersId) ?? null
+    if (!form) notFound()
+    opened = (
+      <div className="flex flex-col gap-5" data-one-portal-open={answersId}>
+        {back('All shoots')}
+        <PortalIntakeView forms={[form]} />
       </div>
     )
   }
@@ -143,6 +209,24 @@ export default async function OnePortalPage({ params, searchParams }: {
     line: [c.shoot?.date_label ?? null, c.line].filter(Boolean).join(' · ') || null,
     chip: waitsOnClient(c) ? { words: 'Waiting on you', tone: 'waiting' } : c.column === 'approved' ? { words: 'Approved', tone: 'done' } : null,
   }))
+  const openForms = new Set(forms.filter(f => f.kind === 'intake').map(f => f.id))
+  const formListRows: ListRow[] = [
+    ...forms.map(f => ({
+      key: `${f.kind}-${f.id}`,
+      href: `${onePortalPath(token, 'shoot')}&${FORM_PARAM[f.kind]}=${encodeURIComponent(f.id)}`,
+      title: f.title,
+      line: f.line,
+      chip: f.waiting ? { words: f.kind === 'proposal' ? 'Waiting on you' : 'To fill in', tone: 'waiting' as const } : f.done ? { words: 'Booked', tone: 'done' as const } : null,
+    })),
+    // answers the team shows on the portal, once the form is no longer theirs to fill in
+    ...(page.scope.kind === 'business' ? (data.intake ?? []) : []).filter(f => !openForms.has(f.id)).map(f => ({
+      key: `answers-${f.id}`,
+      href: `${onePortalPath(token, 'shoot')}&${FORM_PARAM.answers}=${encodeURIComponent(f.id)}`,
+      title: f.title,
+      line: `Your answers · ${f.answered} of ${f.total} answered`,
+      chip: null,
+    })),
+  ]
   const boardRows: ListRow[] = page.boards.map(b => ({
     key: b.id, href: onePortalPath(token, 'boards', b.id), title: b.name, line: 'A board from the team',
   }))
@@ -192,8 +276,9 @@ export default async function OnePortalPage({ params, searchParams }: {
           {opened ?? (
             <>
               <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{tabLabel}</h1>
+              {tab === 'shoot' && formListRows.length > 0 && <OnePortalList heading="Questions for you" rows={formListRows} />}
               {tab === 'shoot' && (
-                <OnePortalList rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
+                <OnePortalList heading={formListRows.length > 0 ? 'Shoots' : undefined} rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
               )}
               {tab === 'boards' && <OnePortalList rows={boardRows} empty="No boards shared with you yet. When the team shares one, it shows here." />}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}

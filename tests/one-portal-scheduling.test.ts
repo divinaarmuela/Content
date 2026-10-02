@@ -77,7 +77,7 @@ describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by
   })
   it('the page: Shoot brief lists shoots and boards, Scheduling lists Your feed and the works; each opens its own page', () => {
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
-    expect(page).toContain('<OnePortalList rows={shootRows}')
+    expect(page).toContain("<OnePortalList heading={formListRows.length > 0 ? 'Shoots' : undefined} rows={shootRows}")
     expect(page).toContain('<OnePortalList heading="By the work" rows={workRows}')
     expect(page).toMatch(/if \(!page\.boards\.some\(b => b\.id === openBoard\)\) notFound\(\)/)
   })

@@ -13,9 +13,11 @@ import type { ShootStatus } from '../../lib/shoot-core'
  * proposal reads as no longer available.
  */
 export default function ShootAnswer({
-  token, clientName, title, startsAt, endsAt, location, note, initialStatus,
+  token, clientName, title, startsAt, endsAt, location, note, initialStatus, backHref,
 }: {
   token: string
+  /** on the one portal: the way back to it (app/portal/[token]/home) */
+  backHref?: string | null
   clientName: string
   title: string
   startsAt: string
@@ -93,6 +95,7 @@ export default function ShootAnswer({
     <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 py-16 text-cream">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/MDLogo-trim.png" alt="MD Media" className="mb-12 h-6 w-auto" />
+      {backHref && <a href={backHref} className="-mt-6 mb-8 inline-flex min-h-11 items-center font-lamam text-[11px] uppercase tracking-widest text-cream-dim underline-offset-4 hover:underline">← Your portal</a>}
 
       <p className="font-lamam text-[10px] uppercase tracking-widest text-cream-faint">
         Shoot proposal{clientName ? ` · ${clientName}` : ''}
@@ -132,7 +135,7 @@ export default function ShootAnswer({
         <div className="mt-10 flex flex-col items-center gap-3 text-center">
           <p className="font-lamam text-[11px] uppercase tracking-widest text-cream">
             {status === 'accepted'
-              ? 'Locked in ✓ — a calendar invite is on its way'
+              ? 'Locked in ✓ — we have it in our calendar'
               : 'Declined — we’ll propose another date'}
           </p>
           {beaten && (

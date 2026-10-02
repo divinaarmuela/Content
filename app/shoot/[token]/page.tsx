@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { onePortalFormRedirect } from '../../lib/one-portal-forms'
 import { archivo, sometype } from '../../components/lama/fonts'
 import { getShootByToken } from '../../lib/shoots'
 import ShootAnswer from './ShootAnswer'
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic'
 /** The client's side of a shoot proposal, behind an unguessable token. */
 export default async function ShootPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+  // a client on the one portal: this old link opens the same form inside their one link (Shoot brief tab)
+  const moved = await onePortalFormRedirect('proposal', token)
+  if (moved) redirect(moved)
   const proposal = await getShootByToken(token)
   if (!proposal) notFound()
 
