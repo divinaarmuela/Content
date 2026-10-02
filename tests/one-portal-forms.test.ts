@@ -76,3 +76,11 @@ describe('Forms is its own tab (the owner, 2 Oct 2026: "usually we would have mu
     expect(readFileSync('app/shoot/[token]/ShootAnswer.tsx', 'utf8')).not.toContain('Add to my calendar')
   })
 })
+
+describe('a failed Drive hand-in leaves the tray once a later one on the card worked (2 Oct 2026, Justin\'s September Videos)', () => {
+  it('the row reads the later hand-in and goes like a finished one', () => {
+    const src = readFileSync('app/dashboard/DriveCopyRows.tsx', 'utf8')
+    expect(src).toContain("const putRight = handIn?.status === 'failed' && at >= 0 && all.slice(at + 1).some(h => h.status === 'done')")
+    expect(src).toContain("const done = handIn?.status === 'done' || putRight")
+  })
+})

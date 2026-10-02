@@ -31,13 +31,18 @@ function DriveCopyRow({ watch }: { watch: DriveCopyWatch }) {
   }, [handIn?.status])
   // A FINISHED COPY LEAVES THE TRAY on its own once it has been read (30 Sep 2026: finished rows sat over the card's
   // files); one that stopped stays until it is closed — that one needs doing something about
-  const done = handIn?.status === 'done'
+  // A STOP THAT A LATER HAND-IN PUT RIGHT leaves too (2 Oct 2026, Divina on Justin's September Videos: the 6:36 pm
+  // copy failed, her 6:49 pm retry handed in all 8 files, and the tray still read "Nothing was handed in")
+  const all = driveHandInsOf(card as never)
+  const at = all.findIndex(h => h.id === watch.handInId)
+  const putRight = handIn?.status === 'failed' && at >= 0 && all.slice(at + 1).some(h => h.status === 'done')
+  const done = handIn?.status === 'done' || putRight
   useEffect(() => {
     if (!done) return
     const t = setTimeout(() => dismissDriveCopy(watch.handInId), DONE_SHOWN_MS)
     return () => clearTimeout(t)
   }, [done, watch.handInId])
-  const said = handInWords(pull as never, handIn, now)
+  const said = putRight ? { words: 'Handed in on the next try — nothing to do', tone: 'done' as const } : handInWords(pull as never, handIn, now)
   const tone = !said ? 'text-muted-foreground' : said.tone === 'failed' ? 'text-accent-red-deep' : said.tone === 'done' ? 'text-foreground' : 'text-muted-foreground'
   return (
     <li className="flex items-start gap-2 rounded-inner px-1 py-1 text-[12px]">
