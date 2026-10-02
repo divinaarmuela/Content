@@ -161,8 +161,52 @@ async function answerBookedPost(body: PostBody, client: Client, scope: PortalSco
   return NextResponse.json({ ok: true, stage: result.stage, scheduled_for: result.post.scheduled_for })
 }
 
+/**
+ * THE ONE PORTAL'S COMMENT (2 Oct 2026, the owner: "why can't [they] leave comments?") — a note on a post that is
+ * still to go out, in the post's Client thread (the team sees it in the post window), with the client's name;
+ * whoever made the post and whoever holds it are emailed. Only for a client on the one portal.
+ */
+async function commentOnPost(body: PostBody, client: Client, scope: PortalScope): Promise<NextResponse> {
+  if (!onePortal(client)) return NextResponse.json({ error: NOT_WITH_YOU }, { status: 404 })
+  const note = String(body.note ?? '').trim().slice(0, 2000)
+  const name = String(body.author_name ?? '').replace(/["<>\r\n]/g, '').trim().slice(0, 60)
+  if (!note) return NextResponse.json({ error: 'Write a comment first.' }, { status: 400 })
+  if (!name) return NextResponse.json({ error: 'Add your name so the team knows who wrote it.' }, { status: 400 })
+  const row = await table('social_posts').get(String(body.post_id ?? ''), { fresh: true }).catch(() => null)
+  const post = readPostState(row as Record<string, unknown> | null)
+  if (!post || post.client_id !== client.id || !(await postOnPortal(post, scope))) {
+    return NextResponse.json({ error: NOT_WITH_YOU }, { status: 404 })
+  }
+  if (!['booked', 'ready', 'draft'].includes(post.stage)) {
+    return NextResponse.json({ error: 'This post has gone out — tell your account manager if something needs fixing.' }, { status: 409 })
+  }
+  const actor = await portalActor(client.id, client.name)
+  const at = new Date().toISOString()
+  const saved = await table<PostComment>('post_comments').insert({
+    post_id: post.id, client_id: client.id, version: post.sent_version ?? null,
+    file_url: null, slide_index: null, visibility: 'client',
+    author_id: actor.id, author_name: name, author_role: 'client',
+    body: note, assigned_to: null, resolved_at: null, resolved_by: null,
+    created_at: at, updated_at: at,
+  } as Omit<PostComment, 'id'> as PostComment)
+  // the maker and the holder hear about it — a comment nobody reads is worse than none
+  const people = [...new Set([post.created_by, post.assigned_to].filter((x): x is string => !!x))]
+  for (const id of people) {
+    const person = await table<TeamUser>('team_users').get(id).catch(() => null)
+    if (!person?.email) continue
+    await notify({
+      eventType: 'one_portal_client_comment', entityType: 'social_post', entityId: `${post.id}#comment#${saved.id}`,
+      recipientId: person.id, recipientEmail: person.email,
+      subject: `${name} commented on a post`,
+      bodyHtml: renderEmail(escapeHtml(`${name} commented`), `<p>${escapeHtml(`“${note}”`)}</p><p>${escapeHtml(`On ${client.name}'s post, from their portal.`)}</p>`, 'See the post', `${DASHBOARD_URL}/dashboard/scheduler?post=${encodeURIComponent(post.id)}`),
+    }).catch(() => undefined)
+  }
+  return NextResponse.json({ ok: true, note_id: saved.id })
+}
+
 async function actOnClientPost(body: PostBody, client: Client, scope: PortalScope): Promise<NextResponse> {
   if (body.action === 'client_ok' || body.action === 'client_not_approved') return answerBookedPost(body, client, scope)
+  if (body.action === 'client_comment') return commentOnPost(body, client, scope)
   const postId = String(body.post_id ?? '')
   const action = String(body.action ?? '')
   if (action !== 'client_approve' && action !== 'client_ask_change' && action !== 'post_note') {

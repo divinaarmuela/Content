@@ -3,7 +3,7 @@ import { table } from '@/lib/db'
 import type { ContentItem, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { getPublisher } from './publisher'
 import { liveTiles, type LiveTile } from './feed-preview-core'
-import { readFrozenPost, reviewFiles, type FrozenPost } from './portal-core'
+import { clientPostNotes, readFrozenPost, reviewFiles, type FrozenPost, type PortalPostNote } from './portal-core'
 import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
 import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
@@ -41,6 +41,10 @@ export type ScheduledTile = {
   waiting_for_them: boolean
   note: string | null
   preview: ClientPreview[]
+  /** the post's client thread — the client's comments and the team's replies there, every version */
+  notes: (PortalPostNote & { version: number | null })[]
+  /** the client may add a comment now (anything still to go out) */
+  may_comment: boolean
 }
 
 export type PostedTile = LiveTile & {
@@ -120,6 +124,12 @@ export async function loadScheduling(
     : []
   const versionById = new Map(versions.map(v => [v.id, v]))
   const accountById = new Map(accounts.map(a => [a.id, a]))
+  const postIds = new Set(posts.map(p => p.id))
+  const noteRows = postIds.size
+    ? await table<{ id: string; post_id: string; version?: number | null; visibility?: string | null; author_role?: string | null; author_name?: string | null; body?: string | null; created_at?: string | null; file_url?: string | null }>('post_comments')
+      .list({ where: r => postIds.has(String(r.post_id)) }).catch(() => [])
+    : []
+  const versionOfNote = new Map(noteRows.map(r => [r.id, typeof r.version === 'number' ? r.version : null]))
 
   const tileOf = (p: PostState): ScheduledTile | null => {
     // the version the client sees: the one they said no to while it is off (Draft); otherwise the one booked
@@ -167,6 +177,8 @@ export async function loadScheduling(
       waiting_for_them: ifNoAnswerOf(p) === 'wait',
       note: state === 'not_approved' ? p.client_review?.note ?? null : null,
       preview,
+      notes: clientPostNotes(noteRows as never, p.id, null, 'You').map(n => ({ ...n, version: versionOfNote.get(n.id) ?? null })),
+      may_comment: p.stage === 'booked' || p.stage === 'ready' || p.stage === 'draft',
     }
   }
 

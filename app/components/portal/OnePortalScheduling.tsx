@@ -244,14 +244,17 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
       <div className="mx-auto w-full max-w-[420px]">
         {frame ? <PostPreviewFrame preview={frame as never} /> : <Cover tile={tile} className="aspect-square w-full rounded" />}
       </div>
+      {/* one name box for the answer and the comments alike */}
+      {(tile.answerable || tile.may_comment) && (
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name"
+          className="mt-4 h-11 w-full rounded-full border border-border bg-background px-4 text-[14px]" />
+      )}
 
       {tile.state === 'not_approved' ? (
         <p className="mt-4 rounded-inner bg-muted p-3 text-[14px]">You asked for a change{tile.note ? `: “${tile.note}”` : ''}. The team is on it — the new version will show here.</p>
       ) : tile.answerable ? (
         <div className="mt-4 flex flex-col gap-3" data-answer={tile.post_id}>
           {tile.last_slot && <p className="text-[13px] text-muted-foreground">This goes out in under 15 minutes, so your answer moves it to the next free time first.</p>}
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" aria-label="Your name"
-            className="h-11 rounded-full border border-border bg-background px-4 text-[14px]" />
           {saying === 'no' && (
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} autoFocus
               placeholder="What should change?" aria-label="What should change"
@@ -281,7 +284,65 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
           )}
         </div>
       ) : null}
+
+      <Comments token={token} tile={tile} name={name} />
     </Sheet>
+  )
+}
+
+/** THE POST'S COMMENTS (the owner, 2 Oct 2026: "why can't [they] leave comments?") — the client thread, every
+ *  version, and a box to add one while the post is still to go out. The team sees and answers it in the post window. */
+function Comments({ token, tile, name }: { token: string; tile: ScheduledTile; name: string }) {
+  const router = useRouter()
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const add = async () => {
+    if (!text.trim()) return
+    if (!name.trim()) { toast.error('Add your name so the team knows who wrote it.'); return }
+    setBusy(true)
+    try { localStorage.setItem(NAME_KEY, name.trim()) } catch { /* private window */ }
+    try {
+      const res = await fetch('/api/portal/act', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, post_id: tile.post_id, action: 'client_comment', note: text.trim(), author_name: name.trim() }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Your comment did not go through — try again.')
+      toast.success('Comment sent — the team has it.')
+      setText('')
+      router.refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Your comment did not go through.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-5 flex flex-col gap-2 border-t border-border pt-4" data-comments={tile.post_id}>
+      <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Comments</p>
+      {tile.notes.length === 0
+        ? <p className="text-[13px] text-muted-foreground">No comments yet.</p>
+        : tile.notes.map(n => (
+          <div key={n.id} className="rounded-inner bg-muted/60 p-2.5">
+            <p className="text-[12px] text-muted-foreground">
+              <span className="font-semibold text-foreground">{n.author_name}</span>
+              {n.from_team ? ' · MD Media' : ''} · {new Date(n.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              {n.version != null && n.version !== tile.version ? ` · on an earlier version` : ''}
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-[14px]">{n.body}</p>
+          </div>
+        ))}
+      {tile.may_comment && (
+        <>
+          <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Add a comment for the team"
+            aria-label="Add a comment" className="rounded-inner border border-border bg-background p-3 text-[14px]" />
+          <button type="button" disabled={busy || !text.trim()} onClick={() => void add()}
+            className="inline-flex min-h-10 w-fit items-center rounded-full border border-border px-4 text-[13px] font-semibold disabled:opacity-50">
+            {busy ? 'Sending…' : 'Send comment'}
+          </button>
+        </>
+      )}
+    </div>
   )
 }
 

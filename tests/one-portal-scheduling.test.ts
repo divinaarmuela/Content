@@ -43,3 +43,19 @@ describe('the tab', () => {
     expect(ui).toContain("const aspect = tall ? 'aspect-[9/16]' : 'aspect-[4/5]'")
   })
 })
+
+describe('the client comments on a post (2 Oct 2026: "why can\'t they leave comments?")', () => {
+  const route = readFileSync('app/api/portal/act/route.ts', 'utf8')
+  const ui = readFileSync('app/components/portal/OnePortalScheduling.tsx', 'utf8')
+  it('a comment on a post still to go out, in its Client thread, with their name; the maker and holder are told', () => {
+    expect(route).toContain("if (body.action === 'client_comment') return commentOnPost(body, client, scope)")
+    expect(route).toMatch(/async function commentOnPost[\s\S]{0,200}if \(!onePortal\(client\)\)/)
+    expect(route).toMatch(/visibility: 'client',\s+author_id: actor\.id, author_name: name, author_role: 'client',/)
+    expect(route).toContain('const people = [...new Set([post.created_by, post.assigned_to].filter((x): x is string => !!x))]')
+    expect(route).toMatch(/postOnPortal\(post, scope\)/)
+  })
+  it('the sheet shows the thread and one name box for the answer and the comment', () => {
+    expect(ui).toContain('<Comments token={token} tile={tile} name={name} />')
+    expect((ui.match(/placeholder="Your name"/g) ?? []).length).toBe(1)
+  })
+})
