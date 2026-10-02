@@ -18,7 +18,7 @@ build choice and may change if the code says otherwise.
 | R3 | The client approves **after** booking, per post, in the Scheduling tab: **Approve** or **Not approved** (+ note). | owner |
 | R4 | **Not approved** → off the schedule at once, back to the team. Whoever made the post and whoever it is assigned to are told. They see the client's comments, can change media, and re-send with the usual choice **Team only / Share with client**. It goes through the quality check again. | owner |
 | R5 | Each post carries a choice set by the team: **If the client hasn't approved: Post anyway (default) / Wait for the client.** | owner |
-| R6 | **Post anyway**, no answer → one reminder email to the client, then it posts as booked. | owner |
+| R6 | **Post anyway**, no answer → it posts as booked. The client is NOT emailed a reminder (owner, 2 Oct 2026: nothing reaches a client until someone presses send); the account managers are told 24 h out and may press Send the preview again. | owner |
 | R7 | **Wait for the client**, no answer by 15 min before its time → taken off the schedule, maker + assignee told; it keeps waiting on the client's link. | owner (as understood, 2 Oct) |
 | R8 | **Any client answer inside the last 15 minutes** moves the post to the next free 15-minute slot first, then applies the answer (approved → posts at the new time; not approved → off the schedule). A late approval of a "Wait" post that came off is booked for the next 15-minute slot. The team is told the new time. | owner |
 | R9 | A post changed after the client approved **keeps** the approval. If the team sends it to the client again, it shows there for review again. | owner |

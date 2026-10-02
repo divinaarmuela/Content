@@ -211,8 +211,9 @@ export const publishDispatcher = inngest.createFunction(
       })(),
       // ONE PORTAL (docs/ONE_PORTAL_SPEC.md R7): a "Wait for the client" post the client has not approved comes
       // off 15 minutes before its time. Reads only clients on the one portal; nobody else is touched.
-      // ONE PORTAL (R6): a booked post the client was asked about and has not answered — one reminder email to the
-      // client 24 h before (or at once when asked later). Clients on the one portal only.
+      // ONE PORTAL (R6): a booked post the client was asked about and has not answered — the client's account
+      // managers are told 24 h before (or at once when asked later). The CLIENT is never emailed by this sweep
+      // (the owner, 2 Oct 2026): only a person pressing Send the preview emails a client.
       client_reminders: await (async () => {
         try {
           const { sendOnePortalReminders } = await import('../lib/one-portal-send')

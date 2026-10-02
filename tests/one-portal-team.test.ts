@@ -60,3 +60,23 @@ describe('Send the preview', () => {
     expect(lib).toContain('if (delivered.length > 0 && !input.reminder)')
   })
 })
+
+describe('nothing is emailed to a client unless a person presses send (the owner, 2 Oct 2026)', () => {
+  const lib = readFileSync('app/lib/one-portal-send.ts', 'utf8')
+  const sweep = lib.slice(lib.indexOf('export async function sendOnePortalReminders'))
+  it('the 24 h reminder tells the account managers, never the client', () => {
+    expect(sweep).not.toContain('toClient')
+    expect(sweep).not.toContain('deliberateClientSend')
+    expect(sweep).not.toContain('sendSchedulingPreview(')
+    expect(sweep).toContain('recipientEmail: m.email')
+  })
+  it('the only automatic sweeps that run are not client sends', () => {
+    const fns = readFileSync('app/inngest/functions.ts', 'utf8')
+    expect(fns).toContain('The CLIENT is never emailed by this sweep')
+  })
+  it('the mailer still drops every client email nobody pressed send for', () => {
+    const mailer = readFileSync('app/lib/mailer.ts', 'utf8')
+    expect(mailer).toContain("if (clientNotificationsPaused() && input.toClient === true && input.deliberateClientSend !== true)")
+    expect(mailer).toMatch(/return true \|\| process\.env\.PAUSE_CLIENT_NOTIFICATIONS/)
+  })
+})

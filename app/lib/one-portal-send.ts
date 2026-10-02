@@ -1,6 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { Client, ClientContact, ContentItem, SocialPost } from '@/lib/db-types'
+import type { Client, ClientContact, ContentItem, SocialPost, TeamUserClient } from '@/lib/db-types'
+import { attachOne } from '@/lib/db-join'
 import { notify, renderEmail, escapeHtml, type NotifyResult } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { formatWithZone, safeZone } from './timezone-core'
@@ -140,7 +141,14 @@ export async function sendSchedulingPreview(input: {
   return { ok: true, delivered, asked, link, message: roundOutcomeWords(results as never) }
 }
 
-/** The reminder sweep (R6): each client on the one portal, the booked posts asked about and unanswered, 24 h out. */
+/**
+ * THE REMINDER GOES TO THE TEAM, NOT THE CLIENT (the owner, 2 Oct 2026: "make sure nothing [is] sent to client in
+ * email now until we click send to client — all will be in [the] portal"). R6 used to email the client on its own
+ * 24 h out; nothing reaches a client now unless a person presses Send the preview. So each booked post the client
+ * was asked about and has not answered tells the client's account managers, once per post and version, and they
+ * decide whether to press Send the preview again. The post itself still goes out (Post anyway) or comes off
+ * (Wait for the client) exactly as before.
+ */
 export async function sendOnePortalReminders(now = new Date()): Promise<{ sent: number }> {
   const clients = await table<Client>('clients').list({ where: c => onePortal(c) })
   let sent = 0
@@ -149,11 +157,46 @@ export async function sendOnePortalReminders(now = new Date()): Promise<{ sent: 
     const due = rows.map(r => readPostState(r as unknown as Record<string, unknown>))
       .filter((p): p is PostState => !!p && reminderDue(p as never, now.getTime()))
     if (due.length === 0) continue
-    const r = await sendSchedulingPreview({
-      clientId: c.id, emails: null, reminder: { post_ids: due.map(p => p.id) }, now,
-      pressedBy: { id: 'system', name: 'MD Media', email: 'hello@mdmmarketing.com.au' },
-    }).catch(() => null)
-    if (r?.ok && r.delivered.length > 0) sent += 1
+    const managers = await clientManagers(c.id).catch(() => [] as { id: string; email: string }[])
+    if (managers.length === 0) continue
+    const items = await table<ContentItem>('content_items').list({ where: r => r.client_id === c.id }).catch(() => [] as ContentItem[])
+    const tz = c.timezone || 'Australia/Melbourne'
+    const words = due.map(p => {
+      const title = String(items.find(i => i.id === p.source_item_id)?.title ?? '').trim() || p.caption.split('
+')[0].slice(0, 60) || 'A post'
+      return `${title} — ${whenIn(p.scheduled_for, tz) ?? 'no time set'}`
+    })
+    const subject = `${c.name} has not answered ${due.length === 1 ? 'a booked post' : `${due.length} booked posts`}`
+    const link = `${DASHBOARD_URL}/dashboard/social/schedule?clientId=${encodeURIComponent(c.id)}`
+    for (const m of managers) {
+      const r = await notify({
+        eventType: 'one_portal_unanswered',
+        entityType: 'client',
+        // once per post and version — the same unanswered post is not told twice
+        entityId: `${c.id}#unanswered#${due.map(p => `${p.id}v${p.sent_version}`).sort().join(',')}`,
+        recipientId: m.id,
+        recipientEmail: m.email,
+        clientId: c.id,
+        subject,
+        bodyHtml: renderEmail(escapeHtml(subject),
+          `<p>${escapeHtml(c.name)} was sent the preview and has not answered yet:</p>`
+          + `<ul>${words.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
+          + '<p>Nothing has been emailed to the client. If you want to remind them, press <strong>Send the preview</strong> on the schedule.</p>',
+          'Open the schedule', link),
+      }).catch(() => 'failed' as const)
+      if (r === 'sent') sent += 1
+    }
   }
   return { sent }
+}
+
+/** The client's account managers (super admins assigned to the client count), active, with an email. */
+async function clientManagers(clientId: string): Promise<{ id: string; email: string }[]> {
+  const links = await table<TeamUserClient>('team_user_clients').list({ by: { client_id: clientId } })
+  const joined = await attachOne(links, 'team_user_id', 'team_users', ['id', 'email', 'role', 'active_status'])
+  return joined
+    .map(r => r.team_users as unknown as { id: string; email: string; role: string; active_status: boolean } | null)
+    .filter((u): u is { id: string; email: string; role: string; active_status: boolean } =>
+      !!u && (u.role === 'account_manager' || u.role === 'super_admin') && u.active_status && !!u.email)
+    .map(u => ({ id: u.id, email: u.email }))
 }
