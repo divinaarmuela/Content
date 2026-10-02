@@ -51,7 +51,9 @@ export type StartResult = { ok: true; handIn: DriveHandIn; round: number } | { o
 
 /** record the hand-in on the card and queue the copy of the picked files */
 export async function startDriveHandIn(user: TeamUser, item: ContentItem, body: { url?: unknown; ids?: unknown; map?: unknown }): Promise<StartResult> {
-  const manager = user.role === 'account_manager' || user.role === 'super_admin'
+  // the colourist hands in the graded cut at colour grade (COLOUR_GRADE_SPLIT_SPEC C4) — a manager's say, there only
+  const colourist = (user as { colourist?: unknown }).colourist === true && String(item.status) === 'colour_grade'
+  const manager = user.role === 'account_manager' || user.role === 'super_admin' || colourist
   const refusal = handInRefusal(item as never, manager)
   if (refusal) return { ok: false, status: 409, error: refusal }
   const listing = await listDriveHandIn(body.url)
@@ -175,6 +177,9 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
     return {
       ...cur,
       ...(result.ok && result.added.length > 0 ? { final_files: result.files } : {}),
+      // THE GRADED CUT LANDED (C5): a hand-in settled at colour grade is the graded set for this version — what
+      // "Put it on the client's portal" waits for
+      ...(result.ok && String((cur as { status?: unknown }).status ?? '') === 'colour_grade' ? { graded_round: round } : {}),
       drive_handins: withHandIn(list, settled),
       updated_at: now,
     } as unknown as ContentItem

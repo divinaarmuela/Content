@@ -37,6 +37,7 @@ import { finalFilesOf, hasFinishedWork, liveFilesAt } from './final-files-core'
 import { clientFrozenFor } from './edit-freeze-core'
 import { withClientRound } from './editing-portal-core'
 import { handInRound, roundOf } from './edit-round-core'
+import { gradeReadyProblem, needsColourGrade } from './colour-grade-core'
 import type { Role } from './identity-core'
 import { systemMayMove } from './posting-card-core'
 import { BATCH_TRANSITION_NOTIFICATIONS } from './batch-brief-core'
@@ -178,6 +179,15 @@ async function resolveAudience(audience: Audience, item: ContentItem): Promise<{
       // super admins hear, because they stand in for her
       const flagged = await table<TeamUserRow>('team_users')
         .list({ where: u => isQualityReviewer(u as { role?: string; quality_reviewer?: boolean }) && u.active_status && u.role !== 'client' })
+      if (flagged.length > 0) return flagged
+      return table<TeamUserRow>('team_users')
+        .list({ where: u => u.role === 'super_admin' && u.active_status })
+    }
+    case 'colourists': {
+      // everyone ticked Colourist on the Team page (Martin, COLOUR_GRADE_SPLIT_SPEC C3); with nobody ticked the super
+      // admins hear, the way they do for the quality check
+      const flagged = await table<TeamUserRow>('team_users')
+        .list({ where: u => (u as { colourist?: unknown }).colourist === true && u.active_status && u.role !== 'client' })
       if (flagged.length > 0) return flagged
       return table<TeamUserRow>('team_users')
         .list({ where: u => u.role === 'super_admin' && u.active_status })
@@ -794,7 +804,7 @@ export async function performTransition(
   const hats: Hat[] = system
     ? []
     : [...new Set<Hat>([
-      ...actingRoles({ id: actor.id, role: actor.role, quality_reviewer: actor.quality_reviewer === true }, item),
+      ...actingRoles({ id: actor.id, role: actor.role, colourist: (actor as { colourist?: unknown }).colourist === true, quality_reviewer: actor.quality_reviewer === true }, item),
       ...(opts?.grantedHats ?? []),
     ])]
 
@@ -859,6 +869,18 @@ export async function performTransition(
   if (!system && String(item.status) === 'quality_check' && (to === 'client_review' || to === 'approved_for_scheduling')
     && !hasFiles && pendingHandIn(item as never)) {
     throw new AuthzError('The finished files are still copying in from Google Drive — pass it once they have landed', 400)
+  }
+  // COLOUR GRADE (docs/COLOUR_GRADE_SPLIT_SPEC.md C1, C5): a video edit's quality check passes to the colourist, never
+  // straight to the client; nothing else goes to colour grade; and the graded cut goes on only once it has landed
+  if (!system && String(item.status) === 'quality_check' && needsColourGrade(kindSlug) && (to === 'client_review' || to === 'approved_for_scheduling')) {
+    throw new AuthzError('A video edit goes to colour grade first — press "Passed — to colour grade"', 400)
+  }
+  if (to === 'colour_grade' && !needsColourGrade(kindSlug)) {
+    throw new AuthzError('Only video edits go to colour grade', 400)
+  }
+  if (!system && String(item.status) === 'colour_grade' && (to === 'client_review' || to === 'approved_for_scheduling')) {
+    const problem = gradeReadyProblem(item as never, roundOf(item as never), !!pendingHandIn(item as never))
+    if (problem) throw new AuthzError(problem, 400)
   }
   if (!system && check.rule.requires === 'reviewable_asset') {
     if (isBriefTask) {

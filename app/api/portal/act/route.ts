@@ -21,6 +21,7 @@ import { postVersionId, readPostState, type PostState } from '../../../lib/post-
 import { refusalStatus, type PostActRefused } from '../../../lib/post-act-contract'
 import { clientActOnPost } from '../../../lib/post-stage'
 import { ANSWER_NOTE_NEEDED, onePortal } from '../../../lib/one-portal-core'
+import { splitCard } from '../../../lib/split'
 
 
 /**
@@ -362,6 +363,20 @@ export async function POST(req: Request) {
       || (action === 'request_changes' && !offered.askForChange)
       || (action === 'comment' && !offered.comment)) {
       return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+    }
+    // SEND MY ANSWERS (docs/COLOUR_GRADE_SPLIT_SPEC.md C6): the client ticked the videos they approve; the ticked ones
+    // go to handover, the rest back to the team as a Round N card. Only on a card with them, on their own portal.
+    if (action === 'send_answers') {
+      if (!offered.approve) return NextResponse.json({ error: NOT_WITH_YOU }, { status: 403 })
+      if (!belongsToPortal(item as { for_contact_id?: string | null }, scope)) return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      if (!authorName) return NextResponse.json({ error: 'Add your name so the team knows who answered' }, { status: 400 })
+      try {
+        return NextResponse.json(await splitCard(actor as never, item.id, { by: 'client' }))
+      } catch (e) {
+        // the split's own refusals are written for the person reading them (split.ts)
+        if (e instanceof AuthzError) return NextResponse.json({ error: e.message }, { status: e.status })
+        throw e
+      }
     }
     // …and a shoot PLAN can only be decided on when the shoot was actually
     // shared with them: the brief item may sit at client_review while the

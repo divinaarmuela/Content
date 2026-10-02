@@ -67,7 +67,7 @@ export default function ProductionPage() {
   // anyone on the team plans a shoot — the shoot page decides whose it then is
   const canPlan = can('scheduler')
   const isManager = can('account_manager')
-  const viewer = useMemo(() => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
+  const viewer = useMemo(() => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true } : null), [me])
   const team = useTeamMembers(isManager)
 
   const [view, setView] = usePersistedChoice(VIEW_KEY, VIEWS, 'stage', 'view')

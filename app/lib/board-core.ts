@@ -24,7 +24,7 @@ import type { Role } from './identity-core'
 import type { Hat } from './workflow-core'
 import { isDelivered } from './deliver-only-core'
 
-export type BoardColumnKey = 'draft' | 'quality_check' | 'with_client' | 'ready_to_post' | 'booked' | 'posted' | 'delivered'
+export type BoardColumnKey = 'draft' | 'quality_check' | 'colour_grade' | 'with_client' | 'ready_to_post' | 'booked' | 'posted' | 'delivered'
 
 export type BoardColumn = {
   key: BoardColumnKey
@@ -55,6 +55,14 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
     // internal_review is LEGACY: a card that was at the old manager's check
     // when that step went away is drawn here and moved on by the manager
     statuses: ['quality_check', 'internal_review'],
+  },
+  // COLOUR GRADE (docs/COLOUR_GRADE_SPLIT_SPEC.md, the owner, 2 Oct 2026): a video edit passed by the quality check
+  // waits here for the colourist, who hands in the graded cut and puts it on the client's portal
+  {
+    key: 'colour_grade',
+    label: 'Colour grade',
+    meaning: 'Passed the quality check. The colourist grades it, then puts it on the client’s portal.',
+    statuses: ['colour_grade'],
   },
   {
     key: 'with_client',

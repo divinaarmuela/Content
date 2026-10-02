@@ -40,6 +40,8 @@ import { cardPeople } from '../../lib/card-people-core'
 import { STAGE_WORDS, readPostState, waitingOn, type PostState } from '../../lib/post-stage-core'
 import { postWindowHref } from '../../lib/post-board-core'
 import { SCHEDULE_PAGE } from '../../lib/page-access-core'
+import { ColourGradePanel } from './ColourGradePanel'
+import { SplitPanel } from './SplitPanel'
 
 /**
  * THE POST APPROVAL DRAWER — a post uploaded for approval, opened from its
@@ -266,7 +268,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
     fmt: (iso: string) => formatInZone(iso, zone, 'full') ?? iso,
   }), [activity, team, fileJobs, item, zone, handedAt])
 
-  const viewer = me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null
+  const viewer = me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true } : null
   const isManager = me?.role === 'account_manager' || me?.role === 'super_admin'
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer ?? { id: '', role: 'scheduler' }, onClose)
   const card = item as unknown as BoardViewCard | null
@@ -518,6 +520,10 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
 
   return (
     <div data-tour="post-drawer" className="flex h-full flex-col overflow-y-auto">
+      {/* the colourist's hand-in at Colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C4) */}
+      {card && <ColourGradePanel item={card as never} mayGrade={isManager || me?.colourist === true} />}
+      {/* the client's answers, split (docs/COLOUR_GRADE_SPLIT_SPEC.md C6) */}
+      {card && <SplitPanel item={card as never} mayDecide={isManager} />}
       {/* ── 1. what and where ── */}
       {/* the buttons sit UNDER the title, full width: beside it they squeezed
           the title to "ZZ walk test ca…" (seen in the browser, 12 Sep 2026) */}

@@ -86,7 +86,7 @@ const SUMMARY: { key: 'ready' | 'booked' | 'posted' | 'missed'; tone: StageTone 
 export default function SchedulePage() {
   const { me, noAccount } = useRole()
   const viewer: ScopeViewer | null = useMemo(
-    () => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer ?? false } : null), [me])
+    () => (me ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer ?? false, colourist: me.colourist === true } : null), [me])
 
   /**
    * ARRIVING FROM A LINK — the bell, or an email.

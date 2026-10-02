@@ -18,13 +18,17 @@ import { defaultMap } from '../../../../../lib/drive-handin-core'
  * follows: the person holding it, whoever holds its scheduling, or a manager (item-edit-core.canEditItemFields).
  * Nothing here writes to Google Drive (CLAUDE.md trap 13).
  */
+/** the colourist hands in the graded cut at colour grade, whoever holds the card (COLOUR_GRADE_SPLIT_SPEC C4) */
+const gradesIt = (user: unknown, item: unknown) =>
+  (user as { colourist?: unknown }).colourist === true && String((item as { status?: unknown }).status ?? '') === 'colour_grade'
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return withRequestCache(async () => {
     try {
       const user = await requireRole('scheduler')
       const { id } = await params
       const item = await loadItemForUser(user, id)
-      if (!canEditItemFields(user, item)) {
+      if (!canEditItemFields(user, item) && !gradesIt(user, item)) {
         return NextResponse.json({ error: 'Only whoever holds this card — or a manager — can hand in its files' }, { status: 403 })
       }
       const url = new URL(req.url).searchParams.get('url')
@@ -44,7 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const user = await requireRole('scheduler')
       const { id } = await params
       const item = await loadItemForUser(user, id)
-      if (!canEditItemFields(user, item)) {
+      if (!canEditItemFields(user, item) && !gradesIt(user, item)) {
         return NextResponse.json({ error: 'Only whoever holds this card — or a manager — can hand in its files' }, { status: 403 })
       }
       const body = await req.json().catch(() => ({})) as { url?: unknown; ids?: unknown; map?: unknown }

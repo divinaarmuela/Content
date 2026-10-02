@@ -375,7 +375,8 @@ export function mergeHandIn(
  *   - a hand-in that has gone out (an earlier version) is history: its files are never removed or rewritten.
  */
 export const LOCKED_STATUSES = ['approved_for_scheduling', 'scheduled', 'published']
-export const LOOKING_STATUSES = ['quality_check', 'client_review']
+// colour grade too (COLOUR_GRADE_SPLIT_SPEC C4): the colourist's graded hand-in, never the editor's
+export const LOOKING_STATUSES = ['quality_check', 'colour_grade', 'client_review']
 
 export function finalFilesChangeRefusal(
   before: readonly FinalFile[],

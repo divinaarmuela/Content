@@ -45,6 +45,7 @@ type Member = {
   quality_reviewer?: boolean
   ops_contact?: boolean
   editors_lead?: boolean
+  colourist?: boolean
 }
 type Invite = {
   id: string
@@ -352,6 +353,7 @@ export default function TeamPage() {
                       {/* the two playbook hats sit beside the role, never inside it */}
                       {m.quality_reviewer && <Badge variant="outline" className="bg-tint-green text-foreground border-accent-green/30">Quality reviewer</Badge>}
                       {m.ops_contact && <Badge variant="outline" className="bg-tint-amber text-foreground border-accent-amber/35">Ops contact</Badge>}
+                      {m.colourist && <Badge variant="outline" className="bg-tint-amber text-foreground border-accent-amber/35">Colourist</Badge>}
                       {m.editors_lead && <Badge variant="outline" className="bg-tint-blue text-foreground border-accent-blue/25">Editors’ lead</Badge>}
                     </div>
                   </TableCell>
@@ -637,6 +639,16 @@ export default function TeamPage() {
                   </div>
                   <Switch id="edit-lead" checked={editDraft.editors_lead === true}
                     onCheckedChange={v => setEditDraft(d => ({ ...d, editors_lead: v }))} />
+                </div>
+                <div className="flex items-start justify-between gap-3 rounded-inner border border-border p-3">
+                  <div className="min-w-0">
+                    <Label htmlFor="edit-colourist">Colourist</Label>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      Colour grades every video edit after the quality check, then puts it on the client’s portal. Told when a card reaches Colour grade. Usually Martin.
+                    </p>
+                  </div>
+                  <Switch id="edit-colourist" checked={editDraft.colourist === true}
+                    onCheckedChange={v => setEditDraft(d => ({ ...d, colourist: v }))} />
                 </div>
               </div>
             )}

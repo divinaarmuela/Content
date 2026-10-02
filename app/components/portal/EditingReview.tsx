@@ -81,7 +81,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
   // "Ask for a change" and the approval of the version are here, beside the clips — the same /api/portal/act
   const [asking, setAsking] = useState(false)
   const [changeNote, setChangeNote] = useState('')
-  const [answered, setAnswered] = useState<'approved' | 'changes' | null>(null)
+  const [answered, setAnswered] = useState<'approved' | 'changes' | 'split' | null>(null)
   useEffect(() => { try { setName(localStorage.getItem('mdm-portal-name') ?? '') } catch { /* fine */ } }, [])
   useEffect(() => { setNow(0); setDuration(0) }, [current])
 
@@ -143,6 +143,28 @@ export default function EditingReview({ data, approved: clientApproved = false }
     try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
     try { await actOnPiece('request_changes', changeNote.trim()); setAnswered('changes'); setAsking(false); router.refresh() }
     catch (e) { setError(e instanceof Error ? e.message : 'That did not go through — try again in a moment') }
+    setSending(false)
+  }
+  // SEND MY ANSWERS (docs/COLOUR_GRADE_SPLIT_SPEC.md C6): some approved, some not — the approved go ahead, the rest go
+  // back to the team as their next round. Only while the piece waits on them, with a name.
+  const approvedCount = clips.length - unapproved.length
+  const mixed = decides && approvedCount > 0 && unapproved.length > 0
+  const [splitWords, setSplitWords] = useState<string | null>(null)
+  const sendAnswers = async () => {
+    if (sending || !name.trim() || !mixed) return
+    setSending(true); setError(null)
+    try { localStorage.setItem('mdm-portal-name', name) } catch { /* fine */ }
+    try {
+      const res = await fetch('/api/portal/act', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, item_id: item.id, action: 'send_answers', author_name: name.trim().slice(0, 60) }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(String(json?.error ?? 'That did not go through — try again in a moment'))
+      setSplitWords(`The ${approvedCount} you approved go ahead. The team is redoing the other ${unapproved.length} — the new ${unapproved.length === 1 ? 'version comes' : 'versions come'} to this same link.`)
+      setAnswered('split')
+      router.refresh()
+    } catch (e) { setError(e instanceof Error ? e.message : 'That did not go through — try again in a moment') }
     setSending(false)
   }
   const approveAll = async () => {
@@ -332,8 +354,8 @@ export default function EditingReview({ data, approved: clientApproved = false }
         {approvedWords && <p className="text-[13px] text-emerald-600 dark:text-emerald-300">{approvedWords}</p>}
         {answered && (
           <p role="status" className="rounded-xl border border-border bg-card p-3 text-[14px]">
-            <span className="font-semibold">{answered === 'approved' ? 'Approved — thank you. ' : 'Thanks — we have your note. '}</span>
-            {answered === 'approved' ? 'The team takes it from here.' : 'We’ll make the change and send the new version here, on this same link.'}
+            <span className="font-semibold">{answered === 'approved' ? 'Approved — thank you. ' : answered === 'split' ? 'Thank you — your answers are with the team. ' : 'Thanks — we have your note. '}</span>
+            {answered === 'approved' ? 'The team takes it from here.' : answered === 'split' ? splitWords : 'We’ll make the change and send the new version here, on this same link.'}
           </p>
         )}
         {/* only while the piece waits on them: once they have answered (or the team has it back), approving the
@@ -345,6 +367,13 @@ export default function EditingReview({ data, approved: clientApproved = false }
             {(!name.trim() || nameTyping) && (
               <input value={name} onChange={e => setName(e.target.value)} onFocus={() => setNameTyping(true)} onBlur={() => setNameTyping(false)} placeholder="Your name, to approve" aria-label="Your name, to approve"
                 className="h-11 w-44 rounded-full border border-border bg-background px-4 text-[14px] text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground/50" />
+            )}
+            {mixed && (
+              <button type="button" onClick={() => void sendAnswers()} disabled={sending || !name.trim()} data-send-answers
+                title={name.trim() ? undefined : 'Type your name first — your answers carry it'}
+                className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90 disabled:opacity-60">
+                {sending ? 'Sending…' : `Send my answers — ${approvedCount} approved, ${unapproved.length} to change`}
+              </button>
             )}
             <button type="button" onClick={() => void approveAll()} disabled={approving || !name.trim()}
               title={name.trim() ? undefined : 'Type your name first — the approval carries it'}

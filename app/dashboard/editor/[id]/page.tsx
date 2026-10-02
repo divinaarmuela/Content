@@ -27,6 +27,8 @@ import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-co
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
 import { useEffect, useState } from 'react'
+import { ColourGradePanel } from '../../board/ColourGradePanel'
+import { SplitPanel } from '../../board/SplitPanel'
 
 /**
  * A CARD'S OWN PAGE ON THE EDITOR SIDE (the owner, 15 Sep 2026: "make the
@@ -71,8 +73,9 @@ function HolderTransfer({ item, viewer, design = false }: { item: ContentItem; v
 
 /** The manager's or checker's answers on the card, above the brief: the
  *  board's own buttons and dialogs, so a press here is a press on the board. */
-function ManagerActions({ item, viewer, portalLink, client, design = false }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null; design?: boolean }) {
-  const card = item as unknown as BoardViewCard
+function ManagerActions({ item, viewer, portalLink, client, design = false, kindSlug = null }: { item: ContentItem; viewer: BoardViewer; portalLink: string | null; client: Client | null; design?: boolean; kindSlug?: string | null }) {
+  // the work kind rides on the card, so a video edit's check offers colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
+  const card = { ...(item as unknown as BoardViewCard), work_kinds: kindSlug ? { name: kindSlug, slug: kindSlug } : null } as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
   const { primary, more } = cardActions(card, viewer)
   const busy = busyId === card.id
@@ -292,7 +295,13 @@ export default function EditorCardPage() {
             : (
               <>
                 {!maker && me && me.role !== 'client' && (
-                  <ManagerActions design={filesOnly} item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true }}
+                  <ColourGradePanel item={item as never} mayGrade={me.role === 'account_manager' || me.role === 'super_admin' || me.colourist === true} />
+                )}
+                {!maker && me && me.role !== 'client' && (
+                  <SplitPanel item={item as never} mayDecide={me.role === 'account_manager' || me.role === 'super_admin'} />
+                )}
+                {!maker && me && me.role !== 'client' && (
+                  <ManagerActions design={filesOnly} item={item} client={client ?? null} viewer={{ id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true }} kindSlug={(kind as { slug?: string } | null)?.slug ?? null}
                     // THE EDITING PORTAL (16 Sep 2026): an edit's link opens the client on
                     // its clips and comments; an uploaded post keeps the board link
                     portalLink={client?.share_token

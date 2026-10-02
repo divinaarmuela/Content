@@ -17,6 +17,9 @@ export const ITEM_STATUSES = [
   // after the account manager's check and before the client or a scheduler
   // ever sees it. AM / designer / editor → Joy → scheduler.
   'quality_check',
+  // COLOUR GRADE (docs/COLOUR_GRADE_SPLIT_SPEC.md, the owner, 2 Oct 2026): a video edit passes the quality check
+  // to the colourist (Martin), who hands in the graded cut and puts it on the client's portal
+  'colour_grade',
   'client_review', 'client_changes_requested', 'approved_for_scheduling',
   'scheduled', 'published',
 ] as const
@@ -30,8 +33,10 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number]
  * stand in. It is a hat and not a role because a role decides pages and
  * permissions everywhere; this decides one gate.
  */
-export type Hat = Role | 'quality_reviewer'
+export type Hat = Role | 'quality_reviewer' | 'colourist'
 export const QUALITY_HAT: Hat = 'quality_reviewer'
+/** `team_users.colourist` (Martin): grades a video edit and puts it on the client's portal (COLOUR_GRADE_SPLIT_SPEC C3) */
+export const COLOURIST_HAT: Hat = 'colourist'
 
 /** Extra evidence a transition needs before it is legal. */
 export type TransitionRequirement = 'reviewable_asset' | 'schedule_entry' | 'live_url'
@@ -113,6 +118,14 @@ export const TRANSITIONS: Partial<Record<ItemStatus, Partial<Record<ItemStatus, 
     client_review: { roles: ['quality_reviewer'], label: 'Passed quality check' },
     approved_for_scheduling: { roles: ['quality_reviewer'], label: 'Passed — approve without client' },
     revision_required: { roles: ['quality_reviewer', 'account_manager'], label: 'Ask for changes' },
+    // a VIDEO edit passes to the colourist, never straight to the client (C1); the two edges above stay for designs
+    colour_grade: { roles: ['quality_reviewer'], label: 'Passed — to colour grade' },
+  },
+  colour_grade: {
+    // the graded cut on the client's portal — once a graded hand-in has landed for this version (C5, checked in workflow.ts)
+    client_review: { roles: ['colourist', 'account_manager'], requires: 'reviewable_asset', label: "Put it on the client's portal" },
+    approved_for_scheduling: { roles: ['colourist', 'account_manager'], requires: 'reviewable_asset', label: 'Graded — ready to hand over' },
+    revision_required: { roles: ['colourist', 'account_manager'], label: 'Send back to the editor' },
   },
   client_review: {
     // A NEW VERSION LANDED WHILE THE CLIENT WAS LOOKING AT THE OLD ONE.
@@ -192,6 +205,7 @@ export const CLIENT_LABELS: Record<ItemStatus, string> = {
   // the quality check is how the agency works, not something the client is
   // asked to wait on by name
   quality_check: 'In production',
+  colour_grade: 'In production',
   client_review: 'Needs your review',
   client_changes_requested: 'Changes in progress',
   approved_for_scheduling: 'Approved',
@@ -220,6 +234,7 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   revision_required: 'Being changed',
   revision_complete: 'Changes made — check again',
   quality_check: 'Quality check',
+  colour_grade: 'Colour grade',
   client_review: 'With client',
   client_changes_requested: 'Client wants changes',
   // NOT "Approved": beside "Signed off. Needs a posting time." that read as
@@ -237,6 +252,7 @@ export const STATUS_MEANING: Record<ItemStatus, string> = {
   revision_required: 'Changes were asked for; the editor is making them.',
   revision_complete: 'The changes are in; an account manager needs to look again.',
   quality_check: 'Waiting for the quality reviewer to check it before it goes to the client or a scheduler.',
+  colour_grade: "Passed the quality check; the colourist grades it, then puts it on the client's portal.",
   client_review: 'Waiting for the client to approve or ask for changes.',
   client_changes_requested: 'An account manager decides: send it for revision, or fix it and resend.',
   approved_for_scheduling: 'Signed off. Needs a posting time.',
@@ -251,6 +267,7 @@ export const STATUS_TURN: Record<ItemStatus, Hat | null> = {
   revision_required: 'editor',
   revision_complete: 'account_manager',
   quality_check: 'quality_reviewer',
+  colour_grade: 'colourist',
   client_review: 'client',
   client_changes_requested: 'account_manager',
   approved_for_scheduling: 'scheduler',
@@ -279,6 +296,8 @@ export type ActingViewer = {
   role: Role
   /** `team_users.quality_reviewer`: may pass work out of the quality check */
   quality_reviewer?: boolean | null
+  /** `team_users.colourist`: grades video edits (COLOUR_GRADE_SPLIT_SPEC C3) */
+  colourist?: boolean | null
 }
 
 export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
@@ -291,6 +310,8 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   // flag on another role: checking is the job, the way reviewing is an
   // account manager's
   if (isQualityReviewer(viewer)) roles.push(QUALITY_HAT)
+  // the colourist's hat, like the quality reviewer's: worn on every item, used at one stage
+  if (viewer.colourist === true) roles.push(COLOURIST_HAT)
 
   const owner = item.owner_id
   // the open pool for an unowned item is editors and AMs; a scheduler picking
@@ -307,7 +328,7 @@ export function actingRoles(viewer: ActingViewer, item: ActingItem): Hat[] {
   // can send it on — it was stuck, only an editor or account manager could
   if (ids.includes(viewer.id) && (item as { status?: unknown }).status === 'draft_uploaded' && !roles.includes('editor')) roles.push('editor')
 
-  const order: Hat[] = ['account_manager', QUALITY_HAT, 'editor', 'scheduler']
+  const order: Hat[] = ['account_manager', QUALITY_HAT, COLOURIST_HAT, 'editor', 'scheduler']
   return order.filter(r => roles.includes(r))
 }
 
@@ -407,6 +428,7 @@ export const PRIMARY_ACTION: Partial<Record<ItemStatus, ItemStatus>> = {
   revision_required: 'quality_check',
   revision_complete: 'quality_check',
   quality_check: 'client_review',
+  colour_grade: 'client_review',
   client_review: 'approved_for_scheduling',
   client_changes_requested: 'revision_required',
   approved_for_scheduling: 'scheduled',
@@ -433,6 +455,9 @@ export function presentTransitions(
      *  filled primary button beside a header reading "Waiting on someone else".
      *  Passing the same answer whoseTurn gives keeps the two in step. */
     viewerHoldsTurn?: boolean
+    /** a VIDEO edit (colour-grade-core needsColourGrade): its quality check passes to colour grade only; anything
+     *  else never offers colour grade (COLOUR_GRADE_SPLIT_SPEC C1) */
+    gradeFirst?: boolean
   },
   /** whose turn each status is. A brief hands over to nobody at the end — its
    *  surfaces pass BRIEF_STATUS_TURN so the account manager who must book the
@@ -451,6 +476,8 @@ export function presentTransitions(
   // manager's stages); from Draft the maker's one button is the gate itself
   const isGate = (roles.includes(QUALITY_HAT) || roles.includes('super_admin')) && transitions.some(t => t.to === 'client_review')
   const visible = transitions
+    // C1: at the quality check a video edit goes to colour grade, everything else to the client as before
+    .filter(t => from !== 'quality_check' || (ctx.gradeFirst ? t.to !== 'client_review' && t.to !== 'approved_for_scheduling' : t.to !== 'colour_grade'))
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
     .filter(t => !(isGate && t.to === 'quality_check'))
 
@@ -458,7 +485,7 @@ export function presentTransitions(
   const holdsTurn = ctx.viewerHoldsTurn !== undefined
     ? ctx.viewerHoldsTurn
     : roles.includes('super_admin') || (turn !== null && roles.includes(turn))
-  const wanted = PRIMARY_ACTION[from]
+  const wanted = from === 'quality_check' && ctx.gradeFirst ? 'colour_grade' : PRIMARY_ACTION[from]
   // the quality reviewer's own check IS the quality check: from the
   // manager's stages their obvious button goes where the gate would have
   // sent it, one press instead of two
@@ -521,7 +548,7 @@ export function whoseTurn(
     : viewer.role === 'super_admin'
       // a super admin stands in for the quality reviewer the way they stand
       // in for the manager: the check is theirs wherever it lands
-      ? hat === 'account_manager' || hat === QUALITY_HAT
+      ? hat === 'account_manager' || hat === QUALITY_HAT || hat === COLOURIST_HAT
         || (hat === 'editor' && item.owner_id === viewer.id)
         || (hat === 'scheduler' && schedulerIdsOf(item).includes(viewer.id))
       : actingRoles(viewer, item).includes(hat)
@@ -535,7 +562,8 @@ export function whoseTurn(
    * asset table only: a shoot plan's stages are the account manager's by
    * design, and its owner is the manager holding it.
    */
-  const reviewHat = hat === 'account_manager' || hat === QUALITY_HAT
+  // the colourist's seat is a review seat too: whoever wears the hat picks it up (COLOUR_GRADE_SPLIT_SPEC C3)
+  const reviewHat = hat === 'account_manager' || hat === QUALITY_HAT || hat === COLOURIST_HAT
   const nobodyAsked = turns === STATUS_TURN && reviewHat && asked.length === 0
     && !(hat === 'account_manager' && !!item.owner_id && item.owner_id === viewer.id)
   const mine = nobodyAsked ? may && opts?.sole === true : may
@@ -587,7 +615,7 @@ export function clientArrivalLine(from: ItemStatus): string {
 /** `creator` is whoever raised the card (`assigned_by`). They hear about
  *  anything the CLIENT does to it, because they are the person who will be
  *  asked about it — owner's rule, 6 Sep 2026. */
-export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator' | 'quality_reviewers' | 'ops_contact'
+export type Audience = 'account_managers' | 'owner_editor' | 'schedulers' | 'client_users' | 'assigned_schedulers' | 'creator' | 'quality_reviewers' | 'ops_contact' | 'colourists'
 export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatus}`, Audience[]>> = {
   // 'owner_editor' is the item's OWNER whatever their role (anyone can carry a
   // task) — every move an item makes reaches the person assigned to it, and
@@ -618,6 +646,11 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
   'quality_check>client_review': ['client_users', 'account_managers'],
   'quality_check>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
   'quality_check>revision_required': ['owner_editor', 'account_managers'],
+  // COLOUR GRADE (C3): the colourists are told it is theirs; the account managers that the client sees it next
+  'quality_check>colour_grade': ['colourists'],
+  'colour_grade>client_review': ['client_users', 'account_managers'],
+  'colour_grade>approved_for_scheduling': ['account_managers', 'owner_editor', 'assigned_schedulers'],
+  'colour_grade>revision_required': ['owner_editor', 'account_managers'],
   'internal_review>client_review': ['client_users', 'account_managers'],
   'revision_complete>client_review': ['client_users', 'account_managers'],
   'client_review>client_changes_requested': ['account_managers', 'creator'], // NEVER the editor directly
@@ -663,7 +696,7 @@ export const TRANSITION_NOTIFICATIONS: Partial<Record<`${ItemStatus}>${ItemStatu
  *
  * `?card=` is what the card sheet on both boards reads (card-sheet-core).
  */
-export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'client_review',
+export const EDITING_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check', 'internal_review', 'colour_grade', 'client_review',
   // the client asked for changes: the card is back on the Editor board (its re-hand-in is the next version), so the
   // "client asked for changes" email opens it there, not on Post approval (the owner, 30 Sep 2026)
   'client_changes_requested']

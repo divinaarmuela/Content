@@ -684,6 +684,10 @@ export interface ContentItem {
   brief_url: string | null
   work_kind_id: string | null
   portal_hidden: boolean | null
+  graded_round: number | null
+  split_from_id: string | null
+  split_round: number | null
+  split_at: string | null
   adhoc_post: boolean | null
   for_contact_id: string | null
   clip_approvals: unknown | null
@@ -1570,6 +1574,7 @@ export interface TeamUser {
   active_status: boolean
   quality_reviewer: boolean
   ops_contact: boolean | null
+  colourist: boolean | null
 }
 
 export interface Todo {
@@ -1687,7 +1692,7 @@ export const TABLE_COLUMNS = {
   comment_automations: ['id', 'client_id', 'social_account_id', 'provider_account_id', 'platform', 'zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'name', 'keywords', 'match_mode', 'dm_message', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'active', 'paused_reason', 'created_by', 'created_at', 'updated_at'],
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
-  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   data_deletion_requests: ['id', 'meta_user_id', 'received_at', 'status', 'note', 'updated_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
@@ -1738,7 +1743,7 @@ export const TABLE_COLUMNS = {
   team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
-  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact'],
+  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'colourist'],
   todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
@@ -1784,7 +1789,7 @@ export const NULLABLE_COLUMNS = {
   comment_automations: ['zernio_automation_id', 'runner', 'social_post_id', 'platform_post_id', 'zernio_post_id', 'post_title', 'post_thumb', 'post_date', 'button_title', 'link', 'comment_reply', 'dm_variations', 'reply_variations', 'paused_reason', 'created_by'],
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
-  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_items: ['group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
   data_deletion_requests: ['note'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
@@ -1835,7 +1840,7 @@ export const NULLABLE_COLUMNS = {
   team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
-  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact'],
+  team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'colourist'],
   todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by'],
   user_page_access: ['granted_by'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],

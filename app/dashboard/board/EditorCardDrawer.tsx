@@ -46,6 +46,7 @@ import {
 import { columnOf } from '../../lib/board-core'
 import { handedToScheduler } from '../../lib/workflow-core'
 import { handedToWords } from '../../lib/board-view-core'
+import { needsColourGrade } from '../../lib/colour-grade-core'
 
 /**
  * THE EDITOR'S CARD, IN THE ORDER THE VIDEO EDITORS SOP READS (11 Sep 2026,
@@ -387,14 +388,16 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   // what went past them, and the history says it was skipped and by whom. Not while Drive files are still copying —
   // a pass never sends the client a card with no files.
   const isSuper = me?.role === 'super_admin'
+  const gradeNext = needsColourGrade(((item as { work_kinds?: { slug?: string } | null } | null)?.work_kinds?.slug ?? (kind as { slug?: string } | null)?.slug) ?? null)
   const skipCheck = async () => {
     if (!submitting || !item || !workIn) return
     if (driveCopying) { toast.error('The files are still copying in from Google Drive — skip the check once they have landed.'); return }
     const into = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, 'Skipping the quality check…', 'Sending')
     if (!into) return
-    const to = item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'
+    // a video edit skips to colour grade, never past it (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
+    const to = gradeNext ? 'colour_grade' : item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'
     const passed = await post(`/api/production/items/${id}/transition`, { to, note: `Quality check skipped by ${me?.name ?? 'a super admin'}.` },
-      to === 'client_review' ? 'Quality check skipped — it is with the client now' : 'Quality check skipped — ready to schedule', 'Sending')
+      to === 'colour_grade' ? 'Quality check skipped — it is with the colourist now' : to === 'client_review' ? 'Quality check skipped — it is with the client now' : 'Quality check skipped — ready to schedule', 'Sending')
     if (!passed) toast.error('It is in the quality check — pass it from there, or the reviewer will.')
     else setTicks([])
   }
@@ -810,7 +813,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
               {isSuper && (
                 <Button variant="outline" className={ghostBtn} disabled={busy || !workIn || driveCopying} onClick={() => void skipCheck()}
                   title={driveCopying ? 'The files are still copying in from Google Drive' : !workIn ? 'Put the finished work on the card first' : 'Super admins only: no quality check — straight to the client'}>
-                  Skip quality check — send {item.client_approval_required === false ? 'to schedule' : 'to client'}
+                  Skip quality check — send {gradeNext ? 'to colour grade' : item.client_approval_required === false ? 'to schedule' : 'to client'}
                 </Button>
               )}
               {!riskOpen && (

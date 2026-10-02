@@ -49,7 +49,7 @@ import { usePostBoard } from './board/usePostBoard'
 export default function PostApprovalPage() {
   const { me, noAccount } = useRole()
   const viewer = useMemo<ScopeViewer | null>(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true } : null), [me])
   const data = usePostBoard(viewer)
   const acts = usePostActs({ choicesFor: data.choicesFor, assignees: data.assignees, nameOf: data.nameOf, clientOf: data.clientOf })
 

@@ -44,6 +44,8 @@ export async function GET() {
         // the Quality checker ROLE or the flag on another role — one answer
         // for every page (the owner, 13 Sep 2026: "quality check is a role")
         quality_reviewer: isQualityReviewer({ role: me.role, quality_reviewer: data?.quality_reviewer === true }),
+        // the colourist (docs/COLOUR_GRADE_SPLIT_SPEC.md C3): their card shows the graded hand-in and Put it on the portal
+        colourist: (data as { colourist?: unknown } | null)?.colourist === true,
         ops_contact: data?.ops_contact === true,
         ...(reviewerSet === undefined ? {} : { quality_reviewer_set: reviewerSet }),
         employment_type: me.employment_type,

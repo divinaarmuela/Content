@@ -133,17 +133,30 @@ describe('the control on a card', () => {
     expect(all(card({ status: 'draft_uploaded', owner_id: 'ed', link_url: 'https://drive.google.com/drive/folders/E', link_kind: 'drive', link_final: true } as never), ed)).toContain('quality_check')
   })
 
-  it('the quality reviewer passes a card to the client, or sends it back; a manager only pulls it back', () => {
+  // a DESIGN passes to the client as before; a video edit passes to colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
+  const design = (over: Partial<BoardViewCard> = {}) => card({ work_kinds: { name: 'Graphics', slug: 'graphics', color: 'pink' }, ...over })
+  it('a video edit passes the quality check to colour grade, never straight to the client', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
     const { primary, more } = cardActions(card({ status: 'quality_check' }), joy)
+    expect(primary).toEqual({ kind: 'transition', to: 'colour_grade', label: 'Passed — to colour grade' })
+    expect(more.map(a => a.to)).toEqual(['revision_required'])
+    // the colourist puts it on the client's portal; nobody else's turn
+    const martin = { id: 'u-martin', role: 'editor' as const, colourist: true }
+    expect(cardActions(card({ status: 'colour_grade' }), martin).primary).toEqual({ kind: 'transition', to: 'client_review', label: "Put it on the client's portal" })
+    // a design never offers colour grade
+    expect(cardActions(design({ status: 'quality_check' }), joy).more.some(a => a.to === 'colour_grade')).toBe(false)
+  })
+  it('the quality reviewer passes a card to the client, or sends it back; a manager only pulls it back', () => {
+    const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
+    const { primary, more } = cardActions(design({ status: 'quality_check' }), joy)
     expect(primary).toEqual({ kind: 'transition', to: 'client_review', label: 'Passed quality check' })
     expect(more.map(a => a.to)).toEqual(['revision_required'])
     // a second version says so on the button — it is a resend (16 Sep 2026)
-    expect(cardActions(card({ status: 'quality_check', edit_round: 2 } as never), joy).primary)
+    expect(cardActions(design({ status: 'quality_check', edit_round: 2 } as never), joy).primary)
       .toEqual({ kind: 'transition', to: 'client_review', label: 'Passed quality check — resend version 2 to the client' })
-    expect(cardActions(card({ status: 'client_review', edit_round: 2 } as never), joy).primary?.label ?? '').not.toContain('resend version')
+    expect(cardActions(design({ status: 'client_review', edit_round: 2 } as never), joy).primary?.label ?? '').not.toContain('resend version')
     // not the manager's turn, so no filled button — the pull-back sits in the dots
-    const am = cardActions(card({ status: 'quality_check' }), manager)
+    const am = cardActions(design({ status: 'quality_check' }), manager)
     expect(am.primary).toBeNull()
     expect(am.more).toEqual([{ kind: 'send_back', to: 'revision_required', label: SEND_BACK_LABEL }])
   })
@@ -151,10 +164,10 @@ describe('the control on a card', () => {
   it('offers "Approve without client" only to the quality reviewer, and only when the card does not need the client', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
     // …and with the client's approval switched off, it IS the pass — the filled button (18 Sep 2026)
-    const { primary, more } = cardActions(card({ status: 'quality_check', client_approval_required: false }), joy)
+    const { primary, more } = cardActions(design({ status: 'quality_check', client_approval_required: false }), joy)
     expect(primary).toEqual({ kind: 'transition', to: 'approved_for_scheduling', label: 'Passed quality check' })
     expect(more.some(a => a.kind === 'transition' && a.to === 'client_review' && a.label === 'Send to the client anyway')).toBe(true)
-    const strict = cardActions(card({ status: 'quality_check' }), joy)
+    const strict = cardActions(design({ status: 'quality_check' }), joy)
     expect(strict.more.some(a => a.to === 'approved_for_scheduling')).toBe(false)
   })
 
@@ -295,7 +308,7 @@ describe('what each page shows', () => {
 
   it('Editor is only what is assigned to the editor, whatever the kind', () => {
     expect(pageCards('editor', rows, editor).map(c => c.id)).toEqual(['a', 'c', 'u'])
-    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'with_client', 'for_handoff', 'done'])
+    expect(pageLanes('editor').map(l => l.key)).toEqual(['in_progress', 'quality_check', 'colour_grade', 'with_client', 'for_handoff', 'done'])
   })
 
   it('a manager on the Editor page sees every lane — a card lives there from In Progress to Done (14 Sep 2026)', () => {
@@ -341,13 +354,13 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(keys).toContain('booked')
   })
 
-  it('the Editor page is five lanes: In Progress, Quality check, With client, For Handoff, Done', () => {
+  it('the Editor page is six lanes: In Progress, Quality check, Colour grade, With client, For Handoff, Done', () => {
     // Abby's rule (11 Sep 2026): the maker's submit goes to Joy; the
     // client's look sits inside the same lane with a chip saying who has it
     const lanes = pageLanes('editor')
-    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'With client', 'For Handoff', 'Done'])
-    expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, true])
-    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
+    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'Colour grade', 'With client', 'For Handoff', 'Done'])
+    expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, false, true])
+    expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check'], ['colour_grade'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page
     expect(lanes.flatMap(l => l.columns).sort()).toEqual(BOARD_COLUMNS.map(c => c.key).sort())
   })
@@ -516,7 +529,7 @@ describe('Posted keeps the last two weeks', () => {
     const kept = pageCards('production', rows, manager, TODAY)
     const keptColumns = new Set(kept.map(c => columnOf(c.status)))
     // Booked in is never cut: a card the channel still holds is coming, not old
-    expect([...keptColumns].sort()).toEqual((['booked', 'draft', 'quality_check', 'ready_to_post', 'with_client'] as BoardColumnKey[]).sort())
+    expect([...keptColumns].sort()).toEqual((['booked', 'colour_grade', 'draft', 'quality_check', 'ready_to_post', 'with_client'] as BoardColumnKey[]).sort())
   })
 })
 

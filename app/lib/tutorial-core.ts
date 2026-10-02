@@ -59,7 +59,7 @@ const NOTIFICATIONS = '/dashboard/notifications'
 
 /** The Post approval columns, as the board draws them — quoted in more than
  *  one tutorial, so said once. */
-export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, With client, Ready to post, Booked in, Posted'
+export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, Colour grade, With client, Ready to post, Booked in, Posted'
 /** The Editor columns. */
 export const EDITOR_COLUMNS = 'In Progress, Quality check, With client, For Handoff, Done'
 /** The Shoots columns. */

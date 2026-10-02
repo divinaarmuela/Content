@@ -387,7 +387,7 @@ function PostsThisMonth({ rows }: { rows: AccountPostsRow[] | null }) {
 
 /** The board at a glance — the same six columns, with the same words. */
 const COLUMN_TONE: Record<BoardColumnKey, ChipTone> = {
-  draft: 'muted', quality_check: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
+  draft: 'muted', quality_check: 'amber', colour_grade: 'amber', with_client: 'blue', ready_to_post: 'green', booked: 'blue', posted: 'green', delivered: 'green',
 }
 
 /** "Where everything is right now" — the ROLE's own columns, each chip a way
@@ -456,7 +456,7 @@ export default function OverviewPage() {
    */
   const { me } = useRole()
   const viewer = useMemo(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true } : null), [me])
   // schedulerPostFilter off: the Overview counts a scheduler's whole scoped
   // list and lets each card decide, exactly as its route always did
   const live = useWorkRows(viewer, { schedulerPostFilter: false })

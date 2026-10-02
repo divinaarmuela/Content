@@ -26,6 +26,8 @@ export const BRIEF_KIND_LABELS: Record<ItemStatus, string> = {
   revision_complete: 'Plan changes made — check again',
   // a plan has no quality gate; the label exists so the dictionary is whole
   quality_check: 'Plan being checked',
+  // a plan never reaches colour grade; the dictionary is whole
+  colour_grade: 'Plan being checked',
   client_review: 'Plan with client',
   client_changes_requested: 'Client wants plan changes',
   approved_for_scheduling: 'Plan approved — press Go',
@@ -60,6 +62,7 @@ export const BRIEF_STATUS_MEANING: Record<ItemStatus, string> = {
   revision_required: 'Changes were asked for; the plan is being reworked.',
   revision_complete: 'The changes are in; an account manager needs to look again.',
   quality_check: 'The plan is being checked.',
+  colour_grade: 'The plan is being checked.',
   client_review: 'Waiting for the client to approve the plan or ask for changes.',
   client_changes_requested: 'An account manager decides: rework the plan, or reshare it as is.',
   approved_for_scheduling: 'The plan is signed off. Book the shoot — pick the date on the shoot page.',

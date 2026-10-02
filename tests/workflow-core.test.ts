@@ -119,7 +119,8 @@ describe('availableTransitions', () => {
     const tos = availableTransitions('account_manager', 'internal_review').map(a => a.to).sort()
     expect(tos).toEqual(['quality_check', 'revision_required'])
     const qa = availableTransitionsAs(['quality_reviewer'], 'quality_check').map(a => a.to).sort()
-    expect(qa).toEqual(['approved_for_scheduling', 'client_review', 'revision_required'])
+    // colour grade too: the screens offer it for a video edit and the client for everything else (COLOUR_GRADE_SPLIT_SPEC C1)
+    expect(qa).toEqual(['approved_for_scheduling', 'client_review', 'colour_grade', 'revision_required'])
   })
   it('client sees nothing from internal statuses', () => {
     expect(availableTransitions('client', 'internal_review')).toHaveLength(0)

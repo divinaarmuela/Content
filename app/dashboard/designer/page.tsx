@@ -42,7 +42,7 @@ import { EDITOR_LANE_WORDS, reviewerNameOf } from '../../lib/editor-sop-core'
 export default function DesignerPage() {
   const { me, noAccount } = useRole()
   const viewer = useMemo<BoardViewer | null>(
-    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true } : null), [me])
+    () => (me && me.role !== 'client' ? { id: me.id, role: me.role, quality_reviewer: me.quality_reviewer === true, colourist: me.colourist === true } : null), [me])
   const live = useWorkRows(viewer)
   const isManager = viewer?.role === 'account_manager' || viewer?.role === 'super_admin'
   const canCreate = isManager || viewer?.role === 'general' || viewer?.role === 'editor'

@@ -33,6 +33,7 @@ import { STAGE_LABEL, STAGE_TONE, hatsFor, waitingOnViewer as postWaitingOnViewe
 import { DEFAULT_TZ, dayKeyInZone } from './timezone-core'
 import { SCHEDULE_PAGE } from './page-access-core'
 import { POST_APPROVAL_BOARD } from './overview-links-core'
+import { needsColourGrade } from './colour-grade-core'
 
 /** Everything a card is drawn from — the row plus its joins. */
 export type BoardViewCard = {
@@ -312,6 +313,8 @@ export function cardActions(
     // an unasked check is nobody's TURN, but the button still belongs to
     // whoever wears the hat: a manager can always pick the empty seat up
     viewerHoldsTurn: turn.mine || (turn.unassigned && turn.may),
+    // a video edit's check passes to colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
+    gradeFirst: needsColourGrade(card.work_kinds?.slug),
   })
   const all: CardAction[] = []
   // A SECOND VERSION GOES BACK TO THE CLIENT AS A RESEND (the owner, 16 Sep
@@ -524,6 +527,7 @@ export type PageLaneKey = BoardColumnKey | 'done' | 'coming_up' | 'in_progress' 
 export const LANE_EMPTY: Record<PageLaneKey, string> = {
   draft: 'Nothing being made.',
   quality_check: 'Nothing waiting on a quality check.',
+  colour_grade: 'Nothing being colour graded.',
   with_client: 'Nothing with a client.',
   ready_to_post: 'Nothing ready to post.',
   booked: 'Nothing booked in.',
@@ -539,6 +543,7 @@ export const LANE_EMPTY: Record<PageLaneKey, string> = {
 export const COLUMN_EMPTY: Record<BoardColumnKey, string> = {
   draft: LANE_EMPTY.draft,
   quality_check: LANE_EMPTY.quality_check,
+  colour_grade: LANE_EMPTY.colour_grade,
   with_client: LANE_EMPTY.with_client,
   ready_to_post: LANE_EMPTY.ready_to_post,
   booked: LANE_EMPTY.booked,

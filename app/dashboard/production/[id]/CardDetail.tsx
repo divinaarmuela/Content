@@ -90,6 +90,7 @@ import type { Role } from '../../../lib/identity-core'
 import PageTitle from '../../ui/PageTitle'
 import Chip, { type ChipTone } from '../../ui/Chip'
 import { kindTone } from '../../ui/tone'
+import { needsColourGrade } from '../../../lib/colour-grade-core'
 
 /**
  * THE CARD, OPENED — on its own page, or in the panel that slides in
@@ -587,6 +588,8 @@ export default function CardDetail({ id, layout = 'page', onClose }: {
     {
       clientApprovalRequired: detail.client_approval_required !== false,
       viewerHoldsTurn: turn.mine,
+      // a video edit's check passes to colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
+      gradeFirst: needsColourGrade(detail.work_kind?.slug),
     },
     turns,
   )

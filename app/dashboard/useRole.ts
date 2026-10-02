@@ -12,6 +12,8 @@ export type Me = {
   quality_reviewer?: boolean
   /** the ops contact the blocker ladder copies (Abby) */
   ops_contact?: boolean
+  /** grades video edits at Colour grade (Martin, docs/COLOUR_GRADE_SPLIT_SPEC.md) */
+  colourist?: boolean
   /** super admins only: is ANYBODY flagged as the quality reviewer? false
    *  means every quality check comes to the super admins until one is set */
   quality_reviewer_set?: boolean

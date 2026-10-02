@@ -53,7 +53,7 @@ describe('a card opens on a board the role has', () => {
 
 describe('the stage chips are the role’s own columns', () => {
   it('editor: the five Editor lanes, into the Editor board', () => {
-    expect(overviewChips('editor').map(c => c.label)).toEqual(['In Progress', 'Quality check', 'With client', 'For Handoff', 'Done'])
+    expect(overviewChips('editor').map(c => c.label)).toEqual(['In Progress', 'Quality check', 'Colour grade', 'With client', 'For Handoff', 'Done'])
     expect(overviewChips('editor').every(c => c.href.startsWith('/dashboard/editor?column='))).toBe(true)
   })
   it('scheduler: Ready to post, Booked in, Posted, into Post approval', () => {
@@ -65,7 +65,7 @@ describe('the stage chips are the role’s own columns', () => {
   })
   it('managers and general: the seven Post approval columns', () => {
     for (const role of ['account_manager', 'super_admin', 'general'] as Role[]) {
-      expect(overviewChips(role).map(c => c.label)).toEqual(['Draft', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered'])
+      expect(overviewChips(role).map(c => c.label)).toEqual(['Draft', 'Quality check', 'Colour grade', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered'])
     }
   })
   it('counts post cards by status into the chip’s columns', () => {

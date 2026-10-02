@@ -14,7 +14,7 @@ import type { Role } from '../app/lib/identity-core'
  * disagree with it, and that every surface reading them gets the same answer.
  */
 
-const KEYS: BoardColumnKey[] = ['draft', 'quality_check', 'with_client', 'ready_to_post', 'booked', 'posted', 'delivered']
+const KEYS: BoardColumnKey[] = ['draft', 'quality_check', 'colour_grade', 'with_client', 'ready_to_post', 'booked', 'posted', 'delivered']
 
 describe('the seven columns', () => {
   it('are exactly seven, in board order, with plain labels and one-line meanings — no Internal check (Abby\u2019s rule, 11 Sep 2026)', () => {
@@ -22,7 +22,7 @@ describe('the seven columns', () => {
     // "Booked in", never "Scheduled" — the owner's word for a post the
     // channel holds (11 Sep 2026: a booked post sat under Posted and read as live)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Quality check', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
+      'Draft', 'Quality check', 'Colour grade', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
     ])
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Internal check')
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Scheduled')
@@ -101,7 +101,7 @@ describe('groupByColumn', () => {
     expect(g[0].cards.map(c => c.id)).toEqual(['a', 'c', 'd'])
     expect(g[1].cards).toEqual([])
     expect(g[2].cards).toEqual([])
-    expect(g[5].cards.map(c => c.id)).toEqual(['b'])
+    expect(g[6].cards.map(c => c.id)).toEqual(['b'])
   })
   it('limits itself to the columns it is given (the portal asks for one)', () => {
     const g = groupByColumn(cards, columnsForRole('client'))
@@ -227,7 +227,8 @@ describe('canMoveTo — a drag may do nothing a button could not', () => {
     expect(reachableColumns({ status: 'internal_review' }, AM).map(r => r.column)).toEqual(['draft'])
     // the reviewer may also send it back: Draft is where "Ask for changes" lands
     expect(reachableColumns({ status: 'quality_check' }, ['quality_reviewer']).map(r => r.column))
-      .toEqual(['draft', 'with_client', 'ready_to_post'])
+      // colour grade too — the server keeps a design out of it and a video edit out of With client (COLOUR_GRADE_SPLIT_SPEC C1)
+      .toEqual(['draft', 'colour_grade', 'with_client', 'ready_to_post'])
     expect(reachableColumns({ status: 'published' }, SA)).toEqual([])
   })
 })

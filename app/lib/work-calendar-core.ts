@@ -159,6 +159,7 @@ const ITEM_TONE: Record<ItemStatus, CalTone> = {
   revision_required: 'amber',
   revision_complete: 'amber',
   quality_check: 'blue',
+  colour_grade: 'blue',
   client_review: 'violet',
   client_changes_requested: 'violet',
   approved_for_scheduling: 'emerald',

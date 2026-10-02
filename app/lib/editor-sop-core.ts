@@ -27,7 +27,7 @@ import type { BoardColumnKey } from './board-core'
 
 /* ── §6 the four stages ─────────────────────────────────────────────────── */
 
-export type EditorLaneKey = 'in_progress' | 'quality_check' | 'with_client' | 'for_handoff' | 'done'
+export type EditorLaneKey = 'in_progress' | 'quality_check' | 'colour_grade' | 'with_client' | 'for_handoff' | 'done'
 
 export const EDITOR_LANES: readonly {
   key: EditorLaneKey
@@ -43,6 +43,8 @@ export const EDITOR_LANES: readonly {
   // look is its own column (the owner, 12 Sep 2026: "why does editing not
   // have with client"), so the editor sees approve / changes requested there
   { key: 'quality_check', label: 'Quality check', columns: ['quality_check'], folded: false, empty: 'Nothing with the quality reviewer.' },
+  // the colourist's lane (COLOUR_GRADE_SPLIT_SPEC): a passed video edit waits here for the graded cut
+  { key: 'colour_grade', label: 'Colour grade', columns: ['colour_grade'], folded: false, empty: 'Nothing being colour graded.' },
   { key: 'with_client', label: 'With client', columns: ['with_client'], folded: false, empty: 'Nothing with a client.' },
   { key: 'for_handoff', label: 'For Handoff', columns: ['ready_to_post'], folded: false, empty: 'Nothing approved yet.' },
   { key: 'done', label: 'Done', columns: ['booked', 'posted', 'delivered'], folded: true, empty: 'Nothing done yet.' },

@@ -23,7 +23,7 @@ describe('the five columns, in the client’s words', () => {
   it('carry the same statuses as the team’s five columns', () => {
     const by = Object.fromEntries(PORTAL_COLUMNS.map(c => [c.key, c.statuses]))
     expect(by.making).toEqual(['draft_uploaded'])
-    expect(by.checking).toEqual(['internal_review', 'revision_required', 'revision_complete', 'quality_check'])
+    expect(by.checking).toEqual(['internal_review', 'revision_required', 'revision_complete', 'quality_check', 'colour_grade'])
     expect(by.your_review).toEqual(['client_review', 'client_changes_requested'])
     expect(by.approved).toEqual(['approved_for_scheduling'])
     expect(by.posted).toEqual(['scheduled', 'published'])

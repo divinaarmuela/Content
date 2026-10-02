@@ -90,7 +90,7 @@ export function overviewChips(role: Role | null | undefined): OverviewChip[] {
   // (Ready to post, Booked in, Posted) on Post approval (13 Sep 2026)
   return BOARD_COLUMNS.map(c => ({
     key: c.key, label: c.label, columns: [c.key],
-    href: ['draft', 'quality_check', 'with_client'].includes(c.key) ? `${EDITOR_BOARD}?column=${c.key}` : `${POST_APPROVAL_BOARD}?column=${c.key}`,
+    href: ['draft', 'quality_check', 'colour_grade', 'with_client'].includes(c.key) ? `${EDITOR_BOARD}?column=${c.key}` : `${POST_APPROVAL_BOARD}?column=${c.key}`,
   }))
 }
 

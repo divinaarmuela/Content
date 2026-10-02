@@ -43,6 +43,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (typeof body.ops_contact === 'boolean') patch.ops_contact = body.ops_contact
       // "Martin heads the Video Editing team": the editors' lead, a flag
       if (typeof body.editors_lead === 'boolean') patch.editors_lead = body.editors_lead
+      // the colourist (docs/COLOUR_GRADE_SPLIT_SPEC.md C3, Martin): told at colour grade, hands in the graded cut there
+      if (typeof body.colourist === 'boolean') patch.colourist = body.colourist
       if ('name' in body) patch.name = String(body.name ?? '')
 
       const data = await table('team_users').update(id, patch)

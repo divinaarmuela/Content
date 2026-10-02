@@ -911,11 +911,24 @@ const GHOST_COLUMNS = {
   //     manager said needs changing, the last time the card was sent back.
   //     Editors and schedulers never see the client's own thread; this is
   //     the manager's words, on the card, for the person assigned to it.
+  //   team_users.colourist — THE COLOURIST (docs/COLOUR_GRADE_SPLIT_SPEC.md C3, Martin): a tick on the Team page like
+  //     quality_reviewer; told when a video edit reaches colour grade, and may hand in the graded cut there.
+  team_users: [['colourist', col('boolean', true)]],
   content_items: [
     //   content_items.portal_hidden — TAKEN OFF THE CLIENT'S PORTAL (the owner, 2 Oct 2026: "we can have the option to
     //     tick take it off their portal… it will not show it there"). An edit or a design reaches the one portal on
     //     its own; a manager ticks this and it stops showing in the Editing / Designing tab. Unset = shown.
     ['portal_hidden', col('boolean', true)],
+    //   content_items.graded_round — THE GRADED CUT LANDED (docs/COLOUR_GRADE_SPLIT_SPEC.md C5): the version a hand-in
+    //     settled on while the card was at colour grade. "Put it on the client's portal" waits for it to equal the version.
+    ['graded_round', col('number', true)],
+    //   content_items.split_from_id / split_round — A ROUND N CARD (C7): the card the client did not approve these videos
+    //     on, and which round of that work this card is (2, 3…). Null on every card that was never split off.
+    ['split_from_id', col('string', true)],
+    ['split_round', col('number', true)],
+    //   content_items.split_at — when this card's approved videos went to handover and the rest to a Round N card (C7),
+    //     so a second press of Send my answers / Split does nothing twice.
+    ['split_at', col('string', true)],
     //   content_items.adhoc_post — media uploaded straight onto the Schedule
     //     page to be posted. It still needs a card to hold the file, the
     //     versions and the numbers afterwards, but it is NOT production work,
