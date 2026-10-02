@@ -42,7 +42,9 @@ export function useCardActs<T extends BoardViewCard>(viewer: BoardViewer, onDone
         throw new Error(friendlyError(body.error ?? 'Could not move it', 'this page'))
       }
       const column = BOARD_COLUMNS.find(c => c.key === columnOf(to as BoardViewCard['status']))
-      toast.success(`${label} — now in ${column?.label ?? 'its new column'}`)
+      // a label that already names where it goes ("Passed — to colour grade") is not said twice (2 Oct 2026, the walk)
+      const where = column?.label ?? 'its new column'
+      toast.success(label.toLowerCase().includes(where.toLowerCase()) ? label : `${label} — now in ${where}`)
       onDone?.()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not move it')

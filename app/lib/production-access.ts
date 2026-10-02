@@ -303,6 +303,15 @@ export async function loadItemForUser(user: TeamUser, itemId: string) {
     }
   }
 
+  // THE COLOURIST'S DESK (docs/COLOUR_GRADE_SPLIT_SPEC.md C3): a card at Colour grade opens for them, whoever's it is
+  if ((user as { colourist?: unknown }).colourist === true && item.status === 'colour_grade') {
+    return item as ContentItem & Record<string, unknown> & {
+      status: ItemStatus
+      scheduler_ids?: string[] | null
+      raw_assets?: { url: string; name: string }[] | null
+    }
+  }
+
   if (user.role === 'scheduler') {
     if (
       !SCHEDULER_STATUSES.includes(item.status as ItemStatus)

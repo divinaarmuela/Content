@@ -101,3 +101,20 @@ describe('C6–C9 — the split', () => {
     expect(src).toContain("eventType: 'split_round'")
   })
 })
+
+describe('the colourist\'s desk, whatever their role (2 Oct 2026, the walk: an editor ticked Colourist was refused the card)', () => {
+  it('a card at colour grade opens for them, shows on their Editor board, and opens in the view with the panel', async () => {
+    expect(readFileSync('app/lib/production-access.ts', 'utf8')).toContain("if ((user as { colourist?: unknown }).colourist === true && item.status === 'colour_grade') {")
+    const { pageCards } = await import('../app/lib/board-view-core')
+    const cards = [
+      { id: 'mine', status: 'draft_uploaded', owner_id: 'e1' },
+      { id: 'grade', status: 'colour_grade', owner_id: 'someone' },
+      { id: 'other', status: 'client_review', owner_id: 'someone' },
+    ] as never[]
+    expect(pageCards('editor', cards, { id: 'e1', role: 'editor', colourist: true } as never).map((c: { id: string }) => c.id)).toEqual(['mine', 'grade'])
+    expect(pageCards('editor', cards, { id: 'e1', role: 'editor' } as never).map((c: { id: string }) => c.id)).toEqual(['mine'])
+    const { usesMakerDrawer } = await import('../app/lib/card-sheet-core')
+    expect(usesMakerDrawer({ id: 'e1', role: 'editor', colourist: true }, { owner_id: 'someone', status: 'colour_grade' })).toBe(false)
+    expect(usesMakerDrawer({ id: 'e1', role: 'editor', colourist: true }, { owner_id: 'e1', status: 'draft_uploaded' })).toBe(true)
+  })
+})

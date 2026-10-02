@@ -56,10 +56,13 @@ export function isDismissSwipe(dx: number, dy: number, threshold = 80): boolean 
 export const HELD_WHILE_MAKING: readonly string[] = ['draft_uploaded', 'revision_required']
 
 export function usesMakerDrawer(
-  me: { id?: string | null; role?: string | null } | null | undefined,
+  me: { id?: string | null; role?: string | null; colourist?: boolean | null } | null | undefined,
   card: { owner_id?: string | null; status?: string | null } | null | undefined,
 ): boolean {
   if (!me) return false
+  // a colourist on a card at Colour grade they do not hold gets the reviewer's view, with the graded hand-in
+  // (docs/COLOUR_GRADE_SPLIT_SPEC.md C4) — the maker's drawer has no colour grade in it
+  if (me.colourist === true && card?.status === 'colour_grade' && card.owner_id !== me.id) return false
   if (me.role === 'editor') return true
   const holder = !!me.id && !!card && card.owner_id === me.id
   if (!holder) return false

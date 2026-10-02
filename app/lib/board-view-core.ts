@@ -509,7 +509,8 @@ export function pageCards<T extends BoardViewCard>(
   if (page === 'editor') {
     // a general user's Editor page is their own cards too — the making is
     // theirs, the checking is the manager's
-    if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => mine(c) && fresh(c))
+    // …and the colourist's desk: every card at Colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C3)
+    if (viewer.role === 'editor' || viewer.role === 'general') return cards.filter(c => (mine(c) || (viewer.colourist === true && c.status === 'colour_grade')) && fresh(c))
     // A MANAGER SEES EVERY LANE (the owner, 14 Sep 2026: "so for every card
     // it will live there, in Editor — approved, or handed over, or finished").
     // It used to hide Ready to post and Done from managers, so an approved
