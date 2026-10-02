@@ -77,9 +77,23 @@ describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by
   })
   it('the page: Shoot brief lists shoots and boards, Scheduling lists Your feed and the works; each opens its own page', () => {
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
-    expect(page).toContain('<OnePortalList heading="Shoots" rows={shootRows}')
-    expect(page).toContain('{boardRows.length > 0 && <OnePortalList heading="Boards" rows={boardRows} />}')
+    expect(page).toContain('<OnePortalList rows={shootRows}')
     expect(page).toContain('<OnePortalList heading="By the work" rows={workRows}')
-    expect(page).toMatch(/if \(!page\.boards\.some\(b => b\.id === boardId\)\) notFound\(\)/)
+    expect(page).toMatch(/if \(!page\.boards\.some\(b => b\.id === openBoard\)\) notFound\(\)/)
+  })
+})
+
+describe('the Boards tab, and taking a piece off the portal (2 Oct 2026)', () => {
+  it('Boards is the fifth tab', async () => {
+    const { PORTAL_TABS } = await import('../app/lib/one-portal-core')
+    expect(PORTAL_TABS.map(t => t.label)).toEqual(['Shoot brief', 'Editing', 'Designing', 'Scheduling', 'Boards'])
+    const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
+    expect(page).toContain("{tab === 'boards' && <OnePortalList rows={boardRows}")
+  })
+  it('a piece a manager took off is not shown, and only a manager may take it off', () => {
+    expect(readFileSync('app/lib/one-portal-page.ts', 'utf8')).toContain('?.portal_hidden !== true)')
+    const route = readFileSync('app/api/production/items/[id]/route.ts', 'utf8')
+    expect(route).toMatch(/hasOwnProperty\.call\(body, 'portal_hidden'\)\) \{\s+if \(!\['account_manager', 'super_admin'\]\.includes\(user\.role\)\)/)
+    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('Take it off the client&apos;s portal — they will not see it there.')
   })
 })

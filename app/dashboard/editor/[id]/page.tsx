@@ -110,6 +110,19 @@ function ManagerActions({ item, viewer, portalLink, client, design = false }: { 
       toast.error(e instanceof Error ? e.message : 'Could not change that')
     } finally { setSavingDeliver(false) }
   }
+  const [savingHidden, setSavingHidden] = useState(false)
+  const setPortalHidden = async (on: boolean) => {
+    setSavingHidden(true)
+    try {
+      const res = await fetch(`/api/production/items/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ portal_hidden: on }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Could not change that')
+      toast.success(on ? 'Taken off the client’s portal — they will not see it there' : 'Back on the client’s portal')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not change that')
+    } finally { setSavingHidden(false) }
+  }
   // CLIENT APPROVED, AWAITING THE HAND-OVER (the owner, 15 Sep 2026: "it's
   // the AM's or super admin's duty to hand it over to a scheduler"): the
   // approved card is still the editing side's; this is the press that gives
@@ -161,6 +174,15 @@ function ManagerActions({ item, viewer, portalLink, client, design = false }: { 
       {transferable && (
         <TransferEditingDialog open={transferOpen} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}
           viewerId={viewer.id} onClose={() => setTransferOpen(false)} design={design} />
+      )}
+      {/* the one portal: an edit or design shows there on its own; a manager may take it off (2 Oct 2026) */}
+      {(viewer.role === 'account_manager' || viewer.role === 'super_admin') && (client as { portal_one?: unknown } | null)?.portal_one === true && (
+        <label className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-[13px]" data-portal-hidden>
+          <input type="checkbox" className="h-4 w-4 accent-foreground" disabled={savingHidden}
+            checked={(item as { portal_hidden?: unknown }).portal_hidden === true}
+            onChange={e => void setPortalHidden(e.target.checked)} />
+          <span>Take it off the client&apos;s portal — they will not see it there.</span>
+        </label>
       )}
       {isManager && !frozen && (
         <label className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-[13px]" data-deliver-only>

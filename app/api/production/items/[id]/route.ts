@@ -197,7 +197,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const handOver = body?.hand_over === true || typeof body?.hand_over === 'string'
     const handNote = typeof body?.hand_over === 'string' ? body.hand_over : ''
 
-    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files'] as const
+    const allowed = ['title', 'content_type', 'platform_targets', 'due_date', 'priority', 'caption', 'owner_id', 'client_approval_required', 'batch_id', 'group_id', 'raw_assets_url', 'brief', 'raw_assets', 'work_kind_id', 'brief_url', 'deliver_only', 'review_link', 'review_note', 'include_plan', 'final_files', 'portal_hidden'] as const
+    // taking a piece off the client's one portal is a manager's call, never the holder's (2 Oct 2026)
+    if (body && Object.prototype.hasOwnProperty.call(body, 'portal_hidden')) {
+      if (!['account_manager', 'super_admin'].includes(user.role)) {
+        return NextResponse.json({ error: "Only an account manager or a super admin can take a piece off the client's portal" }, { status: 403 })
+      }
+      if (typeof body.portal_hidden !== 'boolean') return NextResponse.json({ error: 'portal_hidden has to be yes or no' }, { status: 400 })
+    }
     const patch: Record<string, unknown> = {}
     for (const key of allowed) if (key in body) patch[key] = body[key]
     // a priority is one of the four words, or Normal (priority-core, 21 Sep 2026)

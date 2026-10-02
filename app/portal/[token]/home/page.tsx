@@ -96,13 +96,15 @@ export default async function OnePortalPage({ params, searchParams }: {
       </div>
     )
   }
-  if (tab === 'shoot' && boardId) {
-    if (!page.boards.some(b => b.id === boardId)) notFound()
-    const board = await getPortalTeamBoardDetail(token, boardId)
+  // BOARDS — its own tab; an old `tab=shoot&board=` link still lands on the board
+  const openBoard = tab === 'boards' ? id : tab === 'shoot' ? boardId : null
+  if (openBoard) {
+    if (!page.boards.some(b => b.id === openBoard)) notFound()
+    const board = await getPortalTeamBoardDetail(token, openBoard)
     if (!board) notFound()
     opened = (
-      <div className="flex flex-col gap-5" data-one-portal-board={boardId}>
-        {back('All shoots and boards')}
+      <div className="flex flex-col gap-5" data-one-portal-board={openBoard}>
+        <Link href={onePortalPath(token, 'boards')} className="inline-flex min-h-10 w-fit items-center text-[13px] font-semibold underline-offset-4 hover:underline">← All boards</Link>
         {title(board.board.name, 'Board')}
         {board.board.canvas_cards.length > 0 ? (
           <ShootBoard shootId={board.board.id} thread="team_board" boardName={board.board.name} cards={board.board.canvas_cards}
@@ -143,7 +145,7 @@ export default async function OnePortalPage({ params, searchParams }: {
     chip: waitsOnClient(c) ? { words: 'Waiting on you', tone: 'waiting' } : c.column === 'approved' ? { words: 'Approved', tone: 'done' } : null,
   }))
   const boardRows: ListRow[] = page.boards.map(b => ({
-    key: b.id, href: `${onePortalPath(token, 'shoot')}&board=${encodeURIComponent(b.id)}`, title: b.name, line: 'A board from the team',
+    key: b.id, href: onePortalPath(token, 'boards', b.id), title: b.name, line: 'A board from the team',
   }))
   const workRows: ListRow[] = works.map(w => ({
     key: w.id,
@@ -191,11 +193,9 @@ export default async function OnePortalPage({ params, searchParams }: {
             <>
               <h1 className="text-[26px] font-semibold leading-tight tracking-tight sm:text-[34px]">{tabLabel}</h1>
               {tab === 'shoot' && (
-                <div className="flex flex-col gap-6">
-                  <OnePortalList heading="Shoots" rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
-                  {boardRows.length > 0 && <OnePortalList heading="Boards" rows={boardRows} />}
-                </div>
+                <OnePortalList rows={shootRows} empty="No shoot plans to look at yet. When your next shoot is planned, it shows here." />
               )}
+              {tab === 'boards' && <OnePortalList rows={boardRows} empty="No boards shared with you yet. When the team shares one, it shows here." />}
               {tab === 'editing' && <OnePortalWorkList token={token} tab="editing" cards={page.editing} empty="No edits to look at yet. When a video is ready for you, it shows here." />}
               {tab === 'designing' && <OnePortalWorkList token={token} tab="designing" cards={page.designing} empty="No designs to look at yet. When a design is ready for you, it shows here." />}
               {tab === 'scheduling' && (

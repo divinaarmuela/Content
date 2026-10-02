@@ -72,9 +72,9 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   if (!data) return null
 
   const shoots = data.cards.filter(c => c.kind === 'shoot')
-  const work = data.cards.filter(workShown)
+  const work0 = data.cards.filter(workShown)
   // which tab a piece belongs in: its work kind (graphics → Designing), read here so the live loader is untouched
-  const ids = new Set(work.map(c => c.id))
+  const ids = new Set(work0.map(c => c.id))
   const [items, kinds] = await Promise.all([
     ids.size ? table<ContentItem>('content_items').list({ where: r => ids.has(r.id) }) : Promise.resolve([] as ContentItem[]),
     table<{ id: string; slug: string }>('work_kinds').list().catch(() => [] as { id: string; slug: string }[]),
@@ -84,6 +84,8 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   // the piece as the client knows it (1 Oct 2026, the walk: an approved design handed to the scheduler read
   // "Being made now" — the hand-over moves the CARD back to draft for posting, the client's answer stands)
   const itemById = new Map(items.map(i => [i.id, i]))
+  // a piece the team took off the portal is not shown at all
+  const work = work0.filter(c => (itemById.get(c.id) as { portal_hidden?: unknown } | undefined)?.portal_hidden !== true)
   const shown = work.map(c => withClientFace(c, itemById.get(c.id)))
   const editing = shown.filter(c => (tabOf.get(c.id) ?? 'editing') === 'editing')
   const designing = shown.filter(c => tabOf.get(c.id) === 'designing')
@@ -108,6 +110,7 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
       editing: editing.filter(waitsOnClient).length,
       designing: designing.filter(waitsOnClient).length,
       scheduling: 0,
+      boards: 0,
     },
   }
 }

@@ -912,6 +912,10 @@ const GHOST_COLUMNS = {
   //     Editors and schedulers never see the client's own thread; this is
   //     the manager's words, on the card, for the person assigned to it.
   content_items: [
+    //   content_items.portal_hidden — TAKEN OFF THE CLIENT'S PORTAL (the owner, 2 Oct 2026: "we can have the option to
+    //     tick take it off their portal… it will not show it there"). An edit or a design reaches the one portal on
+    //     its own; a manager ticks this and it stops showing in the Editing / Designing tab. Unset = shown.
+    ['portal_hidden', col('boolean', true)],
     //   content_items.adhoc_post — media uploaded straight onto the Schedule
     //     page to be posted. It still needs a card to hold the file, the
     //     versions and the numbers afterwards, but it is NOT production work,
