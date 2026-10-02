@@ -4,7 +4,7 @@ import { table } from '@/lib/db'
 import type { ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { withRetired, finalFilesOf } from './final-files-core'
-import { nextSplitRound, roundNote, roundTitle, splitPlan, type ClipNote, type SplitVideo } from './split-core'
+import { carriedNotes, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitPlan, type ClipNote, type SplitVideo } from './split-core'
 import { logActivity, performTransition } from './workflow'
 import { announceItemChange } from './production-live'
 import { notify, renderEmail, escapeHtml } from './mailer'
@@ -71,7 +71,8 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       // the brief and the footage to work from carry over; the finished link does not — the editor hands in a new one
       brief: src.brief ?? null,
       raw_assets_url: src.raw_assets_url ?? null,
-      raw_assets: src.raw_assets ?? null,
+      // the videos the client did not approve, playable, ahead of the footage (the owner: "shows the unapproved videos")
+      raw_assets: [...notApprovedFiles(plan.open), ...(Array.isArray(src.raw_assets) ? src.raw_assets as { url: string; name: string }[] : [])],
       link_url: src.raw_assets_url ?? null,
       link_kind: src.raw_assets_url ? (src.link_kind ?? null) : null,
       for_contact_id: src.for_contact_id ?? null,
@@ -91,6 +92,11 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       return { ...cur, final_files: files, split_at: null, updated_at: new Date().toISOString() } as ContentItem
     }).catch(() => undefined)
     throw new AuthzError(`The Round ${n} card could not be made — nothing was split. ${e instanceof Error ? e.message : ''}`.trim(), 500)
+  }
+
+  // …and what the client said on each of them, on the new card's thread (the owner: "shows the … comments")
+  for (const body of carriedNotes(plan.open, notes)) {
+    await table('item_comments').insert({ item_id: newId, author_id: actor.id, visibility: 'internal', body, resolved: false } as never).catch(() => undefined)
   }
 
   // 3. THE APPROVED VIDEOS GO TO HANDOVER — the client's approval, or the manager logging it

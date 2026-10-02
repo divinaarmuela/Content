@@ -10,7 +10,7 @@ import { roundOf } from './edit-round-core'
 /** a card the client is looking at, or has asked changes on, is one a split may act on */
 export const SPLIT_STATUSES = ['client_review', 'client_changes_requested'] as const
 
-export type SplitVideo = { id: string; asset_id: string; name: string }
+export type SplitVideo = { id: string; asset_id: string; name: string; url: string | null }
 
 export type SplitPlan =
   | { kind: 'all'; round: number; approved: SplitVideo[]; open: [] }
@@ -26,7 +26,7 @@ export function splitPlan(item: SplitItem): SplitPlan | { kind: 'refused'; reaso
   const shown = versionSnapshot(item as never, round)
   if (shown.length === 0) return { kind: 'refused', reason: 'There are no videos on this card to split' }
   const ticked = new Set(clipApprovalsOf(item as never).map(a => a.file_id))
-  const video = (f: { id: string; name: string }): SplitVideo => ({ id: f.id, asset_id: assetIdOf(f as never), name: f.name })
+  const video = (f: { id: string; name: string; url?: string | null }): SplitVideo => ({ id: f.id, asset_id: assetIdOf(f as never), name: f.name, url: f.url ?? null })
   const approved = shown.filter(f => ticked.has(f.id)).map(video)
   const open = shown.filter(f => !ticked.has(f.id)).map(video)
   if (open.length === 0) return { kind: 'all', round, approved, open: [] }
@@ -45,6 +45,24 @@ export function roundTitle(title: string | null | undefined, splitRound: number 
 export function nextSplitRound(splitRound: number | null | undefined): number {
   const n = Number(splitRound)
   return (Number.isInteger(n) && n >= 2 ? n : 1) + 1
+}
+
+/** the unapproved videos as the Round N card's files to work from — the editor sees and plays what the client did not approve */
+export function notApprovedFiles(open: readonly SplitVideo[]): { url: string; name: string }[] {
+  return open.filter(v => !!v.url).map(v => ({ url: v.url!, name: `Not approved — ${v.name}` }))
+}
+
+/** each thing the client said on an unapproved video, as a note on the Round N card, naming the video */
+export function carriedNotes(open: readonly SplitVideo[], notes: readonly ClipNote[]): string[] {
+  const out: string[] = []
+  for (const v of open) {
+    for (const n of notes) {
+      if (n.visibility !== 'client' || n.video_file_id !== v.id) continue
+      const said = String(n.body ?? '').trim()
+      if (said) out.push(`The client on ${v.name}: ${said}`)
+    }
+  }
+  return out
 }
 
 export type ClipNote = { video_file_id?: string | null; body?: string | null; visibility?: string | null }

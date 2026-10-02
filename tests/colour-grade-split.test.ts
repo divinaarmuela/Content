@@ -77,7 +77,7 @@ describe('C6–C9 — the split', () => {
     expect(roundTitle('September Videos - Justin · Round 2', 2)).toBe('September Videos - Justin · Round 3')
     expect(nextSplitRound(null)).toBe(2)
     expect(nextSplitRound(3)).toBe(4)
-    const note = roundNote([{ id: 'b', asset_id: 'b', name: 'Justin 3.mov' }], [{ video_file_id: 'b', visibility: 'client', body: 'Too dark' }, { video_file_id: 'b', visibility: 'internal', body: 'team only' }], 1)
+    const note = roundNote([{ id: 'b', asset_id: 'b', name: 'Justin 3.mov', url: 'https://x/b' }], [{ video_file_id: 'b', visibility: 'client', body: 'Too dark' }, { video_file_id: 'b', visibility: 'internal', body: 'team only' }], 1)
     expect(note).toContain('• Justin 3.mov — the client said: Too dark')
     expect(note).not.toContain('team only')
     expect(note).toContain('Upload a new Google Drive link')
@@ -124,5 +124,21 @@ describe('a super admin chooses: colour grade, or straight to the client (the ow
     const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
     expect(drawer).toContain("const to = gradeNext && !straightToClient ? 'colour_grade' : item.client_approval_required === false ? 'approved_for_scheduling' : 'client_review'")
     expect(drawer).toContain('onClick={() => void skipCheck(true)} data-skip-to-client')
+  })
+})
+
+describe('the Round N card shows the unapproved videos and what the client said (the owner, 2 Oct 2026)', () => {
+  it('the videos as files to work from, the client notes as the card thread', async () => {
+    const { notApprovedFiles, carriedNotes } = await import('../app/lib/split-core')
+    const open = [{ id: 'b', asset_id: 'b', name: 'Justin 3.mov', url: 'https://x/b' }, { id: 'c', asset_id: 'c', name: 'Justin 5.mov', url: null }]
+    expect(notApprovedFiles(open)).toEqual([{ url: 'https://x/b', name: 'Not approved — Justin 3.mov' }])
+    expect(carriedNotes(open, [
+      { video_file_id: 'b', visibility: 'client', body: 'Too dark' },
+      { video_file_id: 'b', visibility: 'internal', body: 'team only' },
+      { video_file_id: 'a', visibility: 'client', body: 'approved one' },
+    ])).toEqual(['The client on Justin 3.mov: Too dark'])
+    const src = readFileSync('app/lib/split.ts', 'utf8')
+    expect(src).toContain('raw_assets: [...notApprovedFiles(plan.open),')
+    expect(src).toContain('for (const body of carriedNotes(plan.open, notes)) {')
   })
 })
