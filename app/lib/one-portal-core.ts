@@ -181,7 +181,7 @@ export function postOnPortal(itemContact: string | null | undefined, scope: Port
   return scope.kind === 'business' ? who === null : who === scope.contactId
 }
 
-export type PortalTab = 'shoot' | 'editing' | 'designing' | 'scheduling' | 'boards'
+export type PortalTab = 'shoot' | 'editing' | 'designing' | 'scheduling' | 'boards' | 'forms'
 export const PORTAL_TABS: readonly { key: PortalTab; label: string }[] = [
   { key: 'shoot', label: 'Shoot brief' },
   { key: 'editing', label: 'Editing' },
@@ -189,6 +189,8 @@ export const PORTAL_TABS: readonly { key: PortalTab; label: string }[] = [
   { key: 'scheduling', label: 'Scheduling' },
   // the boards the team shares with the client — their own tab (the owner, 2 Oct 2026: "yes 5th tab")
   { key: 'boards', label: 'Boards' },
+  // intake forms and monthly updates (the owner, 2 Oct 2026: "usually we would have multiple intake forms" — their own tab)
+  { key: 'forms', label: 'Forms' },
 ]
 export function readTab(v: unknown): PortalTab {
   return PORTAL_TABS.some(t => t.key === v) ? (v as PortalTab) : 'scheduling'

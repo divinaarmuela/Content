@@ -1,7 +1,8 @@
 /**
- * THE SHOOT BRIEF TAB'S FORMS (the owner, 2 Oct 2026: "maybe all this links should redirect to their one portal").
+ * THE PORTAL'S FORMS (the owner, 2 Oct 2026: "maybe all this links should redirect to their one portal").
  * An intake form, a monthly update and a shoot-date proposal each had a link of their own; on the one portal they
- * are rows on the Shoot brief tab and open full screen at a portal address, so the old links can redirect there.
+ * are rows on the portal — a shoot date on Shoot brief, intake forms and monthly updates on their own Forms tab —
+ * and open full screen at a portal address, so the old links can redirect there.
  * Pure: which rows show, their words, and which wait on the client. The server half is one-portal-forms.ts.
  */
 
@@ -67,7 +68,12 @@ export function formRows(
   return out.sort((a, b) => Number(b.waiting) - Number(a.waiting) || b.at.localeCompare(a.at))
 }
 
+/** The tab a row lives on: a shoot date on Shoot brief; intake forms and monthly updates on Forms. */
+export function formTab(kind: FormKind): 'shoot' | 'forms' {
+  return kind === 'proposal' ? 'shoot' : 'forms'
+}
+
 /** Which old link opens which row: `/intake/<token>` → the form, `/monthly/<token>` → the update, `/shoot/<token>` → the proposal. */
 export function formLinkTarget(portalHome: string, kind: FormKind, id: string): string {
-  return `${portalHome}?tab=shoot&${FORM_PARAM[kind]}=${encodeURIComponent(id)}`
+  return `${portalHome}?tab=${formTab(kind)}&${FORM_PARAM[kind]}=${encodeURIComponent(id)}`
 }

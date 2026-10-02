@@ -31,8 +31,8 @@ describe('which forms the tab lists', () => {
     expect(rows.find(r => r.id === 'm1')?.title).toBe('Monthly update')
   })
   it('an old link lands on its row', () => {
-    expect(formLinkTarget('/portal/t/home', 'intake', 'i1')).toBe('/portal/t/home?tab=shoot&form=i1')
-    expect(formLinkTarget('/portal/t/home', 'monthly', 'm1')).toBe('/portal/t/home?tab=shoot&monthly=m1')
+    expect(formLinkTarget('/portal/t/home', 'intake', 'i1')).toBe('/portal/t/home?tab=forms&form=i1')
+    expect(formLinkTarget('/portal/t/home', 'monthly', 'm1')).toBe('/portal/t/home?tab=forms&monthly=m1')
     expect(formLinkTarget('/portal/t/home', 'proposal', 'p1')).toBe('/portal/t/home?tab=shoot&proposal=p1')
   })
 })
@@ -62,5 +62,19 @@ describe('the old form links send a one-portal client into the one link, and onl
   it('accepting a date no longer promises an invite nobody sends', () => {
     const src = readFileSync('app/shoot/[token]/ShootAnswer.tsx', 'utf8')
     expect(src).not.toContain('calendar invite is on its way')
+  })
+})
+
+describe('Forms is its own tab (the owner, 2 Oct 2026: "usually we would have multiple intake forms")', () => {
+  const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
+  it('intake forms and monthly updates list on Forms; shoot dates stay on Shoot brief', () => {
+    expect(page).toContain("{tab === 'forms' && <OnePortalList rows={formsTabRows}")
+    expect(page).toContain("{tab === 'shoot' && dateRows.length > 0 && <OnePortalList heading=\"Shoot dates\" rows={dateRows} />}")
+    expect(page).toContain("if (tab === 'forms' && pick('intake')) {")
+  })
+  it('an accepted shoot date offers the calendar file on the page, since the client is never emailed', () => {
+    expect(readFileSync('app/shoot/[token]/ShootAnswer.tsx', 'utf8')).toContain('Add to my calendar')
+    const route = readFileSync('app/api/shoot/[token]/ics/route.ts', 'utf8')
+    expect(route).toContain("proposal.status !== 'accepted'")
   })
 })

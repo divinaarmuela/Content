@@ -111,6 +111,7 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
       designing: designing.filter(waitsOnClient).length,
       scheduling: 0,
       boards: 0,
+      forms: 0,
     },
   }
 }
