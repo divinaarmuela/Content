@@ -77,6 +77,9 @@ export async function POST(req: Request) {
           ? `Approved all ${summaryOf} in this version. The card stays where it is until you log the approval or send it back.`
           : `Approved: ${name || 'a clip'} (${next.length} of the clips so far). The card stays where it is until you log the approval or send it back.`,
         dashboardPath: reviewPath(item.id, fileId, name || undefined),
+        // …and whoever holds the card and whoever assigned it (the owner, 3 Oct 2026: "MD Media created the card too —
+        // shouldn't she be notified as well?"): the account managers alone missed the person who made the card
+        alsoUserIds: [(item as { owner_id?: string | null }).owner_id, (item as { assigned_by?: string | null }).assigned_by],
       }).catch(e => console.error('clip approval notify error:', e))
     }
     return NextResponse.json({ ok: true, approvals: next })

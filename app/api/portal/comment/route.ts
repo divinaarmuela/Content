@@ -75,6 +75,9 @@ export async function POST(req: Request) {
         body: text,
         // straight to the clip, at the comment, on the team's review page
         dashboardPath: videoFile ? reviewPath(item.id, videoFile, videoName) : itemPath(item),
+        // …and whoever holds the card and whoever assigned it (the owner, 3 Oct 2026: "MD Media created the card too —
+        // shouldn't she be notified as well?"): the account managers alone missed the person who made the card
+        alsoUserIds: [(item as { owner_id?: string | null }).owner_id, (item as { assigned_by?: string | null }).assigned_by],
       }).catch(e => console.error('portal comment notify error:', e))
       return NextResponse.json({ ok: true })
     }

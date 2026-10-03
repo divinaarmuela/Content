@@ -38,3 +38,11 @@ describe('every page on the portal can be taken off it (3 Oct 2026)', () => {
     expect(board).toContain('data-board-unshare')
   })
 })
+
+describe('a client approval or comment reaches whoever holds and assigned the card, not only the managers (3 Oct 2026)', () => {
+  it('both portal routes name the holder and the assigner', () => {
+    for (const f of ['app/api/portal/clip/route.ts', 'app/api/portal/comment/route.ts']) {
+      expect(readFileSync(f, 'utf8')).toContain('alsoUserIds: [(item as { owner_id?: string | null }).owner_id, (item as { assigned_by?: string | null }).assigned_by],')
+    }
+  })
+})
