@@ -260,9 +260,11 @@ export default async function OnePortalPage({ params, searchParams }: {
         }}
       >
         <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-          <div className="flex flex-col gap-1 px-5 pt-3 pr-14 sm:px-10 sm:pr-10">
+          {/* the room for the light/dark pill is the NAME row's only — the tabs run to the edge (the owner, 2 Oct 2026, on a
+              phone: "a weird space on the far right") */}
+          <div className="flex flex-col gap-1 px-5 pt-3 sm:px-10">
             {/* min-h-11: as tall as PortalShell's fixed light/dark pill, so on a phone the tabs start below it */}
-            <div className="flex min-h-11 items-center gap-3">
+            <div className="flex min-h-11 items-center gap-3 pr-12 sm:pr-0">
               <div className="flex shrink-0 items-center rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 px-2 py-1.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/MDLogo-trim.png" alt="MD Media" className="h-2.5 w-auto" />

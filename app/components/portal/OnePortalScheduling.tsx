@@ -201,13 +201,22 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 sm:items-center" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className="max-h-[92vh] w-full max-w-[560px] overflow-y-auto rounded-t-2xl border border-border bg-popover p-5 sm:rounded-2xl" onClick={e => e.stopPropagation()}>
-        <div className="mb-3 flex items-start gap-3">
+    // ABOVE THE LIGHT/DARK PILL (z-50), WITH THE CLOSE ALWAYS IN SIGHT (the owner, 2 Oct 2026: "the close button top
+    // right is hard to see because of the top bar"; "no scroll indicator?"): the title bar and Close stay pinned while
+    // the post scrolls under them, and a fade at the foot says there is more below
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 sm:items-center" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
+      <div className="relative flex max-h-[92vh] w-full max-w-[560px] flex-col overflow-hidden rounded-t-2xl border border-border bg-popover sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-popover px-5 py-3">
           <p className="min-w-0 flex-1 text-[17px] font-semibold leading-snug">{title}</p>
-          <button type="button" onClick={onClose} className="inline-flex min-h-10 items-center rounded-full border border-border px-3 text-[13px]">Close</button>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background">
+            <span aria-hidden>✕</span> Close
+          </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-4 [scrollbar-width:thin]">
+          {children}
+        </div>
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-popover to-transparent" />
       </div>
     </div>
   )

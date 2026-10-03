@@ -12,7 +12,10 @@ export default function OnePortalTabs({ token, active, waiting }: {
   waiting: Record<PortalTab, number>
 }) {
   return (
-    <nav aria-label="Your portal" className="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 py-2" data-one-portal-tabs>
+    // ONE ROW, SWIPED, EDGE TO EDGE ON A PHONE (the owner, 2 Oct 2026: "the horizontal scroll of the pills is weird"): no
+    // scrollbar drawn, the row runs to the screen's edge, and a fade at the right says there are more tabs to swipe to
+    <div className="relative -mx-5 sm:mx-0">
+    <nav aria-label="Your portal" className="flex gap-1.5 overflow-x-auto overscroll-x-contain scroll-px-5 px-5 py-2 [scrollbar-width:none] sm:px-0 [&::-webkit-scrollbar]:hidden" data-one-portal-tabs>
       {PORTAL_TABS.map(t => {
         const on = t.key === active
         const n = waiting[t.key] ?? 0
@@ -35,6 +38,10 @@ export default function OnePortalTabs({ token, active, waiting }: {
           </Link>
         )
       })}
+      {/* the last tab clears the fade */}
+      <span aria-hidden className="w-6 shrink-0 sm:hidden" />
     </nav>
+    <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent sm:hidden" />
+    </div>
   )
 }
