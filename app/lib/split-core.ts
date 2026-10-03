@@ -52,6 +52,11 @@ export function notApprovedFiles(open: readonly SplitVideo[]): { url: string; na
   return open.filter(v => !!v.url).map(v => ({ url: v.url!, name: `Not approved — ${v.name}` }))
 }
 
+/** the card's files to work from without an earlier round's 'Not approved' videos — the footage only */
+export function footageOnly(raw: unknown): { url: string; name: string }[] {
+  return (Array.isArray(raw) ? raw as { url: string; name: string }[] : []).filter(a => !String(a?.name ?? '').startsWith('Not approved — '))
+}
+
 /** each thing the client said on an unapproved video, as a note on the Round N card, naming the video */
 export function carriedNotes(open: readonly SplitVideo[], notes: readonly ClipNote[]): string[] {
   const out: string[] = []

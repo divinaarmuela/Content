@@ -4,7 +4,7 @@ import { table } from '@/lib/db'
 import type { ContentItem, TeamUser as TeamUserRow } from '@/lib/db-types'
 import { AuthzError, type TeamUser } from './authz'
 import { withRetired, finalFilesOf } from './final-files-core'
-import { carriedNotes, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitPlan, type ClipNote, type SplitVideo } from './split-core'
+import { carriedNotes, footageOnly, nextSplitRound, notApprovedFiles, roundNote, roundTitle, splitPlan, type ClipNote, type SplitVideo } from './split-core'
 import { logActivity, performTransition } from './workflow'
 import { announceItemChange } from './production-live'
 import { notify, renderEmail, escapeHtml } from './mailer'
@@ -72,7 +72,8 @@ export async function splitCard(actor: TeamUser, itemId: string, opts: { by: 'cl
       brief: src.brief ?? null,
       raw_assets_url: src.raw_assets_url ?? null,
       // the videos the client did not approve, playable, ahead of the footage (the owner: "shows the unapproved videos")
-      raw_assets: [...notApprovedFiles(plan.open), ...(Array.isArray(src.raw_assets) ? src.raw_assets as { url: string; name: string }[] : [])],
+      // …and only THIS round's: an earlier round's 'Not approved' videos were redone already (2 Oct 2026, the Round 3 walk)
+      raw_assets: [...notApprovedFiles(plan.open), ...footageOnly(src.raw_assets)],
       link_url: src.raw_assets_url ?? null,
       link_kind: src.raw_assets_url ? (src.link_kind ?? null) : null,
       for_contact_id: src.for_contact_id ?? null,

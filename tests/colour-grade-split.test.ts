@@ -142,3 +142,12 @@ describe('the Round N card shows the unapproved videos and what the client said 
     expect(src).toContain('for (const body of carriedNotes(plan.open, notes)) {')
   })
 })
+
+describe('a Round N card carries only its own round\'s unapproved videos (2 Oct 2026, the Round 3 walk)', () => {
+  it('earlier rounds\' "Not approved" videos are left behind; the footage stays', async () => {
+    const { footageOnly } = await import('../app/lib/split-core')
+    expect(footageOnly([{ url: 'u1', name: 'Not approved — 8. HECS debt.mov' }, { url: 'u2', name: 'Raw clip A.mov' }])).toEqual([{ url: 'u2', name: 'Raw clip A.mov' }])
+    expect(footageOnly(null)).toEqual([])
+    expect(readFileSync('app/lib/split.ts', 'utf8')).toContain('raw_assets: [...notApprovedFiles(plan.open), ...footageOnly(src.raw_assets)],')
+  })
+})

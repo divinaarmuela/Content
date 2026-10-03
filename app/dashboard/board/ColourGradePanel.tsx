@@ -35,7 +35,7 @@ export function ColourGradePanel({ item, mayGrade }: {
       <p className="text-[14px]">
         {graded
           ? `Graded videos are in — ${count} ${count === 1 ? 'video' : 'videos'} for ${roundLabel(round)}. Press "${PUT_ON_PORTAL}" when it is ready for the client.`
-          : 'Passed the quality check. Hand in the graded videos from Google Drive — they replace the editor’s, video by video, and the client sees the graded ones only.'}
+          : 'Ready to grade. Hand in the graded videos from Google Drive — they replace the editor’s, video by video, and the client sees the graded ones only.'}
       </p>
       <DriveHandInStatus item={item} />
       {mayGrade && (
