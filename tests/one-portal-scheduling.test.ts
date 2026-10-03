@@ -98,3 +98,12 @@ describe('the Boards tab, and taking a piece off the portal (2 Oct 2026)', () =>
     expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('Take it off the client&apos;s portal — they will not see it there.')
   })
 })
+
+describe('a booked video tile shows its Cloudflare still (3 Oct 2026, the Safari check)', () => {
+  it('the loader attaches the still; the tile draws it before trying the video', () => {
+    const loader = readFileSync('app/lib/one-portal-schedule.ts', 'utf8')
+    expect(loader).toContain("const posterOf = new Map(previews.map(r => [r.source_url, pickPoster(r)]))")
+    const ui = readFileSync('app/components/portal/OnePortalScheduling.tsx', 'utf8')
+    expect(ui).toContain("if (poster) return <img src={poster}")
+  })
+})

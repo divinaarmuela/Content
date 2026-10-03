@@ -10,6 +10,7 @@ import { postVersionId, readPostState, type PostState } from './post-stage-core'
 import { scheduledWhen } from './portal-words'
 import { ifNoAnswerOf, insideLastSlot, postOnPortal, reviewState, type ReviewState } from './one-portal-core'
 import type { PortalScope } from './portal-owner-core'
+import { pickPoster, type PreviewRow } from './stream-core'
 
 /**
  * THE SCHEDULING TAB (docs/ONE_PORTAL_SPEC.md R10, R11): per connected network, the client's profile — their
@@ -33,7 +34,8 @@ export type ScheduledTile = {
   title: string
   when: string | null
   scheduled_for: string | null
-  cover: { url: string; type: 'image' | 'video' } | null
+  /** a video's poster is its Cloudflare Stream still — a camera .mov paints no frame in many browsers (3 Oct 2026) */
+  cover: { url: string; type: 'image' | 'video'; poster?: string | null } | null
   files: number
   caption: string
   state: ReviewState
@@ -219,6 +221,16 @@ export async function loadScheduling(
       }),
       feed_problem: problem,
     })
+  }
+  // A STILL FOR EVERY VIDEO TILE (3 Oct 2026, the Safari check: Justin's booked .mov drew an empty tile): the encode's
+  // thumbnail from video_previews, when Cloudflare has made one; otherwise the video as before
+  const videoUrls = new Set(out.flatMap(p => [...p.booked, ...p.off]).filter(t => t.cover?.type === 'video').map(t => t.cover!.url))
+  if (videoUrls.size) {
+    const previews = await table<PreviewRow & { id: string; source_url: string }>('video_previews' as never).list({ where: r => videoUrls.has(r.source_url) }).catch(() => [])
+    const posterOf = new Map(previews.map(r => [r.source_url, pickPoster(r)]))
+    for (const t of out.flatMap(p => [...p.booked, ...p.off])) {
+      if (t.cover?.type === 'video') t.cover = { ...t.cover, poster: posterOf.get(t.cover.url) ?? null }
+    }
   }
   return out
 }

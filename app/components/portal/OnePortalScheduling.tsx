@@ -29,6 +29,11 @@ function Cover({ tile, className }: { tile: { cover?: ScheduledTile['cover']; th
   // a posted tile's "thumbnail" can itself be a video file (an Instagram reel) — drawn as a video too
   const video = 'cover' in tile && tile.cover ? tile.cover.type === 'video' : /\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(url ?? '')
   if (!url) return <div className={`bg-muted ${className ?? ''}`} />
+  // THE STILL FIRST (3 Oct 2026, the Safari check: Justin's booked .mov drew an empty tile): a video with a Cloudflare
+  // still shows the still — every browser can draw a picture; not every browser can draw a frame of a camera .mov
+  const poster = 'cover' in tile && tile.cover?.type === 'video' ? tile.cover.poster ?? null : null
+  // eslint-disable-next-line @next/next/no-img-element
+  if (poster) return <img src={poster} alt="" loading="eager" decoding="async" className={`object-cover ${className ?? ''}`} />
   // A PHONE DRAWS NOTHING FOR A VIDEO UNTIL IT PLAYS (the owner, 2 Oct 2026: "on phone the feed for videos … not
   // showing unless I clicked it"): asking for the frame at 0.001 s makes iOS Safari paint the first frame on load
   return video
