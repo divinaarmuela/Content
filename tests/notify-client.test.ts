@@ -28,3 +28,13 @@ describe('notify the client', () => {
     expect(readFileSync('app/dashboard/clients/[id]/IntakePanel.tsx', 'utf8')).toContain('<NotifyClientButton clientId={clientId} tab="forms" id={form.id}')
   })
 })
+
+describe('every page on the portal can be taken off it (3 Oct 2026)', () => {
+  it('edit / design card, shoot brief and shared board each have a take-off', () => {
+    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('Take it off the client&apos;s portal')
+    expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain("onPatch('shared_with_client', false)}>Take it off the portal")
+    const board = readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')
+    expect(board).toContain("onClick={() => void patch({ shared_with_client: false }")
+    expect(board).toContain('data-board-unshare')
+  })
+})

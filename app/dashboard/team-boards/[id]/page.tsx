@@ -158,6 +158,14 @@ export default function TeamBoardPage() {
                 <Users className="mr-1.5 h-4 w-4" aria-hidden /> {board.shared_with_client ? 'Copy client link' : 'Share with client'}
               </Button>
             )}
+            {/* TAKE IT OFF THE PORTAL (3 Oct 2026: "with editing, designing, shoot and board we can take it off the portal?") —
+                the same switch Share with client turned on; the client no longer sees the board, nothing is deleted */}
+            {mayShareTeamBoard(me, board) && board.shared_with_client && (
+              <Button variant="ghost" disabled={busy} onClick={() => void patch({ shared_with_client: false }, 'Taken off the client’s portal — they will not see it there')}
+                className="h-11 rounded-full px-4 text-[13px] font-semibold text-muted-foreground" data-board-unshare>
+                Take it off the client’s portal
+              </Button>
+            )}
             {/* NOTIFY THE CLIENT (2 Oct 2026): sharing emails nobody; this press emails the board's own link */}
             {mayShareTeamBoard(me, board) && board.shared_with_client && board.client_id && (
               <NotifyClientButton clientId={board.client_id} tab="boards" id={board.id} className="h-11 rounded-full px-4 text-[13px] font-semibold" />
