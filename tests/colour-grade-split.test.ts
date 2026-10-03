@@ -151,3 +151,16 @@ describe('a Round N card carries only its own round\'s unapproved videos (2 Oct 
     expect(readFileSync('app/lib/split.ts', 'utf8')).toContain('raw_assets: [...notApprovedFiles(plan.open), ...footageOnly(src.raw_assets)],')
   })
 })
+
+describe('the screens say what they do (3 Oct 2026: "all buttons make sense?")', () => {
+  it('beside Split, the whole-card buttons say "all N"; the designer board has no empty Colour grade column', async () => {
+    const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    expect(page).toContain("a.kind === 'send_back' ? { ...a, label: `Send all ${whole} back for changes` }")
+    expect(page).toContain("{ ...a, label: `${a.label} — all ${whole}` }")
+    expect(readFileSync('app/dashboard/designer/page.tsx', 'utf8')).toContain("hideEmptyLanes={['colour_grade']}")
+    const { DESIGN_LANE_WORDS, EDITOR_LANE_WORDS } = await import('../app/lib/editor-sop-core')
+    expect(DESIGN_LANE_WORDS).toBe('In Progress, Quality check, With client, For Handoff, Done')
+    expect(EDITOR_LANE_WORDS).toContain('Colour grade')
+    for (const f of ['app/dashboard/editor/page.tsx', 'app/dashboard/designer/page.tsx']) expect(readFileSync(f, 'utf8')).not.toMatch(/five columns: \$\{/)
+  })
+})

@@ -93,8 +93,10 @@ export function useBoardParams(): { column: BoardColumnKey | null; show: ShowFil
 
 export function Board({
   cards, viewer, page, names, managersOf, kinds, today, onOpen, initialColumn, show, onClearShow,
-  postingToday, connectedClientIds, ariaLabel, onAcknowledge, filters, filterNote, laneEmpty,
+  postingToday, connectedClientIds, ariaLabel, onAcknowledge, filters, filterNote, laneEmpty, hideEmptyLanes,
 }: {
+  /** lanes drawn only when a card is in them — the Designer page's Colour grade, which designs never reach (3 Oct 2026) */
+  hideEmptyLanes?: readonly string[]
   cards: BoardCardRow[]
   /** the Client / People controls, drawn in the board's header row — the
    *  page owns the choice and hands the board the cards already narrowed */
@@ -212,7 +214,7 @@ export function Board({
   // the Delivered column is drawn only when a card is in it — a team with no
   // client who posts their own never sees an eighth column
   const grouped = useMemo(
-    () => groupByLane(laneLayout, shown).filter(g => g.lane.key !== 'delivered' || g.cards.length > 0).map(g => ({ ...g, cards: sortCards(g.cards, sort, viewedAt) })),
+    () => groupByLane(laneLayout, shown).filter(g => (g.lane.key !== 'delivered' && !(hideEmptyLanes ?? []).includes(g.lane.key)) || g.cards.length > 0).map(g => ({ ...g, cards: sortCards(g.cards, sort, viewedAt) })),
     [laneLayout, shown, sort, viewedAt])
 
   /** the lanes a drag may land on right now */

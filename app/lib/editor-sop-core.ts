@@ -51,6 +51,8 @@ export const EDITOR_LANES: readonly {
 ]
 
 export const EDITOR_LANE_WORDS = EDITOR_LANES.map(l => l.label).join(', ')
+/** the Designer page's columns — the same, without Colour grade, which designs never reach */
+export const DESIGN_LANE_WORDS = EDITOR_LANES.filter(l => l.key !== 'colour_grade').map(l => l.label).join(', ')
 
 /** Inside Quality check the editor is told who has it, in small words —
  *  the reviewer's first name when somebody wears the flag ("With Joy"). */

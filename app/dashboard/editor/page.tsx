@@ -164,8 +164,8 @@ export default function EditorPage() {
       <PageTitle
         title="Editor"
         summary={isManager
-          ? `Everything still being made, in the editors’ five columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
-          : `Your cards, in five columns: ${EDITOR_LANE_WORDS}. Press "I am on it" the day a card lands, read the brief, hand in the final from Google Drive, tick your checks and submit — it goes straight to the quality reviewer.`}
+          ? `Everything still being made, in the editors’ columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
+          : `Your cards, in their columns: ${EDITOR_LANE_WORDS}. Press "I am on it" the day a card lands, read the brief, hand in the final from Google Drive, tick your checks and submit — it goes straight to the quality reviewer.`}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">

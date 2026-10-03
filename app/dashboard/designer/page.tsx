@@ -23,7 +23,7 @@ import {
 import { NewCardDialog } from '../board/BoardDialogs'
 import { toast } from 'sonner'
 import { flagsOf } from '../../lib/card-flag-core'
-import { EDITOR_LANE_WORDS, reviewerNameOf } from '../../lib/editor-sop-core'
+import { DESIGN_LANE_WORDS, reviewerNameOf } from '../../lib/editor-sop-core'
 
 /**
  * THE DESIGNER PAGE (the owner, 17 Sep 2026: "another page called Designer —
@@ -141,8 +141,8 @@ export default function DesignerPage() {
       <PageTitle
         title="Designer"
         summary={isManager
-          ? `Every graphics card still being made, in the five columns: ${EDITOR_LANE_WORDS}. A designer uploads the finished files onto the card; then it goes the same way as an edit — quality check, the client, the scheduler.`
-          : `Your graphics cards, in five columns: ${EDITOR_LANE_WORDS}. Press "I am on it" the day a card lands, upload the finished files, tick your checks and submit — it goes straight to the quality reviewer.`}
+          ? `Every graphics card still being made, in its columns: ${DESIGN_LANE_WORDS}. A designer uploads the finished files onto the card; then it goes the same way as an edit — quality check, the client, the scheduler.`
+          : `Your graphics cards, in their columns: ${DESIGN_LANE_WORDS}. Press "I am on it" the day a card lands, upload the finished files, tick your checks and submit — it goes straight to the quality reviewer.`}
         actions={viewer && canCreate && (
           <Button onClick={() => setNewOpen(true)}
             className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
@@ -160,6 +160,8 @@ export default function DesignerPage() {
           cards={cards}
           viewer={viewer}
           page="editor"
+          // designs skip colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1) — no empty column for it
+          hideEmptyLanes={['colour_grade']}
           names={names}
           managersOf={managersOf}
           kinds={live.tables.workKinds.rows}

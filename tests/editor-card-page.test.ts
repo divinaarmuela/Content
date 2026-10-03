@@ -61,7 +61,9 @@ describe('the card’s page', () => {
     expect(page).toContain('<EditorCardDrawer key={id} id={id} onClose={back} hideFolderFiles />')
     expect(page).not.toContain('<CardDetail')
     expect(page).toContain("{!maker && me && me.role !== 'client' && (")
-    expect(page).toContain('const { primary, more } = cardActions(card, viewer)')
+    // the board's own buttons — said as "all N" when the client approved only some (3 Oct 2026)
+    expect(page).toContain('const actions = cardActions(card, viewer)')
+    expect(page).toContain('const more = actions.more.map(sayAll)')
   })
   it('the maker’s drawer leaves the folder’s files to the page, so they are not drawn twice', () => {
     const drawer = src('app/dashboard/board/EditorCardDrawer.tsx')

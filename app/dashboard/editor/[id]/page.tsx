@@ -13,7 +13,8 @@ import EditorCardDrawer from '../../board/EditorCardDrawer'
 import PostApprovalDetail from '../../board/PostApprovalDetail'
 import { Button } from '@/components/ui/button'
 import { useCardActs } from '../../board/useCardActs'
-import { cardActions, type BoardViewCard, type BoardViewer } from '../../../lib/board-view-core'
+import { cardActions, type BoardViewCard, type BoardViewer, type CardAction } from '../../../lib/board-view-core'
+import { splitPlan } from '../../../lib/split-core'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
 import ShareAcceptedLink from '../../board/ShareAcceptedLink'
 import { usesMakerDrawer } from '../../../lib/card-sheet-core'
@@ -79,7 +80,17 @@ function ManagerActions({ item, viewer, portalLink, client, design = false, kind
   // the work kind rides on the card, so a video edit's check offers colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
   const card = { ...(item as unknown as BoardViewCard), work_kinds: kindSlug ? { name: kindSlug, slug: kindSlug } : null } as BoardViewCard
   const { busyId, act, dialogs } = useCardActs<BoardViewCard>(viewer)
-  const { primary, more } = cardActions(card, viewer)
+  const actions = cardActions(card, viewer)
+  // SOME APPROVED, NOT ALL (3 Oct 2026: "all buttons make sense?" — beside Split, "Log the client's approval" and "Send
+  // back for changes" read as acting on the unapproved ones; they act on the whole card): they say "all N"
+  const part = splitPlan(item as never)
+  const whole = part.kind === 'split' ? part.approved.length + part.open.length : null
+  const sayAll = (a: CardAction): CardAction => whole === null ? a
+    : a.kind === 'send_back' ? { ...a, label: `Send all ${whole} back for changes` }
+    : a.kind === 'transition' && a.to === 'approved_for_scheduling' ? { ...a, label: `${a.label} — all ${whole}` }
+    : a
+  const primary = actions.primary ? sayAll(actions.primary) : null
+  const more = actions.more.map(sayAll)
   const busy = busyId === card.id
   // WITH THE CLIENT: the portal link, to copy and send (the owner, 15 Sep 2026:
   // "there is one card with the client but no client portal button on the card")
