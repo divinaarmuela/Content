@@ -3,6 +3,14 @@ import { requireRole, authzErrorResponse } from '@/app/lib/authz'
 import { table } from '@/lib/db'
 import { metaIgReady } from '@/app/lib/meta-ig'
 import { authorizeUrl, signState } from '@/app/lib/meta-ig-core'
+import { accessibleClientIds } from '@/app/lib/production-access'
+import { AuthzError } from '@/app/lib/authz'
+
+/** the client must be one this person works on — the same rule as the Schedule's, without its mailer */
+async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clientId: string) {
+  const ids = await accessibleClientIds(user)
+  if (ids !== null && !ids.includes(clientId)) throw new AuthzError('That client is not one of yours', 403)
+}
 
 /**
  * GET /api/meta/instagram/connect?clientId= — start Instagram Business Login
@@ -24,6 +32,9 @@ export async function GET(req: NextRequest) {
   try {
     const me = await requireRole('account_manager')
     userId = me.id
+    // only a client this person works on (5 Oct 2026: the reviewer's account is limited to 100M)
+    const asked = req.nextUrl.searchParams.get('clientId')?.trim()
+    if (asked) await assertMine(me, asked)
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

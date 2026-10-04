@@ -38,6 +38,9 @@ const day = (iso: string | null) =>
 export default function MetaDirectInstagram({ clientId }: { clientId: string }) {
   const { can, loading } = useRole()
   const superAdmin = can('super_admin')
+  // an account manager connects their own clients' Instagram (5 Oct 2026: the Meta reviewer signs in as a 100M-only
+  // manager and must see this card); the server checks the client is theirs. The publishing switch stays super admin.
+  const mayConnect = can('account_manager')
   const [state, setState] = useState<State | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -49,11 +52,11 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
     } catch { setState({ error: 'Could not reach the server' }) }
   }, [clientId])
 
-  useEffect(() => { if (superAdmin) void load() }, [superAdmin, load])
+  useEffect(() => { if (mayConnect) void load() }, [mayConnect, load])
 
   // coming back from Instagram: say how it went once, then clear the query
   useEffect(() => {
-    if (!superAdmin) return
+    if (!mayConnect) return
     const params = new URLSearchParams(window.location.search)
     const result = params.get('meta_ig')
     if (!result) return
@@ -63,7 +66,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
     for (const k of ['meta_ig', 'username', 'reason']) params.delete(k)
     const qs = params.toString()
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
-  }, [superAdmin])
+  }, [mayConnect])
 
   const setViaMeta = async (on: boolean) => {
     setSaving(true)
@@ -80,7 +83,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
     } catch { toast.error('Could not reach the server') } finally { setSaving(false) }
   }
 
-  if (loading || !superAdmin) return null
+  if (loading || !mayConnect) return null
 
   const H = 'font-mono text-[12px] uppercase tracking-widest text-muted-foreground'
   const configured = state && 'configured' in state ? state.configured : false
@@ -129,7 +132,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
         )}
       </div>
 
-      <label className="flex min-h-11 items-center gap-3 border-t border-border pt-2 text-[13px]">
+      {superAdmin && <label className="flex min-h-11 items-center gap-3 border-t border-border pt-2 text-[13px]">
         <Switch
           checked={viaMeta}
           disabled={saving || !state || 'error' in state || (!viaMeta && !anyActive)}
@@ -144,7 +147,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
               : anyActive ? 'Off: everything goes through Zernio.' : 'Connect Instagram directly first.'}
           </span>
         </span>
-      </label>
+      </label>}
     </div>
   )
 }

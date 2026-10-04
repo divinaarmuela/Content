@@ -225,8 +225,8 @@ describe('GET /api/meta/instagram/callback', () => {
 describe('GET /api/meta/instagram/connect', () => {
   const go = (q: string) => new NextRequest(`https://app.mdmmarketing.com.au/api/meta/instagram/connect?${q}`)
 
-  it('sends an account manager to Instagram with a signed state for the client', async () => {
-    setup()
+  it('sends an account manager to Instagram with a signed state for THEIR client', async () => {
+    setup({ team_user_clients: [{ id: 'l1', team_user_id: 'tu-am', client_id: 'c1' } as Row] })
     who = { id: 'tu-am', role: 'account_manager' }
     const { GET } = await import('../app/api/meta/instagram/connect/route')
     const res = await GET(go('clientId=c1'))
@@ -237,6 +237,14 @@ describe('GET /api/meta/instagram/connect', () => {
     const { verifyState } = await import('../app/lib/meta-ig-core')
     const st = verifyState(to.searchParams.get('state'), SECRET, Date.now())
     expect(st.ok && st.payload).toMatchObject({ clientId: 'c1', userId: 'tu-am' })
+  })
+
+  it('refuses an account manager who is not on that client (5 Oct 2026: the reviewer account is 100M-only)', async () => {
+    setup()
+    who = { id: 'tu-other', role: 'account_manager' }
+    const { GET } = await import('../app/api/meta/instagram/connect/route')
+    const res = await GET(go('clientId=c1'))
+    expect(res.status).toBe(403)
   })
 
   it('refuses an editor and a stranger; 404s an unknown client', async () => {

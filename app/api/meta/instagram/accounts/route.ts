@@ -5,6 +5,14 @@ import type { Client, PublishJob, SocialAccount, SocialPost } from '@/lib/db-typ
 import { listClientAccounts, metaIgReady } from '@/app/lib/meta-ig'
 import { readPostState } from '@/app/lib/post-stage-core'
 import { META_PROVIDER, routeMark, type InstagramRoute } from '@/app/lib/meta-route-core'
+import { accessibleClientIds } from '@/app/lib/production-access'
+import { AuthzError } from '@/app/lib/authz'
+
+/** the client must be one this person works on — the same rule as the Schedule's, without its mailer */
+async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clientId: string) {
+  const ids = await accessibleClientIds(user)
+  if (ids !== null && !ids.includes(clientId)) throw new AuthzError('That client is not one of yours', 403)
+}
 
 /**
  * /api/meta/instagram/accounts — super admins only.
@@ -22,12 +30,22 @@ import { META_PROVIDER, routeMark, type InstagramRoute } from '@/app/lib/meta-ro
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const denied = await guard('super_admin')
-  if (denied) return denied
   const postId = req.nextUrl.searchParams.get('postId')?.trim()
-  if (postId) return NextResponse.json(await postRoute(postId))
+  if (postId) {
+    const denied = await guard('super_admin')
+    if (denied) return denied
+    return NextResponse.json(await postRoute(postId))
+  }
   const clientId = req.nextUrl.searchParams.get('clientId')?.trim()
   if (!clientId) return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
+  // an account manager reads their own clients' connection (the Meta reviewer is a 100M-only manager); a super admin any
+  try {
+    const me = await requireRole('account_manager')
+    await assertMine(me, clientId)
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
   const ready = metaIgReady()
   const [accounts, client] = await Promise.all([
     listClientAccounts(clientId),
