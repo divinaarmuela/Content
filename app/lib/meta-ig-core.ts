@@ -25,14 +25,17 @@ export const META_IG_GRAPH = 'https://graph.instagram.com'
 export const META_IG_GRAPH_VERSION = 'v23.0'
 
 /**
- * What the connect asks for — ONLY what the app does itself, on camera, for App Review (Meta, App Review docs, read
- * 5 Oct 2026: "If you request permissions or features that your app does not use … your submission will not be
- * approved"). Comments, messages and insights still run through Zernio, so they are not asked for until this app
- * does them itself; add each back here when it does, and submit it then. docs/META_APP_REVIEW.md.
+ * What the connect asks for — every Instagram feature the app does ITSELF, for the one App Review submission (the
+ * owner, 5 Oct 2026: "one big submission", "make sure we get all their features"). Meta approves only what the app
+ * uses on camera, after at least one successful call with each (App Review docs, read 5 Oct 2026), so each of these is
+ * built into our own app (meta-ig*.ts) and tested on 100M before submitting. docs/META_SUBMISSION_KIT.md.
  */
 export const META_IG_SCOPES = [
   'instagram_business_basic',
   'instagram_business_content_publish',
+  'instagram_business_manage_comments',
+  'instagram_business_manage_messages',
+  'instagram_business_manage_insights',
 ] as const
 
 /** A connect that takes longer than this to come back is refused. */
