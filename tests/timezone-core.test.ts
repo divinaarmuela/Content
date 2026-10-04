@@ -165,7 +165,8 @@ describe('zoneAbbrev — the letters that stop a printed time being a guess', ()
     for (const tz of COMMON_ZONES) {
       expect(zoneAbbrev(tz, '2026-08-27T03:00:00Z')).toMatch(/\S/)
     }
-    expect(zoneAbbrev('nonsense/zone')).toBe('AEST')
+    // a bad zone falls back to Melbourne, whose letters change with daylight saving (AEDT from 4 Oct 2026)
+    expect(zoneAbbrev('nonsense/zone')).toMatch(/^AE[SD]T$/)
   })
 })
 
