@@ -41,6 +41,17 @@ describe('what Instagram answers, read', () => {
     expect(out[1].replies.map(r => [r.id, r.ours])).toEqual([['r1', true], ['r2', false]])
   })
 
+  it('a reply Instagram lists twice is drawn once, under its parent, with its author (seen live on 100M, 5 Oct 2026)', () => {
+    const out = parseComments({ data: [
+      { id: 'r1', text: 'Just sent it to your DMs.', username: 'biz', timestamp: '2026-10-01T02:00:00+0000' },
+      { id: 'c1', text: 'LINK', username: 'pat', timestamp: '2026-10-01T01:00:00+0000', replies: { data: [
+        { id: 'r1', text: 'Just sent it to your DMs.', timestamp: '2026-10-01T02:00:00+0000' },
+      ] } },
+    ] }, { userId: '1789', username: 'biz' })
+    expect(out.map(c => c.id)).toEqual(['c1'])
+    expect(out[0].replies).toMatchObject([{ id: 'r1', username: 'biz', ours: true }])
+  })
+
   it('conversations: the other person, the thread oldest first, and the 24 hours', () => {
     const [c] = parseConversations({ data: [{ id: 'conv1', updated_time: '2026-10-05T00:00:00+0000', messages: { data: [
       { id: 'x2', created_time: '2026-10-05T00:00:00+0000', from: { id: '1789', username: 'biz' }, to: { data: [{ id: 'p1', username: 'pat' }] }, message: 'hi back' },

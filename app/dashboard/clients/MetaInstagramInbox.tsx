@@ -157,7 +157,7 @@ function PostLine({ post }: { post: IgPost }) {
         : <span className="h-12 w-12 shrink-0 rounded-inner bg-muted" />}
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-[13px] font-semibold">{post.caption ?? 'No caption'}</span>
-        <span className="text-[12px] text-muted-foreground">{when(post.postedAt)}{post.likes !== null ? ` · ${count(post.likes)} likes` : ''}</span>
+        <span className="text-[12px] text-muted-foreground">{when(post.postedAt)}{post.likes !== null ? ` · ${count(post.likes)} like${post.likes === 1 ? '' : 's'}` : ''}</span>
       </span>
     </span>
   )

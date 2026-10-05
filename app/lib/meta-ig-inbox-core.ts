@@ -82,10 +82,25 @@ function oneComment(c: any, ownUserId: string, ownUsername: string | null): IgTh
   }
 }
 
-/** Newest first; each comment's replies oldest first, the way a thread reads. */
+/**
+ * Newest first; each comment's replies oldest first, the way a thread reads.
+ *
+ * Instagram lists a reply TWICE — once in the media's own list, with its
+ * author, and once under its parent, where the author comes back empty (seen
+ * live on 100M, 5 Oct 2026). So a reply is drawn once, under its parent, with
+ * the name from its full copy.
+ */
 export function parseComments(json: unknown, own: { userId: string; username: string | null }): IgThreadComment[] {
-  return list(json).filter(c => c && c.id != null).map(c => oneComment(c, own.userId, own.username))
-    .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
+  const all = list(json).filter(c => c && c.id != null).map(c => oneComment(c, own.userId, own.username))
+  const full = new Map(all.map(c => [c.id, c]))
+  const replyIds = new Set(all.flatMap(c => c.replies.map(r => r.id)))
+  return all.filter(c => !replyIds.has(c.id)).map(c => ({
+    ...c,
+    replies: c.replies.map(r => {
+      const copy = full.get(r.id)
+      return copy ? { ...r, username: r.username ?? copy.username, ours: r.ours || copy.ours, likes: r.likes ?? copy.likes } : r
+    }),
+  })).sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
 }
 
 /* ── messages ─────────────────────────────────────────────────────────── */
