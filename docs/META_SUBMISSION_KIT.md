@@ -46,18 +46,18 @@ Done:
 - [x] 100M reconnected with all five scopes; "Post this client's Instagram through Meta" is ON for 100M.
 
 - [x] One real call per permission (the table above) — publishing included.
+- [x] `META_APP_SECRET` is in Vercel Production: the data-deletion endpoint stopped answering "not configured" and
+      refuses a made-up request as "malformed" (called 5 Oct 2026). A real request from Meta has not been seen yet.
 - [x] App icon uploaded and saved (`docs/meta-app-icon-1024.png`), 5 Oct 2026.
 - [x] Business Verification SUBMITTED for MD Media Marketing Pty Ltd — "In review", about two working days
       (Security Centre, read 5 Oct 2026).
 
 Still to do:
-1. `META_APP_SECRET` (Facebook app secret, Settings → Basic) in Vercel Production → redeploy. Check:
-   `POST https://app.mdmmarketing.com.au/api/meta/data-deletion` stops answering "not configured".
-2. The screencasts below, and the reviewer instructions with the two passwords filled in.
-3. Wait for Business Verification. Tech Provider verification is NOT offered anywhere on the app yet (Required
+1. The screencasts below, and the reviewer instructions with the two passwords filled in.
+2. Wait for Business Verification. Tech Provider verification is NOT offered anywhere on the app yet (Required
    actions empty, nothing under Basic, Publish or the Security Centre — looked 5 Oct 2026); look again once
    verification is approved.
-4. Submit (Use cases → the Instagram use case → request each permission → a description and a screencast per
+3. Submit (Use cases → the Instagram use case → request each permission → a description and a screencast per
    permission → submit). Meta takes roughly 2–3 weeks.
 
 ---
