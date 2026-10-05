@@ -21,7 +21,7 @@ the test client **100 Hundred Million Group** / **@testbusinessaccount2026**, th
 | `instagram_business_manage_comments` | Read a post's comments; reply, hide, show again, delete | same card → **Comments** | ✅ reply, hide, show again (delete not yet pressed) |
 | `instagram_business_manage_messages` | Read direct messages; answer inside 24 hours; message a commenter | same card → **Messages** (and "Message them" on a comment) | ✅ a DM answered ("Message them" not yet pressed) |
 | `instagram_business_manage_insights` | The account's and each post's numbers | same card → **Insights**, and each post under Comments | ✅ read |
-| `instagram_business_content_publish` | Publish the client's booked post at its time | Social → Schedule | ⏳ first post booked for 12:40 pm, 5 Oct — fill in once seen live |
+| `instagram_business_content_publish` | Publish the client's booked post at its time | Social → Schedule | ✅ published 12:40 pm, 5 Oct — instagram.com/p/DeGDO-sm29x (job `provider: meta_ig`, one attempt) |
 
 The connect asks for exactly these five (`app/lib/meta-ig-core.ts` `META_IG_SCOPES`). Code: `meta-ig-inbox-core.ts`
 (pure), `meta-ig-inbox.ts`, `/api/meta/instagram/inbox`, `MetaInstagramInbox.tsx`, `meta-ig-publish.ts`.
@@ -45,8 +45,11 @@ Done:
 - [x] @testbusinessaccount2026 has no two-factor (its settings page offered "Get started", 5 Oct 2026).
 - [x] 100M reconnected with all five scopes; "Post this client's Instagram through Meta" is ON for 100M.
 
+- [x] One real call per permission (the table above) — publishing included.
+
 Still to do:
-1. See the 12:40 pm test post live on @testbusinessaccount2026 (the publishing call).
+1. Business Verification was opened on the "SocialScheduler" portfolio (Browser 2, 5 Oct 2026) and waits on the
+   owner at "What type of business is this?" — legal name, phone and email are the owner's to give.
 2. `META_APP_SECRET` (Facebook app secret, Settings → Basic) in Vercel Production → redeploy. Check:
    `POST https://app.mdmmarketing.com.au/api/meta/data-deletion` stops answering "not configured".
 3. Business Verification (Business Settings → Security Centre) — documents in `docs/META_APP_REVIEW.md` §6.
