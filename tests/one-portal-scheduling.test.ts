@@ -147,3 +147,17 @@ describe('a card\'s brief is kept whole and can be re-edited (the owner, 5 Oct 2
     expect(drawer).toContain('resize-y')
   })
 })
+
+describe('the clients list (the owner, 5 Oct 2026: "because of url everything is pushed to the left")', () => {
+  const page = readFileSync('app/dashboard/clients/page.tsx', 'utf8')
+  it('a long website link is cut to its site and path, in a cell with a width; the whole link is the title and the href', () => {
+    expect(page).toContain('<TableCell className="max-w-[18rem]">')
+    expect(page).toContain('{siteWords(c.website)}')
+    expect(page).toContain('bare.split(/[?#]/)[0]')
+    expect(page).toContain('title={c.website}')
+    expect(page).toContain('className="block truncate text-secondary-13 text-muted-foreground hover:underline"')
+  })
+  it('the header tint follows the card\'s rounded corners', () => {
+    expect(page).toContain('[&>th:first-child]:rounded-tl-card [&>th:last-child]:rounded-tr-card')
+  })
+})

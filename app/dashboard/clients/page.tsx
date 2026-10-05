@@ -54,6 +54,12 @@ const initials = (name: string, email: string) =>
   (name || email).split(/[\s@.]+/).filter(Boolean).slice(0, 2)
     .map(w => w[0]?.toUpperCase() ?? '').join('')
 
+/** A website as the list shows it: the site and its path — no `https://`, no `www.`, none of the `?utm_…` after it. */
+function siteWords(url: string): string {
+  const bare = url.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+  return bare.split(/[?#]/)[0].replace(/\/+$/, '') || bare
+}
+
 const EMPTY: Partial<Client> = { name: '', industry: '', contact_name: '', email: '', phone: '', website: '', status: 'active', notes: '' }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -260,7 +266,10 @@ export default function ClientsPage() {
         <Card className="py-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-foreground/[0.04] hover:bg-foreground/[0.04]">
+              {/* the header's tint is on its CELLS, with the card's own corners (5 Oct 2026: "the border issue on
+                  the left box extending" — the tint was on the row, square, and poked out past the card's
+                  rounded corner; the card cannot clip it, see above) */}
+              <TableRow className="hover:bg-transparent [&>th]:bg-foreground/[0.04] [&>th:first-child]:rounded-tl-card [&>th:last-child]:rounded-tr-card">
                 <TableHead>Client</TableHead>
                 <TableHead>Account manager</TableHead>
                 <TableHead className="hidden lg:table-cell">Industry</TableHead>
@@ -306,13 +315,18 @@ export default function ClientsPage() {
                     )}
                   </TableCell>
                   <TableCell className="hidden text-body-15 text-muted-foreground lg:table-cell">{c.industry || '—'}</TableCell>
-                  <TableCell>
-                    <div className="text-body-15">{c.contact_name || '—'}</div>
-                    {c.email && <a href={`mailto:${c.email}`} className="block text-secondary-13 text-accent-blue-deep hover:underline">{c.email}</a>}
+                  {/* A LONG LINK NEVER WIDENS THE TABLE (the owner, 5 Oct 2026: "because of url everything is pushed
+                      to the left" — The Glass Den's booking link, tracking parameters and all, was one unbroken
+                      300-character word, so its column took the row and every name wrapped). The cell has a
+                      width; the link shows its site and path, cut with … and whole on hover; it still opens the
+                      full address. */}
+                  <TableCell className="max-w-[18rem]">
+                    <div className="truncate text-body-15">{c.contact_name || '—'}</div>
+                    {c.email && <a href={`mailto:${c.email}`} title={c.email} className="block truncate text-secondary-13 text-accent-blue-deep hover:underline">{c.email}</a>}
                     {c.website && (
-                      <a href={c.website} target="_blank" rel="noreferrer noopener"
-                        className="block text-secondary-13 text-muted-foreground hover:underline">
-                        {c.website.replace(/^https?:\/\//i, '')}
+                      <a href={c.website} target="_blank" rel="noreferrer noopener" title={c.website}
+                        className="block truncate text-secondary-13 text-muted-foreground hover:underline">
+                        {siteWords(c.website)}
                       </a>
                     )}
                   </TableCell>
