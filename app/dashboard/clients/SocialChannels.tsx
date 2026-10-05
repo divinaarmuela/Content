@@ -28,6 +28,20 @@ type Account = {
   username: string | null
   avatar_url: string | null
   active: boolean
+  /** what the last health check found; null when it has not been checked yet */
+  stored_health?: { level: 'ok' | 'watch' | 'act'; reason: string } | null
+}
+
+/**
+ * THE DOT SAYS WHAT THE LAST CHECK FOUND (5 Oct 2026: "why the luxe laser showing its connected green" — the dot
+ * was drawn green for every listed account, while Meta had invalidated that one's token). Green only for a
+ * connection that checked out; red and a sentence for one that needs reconnecting.
+ */
+function connectionMark(h: Account['stored_health']): { dot: string; title: string; line: string | null } {
+  if (!h) return { dot: 'bg-foreground/25', title: 'Not checked yet', line: null }
+  if (h.level === 'act') return { dot: 'bg-accent-red', title: 'Needs reconnecting', line: `Needs reconnecting — ${h.reason || 'posts will not go out until it is.'}` }
+  if (h.level === 'watch') return { dot: 'bg-accent-amber', title: h.reason || 'Worth a look', line: h.reason || null }
+  return { dot: 'bg-accent-green', title: 'Connected', line: null }
 }
 
 /** Platforms worth offering first for this agency. The API supports more;
@@ -286,6 +300,7 @@ export default function SocialChannels(
         <ul className="grid gap-2 sm:grid-cols-2">
           {section.accounts.map(a => {
             const brand = brandFor(a.platform)
+            const mark = connectionMark(a.stored_health)
             return (
               <li
                 key={a.id}
@@ -300,13 +315,19 @@ export default function SocialChannels(
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-body-15 font-medium">{brand.label}</span>
                       <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-green"
-                        title="Connected"
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${mark.dot}`}
+                        title={mark.title}
+                        data-connection={a.stored_health?.level ?? 'unchecked'}
                       />
                     </div>
                     <span className="block truncate font-mono text-secondary-13 text-muted-foreground">
                       {a.username ? `@${a.username}` : a.name ?? '—'}
                     </span>
+                    {mark.line && (
+                      <span className={`block text-[12px] ${a.stored_health?.level === 'act' ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>
+                        {mark.line}
+                      </span>
+                    )}
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
                 </Link>

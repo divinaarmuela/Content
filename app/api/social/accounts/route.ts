@@ -4,6 +4,7 @@ import type { SocialAccount, SocialAccountsRetired, Client } from '@/lib/db-type
 import { requireRole, authzErrorResponse } from '../../../lib/authz'
 import { getPublisher } from '../../../lib/publisher'
 import { SUPPORTED_PLATFORMS } from '../../../lib/publish-core'
+import { readStoredHealth } from '../../../lib/account-health-core'
 
 /** The columns every account list has returned; the row carries no more. */
 const accountShape = (r: SocialAccount) => ({
@@ -11,6 +12,9 @@ const accountShape = (r: SocialAccount) => ({
   provider_account_id: r.provider_account_id, name: r.name,
   username: r.username, avatar_url: r.avatar_url, active: r.active,
   connected_at: r.connected_at, contact_id: r.contact_id ?? null,
+  // what the last health check found, so a list never draws "connected" for an account Meta has cut off
+  // (5 Oct 2026: Luxe Laser's Instagram showed a green dot while its token was invalid)
+  stored_health: readStoredHealth((r as { health?: unknown }).health),
 })
 
 /** Connected accounts, optionally for one client, plus whether publishing is

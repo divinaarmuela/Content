@@ -67,3 +67,14 @@ describe('the stored row, and the words', () => {
     expect(w.watch.map(r => r.id)).toEqual(['c'])
   })
 })
+
+describe('the Channels card draws what the last check found (5 Oct 2026: Luxe Laser showed green while Meta had cut it off)', () => {
+  it('the dot is no longer always green, and the list carries the stored health', async () => {
+    const { readFileSync } = await import('node:fs')
+    const ui = readFileSync('app/dashboard/clients/SocialChannels.tsx', 'utf8')
+    expect(ui).not.toContain('className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-green"')
+    expect(ui).toContain("if (h.level === 'act') return { dot: 'bg-accent-red', title: 'Needs reconnecting'")
+    expect(ui).toContain("if (!h) return { dot: 'bg-foreground/25', title: 'Not checked yet', line: null }")
+    expect(readFileSync('app/api/social/accounts/route.ts', 'utf8')).toContain('stored_health: readStoredHealth(')
+  })
+})
