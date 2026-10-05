@@ -269,10 +269,14 @@ export function schedulingWorks(profiles: readonly NetworkProfile[]): Scheduling
     (a.id === 'other' ? 1 : 0) - (b.id === 'other' ? 1 : 0) || (b.waiting - a.waiting) || String(a.next ?? '~').localeCompare(String(b.next ?? '~')))
 }
 
-/** The profiles holding only one work's posts (its mini page); the posted feed is the "Your feed" page's. */
+/**
+ * One work's page: only ITS booked posts — drawn, like Your feed, in front of what is already posted (the owner,
+ * 5 Oct 2026: by the work "the feed preview is not showing"). It used to drop the posted feed, so a work's post
+ * stood alone and nobody could see how it would sit on the profile. Other works' booked posts stay off this page.
+ */
 export function profilesForWork(profiles: readonly NetworkProfile[], workId: string): NetworkProfile[] {
   return profiles
-    .map(p => ({ ...p, booked: p.booked.filter(t => t.work_id === workId), off: p.off.filter(t => t.work_id === workId), posted: [], feed_problem: null }))
+    .map(p => ({ ...p, booked: p.booked.filter(t => t.work_id === workId), off: p.off.filter(t => t.work_id === workId) }))
     .filter(p => p.booked.length + p.off.length > 0)
 }
 

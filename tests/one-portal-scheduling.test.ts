@@ -73,7 +73,8 @@ describe('mini pages (2 Oct 2026: "each tab has like mini pages"; Scheduling "by
     expect(works.find(w => w.id === 'w1')).toMatchObject({ booked: 1, off: 1, waiting: 0 })
     const only = profilesForWork([ig, li], 'w2')
     expect(only.map(p => p.network)).toEqual(['instagram', 'linkedin'])
-    expect(only[0].posted).toEqual([])
+    // …and each keeps its posted feed behind them: the preview (5 Oct 2026, "the feed preview is not showing")
+    expect(only[0].posted).toEqual([{ id: 'x' }])
   })
   it('the page: Shoot brief lists shoots and boards, Scheduling lists Your feed and the works; each opens its own page', () => {
     const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
