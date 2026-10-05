@@ -46,3 +46,24 @@ describe('a client approval or comment reaches whoever holds and assigned the ca
     }
   })
 })
+
+describe('a booked post has its portal link and a Notify the client (the owner, 5 Oct 2026: "the post approval schedule and schedule don\'t have the portal link… and no notify of them if it needs to be approved")', () => {
+  it('the notify knows the Scheduling tab, and its link is the post\'s own page', async () => {
+    const { NOTIFY_TABS, notifyPath, notifyWords } = await import('../app/lib/one-portal-notify')
+    expect(NOTIFY_TABS).toContain('scheduling')
+    expect(notifyPath('t', 'scheduling', 'p1')).toBe('/portal/t/home?tab=scheduling&post=p1')
+    expect(notifyWords('scheduling', 'Your post for Mon 5 Oct, 5:30 pm', 'Acme')).toMatchObject({ cta: 'See the post' })
+  })
+  it('only a BOOKED post of that client can be notified about — it is the only one they can open', async () => {
+    const { readFileSync } = await import('node:fs')
+    const lib = readFileSync('app/lib/one-portal-notify.ts', 'utf8')
+    expect(lib).toContain("if (post && post.client_id === client.id && post.stage === 'booked') {")
+  })
+  it('the post window, on both pages, draws the two buttons once the post is booked', async () => {
+    const { readFileSync } = await import('node:fs')
+    const line = readFileSync('app/dashboard/social/schedule/OnePortalPostLine.tsx', 'utf8')
+    expect(line).toContain("post.stage === 'booked' && typeof window !== 'undefined'")
+    expect(line).toContain('Copy the client&apos;s portal link')
+    expect(line).toContain('<NotifyClientButton clientId={post.client_id} tab="scheduling" id={post.id}')
+  })
+})

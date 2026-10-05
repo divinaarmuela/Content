@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { useRow } from '@/lib/db-client'
 import { postAct } from '@/app/lib/post-act-contract'
+import { NotifyClientButton } from '@/app/dashboard/board/NotifyClientDialog'
 import type { PostState } from '@/app/lib/post-stage-core'
 import {
-  IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, onePortal, readClientReview, reviewState,
+  IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, oldLinkTarget, onePortal, readClientReview, reviewState,
   type IfNoAnswer,
 } from '@/app/lib/one-portal-core'
 
@@ -15,7 +16,10 @@ import {
  * the one portal only:
  *   - where the client's word stands — Approved, Not reviewed yet, Not approved with their note — and
  *     "Changed since the client approved" (R9: the approval stands; the team is shown);
- *   - the team's choice "If the client hasn't approved: Post anyway / Wait for the client" (R5).
+ *   - the team's choice "If the client hasn't approved: Post anyway / Wait for the client" (R5);
+ *   - "Copy the client's portal link" — this post's own page on their one link (the owner, 5 Oct 2026: "the
+ *     post approval schedule and schedule don't have the portal link"). The edit, design, shoot and board cards
+ *     already had it; a post did not. Shown once the post is booked, which is when the client can see it.
  * Nothing is drawn for any other client.
  */
 export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange }: {
@@ -30,7 +34,7 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
    */
   onOwnChange?: (phase: 'start' | 'end', answered: PostState | null) => void
 }) {
-  const { row: client } = useRow<{ id: string; portal_one?: boolean | null }>('clients', post.client_id)
+  const { row: client } = useRow<{ id: string; portal_one?: boolean | null; share_token?: string | null }>('clients', post.client_id)
   const [busy, setBusy] = useState(false)
   if (!onePortal(client)) return null
   if (post.stage === 'posted' || post.stage === 'cancelled') return null
@@ -48,6 +52,17 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
     if (!r.ok) { toast.error(r.reason); return }
     toast.success(next === 'wait' ? 'It waits for the client — it comes off 15 minutes before its time unless they approve' : 'It goes out at its time, approved or not')
     onMoved?.()
+  }
+
+  // the same address the client's emails open: their Scheduling tab, on this post
+  const portalLink = client?.share_token && post.stage === 'booked' && typeof window !== 'undefined'
+    ? `${window.location.origin}${oldLinkTarget(client.share_token, { kind: 'post', id: post.id })}`
+    : null
+  const copyLink = () => {
+    if (!portalLink) return
+    void navigator.clipboard.writeText(portalLink)
+      .then(() => toast.success('Portal link copied — send it to the client'))
+      .catch(() => toast.error('Could not copy — the link is: ' + portalLink))
   }
 
   return (
@@ -74,6 +89,16 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
           {(['post', 'wait'] as const).map(k => <option key={k} value={k}>{IF_NO_ANSWER_WORDS[k]}</option>)}
         </select>
       </label>
+      {portalLink && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={copyLink} data-copy-portal-link
+            className="inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted">
+            Copy the client&apos;s portal link
+          </button>
+          {/* the deliberate press that emails them this post's page — nothing is emailed until it is pressed */}
+          <NotifyClientButton clientId={post.client_id} tab="scheduling" id={post.id} className="h-11 rounded-full px-4 text-[13px] font-semibold" />
+        </div>
+      )}
     </div>
   )
 }

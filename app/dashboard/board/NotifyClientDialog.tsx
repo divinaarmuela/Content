@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { defaultRecipients, type ClientRecipient } from '../../lib/client-recipients-core'
 
-export type NotifyTab = 'editing' | 'designing' | 'shoot' | 'boards' | 'forms'
+export type NotifyTab = 'editing' | 'designing' | 'shoot' | 'boards' | 'forms' | 'scheduling'
 
 /**
  * NOTIFY THE CLIENT (the owner, 2 Oct 2026: "for every page a notify client button with the link"). Putting a page on

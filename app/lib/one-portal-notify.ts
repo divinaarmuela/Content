@@ -1,12 +1,13 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { Client, ClientContact } from '@/lib/db-types'
+import type { Client, ClientContact, SocialPost } from '@/lib/db-types'
 import { notify, renderEmail, escapeHtml, type NotifyResult } from './mailer'
 import { DASHBOARD_URL } from './app-url'
 import { clientRecipients, pickRecipients, type ClientRecipient } from './client-recipients-core'
 import { accountManagerName } from './portal-data'
 import { roundOutcomeWords } from './post-notify-core'
-import { onePortal, onePortalPath, type PortalTab } from './one-portal-core'
+import { oldLinkTarget, onePortal, onePortalPath, type PortalTab } from './one-portal-core'
+import { formatInZone } from './timezone-core'
 import { loadOnePortal } from './one-portal-page'
 import { loadPortalForms } from './one-portal-forms'
 import { NO_REPLY_DOMAIN } from './one-portal-send'
@@ -19,8 +20,10 @@ import { NO_REPLY_DOMAIN } from './one-portal-send'
  * so nobody is ever sent a link to a 404. From MD Media's no-reply address, like Send the preview.
  */
 
-export type NotifyTab = Extract<PortalTab, 'editing' | 'designing' | 'shoot' | 'boards' | 'forms'>
-export const NOTIFY_TABS: readonly NotifyTab[] = ['editing', 'designing', 'shoot', 'boards', 'forms']
+// 'scheduling' is a BOOKED POST (the owner, 5 Oct 2026: a post had no portal link and "no notify of them if it needs to be
+// approved") — the id is the post's, and the page is its own on the Scheduling tab.
+export type NotifyTab = Extract<PortalTab, 'editing' | 'designing' | 'shoot' | 'boards' | 'forms' | 'scheduling'>
+export const NOTIFY_TABS: readonly NotifyTab[] = ['editing', 'designing', 'shoot', 'boards', 'forms', 'scheduling']
 
 /** what the email says, by the page it points at */
 export function notifyWords(tab: NotifyTab, title: string, clientName: string): { subject: string; heading: string; line: string; cta: string } {
@@ -29,6 +32,7 @@ export function notifyWords(tab: NotifyTab, title: string, clientName: string): 
     case 'designing': return { subject: `Ready for your review: ${title}`, heading: 'Your designs are ready', line: `"${title}" is on your portal. Approve each design, or tell us what to change.`, cta: 'Review the designs' }
     case 'shoot': return { subject: `Your shoot plan: ${title}`, heading: 'Your shoot plan', line: `The plan for "${title}" is on your portal. Have a look, approve it, or ask for a change.`, cta: 'Open the plan' }
     case 'boards': return { subject: `A board for you: ${title}`, heading: 'A board from MD Media', line: `"${title}" is on your portal. Leave a comment on any card.`, cta: 'Open the board' }
+    case 'scheduling': return { subject: `A post for you to approve: ${title}`, heading: 'A post is ready for you', line: `${title} is on your portal. Have a look and approve it, or tell us what to change.`, cta: 'See the post' }
     case 'forms': return { subject: `A few questions for you: ${title}`, heading: 'A few questions for you', line: `"${title}" is on your portal — fill it in when you have a moment; it saves as you go.`, cta: 'Open the form' }
   }
   return { subject: `An update from MD Media for ${clientName}`, heading: 'An update', line: '', cta: 'Open your portal' }
@@ -36,6 +40,7 @@ export function notifyWords(tab: NotifyTab, title: string, clientName: string): 
 
 /** the page's own address on the one portal — a form opens by its own parameter */
 export function notifyPath(token: string, tab: NotifyTab, id: string): string {
+  if (tab === 'scheduling') return oldLinkTarget(token, { kind: 'post', id })
   return tab === 'forms' ? `${onePortalPath(token, 'forms')}&form=${encodeURIComponent(id)}` : onePortalPath(token, tab, id)
 }
 
@@ -63,6 +68,13 @@ export async function loadNotify(clientId: string, tab: unknown, id: unknown): P
   if (t === 'shoot') title = page.shoots.find(c => c.id === pageId)?.title ?? null
   if (t === 'boards') title = page.boards.find(b => b.id === pageId)?.name ?? null
   if (t === 'forms') title = (await loadPortalForms(client.id, page.scope, client.timezone || 'Australia/Melbourne')).find(f => f.id === pageId && f.kind !== 'proposal')?.title ?? null
+  if (t === 'scheduling') {
+    // a post is on the client's portal once it is booked (one-portal-schedule.ts)
+    const post = await table<SocialPost>('social_posts').get(pageId, { fresh: true }).catch(() => null) as (SocialPost & { stage?: string }) | null
+    if (post && post.client_id === client.id && post.stage === 'booked') {
+      title = post.scheduled_for ? `Your post for ${formatInZone(post.scheduled_for, client.timezone || 'Australia/Melbourne', 'full')}` : 'Your post'
+    }
+  }
   if (!title) return { ok: false, status: 409, error: 'This is not on the client’s portal yet — they could not open it. Put it there first.' }
   return { ok: true, client, recipients: clientRecipients(client, contacts), title, link: `${DASHBOARD_URL}${notifyPath(token, t, pageId)}` }
 }
