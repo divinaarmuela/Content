@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { newScriptId, sanitiseScripts, type ScriptBlock } from '../../../../lib/script-core'
+import { growTextarea } from '../../../../lib/grow-textarea'
 
 /**
  * THE SCRIPTS, ONE PER VIDEO (the owner, 15 Sep 2026: "there will be
@@ -18,7 +19,8 @@ import { newScriptId, sanitiseScripts, type ScriptBlock } from '../../../../lib/
  * section, the editor's card lists each under its name, and the portal
  * shows the same. Saved on blur, the whole list at once.
  */
-const grow = (el: HTMLTextAreaElement) => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }
+// sized to its words without moving the page (grow-textarea.ts — the page used to jump up on every keystroke)
+const grow = growTextarea
 
 export default function ScriptsEditor({ scripts, onSave, disabled = false }: {
   scripts: unknown

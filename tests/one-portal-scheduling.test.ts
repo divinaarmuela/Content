@@ -170,3 +170,30 @@ describe('a link to one post opens it on Your feed (the owner, 5 Oct 2026, Justi
     expect(page).toContain("profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)} openPostId={askedPost}")
   })
 })
+
+describe('a script box grows without moving the page (5 Oct 2026, the shoot brief: a paste threw the page back up)', () => {
+  it('a box with more words than room is only made taller — never collapsed first', async () => {
+    const { growTextarea } = await import('../app/lib/grow-textarea')
+    const set: string[] = []
+    const el = { scrollHeight: 300, clientHeight: 100, parentElement: null, style: { get height() { return set[set.length - 1] ?? '' }, set height(v: string) { set.push(v) } } }
+    growTextarea(el as never)
+    expect(set).toEqual(['300px'])
+  })
+  it('a box that may need to shrink is measured, and every scroller is put back where it was', async () => {
+    const { growTextarea } = await import('../app/lib/grow-textarea')
+    const scroller = { scrollHeight: 2000, clientHeight: 600, scrollTop: 900, parentElement: null }
+    const set: string[] = []
+    const el = {
+      scrollHeight: 100, clientHeight: 100, parentElement: scroller,
+      style: { get height() { return set[set.length - 1] ?? '' }, set height(v: string) { set.push(v); if (v === 'auto') scroller.scrollTop = 0 } },
+    }
+    growTextarea(el as never)
+    expect(set).toEqual(['auto', '100px'])
+    expect(scroller.scrollTop).toBe(900)
+  })
+  it('the scripts editor and the brief canvas both use it', () => {
+    expect(readFileSync('app/dashboard/production/shoots/[id]/ScriptsEditor.tsx', 'utf8')).toContain('const grow = growTextarea')
+    const canvas = readFileSync('app/dashboard/production/shoots/[id]/CanvasCard.tsx', 'utf8')
+    expect(canvas).not.toContain("el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`")
+  })
+})

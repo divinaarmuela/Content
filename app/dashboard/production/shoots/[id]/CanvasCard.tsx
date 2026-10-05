@@ -27,6 +27,7 @@ import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 // canvas comments — see the marked block at the bottom of this file
 import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
 import { usePortalDriveScope } from '../../../../components/canvas/PortalDriveScope'
+import { growTextarea } from '../../../../lib/grow-textarea'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 /** the words' own colour, when picked; '' = the box decides */
@@ -563,8 +564,8 @@ function CanvasCardInner({
                 // one-line input never wraps, however narrow the box; this box
                 // wraps its words and grows to them, and Enter still finishes
                 <BoldableTextarea key={`${t.id}:${t.text}`} defaultValue={t.text} rows={1} style={{ fontSize: px }}
-                  ref={el => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }}
-                  onInput={e => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
+                  ref={el => { if (el) growTextarea(el) }}
+                  onInput={e => growTextarea(e.currentTarget)}
                   className={`min-w-0 flex-1 resize-none break-words bg-transparent leading-snug outline-none ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[align]} ${t.done ? 'text-muted-foreground line-through' : ink}`}
                   onBlur={e => {
                     const v = e.target.value.trim()
@@ -651,8 +652,8 @@ function CanvasCardInner({
             rows={1}
             // focus without a scroll (16 Sep 2026): the board's camera, not the
             // browser, decides what is in view
-            ref={el => { if (el && !card.h) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } if (el && !el.dataset.focusedOnce) { el.dataset.focusedOnce = '1'; el.focus({ preventScroll: true }) } }}
-            onInput={e => { if (card.h) return; const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }}
+            ref={el => { if (el && !card.h) growTextarea(el); if (el && !el.dataset.focusedOnce) { el.dataset.focusedOnce = '1'; el.focus({ preventScroll: true }) } }}
+            onInput={e => { if (card.h) return; growTextarea(e.currentTarget) }}
             style={{ fontSize: noteFont, lineHeight: noteLine }}
             className={`min-h-0 w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground ${card.h ? 'flex-1' : ''} ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}
             placeholder="Write it down…"
