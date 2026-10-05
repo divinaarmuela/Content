@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { AuthzError, authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { accessibleClientIds } from '@/app/lib/production-access'
 import { MetaIgError, metaIgReady } from '@/app/lib/meta-ig'
-import { act, commentsFor, conversationsFor, directAccountFor, insightsFor, postInsightsFor, postsFor } from '@/app/lib/meta-ig-inbox'
+import { act, commentsFor, type DirectAccount, conversationsFor, directAccountFor, insightsFor, postInsightsFor, postsFor } from '@/app/lib/meta-ig-inbox'
 import { INBOX_VIEWS, readGraphId, readInboxRequest, type InboxView } from '@/app/lib/meta-ig-inbox-core'
 
 /**
@@ -29,14 +29,14 @@ async function assertMine(user: Parameters<typeof accessibleClientIds>[0], clien
   if (ids !== null && !ids.includes(clientId)) throw new AuthzError('That client is not one of yours', 403)
 }
 
-async function accountOr(clientId: string) {
+async function accountOr(clientId: string): Promise<{ ok: true; account: DirectAccount } | { ok: false; res: NextResponse }> {
   const me = await requireRole('account_manager')
   await assertMine(me, clientId)
   const ready = metaIgReady()
-  if (!ready.ok) return { res: NextResponse.json({ error: ready.reason }, { status: 503 }) }
+  if (!ready.ok) return { ok: false, res: NextResponse.json({ error: ready.reason }, { status: 503 }) }
   const found = await directAccountFor(clientId)
-  if (!found.ok) return { res: NextResponse.json({ error: found.reason }, { status: 409 }) }
-  return { account: found.account }
+  if (!found.ok) return { ok: false, res: NextResponse.json({ error: found.reason }, { status: 409 }) }
+  return { ok: true, account: found.account }
 }
 
 /** Instagram's refusal, in its own words, as a 502 — never a 500 that says nothing. */
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
   if (!INBOX_VIEWS.includes(view)) return NextResponse.json({ error: 'Unknown view' }, { status: 400 })
   try {
     const got = await accountOr(clientId)
-    if ('res' in got) return got.res
+    if (!got.ok) return got.res
     const a = got.account
     const now = Date.now()
     if (view === 'posts') return NextResponse.json({ username: a.username, posts: await postsFor(a) })
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
   try {
     const got = await accountOr(clientId)
-    if ('res' in got) return got.res
+    if (!got.ok) return got.res
     const done = await act(got.account, parsed.value)
     return NextResponse.json({ ok: true, action: parsed.value.action, id: done.id })
   } catch (e) {
