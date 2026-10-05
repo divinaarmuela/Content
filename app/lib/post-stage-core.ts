@@ -1722,7 +1722,13 @@ export function postActions(
     }
     const label = action === 'edit' || action === 'edit_booked'
       ? `Edit — makes version ${post.draft_version}`
-      : action === 'resend_new_time' && missed ? 'Set a new time and resend' : row.label
+      : action === 'resend_new_time' && missed ? 'Set a new time and resend'
+      // THE BUTTON SAYS WHAT PRESSING IT DOES (the owner, 5 Oct 2026: the black "Passed" pill "can be confusing…
+      // it should be something like mark it as passed" — it read as the post's state, not as something to press).
+      // The record and the answer keep the past tense: "Passed — now in Ready to post".
+      : action === 'pass' ? 'Mark as passed'
+      : action === 'pass_send_client' ? 'Mark as passed — send to client'
+      : row.label
     offered.push({ action, label, blocked: r.ok ? null : r.reason, needs: row.needs ?? [], confirm: row.confirm ?? null })
   }
 

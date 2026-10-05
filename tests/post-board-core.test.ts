@@ -163,11 +163,14 @@ describe('what this page offers', () => {
     expect(offeredList(boardActions(p, HATS.amJoy, NOW, CTX)).map(a => a.action)).toContain('pass')
   })
 
-  it('team then the client: the checker’s main button is "Passed — send to client"', () => {
+  it('team then the client: the checker’s main button is "Mark as passed — send to client" (the owner, 5 Oct 2026: "Passed" read as the state of the post, not as a button)', () => {
     const p = post('quality_check', { approval_steps: 'team_then_client' })
     const joy = boardActions(p, HATS.joy, NOW, CTX)
     expect(joy.primary?.action).toBe('pass_send_client')
-    expect(joy.primary?.label).toBe('Passed — send to client')
+    expect(joy.primary?.label).toBe('Mark as passed — send to client')
+    // team only: "Mark as passed"; and what is recorded afterwards stays in the past tense
+    const teamOnly = boardActions(post('quality_check', { approval_steps: 'team' }), HATS.joy, NOW, CTX)
+    expect(teamOnly.primary?.label).toBe('Mark as passed')
     expect(offeredList(joy).map(a => a.action)).not.toContain('pass')
   })
 
