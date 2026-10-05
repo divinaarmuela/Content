@@ -18,11 +18,17 @@ import {
  *   - the team's choice "If the client hasn't approved: Post anyway / Wait for the client" (R5).
  * Nothing is drawn for any other client.
  */
-export default function OnePortalPostLine({ post, editable, onMoved }: {
+export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange }: {
   post: PostState
   /** the person may change the post's settings (the window's own rule) */
   editable: boolean
   onMoved?: () => void
+  /**
+   * THIS CHOICE IS THE PERSON'S OWN WRITE, and it moves the post's rev. The window is told when it starts and
+   * the post as the server answered (null = refused), so it is never read as "someone else changed this post" (5 Oct 2026,
+   * Karly's Capila draft: she picked "Wait for the client", kept typing, and was told somebody else had changed it).
+   */
+  onOwnChange?: (phase: 'start' | 'end', answered: PostState | null) => void
 }) {
   const { row: client } = useRow<{ id: string; portal_one?: boolean | null }>('clients', post.client_id)
   const [busy, setBusy] = useState(false)
@@ -35,8 +41,10 @@ export default function OnePortalPostLine({ post, editable, onMoved }: {
   const set = async (next: IfNoAnswer) => {
     if (next === choice) return
     setBusy(true)
+    onOwnChange?.('start', null)
     const r = await postAct(post.id, { action: 'set_if_no_answer', expect_rev: post.rev, if_no_answer: next })
     setBusy(false)
+    onOwnChange?.('end', r.ok ? r.post : null)
     if (!r.ok) { toast.error(r.reason); return }
     toast.success(next === 'wait' ? 'It waits for the client — it comes off 15 minutes before its time unless they approve' : 'It goes out at its time, approved or not')
     onMoved?.()

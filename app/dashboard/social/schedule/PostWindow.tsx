@@ -793,7 +793,21 @@ export default function PostWindow({
             </div>
           )}
           {/* the one portal: the client's word and "if the client hasn't approved" (docs/ONE_PORTAL_SPEC.md §5) */}
-          {saved && !unsaved && <OnePortalPostLine post={saved} editable={!!saved} />}
+          {saved && !unsaved && (
+            <OnePortalPostLine
+              post={saved} editable={!!saved}
+              // the person's own choice moves the rev: not "someone else" — and what they are typing stays
+              onOwnChange={(phase, after) => {
+                savingRef.current = phase === 'start'
+                if (phase === 'end' && after) {
+                  // the same post, one rev on: keep the screen, hold the new rev so the next Save is accepted
+                  loadedKey.current = `${after.id}:${after.rev}`
+                  setAnswered(after)
+                  setMovedUnder(false)
+                }
+              }}
+            />
+          )}
           {gone && <p role="alert" className="text-[13px] font-medium">This post no longer exists.</p>}
           {notMigrated && <p role="alert" className="text-[13px] font-medium">This post has not been moved onto the new stages yet. It opens here once that is done.</p>}
           {movedUnder && (

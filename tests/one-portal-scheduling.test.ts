@@ -107,3 +107,17 @@ describe('a booked video tile shows its Cloudflare still (3 Oct 2026, the Safari
     expect(ui).toContain("if (poster) return <img src={poster}")
   })
 })
+
+describe('the person\'s own "If the client hasn\'t approved" choice is not "someone else" (5 Oct 2026, Karly\'s Capila draft)', () => {
+  const line = readFileSync('app/dashboard/social/schedule/OnePortalPostLine.tsx', 'utf8')
+  const win = readFileSync('app/dashboard/social/schedule/PostWindow.tsx', 'utf8')
+  it('the choice tells the window when its write starts and the post it ended on', () => {
+    expect(line).toContain("onOwnChange?.('start', null)")
+    expect(line).toContain("onOwnChange?.('end', r.ok ? r.post : null)")
+  })
+  it('the window holds the new rev, keeps what is being typed, and never calls it a conflict', () => {
+    expect(win).toContain("savingRef.current = phase === 'start'")
+    expect(win).toContain('loadedKey.current = `${after.id}:${after.rev}`')
+    expect(win).toMatch(/setAnswered\(after\)\s+setMovedUnder\(false\)/)
+  })
+})
