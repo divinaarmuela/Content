@@ -44,6 +44,20 @@ function connectionMark(h: Account['stored_health']): { dot: string; title: stri
   return { dot: 'bg-accent-green', title: 'Connected', line: null }
 }
 
+/**
+ * …AND THE PROVIDER'S ANSWER RIGHT NOW WINS (the owner, 5 Oct 2026: "it should always refer to that"). The saved
+ * check is from this morning or the last connect; the page asks the provider again when it opens, and a
+ * connection the platform has rejected is red at once. No answer for an account leaves the saved one standing —
+ * a provider that did not answer is never read as "connected".
+ */
+function liveOver(stored: Account['stored_health'], live: { valid: boolean } | undefined): Account['stored_health'] {
+  if (!live) return stored ?? null
+  if (!live.valid) {
+    return { level: 'act', reason: stored?.level === 'act' && stored.reason ? stored.reason : 'The platform rejected its connection. Reconnect the account.' }
+  }
+  return stored?.level === 'watch' ? stored : { level: 'ok', reason: 'Connected' }
+}
+
 /** Platforms worth offering first for this agency. The API supports more;
  *  these are the ones MD Media actually publishes to. */
 const OFFERED = [
@@ -67,6 +81,8 @@ export default function SocialChannels(
   const [linking, setLinking] = useState(false)
   /** has this client ever had a provider profile created for it? */
   const hasProfileRef = useRef(false)
+  /** each account's connection as the provider answers it now, by account id */
+  const [liveHealth, setLiveHealth] = useState<Record<string, { valid: boolean }>>({})
 
   const load = useCallback(async (): Promise<number> => {
     try {
@@ -77,6 +93,13 @@ export default function SocialChannels(
       setAccounts(live)
       setConfigured(json.provider?.configured ?? false)
       hasProfileRef.current = Boolean(json.hasProfile)
+      // the provider's word on each connection, after the list is already on screen; a failure changes nothing
+      if (live.length > 0) {
+        void fetch(`/api/social/accounts?clientId=${clientId}&health=1`)
+          .then(r => (r.ok ? r.json() : null))
+          .then(j => { if (j?.health) setLiveHealth(j.health as Record<string, { valid: boolean }>) })
+          .catch(() => {})
+      }
       return live.length
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not load channels')
@@ -300,7 +323,8 @@ export default function SocialChannels(
         <ul className="grid gap-2 sm:grid-cols-2">
           {section.accounts.map(a => {
             const brand = brandFor(a.platform)
-            const mark = connectionMark(a.stored_health)
+            const health = liveOver(a.stored_health, liveHealth[a.id])
+            const mark = connectionMark(health)
             return (
               <li
                 key={a.id}
@@ -317,14 +341,14 @@ export default function SocialChannels(
                       <span
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${mark.dot}`}
                         title={mark.title}
-                        data-connection={a.stored_health?.level ?? 'unchecked'}
+                        data-connection={health?.level ?? 'unchecked'}
                       />
                     </div>
                     <span className="block truncate font-mono text-secondary-13 text-muted-foreground">
                       {a.username ? `@${a.username}` : a.name ?? '—'}
                     </span>
                     {mark.line && (
-                      <span className={`block text-[12px] ${a.stored_health?.level === 'act' ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>
+                      <span className={`block text-[12px] ${health?.level === 'act' ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>
                         {mark.line}
                       </span>
                     )}

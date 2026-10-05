@@ -77,4 +77,12 @@ describe('the Channels card draws what the last check found (5 Oct 2026: Luxe La
     expect(ui).toContain("if (!h) return { dot: 'bg-foreground/25', title: 'Not checked yet', line: null }")
     expect(readFileSync('app/api/social/accounts/route.ts', 'utf8')).toContain('stored_health: readStoredHealth(')
   })
+  it('the provider is asked again when the page opens, and its answer wins (the owner: "it should always refer to that")', async () => {
+    const { readFileSync } = await import('node:fs')
+    const ui = readFileSync('app/dashboard/clients/SocialChannels.tsx', 'utf8')
+    expect(ui).toContain("void fetch(`/api/social/accounts?clientId=${clientId}&health=1`)")
+    expect(ui).toContain('const health = liveOver(a.stored_health, liveHealth[a.id])')
+    // no answer leaves the saved check standing — never "connected" by default
+    expect(ui).toContain('if (!live) return stored ?? null')
+  })
 })
