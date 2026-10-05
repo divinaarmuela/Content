@@ -3,6 +3,7 @@ import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { Client, SocialAccount, TeamUserClient } from '@/lib/db-types'
 import { getPublisher } from './publisher'
+import { refreshAvatars } from './account-avatars'
 import { notify, renderEmail, escapeHtml } from './mailer'
 import { healthVerdict, readStoredHealth, reconnectSubject, type ProviderHealth, type StoredHealth } from './account-health-core'
 import { DASHBOARD_URL } from './app-url'
@@ -58,6 +59,8 @@ export async function refreshClientAccountsHealth(
 
 export async function checkAllAccountsHealth(now: Date = new Date()): Promise<{ checked: number; act: number; watch: number; told: number }> {
   const tally = { checked: 0, act: 0, watch: 0, told: 0 }
+  // the pictures first, and never in the way of the health check
+  await refreshAvatars().catch(() => undefined)
   const publisher = getPublisher()
   const answer = await publisher.accountsHealth() as { accounts?: ProviderHealth[] } | null
   const rows = Array.isArray(answer?.accounts) ? answer!.accounts! : []

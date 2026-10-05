@@ -2,6 +2,7 @@ import 'server-only'
 import { table } from '@/lib/db'
 import type { ContentItem, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { getPublisher } from './publisher'
+import { avatarStale, refreshAvatars } from './account-avatars'
 import { liveTiles, type LiveTile } from './feed-preview-core'
 import { clientPostNotes, readFrozenPost, reviewFiles, type FrozenPost, type PortalPostNote } from './portal-core'
 import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
@@ -113,6 +114,15 @@ export async function loadScheduling(
     table<SocialPost>('social_posts').list({ where: r => r.client_id === clientId && (r.stage === 'booked' || r.stage === 'ready' || r.stage === 'draft') }),
     table<ContentItem>('content_items').list({ where: r => r.client_id === clientId }),
   ])
+  // A DEAD PROFILE PICTURE IS READ AGAIN, HERE (5 Oct 2026): Instagram's signed link lasts about four days. Only
+  // when one is stale, only with the feeds (never for a tab's badge), and never longer than four seconds.
+  if (withFeeds && accounts.some(a => avatarStale(a.avatar_url, now.getTime()))) {
+    const fresh = await Promise.race([
+      refreshAvatars(clientId).catch(() => new Map<string, string>()),
+      new Promise<Map<string, string>>(resolve => setTimeout(() => resolve(new Map()), 4000)),
+    ])
+    for (const a of accounts) { const url = fresh.get(a.id); if (url) (a as { avatar_url?: string | null }).avatar_url = url }
+  }
   const itemById = new Map(items.map(i => [i.id, i]))
   const contactOf = (p: PostState) => {
     const it = p.source_item_id ? itemById.get(p.source_item_id) : null
