@@ -133,3 +133,17 @@ describe('the card column on the editor and designer page ends at the bottom of 
     expect(page).toContain("if (!wide.matches) { el.style.maxHeight = ''; return }")
   })
 })
+
+describe('a card\'s brief is kept whole and can be re-edited (the owner, 5 Oct 2026: "put no limits and allow it to be reedited")', () => {
+  it('no cut when the card is made, nor on a batch\'s objective', () => {
+    const items = readFileSync('app/api/production/items/route.ts', 'utf8')
+    expect(items).toContain('brief: it.brief ? String(it.brief) : null,')
+    expect(items).not.toMatch(/String\(it\.brief\)\.slice\(/)
+    expect(readFileSync('app/api/production/batches/route.ts', 'utf8')).not.toMatch(/String\(body\.description\)\.slice\(/)
+  })
+  it('the edit box is tall and the person can drag it taller', () => {
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(drawer).toContain('<textarea rows={12} value={eBrief}')
+    expect(drawer).toContain('resize-y')
+  })
+})

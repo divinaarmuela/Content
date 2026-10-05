@@ -397,7 +397,8 @@ export async function POST(req: Request) {
             // "What this shoot is for" on the popup IS the plan's Objective
             // row — the checklist ticks it from here (seen in the browser,
             // 12 Sep 2026: the row read "Not given" after the popup)
-            objective: it.brief ? String(it.brief).slice(0, 2000) : null,
+            // whole, never cut (5 Oct 2026: a 5,000-character cut dropped the end of a card's copy notes, silently)
+            objective: it.brief ? String(it.brief) : null,
             owner_id: it.owner_id ?? user.id,
             // Postgres defaulted the status; a shoot without one matches no
             // gate in batch-brief-core
@@ -439,7 +440,9 @@ export async function POST(req: Request) {
           ? it.for_contact_id
           // a card from a shoot is for whoever the shoot is for (15 Sep 2026)
           : (it.batch_id ? ((batchById.get(it.batch_id) as { for_contact_id?: string | null } | undefined)?.for_contact_id ?? null) : null),
-        brief: it.brief ? String(it.brief).slice(0, 5000) : null,
+        // THE BRIEF IS KEPT WHOLE (the owner, 5 Oct 2026: "put no limits"). It was cut at 5,000 characters with no
+        // word to the person writing it — "October Graphics - MGMT with REBRAND" lost the end of its copy notes.
+        brief: it.brief ? String(it.brief) : null,
         raw_assets: sanitiseRawAssets(it.raw_assets),
         // the caller decides; an internal task defaults to NO client step
         // (its "Approve — done" is the whole point), everything else to yes

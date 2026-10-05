@@ -519,7 +519,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-[12px] font-semibold">What needs doing
-                <textarea rows={3} value={eBrief} onChange={e => setEBrief(e.target.value)} className={`${field} resize-none p-2.5`} aria-label="What needs doing" />
+                {/* tall, and the person can drag it taller: a brief is often pages of copy notes (5 Oct 2026) */}
+                <textarea rows={12} value={eBrief} onChange={e => setEBrief(e.target.value)} className={`${field} h-auto min-h-[12rem] resize-y p-2.5`} aria-label="What needs doing" />
               </label>
               <div className="flex flex-wrap gap-2">
                 <Button className={primaryBtn} disabled={busy} onClick={() => void saveEdit()}>Save</Button>
