@@ -121,3 +121,15 @@ describe('the person\'s own "If the client hasn\'t approved" choice is not "some
     expect(win).toMatch(/setAnswered\(after\)\s+setMovedUnder\(false\)/)
   })
 })
+
+describe('the card column on the editor and designer page ends at the bottom of the screen (5 Oct 2026: "I need to scroll outside the two windows")', () => {
+  it('its height is what is left under its own top edge, kept right on scroll and resize', () => {
+    const page = readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')
+    expect(page).toContain('const cardColumn = useFitsScreen<HTMLElement>()')
+    expect(page).toContain('<aside ref={cardColumn}')
+    expect(page).toContain('el.style.maxHeight = `${Math.max(240, window.innerHeight - top - 16)}px`')
+    expect(page).toContain("window.addEventListener('scroll', fit, { capture: true, passive: true })")
+    // on a phone the column is not a scrolling box at all
+    expect(page).toContain("if (!wide.matches) { el.style.maxHeight = ''; return }")
+  })
+})

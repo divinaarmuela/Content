@@ -27,7 +27,7 @@ import { HandToDialog } from '../../board/BoardDialogs'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { deliverOnly } from '../../../lib/deliver-only-core'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ColourGradePanel } from '../../board/ColourGradePanel'
 import { SplitPanel } from '../../board/SplitPanel'
 import { onePortalPath, workTab } from '../../../lib/one-portal-core'
@@ -219,7 +219,40 @@ function ManagerActions({ item, viewer, portalLink, client, design = false, kind
   )
 }
 
+/**
+ * THE CARD'S COLUMN ENDS AT THE BOTTOM OF THE SCREEN, WHEREVER IT STARTS (5 Oct 2026: "it's a bit hard to see the
+ * brief — I need to scroll outside the two windows to scroll the remaining"). The column scrolls inside itself,
+ * and was given the whole screen's height — but it starts below the page's title, so its last few hundred pixels
+ * hung off the bottom of the screen and the end of a long brief could only be reached by scrolling the PAGE.
+ * Its height is now what is actually left under its top edge, kept right as the page scrolls or resizes.
+ */
+function useFitsScreen<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const wide = window.matchMedia('(min-width: 1024px)')
+    const fit = () => {
+      if (!wide.matches) { el.style.maxHeight = ''; return }
+      const top = Math.max(16, el.getBoundingClientRect().top)
+      el.style.maxHeight = `${Math.max(240, window.innerHeight - top - 16)}px`
+    }
+    fit()
+    // capture: the dashboard's own scrolling box does not bubble its scroll to the window
+    window.addEventListener('scroll', fit, { capture: true, passive: true })
+    window.addEventListener('resize', fit)
+    wide.addEventListener('change', fit)
+    return () => {
+      window.removeEventListener('scroll', fit, { capture: true })
+      window.removeEventListener('resize', fit)
+      wide.removeEventListener('change', fit)
+    }
+  })
+  return ref
+}
+
 export default function EditorCardPage() {
+  const cardColumn = useFitsScreen<HTMLElement>()
   const { id } = useParams<{ id: string }>()
   // WHEN A PERSON LAST OPENED A CARD (21 Sep 2026): stamped for the board's "Last viewed" order, fire and forget
   useEffect(() => {
@@ -307,7 +340,7 @@ export default function EditorCardPage() {
 
         {/* ── the card itself, beside the files ── */}
         {/* the card scrolls inside its own column on a wide screen, so "What happened" at its foot is reachable (the owner, 16 Sep 2026: "on phone I can see the logs but on larger screens I can’t") */}
-        <aside className="min-w-0 overflow-hidden rounded-card border border-border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto" aria-label="The card">
+        <aside ref={cardColumn} className="min-w-0 overflow-hidden rounded-card border border-border bg-card lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto" aria-label="The card">
           {adhoc
             ? <PostApprovalDetail key={id} id={id} onClose={back} />
             : (
