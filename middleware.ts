@@ -32,6 +32,7 @@ const isProtectedRoute = createRouteMatcher([
   '/api/meta/instagram/connect(.*)',
   '/api/meta/instagram/accounts(.*)',
   '/api/meta/instagram/subscribe(.*)',
+  '/api/meta/instagram/inbox(.*)',
 ])
 
 /**
@@ -158,6 +159,7 @@ export const config = {
     '/api/meta/instagram/connect',
     '/api/meta/instagram/accounts',
     '/api/meta/instagram/subscribe',
+    '/api/meta/instagram/inbox',
     '/api/portal/:path*',
     '/api/overview/:path*',
     '/api/posts/:path*',

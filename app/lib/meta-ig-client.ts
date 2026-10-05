@@ -217,6 +217,38 @@ export async function hideComment(token: string, commentId: string, hide: boolea
   return { ok: json?.success !== false }
 }
 
+/** `DELETE /{comment-id}` — a comment on the account's own media, gone for good. */
+export async function deleteComment(token: string, commentId: string): Promise<{ ok: boolean }> {
+  const json = await call(withToken(graphUrl(commentId), token), { method: 'DELETE' })
+  return { ok: json?.success !== false }
+}
+
+/* ── reading: posts, threads, conversations, the profile (5 Oct 2026, meta-ig-inbox-core.ts) ── */
+
+/** The account's own recent media, as Instagram answers (`GET /{ig-user-id}/media`). */
+export async function listMedia(token: string, igUserId: string, fields: string, limit = 12): Promise<unknown> {
+  return get(token, `${igUserId}/media`, { fields, limit })
+}
+
+/** A media's comments with their replies (`GET /{media-id}/comments`). */
+export async function listCommentThreads(token: string, mediaId: string, fields: string): Promise<unknown> {
+  return get(token, `${mediaId}/comments`, { fields, limit: 50 })
+}
+
+/** The account's Instagram conversations (`GET /me/conversations?platform=instagram`). */
+export async function listConversations(token: string, fields: string, limit = 15): Promise<unknown> {
+  return get(token, 'me/conversations', { platform: 'instagram', fields, limit })
+}
+
+/** One message's details. Instagram answers for the 20 most recent messages of a conversation only. */
+export async function messageDetail(token: string, messageId: string): Promise<unknown> {
+  return get(token, messageId, { fields: 'id,created_time,from,to,message' })
+}
+
+export async function profile(token: string, fields: string): Promise<unknown> {
+  return get(token, 'me', { fields })
+}
+
 /* ── messages ─────────────────────────────────────────────────────────── */
 
 /** A private reply: one DM to the person who wrote a comment. */

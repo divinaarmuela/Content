@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useRole } from '../useRole'
 import PlatformIcon from '../social/PlatformIcon'
+import MetaInstagramInbox from './MetaInstagramInbox'
 
 /**
  * THE AGENCY'S OWN INSTAGRAM CONNECTION, FOR TESTING (1 Oct 2026, branch
@@ -18,6 +19,10 @@ import PlatformIcon from '../social/PlatformIcon'
  * client's Instagram posts through our own Meta app instead of Zernio, for
  * testing — off by default, and only effective with an active connection
  * here for the same account (app/lib/meta-route-core.ts).
+ *
+ * An account connected here also has its comments, direct messages and
+ * numbers read and answered through our own Meta app, underneath
+ * (MetaInstagramInbox, 5 Oct 2026) — a person pressing a button, never a rule.
  */
 
 type Row = {
@@ -98,7 +103,7 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
         <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Direct — testing</span>
       </div>
       <p className="text-[13px] text-muted-foreground">
-        Connects an Instagram professional account straight to MD Media’s Meta app, for testing. Posting, comments and DMs still go through the channels above.
+        Connects an Instagram professional account straight to MD Media’s Meta app. Once connected, its comments, direct messages and numbers are read and answered here; posting goes through this app when the switch below is on.
       </p>
       {state && 'error' in state && <p className="text-[12px] text-accent-red-deep">{state.error}</p>}
       {state && 'reason' in state && state.reason && <p className="text-[12px] text-muted-foreground">{state.reason}</p>}
@@ -131,6 +136,11 @@ export default function MetaDirectInstagram({ clientId }: { clientId: string }) 
           </Button>
         )}
       </div>
+
+      {(() => {
+        const active = accounts.find(a => a.status === 'active')
+        return active ? <MetaInstagramInbox clientId={clientId} username={active.username} /> : null
+      })()}
 
       {superAdmin && <label className="flex min-h-11 items-center gap-3 border-t border-border pt-2 text-[13px]">
         <Switch
