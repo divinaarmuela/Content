@@ -161,3 +161,11 @@ describe('the clients list (the owner, 5 Oct 2026: "because of url everything is
     expect(page).toContain('[&>th:first-child]:rounded-tl-card [&>th:last-child]:rounded-tr-card')
   })
 })
+
+describe('a link to one post opens it on Your feed (the owner, 5 Oct 2026, Justin\'s link: "feed view cache is not picked")', () => {
+  it('the post is drawn among what is already posted, not alone on its work\'s page', () => {
+    const page = readFileSync('app/portal/[token]/home/page.tsx', 'utf8')
+    expect(page).toContain("const workId = id && id !== askedPost ? id : 'feed'")
+    expect(page).toContain("profiles={workId === 'feed' ? profiles : profilesForWork(profiles, workId)} openPostId={askedPost}")
+  })
+})

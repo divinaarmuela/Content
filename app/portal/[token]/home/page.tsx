@@ -190,8 +190,11 @@ export default async function OnePortalPage({ params, searchParams }: {
   const askedPost = typeof sp.post === 'string' ? sp.post : (id && allTiles.some(t => t.post_id === id) ? id : null)
   const works = schedulingWorks(profiles)
   if (tab === 'scheduling' && (id || askedPost)) {
-    const postWork = askedPost ? allTiles.find(t => t.post_id === askedPost)?.work_id ?? null : null
-    const workId = id && id !== askedPost ? id : postWork ?? 'feed'
+    // A LINK TO ONE POST OPENS IT ON "YOUR FEED" (the owner, 5 Oct 2026, Justin's link: "feed view cache is not
+    // picked"). It used to open on the page of the work the post came from, which carries no posted feed — so the
+    // post stood alone, with none of what is already on their profile around it. The feed is the preview: the
+    // booked post in its place among the posted ones. A work's own page is still reached by its `id`.
+    const workId = id && id !== askedPost ? id : 'feed'
     const work = works.find(w => w.id === workId) ?? null
     if (workId !== 'feed' && !work) redirect(onePortalPath(token, tab))
     opened = (
