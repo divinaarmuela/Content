@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { Toaster } from '@/components/ui/sonner'
 import { ClerkProvider } from '@clerk/nextjs'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -14,7 +14,6 @@ import { rememberList } from './lastList'
 import UploadTray from './UploadTray'
 import Shell, { NAV_MAIN, NAV_SOCIAL_CHILDREN, NAV_LEADS_CHILDREN, NAV_TOOLS } from './ui/Shell'
 import { canSeePage, visiblePages } from '@/app/lib/page-access-core'
-import { isPlainVisit, shouldOpenTutorial } from '@/app/lib/tutorial-core'
 
 // the shell's markup lives in ./ui/Shell; the nav data and the active-entry
 // rule live there with it, and are re-exported here for anything that used to
@@ -85,40 +84,10 @@ function DashboardInner({ children }: { children: React.ReactNode }) {
   const { dark, toggle } = useDashTheme()
 
   /**
-   * THE FIRST SIGN-IN OPENS THE TUTORIAL (the owner, 9 Sep 2026).
-   *
-   * Someone in a role that has a tutorial, who has never finished it in that
-   * role, is sent to How this works — once per browser session, so a person
-   * who leaves it half-read to look at their board is not dragged back on
-   * every click; the sidebar entry brings them back when they choose. The
-   * answer comes from the same row the Getting started panels read, and the
-   * browser's own memory of "done" counts too, because the write can fail
-   * and a tutorial that will not go away is one people learn to hate.
+   * NOBODY IS SENT TO "HOW THIS WORKS" ANY MORE (the owner, 5 Oct 2026: "please remove how this works from the
+   * pages… it keeps showing"). A first sign-in in a role used to be redirected to /dashboard/start once per
+   * browser session; it also left the sidebar. The page itself is still there at its address.
    */
-  const router = useRouter()
-  useEffect(() => {
-    if (!role || role === 'client' || !path || path.startsWith('/dashboard/start')) return
-    // A LINK TO A CARD IS NEVER HIJACKED (the owner, 13 Sep 2026: the editor
-    // "received the email and when he opened it the page is taking them to
-    // the How it works page"). Somebody who arrived with ?card= came to do
-    // one thing; the tutorial waits for a plain visit.
-    try { if (!isPlainVisit(window.location.pathname, window.location.search)) return } catch { /* no window */ }
-    let live = true
-    try {
-      if (sessionStorage.getItem('md-tutorial-offered') === '1') return
-      if (localStorage.getItem(`md-tutorial-done:${role}`) === '1') return
-    } catch { return }
-    fetch('/api/team/getting-started')
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (!live || !j) return
-        if (!shouldOpenTutorial(role, Array.isArray(j.dismissedPages) ? j.dismissedPages : [])) return
-        try { sessionStorage.setItem('md-tutorial-offered', '1') } catch { /* private mode */ }
-        router.replace('/dashboard/start')
-      })
-      .catch(() => { /* help that cannot load is help that stays quiet */ })
-    return () => { live = false }
-  }, [role, path, router])
 
   /**
    * Hiding a link is not a lock. Someone who types the address, follows an

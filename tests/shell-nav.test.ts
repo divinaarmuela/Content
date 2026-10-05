@@ -103,7 +103,6 @@ describe('resolveNav by role', () => {
       '/dashboard/editor',
       '/dashboard/notifications',
       '/dashboard/settings',
-      '/dashboard/start',
       '/dashboard/todos', // everyone's own list (17 Sep 2026)
       '/dashboard/team-boards', // the team's own canvases (21 Sep 2026)
     ].sort())
@@ -119,7 +118,6 @@ describe('resolveNav by role', () => {
       '/dashboard/notifications',
       '/dashboard/scheduler',
       '/dashboard/settings',
-      '/dashboard/start',
       '/dashboard/team-boards',
       '/dashboard/todos',
     ].sort())

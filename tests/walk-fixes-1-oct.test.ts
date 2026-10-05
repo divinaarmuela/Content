@@ -56,7 +56,9 @@ describe('a link to one thing never lands on How this works (1 Oct 2026)', () =>
     expect(isPlainVisit('/dashboard/scheduler', '?post=p1')).toBe(false)
     expect(isPlainVisit('/dashboard/social/schedule', '?client=c&post=p')).toBe(false)
     expect(isPlainVisit('/dashboard/clients/c1/social', '')).toBe(false)
-    expect(readFileSync('app/dashboard/layout.tsx', 'utf8')).toContain('if (!isPlainVisit(window.location.pathname, window.location.search)) return')
+    // …and since 5 Oct 2026 the layout sends nobody there at all, and the sidebar has no entry for it
+    expect(readFileSync('app/dashboard/layout.tsx', 'utf8')).not.toContain("router.replace('/dashboard/start')")
+    expect(readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')).not.toContain("label: 'How this works'")
   })
 })
 
