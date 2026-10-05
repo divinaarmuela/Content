@@ -971,11 +971,37 @@ describe('Schedule it — a super admin books a Draft or a post at the quality c
     const row = ROW_OF.schedule_direct
     expect([...row.from].sort()).toEqual(['draft', 'quality_check'])
     expect(row.to).toBe('booked')
-    expect(row.who).toEqual(['sa'])
+    // …and, on a test client's post only, an account manager (the Meta review account) — the test below
+    expect(row.who).toEqual(['sa', 'tester'])
     expect(row.label).toBe('Schedule it')
     expect(row.needs).toEqual(['time'])
     // Post now is still only from Ready to post
     expect(ROW_OF.post_now.from).toEqual(['ready'])
+  })
+
+  it('an account manager books alone on a TEST client only (the owner, 5 Oct 2026: "allow them to publish" — Meta\'s reviewer is a 100M-only account manager)', () => {
+    const am = { id: 'u-review', role: 'account_manager' }
+    const onTest = { created_by: 'u-review', client_id: '459e2564-1089-45ed-abd7-56d5f53c2cf6' }
+    const onReal = { created_by: 'u-review', client_id: 'client-1' }
+    expect(hatsFor(am, onTest)).toContain('tester')
+    expect(hatsFor(am, onReal)).not.toContain('tester')
+    // nobody else gets it: not a scheduler, an editor or a quality checker — and a super admin does not need it
+    for (const role of ['scheduler', 'general', 'editor', 'quality_checker', 'super_admin']) {
+      expect(hatsFor({ id: 'u', role }, onTest)).not.toContain('tester')
+    }
+    // the hat opens exactly one row
+    expect(POST_TRANSITIONS.filter(r => r.who.includes('tester')).map(r => r.action)).toEqual(['schedule_direct'])
+
+    const real = post('draft', { draft_version: 1, sent_version: null })
+    expect(checkPostTransition(real, 'schedule_direct', { id: 'u-review', hats: hatsFor(am, real) }, { expect_rev: 5 }, CTX))
+      .toMatchObject({ ok: false, code: 'not_allowed' })
+
+    const test = post('draft', { draft_version: 1, sent_version: null, client_id: '459e2564-1089-45ed-abd7-56d5f53c2cf6' })
+    const plan = planPostTransition(test, 'schedule_direct', { id: 'u-review', hats: hatsFor(am, test) }, { expect_rev: 5 }, CTX)
+    if (!plan.ok) throw new Error(plan.reason)
+    expect(plan.to).toBe('booked')
+    expect(plan.patch.approval).toMatchObject({ by: 'u-review', hat: 'account_manager', skipped_check: true })
+    expect(plan.event).toMatchObject({ action: 'schedule_direct', hat: 'tester', note: 'Scheduled by an account manager on a test client without the quality check' })
   })
 
   it('from Draft: the working copy is frozen as version N, recorded as a super admin\'s, the check marked skipped, booked for its time', () => {

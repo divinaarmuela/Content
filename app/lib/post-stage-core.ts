@@ -55,6 +55,7 @@ import { optionsFromExtras, readChannelExtras, type ChannelExtras } from './sche
 import type { PostKind } from './publish-core'
 import type { Slide } from './version-files-core'
 import { readPostAutomation, type PostAutomation } from './comment-automation-core'
+import { isTestClient } from './test-clients-core'
 import { readPostBatch, type PostBatch } from './post-batch-core'
 import {
   ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, insideLastSlot, onePortal, readClientReview, readReviewAsked,
@@ -168,12 +169,16 @@ export const PORTAL_COLUMN: Record<PostStage, PortalColumn | null> = {
  *   am        — account manager
  *   qr        — the quality checker (the role, or the quality_reviewer flag)
  *   sa        — super admin; listed on every team row it may use
+ *   tester    — an account manager on a TEST client's post (100M, ZZ E2E, ZZ TEST). Meta's App Review
+ *               signs in as a 100M-only account manager and has to book a post alone, with nobody there to
+ *               pass a quality check (the owner, 5 Oct 2026: "allow them to publish"). Worn on test clients
+ *               only, and it opens one row: Schedule it. A real client's post is never touched by it.
  *   client    — the portal link holder; valid only on the client rows
  *   system    — the publish recorder and the booking steps
  * Editors and designers are not in the posting flow (the owner's decision 7).
  */
-export type PostHat = 'creator' | 'scheduler' | 'am' | 'qr' | 'sa' | 'client' | 'system'
-export const POST_HATS: readonly PostHat[] = ['creator', 'scheduler', 'am', 'qr', 'sa', 'client', 'system']
+export type PostHat = 'creator' | 'scheduler' | 'am' | 'qr' | 'sa' | 'tester' | 'client' | 'system'
+export const POST_HATS: readonly PostHat[] = ['creator', 'scheduler', 'am', 'qr', 'sa', 'tester', 'client', 'system']
 
 export const HAT_WORDS: Record<PostHat, string> = {
   creator: 'the person who made it',
@@ -181,6 +186,7 @@ export const HAT_WORDS: Record<PostHat, string> = {
   am: 'an account manager',
   qr: 'the quality checker',
   sa: 'a super admin',
+  tester: 'an account manager on a test client',
   client: 'the client',
   system: 'the app',
 }
@@ -192,13 +198,14 @@ export type Viewer = {
 }
 
 /** The hats a team member wears on this post. */
-export function hatsFor(viewer: Viewer | null | undefined, post: { created_by?: string | null } | null | undefined): PostHat[] {
+export function hatsFor(viewer: Viewer | null | undefined, post: { created_by?: string | null; client_id?: string | null } | null | undefined): PostHat[] {
   if (!viewer) return []
   const role = String(viewer.role ?? '')
   if (role === 'client') return ['client']
   const hats = new Set<PostHat>()
   if (role === 'super_admin') hats.add('sa')
   if (role === 'account_manager') hats.add('am')
+  if (role === 'account_manager' && isTestClient(post?.client_id)) hats.add('tester')
   if (role === 'scheduler' || role === 'general') hats.add('scheduler')
   if (role === 'quality_checker' || viewer.quality_reviewer === true) hats.add('qr')
   // editors and designers make the EDIT, not the post: never the creator hat
@@ -805,7 +812,7 @@ export const POST_TRANSITIONS: readonly TransitionRow[] = [
   // books a Draft (its working copy frozen, as Send for quality check freezes it) or a post waiting on
   // the check (the version sent), at its time, WITHOUT the check. Never now: Post now stays on Ready.
   // Versioned from the quality check only — a Draft has no version the person saw (see the check).
-  { action: 'schedule_direct', spec: 'owner 29 Sep', from: ['quality_check', 'draft'], to: 'booked', who: ['sa'], label: 'Schedule it', needs: ['time'], versioned: true },
+  { action: 'schedule_direct', spec: 'owner 29 Sep', from: ['quality_check', 'draft'], to: 'booked', who: ['sa', 'tester'], label: 'Schedule it', needs: ['time'], versioned: true },
   { action: 'post_now', spec: 'T12', from: ['ready'], to: 'booked', who: BOOKERS, label: 'Post now', needs: ['confirm'], confirm:'This goes out on the client\'s accounts now.' },
   // …and from the quality check: a time that has passed (or will) is fixed there, without a full re-check
   { action: 'change_time', spec: 'T13/T15', from: ['quality_check', 'ready', 'booked'], to: 'same', who: BOOKERS, label: 'Change time', needs: ['time'] },
@@ -1289,12 +1296,12 @@ function eventNote(act: PostAction, note: string | null, post: PostState, input:
   if (act === 'change_time' && post.approval) return 'Time changed after approval'
   if (act === 'booking_failed') return String(input.problem ?? '').trim() || null
   if (act === 'remind_client') return `Reminded ${joinNames((input.delivered_to ?? []).filter(Boolean))}`
-  if (act === 'schedule_direct') return `Scheduled by a super admin without the quality check${patch.approval?.without_client ? ' and without the client' : ''}`
+  if (act === 'schedule_direct') return `Scheduled by ${patch.approval?.hat === 'account_manager' ? 'an account manager on a test client' : 'a super admin'} without the quality check${patch.approval?.without_client ? ' and without the client' : ''}`
   return null
 }
 
 const APPROVAL_HAT: Partial<Record<PostHat, ApprovalHat>> = {
-  qr: 'quality_reviewer', am: 'account_manager', sa: 'super_admin', client: 'client',
+  qr: 'quality_reviewer', am: 'account_manager', sa: 'super_admin', tester: 'account_manager', client: 'client',
 }
 
 /** The event row's id: one per rev, so a retried write cannot log twice. */
@@ -1834,7 +1841,7 @@ export function approvalLine(approval: Approval | null | undefined, nameOf: Name
   if (!approval) return null
   // a super admin's Schedule it: never worded as a pass (the owner, 29 Sep 2026)
   if (approval.skipped_check) {
-    return `Scheduled without the quality check${approval.without_client ? ' and without the client' : ''} by ${nameOf(approval.by) || 'a super admin'}`
+    return `Scheduled without the quality check${approval.without_client ? ' and without the client' : ''} by ${nameOf(approval.by) || (approval.hat === 'account_manager' ? 'an account manager' : 'a super admin')}`
   }
   const name = nameOf(approval.by) || 'the team'
   if (approval.hat === 'client') return 'Approved by the client'
