@@ -1,4 +1,5 @@
 import 'server-only'
+import { readbackCandidates } from './zernio-readback-core'
 import { randomUUID } from 'node:crypto'
 import { table } from '@/lib/db'
 import type {
@@ -922,16 +923,14 @@ export async function reclaimStalePublishing(olderThanMinutes = 15): Promise<num
  * success for posts that never appeared.
  */
 export async function reconcilePublishedJobs(): Promise<number> {
-  const since = new Date(Date.now() - 14 * 24 * 3600_000).toISOString()
-  // 'scheduled' jobs are included: the provider posts them at their time and
-  // nothing else ever flips our row to published — without this they sit as
-  // "scheduled" forever while the post is live
-  const jobs = await table<PublishJobRow>('publish_jobs').list({
-    where: j => ['published', 'scheduled'].includes(j.status)
-      && j.created_at >= since
-      && j.provider_post_id != null,
-    limit: 50,
-  })
+  // THE WINDOW FOLLOWS THE POSTING TIME (zernio-readback-core, 16 Oct 2026): it used to be 14 days from when the job
+  // was MADE, capped at 50 — Jordan "3", booked 30 Sep for 12 Oct and posted by Zernio while the dispatcher could not
+  // reach the app (6–15 Oct), left that window before it could be read back, and was never marked posted.
+  // 'scheduled' jobs are included: the provider posts them at their time and nothing else ever flips our row.
+  const jobs = readbackCandidates(
+    await table<PublishJobRow>('publish_jobs').list({ where: j => ['published', 'scheduled'].includes(j.status) && j.provider_post_id != null }),
+    Date.now(),
+  )
 
   if (!jobs.length) return 0
 
