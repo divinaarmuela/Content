@@ -195,7 +195,7 @@ describe('who the link is for (the owner, 15 Sep 2026: "for their business, or t
     expect(invite).toContain('connectLinkPath(token, networks, forId)')
     const control = readFileSync('app/dashboard/social/ClientConnectLink.tsx', 'utf8')
     expect(control).toContain('This link is for')
-    expect(control).toContain('connectLinkPath(token, picked, contactIdOf(linkFor), off)')
+    expect(control).toContain('connectLinkPath(token, picked, contactIdOf(linkFor))')
     const card = readFileSync('app/dashboard/clients/SocialChannels.tsx', 'utf8')
     expect(card).toContain('accountSections(clientName, accounts, contacts)')
   })
