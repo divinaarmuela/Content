@@ -48,13 +48,36 @@ export function parseNetworks(param: string | null | undefined): Platform[] {
  * that person's own; no `for` means the client's official business accounts.
  * The link cannot tell who pressed it, so the manager says so when making it.
  */
-export function connectLinkPath(token: string, networks: readonly Platform[], forContact?: string | null): string {
+export function connectLinkPath(token: string, networks: readonly Platform[], forContact?: string | null, inbox = true): string {
   const picked = CONNECTABLE.filter(p => networks.includes(p))
   const parts: string[] = []
   if (picked.length > 0 && picked.length < CONNECTABLE.length) parts.push(`networks=${picked.join(',')}`)
   const who = parseFor(forContact)
   if (who) parts.push(`for=${encodeURIComponent(who)}`)
+  // THE MESSAGE INBOX (16 Oct 2026): off is the only thing that travels — a link without it means everything, as before
+  if (!inbox) parts.push('inbox=0')
   return `/connect/${encodeURIComponent(token)}${parts.length ? `?${parts.join('&')}` : ''}`
+}
+
+/**
+ * THE MESSAGE INBOX, ON OR OFF, PER CONNECT LINK (the owner, 16 Oct 2026: "does our link include toggling on and off for
+ * message inbox?… for instagram"). Zernio asks a network for every permission it supports unless `scopes` names fewer
+ * areas (docs.zernio.com/guides/connecting-accounts). Leaving out `messaging` means Instagram and Facebook never grant
+ * message access, so the account has no DM inbox with us. It is decided at sign-in: turning it on later is a reconnect.
+ */
+export function parseInbox(raw: unknown): boolean {
+  if (raw === false || raw === 0) return false
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return !(s === '0' || s === 'off' || s === 'false')
+}
+
+/** The areas Zernio is asked for: null (everything, as before) unless the inbox is off on a network that has one. */
+export function scopesFor(platform: string, inbox: boolean): string | null {
+  if (inbox) return null
+  if (platform === 'instagram') return 'posting,analytics,comments'
+  // Facebook keeps its ads area (Facebook Login is how the ads permissions are granted); only messaging goes
+  if (platform === 'facebook') return 'posting,analytics,comments,ads'
+  return null
 }
 
 /** The `for=` on a link: one contact id, or null for the business. Only the

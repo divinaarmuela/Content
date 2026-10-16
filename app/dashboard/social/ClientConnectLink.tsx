@@ -67,7 +67,9 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
   }
   const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
 
-  const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor))), [token, picked, linkFor])
+  // THE MESSAGE INBOX (16 Oct 2026): on by default; off means Instagram and Facebook are not asked for message access
+  const [inbox, setInbox] = useState(true)
+  const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor), inbox)), [token, picked, linkFor, inbox])
 
   const toggle = (p: Platform) =>
     setPicked(cur => cur.includes(p) ? cur.filter(x => x !== p) : CONNECTABLE.filter(x => x === p || cur.includes(x)))
@@ -130,6 +132,19 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
               )
             })}
           </div>
+          {(picked.includes('instagram') || picked.includes('facebook')) && (
+            <label className="flex min-h-10 cursor-pointer items-start gap-2 text-[13px]">
+              <input type="checkbox" checked={inbox} onChange={e => setInbox(e.target.checked)} className="mt-1 h-4 w-4" />
+              <span>
+                <span className="font-semibold">Include the message inbox</span>
+                <span className="block text-[12px] text-muted-foreground">
+                  {inbox
+                    ? 'Instagram and Facebook will ask them to allow messages, so their DMs show in our Inbox.'
+                    : 'Their DMs will not reach us. To add the inbox later they connect again with this ticked.'}
+                </span>
+              </span>
+            </label>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <input readOnly value={link} onFocus={e => e.currentTarget.select()}
               aria-label="The client's connect link"

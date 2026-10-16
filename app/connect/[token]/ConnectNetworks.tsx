@@ -27,7 +27,9 @@ import PlatformIcon, { brandFor } from '@/app/dashboard/social/PlatformIcon'
  *   · the WRONG account got connected — "Connect a different account"
  *     runs the sign-in again, and the network's own picker takes over.
  */
-export default function ConnectNetworks({ token, networks, networksParam, initial, justConnected, returnError, forContact = null }: {
+export default function ConnectNetworks({ token, networks, networksParam, initial, justConnected, returnError, forContact = null, inbox = true }: {
+  /** the link's inbox choice (connect-link-core parseInbox): false = the network is not asked for message access */
+  inbox?: boolean
   token: string
   /** the link's `for=` — the person whose own accounts these are, or null for the business (15 Sep 2026) */
   forContact?: string | null
@@ -88,7 +90,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       const res = await fetch(`/api/connect/${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, networks: networksParam, for: forContact }),
+        body: JSON.stringify({ platform, networks: networksParam, for: forContact, inbox: inbox ? undefined : 0 }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not start the sign-in'))

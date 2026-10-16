@@ -4,7 +4,7 @@ import type { Client, SocialAccount } from '@/lib/db-types'
 import { connectLinkFor } from '@/app/lib/social-connect'
 import { syncSocialAccounts } from '@/app/lib/publish'
 import { refreshClientAccountsHealth } from '@/app/lib/account-health'
-import { connectLinkPath, isConnectable, isShareToken, parseFor, parseNetworks, type ConnectedAccount } from '@/app/lib/connect-link-core'
+import { connectLinkPath, isConnectable, isShareToken, parseFor, parseInbox, parseNetworks, scopesFor, type ConnectedAccount } from '@/app/lib/connect-link-core'
 import { needsReconnect, readStoredHealth } from '@/app/lib/account-health-core'
 
 /**
@@ -68,7 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const { token } = await ctx.params
     const client = await clientFor(token)
     if (!client) return NextResponse.json({ error: 'This link is not valid' }, { status: 404 })
-    const body = await req.json().catch(() => ({})) as { platform?: unknown; networks?: unknown; for?: unknown }
+    const body = await req.json().catch(() => ({})) as { platform?: unknown; networks?: unknown; for?: unknown; inbox?: unknown }
     if (!isConnectable(body.platform)) {
       return NextResponse.json({ error: 'That network cannot be connected here' }, { status: 400 })
     }
@@ -80,7 +80,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     }
     // who the link is for comes back with them, so the sync can tag the new account
     const forContact = await contactOnClient(client.id, parseFor(body.for))
-    const link = await connectLinkFor(client.id, body.platform, { path: connectLinkPath(token, allowed, forContact) })
+    // the link's inbox choice: off → Zernio is not asked for message access on Instagram / Facebook (16 Oct 2026)
+    const inbox = parseInbox(body.inbox)
+    const link = await connectLinkFor(client.id, body.platform, { path: connectLinkPath(token, allowed, forContact, inbox) }, { scopes: scopesFor(body.platform, inbox) })
     if ('error' in link) return NextResponse.json({ error: link.error }, { status: link.status })
     return NextResponse.json({ authUrl: link.authUrl })
   })

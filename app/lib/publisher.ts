@@ -21,7 +21,7 @@ export interface Publisher {
   /** Create a provider profile to hold one client's accounts. Returns its id. */
   createProfile(name: string): Promise<string>
   /** OAuth URL to connect one platform for one client profile. */
-  connectUrl(input: { platform: Platform; profileId: string; redirectUrl: string }): Promise<string>
+  connectUrl(input: { platform: Platform; profileId: string; redirectUrl: string; scopes?: string | null }): Promise<string>
   /** Accounts currently connected, optionally scoped to one client profile. */
   listAccounts(profileId?: string): Promise<ProviderAccount[]>
   /** Revoke an account at the provider, not just locally. */
@@ -499,10 +499,12 @@ class ZernioPublisher implements Publisher {
     return id
   }
 
-  async connectUrl({ platform, profileId, redirectUrl }: {
-    platform: Platform; profileId: string; redirectUrl: string
+  async connectUrl({ platform, profileId, redirectUrl, scopes }: {
+    platform: Platform; profileId: string; redirectUrl: string; scopes?: string | null
   }): Promise<string> {
     const qs = new URLSearchParams({ profileId, redirect_url: redirectUrl })
+    // fewer areas only when asked (connect-link-core scopesFor); unset is every area, as it always was
+    if (scopes) qs.set('scopes', scopes)
     const res = await fetch(`${BASE}/connect/${platform}?${qs}`, { headers: this.headers() })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(json?.error ?? `Could not start ${platform} connection (${res.status})`)

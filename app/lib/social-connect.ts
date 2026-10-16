@@ -39,6 +39,7 @@ export function connectReturnPath(returnTo: ConnectReturn, clientId: string, pla
 
 export async function connectLinkFor(
   clientId: string, platform: string, returnTo: ConnectReturn = 'social',
+  opts: { scopes?: string | null } = {},
 ): Promise<{ authUrl: string; clientName: string } | { error: string; status: number }> {
   if (!isPlatform(platform)) {
     return { error: `Unsupported platform "${platform}"`, status: 400 }
@@ -78,6 +79,7 @@ export async function connectLinkFor(
     platform: platform as Platform,
     profileId,
     redirectUrl: `${base}${connectReturnPath(returnTo, clientId, platform)}`,
+    scopes: opts.scopes ?? null,
   })
 
   return { authUrl, clientName: client.name ?? 'the client' }
