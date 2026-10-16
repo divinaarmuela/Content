@@ -87,14 +87,6 @@ export const AREA_WORDS: Record<OptionalArea, { label: string; on: string; off: 
   ads: { label: 'Ads', networks: 'Facebook', on: 'Ads, lead forms and the paid-partnership label.', off: 'No ads features for this account.' },
 }
 
-/** what the CLIENT reads beside each tick on their connect page — plain, about them, never our jargon */
-export const CLIENT_AREA_WORDS: Record<OptionalArea, string> = {
-  analytics: 'See how your posts are doing (views, reach, followers)',
-  comments: 'Read and reply to comments on your posts',
-  messaging: 'Read and reply to your direct messages',
-  ads: 'Run ads for you (Facebook only)',
-}
-
 /** the switched-off areas a link carries: `off=comments,messaging`; the first link of all, `inbox=0`, still means messaging off */
 export function parseOff(raw: unknown, legacyInbox?: unknown): OptionalArea[] {
   const list = (typeof raw === 'string' ? raw : '').split(',').map(x => x.trim().toLowerCase())

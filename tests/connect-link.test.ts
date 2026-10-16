@@ -190,7 +190,7 @@ describe('who the link is for (the owner, 15 Sep 2026: "for their business, or t
     expect(route).toContain('connectLinkPath(token, allowed, forContact, off)')
     expect(route).toContain("syncSocialAccounts(client.id, client.social_profile_id, { tagNewWith: forContact })")
     const page = readFileSync('app/connect/[token]/ConnectNetworks.tsx', 'utf8')
-    expect(page).toContain("body: JSON.stringify({ platform, networks: networksParam, for: forContact, off: choice.length ? choice.join(',') : undefined }),")
+    expect(page).toContain("body: JSON.stringify({ platform, networks: networksParam, for: forContact, off: off.length ? off.join(',') : undefined }),")
     const invite = readFileSync('app/api/social/connect/invite/route.ts', 'utf8')
     expect(invite).toContain('connectLinkPath(token, networks, forId)')
     const control = readFileSync('app/dashboard/social/ClientConnectLink.tsx', 'utf8')

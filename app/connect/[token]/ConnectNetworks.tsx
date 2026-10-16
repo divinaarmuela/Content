@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AREAS_OF, CLIENT_AREA_WORDS, OPTIONAL_AREAS, type OptionalArea } from '../../lib/connect-link-core'
+import { AREAS_OF } from '../../lib/connect-link-core'
 import { Check, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Platform } from '@/app/lib/publish-core'
@@ -44,11 +44,10 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
   returnError: string | null
 }) {
   const [connected, setConnected] = useState<Connected[]>(initial)
-  // THE CLIENT CHOOSES (the owner, 16 Oct 2026: "we can ask them to toggle… when the client is on the connect page — don't
-  // force anything"): each area starts as the team's link set it (all on unless switched off), and what they leave ticked
-  // is exactly what the network is asked for when they press Connect
-  const [choice, setChoice] = useState<OptionalArea[]>(() => OPTIONAL_AREAS.filter(a => off.includes(a)))
-  const areas = OPTIONAL_AREAS.filter(a => networks.some(p => (AREAS_OF[p] ?? []).includes(a)))
+  // THE SWITCHES ARE INSTAGRAM'S, NOT OURS (the owner, 16 Oct 2026: "why is it rendered outside of Instagram"): Instagram
+  // and Facebook show the client their own permission switches while signing in. Nothing is chosen on this page — we only
+  // ask them to leave every switch on, and the team's link decides what is asked for (`off`)
+  const asksPermissions = networks.some(p => !!AREAS_OF[p])
   const [busy, setBusy] = useState<string | null>(null)
   const [settling, setSettling] = useState(Boolean(justConnected) && !returnError)
   const [problem, setProblem] = useState<string | null>(() =>
@@ -96,7 +95,7 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       const res = await fetch(`/api/connect/${encodeURIComponent(token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, networks: networksParam, for: forContact, off: choice.length ? choice.join(',') : undefined }),
+        body: JSON.stringify({ platform, networks: networksParam, for: forContact, off: off.length ? off.join(',') : undefined }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(String(json?.error ?? 'Could not start the sign-in'))
@@ -116,18 +115,11 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
           {problem}
         </p>
       )}
-      {areas.length > 0 && (
-        <fieldset className="flex flex-col gap-1.5 rounded-inner border border-border bg-surface px-4 py-3">
-          <legend className="px-1 text-[13px] font-semibold">For Instagram and Facebook, MD Media may also…</legend>
-          <p className="text-[13px] opacity-75">Posting your approved posts is always included. Untick anything you would rather keep to yourself — you can connect again later to change it.</p>
-          {areas.map(a => (
-            <label key={a} className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
-              <input type="checkbox" className="h-5 w-5" checked={!choice.includes(a)}
-                onChange={e => setChoice(cur => e.target.checked ? cur.filter(x => x !== a) : [...cur, a])} />
-              <span>{CLIENT_AREA_WORDS[a]}</span>
-            </label>
-          ))}
-        </fieldset>
+      {asksPermissions && (
+        <p className="rounded-inner border border-border bg-surface px-4 py-3 text-[14px]">
+          When Instagram or Facebook asks what MD Media may do, <strong>leave every switch on</strong> — posting, comments,
+          messages and insights — so we can manage your account for you.
+        </p>
       )}
       <ul className="flex flex-col gap-3" aria-label="Networks to connect">
         {networks.map(platform => {

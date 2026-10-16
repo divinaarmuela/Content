@@ -61,10 +61,10 @@ describe('wired through', () => {
     expect(s).toContain('parseOff(body.off, body.inbox)')
     expect(s).toContain('scopes: scopesFor(body.platform, off)')
   })
-  it("the client chooses on their connect page: ticks start from the link, what they leave ticked is what is asked for", () => {
+  it("the client's page asks them to leave Instagram's own switches on — and draws no switches of ours", () => {
     const s = readFileSync('app/connect/[token]/ConnectNetworks.tsx', 'utf8')
-    expect(s).toContain('useState<OptionalArea[]>(() => OPTIONAL_AREAS.filter(a => off.includes(a)))')
-    expect(s).toContain("off: choice.length ? choice.join(',') : undefined")
-    expect(s).toContain('type="checkbox"')
+    expect(s).toContain("off: off.length ? off.join(',') : undefined")
+    expect(s).toContain('leave every switch on')
+    expect(s).not.toContain('type="checkbox"')
   })
 })
