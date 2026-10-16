@@ -117,8 +117,8 @@ export default function ConnectNetworks({ token, networks, networksParam, initia
       )}
       {asksPermissions && (
         <p className="rounded-inner border border-border bg-surface px-4 py-3 text-[14px]">
-          When Instagram or Facebook asks what MD Media may do, <strong>leave every switch on</strong> — posting, comments,
-          messages and insights — so we can manage your account for you.
+          When Instagram or Facebook asks what MD Media may do, <strong>leave every switch on</strong> (posting, comments,
+          messages and insights) so we can manage your account for you.
         </p>
       )}
       <ul className="flex flex-col gap-3" aria-label="Networks to connect">

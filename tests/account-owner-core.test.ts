@@ -90,7 +90,7 @@ describe('the route and the page (source pins)', () => {
     const c = src('app/dashboard/clients/SocialChannels.tsx')
     expect(c).toContain('accountSections(clientName, accounts, contacts)')
     const l = src('app/dashboard/social/ClientConnectLink.tsx')
-    expect(l).toContain('Connect link — for the business, or for one of their people')
+    expect(l).toContain('Connect link: for the business, or for one of their people')
     expect(l).toContain('+ Add a person')
     expect(l).toContain('fetch(`/api/website/clients/${clientId}/contacts`, {')
   })

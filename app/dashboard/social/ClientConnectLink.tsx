@@ -58,7 +58,7 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
       const made = (json?.contact ?? json?.data ?? json) as { id?: string }
       if (made?.id) setLinkFor(made.id)
       setAdding(false); setNewName('')
-      toast.success(`${name} added — the link is now theirs`)
+      toast.success(`${name} added. The link is now theirs.`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not add them')
     } finally {
@@ -80,10 +80,10 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
-      toast.success('Link copied — send it to the client')
+      toast.success('Link copied. Send it to the client.')
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error('Could not copy — select the link and copy it by hand')
+      toast.error('Could not copy. Select the link and copy it by hand.')
     }
   }
 
@@ -92,14 +92,14 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
       <button type="button" onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 text-left text-[13px] font-semibold">
         <Link2 className="h-4 w-4" aria-hidden />
-        Connect link — for the business, or for one of their people
+        Connect link: for the business, or for one of their people
         <span className="ml-auto text-[12px] font-normal text-muted-foreground">{open ? 'Hide' : 'Show'}</span>
       </button>
       {open && (
         <>
           <p className="text-[12px] text-muted-foreground">
             Tick the networks they should sign in to, copy the link, send it. They press Connect on each, sign
-            in to the network, and the account lands here — no account of ours needed.
+            in to the network, and the account lands here. No account of ours needed.
           </p>
           <label className="flex flex-col gap-1">
             <span className="text-[12px] font-semibold text-muted-foreground">This link is for</span>
@@ -107,7 +107,7 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
               className="min-h-10 w-full max-w-[420px] rounded-full border border-border bg-background px-3 text-[13px]">
               {ownerChoices(clientName, contacts).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. Copy the link and send it yourself — nothing is emailed from here.</span>
+            <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. Copy the link and send it yourself. Nothing is emailed from here.</span>
             {!adding ? (
               <button type="button" onClick={() => setAdding(true)} className="w-fit text-[12px] font-semibold underline underline-offset-4">+ Add a person</button>
             ) : (
@@ -137,7 +137,7 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
           {areas.length > 0 && (
             <fieldset className="flex flex-col gap-1.5 rounded-inner bg-muted/50 p-2.5">
               <legend className="text-[12px] font-semibold text-muted-foreground">What this connection lets us do</legend>
-              <p className="text-[12px] text-muted-foreground"><strong>Posting</strong> — always on. Untick anything below only if the client asks; to turn it back on later they connect again.</p>
+              <p className="text-[12px] text-muted-foreground"><strong>Posting</strong> is always on. Untick anything below only if the client asks. To turn it back on later, they connect again.</p>
               {areas.map(a => {
                 const on = !off.includes(a)
                 return (
