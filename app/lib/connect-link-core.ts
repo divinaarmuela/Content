@@ -48,36 +48,67 @@ export function parseNetworks(param: string | null | undefined): Platform[] {
  * that person's own; no `for` means the client's official business accounts.
  * The link cannot tell who pressed it, so the manager says so when making it.
  */
-export function connectLinkPath(token: string, networks: readonly Platform[], forContact?: string | null, inbox = true): string {
+export function connectLinkPath(token: string, networks: readonly Platform[], forContact?: string | null, off: readonly OptionalArea[] = []): string {
   const picked = CONNECTABLE.filter(p => networks.includes(p))
   const parts: string[] = []
   if (picked.length > 0 && picked.length < CONNECTABLE.length) parts.push(`networks=${picked.join(',')}`)
   const who = parseFor(forContact)
   if (who) parts.push(`for=${encodeURIComponent(who)}`)
-  // THE MESSAGE INBOX (16 Oct 2026): off is the only thing that travels — a link without it means everything, as before
-  if (!inbox) parts.push('inbox=0')
+  // WHAT THE CLIENT IS NOT ASKED FOR (16 Oct 2026): only what is switched off travels — a link without it means everything
+  const left = OPTIONAL_AREAS.filter(x => off.includes(x))
+  if (left.length > 0) parts.push(`off=${left.join(',')}`)
   return `/connect/${encodeURIComponent(token)}${parts.length ? `?${parts.join('&')}` : ''}`
 }
 
 /**
- * THE MESSAGE INBOX, ON OR OFF, PER CONNECT LINK (the owner, 16 Oct 2026: "does our link include toggling on and off for
- * message inbox?… for instagram"). Zernio asks a network for every permission it supports unless `scopes` names fewer
- * areas (docs.zernio.com/guides/connecting-accounts). Leaving out `messaging` means Instagram and Facebook never grant
- * message access, so the account has no DM inbox with us. It is decided at sign-in: turning it on later is a reconnect.
+ * WHAT A CONNECTION LETS US DO, ON OR OFF, PER CONNECT LINK (the owner, 16 Oct 2026: "does our link include toggling on
+ * and off for message inbox?" → "why don't you add all"). Zernio asks a network for every permission it supports unless
+ * `scopes` names fewer areas (docs.zernio.com/guides/connecting-accounts; the areas per network are on its platform pages).
+ * Posting is never optional — a connection that cannot post is no connection. It is decided at sign-in: switching an
+ * area back on later means the client connects again with it ticked.
+ *
+ * Instagram and Facebook only: those are the networks whose areas are documented; Zernio refuses an area a network
+ * does not have, so nothing is guessed for the others (they keep asking for everything, as before).
  */
-export function parseInbox(raw: unknown): boolean {
-  if (raw === false || raw === 0) return false
-  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
-  return !(s === '0' || s === 'off' || s === 'false')
+export const OPTIONAL_AREAS = ['analytics', 'comments', 'messaging', 'ads'] as const
+export type OptionalArea = (typeof OPTIONAL_AREAS)[number]
+
+/** the areas each network has at Zernio (posting first, always asked for) */
+export const AREAS_OF: Partial<Record<string, readonly ('posting' | OptionalArea)[]>> = {
+  instagram: ['posting', 'analytics', 'comments', 'messaging'],
+  facebook: ['posting', 'analytics', 'comments', 'messaging', 'ads'],
 }
 
-/** The areas Zernio is asked for: null (everything, as before) unless the inbox is off on a network that has one. */
-export function scopesFor(platform: string, inbox: boolean): string | null {
-  if (inbox) return null
-  if (platform === 'instagram') return 'posting,analytics,comments'
-  // Facebook keeps its ads area (Facebook Login is how the ads permissions are granted); only messaging goes
-  if (platform === 'facebook') return 'posting,analytics,comments,ads'
-  return null
+/** the words the panel shows for each area: what it gives us, and what is lost without it */
+export const AREA_WORDS: Record<OptionalArea, { label: string; on: string; off: string; networks: string }> = {
+  analytics: { label: 'Stats', networks: 'Instagram, Facebook', on: 'Views, reach and follower numbers for the portal and reports.', off: 'No numbers on the portal or in reports for this account.' },
+  comments: { label: 'Comments', networks: 'Instagram, Facebook', on: 'Read and answer comments; first comments and comment-to-DM automations work.', off: 'No comments in our Inbox, no first comment on posts, and comment automations will not run.' },
+  messaging: { label: 'Message inbox', networks: 'Instagram, Facebook', on: 'Their DMs show in our Inbox.', off: 'Their DMs will not reach us.' },
+  ads: { label: 'Ads', networks: 'Facebook', on: 'Ads, lead forms and the paid-partnership label.', off: 'No ads features for this account.' },
+}
+
+/** what the CLIENT reads beside each tick on their connect page — plain, about them, never our jargon */
+export const CLIENT_AREA_WORDS: Record<OptionalArea, string> = {
+  analytics: 'See how your posts are doing (views, reach, followers)',
+  comments: 'Read and reply to comments on your posts',
+  messaging: 'Read and reply to your direct messages',
+  ads: 'Run ads for you (Facebook only)',
+}
+
+/** the switched-off areas a link carries: `off=comments,messaging`; the first link of all, `inbox=0`, still means messaging off */
+export function parseOff(raw: unknown, legacyInbox?: unknown): OptionalArea[] {
+  const list = (typeof raw === 'string' ? raw : '').split(',').map(x => x.trim().toLowerCase())
+  const off = OPTIONAL_AREAS.filter(x => list.includes(x))
+  const s = typeof legacyInbox === 'string' ? legacyInbox.trim().toLowerCase() : ''
+  if ((legacyInbox === 0 || legacyInbox === false || s === '0' || s === 'off' || s === 'false') && !off.includes('messaging')) off.push('messaging')
+  return OPTIONAL_AREAS.filter(x => off.includes(x))
+}
+
+/** The areas Zernio is asked for: null (everything, as before) unless something this network has is switched off. */
+export function scopesFor(platform: string, off: readonly OptionalArea[]): string | null {
+  const areas = AREAS_OF[platform]
+  if (!areas || !areas.some(a => (off as readonly string[]).includes(a))) return null
+  return areas.filter(a => a === 'posting' || !(off as readonly string[]).includes(a)).join(',')
 }
 
 /** The `for=` on a link: one contact id, or null for the business. Only the

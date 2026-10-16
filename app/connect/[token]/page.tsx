@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { Toaster } from 'sonner'
 import { table } from '@/lib/db'
 import type { Client, SocialAccount } from '@/lib/db-types'
-import { isShareToken, parseFor, parseInbox, parseNetworks } from '../../lib/connect-link-core'
+import { isShareToken, parseFor, parseNetworks, parseOff } from '../../lib/connect-link-core'
 import { needsReconnect, readStoredHealth } from '../../lib/account-health-core'
 
 const healthFacts = (raw: unknown) => {
@@ -52,8 +52,8 @@ export default async function ConnectPage({ params, searchParams }: {
     ? await table<{ id: string; client_id: string; name: string }>('client_contacts').get(forParam).then(c => c && c.client_id === client.id ? c : null).catch(() => null)
     : null
   const networks = parseNetworks(networksParam ?? null)
-  // the link's message-inbox choice (16 Oct 2026): inbox=0 → the network is not asked for message access
-  const inbox = parseInbox(Array.isArray(q.inbox) ? q.inbox[0] : q.inbox)
+  // what the link switched off (16 Oct 2026): off=comments,messaging (and the first links' inbox=0)
+  const off = parseOff(Array.isArray(q.off) ? q.off[0] : q.off, Array.isArray(q.inbox) ? q.inbox[0] : q.inbox)
   const accounts = (await table<SocialAccount>('social_accounts').list({ by: { client_id: client.id } }))
     .filter(a => a.active !== false)
     .map(a => ({
@@ -84,7 +84,7 @@ export default async function ConnectPage({ params, searchParams }: {
           networks={networks}
           networksParam={networksParam ?? ''}
           forContact={forPerson?.id ?? null}
-          inbox={inbox}
+          off={off}
           initial={accounts}
           justConnected={justConnected ?? null}
           returnError={returnError ?? null}

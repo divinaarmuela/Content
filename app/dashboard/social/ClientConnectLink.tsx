@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Check, Copy, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { publicUrl } from '@/app/lib/public-url'
-import { CONNECTABLE, connectLinkPath } from '@/app/lib/connect-link-core'
+import { AREAS_OF, AREA_WORDS, CONNECTABLE, OPTIONAL_AREAS, connectLinkPath, type OptionalArea } from '@/app/lib/connect-link-core'
 import { contactIdOf, ownerChoices } from '@/app/lib/account-owner-core'
 import { useTable } from '@/lib/db-client'
 import type { ClientContact } from '@/lib/db-types'
@@ -67,9 +67,11 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
   }
   const contacts = useTable<ClientContact>('client_contacts', { by: useMemo(() => ({ client_id: clientId }), [clientId]) }).rows
 
-  // THE MESSAGE INBOX (16 Oct 2026): on by default; off means Instagram and Facebook are not asked for message access
-  const [inbox, setInbox] = useState(true)
-  const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor), inbox)), [token, picked, linkFor, inbox])
+  // WHAT THE CONNECTION LETS US DO (16 Oct 2026): every area on by default; one switched off is not asked of the network
+  const [off, setOff] = useState<OptionalArea[]>([])
+  const link = useMemo(() => publicUrl(connectLinkPath(token, picked, contactIdOf(linkFor), off)), [token, picked, linkFor, off])
+  /** the areas the ticked networks actually have (Instagram, Facebook) — nothing to choose for the others */
+  const areas = OPTIONAL_AREAS.filter(a => picked.some(p => (AREAS_OF[p] ?? []).includes(a)))
 
   const toggle = (p: Platform) =>
     setPicked(cur => cur.includes(p) ? cur.filter(x => x !== p) : CONNECTABLE.filter(x => x === p || cur.includes(x)))
@@ -132,18 +134,25 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
               )
             })}
           </div>
-          {(picked.includes('instagram') || picked.includes('facebook')) && (
-            <label className="flex min-h-10 cursor-pointer items-start gap-2 text-[13px]">
-              <input type="checkbox" checked={inbox} onChange={e => setInbox(e.target.checked)} className="mt-1 h-4 w-4" />
-              <span>
-                <span className="font-semibold">Include the message inbox</span>
-                <span className="block text-[12px] text-muted-foreground">
-                  {inbox
-                    ? 'Instagram and Facebook will ask them to allow messages, so their DMs show in our Inbox.'
-                    : 'Their DMs will not reach us. To add the inbox later they connect again with this ticked.'}
-                </span>
-              </span>
-            </label>
+          {areas.length > 0 && (
+            <fieldset className="flex flex-col gap-1.5 rounded-inner bg-muted/50 p-2.5">
+              <legend className="text-[12px] font-semibold text-muted-foreground">What this connection lets us do</legend>
+              <p className="text-[12px] text-muted-foreground"><strong>Posting</strong> — always on. Untick anything below only if the client asks; to turn it back on later they connect again.</p>
+              {areas.map(a => {
+                const on = !off.includes(a)
+                return (
+                  <label key={a} className="flex min-h-10 cursor-pointer items-start gap-2 text-[13px]">
+                    <input type="checkbox" checked={on} className="mt-1 h-4 w-4"
+                      onChange={e => setOff(cur => e.target.checked ? cur.filter(x => x !== a) : [...cur, a])} />
+                    <span>
+                      <span className="font-semibold">{AREA_WORDS[a].label}</span>
+                      <span className="text-[12px] text-muted-foreground"> · {AREA_WORDS[a].networks}</span>
+                      <span className={`block text-[12px] ${on ? 'text-muted-foreground' : 'text-accent-red'}`}>{on ? AREA_WORDS[a].on : AREA_WORDS[a].off}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </fieldset>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <input readOnly value={link} onFocus={e => e.currentTarget.select()}
