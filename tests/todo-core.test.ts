@@ -61,10 +61,12 @@ describe('todo-core — who sees and changes what (17 Sep 2026)', () => {
   it('the page, the routes and the nav carry it', () => {
     const page = readFileSync('app/dashboard/todos/page.tsx', 'utf8')
     expect(page).toContain("useTable<TodoRow>('todos')")
-    expect(page).toContain('visibleTodos(viewer, raw as never[])')
+    // 18 Oct 2026: collaborators see a to-do too, and the uploads moved into the task panel
+    expect(page).toContain('visibleWithFollowers(viewer, raw as never[])')
     expect(page).toContain('{canFilterPeople && (')
-    expect(page).toContain("uploadFiles(picked, { purpose: 'social' })")
-    expect(page).toContain('<UploadRows uploads={uploading} compact />')
+    const panel = readFileSync('app/dashboard/todos/TodoPanel.tsx', 'utf8')
+    expect(panel).toContain("uploadFiles(picked, { purpose: 'social' })")
+    expect(panel).toContain('<UploadRows uploads={uploading} compact />')
     for (const f of ['app/api/todos/route.ts', 'app/api/todos/[id]/route.ts']) {
       const s = readFileSync(f, 'utf8')
       expect(s).toContain("requireRole('scheduler')   // any team role")

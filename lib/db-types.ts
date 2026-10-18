@@ -90,6 +90,8 @@ export type TableName =
   | 'team_invites'
   | 'team_user_clients'
   | 'team_users'
+  | 'todo_comments'
+  | 'todo_sections'
   | 'todos'
   | 'user_page_access'
   | 'video_previews'
@@ -1577,6 +1579,28 @@ export interface TeamUser {
   colourist: boolean | null
 }
 
+export interface TodoComment {
+  id: string
+  todo_id: string
+  author_id: string | null
+  body: string
+  mentions: unknown | null
+  likes: unknown | null
+  edited_at: string | null
+  asana_gid: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TodoSection {
+  id: string
+  owner_id: string
+  name: string
+  position: number | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Todo {
   id: string
   prospect_id: string | null
@@ -1592,6 +1616,13 @@ export interface Todo {
   updated_at: string
   done_at: string | null
   done_by: string | null
+  parent_id: string | null
+  followers: unknown | null
+  likes: unknown | null
+  section_id: string | null
+  position: number | null
+  blocked_by: unknown | null
+  asana_gid: string | null
 }
 
 export interface UserPageAccess {
@@ -1744,7 +1775,9 @@ export const TABLE_COLUMNS = {
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'colourist'],
-  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by'],
+  todo_comments: ['id', 'todo_id', 'author_id', 'body', 'mentions', 'likes', 'edited_at', 'asana_gid', 'created_at', 'updated_at'],
+  todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
+  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
   webhook_deliveries: ['id', 'provider', 'event', 'provider_event_id', 'received_at', 'handled', 'note'],
@@ -1841,7 +1874,9 @@ export const NULLABLE_COLUMNS = {
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'colourist'],
-  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by'],
+  todo_comments: ['author_id', 'mentions', 'likes', 'edited_at', 'asana_gid'],
+  todo_sections: ['position'],
+  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid'],
   user_page_access: ['granted_by'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
   webhook_deliveries: ['note'],
@@ -1945,7 +1980,9 @@ export const JSON_COLUMNS = {
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages', 'notification_prefs'],
-  todos: ['files'],
+  todo_comments: ['mentions', 'likes'],
+  todo_sections: [],
+  todos: ['files', 'followers', 'likes', 'blocked_by'],
   user_page_access: [],
   video_previews: [],
   webhook_deliveries: [],
@@ -2048,6 +2085,8 @@ export const JSON_ARRAY_COLUMNS = {
   team_invites: [],
   team_user_clients: [],
   team_users: ['getting_started_dismissed_pages'],
+  todo_comments: [],
+  todo_sections: [],
   todos: [],
   user_page_access: [],
   video_previews: [],
@@ -2057,7 +2096,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todos'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

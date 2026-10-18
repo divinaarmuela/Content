@@ -1,0 +1,28 @@
+import { NextResponse } from 'next/server'
+import { table } from '@/lib/db'
+import type { Todo as TodoRow, TodoComment } from '@/lib/db-types'
+import { authzErrorResponse, requireRole } from '../../../../lib/authz'
+import { mayCommentOnTodo, toggleId } from '../../../../lib/todo-core'
+
+/** A THUMBS-UP on a comment (18 Oct 2026). POST { on }. Inside a claim. */
+export const dynamic = 'force-dynamic'
+type Ctx = { params: Promise<{ id: string }> }
+
+export async function POST(req: Request, ctx: Ctx) {
+  try {
+    const user = await requireRole('scheduler')   // any team role
+    const { id } = await ctx.params
+    const on = (await req.json().catch(() => ({})))?.on !== false
+    const c = await table<TodoComment>('todo_comments').get(id)
+    if (!c) return NextResponse.json({ error: 'That comment is gone' }, { status: 404 })
+    const todo = await table<TodoRow>('todos').get(String(c.todo_id))
+    const parent = todo?.parent_id ? await table<TodoRow>('todos').get(todo.parent_id) : null
+    if (!todo || !mayCommentOnTodo({ id: user.id, role: user.role }, todo as never, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
+    const res = await table<TodoComment>('todo_comments').claim(id, cur => cur ? { ...cur, likes: toggleId(cur.likes, user.id, on) } as TodoComment : null)
+    if (!res.claimed) return NextResponse.json({ error: 'That comment is gone' }, { status: 404 })
+    return NextResponse.json(res.row)
+  } catch (e) {
+    const { error, status } = authzErrorResponse(e)
+    return NextResponse.json({ error }, { status })
+  }
+}

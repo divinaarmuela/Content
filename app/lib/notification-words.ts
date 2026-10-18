@@ -105,6 +105,8 @@ export function notificationHref(entityType: string, entityId: string, role?: st
     case 'client': return isUuid ? `/dashboard/clients/${id}` : '/dashboard/clients'
     case 'intake': return isUuid ? `/dashboard/clients/${id}/intake` : '/dashboard/clients'
     case 'lead': return '/dashboard/leads'
+    // a to-do opens on the To-dos page with its panel open (18 Oct 2026)
+    case 'todo': return id ? `/dashboard/todos?task=${encodeURIComponent(id)}` : '/dashboard/todos'
     case 'booking': return '/dashboard/bookings'
     // a "reconnect" note opens the Schedule page, where the icon is (9 Sep 2026)
     case 'social_account': return String(entityId ?? '').includes('#health') ? '/dashboard/social/schedule' : (isUuid ? `/dashboard/social/${id}` : '/dashboard/social')

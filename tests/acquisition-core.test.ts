@@ -172,6 +172,8 @@ describe('the acquisition system (the blueprint read 21 Sep 2026)', () => {
     expect(stage).toContain("if (action === 'move' && moved === 'handoff') await onHandoff(user, row,")
     expect(readFileSync('app/api/leads/acquisition/[id]/events/route.ts', 'utf8')).toContain("? await recordCallBooked(user, p, (p as { call_at?: string | null }).call_at ?? null, detail, { by: user.id })")
     // a reminder on To-dos opens the prospect it is about
-    expect(readFileSync('app/dashboard/todos/page.tsx', 'utf8')).toContain('/dashboard/leads/acquisition?prospect=')
+    // the owner, 18 Oct 2026, on the Asana-style To-dos page: "what in the world is the lead link doing there" — a
+    // to-do no longer links to its prospect; the reminder itself is still made (above) and the bell still opens it
+    expect(readFileSync('app/dashboard/todos/page.tsx', 'utf8')).not.toContain('/dashboard/leads/acquisition?prospect=')
   })
 })

@@ -19,7 +19,7 @@ import {
  * hover-only affordance. Every row is a 44px target.
  */
 export default function MentionBox({
-  value, onChange, members, placeholder, rows = 2, disabled, onSubmit, id, textareaRef, className,
+  value, onChange, members, placeholder, rows = 2, disabled, onSubmit, id, textareaRef, className, openUp,
 }: {
   value: string
   onChange: (v: string) => void
@@ -36,6 +36,8 @@ export default function MentionBox({
   textareaRef?: RefObject<HTMLTextAreaElement | null>
   /** the box's look, when the caller's is not this one */
   className?: string
+  /** the list opens ABOVE the box — for a box pinned to the foot of a panel (the to-do panel, 18 Oct 2026) */
+  openUp?: boolean
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null)
   const setRefs = (el: HTMLTextAreaElement | null) => {
@@ -106,7 +108,7 @@ export default function MentionBox({
       />
       {open && (
         <ul role="listbox" aria-label="Tag someone"
-          className="absolute left-0 top-full z-30 mt-1 w-80 max-w-full overflow-hidden rounded-inner border border-border bg-popover shadow-lg">
+          className={`absolute left-0 z-30 w-80 max-w-full overflow-y-auto rounded-inner ${openUp ? 'bottom-full mb-1 max-h-72' : 'top-full mt-1'} border border-border bg-popover shadow-lg`}>
           {options.map((m, i) => (
             <li key={m.id} role="option" aria-selected={i === active}>
               <button type="button"

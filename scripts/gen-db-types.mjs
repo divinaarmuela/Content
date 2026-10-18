@@ -412,6 +412,48 @@ const GHOST_TABLES = {
     ['updated_at', col('string', false)],
     ['done_at', col('string', true)],
     ['done_by', col('string', true)],
+    // ASANA'S MY TASKS (the owner, 18 Oct 2026: "identical ui from asana … everything"):
+    //   parent_id — a subtask's to-do; null on a top-level one
+    //   followers — collaborators: people told about every comment and change
+    //   likes     — who gave it a thumbs-up
+    ['parent_id', col('string', true)],
+    ['followers', col('unknown', true, true)],
+    ['likes', col('unknown', true, true)],
+    //   section_id - the holder's own section (todo_sections); null = the date sections
+    //   position   - order inside a section, smaller first (drag to reorder)
+    //   blocked_by - dependencies: to-dos that must be done first
+    ['section_id', col('string', true)],
+    ['position', col('number', true)],
+    ['blocked_by', col('unknown', true, true)],
+    //   asana_gid — the Asana task this was copied from (scripts/import-asana-todos.mjs, 18 Oct 2026); re-running skips it
+    ['asana_gid', col('string', true)],
+  ],
+  // todo_sections - a person's own sections on My to-dos (Asana's "Add section",
+  //   18 Oct 2026). One row per section; owner_id is whose list it is.
+  todo_sections: [
+    ['id', col('string', false)],
+    ['owner_id', col('string', false)],
+    ['name', col('string', false)],
+    ['position', col('number', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  // todo_comments — the comment feed under a to-do (18 Oct 2026). "@Name" in
+  //   the body tags a person (mention-core); `mentions` is what the server
+  //   resolved. Rules in app/lib/todo-core.ts.
+  todo_comments: [
+    ['id', col('string', false)],
+    ['todo_id', col('string', false)],
+    ['author_id', col('string', true)],
+    ['body', col('string', false)],
+    ['mentions', col('unknown', true, true)],
+    ['likes', col('unknown', true, true)],
+    // set only when its writer changes the text (a like also moves updated_at)
+    ['edited_at', col('string', true)],
+    // the Asana comment this was copied from, when it was (scripts/import-asana-todos.mjs)
+    ['asana_gid', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
   ],
   schedule_notes: [
     ['id', col('string', false)],
@@ -830,7 +872,7 @@ for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale

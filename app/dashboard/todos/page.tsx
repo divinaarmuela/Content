@@ -1,43 +1,59 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Download, ExternalLink, Paperclip, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, GitBranch, GripVertical, Hourglass, Keyboard, Layers, MessageSquare,
+  MoreHorizontal, Paperclip, Plus, Sparkles, ThumbsUp, X,
+} from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTable } from '@/lib/db-client'
-import type { Client, TeamUser, Todo as TodoRow } from '@/lib/db-types'
-import PageTitle from '../ui/PageTitle'
-import Chip from '../ui/Chip'
+import type { Client, TeamUser, Todo as TodoRow, TodoComment, TodoSection } from '@/lib/db-types'
 import { todayKey } from '../ui/tone'
 import { useRole } from '../useRole'
 import { personLabel } from '../../lib/identity-core'
-import { initialsOf } from '../../lib/board-view-core'
-import { downloadHref } from '../../lib/download-core'
-import { uploadFiles } from '../uploadQueue'
-import { UploadRows, useUploadGroup } from '../UploadRows'
 import {
-  dueWords, groupTodos, mayDeleteTodo, mayEditTodo, mayFilterByPerson, todoFilesOf, todosEmptyWords, visibleTodos,
-  type TodoFile,
+  TODO_GROUP_BYS, TODO_SORTS, dueForGroup, groupTodos, groupTodosBy, idsOf, mayEditTodo, mayFilterByPerson, openBlockers, positionBetween,
+  todoFilesOf, todosEmptyWords, visibleWithFollowers,
+  type TodoGroup, type TodoGroupBy, type TodoGroupKey, type TodoSort,
 } from '../../lib/todo-core'
+import TodoPanel, { Avatar, CheckCircle } from './TodoPanel'
+import Celebration from './Celebration'
+import { MONTH_NAMES, dueTone, monthGrid, shortDue } from './todo-words'
 
 /**
- * THE TO-DOS PAGE (todo-core, 17 Sep 2026): every team role's own list —
- * what they hold and what they wrote; a super admin's is everyone's. A
- * manager can narrow it to one person. A to-do carries a note, a date, a
- * client and files. The table is read live, so a tick lands for everyone
- * looking.
+ * THE TO-DOS PAGE, AS ASANA'S MY TASKS (the owner, 18 Oct 2026: "create
+ * identical ui from asana look from the todos … everything", then "add this":
+ * sort and group, own sections, shortcuts, select several, dependencies,
+ * formatting, celebrations). Asana's layout, our colours. Measured from the
+ * owner's own Asana: 37px rows with hairlines, 14px names, 12px grey column
+ * heads, 16px section names with a caret, an "Add task…" row closing each
+ * section; List · Board · Calendar tabs; a ~700px task panel over the list
+ * from the right (TodoPanel). Who sees and changes what is todo-core's,
+ * enforced again by every route; the tables are read live.
  */
-const field = 'h-11 rounded-full border-border bg-surface px-4'
-const isImage = (f: TodoFile) => (f.mime ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|avif)$/i.test(f.name)
+type View = 'list' | 'board' | 'calendar'
+const VIEWS: { key: View; label: string }[] = [{ key: 'list', label: 'List' }, { key: 'board', label: 'Board' }, { key: 'calendar', label: 'Calendar' }]
+const GRID = 'grid grid-cols-[minmax(0,1fr)_96px] md:grid-cols-[minmax(0,1fr)_120px_170px_200px]'
+const CELL = 'flex h-[37px] min-w-0 items-center border-l border-border px-2 text-[12px] max-md:[&:nth-child(n+3)]:hidden'
 
-type Draft = { id: string | null; title: string; note: string; due: string; owner: string; client: string; files: TodoFile[] }
-const EMPTY: Draft = { id: null, title: '', note: '', due: '', owner: '', client: '', files: [] }
+const SHORTCUTS: [string, string][] = [
+  ['Tab + Q', 'Add a task'],
+  ['Tab + N', 'Add a section'],
+  ['Tab + M', 'Assign the open or selected tasks to me'],
+  ['Tab + Backspace', 'Delete the open task'],
+  ['Ctrl/⌘ + Enter', 'Mark the open task complete'],
+  ['↑ / ↓', 'Open the task above / below'],
+  ['Ctrl/⌘ or Shift + click', 'Select several tasks'],
+  ['Esc', 'Close the panel, clear the selection'],
+  ['?', 'Show these shortcuts'],
+]
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* private window */ } },
+}
 
 export default function TodosPage() {
   const { me, loading: meLoading } = useRole()
@@ -45,288 +61,658 @@ export default function TodosPage() {
   const { rows: raw, loading } = useTable<TodoRow>('todos')
   const { rows: team } = useTable<TeamUser>('team_users')
   const { rows: clients } = useTable<Client>('clients')
+  const { rows: comments } = useTable<TodoComment>('todo_comments')
+  const { rows: allSections } = useTable<TodoSection>('todo_sections')
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
 
   const names = useMemo(() => new Map(team.map(u => [u.id, personLabel(u.name, u.email)])), [team])
-  const people = useMemo(() => team.filter(u => u.role !== 'client' && u.active_status !== false).map(u => ({ id: u.id, name: personLabel(u.name, u.email) })), [team])
+  const people = useMemo(() => team.filter(u => u.role !== 'client' && u.active_status !== false).map(u => ({ id: u.id, name: personLabel(u.name, u.email), email: u.email ?? undefined })), [team])
   const clientNames = useMemo(() => new Map(clients.map(c => [c.id, c.name])), [clients])
+  const activeClients = useMemo(() => clients.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => ({ id: c.id, name: c.name })), [clients])
+  const sections = useMemo(() => allSections.filter(s => s.owner_id === me?.id).sort((a, b) => (Number(a.position ?? 0) - Number(b.position ?? 0)) || String(a.created_at).localeCompare(String(b.created_at))).map(s => ({ id: s.id, name: s.name })), [allSections, me?.id])
 
+  const visibleAll = useMemo(() => visibleWithFollowers(viewer, raw as never[]) as TodoRow[], [viewer, raw])
+  const commentCount = useMemo(() => { const m = new Map<string, number>(); for (const c of comments) m.set(String(c.todo_id), (m.get(String(c.todo_id)) ?? 0) + 1); return m }, [comments])
+  const subCount = useMemo(() => { const m = new Map<string, number>(); for (const t of visibleAll) if (t.parent_id) m.set(t.parent_id, (m.get(t.parent_id) ?? 0) + 1); return m }, [visibleAll])
+
+  const [view, setView] = useState<View>('list')
+  const [sort, setSort] = useState<TodoSort>('due')
+  const [groupBy, setGroupBy] = useState<TodoGroupBy>('date')
+  const [celebrate, setCelebrate] = useState(true)
   const [status, setStatus] = useState<'open' | 'done' | 'all'>('open')
   const [person, setPerson] = useState<string>('')
   const [client, setClient] = useState<string>('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const canFilterPeople = mayFilterByPerson(viewer)
+  useEffect(() => {
+    const v = store.get('mdm.todos.view'); if (v === 'list' || v === 'board' || v === 'calendar') setView(v)
+    const s = store.get('mdm.todos.sort'); if (TODO_SORTS.some(x => x.key === s)) setSort(s as TodoSort)
+    const g = store.get('mdm.todos.group'); if (TODO_GROUP_BYS.some(x => x.key === g)) setGroupBy(g as TodoGroupBy)
+    if (store.get('mdm.todos.celebrate') === '0') setCelebrate(false)
+  }, [])
+  const pickView = (v: View) => { setView(v); store.set('mdm.todos.view', v) }
+  const pickSort = (v: TodoSort) => { setSort(v); store.set('mdm.todos.sort', v) }
+  const pickGroup = (v: TodoGroupBy) => { setGroupBy(v); store.set('mdm.todos.group', v) }
 
-  const visible = useMemo(() => visibleTodos(viewer, raw as never[]) as TodoRow[], [viewer, raw])
-  const shown = useMemo(() => visible.filter(t =>
-    (status === 'all' || (status === 'done' ? t.status === 'done' : t.status !== 'done'))
+  // the top-level to-dos (subtasks live in their parent's panel, as in Asana's My Tasks)
+  const shown = useMemo(() => visibleAll.filter(t => !t.parent_id
+    && (status === 'all' || (status === 'done' ? t.status === 'done' : t.status !== 'done'))
     && (!person || !canFilterPeople || t.owner_id === person)
-    && (!client || t.client_id === client)), [visible, status, person, client, canFilterPeople])
-  const groups = useMemo(() => (today ? groupTodos(shown, today).filter(g => g.rows.length > 0) : []), [shown, today])
+    && (!client || t.client_id === client)), [visibleAll, status, person, client, canFilterPeople])
+  const nameOf = useCallback((id: string | null) => (id ? names.get(id) ?? 'Someone' : ''), [names])
+  const clientOf = useCallback((id: string | null) => (id ? clientNames.get(id) ?? 'A client' : ''), [clientNames])
+  const listGroups = useMemo(() => {
+    if (!today) return []
+    const all = groupTodosBy(shown as never[], groupBy, { today, sort, sections, nameOf, clientOf }) as TodoGroup<TodoRow>[]
+    // the date sections stay even when empty (somewhere to add into), Overdue and Done only when they hold something
+    return groupBy === 'date' ? all.filter(g => g.rows.length > 0 || (g.key !== 'done' && g.key !== 'overdue' && status !== 'done')) : all.filter(g => g.rows.length > 0 || groupBy === 'sections' || groupBy === 'none')
+  }, [shown, groupBy, today, sort, sections, nameOf, clientOf, status])
+  const boardGroups = useMemo(() => (today ? groupTodos(shown, today).filter(g => g.rows.length > 0 || (g.key !== 'done' && g.key !== 'overdue' && status !== 'done')) : []), [shown, today, status])
+  const flat = useMemo(() => listGroups.flatMap(g => g.rows), [listGroups])
 
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [adding, setAdding] = useState<string | null>(null)
+  const [newSection, setNewSection] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const lastPicked = useRef<string | null>(null)
+  const [party, setParty] = useState(0)
+  const open = openId ? visibleAll.find(t => t.id === openId) ?? null : null
+  // a link from an email or the bell: /dashboard/todos?task=<id>
+  useEffect(() => { const id = new URLSearchParams(location.search).get('task'); if (id) setOpenId(id) }, [])
+  const openTask = useCallback((id: string | null) => {
+    setOpenId(id)
+    try { const u = new URL(location.href); if (id) u.searchParams.set('task', id); else u.searchParams.delete('task'); history.replaceState(null, '', u) } catch { /* fine */ }
+  }, [])
 
-  const call = async (path: string, init: RequestInit, said: string) => {
-    const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
-    if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save that')
-    toast.success(said)
-    return res
-  }
-  const tick = async (t: TodoRow, done: boolean) => {
-    try { await call(`/api/todos/${t.id}`, { method: 'PATCH', body: JSON.stringify({ status: done ? 'done' : 'open' }) }, done ? 'Done' : 'Reopened') }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that') }
-  }
-  const save = async () => {
-    if (!draft || !draft.title.trim()) return
-    setBusy(true)
+  const send = useCallback(async (path: string, init: RequestInit, said?: string) => {
     try {
-      const body = { title: draft.title, note: draft.note, due_date: draft.due || null, owner_id: draft.owner || (me?.id ?? null), client_id: draft.client || null, files: draft.files }
-      if (draft.id) await call(`/api/todos/${draft.id}`, { method: 'PATCH', body: JSON.stringify(body) }, 'Saved')
-      else await call('/api/todos', { method: 'POST', body: JSON.stringify(body) }, 'To-do added')
-      setDraft(null)
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that') }
-    finally { setBusy(false) }
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'Could not save that')
+      if (said) toast.success(said)
+      return true
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that'); return false }
+  }, [])
+  const patchTodo = useCallback((id: string, body: Record<string, unknown>, said?: string) => send(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, said), [send])
+  const tick = useCallback(async (t: TodoRow, done: boolean) => {
+    // DEPENDENCIES: Asana warns, it does not stop you
+    if (done && openBlockers(t, visibleAll).length > 0) toast.warning(`This one was waiting on ${openBlockers(t, visibleAll).length} open task${openBlockers(t, visibleAll).length === 1 ? '' : 's'}`)
+    const ok = await patchTodo(t.id, { status: done ? 'done' : 'open' }, done ? 'Marked complete' : 'Marked incomplete')
+    // CELEBRATIONS: now and then, like Asana's creatures — off in Options, never with reduced motion
+    if (ok && done && celebrate && Math.random() < 0.34) setParty(p => p + 1)
+  }, [patchTodo, visibleAll, celebrate])
+  const create = (title: string, g: TodoGroup<TodoRow> | null, due?: string | null) => {
+    const body: Record<string, unknown> = { title, owner_id: person || me?.id || null, client_id: client || null, files: [] }
+    body.due_date = due !== undefined ? due : g?.dateKey ? dueForGroup(g.dateKey, today!) : null
+    if (g?.key.startsWith('assignee:')) body.owner_id = g.key.slice(9) || me?.id || null
+    if (g?.key.startsWith('client:')) body.client_id = g.key.slice(7) || null
+    if (g?.sectionId) body.section_id = g.sectionId
+    void send('/api/todos', { method: 'POST', body: JSON.stringify(body) })
   }
-  const remove = async (t: TodoRow) => {
-    setBusy(true)
-    try { await call(`/api/todos/${t.id}`, { method: 'DELETE' }, 'Deleted'); setDraft(null) }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not delete it') }
-    finally { setBusy(false) }
+  /** a card dropped on a board column or a calendar day gets that column's date */
+  const moveTo = (id: string, due: string | null, done?: boolean) => {
+    const t = visibleAll.find(x => x.id === id)
+    if (!t || !mayEditTodo(viewer, t as never)) { toast.error('Only the person it is for, or who wrote it, can move it'); return }
+    if (done) { if (t.status !== 'done') void tick(t, true); return }
+    if ((t.due_date ?? null) === due && t.status !== 'done') return
+    void patchTodo(id, { due_date: due, ...(t.status === 'done' ? { status: 'open' } : {}) })
   }
+  /** a row dropped in the list: into that group (a section, a date, a person, a client), placed before `beforeId` */
+  const dropRow = (id: string, g: TodoGroup<TodoRow>, beforeId: string | null) => {
+    const t = visibleAll.find(x => x.id === id)
+    if (!t || !mayEditTodo(viewer, t as never)) { toast.error('Only the person it is for, or who wrote it, can move it'); return }
+    const rows = g.rows.filter(r => r.id !== id)
+    const at = beforeId ? rows.findIndex(r => r.id === beforeId) : rows.length
+    const idx = at < 0 ? rows.length : at
+    const body: Record<string, unknown> = {}
+    // dropped on a row: that is a new order — saved, and the list switches to it so the drag shows (Asana does the same)
+    const reordered = beforeId !== null || sort === 'manual'
+    if (reordered) body.position = positionBetween(rows[idx - 1]?.position ?? null, rows[idx]?.position ?? null)
+    if (groupBy === 'sections' && (t.section_id ?? null) !== (g.sectionId ?? null)) body.section_id = g.sectionId ?? null
+    if (groupBy === 'date' && g.dateKey && g.dateKey !== 'done') { const due = dueForGroup(g.dateKey, today!); if ((t.due_date ?? null) !== due && !(g.dateKey === 'overdue')) body.due_date = due }
+    if (groupBy === 'assignee' && g.key.slice(9) && g.key.slice(9) !== t.owner_id) body.owner_id = g.key.slice(9)
+    if (groupBy === 'client' && (g.key.slice(7) || null) !== (t.client_id ?? null)) body.client_id = g.key.slice(7) || null
+    if (Object.keys(body).length === 0) return
+    if (body.position !== undefined && sort !== 'manual') { pickSort('manual'); toast('Sorted by your own order now — change it under Sort') }
+    void patchTodo(id, body)
+  }
+  const addSection = async (name: string) => {
+    if (!name.trim()) return
+    const last = allSections.filter(s => s.owner_id === me?.id).reduce((m, s) => Math.max(m, Number(s.position ?? 0)), 0)
+    await send('/api/todo-sections', { method: 'POST', body: JSON.stringify({ name: name.trim(), position: last + 1024 }) }, 'Section added')
+  }
+
+  // SELECTING SEVERAL: Ctrl/⌘-click adds one, Shift-click a run, the bar acts on all of them
+  const pick = (id: string, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => {
+    // the anchor is read NOW: the updater below runs later, after lastPicked has moved on
+    const anchor = lastPicked.current
+    setSelected(cur => {
+      const n = new Set(cur)
+      if (e.shiftKey && anchor) {
+        const a = flat.findIndex(r => r.id === anchor), b = flat.findIndex(r => r.id === id)
+        if (a >= 0 && b >= 0) for (const r of flat.slice(Math.min(a, b), Math.max(a, b) + 1)) n.add(r.id)
+      } else if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+    lastPicked.current = id
+  }
+  const chosen = useMemo(() => visibleAll.filter(t => selected.has(t.id)), [visibleAll, selected])
+  const bulk = async (body: Record<string, unknown>, said: string) => {
+    const mine = chosen.filter(t => mayEditTodo(viewer, t as never))
+    const results = await Promise.all(mine.map(t => fetch(`/api/todos/${t.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.ok).catch(() => false)))
+    const ok = results.filter(Boolean).length
+    const skipped = chosen.length - mine.length
+    if (ok) toast.success(`${said}: ${ok} task${ok === 1 ? '' : 's'}${skipped ? ` (${skipped} not yours to change)` : ''}`)
+    if (ok < mine.length) toast.error(`${mine.length - ok} could not be changed`)
+    if (body.status === 'done' && ok && celebrate) setParty(p => p + 1)
+  }
+  const [bulkDelete, setBulkDelete] = useState(false)
+  const removeChosen = async () => {
+    const results = await Promise.all(chosen.map(t => fetch(`/api/todos/${t.id}`, { method: 'DELETE' }).then(r => r.ok).catch(() => false)))
+    const ok = results.filter(Boolean).length
+    toast.success(`Deleted ${ok} task${ok === 1 ? '' : 's'}`)
+    if (ok < chosen.length) toast.error(`${chosen.length - ok} could not be deleted (only the person who made it, or a super admin)`)
+    setSelected(new Set()); setBulkDelete(false)
+  }
+
+  // KEYBOARD SHORTCUTS (Asana's): Tab + a letter, Ctrl/⌘+Enter, the arrows, Esc, ?
+  const tabDown = useRef(false)
+  useEffect(() => {
+    const typing = (el: EventTarget | null) => !!(el as HTMLElement | null)?.closest?.('input,textarea,select,[contenteditable=true],[role=listbox],[role=dialog][data-radix-popper-content-wrapper]')
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') { tabDown.current = true; return }
+      if (tabDown.current && !typing(e.target)) {
+        const k = e.key.toLowerCase()
+        if (k === 'q') { e.preventDefault(); pickView('list'); const g = listGroups.find(x => x.key !== 'done'); if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) } return }
+        if (k === 'n') { e.preventDefault(); pickView('list'); pickGroup('sections'); setNewSection(''); return }
+        if (k === 'm' && me) { e.preventDefault(); if (chosen.length) void bulk({ owner_id: me.id }, 'Assigned to you'); else if (open) void patchTodo(open.id, { owner_id: me.id }, 'Assigned to you'); return }
+        if ((k === 'backspace' || k === 'delete') && open) { e.preventDefault(); document.querySelector<HTMLButtonElement>('[data-todo-panel] [aria-label="Delete this to-do"]')?.click(); return }
+      }
+      if (typing(e.target)) return
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && open && mayEditTodo(viewer, open as never)) { e.preventDefault(); void tick(open, open.status !== 'done'); return }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && view === 'list' && flat.length) {
+        e.preventDefault()
+        const i = open ? flat.findIndex(r => r.id === open.id) : -1
+        const next = flat[Math.max(0, Math.min(flat.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]
+        if (next) { openTask(next.id); document.querySelector(`[data-todo-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' }) }
+        return
+      }
+      if (e.key === 'Escape') { if (selected.size) setSelected(new Set()); setHelpOpen(false); setOptionsOpen(false) }
+      if (e.key === '?') { setHelpOpen(h => !h) }
+    }
+    const up = (e: KeyboardEvent) => { if (e.key === 'Tab') tabDown.current = false }
+    const blur = () => { tabDown.current = false }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
+  })
 
   const ready = !meLoading && !loading && today !== null
   const filterPersonName = person ? (names.get(person) ?? null) : null
+  const filterCount = (person ? 1 : 0) + (client ? 1 : 0)
+  const linkOf = (t: TodoRow) => (t.client_id ? { label: clientNames.get(t.client_id) ?? null } : null)
+  const meta = (t: TodoRow) => ({ subs: subCount.get(t.id) ?? 0, comments: commentCount.get(t.id) ?? 0, files: todoFilesOf(t.files).length, likes: idsOf(t.likes).length, blocked: openBlockers(t, visibleAll).length })
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<string | null>(null)
+  const tool = 'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium'
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageTitle
-        title="To-dos"
-        summary={viewer?.role === 'super_admin'
-          ? 'Everyone’s to-dos — what each person holds and what they wrote. Narrow it to one person, tick things off, attach files.'
-          : 'Yours — what you hold and what you wrote. Add one for yourself or for somebody else, with a date, a client and files.'}
-        actions={viewer && (
-          <Button onClick={() => setDraft({ ...EMPTY, owner: me?.id ?? '' })}
-            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
-            <Plus className="h-4 w-4" /> New to-do
-          </Button>
-        )}
-      />
-
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filters">
-        <div className="inline-flex rounded-full border border-border bg-surface p-1" role="tablist" aria-label="Open or done">
-          {(['open', 'done', 'all'] as const).map(s => (
-            <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => setStatus(s)}
-              className={`inline-flex min-h-9 items-center rounded-full px-3.5 text-[13px] font-semibold ${status === s ? 'bg-foreground text-background' : 'hover:bg-muted'}`}>
-              {s === 'open' ? 'Open' : s === 'done' ? 'Done' : 'All'}
+    <div className="flex min-h-0 flex-col" data-todos-page>
+      <header className="flex flex-col border-b border-border">
+        <div className="flex h-14 items-center gap-2.5">
+          <Avatar name={(me && names.get(me.id)) || 'Me'} size="md" />
+          <h1 className="text-[20px] font-semibold tracking-tight">{viewer?.role === 'super_admin' ? 'Everyone’s to-dos' : 'My to-dos'}</h1>
+          <button type="button" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Keyboard className="h-4 w-4" aria-hidden /></button>
+        </div>
+        <nav className="flex h-9 items-end gap-5" role="tablist" aria-label="Views">
+          {VIEWS.map(v => (
+            <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => pickView(v.key)}
+              className={`border-b-2 pb-1.5 text-[14px] font-medium ${view === v.key ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+              {v.label}
             </button>
           ))}
-        </div>
-        {canFilterPeople && (
-          <Select value={person || 'everyone'} onValueChange={v => setPerson(v === 'everyone' ? '' : v)}>
-            <SelectTrigger className={`${field} w-56`} aria-label="Whose to-dos"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="everyone">Everyone</SelectItem>
-              {people.map(p => <SelectItem key={p.id} value={p.id}>{p.id === me?.id ? 'Me' : p.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        </nav>
+      </header>
+
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border py-2">
+        {viewer && (
+          <button type="button" onClick={() => { pickView('list'); const g = listGroups.find(x => x.key !== 'done'); if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) } }}
+            title="Add task (Tab + Q)" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-semibold text-background hover:bg-foreground/90">
+            <Plus className="h-4 w-4" aria-hidden /> Add task
+          </button>
         )}
-        <Select value={client || 'all'} onValueChange={v => setClient(v === 'all' ? '' : v)}>
-          <SelectTrigger className={`${field} w-56`} aria-label="Which client"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All clients</SelectItem>
-            {clients.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {(person || client || status !== 'open') && (
-          <button type="button" onClick={() => { setPerson(''); setClient(''); setStatus('open') }} className="inline-flex min-h-9 items-center px-2 text-[13px] text-muted-foreground underline-offset-4 hover:underline">Clear</button>
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filters">
+          <div className="inline-flex items-center" role="tablist" aria-label="Incomplete or completed">
+            {(['open', 'done', 'all'] as const).map(s => (
+              <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => setStatus(s)}
+                className={`${tool} ${status === s ? 'bg-foreground/[0.08] text-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                {s === 'open' ? 'Incomplete' : s === 'done' ? 'Completed' : 'All tasks'}
+              </button>
+            ))}
+          </div>
+          <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(o => !o)}
+            className={`${tool} ${filtersOpen || filterCount ? 'bg-foreground/[0.08] text-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+            <Filter className="h-3.5 w-3.5" aria-hidden /> Filter{filterCount ? `: ${filterCount}` : ''}
+          </button>
+          {view === 'list' && (
+            <>
+              <Select value={sort} onValueChange={v => pickSort(v as TodoSort)}>
+                <SelectTrigger className={`${tool} w-auto border-0 bg-transparent text-muted-foreground shadow-none hover:bg-muted ${sort !== 'due' ? 'bg-foreground/[0.08] text-foreground' : ''}`} aria-label="Sort">
+                  <ArrowUpDown className="h-3.5 w-3.5" aria-hidden /><span>Sort: {TODO_SORTS.find(s => s.key === sort)?.label}</span>
+                </SelectTrigger>
+                <SelectContent>{TODO_SORTS.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+              <Select value={groupBy} onValueChange={v => pickGroup(v as TodoGroupBy)}>
+                <SelectTrigger className={`${tool} w-auto border-0 bg-transparent text-muted-foreground shadow-none hover:bg-muted ${groupBy !== 'date' ? 'bg-foreground/[0.08] text-foreground' : ''}`} aria-label="Group">
+                  <Layers className="h-3.5 w-3.5" aria-hidden /><span>Group: {TODO_GROUP_BYS.find(s => s.key === groupBy)?.label}</span>
+                </SelectTrigger>
+                <SelectContent>{TODO_GROUP_BYS.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </>
+          )}
+          <span className="relative">
+            <button type="button" aria-expanded={optionsOpen} aria-label="Options" onClick={() => setOptionsOpen(o => !o)} className={`${tool} text-muted-foreground hover:bg-muted`}><MoreHorizontal className="h-4 w-4" aria-hidden /> Options</button>
+            {optionsOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 text-[13px] shadow-lg">
+                <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 hover:bg-muted">
+                  <input type="checkbox" checked={celebrate} onChange={e => { setCelebrate(e.target.checked); store.set('mdm.todos.celebrate', e.target.checked ? '1' : '0') }} />
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden /> Celebrations when I complete a task
+                </label>
+                <button type="button" onClick={() => { setOptionsOpen(false); setHelpOpen(true) }} className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted"><Keyboard className="h-3.5 w-3.5" aria-hidden /> Keyboard shortcuts</button>
+              </div>
+            )}
+          </span>
+          {(filterCount > 0 || status !== 'open') && (
+            <button type="button" onClick={() => { setPerson(''); setClient(''); setStatus('open') }} className="inline-flex h-8 items-center px-2 text-[12px] text-muted-foreground underline-offset-4 hover:underline">Clear</button>
+          )}
+        </div>
+        {filtersOpen && (
+          <div className="flex w-full flex-wrap items-center gap-2 pt-1">
+            {canFilterPeople && (
+              <Select value={person || 'everyone'} onValueChange={v => setPerson(v === 'everyone' ? '' : v)}>
+                <SelectTrigger className="h-8 w-52 rounded-md text-[13px]" aria-label="Whose to-dos"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="everyone">Everyone</SelectItem>
+                  {people.map(p => <SelectItem key={p.id} value={p.id}>{p.id === me?.id ? 'Me' : p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={client || 'all'} onValueChange={v => setClient(v === 'all' ? '' : v)}>
+              <SelectTrigger className="h-8 w-52 rounded-md text-[13px]" aria-label="Which client"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clients</SelectItem>
+                {activeClients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </div>
 
       {!ready ? (
-        <div className="flex flex-col gap-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-inner" />)}</div>
-      ) : groups.length === 0 ? (
-        <p className="rounded-card border border-border bg-card px-5 py-8 text-center text-[14px] text-muted-foreground">{todosEmptyWords({ status, person: person || null, client: client || null }, filterPersonName)}</p>
-      ) : (
-        <div className="flex flex-col gap-5">
-          {groups.map(g => (
-            <section key={g.key} className="flex flex-col gap-2" aria-label={g.label}>
-              <h2 className={`text-[12px] font-semibold uppercase tracking-[0.08em] ${g.key === 'overdue' ? 'text-accent-red-deep' : 'text-muted-foreground'}`}>{g.label} · {g.rows.length}</h2>
-              <ul className="flex flex-col gap-2">
-                {g.rows.map(t => {
-                  const files = todoFilesOf(t.files)
-                  const due = dueWords(t.due_date, today!)
-                  const editable = mayEditTodo(viewer, t as never)
-                  const done = t.status === 'done'
-                  return (
-                    <li key={t.id} className={`flex gap-3 rounded-inner border border-border bg-card p-3 ${done ? 'opacity-70' : ''}`} data-todo>
-                      <button type="button" role="checkbox" aria-checked={done} aria-label={done ? `Reopen ${t.title}` : `Mark ${t.title} done`}
-                        disabled={!editable} onClick={() => void tick(t, !done)}
-                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${done ? 'border-foreground bg-foreground text-background' : 'border-border hover:bg-muted'} disabled:opacity-50`}>
-                        {done && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />}
-                      </button>
-                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[14px] font-semibold ${done ? 'line-through' : ''}`}>{t.title}</span>
-                          {t.client_id && clientNames.get(t.client_id) && <Chip tone="muted">{clientNames.get(t.client_id)}</Chip>}
-                          {/* an acquisition reminder opens the prospect it is about (21 Sep 2026) */}
-                          {(t as { prospect_id?: string | null }).prospect_id && (
-                            <a href={`/dashboard/leads/acquisition?prospect=${encodeURIComponent(String((t as { prospect_id?: string | null }).prospect_id))}`}
-                              className="inline-flex min-h-11 items-center text-[13px] font-semibold text-accent-blue-deep underline underline-offset-4">Open the prospect</a>
-                          )}
-                          {due && !done && <Chip tone={g.key === 'overdue' ? 'red' : g.key === 'today' ? 'amber' : 'muted'}>{due}</Chip>}
-                          {t.owner_id && (
-                            <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground" title={names.get(t.owner_id) ?? ''}>
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/[0.08] text-[10px] font-semibold">{initialsOf(names.get(t.owner_id) ?? '?')}</span>
-                              {t.owner_id === me?.id ? 'Me' : names.get(t.owner_id) ?? 'Someone'}
-                            </span>
-                          )}
-                          {t.created_by && t.created_by !== t.owner_id && <span className="text-[12px] text-muted-foreground">from {t.created_by === me?.id ? 'me' : names.get(t.created_by) ?? 'someone'}</span>}
-                        </div>
-                        {t.note && <p className="whitespace-pre-wrap text-[13px] text-muted-foreground">{t.note}</p>}
-                        {files.length > 0 && (
-                          <ul className="flex flex-wrap gap-2">
-                            {files.map(f => (
-                              <li key={f.url} className="flex items-center gap-1.5 rounded-full border border-border bg-surface py-1 pl-1.5 pr-2 text-[12px]">
-                                {isImage(f)
-                                  // eslint-disable-next-line @next/next/no-img-element -- the person's own upload
-                                  ? <img src={f.url} alt="" className="h-7 w-7 rounded-full object-cover" />
-                                  : <Paperclip className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
-                                <span className="max-w-[160px] truncate" title={f.name}>{f.name}</span>
-                                <a href={f.url} target="_blank" rel="noreferrer noopener" aria-label={`Open ${f.name}`} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-muted"><ExternalLink className="h-3.5 w-3.5" aria-hidden /></a>
-                                <a href={downloadHref(f) ?? f.url} download={f.name} aria-label={`Download ${f.name}`} className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-muted"><Download className="h-3.5 w-3.5" aria-hidden /></a>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      {editable && (
-                        <button type="button" aria-label={`Edit ${t.title}`} onClick={() => setDraft({ id: t.id, title: t.title, note: t.note ?? '', due: t.due_date ?? '', owner: t.owner_id ?? '', client: t.client_id ?? '', files })}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted">
-                          <Pencil className="h-4 w-4" aria-hidden />
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            </section>
+        <div className="flex flex-col pt-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="my-[9px] h-[19px] w-1/3 rounded" />)}</div>
+      ) : view === 'list' ? (
+        <div role="table" aria-label="To-dos" aria-multiselectable className="pb-28">
+          <div role="row" className={`${GRID} sticky top-0 z-10 border-b border-border bg-background text-[12px] text-muted-foreground`}>
+            <div role="columnheader" className="flex h-9 items-center pl-8">Task name</div>
+            {['Due date', 'Assignee', 'Client'].map(h => <div key={h} role="columnheader" className={`${CELL} h-9`}>{h}</div>)}
+          </div>
+          {shown.length === 0 && status !== 'open' && (
+            <p className="px-8 py-6 text-[14px] text-muted-foreground">{todosEmptyWords({ status, person: person || null, client: client || null }, filterPersonName)}</p>
+          )}
+          {listGroups.map(g => {
+            const shut = collapsed.has(g.key)
+            return (
+              <section key={g.key} aria-label={g.label} data-todo-section={g.key}
+                onDragOver={e => { if (dragId) { e.preventDefault(); if (!(e.target as HTMLElement).closest?.('[data-todo]')) setDropAt(`group:${g.key}`) } }}
+                onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/todo'); const before = dropAt?.startsWith('row:') ? dropAt.slice(4) : null; setDropAt(null); setDragId(null); if (id) dropRow(id, g, before) }}
+                className={dropAt === `group:${g.key}` ? 'rounded bg-accent-blue-deep/5' : ''}>
+                <SectionHeader g={g} shut={shut} editable={!!g.sectionId}
+                  onToggle={() => setCollapsed(c => { const n = new Set(c); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n })}
+                  onRename={name => void send(`/api/todo-sections/${g.sectionId}`, { method: 'PATCH', body: JSON.stringify({ name }) })}
+                  onDelete={() => void send(`/api/todo-sections/${g.sectionId}`, { method: 'DELETE' }, 'Section deleted — its tasks moved to Recently assigned')}
+                  onAdd={() => setAdding(g.key)} />
+                {!shut && (
+                  <div role="rowgroup">
+                    {g.rows.map(t => (
+                      <TaskRow key={t.id} t={t} today={today!} open={openId === t.id} picked={selected.has(t.id)} editable={mayEditTodo(viewer, t as never)}
+                        owner={t.owner_id ? (t.owner_id === me?.id ? 'Me' : names.get(t.owner_id) ?? 'Someone') : null}
+                        ownerName={t.owner_id ? names.get(t.owner_id) ?? '?' : null}
+                        link={linkOf(t)} meta={meta(t)} dropBefore={dropAt === `row:${t.id}`}
+                        onOpen={e => { if (e.metaKey || e.ctrlKey || e.shiftKey) pick(t.id, e); else { if (selected.size) setSelected(new Set()); openTask(t.id) } }}
+                        onPick={e => pick(t.id, e)} onTick={d => void tick(t, d)}
+                        onDragStart={() => setDragId(t.id)} onDragEnd={() => { setDragId(null); setDropAt(null) }}
+                        onDragOverRow={() => { if (dragId && dragId !== t.id) setDropAt(`row:${t.id}`) }}
+                        onRename={title => void patchTodo(t.id, { title })} />
+                    ))}
+                    {viewer && g.key !== 'done' && (adding === g.key ? (
+                      <NewRow onCancel={() => setAdding(null)} onAdd={title => create(title, g)} />
+                    ) : (
+                      <button type="button" onClick={() => setAdding(g.key)} className="flex h-[37px] w-full items-center pl-8 text-left text-[14px] text-muted-foreground hover:bg-muted/60">Add task…</button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+          {viewer && groupBy === 'sections' && (newSection !== null ? (
+            <input autoFocus value={newSection} placeholder="Name the section, then press Enter" aria-label="New section name" onChange={e => setNewSection(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { void addSection(newSection); setNewSection(null) } if (e.key === 'Escape') setNewSection(null) }}
+              onBlur={() => { if (newSection.trim()) void addSection(newSection); setNewSection(null) }}
+              className="mt-3 h-10 w-80 rounded-md border border-border bg-transparent px-3 text-[16px] font-medium outline-none focus:border-foreground/30" />
+          ) : (
+            <button type="button" onClick={() => setNewSection('')} title="Add section (Tab + N)" className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-[14px] font-medium text-muted-foreground hover:bg-muted">
+              <Plus className="h-4 w-4" aria-hidden /> Add section
+            </button>
           ))}
+          {viewer && groupBy !== 'sections' && sections.length === 0 && (
+            <button type="button" onClick={() => { pickGroup('sections'); setNewSection('') }} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-muted">
+              <Plus className="h-4 w-4" aria-hidden /> Add your own section
+            </button>
+          )}
+        </div>
+      ) : view === 'board' ? (
+        <Board groups={boardGroups} today={today!} names={names} openId={openId} viewer={viewer}
+          link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo} onAdd={(title, key) => create(title, null, dueForGroup(key, today!))} />
+      ) : (
+        <CalendarView rows={shown} today={today!} names={names} openId={openId} onOpen={openTask} onMove={moveTo} onAdd={(title, day) => create(title, null, day)} canAdd={!!viewer} />
+      )}
+
+      {/* THE BAR FOR SEVERAL SELECTED TASKS */}
+      {chosen.length > 0 && (
+        <div role="toolbar" aria-label={`${chosen.length} selected`} data-todo-bulk
+          className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-wrap items-center gap-1 rounded-lg border border-border bg-popover px-3 py-2 text-[13px] shadow-xl">
+          <span className="px-1 font-semibold">{chosen.length} selected</span>
+          <button type="button" onClick={() => void bulk({ status: 'done' }, 'Marked complete')} className="h-8 rounded-md px-2.5 font-medium hover:bg-muted">Mark complete</button>
+          <label className="flex h-8 items-center gap-1 rounded-md px-2 hover:bg-muted">Due
+            <input type="date" aria-label="Due date for the selected tasks" onChange={e => { if (e.target.value) void bulk({ due_date: e.target.value }, 'Due date set') }} className="bg-transparent text-[13px]" />
+          </label>
+          <Select onValueChange={v => void bulk({ owner_id: v }, 'Reassigned')}>
+            <SelectTrigger className="h-8 w-40 rounded-md border-0 bg-transparent text-[13px] hover:bg-muted" aria-label="Assign the selected tasks"><SelectValue placeholder="Assign to…" /></SelectTrigger>
+            <SelectContent>{people.map(p => <SelectItem key={p.id} value={p.id}>{p.id === me?.id ? 'Me' : p.name}</SelectItem>)}</SelectContent>
+          </Select>
+          {sections.length > 0 && (
+            <Select onValueChange={v => void bulk({ section_id: v === 'none' ? null : v }, 'Moved')}>
+              <SelectTrigger className="h-8 w-44 rounded-md border-0 bg-transparent text-[13px] hover:bg-muted" aria-label="Move the selected tasks to a section"><SelectValue placeholder="Move to section…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Recently assigned</SelectItem>
+                {sections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {bulkDelete ? (
+            <span className="flex items-center gap-1 rounded-md bg-accent-red-deep/10 px-2">Delete {chosen.length}?
+              <button type="button" onClick={() => setBulkDelete(false)} className="h-8 rounded-md px-2 hover:bg-muted">Keep</button>
+              <button type="button" onClick={() => void removeChosen()} className="h-8 rounded-md bg-accent-red-deep px-2.5 font-semibold text-background">Delete</button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setBulkDelete(true)} className="h-8 rounded-md px-2.5 font-medium text-accent-red-deep hover:bg-muted">Delete</button>
+          )}
+          <button type="button" aria-label="Clear the selection" onClick={() => setSelected(new Set())} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>
         </div>
       )}
 
-      {draft && viewer && (
-        <TodoDialog draft={draft} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} busy={busy}
-          people={people} meId={me?.id ?? ''} clients={clients.filter(c => ((c as { status?: string | null }).status ?? 'active') === 'active').map(c => ({ id: c.id, name: c.name }))}
-          onDelete={draft.id && mayDeleteTodo(viewer, (raw as TodoRow[]).find(r => r.id === draft.id) ?? {}) ? () => { const t = (raw as TodoRow[]).find(r => r.id === draft.id); if (t) void remove(t) } : undefined} />
+      {helpOpen && (
+        <div role="dialog" aria-label="Keyboard shortcuts" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setHelpOpen(false)}>
+          <div className="w-full max-w-md rounded-lg border border-border bg-popover p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-[16px] font-semibold">Keyboard shortcuts</h2>
+              <button type="button" aria-label="Close" onClick={() => setHelpOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button></div>
+            <dl className="flex flex-col gap-1.5 text-[13px]">
+              {SHORTCUTS.map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{v}</dt><dd><kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[12px]">{k}</kbd></dd></div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      )}
+
+      <Celebration key={party} run={party > 0} />
+
+      {open && viewer && today && (
+        <TodoPanel key={open.id} t={open} all={visibleAll} today={today} viewer={viewer} people={people} clients={activeClients}
+          names={names} clientNames={clientNames} onTick={d => void tick(open, d)}
+          onClose={() => openTask(null)} onOpen={id => openTask(id)} onDeleted={() => openTask(open.parent_id ?? null)} />
       )}
     </div>
   )
 }
 
-function TodoDialog({ draft, onChange, onClose, onSave, onDelete, busy, people, meId, clients }: {
-  draft: Draft
-  onChange: (d: Draft) => void
-  onClose: () => void
-  onSave: () => void
-  onDelete?: () => void
-  busy: boolean
-  people: { id: string; name: string }[]
-  meId: string
-  clients: { id: string; name: string }[]
+function SectionHeader({ g, shut, editable, onToggle, onRename, onDelete, onAdd }: {
+  g: TodoGroup<TodoRow>; shut: boolean; editable: boolean
+  onToggle: () => void; onRename: (name: string) => void; onDelete: () => void; onAdd: () => void
 }) {
-  const input = useRef<HTMLInputElement | null>(null)
-  const [group, setGroup] = useState<string | null>(null)
-  const uploading = useUploadGroup(group)
-  const stillUploading = uploading.some(u => !u.url && !u.error)
-  const add = async (picked: File[]) => {
-    if (picked.length === 0) return
-    const up = uploadFiles(picked, { purpose: 'social' })
-    setGroup(up.group)
-    try {
-      const landed = await up.done
-      onChange({ ...draft, files: [...draft.files, ...landed.map(({ file, url }) => ({ url, name: file.name, mime: file.type || null, size: file.size }))] })
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not upload that') }
-    finally { setGroup(null) }
-  }
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(g.label)
+  const [menu, setMenu] = useState(false)
+  const [sure, setSure] = useState(false)
+  useEffect(() => { if (!editing) setName(g.label) }, [g.label, editing])
   return (
-    <Dialog open onOpenChange={o => { if (!o) onClose() }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-card bg-popover sm:max-w-lg" data-todo-dialog>
-        <DialogHeader>
-          <DialogTitle>{draft.id ? 'Edit the to-do' : 'New to-do'}</DialogTitle>
-          <DialogDescription>{draft.id ? 'Change what you need to; the rest stays.' : 'One thing to do — for you, or for somebody else on the team.'}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="todo-title">What</Label>
-            <Input id="todo-title" value={draft.title} onChange={e => onChange({ ...draft, title: e.target.value })} placeholder="Send Capila the October captions" className={field} autoFocus />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="todo-note">Notes (optional)</Label>
-            <Textarea id="todo-note" rows={3} value={draft.note} onChange={e => onChange({ ...draft, note: e.target.value })} placeholder="Anything the person needs to know" className="rounded-[20px] border-border bg-surface px-4 py-3" />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label>Who</Label>
-              <Select value={draft.owner || meId} onValueChange={v => v && onChange({ ...draft, owner: v })}>
-                <SelectTrigger className={field}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {people.map(p => <SelectItem key={p.id} value={p.id}>{p.id === meId ? 'Me' : p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+    <div className="group/sec flex h-11 items-center gap-1 pt-2">
+      <button type="button" aria-expanded={!shut} aria-label={`${shut ? 'Open' : 'Fold'} ${g.label}`} onClick={onToggle}
+        className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted">
+        {shut ? <ChevronRight className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
+      </button>
+      {editing ? (
+        <input autoFocus value={name} aria-label="Section name" onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setName(g.label); setEditing(false) } }}
+          onBlur={() => { setEditing(false); if (name.trim() && name.trim() !== g.label) onRename(name.trim()) }}
+          className="h-8 rounded border border-border bg-transparent px-1.5 text-[16px] font-medium outline-none" />
+      ) : (
+        <h2 onDoubleClick={() => editable && setEditing(true)} className={`text-[16px] font-medium ${g.tone === 'red' ? 'text-accent-red-deep' : ''}`}>{g.label}</h2>
+      )}
+      <span className="ml-1 text-[12px] text-muted-foreground">{shut || g.rows.length ? g.rows.length : ''}</span>
+      <button type="button" aria-label={`Add a task to ${g.label}`} onClick={onAdd} className="ml-1 flex h-7 w-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-muted focus:opacity-100 group-hover/sec:opacity-100"><Plus className="h-4 w-4" aria-hidden /></button>
+      {editable && (
+        <span className="relative">
+          <button type="button" aria-label={`More for ${g.label}`} aria-expanded={menu} onClick={() => setMenu(m => !m)} className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-muted focus:opacity-100 group-hover/sec:opacity-100"><MoreHorizontal className="h-4 w-4" aria-hidden /></button>
+          {menu && (
+            <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 text-[13px] shadow-lg">
+              <button type="button" onClick={() => { setMenu(false); setEditing(true) }} className="flex min-h-9 w-full items-center rounded px-2 text-left hover:bg-muted">Rename section</button>
+              {sure ? (
+                <span className="flex min-h-9 items-center justify-between gap-1 px-2">Delete it?
+                  <button type="button" onClick={() => { setSure(false); setMenu(false); onDelete() }} className="h-8 rounded bg-accent-red-deep px-2 font-semibold text-background">Delete</button></span>
+              ) : (
+                <button type="button" onClick={() => setSure(true)} className="flex min-h-9 w-full items-center rounded px-2 text-left text-accent-red-deep hover:bg-muted">Delete section</button>
+              )}
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="todo-due">Due (optional)</Label>
-              <Input id="todo-due" type="date" value={draft.due} onChange={e => onChange({ ...draft, due: e.target.value })} className={field} />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label>Client (optional)</Label>
-            <Select value={draft.client || 'none'} onValueChange={v => onChange({ ...draft, client: v === 'none' ? '' : v })}>
-              <SelectTrigger className={field}><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Not about a client</SelectItem>
-                {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2 rounded-[20px] border border-border p-3">
-            <Label>Files (optional)</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={busy || stillUploading} onClick={() => input.current?.click()}>
-                <Paperclip className="h-4 w-4" aria-hidden /> Add files
-              </Button>
-              <input ref={input} type="file" multiple className="hidden" aria-label="Files for this to-do" onChange={e => { void add(Array.from(e.target.files ?? [])); e.target.value = '' }} />
-              {draft.files.length > 0 && <span className="text-[13px] text-muted-foreground">{draft.files.length} {draft.files.length === 1 ? 'file' : 'files'}</span>}
-            </div>
-            {uploading.length > 0 && <UploadRows uploads={uploading} compact />}
-            {draft.files.length > 0 && (
-              <ul className="flex flex-col gap-1">
-                {draft.files.map(f => (
-                  <li key={f.url} className="flex items-center justify-between gap-2 text-[13px]">
-                    <span className="truncate">{f.name}</span>
-                    <button type="button" aria-label={`Remove ${f.name}`} onClick={() => onChange({ ...draft, files: draft.files.filter(x => x.url !== f.url) })}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"><X className="h-4 w-4" aria-hidden /></button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {onDelete ? (
-              <Button type="button" variant="ghost" className="h-11 rounded-full px-3 text-[13px] font-semibold text-muted-foreground" disabled={busy} onClick={onDelete}>
-                <Trash2 className="h-4 w-4" aria-hidden /> Delete
-              </Button>
-            ) : <span />}
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="ghost" className="h-11 rounded-full px-4 text-[13px] font-semibold" disabled={busy} onClick={onClose}>Cancel</Button>
-              <Button type="button" className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90" disabled={busy || stillUploading || !draft.title.trim()} onClick={onSave}>
-                {busy ? 'Saving…' : stillUploading ? 'Uploading…' : draft.id ? 'Save' : 'Add the to-do'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+          )}
+        </span>
+      )}
+    </div>
   )
 }
+
+type Meta = { subs: number; comments: number; files: number; likes: number; blocked: number }
+function MetaIcons({ m }: { m: Meta }) {
+  return (
+    <>
+      {m.blocked > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-accent-red-deep" title={`Waiting on ${m.blocked} open task${m.blocked === 1 ? '' : 's'}`}><Hourglass className="h-3 w-3" aria-hidden />{m.blocked}</span>}
+      {m.subs > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground" title={`${m.subs} subtask${m.subs === 1 ? '' : 's'}`}>{m.subs}<GitBranch className="h-3 w-3" aria-hidden /></span>}
+      {m.comments > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground" title={`${m.comments} comment${m.comments === 1 ? '' : 's'}`}>{m.comments}<MessageSquare className="h-3 w-3" aria-hidden /></span>}
+      {m.files > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground" title={`${m.files} file${m.files === 1 ? '' : 's'}`}>{m.files}<Paperclip className="h-3 w-3" aria-hidden /></span>}
+      {m.likes > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground" title={`${m.likes} like${m.likes === 1 ? '' : 's'}`}>{m.likes}<ThumbsUp className="h-3 w-3" aria-hidden /></span>}
+    </>
+  )
+}
+
+function LinkChip({ link }: { link: { label: string | null } | null }) {
+  if (!link?.label) return null
+  return <span className="truncate rounded bg-foreground/[0.06] px-1.5 py-0.5">{link.label}</span>
+}
+
+type Mods = { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }
+function TaskRow({ t, today, open, picked, editable, owner, ownerName, link, meta, dropBefore, onOpen, onPick, onTick, onRename, onDragStart, onDragEnd, onDragOverRow }: {
+  t: TodoRow; today: string; open: boolean; picked: boolean; editable: boolean
+  owner: string | null; ownerName: string | null; link: { label: string | null } | null; meta: Meta; dropBefore: boolean
+  onOpen: (e: Mods) => void; onPick: (e: Mods) => void; onTick: (done: boolean) => void; onRename: (title: string) => void
+  onDragStart: () => void; onDragEnd: () => void; onDragOverRow: () => void
+}) {
+  const done = t.status === 'done'
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(t.title)
+  useEffect(() => { if (!editing) setTitle(t.title) }, [t.title, editing])
+  const commit = () => { setEditing(false); const v = title.trim(); if (v && v !== t.title) onRename(v); else setTitle(t.title) }
+  return (
+    <div role="row" aria-selected={picked} data-todo data-todo-id={t.id} onClick={e => onOpen(e)}
+      draggable={editable && !editing} onDragStart={e => { e.dataTransfer.setData('text/todo', t.id); e.dataTransfer.effectAllowed = 'move'; onDragStart() }} onDragEnd={onDragEnd}
+      onDragOver={e => { e.preventDefault(); onDragOverRow() }}
+      className={`group relative ${GRID} cursor-pointer border-b border-border ${picked ? 'bg-accent-blue-deep/15' : open ? 'bg-accent-blue-deep/10' : 'hover:bg-muted/60'} ${dropBefore ? 'shadow-[inset_0_2px_0_0_var(--tw-shadow-color)] shadow-accent-blue-deep' : ''}`}>
+      <div role="cell" className="flex h-[37px] min-w-0 items-center gap-1 pr-2">
+        {/* the gutter: a drag handle, and a tick box for selecting several */}
+        <span className="-ml-6 flex w-6 shrink-0 items-center">
+          <input type="checkbox" checked={picked} aria-label={`Select ${t.title}`} onClick={e => { e.stopPropagation(); onPick({ shiftKey: e.shiftKey, metaKey: true, ctrlKey: true }) }} onChange={() => {}}
+            className={`h-3.5 w-3.5 ${picked ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`} />
+        </span>
+        {editable && <GripVertical className="-ml-1 h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground opacity-0 group-hover:opacity-60" aria-hidden />}
+        <CheckCircle done={done} disabled={!editable} label={done ? `Mark ${t.title} incomplete` : `Mark ${t.title} complete`} onClick={() => onTick(!done)} />
+        {editing ? (
+          <input autoFocus value={title} aria-label="Task name" onClick={e => e.stopPropagation()} onChange={e => setTitle(e.target.value)} onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setTitle(t.title); setEditing(false) } }}
+            className="h-7 min-w-0 flex-1 rounded border border-border bg-background px-1 text-[14px] outline-none focus:border-foreground/40" />
+        ) : (
+          <span onClick={e => { if (editable && !(e.metaKey || e.ctrlKey || e.shiftKey)) { e.stopPropagation(); setEditing(true) } }}
+            className={`min-w-0 truncate rounded px-1 text-[14px] ${done ? 'text-muted-foreground' : ''} ${editable ? 'cursor-text hover:outline hover:outline-1 hover:outline-border' : ''}`}>{t.title}</span>
+        )}
+        <MetaIcons m={meta} />
+        <span className="ml-auto hidden shrink-0 items-center gap-0.5 text-[12px] text-muted-foreground group-hover:inline-flex">Details <ChevronRight className="h-3.5 w-3.5" aria-hidden /></span>
+      </div>
+      <div role="cell" className={`${CELL} ${dueTone(t.due_date, today, done)}`}>
+        {t.due_date ? shortDue(t.due_date, today) : <Calendar className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60" aria-hidden />}
+      </div>
+      <div role="cell" className={CELL}>
+        {owner && <span className="flex min-w-0 items-center gap-1.5"><Avatar name={ownerName ?? '?'} /><span className="truncate">{owner}</span></span>}
+      </div>
+      <div role="cell" className={CELL}><LinkChip link={link} /></div>
+    </div>
+  )
+}
+
+/** the inline row Asana opens: type, Enter adds and keeps the row open for the next, Esc stops */
+function NewRow({ onAdd, onCancel }: { onAdd: (title: string) => void; onCancel: () => void }) {
+  const [v, setV] = useState('')
+  return (
+    <div className="flex h-[37px] items-center border-b border-border">
+      <span className="flex h-9 w-8 shrink-0 items-center justify-center"><span className="h-4 w-4 rounded-full border border-muted-foreground/60" /></span>
+      <input autoFocus value={v} placeholder="Write a task name, then press Enter" aria-label="New task name" onChange={e => setV(e.target.value)}
+        onBlur={() => { if (v.trim()) onAdd(v.trim()); onCancel() }}
+        onKeyDown={e => { if (e.key === 'Enter' && v.trim()) { onAdd(v.trim()); setV('') } if (e.key === 'Escape') onCancel() }}
+        className="h-7 min-w-0 flex-1 bg-transparent px-1 text-[14px] outline-none placeholder:text-muted-foreground" />
+    </div>
+  )
+}
+
+/** BOARD — one column per date section; drag a card to another to give it that date (Done completes it) */
+function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTick, onMove, onAdd }: {
+  groups: { key: TodoGroupKey; label: string; rows: TodoRow[] }[]; today: string; names: Map<string, string>; openId: string | null
+  viewer: { id: string; role: string } | null
+  link: (t: TodoRow) => { label: string | null } | null; meta: (t: TodoRow) => Meta
+  onOpen: (id: string) => void; onTick: (t: TodoRow, done: boolean) => void; onMove: (id: string, due: string | null, done?: boolean) => void; onAdd: (title: string, key: TodoGroupKey) => void
+}) {
+  const [over, setOver] = useState<string | null>(null)
+  const [adding, setAdding] = useState<TodoGroupKey | null>(null)
+  const [draft, setDraft] = useState('')
+  return (
+    <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-24 pt-3" aria-label="Board">
+      {groups.map(g => (
+        <section key={g.key} aria-label={g.label} data-todo-column={g.key}
+          onDragOver={e => { e.preventDefault(); setOver(g.key) }} onDragLeave={() => setOver(o => (o === g.key ? null : o))}
+          onDrop={e => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData('text/todo'); if (id) onMove(id, g.key === 'done' ? null : dueForGroup(g.key, today), g.key === 'done') }}
+          className={`flex w-[272px] shrink-0 flex-col gap-2 rounded-lg p-2 ${over === g.key ? 'bg-accent-blue-deep/10' : 'bg-muted/50'}`}>
+          <h2 className={`flex h-8 items-center gap-2 px-1 text-[14px] font-semibold ${g.key === 'overdue' ? 'text-accent-red-deep' : ''}`}>{g.label}<span className="text-[12px] font-normal text-muted-foreground">{g.rows.length}</span></h2>
+          {g.rows.map(t => {
+            const done = t.status === 'done'
+            const editable = mayEditTodo(viewer, t as never)
+            const l = link(t)
+            return (
+              <article key={t.id} draggable={editable} onDragStart={e => e.dataTransfer.setData('text/todo', t.id)} onClick={() => onOpen(t.id)} data-todo-card
+                className={`flex cursor-pointer flex-col gap-2 rounded-md border bg-card p-3 shadow-sm hover:border-foreground/30 ${openId === t.id ? 'border-accent-blue-deep' : 'border-border'}`}>
+                <div className="-ml-2 -mt-2 flex items-start">
+                  <CheckCircle done={done} disabled={!editable} label={done ? `Mark ${t.title} incomplete` : `Mark ${t.title} complete`} onClick={() => onTick(t, !done)} />
+                  <span className={`pt-2 text-[14px] leading-snug ${done ? 'text-muted-foreground' : ''}`}>{t.title}</span>
+                </div>
+                {l?.label && <span className="text-[12px]"><LinkChip link={l} /></span>}
+                <div className="flex items-center gap-2">
+                  {t.owner_id && <Avatar name={names.get(t.owner_id) ?? '?'} />}
+                  {t.due_date && <span className={`text-[12px] ${dueTone(t.due_date, today, done)}`}>{shortDue(t.due_date, today)}</span>}
+                  <span className="ml-auto flex items-center gap-2"><MetaIcons m={meta(t)} /></span>
+                </div>
+              </article>
+            )
+          })}
+          {viewer && g.key !== 'done' && (adding === g.key ? (
+            <textarea autoFocus value={draft} rows={2} placeholder="Write a task name" aria-label="New task name" onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (draft.trim()) onAdd(draft.trim(), g.key); setDraft('') } if (e.key === 'Escape') { setAdding(null); setDraft('') } }}
+              onBlur={() => { if (draft.trim()) onAdd(draft.trim(), g.key); setDraft(''); setAdding(null) }}
+              className="resize-none rounded-md border border-border bg-card p-3 text-[14px] outline-none focus:border-foreground/30" />
+          ) : (
+            <button type="button" onClick={() => setAdding(g.key)} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-[13px] text-muted-foreground hover:bg-muted">
+              <Plus className="h-4 w-4" aria-hidden /> Add task
+            </button>
+          ))}
+        </section>
+      ))}
+    </div>
+  )
+}
+
+/** CALENDAR — a month by due date; drag a task to another day, press a day's + to add one there */
+function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAdd }: {
+  rows: TodoRow[]; today: string; names: Map<string, string>; openId: string | null
+  onOpen: (id: string) => void; onMove: (id: string, due: string | null) => void; onAdd: (title: string, day: string) => void; canAdd: boolean
+}) {
+  const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }))
+  const days = useMemo(() => monthGrid(ym.y, ym.m), [ym])
+  const byDay = useMemo(() => { const m = new Map<string, TodoRow[]>(); for (const t of rows) if (t.due_date) m.set(t.due_date, [...(m.get(t.due_date) ?? []), t]); return m }, [rows])
+  const undated = rows.filter(t => !t.due_date).length
+  const [over, setOver] = useState<string | null>(null)
+  const [adding, setAdding] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const step = (d: number) => setYm(({ y, m }) => { const n = new Date(Date.UTC(y, m + d, 1)); return { y: n.getUTCFullYear(), m: n.getUTCMonth() } })
+  return (
+    <div className="flex flex-col gap-2 pb-24 pt-3">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setYm({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 })} className="h-8 rounded-md border border-border px-3 text-[13px] font-medium hover:bg-muted">Today</button>
+        <button type="button" aria-label="Previous month" onClick={() => step(-1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"><ChevronLeft className="h-4 w-4" aria-hidden /></button>
+        <button type="button" aria-label="Next month" onClick={() => step(1)} className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"><ChevronRight className="h-4 w-4" aria-hidden /></button>
+        <h2 className="text-[16px] font-medium">{MONTH_NAMES[ym.m]} {ym.y}</h2>
+        {undated > 0 && <span className="ml-auto text-[12px] text-muted-foreground">{undated} with no date — on the List</span>}
+      </div>
+      <div className="grid grid-cols-7 border-l border-t border-border text-[12px]">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <div key={d} className="border-b border-r border-border px-2 py-1.5 text-muted-foreground">{d}</div>)}
+        {days.map(day => {
+          const inMonth = Number(day.slice(5, 7)) - 1 === ym.m
+          const list = byDay.get(day) ?? []
+          return (
+            <div key={day} data-day={day}
+              onDragOver={e => { e.preventDefault(); setOver(day) }} onDragLeave={() => setOver(o => (o === day ? null : o))}
+              onDrop={e => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData('text/todo'); if (id) onMove(id, day) }}
+              className={`group flex min-h-[112px] min-w-0 flex-col gap-1 border-b border-r border-border p-1 ${over === day ? 'bg-accent-blue-deep/10' : inMonth ? '' : 'bg-muted/40'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 ${day === today ? 'bg-accent-red-deep font-semibold text-background' : inMonth ? '' : 'text-muted-foreground'}`}>{Number(day.slice(8))}</span>
+                {canAdd && <button type="button" aria-label={`Add a task on ${day}`} onClick={() => { setAdding(day); setDraft('') }} className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-muted group-hover:opacity-100 focus:opacity-100"><Plus className="h-3.5 w-3.5" aria-hidden /></button>}
+              </div>
+              {list.map(t => (
+                <button key={t.id} type="button" draggable onDragStart={e => e.dataTransfer.setData('text/todo', t.id)} onClick={() => onOpen(t.id)} data-todo-chip
+                  title={`${t.title}${t.owner_id ? ` · ${names.get(t.owner_id) ?? ''}` : ''}`}
+                  className={`truncate rounded px-1.5 py-1 text-left text-[12px] ${t.status === 'done' ? 'text-muted-foreground line-through' : ''} ${openId === t.id ? 'bg-accent-blue-deep/20' : t.due_date && t.due_date < today && t.status !== 'done' ? 'bg-accent-red-deep/10' : 'bg-foreground/[0.06]'} hover:bg-foreground/10`}>
+                  {t.title}
+                </button>
+              ))}
+              {adding === day && (
+                <input autoFocus value={draft} placeholder="Task name" aria-label="New task name" onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && draft.trim()) { onAdd(draft.trim(), day); setDraft(''); setAdding(null) } if (e.key === 'Escape') setAdding(null) }}
+                  onBlur={() => { if (draft.trim()) onAdd(draft.trim(), day); setAdding(null) }}
+                  className="h-7 rounded border border-border bg-card px-1.5 text-[12px] outline-none" />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
