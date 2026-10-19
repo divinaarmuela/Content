@@ -36,7 +36,8 @@ import { kindOf as fileKindOf } from './files-core'
  */
 export const PULL_EVENT = 'drive/pull.folder'
 const MAX_FILES = 400
-const MAX_DEPTH = 3
+// six levels below the link (19 Oct 2026: "anything that was there its shown" — sub, sub-sub and on down)
+const MAX_DEPTH = 6
 const PREVIEW_MAX_BYTES = 800 * 1024 * 1024
 
 type Kind = 'batch' | 'item'
@@ -146,7 +147,7 @@ export type DriveTargetFile = { id: string; name: string; mime: string; size: nu
 
 /**
  * WHAT A DRIVE LINK HOLDS — read only (trap 13): one file's name, type and size from Drive; or a folder walked
- * (subfolders three deep, 400 files at most, a subfolder's files named "Sub/Name"). The pull reads through here,
+ * (subfolders six deep, 400 files at most, a subfolder's files named "Sub/Name"). The pull reads through here,
  * and so does the Drive hand-in's picker, so the editor picks from exactly what the copy will find.
  */
 export async function readDriveTarget(kind: 'folder' | 'file', driveId: string, opts: { cuts?: boolean } = {}): Promise<DriveTargetFile[]> {

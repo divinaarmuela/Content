@@ -22,7 +22,7 @@ import {
 import { useTable } from '@/lib/db-client'
 import type { TeamUser } from '@/lib/db-types'
 import {
-  briefAfterHandover, handToGroups, personLabel, whoMakesIt, type HandTo,
+  SCHEDULING_HAND_TO_ORDER, briefAfterHandover, handToGroups, personLabel, whoMakesIt, type HandTo,
 } from '../../lib/hand-over-core'
 import { roleLabel } from '../../lib/identity-core'
 import { linkKindOf } from '../../lib/card-link-core'
@@ -383,9 +383,10 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
   // super admin hands over to a scheduler, who picks the files from the link
   // and uploads them for approval"): the picker offers the scheduler users
   const people: HandTo[] = team
-    .filter(u => u.active_status !== false && u.role === 'scheduler')
+    .filter(u => u.active_status !== false && (SCHEDULING_HAND_TO_ORDER as readonly string[]).includes(String(u.role)))
     .map(u => ({ id: u.id, name: u.name || u.email, email: u.email, role: u.role }))
-  const groups = handToGroups(people)
+  // schedulers first, then super admins, then account managers (19 Oct 2026)
+  const groups = handToGroups(people, SCHEDULING_HAND_TO_ORDER)
   const chosen = people.find(p => p.id === to) ?? null
 
   const hand = async () => {
@@ -396,11 +397,12 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
       // approval (its history, the client's decision recorded) and lands the
       // card in this scheduler's Draft — it is never in Ready to post
       // what the hand-over made: how many draft posts — one per approved file (1 Oct 2026) — or why none
-      const seatSaid: { problem: string | null; posts: number | null } = { problem: null, posts: null }
+      const seatSaid: { problem: string | null; posts: number | null; inFolders: boolean } = { problem: null, posts: null, inFolders: false }
       const readSeat = async (seat: Response) => {
-        const j = (await seat.json().catch(() => ({}))) as { post_problem?: string; posts?: number }
+        const j = (await seat.json().catch(() => ({}))) as { post_problem?: string; posts?: number; in_folders?: boolean }
         seatSaid.problem = j.post_problem ?? null
         seatSaid.posts = typeof j.posts === 'number' ? j.posts : null
+        seatSaid.inFolders = j.in_folders === true
       }
       if (approve) {
         const seat = await fetch(`/api/production/items/${card.id}/handoff`, {
@@ -443,7 +445,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
       // the hand-over makes the card's draft POSTS from the edit's files, on Post approval — one per
       // approved file (1 Oct 2026): "Handed to Test Scheduler — 8 draft posts on Post approval"
       if (seatSaid.problem) toast.error(`Handed to ${personLabel(chosen)}, but the posts could not be made: ${seatSaid.problem}`)
-      else toast.success(handoverNotice(personLabel(chosen), approve || card.status === 'approved_for_scheduling' ? (seatSaid.posts ?? 0) : 0))
+      else toast.success(handoverNotice(personLabel(chosen), approve || card.status === 'approved_for_scheduling' ? (seatSaid.posts ?? 0) : 0, seatSaid.inFolders))
       onHanded?.()
       onClose()
     } catch (e) {
@@ -457,7 +459,7 @@ export function HandToDialog({ card, viewer, viewerName, onClose, onHanded, appr
     <Dialog open={open} onOpenChange={o => { if (!o && !busy) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{approve ? 'Approve and hand it to a scheduler' : 'Hand this to someone'}</DialogTitle>
+          <DialogTitle>{approve ? 'Approve and hand it over for posting' : 'Hand this to someone'}</DialogTitle>
           <DialogDescription>
             {approve
               ? 'The approval is logged and a draft post is made for each approved file, waiting for them on Post approval. Close this without picking anyone and nothing changes.'
@@ -543,7 +545,10 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
   // should be the scheduler users"): they pick the files from the folder
   // and upload them for approval. A card for editing can go to anyone.
   // the editors and designers first, then everyone else (17 Sep 2026)
-  const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : whoMakesIt(team as HandTo[])
+  // …and a card for POSTING goes to a scheduler, a super admin or an account manager, in that order (19 Oct 2026)
+  const handTo = forPosting
+    ? handToGroups((team as HandTo[]).filter(p => (SCHEDULING_HAND_TO_ORDER as readonly string[]).includes(String(p.role))), SCHEDULING_HAND_TO_ORDER).flatMap(g => g.people)
+    : whoMakesIt(team as HandTo[])
   const [clientId, setClientId] = useState(defaultClientId ?? '')
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState('')

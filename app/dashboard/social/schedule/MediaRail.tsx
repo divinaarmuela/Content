@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { NOT_CLIENT_APPROVED } from '@/app/lib/social-schedule-core'
 import { POST_APPROVAL_BOARD } from '@/app/lib/overview-links-core'
 import { Thumb } from './tiles'
+import { baseName, startOpenFolders, tileTree, type TileFolder } from '@/app/lib/drive-folder-files-core'
 import type { RailMedia } from './useSchedulePosts'
 
 /**
@@ -120,9 +121,17 @@ export default function MediaRail({
    */
   const [openFolder, setOpenFolder] = useState<string | null>(null)
   const [ticked, setTicked] = useState<Set<string>>(() => new Set())
+  /** which subfolders of the open card are open — a lone wrapping folder opens by itself */
+  const [openSub, setOpenSub] = useState<Set<string>>(() => new Set())
+  const toggleSub = (path: string) => setOpenSub(prev => {
+    const next = new Set(prev)
+    if (next.has(path)) next.delete(path); else next.add(path)
+    return next
+  })
   const openIt = (m: RailMedia) => {
     if (openFolder === m.itemId) { setOpenFolder(null); return }
     setOpenFolder(m.itemId)
+    setOpenSub(startOpenFolders(tileTree(m.allSlides.length ? m.allSlides : m.slides)))
     setTicked(new Set((m.slides.length ? m.slides : m.allSlides).map(sl => sl.url)))
   }
   const tick = (url: string) => setTicked(prev => {
@@ -280,8 +289,13 @@ export default function MediaRail({
                   {/* open: the files, ticked, and the one press */}
                   {isOpen && m.ok && (
                     <div className="flex flex-col gap-2 border-t border-border p-1.5">
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {offer.map((sl, i) => {
+                      {/* THE FOLDERS OF THE HANDED-IN LINK (19 Oct 2026): the main folder's files, then each
+                          subfolder's, Drive's way round — a folder can be ticked whole, so a carousel's clips go
+                          out as one post */}
+                      <RailFolder node={tileTree(offer)} depth={0} open={openSub} onToggle={toggleSub}
+                        onTickFolder={files => setTicked(new Set(files.map(f => f.url)))}
+                        file={sl => {
+                          const i = offer.indexOf(sl)
                           const on = ticked.has(sl.url)
                           return (
                             <button
@@ -295,7 +309,7 @@ export default function MediaRail({
                                 on ? 'outline outline-2 outline-offset-1 outline-foreground' : 'opacity-60',
                               )}
                             >
-                              <Thumb slide={sl} label={sl.name} className="h-full w-full" />
+                              <Thumb slide={sl} label={baseName(sl.name)} className="h-full w-full" />
                               {taken.has(sl.url) && (
                                 <span className="absolute inset-x-0 bottom-0 bg-ink/70 px-1 py-0.5 text-center text-[9px] font-semibold text-cream">In a post</span>
                               )}
@@ -305,8 +319,7 @@ export default function MediaRail({
                               )}>{i + 1}</span>
                             </button>
                           )
-                        })}
-                      </div>
+                        }} />
                       <div className="flex items-center justify-between gap-2">
                         <button type="button" onClick={() => setTicked(new Set(chosen.length === offer.length ? [] : offer.map(sl => sl.url)))}
                           className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
@@ -393,6 +406,51 @@ export default function MediaRail({
           <span className="text-[12px] font-normal text-muted-foreground">Not on the calendar — they go to quality check first</span>
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * One folder of a card's files in the rail (19 Oct 2026): its own files three to a row, then its subfolders as
+ * rows that open in place — each with its name, how many files, and "Tick this folder".
+ */
+function RailFolder({ node, depth, open, onToggle, onTickFolder, file }: {
+  node: TileFolder<Slide>
+  depth: number
+  open: ReadonlySet<string>
+  onToggle: (path: string) => void
+  onTickFolder: (files: Slide[]) => void
+  file: (s: Slide) => React.ReactNode
+}) {
+  const everyFile = (f: TileFolder<Slide>): Slide[] => [...f.files, ...f.folders.flatMap(everyFile)]
+  return (
+    <div className="flex flex-col gap-1.5">
+      {node.files.length > 0 && <div className="grid grid-cols-3 gap-1.5">{node.files.map(sl => <span key={sl.url} className="contents">{file(sl)}</span>)}</div>}
+      {node.folders.map(f => {
+        const isOpen = open.has(f.path)
+        return (
+          <div key={f.path} className="flex flex-col gap-1.5" data-rail-subfolder={f.path}>
+            <div className="flex items-center gap-1 rounded-[6px] border border-border bg-surface pr-1">
+              <button type="button" onClick={() => onToggle(f.path)} aria-expanded={isOpen}
+                className="flex min-h-9 min-w-0 flex-1 items-center gap-1.5 px-1.5 text-left">
+                <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', !isOpen && '-rotate-90')} aria-hidden />
+                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate text-[12px] font-semibold" title={f.path}>{f.name}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{f.count}</span>
+              </button>
+              <button type="button" onClick={() => onTickFolder(everyFile(f))}
+                className="min-h-9 shrink-0 px-1.5 text-[11px] font-semibold underline-offset-4 hover:underline">
+                Tick this folder
+              </button>
+            </div>
+            {isOpen && (
+              <div className="border-l border-border pl-1.5">
+                <RailFolder node={f} depth={depth + 1} open={open} onToggle={onToggle} onTickFolder={onTickFolder} file={file} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

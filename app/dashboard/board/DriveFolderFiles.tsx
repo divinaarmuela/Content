@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Download, ExternalLink, File, Film, Image as ImageIcon, Play, X } from 'lucide-react'
+import { Check, ChevronRight, Download, ExternalLink, File, Film, Folder as FolderIcon, Image as ImageIcon, Play, X } from 'lucide-react'
 import { downloadHref } from '../../lib/download-core'
 import type { DriveEntry } from '../../lib/files-core'
 import {
-  folderFilesWords, folderTilesOf, readableDriveId, readableFolderId, subfolderCount, tileActionWords, type FolderTile,
+  baseName, folderFilesWords, folderTilesOf, readableDriveId, readableFolderId, startOpenFolders, subfolderCount,
+  tileActionWords, tileTree, type FolderTile, type TileFolder,
 } from '../../lib/drive-folder-files-core'
 import { kindOf } from '../../lib/files-core'
 import type { PullFile } from '../../lib/drive-pull-core'
@@ -105,10 +106,83 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
   }, [folderId, driveId, fromCopies])
 
   // uploads have no Drive behind them: our copies are the whole story (17 Sep 2026)
+  // which folders of the tree are open — before the early return, as hooks must be
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set())
+  const [seededFor, setSeededFor] = useState('')
   if (!fromCopies && (!driveId || state.at === 'idle')) return null
   const tiles = fromCopies ? copyTiles : state.at === 'ready' ? state.tiles : []
   // every file new (a first version): no tag on each — "New in this version" on all of them tells nobody anything
   const allNew = tiles.length > 0 && tiles.every(t => markOf.get(t.id)?.changed === true)
+
+  // THE FOLDERS INSIDE THE LINK (19 Oct 2026): the files grouped back into the subfolders they came from
+  const tree = tileTree(tiles)
+  const treeKey = tiles.map(t => t.name).join('|')
+  if (treeKey !== seededFor) { setSeededFor(treeKey); setOpenFolders(startOpenFolders(tree)) }
+  const toggleFolder = (path: string) => setOpenFolders(prev => {
+    const next = new Set(prev)
+    if (next.has(path)) next.delete(path); else next.add(path)
+    return next
+  })
+  const gridClass = fromCopies ? 'grid grid-cols-2 gap-3' : wide ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3'
+
+  /** one file's tile — the same whichever folder of the tree it sits in */
+  const tileOf = (t: FolderTile) => {
+    const open = showing?.id === t.id
+    const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
+    // a real download on every tile (download-core, 17 Sep 2026): our copy through our route, a Drive original through the Files page's
+    const dl = downloadHref(isCopy(t) ? { url: t.open, name: t.name } : { id: t.id, name: t.name })
+    return (
+      <li key={t.id} className={`relative flex flex-col gap-1 rounded-inner border p-2 ${open || selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ? 'border-foreground' : 'border-border'}`}>
+        {onSelect && (t.kind === 'video' || t.kind === 'image') && (
+          <label className="absolute right-3 top-3 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/90 shadow" title="Pick for side by side">
+            <input type="checkbox" className="h-4 w-4 accent-foreground" checked={selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ?? false}
+              onChange={e => onSelect(t, pickKeyRound ?? shownRound, e.target.checked)} aria-label={`Pick ${t.name} for side by side`} />
+          </label>
+        )}
+        <button type="button" onClick={() => { if (onSelect) { onSelect(t, pickKeyRound ?? shownRound, !(selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ?? false)); return } if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
+          aria-label={`${tileActionWords(t.kind)} ${t.name}`}
+          className={`relative block w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-95 ${fromCopies ? 'aspect-[4/5]' : 'aspect-square'}`}>
+          {t.thumb
+            // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
+            ? <img src={t.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+            : isCopy(t) && t.kind === 'video'
+              // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
+              // the tile is the clip a moment in, and no picture has to be made
+              ? <HoverClip src={t.preview} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
+                  frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null} />
+              : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
+          {approvedIds?.includes(t.id) && (
+            <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
+              <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> Approved
+            </span>
+          )}
+          {t.kind === 'video' && (
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow">
+                <Play className="ml-0.5 h-4 w-4" fill="currentColor" aria-hidden />
+              </span>
+            </span>
+          )}
+        </button>
+        <span className="truncate text-[12px] font-semibold" title={t.name}>{baseName(t.name)}</span>
+        {/* the whole set at a version (30 Sep 2026): what changed in it, and what was carried */}
+        {markOf.has(t.id) && !allNew && (
+          // ONE WORD, the sentence on hover (1 Oct 2026, the walk: "Unchanged — from Version 2" wrapped to three lines
+          // in the narrow column and ran over the thumbnails)
+          <span data-version-mark
+            title={markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'A new cut in this version' : 'New in this version') : `Unchanged — the same file as ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
+            className={`w-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
+            {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut && t.kind !== 'image' ? 'New cut' : 'New') : 'Unchanged'}
+          </span>
+        )}
+        {dl && (
+          <a href={dl} download={baseName(t.name)} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
+            <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>
+          </a>
+        )}
+      </li>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2" data-drive-folder-files>
@@ -160,68 +234,48 @@ export default function DriveFolderFiles({ url, wide = false, reviewHref, approv
           )}
 
           {tiles.length > 0 && (
-            <ul className={fromCopies ? 'grid grid-cols-2 gap-3' : wide ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid grid-cols-2 gap-2 sm:grid-cols-3'}>
-              {tiles.map(t => {
-                const open = showing?.id === t.id
-                const Glyph = t.kind === 'video' ? Film : t.kind === 'image' ? ImageIcon : File
-                // a real download on every tile (download-core, 17 Sep 2026): our copy through our route, a Drive original through the Files page's
-                const dl = downloadHref(isCopy(t) ? { url: t.open, name: t.name } : { id: t.id, name: t.name })
-                return (
-                  <li key={t.id} className={`relative flex flex-col gap-1 rounded-inner border p-2 ${open || selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ? 'border-foreground' : 'border-border'}`}>
-                    {onSelect && (t.kind === 'video' || t.kind === 'image') && (
-                      <label className="absolute right-3 top-3 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/90 shadow" title="Pick for side by side">
-                        <input type="checkbox" className="h-4 w-4 accent-foreground" checked={selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ?? false}
-                          onChange={e => onSelect(t, pickKeyRound ?? shownRound, e.target.checked)} aria-label={`Pick ${t.name} for side by side`} />
-                      </label>
-                    )}
-                    <button type="button" onClick={() => { if (onSelect) { onSelect(t, pickKeyRound ?? shownRound, !(selected?.has(`${t.id}@${pickKeyRound ?? shownRound}`) ?? false)); return } if (reviewHref && (t.kind === 'video' || t.kind === 'image')) { window.location.assign(reviewHref(t)); return } setShowing(open ? null : t) }} aria-pressed={open}
-                      aria-label={`${tileActionWords(t.kind)} ${t.name}`}
-                      className={`relative block w-full overflow-hidden rounded-tile bg-foreground/[0.06] hover:opacity-95 ${fromCopies ? 'aspect-[4/5]' : 'aspect-square'}`}>
-                      {t.thumb
-                        // eslint-disable-next-line @next/next/no-img-element -- proxied, same origin
-                        ? <img src={t.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                        : isCopy(t) && t.kind === 'video'
-                          // THE CLIP'S OWN FIRST FRAME (16 Sep 2026): our copy is seekable, so
-                          // the tile is the clip a moment in, and no picture has to be made
-                          ? <HoverClip src={t.preview} className="h-full w-full object-cover" poster={pickPoster(previewOf(t), null)} duration={previewOf(t)?.duration_sec ?? null}
-                              frames={previewOf(t) ? (s => streamThumbnailUrl(previewOf(t), { time: `${s}s`, height: 480 }) as string) : null} />
-                          : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><Glyph className="h-6 w-6" strokeWidth={1.6} aria-hidden /></span>}
-                      {approvedIds?.includes(t.id) && (
-                        <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-accent-green px-2 py-0.5 text-[11px] font-semibold text-ink shadow" title="Approved by the client">
-                          <Check className="h-3 w-3" strokeWidth={3} aria-hidden /> Approved
-                        </span>
-                      )}
-                      {t.kind === 'video' && (
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white shadow">
-                            <Play className="ml-0.5 h-4 w-4" fill="currentColor" aria-hidden />
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                    <span className="truncate text-[12px] font-semibold" title={t.name}>{t.name}</span>
-                    {/* the whole set at a version (30 Sep 2026): what changed in it, and what was carried */}
-                    {markOf.has(t.id) && !allNew && (
-                      // ONE WORD, the sentence on hover (1 Oct 2026, the walk: "Unchanged — from Version 2" wrapped to three lines
-                      // in the narrow column and ran over the thumbnails)
-                      <span data-version-mark
-                        title={markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut ? 'A new cut in this version' : 'New in this version') : `Unchanged — the same file as ${(labelOf ?? roundLabel)(markOf.get(t.id)!.from)}`}
-                        className={`w-fit whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${markOf.get(t.id)!.changed ? 'bg-tint-amber' : 'bg-foreground/[0.06] text-muted-foreground'}`}>
-                        {markOf.get(t.id)!.changed ? (markOf.get(t.id)!.newCut && t.kind !== 'image' ? 'New cut' : 'New') : 'Unchanged'}
-                      </span>
-                    )}
-                    {dl && (
-                      <a href={dl} download={t.name} className="inline-flex min-h-9 w-fit items-center gap-1 text-[12px] underline-offset-4 hover:underline">
-                        <Download className="h-3.5 w-3.5" aria-hidden /> Download<span className="sr-only"> {t.name}</span>
-                      </a>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
+            <FolderLevel node={tree} depth={0} open={openFolders} onToggle={toggleFolder} gridClass={gridClass} tile={tileOf} />
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * One folder of the handed-in link, Drive's way round: its own files as tiles, then its subfolders as rows that
+ * open in place to theirs — sub, sub-sub and on down (19 Oct 2026).
+ */
+function FolderLevel({ node, depth, open, onToggle, gridClass, tile }: {
+  node: TileFolder<FolderTile>
+  depth: number
+  open: ReadonlySet<string>
+  onToggle: (path: string) => void
+  gridClass: string
+  tile: (t: FolderTile) => React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {node.files.length > 0 && <ul className={gridClass}>{node.files.map(tile)}</ul>}
+      {node.folders.map(f => {
+        const isOpen = open.has(f.path)
+        return (
+          <div key={f.path} className="flex flex-col gap-2" data-drive-subfolder={f.path}>
+            <button type="button" onClick={() => onToggle(f.path)} aria-expanded={isOpen}
+              className="flex min-h-10 w-full items-center gap-2 rounded-inner border border-border bg-surface px-2.5 text-left hover:bg-muted">
+              <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden />
+              <FolderIcon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={f.path}>{f.name}</span>
+              <span className="shrink-0 text-[12px] text-muted-foreground">{f.count} {f.count === 1 ? 'file' : 'files'}</span>
+            </button>
+            {isOpen && (
+              <div className="border-l border-border pl-3">
+                <FolderLevel node={f} depth={depth + 1} open={open} onToggle={onToggle} gridClass={gridClass} tile={tile} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

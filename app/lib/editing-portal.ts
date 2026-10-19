@@ -117,7 +117,8 @@ export async function getEditingPortal(rawToken: string, itemId: string): Promis
   const upRounds = new Set(uploadedAll.map(f => f.version))
   const uploaded = uploadedAll.filter(f => ['video', 'image'].includes(kindOf(f.mime, f.name))).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, done: f.size ?? 0, url: f.url, status: 'done' as const, version: f.version }))
   // A CARD THAT BEGAN AS A LINK AND WENT ON AS FILES keeps its link rounds: Version 1 from the folder, Version 2 uploaded
-  const fromLink = filesOf(pull).filter(f => f.status === 'done' && !!f.url && kindOf(f.mime, f.name) === 'video' && fileRound(f) <= seen && !upRounds.has(fileRound(f)))
+  // …and a link's photos as well as its clips (19 Oct 2026: "anything that was there its shown"), as an upload's are
+  const fromLink = filesOf(pull).filter(f => f.status === 'done' && !!f.url && ['video', 'image'].includes(kindOf(f.mime, f.name)) && fileRound(f) <= seen && !upRounds.has(fileRound(f)))
   const pulled = [...fromLink, ...uploaded]
   const round = roundOf(item)
   // the preview copies of the pulled clips, for the strip's stills and hover frames

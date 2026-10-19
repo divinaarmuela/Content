@@ -81,10 +81,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // hand-over or a retry makes nothing twice. The edit card stays on the Editor page.
     let postIds: string[] = []
     let postProblem: string | null = null
+    let inFolders = false
     if (toDraft) {
       try {
         const batch = await createBatchForCard(item as never, { scheduler: valid[0] })
-        if (batch.ok) postIds = batch.postIds
+        if (batch.ok) { postIds = batch.postIds; inFolders = batch.inFolders === true }
         else postProblem = batch.reason
       } catch (e) {
         postProblem = e instanceof Error ? e.message : 'The posts could not be made'
@@ -116,6 +117,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       post_id: postIds[0] ?? null,
       post_ids: postIds,
       posts: postIds.length,
+      // the files are in folders and wait on the Schedule page, folder by folder (post-batch-core.waitsInFolders)
+      ...(inFolders ? { in_folders: true } : {}),
       handed_to: first ? (first.name || first.email) : null,
       ...(postProblem ? { post_problem: postProblem } : {}),
     })

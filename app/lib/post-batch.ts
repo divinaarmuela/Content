@@ -9,7 +9,7 @@ import { slidesOf } from './version-files-core'
 import { finalFilesOf } from './final-files-core'
 import { safeZone } from './timezone-core'
 import { claimDraftPost } from './post-stage'
-import { batchApprovalSteps, planBatch } from './post-batch-core'
+import { batchApprovalSteps, planBatch, waitsInFolders } from './post-batch-core'
 
 /**
  * A CARD BECOMES ITS POSTS — the server half of app/lib/post-batch-core.ts (the owner, 1 Oct 2026).
@@ -34,7 +34,7 @@ export type CardForBatch = {
 }
 
 export type BatchResult =
-  | { ok: true; postIds: string[]; made: number; total: number }
+  | { ok: true; postIds: string[]; made: number; total: number; inFolders?: boolean }
   | { ok: false; reason: string }
 
 export async function createBatchForCard(item: CardForBatch, opts: { scheduler: string }): Promise<BatchResult> {
@@ -45,6 +45,10 @@ export async function createBatchForCard(item: CardForBatch, opts: { scheduler: 
   const elig = eligibility(item as never, versions as never)
   if (!elig.ok) return { ok: false, reason: elig.reason }
   const client = await table<Client>('clients').get(item.client_id).catch(() => null)
+  // handed in as folders: the files wait in the Schedule rail, by folder — no drafts (waitsInFolders)
+  if (finalFilesOf(item as never).length > 0 && waitsInFolders(slidesOf(elig.version))) {
+    return { ok: true, postIds: [], made: 0, total: 0, inFolders: true }
+  }
   const planned = planBatch({
     itemId: item.id,
     title: item.title,
