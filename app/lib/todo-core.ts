@@ -1,3 +1,5 @@
+import { normaliseRepeat, type TodoRepeat } from './todo-repeat-core'
+
 /**
  * TO-DOS (the owner, 17 Sep 2026: "create a to-dos page for every role —
  * anyone can have access, but they see theirs: a scheduler sees theirs, an
@@ -30,6 +32,9 @@ export type Todo = {
   section_id?: string | null
   position?: number | null
   blocked_by?: string[] | null
+  /** Asana's "Repeats" (todo-repeat-core) */
+  repeat?: TodoRepeat | null
+  repeat_of?: string | null
 }
 
 export type TodoViewer = { id: string; role: string }
@@ -111,6 +116,8 @@ export function sanitiseTodoPatch(raw: unknown): { ok: true; patch: Partial<Todo
     patch.position = n
   }
   if ('blocked_by' in p) patch.blocked_by = idsOf(p.blocked_by).slice(0, 50)
+  // 20 Oct 2026: Asana's "Repeats" — anything that is not a rule is "doesn't repeat"
+  if ('repeat' in p) patch.repeat = normaliseRepeat(p.repeat)
   return { ok: true, patch }
 }
 
@@ -255,6 +262,8 @@ export function activityWords(row: { action?: string | null; old_value?: string 
   switch (row.action) {
     case 'todo_made': return 'created this task'
     case 'todo_done': return 'completed this task'
+    // the next one, made by a repeat (20 Oct 2026)
+    case 'todo_repeated': return `made this task by repeating it${v ? `, due ${v}` : ''}`
     case 'todo_reopened': return 'marked this task incomplete'
     case 'todo_subtask': return `added subtask ${row.detail ?? ''}`.trim()
     case 'todo_attached': return `attached ${row.detail ?? 'a file'}`

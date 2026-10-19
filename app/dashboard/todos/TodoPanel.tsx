@@ -16,6 +16,8 @@ import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
 import { activityWords, idsOf, mayCommentOnTodo, mayDependOn, mayEditTodo, openBlockers, parseNote, todoFilesOf, type NoteSpan, type TodoFile } from '../../lib/todo-core'
 import { dueTone, shortDue } from './todo-words'
+import DuePicker from './DuePicker'
+import { normaliseRepeat } from '../../lib/todo-repeat-core'
 
 /**
  * THE TASK PANEL, Asana's (measured 18 Oct 2026 from the owner's own Asana:
@@ -270,10 +272,9 @@ export default function TodoPanel({
             <div className="flex min-h-9 items-center gap-3">
               <dt className={label}>Due date</dt>
               <dd className="flex items-center gap-1">
-                <input type="date" disabled={!editable} value={t.due_date ?? ''} aria-label="Due date" onChange={e => void patch({ due_date: e.target.value || null })}
-                  className={`h-8 rounded-md border border-transparent bg-transparent px-2 text-[14px] hover:border-border ${dueTone(t.due_date, today, done)}`} />
-                {t.due_date && <span className={`text-[12px] ${dueTone(t.due_date, today, done)}`}>{shortDue(t.due_date, today)}</span>}
-                {t.due_date && editable && <button type="button" aria-label="Remove the due date" onClick={() => void patch({ due_date: null })} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><X className="h-3.5 w-3.5" aria-hidden /></button>}
+                {/* Asana's due date and "Repeats" (20 Oct 2026) */}
+                <DuePicker due={t.due_date} repeat={normaliseRepeat((t as { repeat?: unknown }).repeat)} today={today} done={done} editable={editable}
+                  onChange={p => void patch(p as never)} />
               </dd>
             </div>
             {/* CLIENT — Asana's "Projects" row: the client this is for */}

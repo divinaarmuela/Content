@@ -5,6 +5,8 @@ import { authzErrorResponse, requireRole } from '../../../lib/authz'
 import { logActivity } from '../../../lib/workflow'
 import { idsOf, mayDeleteTodo, mayDependOn, mayEditTodo, sanitiseTodoPatch, todoAudience, todoChanges, todoFilesOf } from '../../../lib/todo-core'
 import { notifyTodo } from '../../../lib/todo-notify'
+import { nextDue, nextTodoId, normaliseRepeat } from '../../../lib/todo-repeat-core'
+import { dayKeyInZone } from '../../../lib/timezone-core'
 
 /** One to-do: PATCH what changed (title, note, status, date, who, client, files), DELETE it. */
 export const dynamic = 'force-dynamic'
@@ -31,6 +33,25 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (checked.patch.status === 'done' && row.status !== 'done') { patch.done_at = now; patch.done_by = user.id }
     if (checked.patch.status === 'open') { patch.done_at = null; patch.done_by = null }
     const updated = await table<TodoRow>('todos').update(id, patch as never)
+    // REPEATS (20 Oct 2026, as Asana does it): ticking a repeating to-do done makes the next one, due on the next
+    // day its rule allows. Claimed on a fixed id (`<id>_next`), so a double tick, a re-tick after a reopen, or
+    // two people at once make it once (trap 11). Same title, note, person, client, section and followers.
+    const rule = normaliseRepeat('repeat' in checked.patch ? checked.patch.repeat : row.repeat)
+    if (rule && checked.patch.status === 'done' && row.status !== 'done') {
+      const doneOn = dayKeyInZone(new Date(), 'Australia/Melbourne') ?? now.slice(0, 10)
+      const nextId = nextTodoId(id)
+      const made = await table<TodoRow>('todos').claim(nextId, cur => (cur ? null : {
+        id: nextId, title: row.title, note: row.note ?? null, status: 'open',
+        due_date: nextDue(rule, row.due_date, doneOn),
+        owner_id: row.owner_id ?? null, created_by: row.created_by ?? user.id, client_id: row.client_id ?? null,
+        files: row.files ?? [], followers: row.followers ?? null, section_id: row.section_id ?? null,
+        position: row.position ?? null, repeat: rule, repeat_of: id,
+        created_at: now, updated_at: now, done_at: null, done_by: null,
+      } as never))
+      if (made.claimed) {
+        await logActivity({ entityType: 'todo', entityId: nextId, action: 'todo_repeated', actor: user, newValue: (made.row as TodoRow).due_date ?? undefined, detail: String(row.title ?? '').slice(0, 200) })
+      }
+    }
     if (checked.patch.status && checked.patch.status !== row.status) {
       await logActivity({ entityType: 'todo', entityId: id, action: checked.patch.status === 'done' ? 'todo_done' : 'todo_reopened', actor: user, detail: String(row.title ?? '').slice(0, 200) })
       if (checked.patch.status === 'done') {

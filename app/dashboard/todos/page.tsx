@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, GitBranch, GripVertical, Hourglass, Keyboard, Layers, MessageSquare,
-  MoreHorizontal, Paperclip, Plus, Sparkles, ThumbsUp, X,
-} from 'lucide-react'
+  MoreHorizontal, Paperclip, Plus, Sparkles, ThumbsUp, X, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -21,6 +20,7 @@ import {
 import TodoPanel, { Avatar, CheckCircle } from './TodoPanel'
 import Celebration from './Celebration'
 import { MONTH_NAMES, dueTone, monthGrid, shortDue } from './todo-words'
+import { normaliseRepeat, repeatWords } from '../../lib/todo-repeat-core'
 
 /**
  * THE TO-DOS PAGE, AS ASANA'S MY TASKS (the owner, 18 Oct 2026: "create
@@ -582,6 +582,10 @@ function TaskRow({ t, today, open, picked, editable, owner, ownerName, link, met
       </div>
       <div role="cell" className={`${CELL} ${dueTone(t.due_date, today, done)}`}>
         {t.due_date ? shortDue(t.due_date, today) : <Calendar className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60" aria-hidden />}
+        {/* repeats, as Asana marks it beside the date (20 Oct 2026) */}
+        {normaliseRepeat((t as { repeat?: unknown }).repeat) && (
+          <Repeat className="ml-1 h-3.5 w-3.5 shrink-0" aria-label={repeatWords(normaliseRepeat((t as { repeat?: unknown }).repeat))} />
+        )}
       </div>
       <div role="cell" className={CELL}>
         {owner && <span className="flex min-w-0 items-center gap-1.5"><Avatar name={ownerName ?? '?'} /><span className="truncate">{owner}</span></span>}
