@@ -333,6 +333,25 @@ export function missingPreviewSources(
   return out
 }
 
+/** How long a `processing` row may sit before a PLAYER asking about it asks Cloudflare too. */
+export const ASK_ON_LOOKUP_AFTER_MS = 20 * 1000
+
+/**
+ * Should a player's lookup ask Cloudflare itself (19 Oct 2026)? The player read only our row, so a camera .mov
+ * Cloudflare had finished in 37 seconds said "Preview being made" for half an hour, until the sweep or a webhook
+ * moved the row. A row still `processing`/`queued` after twenty seconds is asked about; the answer is written
+ * back with a fresh `updated_at`, so one video costs at most one Cloudflare call per twenty seconds however many
+ * people are watching it.
+ */
+export function askCloudflareOnLookup(
+  row: { state: PreviewState; stream_uid: string | null; updated_at?: string | null; created_at?: string | null } | null,
+  nowMs: number,
+): boolean {
+  if (!row || !row.stream_uid || (row.state !== 'processing' && row.state !== 'queued')) return false
+  const t = new Date(row.updated_at ?? row.created_at ?? '').getTime()
+  return !Number.isFinite(t) || nowMs - t >= ASK_ON_LOOKUP_AFTER_MS
+}
+
 /** How long a `processing` row may sit before the poller asks Cloudflare. */
 export const POLL_AFTER_MS = 2 * 60 * 1000
 

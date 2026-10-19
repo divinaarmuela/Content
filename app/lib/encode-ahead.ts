@@ -128,7 +128,10 @@ async function copiesWanted(input: CopiesAheadInput): Promise<CopyAsk[]> {
   // as it does at publish time: the bitrate is the channel's size limit
   // spread over the length being budgeted for, and whoever asks FIRST fixes
   // that for good — which, after this change, is usually this call.
-  const seconds = await measuredDurationOf(video.url).catch(() => null)
+  // …or, while Cloudflare is still measuring a fresh upload, the length the slide was measured at in the
+  // browser (19 Oct 2026: a LinkedIn copy budgeted for thirty minutes was refused for a 57-second clip)
+  const seconds = (await measuredDurationOf(video.url).catch(() => null))
+    ?? (typeof video.seconds === 'number' && video.seconds > 0 ? video.seconds : null)
 
   const accounts = await table<SocialAccount>('social_accounts')
     .list({ where: a => a.client_id === input.clientId && input.channels.includes(a.id) })

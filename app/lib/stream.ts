@@ -2,17 +2,17 @@ import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { after } from 'next/server'
 import { DbError, table } from '@/lib/db'
-import type { AssetVersion, ContentItem, EncodeJob, VideoPreview } from '@/lib/db-types'
+import type { AssetVersion, ContentItem, EncodeJob, SocialPost, VideoPreview } from '@/lib/db-types'
 import { encoderConfigured } from './encoder'
 import { getEncodeJob, progressOf } from './encode-jobs'
 import { encodeTargetFor, PLATFORM_MEDIA } from './media-fit-core'
-import { cleanCopyWords, type CopyState } from './shrink-core'
+import { cleanCopyWords, copyDuration, type CopyState } from './shrink-core'
 import type { Platform, PostKind } from './publish-core'
 import {
   POLL_AFTER_MS, isVideoUrl, missingPreviewSources, pollablePreviews,
   previewPatchFrom, parseWebhookSignature, webhookSignatureSource,
   webhookTimestampFresh,
-  type PreviewPatch, type PreviewRow,
+  askCloudflareOnLookup, type PreviewPatch, type PreviewRow,
 } from './stream-core'
 
 /**
@@ -145,6 +145,33 @@ export async function measuredDurationOf(sourceUrl: string): Promise<number | nu
   } catch {
     return null
   }
+}
+
+/**
+ * The length a copy is budgeted for, and whether it is worth waiting for one (`copyDuration`): Cloudflare's
+ * measurement, else the length the post's own slide was measured at in the browser, else "still measuring"
+ * while Cloudflare is working on it. Never throws.
+ */
+export async function durationForCopy(sourceUrl: string): Promise<{ seconds?: number; measuring: boolean }> {
+  const url = String(sourceUrl ?? '').trim()
+  if (!url) return { measuring: false }
+  const preview = await table<VideoPreview>('video_previews')
+    .list({ where: r => r.source_url === url, limit: 1 })
+    .then(rows => rows[0] ?? null).catch(() => null)
+  let slideSeconds: number | null = null
+  if (!(typeof preview?.duration_sec === 'number' && preview.duration_sec > 0)) {
+    const posts = await table<SocialPost>('social_posts').list().catch(() => [] as SocialPost[])
+    const slidesOf = (p: SocialPost) => {
+      const own = Object.values((p.per_channel ?? {}) as Record<string, { slides?: unknown }>)
+        .flatMap(c => (Array.isArray(c?.slides) ? c.slides : []))
+      return [...(Array.isArray(p.slides) ? p.slides : []), ...own] as { url?: unknown; seconds?: unknown }[]
+    }
+    for (const p of posts) {
+      const hit = slidesOf(p).find(sl => sl?.url === url && typeof sl.seconds === 'number' && sl.seconds > 0)
+      if (hit) { slideSeconds = hit.seconds as number; break }
+    }
+  }
+  return copyDuration({ preview, slideSeconds, now: Date.now() })
 }
 
 // ── asking for one ────────────────────────────────────────────────────────
@@ -321,6 +348,11 @@ export async function lookupPreview(
   if (!streamConfigured()) return { configured: false, row: null }
   const url = String(sourceUrl ?? '').trim()
   const row = await previewFor(url)
+  // still "processing" here though Cloudflare may long be done: ask it, rather than wait on the webhook or the sweep
+  if (row && askCloudflareOnLookup(row as PreviewRow & { updated_at?: string | null }, Date.now())) {
+    const fresh = await refreshPreview(row.stream_uid!).catch(() => null)
+    if (fresh) return { configured: true, row: { ...row, ...fresh } as PreviewRow }
+  }
   if (row || !claim || !isVideoUrl(url) || !isOwnStorageUrl(url)) {
     return { configured: true, row }
   }

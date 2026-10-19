@@ -199,3 +199,32 @@ export function copyMeasureWords(probe: { width?: number; height?: number; secon
   if (probe.bytes !== undefined) parts.push(`${Math.round(probe.bytes / MB)} MB`)
   return parts.join(' · ')
 }
+
+/** How long Cloudflare may still be measuring an upload before a copy stops waiting on it. */
+export const MEASURING_WAIT_MS = 60 * 60 * 1000
+
+/**
+ * HOW LONG THE VIDEO RUNS, for budgeting its copy (19 Oct 2026, Anthony Chimirri's LinkedIn post).
+ *
+ * The length came only from Cloudflare's preview row. A video uploaded afresh and booked three minutes later
+ * was still `processing` there, so the copy was budgeted for LinkedIn's whole thirty minutes, came in under the
+ * encoder's floor, and the post failed in two seconds with "LinkedIn has no size limit a copy could be made to
+ * fit" — for a 57-second clip whose length the post's own slide had held since the upload.
+ *
+ * So: Cloudflare's number, else the slide's (measured in the browser at upload), else — while Cloudflare is
+ * still working on it, and not for ever — wait for it rather than budget blind.
+ */
+export function copyDuration(input: {
+  preview: { duration_sec?: number | null; state?: string | null; created_at?: string | null } | null
+  slideSeconds: number | null
+  now: number
+}): { seconds?: number; measuring: boolean } {
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
+  if (ok(input.preview?.duration_sec)) return { seconds: input.preview!.duration_sec!, measuring: false }
+  if (ok(input.slideSeconds)) return { seconds: input.slideSeconds, measuring: false }
+  const p = input.preview
+  const started = p?.created_at ? Date.parse(p.created_at) : NaN
+  const measuring = !!p && p.state !== 'ready' && p.state !== 'error'
+    && Number.isFinite(started) && input.now - started < MEASURING_WAIT_MS
+  return { measuring }
+}

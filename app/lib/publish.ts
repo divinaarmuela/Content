@@ -10,7 +10,7 @@ import { readPostState } from './post-stage-core'
 import { getPublisher } from './publisher'
 import { takeClaimLock, releaseClaimLock } from './claim-lock'
 import { encoderConfigured } from './encoder'
-import { measuredDurationOf, smallerCopyOf } from './stream'
+import { durationForCopy, smallerCopyOf } from './stream'
 import { headStoredObject, publicBase } from './storage'
 import { channelsNeedingCopy, cleanCopyWords } from './shrink-core'
 import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-core'
@@ -711,8 +711,12 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
    * that is missing the fallback still applies, and the job row records
    * `target_source: 'fallback'` so the gap is findable.
    */
-  const measured = await measuredDurationOf(url)
-  const seconds = measured ?? undefined
+  const { seconds, measuring } = await durationForCopy(url)
+  if (seconds === undefined && measuring) {
+    // a fresh upload Cloudflare is still measuring: budgeting it for the channel's whole length ceiling
+    // refused a 57-second LinkedIn video outright (19 Oct 2026) — wait for the number instead
+    return { wait: true, reason: 'Measuring the video before its copy is made' }
+  }
   if (seconds === undefined) {
     console.warn(`[publish ${job.id}] no measured duration for ${url}; the copy will be budgeted for the channel's whole length ceiling`)
   }
