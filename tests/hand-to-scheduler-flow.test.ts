@@ -167,10 +167,12 @@ describe('a manager hands an approved edit to a scheduler', () => {
     expect(r.json.error).toBe('Only an approved or scheduled item can be handed to someone')
   })
 
-  it('the pickers offer scheduler users: Hand to on a card, and Hand to on a New post', () => {
+  // …and a scheduler, a super admin or an account manager, in that order (the owner, 19 Oct 2026: "allow it to
+  // handover to anyone with schedular first options dropdown then Super admin and then AM")
+  it('the pickers offer schedulers first, then super admins, then account managers: Hand to on a card, and on a New post', () => {
     const s = readFileSync(join(process.cwd(), 'app/dashboard/board/BoardDialogs.tsx'), 'utf8')
-    expect(s).toContain(".filter(u => u.active_status !== false && u.role === 'scheduler')")
-    expect(s).toContain("const handTo = forPosting ? team.filter(p => p.role === 'scheduler') : whoMakesIt(team as HandTo[])")
+    expect(s).toContain('const groups = handToGroups(people, SCHEDULING_HAND_TO_ORDER)')
+    expect(s).toContain('SCHEDULING_HAND_TO_ORDER).flatMap(g => g.people)')
     // the scheduler's drawer: the finished edit above the folder, and files
     // added on top of it for the approval
     const d = readFileSync(join(process.cwd(), 'app/dashboard/board/PostApprovalDetail.tsx'), 'utf8')

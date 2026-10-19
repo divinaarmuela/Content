@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ExternalLink, Send } from 'lucide-react'
+import { Check, ExternalLink, Folder as FolderIcon, Send } from 'lucide-react'
 import type { EditingPortal, EditingPortalComment } from '../../lib/editing-portal'
 import type { ClipApproval } from '../../lib/clip-approvals-core'
 import { clipApproval, approvedClipsWords } from '../../lib/clip-approvals-core'
@@ -11,6 +11,7 @@ import { roundLabel } from '../../lib/edit-round-core'
 import HoverClip from '../media/HoverClip'
 import { hlsManifestUrl, useHlsSource } from '../media/useHlsSource'
 import { assetLine, changedAtRound, clipsAtRound, pieceWords } from '../../lib/editing-portal-core'
+import { baseName, folderSections } from '../../lib/drive-folder-files-core'
 
 /**
  * THE EDITING PORTAL (the owner, 16 Sep 2026: "a new look where the videos
@@ -277,7 +278,7 @@ export default function EditingReview({ data, approved: clientApproved = false }
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-foreground" title={clip.name}>{clip.name}</p>
+                <p className="truncate text-[15px] font-semibold text-foreground" title={clip.name}>{clip.name.split('/').join(' / ')}</p>
                 {/* the whole set at this version (30 Sep 2026): what changed in it, what was carried as it was */}
                 {data.rounds.length > 1 && !lookingBack && round !== data.rounds[data.rounds.length - 1] && (
                   <p data-version-mark className="text-[12px] font-semibold text-muted-foreground">{changedAtRound(clip, round) ? `New in ${roundLabel(round)}` : `Unchanged since ${roundLabel(clip.version)}`}</p>
@@ -320,36 +321,51 @@ export default function EditingReview({ data, approved: clientApproved = false }
 
         {/* ── the other clips ── */}
         {clips.length > 1 && (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label="All the clips">
-            {clips.map((c, i) => {
+          // THE FOLDERS OF THE LINK (19 Oct 2026): each folder a heading by its whole name, its clips under it
+          <div className="flex flex-col gap-4" aria-label="All the clips">
+            {folderSections(clips).map(section => (
+              <section key={section.path || 'top'} className="flex flex-col gap-2">
+                {section.title && (
+                  <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                    <FolderIcon className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    {section.title}
+                    <span className="font-normal text-muted-foreground">· {section.files.length}</span>
+                  </h3>
+                )}
+                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {section.files.map(c => {
+                    const i = clips.indexOf(c)
               const tick = clipApproval(approvals, c.id)
-              const n = commentsOnClip(comments as never, c.id).length
-              return (
-                <li key={c.id}>
-                  <button type="button" onClick={() => setCurrent(i)} aria-pressed={i === current} aria-label={`Play ${c.name}`}
-                    className={`group flex w-full flex-col gap-1.5 rounded-xl border p-1.5 text-left transition ${i === current ? 'border-amber-300 bg-foreground/10' : 'border-border hover:border-foreground/40'}`}>
-                    <span className="relative block aspect-[4/5] w-full overflow-hidden rounded-lg bg-foreground/5">
-                      {c.thumb
-                        // eslint-disable-next-line @next/next/no-img-element -- Drive's own picture
-                        ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                        // the clip's own first frame, from our copy (16 Sep 2026)
-                        : <HoverClip src={c.src} className="h-full w-full object-cover"
-                            poster={c.stream ? `${c.stream.base}/thumbnails/thumbnail.jpg?time=1s&height=480` : null} duration={c.stream?.duration ?? null}
-                            frames={c.stream ? (s => `${c.stream!.base}/thumbnails/thumbnail.jpg?time=${s}s&height=480`) : null} />}
-                      {tick && (
-                        <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
-                          <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
-                        </span>
-                      )}
-                      {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">{n}</span>}
-                    </span>
-                    <span className="truncate px-0.5 text-[12px] text-foreground/80" title={c.name}>{c.name}</span>
-                    {data.rounds.length > 1 && round !== data.rounds[data.rounds.length - 1] && <span className="px-0.5 text-[11px] text-muted-foreground">{changedAtRound(c, round) ? `New in ${roundLabel(round)}` : 'Unchanged'}</span>}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                    const n = commentsOnClip(comments as never, c.id).length
+                    return (
+                      <li key={c.id}>
+                        <button type="button" onClick={() => setCurrent(i)} aria-pressed={i === current} aria-label={`Play ${c.name}`}
+                          className={`group flex w-full flex-col gap-1.5 rounded-xl border p-1.5 text-left transition ${i === current ? 'border-amber-300 bg-foreground/10' : 'border-border hover:border-foreground/40'}`}>
+                          <span className="relative block aspect-[4/5] w-full overflow-hidden rounded-lg bg-foreground/5">
+                            {c.thumb
+                              // eslint-disable-next-line @next/next/no-img-element -- Drive's own picture
+                              ? <img src={c.thumb} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                              // the clip's own first frame, from our copy (16 Sep 2026)
+                              : <HoverClip src={c.src} className="h-full w-full object-cover"
+                                  poster={c.stream ? `${c.stream.base}/thumbnails/thumbnail.jpg?time=1s&height=480` : null} duration={c.stream?.duration ?? null}
+                                  frames={c.stream ? (s => `${c.stream!.base}/thumbnails/thumbnail.jpg?time=${s}s&height=480`) : null} />}
+                            {tick && (
+                              <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black" title="Approved">
+                                <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
+                              </span>
+                            )}
+                            {n > 0 && <span className="absolute bottom-1.5 right-1.5 rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">{n}</span>}
+                          </span>
+                          <span className="truncate px-0.5 text-[12px] text-foreground/80" title={c.name}>{baseName(c.name)}</span>
+                          {data.rounds.length > 1 && round !== data.rounds[data.rounds.length - 1] && <span className="px-0.5 text-[11px] text-muted-foreground">{changedAtRound(c, round) ? `New in ${roundLabel(round)}` : 'Unchanged'}</span>}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
         {approvedWords && <p className="text-[13px] text-emerald-600 dark:text-emerald-300">{approvedWords}</p>}
         {answered && (

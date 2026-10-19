@@ -30,6 +30,13 @@ export const HAND_TO_ROLE_ORDER: readonly Role[] = [
   'editor', 'scheduler', 'account_manager', 'super_admin',
 ]
 
+/**
+ * WHO A CARD IS HANDED TO FOR POSTING, in order (the owner, 19 Oct 2026: "allow it to handover to anyone with
+ * schedular first options dropdown then Super admin and then AM"). It was schedulers only; the hand-over route
+ * already took any active team member.
+ */
+export const SCHEDULING_HAND_TO_ORDER: readonly Role[] = ['scheduler', 'super_admin', 'account_manager']
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /**
@@ -130,7 +137,7 @@ export function whoMakesIt(people: readonly HandTo[]): HandTo[] {
   return [...makers, ...rest]
 }
 
-export function handToGroups(people: readonly HandTo[]): HandToGroup[] {
+export function handToGroups(people: readonly HandTo[], roleOrder: readonly Role[] = HAND_TO_ROLE_ORDER): HandToGroup[] {
   const groups = new Map<string, HandTo[]>()
   for (const p of people) {
     if (!p?.id || p.role === 'client') continue
@@ -140,8 +147,8 @@ export function handToGroups(people: readonly HandTo[]): HandToGroup[] {
     else groups.set(key, [p])
   }
   const order = (role: string) => {
-    const i = (HAND_TO_ROLE_ORDER as readonly string[]).indexOf(role)
-    return i === -1 ? HAND_TO_ROLE_ORDER.length : i
+    const i = (roleOrder as readonly string[]).indexOf(role)
+    return i === -1 ? roleOrder.length : i
   }
   return [...groups.entries()]
     .sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))

@@ -121,3 +121,90 @@ export function folderUnreadableWords(accountEmail: string | null): string {
   const who = accountEmail ? `share it with ${accountEmail}` : 'share it with the agency\u2019s Drive account'
   return `The files could not be read — ${who}, or set the folder to anyone with the link, and they show here.`
 }
+
+/**
+ * THE FOLDERS INSIDE A HANDED-IN LINK (the owner, 19 Oct 2026, Ryan Patumaka's "Travel Vlogs x5": the card had
+ * "extracted all the videos from the link including the one in sub folder and grabbed all the videos as one").
+ * The pull keeps every file's place in the folder in its name — `SCHEDULED/Video Carousel/1.mov` — but the card
+ * drew all 37 as one grid, so twelve clips of one carousel and eight of another could not be told apart. This
+ * groups them back into the folders they came from, Drive's way round: a folder's own files, then its
+ * subfolders, each holding theirs. A set with no folders in it comes back as one flat level, as before.
+ */
+export type TileFolder<T> = {
+  /** the folder's own name; '' for the top */
+  name: string
+  /** its place from the top, `SCHEDULED/Video Carousel` */
+  path: string
+  /** the files directly in it, in the order they came */
+  files: T[]
+  folders: TileFolder<T>[]
+  /** every file in it and below it */
+  count: number
+}
+
+export function tileTree<T extends { name: string }>(tiles: readonly T[]): TileFolder<T> {
+  const top: TileFolder<T> = { name: '', path: '', files: [], folders: [], count: 0 }
+  for (const t of tiles) {
+    const parts = String(t.name ?? '').split('/').filter(Boolean)
+    let at = top
+    at.count++
+    for (const part of parts.slice(0, -1)) {
+      let next = at.folders.find(f => f.name === part)
+      if (!next) {
+        next = { name: part, path: at.path ? `${at.path}/${part}` : part, files: [], folders: [], count: 0 }
+        at.folders.push(next)
+      }
+      next.count++
+      at = next
+    }
+    at.files.push(t)
+  }
+  const sort = (f: TileFolder<T>) => {
+    f.folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    f.folders.forEach(sort)
+  }
+  sort(top)
+  return top
+}
+
+/** A file's own name, without the folders it sits in. */
+export function baseName(name: string): string {
+  const parts = String(name ?? '').split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? String(name ?? '')
+}
+
+/**
+ * The folders open when the set is first shown: a lone wrapping folder (the `SCHEDULED` that holds everything)
+ * opens by itself, all the way down while each level holds nothing but one folder, so the first thing seen is
+ * where the files start dividing. Below that, every folder starts closed, as Drive's do.
+ */
+export function startOpenFolders<T>(top: TileFolder<T>): Set<string> {
+  const open = new Set<string>()
+  let at = top
+  while (at.files.length === 0 && at.folders.length === 1) {
+    at = at.folders[0]
+    open.add(at.path)
+  }
+  return open
+}
+
+/**
+ * The same folders as flat SECTIONS, for the client's portal (19 Oct 2026, the owner: "im worried how this will
+ * show on the portal" … "we need the folder names tho"). A client is not handed a tree to open and close: each
+ * folder of the link becomes a heading — its whole name, `SCHEDULED / Video Carousel`, as the Drive reads — with
+ * its files under it, depth first, in Drive's order. Files loose at the top of the link come first, with a
+ * heading only once there are folders to tell them apart from.
+ */
+export function folderSections<T extends { name: string }>(
+  tiles: readonly T[], looseTitle = 'In the main folder',
+): { title: string | null; path: string; files: T[] }[] {
+  const top = tileTree(tiles)
+  const out: { title: string | null; path: string; files: T[] }[] = []
+  if (top.files.length > 0) out.push({ title: top.folders.length > 0 ? looseTitle : null, path: '', files: top.files })
+  const walk = (f: TileFolder<T>) => {
+    if (f.files.length > 0) out.push({ title: f.path.split('/').join(' / '), path: f.path, files: f.files })
+    f.folders.forEach(walk)
+  }
+  top.folders.forEach(walk)
+  return out
+}

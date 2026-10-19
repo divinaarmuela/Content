@@ -196,8 +196,25 @@ export function autoHandoverTargets(input: {
 }
 
 /** The edit card's notice after a hand-over: "Handed to Test Scheduler — 8 draft posts on Post approval". */
-export function handoverNotice(name: string | null | undefined, posts: number): string {
+/**
+ * FILES HANDED IN AS FOLDERS WAIT ON THE SCHEDULE PAGE (the owner, 19 Oct 2026: "it will be like the main folder
+ * with the videos if any and then the subfolder with the videos there — anything thats not posted will be shown
+ * … on the schedule page left side … they can simply post it anytime"). A card whose files sit in two or more
+ * folders of the link (the main folder counts) is not made into drafts at the hand-over: one draft per file, or
+ * one post of all of them, would scatter or merge what the folders keep apart. The files wait in the rail,
+ * folder by folder. One folder — `6-12/` holding everything — is no structure to keep, and hands over as before.
+ */
+export function waitsInFolders(slides: readonly { name?: string | null }[]): boolean {
+  const dirs = new Set(slides.map(s => {
+    const parts = String(s?.name ?? '').split('/').filter(Boolean)
+    return parts.slice(0, -1).join('/')
+  }))
+  return dirs.size >= 2
+}
+
+export function handoverNotice(name: string | null | undefined, posts: number, inFolders = false): string {
   const who = String(name ?? '').trim() || 'the scheduler'
+  if (inFolders) return `Handed to ${who} — the files wait on the Schedule page, folder by folder, to post any time.`
   if (posts <= 0) return `Handed to ${who}.`
   return `Handed to ${who} — ${posts} draft post${posts === 1 ? '' : 's'} on Post approval`
 }
