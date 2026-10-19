@@ -69,9 +69,12 @@ describe('eligibility', () => {
     }
   })
 
-  it('says an already-posted item has already posted', () => {
-    expect(eligibility({ status: 'published' }, [version]))
-      .toEqual({ ok: false, reason: 'Already posted' })
+  // USED AGAIN (the owner, 19 Oct 2026): a piece that went out may start another post — the same video for
+  // another network. A post never moves its piece (the posting rebuild, 29 Sep 2026), so nothing has to take it.
+  it('lets an already-posted item start another post', () => {
+    const e = eligibility({ status: 'published' }, [version])
+    expect(e.ok).toBe(true)
+    if (e.ok) expect(e.needsClientApproval).toBe(false)
   })
 
   it('says nothing else is ready yet', () => {
@@ -688,7 +691,7 @@ describe('the media a manager may post', () => {
   it('never includes work still being MADE — no edge would take it either', () => {
     for (const status of [
       'draft_uploaded', 'revision_required', 'revision_complete',
-      'client_changes_requested', 'published',
+      'client_changes_requested',
     ]) {
       expect(postingEligibility({ status, content_type: 'static' }, [version], true).ok, status)
         .toBe(false)

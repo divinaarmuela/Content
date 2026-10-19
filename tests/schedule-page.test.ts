@@ -349,3 +349,29 @@ describe('the grids draw Ready to post, Booked in and Posted only', () => {
     for (const s of ['draft', 'quality_check', 'with_client', 'cancelled'] as const) expect(showsOnSchedule(s), s).toBe(false)
   })
 })
+
+import { postingEligibility } from '../app/lib/social-schedule-core'
+import { UPLOAD_ADHOC_REASON } from '../app/lib/schedule-upload-core'
+
+/**
+ * USED AGAIN (the owner, 19 Oct 2026): a file uploaded straight onto Schedule or Post approval stays a
+ * `draft_uploaded` piece for good, and a piece that went out is `published` — both were refused, so Anthony
+ * Chimirri's video was uploaded a second time for LinkedIn. Either may now start another post (a draft, still
+ * checked); a piece genuinely still being made is still refused.
+ */
+describe('which pieces may start another post', () => {
+  const upload = { version_number: 1, notes: UPLOAD_ADHOC_REASON, files: [{ url: 'https://media.mdmmarketing.com.au/v.mov', type: 'video', name: 'v.mov' }] }
+  it('an upload made for a post may be used again', () => {
+    const e = postingEligibility({ status: 'draft_uploaded', content_type: 'reel' } as never, [upload] as never, false)
+    expect(e.ok).toBe(true)
+  })
+  it('a piece that already went out may be used again, without the not-approved marker', () => {
+    const e = postingEligibility({ status: 'published', content_type: 'reel' } as never, [{ ...upload, notes: '' }] as never, false)
+    expect(e.ok && e.needsClientApproval).toBe(false)
+    expect(e.ok).toBe(true)
+  })
+  it('a board piece still being made is still refused', () => {
+    const e = postingEligibility({ status: 'draft_uploaded', content_type: 'reel' } as never, [{ ...upload, notes: 'first cut' }] as never, false)
+    expect(e.ok).toBe(false)
+  })
+})
