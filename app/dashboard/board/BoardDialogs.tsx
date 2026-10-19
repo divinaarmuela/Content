@@ -887,7 +887,7 @@ export function NewCardDialog({ open, onOpenChange, clients, kinds, team, viewer
               <div className="flex flex-col gap-2">
                 <Label>{forPosting ? 'Hand to' : 'Who'}</Label>
                 <Select value={owner} onValueChange={v => v && setOwner(v)}>
-                  <SelectTrigger className={field}><SelectValue placeholder={forPosting ? 'Pick a scheduler' : 'Pick a person'} /></SelectTrigger>
+                  <SelectTrigger className={field}><SelectValue placeholder={forPosting ? 'Pick who posts it' : 'Pick a person'} /></SelectTrigger>
                   <SelectContent>
                     {handTo.map(p => <SelectItem key={p.id} value={p.id}>{p.id === viewer.id ? 'Me' : p.name || p.email}</SelectItem>)}
                   </SelectContent>
