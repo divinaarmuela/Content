@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Check, Copy, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { publicUrl } from '@/app/lib/public-url'
 import { CONNECTABLE, connectLinkPath } from '@/app/lib/connect-link-core'
 import { contactIdOf, ownerChoices } from '@/app/lib/account-owner-core'
@@ -98,12 +99,19 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
             Tick the networks they should sign in to, copy the link, send it. They press Connect on each, sign
             in to the network, and the account lands here. No account of ours needed.
           </p>
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className="text-[12px] font-semibold text-muted-foreground">This link is for</span>
-            <select value={linkFor} onChange={e => setLinkFor(e.target.value)} aria-label="Who the link is for"
-              className="min-h-10 w-full max-w-[420px] rounded-full border border-border bg-background px-3 text-[13px]">
-              {ownerChoices(clientName, contacts).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
+            <Select value={linkFor} onValueChange={setLinkFor}>
+              <SelectTrigger aria-label="Who the link is for"
+                className="h-10 w-full max-w-[420px] rounded-full border-border bg-background px-4 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ownerChoices(clientName, contacts).map(c => (
+                  <SelectItem key={c.value} value={c.value} className="min-h-10 text-[13px]">{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="text-[12px] text-muted-foreground">Accounts connected from this link land under that name. Copy the link and send it yourself. Nothing is emailed from here.</span>
             {!adding ? (
               <button type="button" onClick={() => setAdding(true)} className="w-fit text-[12px] font-semibold underline underline-offset-4">+ Add a person</button>
@@ -116,7 +124,7 @@ export default function ClientConnectLink({ token, clientId, clientName, connect
                 <button type="button" onClick={() => setAdding(false)} className="min-h-10 px-2 text-[13px] text-muted-foreground">Cancel</button>
               </div>
             )}
-          </label>
+          </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Networks on the link">
             {CONNECTABLE.map(p => {
               const on = picked.includes(p)
