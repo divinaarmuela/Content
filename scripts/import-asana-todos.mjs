@@ -20,6 +20,13 @@
  * team by email), creator, collaborators, and its comments (oldest first,
  * the writer matched by email; an unmatched writer's name leads the text).
  * Re-running is safe: a task already copied (asana_gid) is skipped.
+ *
+ * REPEATING TASKS (20 Oct 2026, Manal's missing to-dos): Asana makes a NEW task each time a repeating one is
+ * ticked, so a one-off copy misses every round after it. A re-run copies the round that is open now, and:
+ *   - skips it when that person already has an OPEN to-do of the same title here (they re-made it by hand);
+ *   - gives it our repeat rule (todo-repeat-core), read off its past rounds in Asana — Asana's API does not hand
+ *     the rule itself out. Every round a weekday apart → Weekly Mon–Fri; always 7 days → Weekly on that day;
+ *     always 1 day → Daily; always about a month → Monthly. Anything else: copied with no rule, and listed.
  */
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -70,6 +77,29 @@ const clientOfProjects = ps => {
 // what is already here
 const existing = Object.values(await dbGet('todos'))
 const already = new Set(existing.map(t => t.asana_gid).filter(Boolean))
+const norm = s => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+// an open to-do this person already has under the same title: re-made here by hand, not copied again
+const remade = (title, owner) => existing.find(e => e.status !== 'done' && norm(e.title) === norm(title) && (e.owner_id ?? null) === (owner ?? null))
+
+// THE REPEAT RULE, read off the task's past rounds in Asana (dates as calendar days)
+const dayMs = 86400000
+const dow = d => (new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7   // Monday 0
+async function repeatOf(t) {
+  if (!t.assignee?.gid || !t.due_on) return null
+  const rounds = await asana(`/workspaces/${WS}/tasks/search?text=${encodeURIComponent(t.name)}&assignee.any=${t.assignee.gid}&opt_fields=name,due_on&sort_by=created_at`)
+  const dues = [...new Set(rounds.filter(r => norm(r.name) === norm(t.name) && r.due_on).map(r => r.due_on))].sort().slice(-10)
+  if (dues.length < 3) return null
+  const gaps = dues.slice(1).map((d, i) => Math.round((Date.parse(d) - Date.parse(dues[i])) / dayMs))
+  const days = [...new Set(dues.map(dow))].sort()
+  if (gaps.every(g => g === 1)) return { freq: 'daily' }
+  if (gaps.every(g => g === 7)) return { freq: 'weekly', days: [dow(dues[dues.length - 1])] }
+  // each round on the NEXT of the weekdays it has been seen on — Mon–Fri, Mon–Sat, Tue/Thu/Fri (Manal's
+  // "Community Management for All Clients", 20 Oct 2026): weekly on exactly those days
+  const nextOn = (d, g) => { for (let i = 1; i <= 7; i++) { if (days.includes(dow(new Date(Date.parse(d) + i * dayMs).toISOString().slice(0, 10)))) return i === g } return false }
+  if (days.length > 1 && gaps.every((g, i) => nextOn(dues[i], g))) return { freq: 'weekly', days }
+  if (gaps.every(g => g >= 28 && g <= 31)) return { freq: 'monthly' }
+  return null
+}
 
 // 1. every incomplete task in the live projects
 const tasks = new Map()
@@ -97,8 +127,10 @@ const unmatched = new Set()
 console.log(`${WRITE ? 'WRITING' : 'DRY RUN (nothing written)'} — ${projects.length} projects, ${tasks.size} tasks read, ${open.length} to copy, ${tasks.size - open.length} skipped (done or already copied)\n`)
 
 let written = 0, commentsWritten = 0
+const noRule = []
 for (const t of topFirst) {
   const owner = idOf(t.assignee?.email)
+  if (remade(t.name, owner)) { console.log(`= ${t.name}  [already here, re-made by hand — not copied]`); continue }
   if (t.assignee && !owner) unmatched.add(`${t.assignee.name} <${t.assignee.email ?? 'no email'}>`)
   const parentId = t.parent?.gid ? ourId.get(t.parent.gid) ?? existing.find(e => e.asana_gid === t.parent.gid)?.id ?? null : null
   const followers = [...new Set((t.followers ?? []).map(f => idOf(f.email)).filter(Boolean))]
@@ -122,6 +154,7 @@ for (const t of topFirst) {
     position: Date.parse(t.created_at ?? now) || Date.now(),
     blocked_by: [],
     asana_gid: t.gid,
+    repeat: t.parent?.gid ? null : await repeatOf(t),
     created_at: t.created_at ?? now,
     updated_at: now,
     done_at: null,
@@ -129,7 +162,9 @@ for (const t of topFirst) {
   }
   const stories = await asana(`/tasks/${t.gid}/stories?opt_fields=type,text,created_at,created_by.email,created_by.name`)
   const comments = stories.filter(s => s.type === 'comment' && String(s.text ?? '').trim())
-  console.log(`${parentId ? '   └ ' : '• '}${row.title}  [${where || 'no project'} → ${row.client_id ? clients.find(c => c.id === row.client_id)?.name : 'no client'} · ${row.due_date ?? 'no date'} · ${owner ? (team.find(u => u.id === owner)?.name ?? owner) : (t.assignee ? `unmatched: ${t.assignee.name}` : 'no assignee')} · ${comments.length} comment${comments.length === 1 ? '' : 's'}]`)
+  const ruleWords = row.repeat ? (row.repeat.freq === 'weekly' ? `repeats weekly ${row.repeat.days.map(d => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d]).join('/')}` : `repeats ${row.repeat.freq}`) : 'NO REPEAT'
+  if (!row.repeat && !parentId) noRule.push(row.title)
+  console.log(`${parentId ? '   └ ' : '• '}${row.title}  [${ruleWords} · ${where || 'no project'} → ${row.client_id ? clients.find(c => c.id === row.client_id)?.name : 'no client'} · ${row.due_date ?? 'no date'} · ${owner ? (team.find(u => u.id === owner)?.name ?? owner) : (t.assignee ? `unmatched: ${t.assignee.name}` : 'no assignee')} · ${comments.length} comment${comments.length === 1 ? '' : 's'}]`)
   if (!WRITE) continue
   await dbPut(`todos/${row.id}`, row)
   written++
@@ -146,4 +181,5 @@ for (const t of topFirst) {
 }
 
 console.log(`\n${WRITE ? `Wrote ${written} to-dos and ${commentsWritten} comments.` : 'Dry run only — run again with --write to copy.'}`)
+if (noRule.length) console.log(`\nNo repeat pattern found (copied as one-off to-dos — set Repeats by hand if they repeat):\n  ${noRule.join('\n  ')}`)
 if (unmatched.size) console.log(`\nAssignees in Asana with no matching team member here (their to-dos have no assignee; the note says who): \n  ${[...unmatched].join('\n  ')}`)
