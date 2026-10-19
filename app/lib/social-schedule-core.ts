@@ -38,6 +38,7 @@ import { finalFilesOf, versionSnapshot, type FinalFile } from './final-files-cor
 import { roundOf, versionLabel } from './edit-round-core'
 import { keyToUtc, weekdayIndex, type GridCell } from './work-calendar-core'
 import type { ItemStatus } from './workflow-core'
+import { isAdHocUploadVersion } from './schedule-upload-core'
 
 /* ── the post ───────────────────────────────────────────────────────────── */
 
@@ -425,7 +426,14 @@ export function postingEligibility(
 ): Eligibility {
   const status = String(item?.status ?? '') as ItemStatus
   const approved = ELIGIBLE_STATUSES.includes(status)
-  const usable = approved
+  // USED AGAIN (the owner, 19 Oct 2026: files uploaded for a post "should be able to be resuable in the scedule
+  // left side so we dont need to encode it anymore"). A file uploaded straight onto Schedule or Post approval
+  // makes a piece that stays `draft_uploaded` for good — its POSTS are what get approved — and a piece that went
+  // out is `published`; both were refused for ever, so the same video was uploaded again for another network.
+  // Either may now start another post. That post is a draft like any other and goes to the quality check.
+  const reusable = (status === 'draft_uploaded' && isAdHocUploadVersion(latestVersion(versions)))
+    || status === 'published'
+  const usable = approved || reusable
     || (withoutApproval && (APPROVE_WITHOUT_CLIENT_STATUSES as string[]).includes(status))
   if (!usable) {
     return { ok: false, reason: NOT_ELIGIBLE[status] ?? 'Not ready yet' }
@@ -435,7 +443,8 @@ export function postingEligibility(
   if (!version) return { ok: false, reason: 'No media yet' }
   const slides = postSlides(item?.content_type, slidesOf(version))
   if (slides.length === 0) return { ok: false, reason: 'No media yet' }
-  return { ok: true, version, slides, needsClientApproval: !approved }
+  // a piece that went out was signed off on its way; only an upload nobody approved carries the marker
+  return { ok: true, version, slides, needsClientApproval: !approved && status !== 'published' }
 }
 
 /** The highest `version_number`; array order is the tie-break and the fallback
