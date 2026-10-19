@@ -36,7 +36,7 @@ describe('Linktree — the pure half (21 Sep 2026)', () => {
     expect(mayManageLinktree({ role: 'account_manager' })).toBe(true)
     expect(mayManageLinktree({ role: 'editor' })).toBe(false)
   })
-  it('tokens are encrypted at rest, the state is claimed once, writes are a manager’s, and the card sits with the channels', () => {
+  it('tokens are encrypted at rest, the state is claimed once, writes are a manager’s, and the card is off the social pages', () => {
     const server = readFileSync('app/lib/linktree.ts', 'utf8')
     expect(server).toContain('access_token_enc: encryptSecret(t.access_token),')
     const cb = readFileSync('app/api/production/linktree/callback/route.ts', 'utf8')
@@ -45,8 +45,10 @@ describe('Linktree — the pure half (21 Sep 2026)', () => {
     const one = readFileSync('app/api/production/linktree/[clientId]/route.ts', 'utf8')
     expect(one).toContain('if (!mayManageLinktree(user)) return NextResponse.json(')
     expect(readFileSync('app/api/production/linktree/connect/route.ts', 'utf8')).toContain("const user = await requireRole('account_manager')")
-    expect(readFileSync('app/dashboard/social/page.tsx', 'utf8')).toContain('<LinktreeCard clientId={c.id} />')
-    expect(readFileSync('app/dashboard/clients/[id]/social/page.tsx', 'utf8')).toContain('<LinktreeCard clientId={id} />')
+    // OFF THE SOCIAL PAGES (the owner, 19 Oct 2026: "remove the linktree feature on the social channels page").
+    // The connection and its routes stay; the card is drawn nowhere.
+    expect(readFileSync('app/dashboard/social/page.tsx', 'utf8')).not.toContain('LinktreeCard')
+    expect(readFileSync('app/dashboard/clients/[id]/social/page.tsx', 'utf8')).not.toContain('LinktreeCard')
     expect(readFileSync('app/dashboard/clients/LinktreeCard.tsx', 'utf8')).toContain('Linktree has no way to make a profile from here.')
   })
 })
