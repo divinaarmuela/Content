@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { PostPreviewFrame } from '../social/PostPreview'
+import OwnCaptions from './OwnCaptions'
 import type { NetworkProfile, PostedTile, ScheduledTile, SchedulingNetwork } from '../../lib/one-portal-schedule'
 import { REVIEW_WORDS } from '../../lib/one-portal-core'
 
@@ -265,6 +266,7 @@ function BookedSheet({ token, tile, network, onClose }: { token: string; tile: S
       </p>
       <div className="mx-auto w-full max-w-[420px]">
         {frame ? <PostPreviewFrame preview={frame as never} /> : <Cover tile={tile} className="aspect-square w-full rounded" />}
+        <OwnCaptions captions={tile.own_captions} except={frame?.platform ?? null} />
       </div>
       {/* one name box for the answer and the comments alike */}
       {(tile.answerable || tile.may_comment) && (

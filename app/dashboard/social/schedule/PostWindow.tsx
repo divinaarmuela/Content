@@ -57,6 +57,7 @@ import { useTeamMembers } from '../../production/workHooks'
 import type { ImageEditorTarget } from './ImageEditor'
 import MediaPicker from './MediaPicker'
 import PostNotes from './PostNotes'
+import ChannelCaptions from './ChannelCaptions'
 import AutomationSection from './AutomationSection'
 import { Dropdown, ExtraRow, MenuItem } from './PostOptionRows'
 import TimePicker from './TimePicker'
@@ -1130,6 +1131,20 @@ export default function PostWindow({
                       className="w-full resize-y bg-transparent text-[14px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground"
                     />
                   </label>
+                )}
+
+                {!allStory && (
+                  <ChannelCaptions
+                    channels={chosen}
+                    perChannel={shown.perChannel}
+                    caption={editable ? state.caption : shown.caption}
+                    editable={editable}
+                    onChange={(channel, words) => dispatch({ type: 'extra', channel, patch: { caption: words } })}
+                    noCaption={a => {
+                      const p = String(a.platform)
+                      return (shown.perChannel[a.id]?.kind ?? (isPlatform(p) ? autoKindFor(p, media) : null)) === 'story'
+                    }}
+                  />
                 )}
 
                 {chosen.some(a => ['instagram', 'facebook'].includes(String(a.platform))) && (

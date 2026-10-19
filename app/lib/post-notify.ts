@@ -17,7 +17,7 @@ import {
   teamPostPath, type RoundPost, type Roster, type TeamPerson, type Words,
 } from './post-notify-core'
 import { clientRecipients, pickRecipients } from './client-recipients-core'
-import { portalWaitingPath } from './portal-core'
+import { portalWaitingPath, readFrozenPost } from './portal-core'
 import { portalPostHref } from './post-page-core'
 import { POST_APPROVAL_BOARD } from './overview-links-core'
 
@@ -103,6 +103,17 @@ async function platformsOf(channelIds: readonly string[]): Promise<string[]> {
   const accounts = await table<SocialAccount>('social_accounts')
     .list({ where: a => channelIds.includes(a.id) }).catch(() => [] as SocialAccount[])
   return [...new Set(accounts.map(a => String(a.platform)))]
+}
+
+/** the channels whose own caption is not the shared one (`customContent`) */
+function ownWordChannels(version: PostVersion, channels: readonly string[]): string[] {
+  const frozen = readFrozenPost(version as unknown as Record<string, unknown>)
+  if (!frozen) return []
+  const shared = frozen.caption.trim()
+  return channels.filter(id => {
+    const words = frozen.per_channel[id]?.caption?.trim()
+    return !!words && words !== shared
+  })
 }
 
 const whenIn = (iso: string | null | undefined, tz: string | null | undefined) =>
@@ -328,6 +339,8 @@ export async function sendClientRound(input: {
       version: want.version,
       title: await sourceTitle({ source_item_id: post.source_item_id, caption: version.caption ?? '' }),
       caption: version.caption ?? '',
+      // the networks with words of their own: the email says so, the portal shows them
+      own_words: await platformsOf(ownWordChannels(version, channels)),
       when: whenIn(version.scheduled_for, tz),
       networks: await platformsOf(channels),
       link: test ? `${DASHBOARD_URL}${teamPostPath(post)}` : `${DASHBOARD_URL}${portalPostHref(token, post.id)}`,

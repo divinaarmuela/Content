@@ -733,8 +733,8 @@ export function postsMissedByClient<P extends PostState>(posts: readonly P[], no
 export type FrozenPost = {
   n: number
   slides: Slide[]
-  /** per network (by account id): its own kind and its own files, when it has them */
-  per_channel: Record<string, { kind: string | null; slides: Slide[] }>
+  /** per network (by account id): its own kind, its own files and its own words, when it has them */
+  per_channel: Record<string, { kind: string | null; slides: Slide[]; caption?: string }>
   channels: string[]
   caption: string
   scheduled_for: string | null
@@ -746,6 +746,30 @@ export type FrozenPost = {
 const asObj = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
 
+/**
+ * THE NETWORKS WITH WORDS OF THEIR OWN (19 Oct 2026): the channels whose
+ * caption is not the shared one — Zernio's `customContent`. One line per
+ * network, in the post's channel order; a channel whose own words are the same
+ * as the shared caption is not a difference and is left out. The client sees
+ * these beside the caption, so what they approve is what each network gets.
+ */
+export function ownCaptions(
+  v: Pick<FrozenPost, 'per_channel' | 'channels' | 'caption'>,
+  platformOf: (accountId: string) => string | null | undefined,
+): { platform: string; network: string; caption: string }[] {
+  const shared = v.caption.trim()
+  const seen = new Set<string>()
+  const out: { platform: string; network: string; caption: string }[] = []
+  for (const id of v.channels) {
+    const words = v.per_channel[id]?.caption?.trim()
+    const platform = platformOf(id)
+    if (!words || !platform || words === shared || seen.has(platform)) continue
+    seen.add(platform)
+    out.push({ platform, network: networkName(platform), caption: words })
+  }
+  return out
+}
+
 /** Read a raw `post_versions` row (or, for a live post never frozen, the post's own row). Null when there is none. */
 export function readFrozenPost(row: Record<string, unknown> | null | undefined): FrozenPost | null {
   if (!row) return null
@@ -753,7 +777,11 @@ export function readFrozenPost(row: Record<string, unknown> | null | undefined):
   const per: FrozenPost['per_channel'] = {}
   for (const [acc, raw] of Object.entries(asObj(row.per_channel) ?? {})) {
     const r = asObj(raw) ?? {}
-    per[acc] = { kind: typeof r.kind === 'string' ? r.kind : null, slides: normaliseSlides(r.slides) }
+    per[acc] = {
+      kind: typeof r.kind === 'string' ? r.kind : null,
+      slides: normaliseSlides(r.slides),
+      ...(typeof r.caption === 'string' && r.caption.trim() ? { caption: r.caption } : {}),
+    }
   }
   const rawChannels = Array.isArray(row.channels) ? row.channels : Object.values(asObj(row.channels) ?? {})
   return {

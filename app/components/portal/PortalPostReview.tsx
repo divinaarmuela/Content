@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Check, ExternalLink, MessageCircle, MessageSquare } from 'lucide-react'
 import SlideCarousel from '../media/SlideCarousel'
 import PostPreviewPane from '../social/PostPreview'
+import OwnCaptions from './OwnCaptions'
 import type { PortalPostPage } from '../../lib/portal-thread'
 import type { PortalPostNote } from '../../lib/portal-core'
 import { notesForFile } from '../../lib/post-stage-core'
@@ -179,6 +180,7 @@ export default function PortalPostReview({ token, data, accent }: {
                     {showCaption ? 'Show less' : 'Read it all'}
                   </button>
                 ) : null}
+                <OwnCaptions captions={data.own_captions} />
               </div>
             )}
           </div>

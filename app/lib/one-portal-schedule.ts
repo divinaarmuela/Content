@@ -4,7 +4,7 @@ import type { ContentItem, PostVersion, SocialAccount, SocialPost } from '@/lib/
 import { getPublisher } from './publisher'
 import { avatarStale, refreshAvatars } from './account-avatars'
 import { liveTiles, type LiveTile } from './feed-preview-core'
-import { clientPostNotes, readFrozenPost, reviewFiles, type FrozenPost, type PortalPostNote } from './portal-core'
+import { clientPostNotes, ownCaptions, readFrozenPost, reviewFiles, type FrozenPost, type PortalPostNote } from './portal-core'
 import { optionsFromExtras, readPerChannel } from './schedule-compose-core'
 import { buildPostPreview, clientPreviews, type ClientPreview } from './post-preview-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
@@ -39,6 +39,8 @@ export type ScheduledTile = {
   cover: { url: string; type: 'image' | 'video'; poster?: string | null } | null
   files: number
   caption: string
+  /** the networks with words of their own (`customContent`), shown beside the caption */
+  own_captions: { platform: string; network: string; caption: string }[]
   state: ReviewState
   /** the client may answer now (booked, or a "wait" post that came off unanswered) */
   answerable: boolean
@@ -191,6 +193,7 @@ export async function loadScheduling(
       cover: files[0] ? { url: files[0].url, type: files[0].type === 'video' ? 'video' : 'image' } : null,
       files: files.length,
       caption: v.caption,
+      own_captions: ownCaptions(v, id => accountById.get(id)?.platform as string | undefined),
       state,
       answerable,
       last_slot: p.stage === 'booked' && insideLastSlot(p.scheduled_for, now.getTime()),

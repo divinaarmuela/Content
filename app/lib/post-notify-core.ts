@@ -540,6 +540,8 @@ export type RoundPost = {
   title: string
   /** the frozen version's words — never the working copy (audit P2) */
   caption: string
+  /** the networks posting words of their own instead of `caption` */
+  own_words?: readonly string[]
   when: string | null
   networks: readonly string[]
   link: string
@@ -584,6 +586,7 @@ export function clientRoundEmail(w: {
     lines: [
       ...(p.when ? [`Goes out ${p.when}${p.networks.length ? ` on ${joinNames(p.networks.map(networkName))}` : ''}.`] : []),
       ...(p.caption.trim() ? [p.caption.trim().length > 400 ? `${p.caption.trim().slice(0, 397).trimEnd()}…` : p.caption.trim()] : []),
+      ...(p.own_words?.length ? [`${joinNames(p.own_words.map(networkName))} ${p.own_words.length === 1 ? 'has' : 'have'} different words. Open the post to see them.`] : []),
     ],
     link: p.link,
   }))

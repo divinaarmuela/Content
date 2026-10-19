@@ -16,7 +16,7 @@ import { clientStatusWord, planState, progressLine, shootStatusLabel } from './p
 import { slidesOf } from './version-files-core'
 import {
   clientHadEdit, clientPostNotes, clientPostView, pieceReachedClient, postLiveLinks, postTypeLine,
-  instagramGrid, postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
+  instagramGrid, ownCaptions, postedAt, readFrozenPost, reviewFiles, type ClientPostView, type PortalPostNote,
 } from './portal-core'
 import { networkName } from './publish-core'
 import { postVersionId, readPostState, type PostState } from './post-stage-core'
@@ -334,6 +334,8 @@ export type PortalPostPage = {
   /** every file they are asked about, each can take a note */
   files: { url: string; name: string; type: 'image' | 'video' }[]
   caption: string
+  /** the networks with words of their own (`customContent`), shown under the caption */
+  own_captions: { platform: string; network: string; caption: string }[]
   type_line: string
   /** "Goes out Thu 10 Sept, 6:00 pm", or when it went out */
   when_line: string | null
@@ -466,6 +468,7 @@ export async function getPortalPostPage(
     shown_as_posted: shownAsPosted,
     files: files.map(f => ({ url: f.url, name: f.name, type: f.type === 'video' ? 'video' : 'image' })),
     caption: frozen.caption,
+    own_captions: ownCaptions(frozen, id => accountById.get(id)?.platform as string | undefined),
     type_line: postTypeLine(files, frozen.channels.map(id => frozen!.per_channel[id]?.kind ?? null)),
     when_line: posted ? when(postedAt(post)) : when(post.stage === 'booked' ? (post.booking?.for_time ?? frozen.scheduled_for) : frozen.scheduled_for),
     networks,

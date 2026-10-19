@@ -1252,7 +1252,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     .filter(c => c && String(c.platform ?? ''))
   if (channels.length === 0) problems.push('Choose at least one channel')
 
-  const caption = String(input.caption ?? '').trim()
+  const shared = String(input.caption ?? '').trim()
   const limits = slideLimits(channels.map(c => String(c.platform)))
   const seen = new Set<string>()
   for (const channel of channels) {
@@ -1262,6 +1262,8 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     const rules = PLATFORM_RULES[platform as Platform]
     const name = NETWORK_LABEL[platform.toLowerCase()] ?? platform
     if (!rules) continue
+    // a channel with its OWN words (`customContent`) is judged on those, not on the shared caption
+    const caption = String(channel.options?.caption ?? '').trim() || shared
 
     // A channel that does not need media is a channel built on words: a
     // picture with nothing said is a post with nothing said.
@@ -1316,7 +1318,7 @@ export function validateComposition(input: CompositionInput): { ok: boolean; pro
     const own: PostOptions = channel.options ?? {}
     const name = NETWORK_LABEL[platform] ?? platform
     for (const problem of optionProblems(
-      platform, { ...own, kind: own.kind ?? channel.kind ?? undefined }, media, caption,
+      platform, { ...own, kind: own.kind ?? channel.kind ?? undefined }, media, own.caption?.trim() || shared,
     )) {
       // the sentence names its own network wherever the network matters; the
       // ones that do not are prefixed so nobody has to guess which channel
