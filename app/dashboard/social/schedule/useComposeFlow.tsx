@@ -16,6 +16,11 @@ import type { Slide } from '@/app/lib/version-files-core'
 import { CANCELLED_NOTICE_SCHEDULE } from '@/app/lib/post-board-core'
 import { rebookPost } from '../../scheduler/board/rebook'
 
+/** what a piece offers a new post: its free files, or — every one already in a post — all of them again */
+function offeredFiles(m: RailMedia | undefined): Slide[] | undefined {
+  return m ? (m.slides.length ? m.slides : m.allSlides) : undefined
+}
+
 /**
  * ONE ACTION: ADD THE MEDIA, SEE IT, SEND IT — WHEREVER YOU ARE STANDING.
  *
@@ -166,8 +171,9 @@ export function useComposeFlow({ clientId, data, role, userId, suggested, onShow
     return {
       itemId: composing.itemId,
       title: media?.title ?? fresh?.title ?? 'Post',
-      slides: composing.slides?.length ? composing.slides : (media?.slides ?? fresh?.slides ?? []),
-      pieceFiles: media?.slides ?? fresh?.slides ?? [],
+      // a piece whose files are all in a post already starts its new post with those same files (19 Oct 2026)
+      slides: composing.slides?.length ? composing.slides : (offeredFiles(media) ?? fresh?.slides ?? []),
+      pieceFiles: offeredFiles(media) ?? fresh?.slides ?? [],
       pieceVersions: media?.versions,
       versionNumber: media?.versionNumber ?? null,
       coverUrl: media?.coverUrl ?? null,

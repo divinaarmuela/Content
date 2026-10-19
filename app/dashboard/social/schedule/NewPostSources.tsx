@@ -490,7 +490,7 @@ export default function NewPostSources({
                         )}
                         {m.ok && m.used && (
                           <span className="block truncate font-normal text-cream/80">
-                            Already has a post
+                            In a post · use again
                           </span>
                         )}
                       </span>

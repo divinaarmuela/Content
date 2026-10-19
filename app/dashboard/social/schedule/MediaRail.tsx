@@ -103,7 +103,9 @@ export default function MediaRail({
   const [removing, setRemoving] = useState<string | null>(null)
   // "Unused" starts on, as the design has it: the rail is for finding the
   // next thing to post, and media already in a post is not that
-  const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>(['Unused']))
+  // EVERYTHING APPROVED by default (19 Oct 2026): a piece already in a post is there to be used again for
+  // another network, rather than uploaded a second time — free pieces still come first. "Unused" is one press.
+  const [filters, setFilters] = useState<Set<RailFilter>>(() => new Set<RailFilter>())
   const [starred, toggleStar] = useStars()
   const shown = useMemo(() => filterMedia(media, filters, starred), [media, filters, starred])
 
@@ -112,14 +114,16 @@ export default function MediaRail({
    * shows like a folder so we know we can select from there which one to
    * post … once we select and see there we know which one we want to
    * schedule"). Open a folder, tick the files, press Post — the composer
-   * opens with just those. Files already in a booked post are not offered.
+   * opens with just those. Files already in a post are offered too, marked, and
+   * start unticked unless nothing else is free — the same stored file, so its
+   * preview and any copy already made are used again (19 Oct 2026).
    */
   const [openFolder, setOpenFolder] = useState<string | null>(null)
   const [ticked, setTicked] = useState<Set<string>>(() => new Set())
   const openIt = (m: RailMedia) => {
     if (openFolder === m.itemId) { setOpenFolder(null); return }
     setOpenFolder(m.itemId)
-    setTicked(new Set(m.slides.map(sl => sl.url)))
+    setTicked(new Set((m.slides.length ? m.slides : m.allSlides).map(sl => sl.url)))
   }
   const tick = (url: string) => setTicked(prev => {
     const next = new Set(prev)
@@ -204,7 +208,10 @@ export default function MediaRail({
           <div className="flex flex-col gap-2">
             {shown.map(m => {
               const isOpen = openFolder === m.itemId
-              const chosen = m.slides.filter(sl => ticked.has(sl.url))
+              // every approved file, in order; the ones a post already holds are marked
+              const offer = m.allSlides.length ? m.allSlides : m.slides
+              const taken = new Set(m.takenUrls)
+              const chosen = offer.filter(sl => ticked.has(sl.url))
               return (
                 <div
                   key={m.itemId}
@@ -235,7 +242,9 @@ export default function MediaRail({
                         <span className="truncate text-[13px] font-semibold">{m.title}</span>
                         <span className="truncate text-[12px] text-muted-foreground">
                           {m.ok
-                            ? `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`
+                            ? (m.used
+                              ? `In a post · use again${m.posted ? ` · ${m.posted}` : ''}`
+                              : `${m.slides.length} ${m.slides.length === 1 ? 'file' : 'files'} to post${m.posted ? ` · ${m.posted}` : ''}${m.needsClientApproval ? ` · ${NOT_CLIENT_APPROVED}` : ''}`)
                             : m.reason}
                         </span>
                         {/* THE FOLDER THE SCHEDULER WAS HANDED (the owner, 13 Sep
@@ -272,7 +281,7 @@ export default function MediaRail({
                   {isOpen && m.ok && (
                     <div className="flex flex-col gap-2 border-t border-border p-1.5">
                       <div className="grid grid-cols-3 gap-1.5">
-                        {m.slides.map((sl, i) => {
+                        {offer.map((sl, i) => {
                           const on = ticked.has(sl.url)
                           return (
                             <button
@@ -280,13 +289,16 @@ export default function MediaRail({
                               type="button"
                               onClick={() => tick(sl.url)}
                               aria-pressed={on}
-                              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.type === 'video' ? 'video' : 'photo'} ${i + 1}`}
+                              aria-label={`${on ? 'Untick' : 'Tick'} ${sl.type === 'video' ? 'video' : 'photo'} ${i + 1}${taken.has(sl.url) ? ', already in a post' : ''}`}
                               className={cn(
                                 'relative aspect-square overflow-hidden rounded-[6px] bg-foreground/[0.06]',
                                 on ? 'outline outline-2 outline-offset-1 outline-foreground' : 'opacity-60',
                               )}
                             >
                               <Thumb slide={sl} label={sl.name} className="h-full w-full" />
+                              {taken.has(sl.url) && (
+                                <span className="absolute inset-x-0 bottom-0 bg-ink/70 px-1 py-0.5 text-center text-[9px] font-semibold text-cream">In a post</span>
+                              )}
                               <span className={cn(
                                 'absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold',
                                 on ? 'bg-foreground text-background' : 'bg-cream/90 text-ink',
@@ -296,9 +308,9 @@ export default function MediaRail({
                         })}
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <button type="button" onClick={() => setTicked(new Set(chosen.length === m.slides.length ? [] : m.slides.map(sl => sl.url)))}
+                        <button type="button" onClick={() => setTicked(new Set(chosen.length === offer.length ? [] : offer.map(sl => sl.url)))}
                           className="-my-1 inline-flex min-h-11 items-center text-[12px] font-semibold underline-offset-4 hover:underline">
-                          {chosen.length === m.slides.length ? 'Untick all' : 'Tick all'}
+                          {chosen.length === offer.length ? 'Untick all' : 'Tick all'}
                         </button>
                         <button
                           type="button"
@@ -306,7 +318,7 @@ export default function MediaRail({
                           onClick={() => onPick(m, chosen)}
                           className="flex min-h-11 items-center gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-semibold text-background disabled:opacity-40"
                         >
-                          <Plus className="h-3.5 w-3.5" aria-hidden /> Post {chosen.length === m.slides.length ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
+                          <Plus className="h-3.5 w-3.5" aria-hidden /> Post {chosen.length === offer.length && offer.length > 1 ? 'all' : chosen.length} {chosen.length === 1 ? 'file' : 'files'}
                         </button>
                       </div>
                     </div>

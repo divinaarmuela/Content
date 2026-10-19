@@ -100,6 +100,17 @@ export type RailMedia = {
   /** why not, in the words a person would use */
   reason: string | null
   /**
+   * EVERY approved file of the piece, including the ones already in a post (the owner, 19 Oct 2026: "anything
+   * uploaded in post approval should be reusable in the schedule left side so we dont need to encode it
+   * anymore"). `slides` is only the files still free; a piece whose video is in a booked TikTok post had none,
+   * so the same video was uploaded again for LinkedIn — a new address, a new preview, a new copy, and a
+   * LinkedIn post that failed while the new upload was still being measured. Reusing one of these is the SAME
+   * stored file: its preview and any copy already made for a network are used again.
+   */
+  allSlides: Slide[]
+  /** which of `allSlides` a booked, posted or still-open post already holds */
+  takenUrls: string[]
+  /**
    * Usable, but the client has not seen the EDIT yet.
    *
    * Only ever true for an account manager or a super admin. The card wears a
@@ -424,6 +435,8 @@ export function useSchedulePosts(
           title: item.title,
           contentType: String(item.content_type ?? ''),
           slides,
+          allSlides: elig.ok ? elig.slides : [],
+          takenUrls: elig.ok ? elig.slides.filter(sl => gone.has(sl.url)).map(sl => sl.url) : [],
           versions: cardVersionGroups(item, itemVersions),
           cover: slides[0] ?? coverOf(itemVersions),
           ok: elig.ok,
@@ -447,7 +460,8 @@ export function useSchedulePosts(
         }
       })
       .sort((a, b) =>
-        Number(b.ok) - Number(a.ok) || b.updatedAt.localeCompare(a.updatedAt))
+        // a piece with files still free first; one already in a post after it, there to be used again
+        Number(b.ok) - Number(a.ok) || Number(a.used) - Number(b.used) || b.updatedAt.localeCompare(a.updatedAt))
   }, [scopedItems, versionsByItem, posts.rows, postWithoutApproval, clientSignsOff, client])
 
   /** posts still being approved — they live on Post approval; this page only counts them */

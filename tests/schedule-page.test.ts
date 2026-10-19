@@ -72,7 +72,7 @@ describe('the week on screen has a name', () => {
 describe('the media rail filters', () => {
   const media = (over: Partial<RailMedia>): RailMedia => ({
     itemId: 'i1', title: 'A piece', contentType: 'static',
-    slides: [], cover: { url: 'u', name: 'n', type: 'image' },
+    slides: [], allSlides: [], takenUrls: [], cover: { url: 'u', name: 'n', type: 'image' },
     ok: true, reason: null, used: false, posted: null, knownUrls: [], coverUrl: null, boardApproved: false,
     status: 'approved_for_scheduling', versionNumber: 1, clientSignsOff: false,
     needsClientApproval: false, clientApproved: true,
