@@ -427,6 +427,10 @@ const GHOST_TABLES = {
     ['blocked_by', col('unknown', true, true)],
     //   asana_gid — the Asana task this was copied from (scripts/import-asana-todos.mjs, 18 Oct 2026); re-running skips it
     ['asana_gid', col('string', true)],
+    //   repeat    — Asana's "Repeats" (todo-repeat-core, 20 Oct 2026): ticking it done makes the next one
+    //   repeat_of — the to-do this one came after, when a repeat made it
+    ['repeat', col('unknown', true, true)],
+    ['repeat_of', col('string', true)],
   ],
   // todo_sections - a person's own sections on My to-dos (Asana's "Add section",
   //   18 Oct 2026). One row per section; owner_id is whose list it is.

@@ -1623,6 +1623,8 @@ export interface Todo {
   position: number | null
   blocked_by: unknown | null
   asana_gid: string | null
+  repeat: unknown | null
+  repeat_of: string | null
 }
 
 export interface UserPageAccess {
@@ -1777,7 +1779,7 @@ export const TABLE_COLUMNS = {
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'colourist'],
   todo_comments: ['id', 'todo_id', 'author_id', 'body', 'mentions', 'likes', 'edited_at', 'asana_gid', 'created_at', 'updated_at'],
   todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
-  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid'],
+  todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
   webhook_deliveries: ['id', 'provider', 'event', 'provider_event_id', 'received_at', 'handled', 'note'],
@@ -1876,7 +1878,7 @@ export const NULLABLE_COLUMNS = {
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'colourist'],
   todo_comments: ['author_id', 'mentions', 'likes', 'edited_at', 'asana_gid'],
   todo_sections: ['position'],
-  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid'],
+  todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of'],
   user_page_access: ['granted_by'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
   webhook_deliveries: ['note'],
@@ -1982,7 +1984,7 @@ export const JSON_COLUMNS = {
   team_users: ['getting_started_dismissed_pages', 'notification_prefs'],
   todo_comments: ['mentions', 'likes'],
   todo_sections: [],
-  todos: ['files', 'followers', 'likes', 'blocked_by'],
+  todos: ['files', 'followers', 'likes', 'blocked_by', 'repeat'],
   user_page_access: [],
   video_previews: [],
   webhook_deliveries: [],

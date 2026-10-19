@@ -53,6 +53,8 @@ export async function POST(req: Request) {
       section_id: checked.patch.section_id ?? null,
       position: checked.patch.position ?? Date.now(),
       blocked_by: [],
+      // Asana's "Repeats", set as it is made (20 Oct 2026)
+      repeat: checked.patch.repeat ?? null,
       created_at: now,
       updated_at: now,
       done_at: null,
