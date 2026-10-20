@@ -46,8 +46,8 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
       <li key={p.id}>
         <button type="button" onClick={() => onPlace(key)} aria-current={place === key ? 'page' : undefined} className={item(place === key)} title={p.name}>
           <ProjectIcon p={p} />
+          {/* the name alone, as Asana's sidebar has it — no count (21 Oct 2026) */}
           <span className="min-w-0 flex-1 truncate">{p.name}</span>
-          {p.open > 0 && <span className="text-[11px] text-muted-foreground">{p.open}</span>}
         </button>
       </li>
     )
@@ -77,13 +77,14 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
       {projects.length > 0 && (
         <div className="mt-3 hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto [overflow-anchor:none] md:flex">
           <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><FolderKanban className="h-3.5 w-3.5" aria-hidden /> Projects</p>
-          <ul className="flex flex-col gap-0.5">{list(mine)}</ul>
-          {others.length > 0 && (
+          {/* "Other clients" only when some are yours: with none of your own it was a heading over every project (21 Oct 2026) */}
+          {mine.length > 0 && others.length > 0 ? (
             <>
+              <ul className="flex flex-col gap-0.5">{list(mine)}</ul>
               <p className="mt-2 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Other clients</p>
               <ul className="flex flex-col gap-0.5">{list(others)}</ul>
             </>
-          )}
+          ) : <ul className="flex flex-col gap-0.5">{list(projects)}</ul>}
         </div>
       )}
       {/* on a phone, the projects as one picker under the tabs */}

@@ -108,7 +108,7 @@ export default function MentionBox({
       />
       {open && (
         <ul role="listbox" aria-label="Tag someone"
-          className={`absolute left-0 z-30 w-80 max-w-full overflow-y-auto rounded-inner ${openUp ? 'bottom-full mb-1 max-h-72' : 'top-full mt-1'} border border-border bg-popover shadow-lg`}>
+          className={`absolute left-0 z-30 w-[26rem] max-w-full overflow-y-auto rounded-inner ${openUp ? 'bottom-full mb-1 max-h-72' : 'top-full mt-1'} border border-border bg-popover shadow-lg`}>
           {options.map((m, i) => (
             <li key={m.id} role="option" aria-selected={i === active}>
               <button type="button"
@@ -119,10 +119,13 @@ export default function MentionBox({
                 }`}>
                 <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="flex min-w-0 flex-col leading-tight">
-                  <span className="truncate">{m.name}</span>
-                  {(m.hint || m.email) && (
-                    <span className="truncate text-[12px] text-muted-foreground">{[m.hint, m.email].filter(Boolean).join(' · ')}</span>
-                  )}
+                  {/* THE NAME AND THE EMAIL ON ONE LINE (the owner, 21 Oct 2026: "when tagging … shows the name - email") —
+                      Manal tagged "@Akmal" and the first Akmal was another account; the email says which person it is */}
+                  <span className="truncate">
+                    {m.name}
+                    {m.email && m.email !== m.name && <span className="text-muted-foreground"> — {m.email}</span>}
+                  </span>
+                  {m.hint && <span className="truncate text-[12px] text-muted-foreground">{m.hint}</span>}
                 </span>
               </button>
             </li>

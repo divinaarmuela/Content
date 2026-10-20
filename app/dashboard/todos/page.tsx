@@ -121,6 +121,11 @@ export default function TodosPage() {
     if (store.get('mdm.todos.celebrate') === '0') setCelebrate(false)
   }, [])
   const pickView = (v: View) => { setView(v); store.set('mdm.todos.view', v) }
+  const startAdd = () => {
+    if (view !== 'list') { setAddNonce(n => n + 1); return }
+    const g = listGroups.find(x => x.key !== 'done')
+    if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) }
+  }
   const pickSort = (v: TodoSort) => { setSort(v); store.set('mdm.todos.sort', v) }
   const pickGroup = (v: TodoGroupBy) => { setGroupBy(v); store.set('mdm.todos.group', v) }
   /** go somewhere in the sidebar; a project opens grouped by who is doing what, as Manal asked */
@@ -153,6 +158,10 @@ export default function TodosPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [openId, setOpenId] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
+  // ADD TASK STAYS IN THE VIEW YOU ARE IN, as Asana's does (the owner, 21 Oct 2026: "what happens if i click new task
+  // but im in board view"): List opens a row in the first section, Board a card in its first column, Calendar one
+  // on today — it used to throw you back to List
+  const [addNonce, setAddNonce] = useState(0)
   const [newSection, setNewSection] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const lastPicked = useRef<string | null>(null)
@@ -271,7 +280,7 @@ export default function TodosPage() {
       if (e.key === 'Tab') { tabDown.current = true; return }
       if (tabDown.current && !typing(e.target)) {
         const k = e.key.toLowerCase()
-        if (k === 'q') { e.preventDefault(); pickView('list'); const g = listGroups.find(x => x.key !== 'done'); if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) } return }
+        if (k === 'q') { e.preventDefault(); startAdd(); return }
         if (k === 'n') { e.preventDefault(); pickView('list'); pickGroup('sections'); setNewSection(''); return }
         if (k === 'm' && me) { e.preventDefault(); if (chosen.length) void bulk({ owner_id: me.id }, 'Assigned to you'); else if (open) void patchTodo(open.id, { owner_id: me.id }, 'Assigned to you'); return }
         if ((k === 'backspace' || k === 'delete') && open) { e.preventDefault(); document.querySelector<HTMLButtonElement>('[data-todo-panel] [aria-label="Delete this to-do"]')?.click(); return }
@@ -332,7 +341,7 @@ export default function TodosPage() {
 
       <div className={`flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border py-2 ${place === 'inbox' ? 'hidden' : ''}`}>
         {viewer && (
-          <button type="button" onClick={() => { pickView('list'); const g = listGroups.find(x => x.key !== 'done'); if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) } }}
+          <button type="button" onClick={startAdd}
             title="Add task (Tab + Q)" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-semibold text-background hover:bg-foreground/90">
             <Plus className="h-4 w-4" aria-hidden /> Add task
           </button>
@@ -488,13 +497,13 @@ export default function TodosPage() {
           <Board groups={listGroups as never} today={today!} names={names} openId={openId} viewer={viewer}
             link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo}
             onDropTo={(id, key) => { const g = listGroups.find(x => x.key === key); if (g) dropRow(id, g, null) }}
-            onAdd={(title, key) => create(title, listGroups.find(x => x.key === key) ?? null)} />
+            onAdd={(title, key) => create(title, listGroups.find(x => x.key === key) ?? null)} addNonce={addNonce} />
         ) : (
           <Board groups={boardGroups} today={today!} names={names} openId={openId} viewer={viewer}
-            link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo} onAdd={(title, key) => create(title, null, dueForGroup(key, today!))} />
+            link={linkOf} meta={meta} onOpen={openTask} onTick={(t, d) => void tick(t, d)} onMove={moveTo} onAdd={(title, key) => create(title, null, dueForGroup(key, today!))} addNonce={addNonce} />
         )
       ) : (
-        <CalendarView rows={shown} today={today!} names={names} openId={openId} onOpen={openTask} onMove={moveTo} onAdd={(title, day) => create(title, null, day)} canAdd={!!viewer} />
+        <CalendarView rows={shown} today={today!} names={names} openId={openId} onOpen={openTask} onMove={moveTo} onAdd={(title, day) => create(title, null, day)} canAdd={!!viewer} addNonce={addNonce} />
       )}
 
       {/* THE BAR FOR SEVERAL SELECTED TASKS */}
@@ -692,7 +701,9 @@ function NewRow({ onAdd, onCancel }: { onAdd: (title: string) => void; onCancel:
 }
 
 /** BOARD — one column per date section; drag a card to another to give it that date (Done completes it) */
-function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTick, onMove, onAdd, onDropTo }: {
+function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTick, onMove, onAdd, onDropTo, addNonce = 0 }: {
+  /** the page's Add task, pressed: a new card at the end of the first column */
+  addNonce?: number
   /** a project's board: a card dropped on a column moves it to that section, not a date */
   onDropTo?: (id: string, key: string) => void
   groups: { key: TodoGroupKey; label: string; rows: TodoRow[] }[]; today: string; names: Map<string, string>; openId: string | null
@@ -703,6 +714,12 @@ function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTic
   const [over, setOver] = useState<string | null>(null)
   const [adding, setAdding] = useState<TodoGroupKey | null>(null)
   const [draft, setDraft] = useState('')
+  useEffect(() => {
+    if (!addNonce) return
+    const first = groups.find(g => g.key !== 'done')
+    if (first) { setDraft(''); setAdding(first.key) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addNonce])
   return (
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-24 pt-3" aria-label="Board">
       {groups.map(g => (
@@ -748,7 +765,9 @@ function Board({ groups, today, names, openId, viewer, link, meta, onOpen, onTic
 }
 
 /** CALENDAR — a month by due date; drag a task to another day, press a day's + to add one there */
-function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAdd }: {
+function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAdd, addNonce = 0 }: {
+  /** the page's Add task, pressed: a new task on today, in today's month */
+  addNonce?: number
   rows: TodoRow[]; today: string; names: Map<string, string>; openId: string | null
   onOpen: (id: string) => void; onMove: (id: string, due: string | null) => void; onAdd: (title: string, day: string) => void; canAdd: boolean
 }) {
@@ -769,6 +788,12 @@ function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAd
   const [over, setOver] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  useEffect(() => {
+    if (!addNonce || !canAdd) return
+    setYm({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 })
+    setDraft(''); setAdding(today)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addNonce])
   const step = (d: number) => setYm(({ y, m }) => { const n = new Date(Date.UTC(y, m + d, 1)); return { y: n.getUTCFullYear(), m: n.getUTCMonth() } })
   return (
     <div className="flex flex-col gap-2 pb-24 pt-3">

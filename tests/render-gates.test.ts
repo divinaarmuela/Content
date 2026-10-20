@@ -528,7 +528,7 @@ describe('typing @ in a team note offers the people on the card (14 Sep 2026)', 
     for (const f of ['app/dashboard/board/PostApprovalDetail.tsx', 'app/dashboard/board/EditorCardDrawer.tsx']) {
       expect(src(f), f).toMatch(/mentionable=\{cardPeople\(item, team as never, clientLinks as never, me\?\.id\)\}/)
     }
-    expect(src('app/dashboard/MentionBox.tsx')).toMatch(/\[m\.hint, m\.email\]\.filter\(Boolean\)\.join\(' · '\)/)
+    expect(src('app/dashboard/MentionBox.tsx')).toContain('{m.email && m.email !== m.name && <span className="text-muted-foreground"> — {m.email}</span>}')
     // "Revisions done — ready for quality check" ran out of the card
     expect((src('app/dashboard/board/BoardCard.tsx').match(/h-auto min-h-11 max-w-full whitespace-normal rounded-full/g) ?? []).length).toBe(3) // the skip-colour-grade button too (20 Oct 2026)
   })
