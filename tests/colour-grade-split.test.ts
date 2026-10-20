@@ -166,3 +166,11 @@ describe('the screens say what they do (3 Oct 2026: "all buttons make sense?")',
     for (const f of ['app/dashboard/editor/page.tsx', 'app/dashboard/designer/page.tsx']) expect(readFileSync(f, 'utf8')).not.toMatch(/five columns: \$\{/)
   })
 })
+
+describe('the board card shows both passes for a video at the quality check (20 Oct 2026)', () => {
+  it('draws the skip beside the colour-grade button, not in the menu', () => {
+    const src = readFileSync('app/dashboard/board/BoardCard.tsx', 'utf8')
+    expect(src).toContain("const skipGrade = primary?.kind === 'transition' && primary.to === 'colour_grade'")
+    expect(src).toContain('{busy ? \'Saving…\' : skipGrade.label}')
+  })
+})

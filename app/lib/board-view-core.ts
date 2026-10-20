@@ -27,7 +27,7 @@ import { roundOf } from './edit-round-core'
 import { finalFilesOf, hasFinishedWork } from './final-files-core'
 import { pendingHandIn } from './drive-handin-core'
 import { askedIdsOf, askedWords, waitingOnViewer } from './asked-core'
-import { STATUS_TURN } from './workflow-core'
+import { SKIP_GRADE_LABEL, STATUS_TURN } from './workflow-core'
 import type { Role } from './identity-core'
 import { STAGE_LABEL, STAGE_TONE, hatsFor, waitingOnViewer as postWaitingOnViewer, type NowLike, type PostState } from './post-stage-core'
 import { DEFAULT_TZ, dayKeyInZone } from './timezone-core'
@@ -324,7 +324,8 @@ export function cardActions(
   const round = roundOf(card)
   const versioned = (a: CardAction): CardAction =>
     a.kind === 'transition' && a.to === 'client_review' && card.status === 'quality_check' && round >= 2
-      ? { ...a, label: `Passed quality check — resend version ${round} to the client` }
+      // the skip keeps saying it skips the colour grade (20 Oct 2026)
+      ? { ...a, label: a.label === SKIP_GRADE_LABEL ? `Skip colour grade — resend version ${round} to the client` : `Passed quality check — resend version ${round} to the client` }
       : a
   // THE HAND-IN IS THE EDITOR'S OWN PRESS (the owner, 16 Sep 2026: "as quality
   // reviewer how come I'm able to see a send-to-quality-check on an editor's

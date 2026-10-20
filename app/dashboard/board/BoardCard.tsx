@@ -162,7 +162,13 @@ export function BoardCard({
   const [briefClamped, setBriefClamped] = useState(true)
   const toggleBrief = () => { if (briefOpen) setBriefOpen(false); else { setBriefClamped(false); setBriefOpen(true) } }
   const briefFolds = !!lines.brief && (lines.brief.length > BRIEF_FOLD || lines.brief.includes('\n'))
-  const { primary, more } = cardActions(card, viewer)
+  const { primary, more: allMore } = cardActions(card, viewer)
+  // A VIDEO AT THE QUALITY CHECK HAS TWO PASSES ON ITS FACE (the owner, 20 Oct 2026: "main card is showing passed - to
+  // colour grade only … which can be misleading"): to colour grade, and straight to the client — not one in a menu
+  const skipGrade = primary?.kind === 'transition' && primary.to === 'colour_grade'
+    ? allMore.find(a => a.kind === 'transition' && a.to === 'client_review') ?? null
+    : null
+  const more = skipGrade ? allMore.filter(a => a !== skipGrade) : allMore
   const targets = moveTargets(card, viewer)
   const column = columnOf(card.status)
   // the column already names the stage; the chip earns its place only where
@@ -342,6 +348,13 @@ export function BoardCard({
             </Button>
           )
         })()}
+        {skipGrade && (
+          <Button variant="outline" disabled={busy}
+            onClick={e => { e.preventDefault(); onAction(card, skipGrade) }}
+            className="h-auto min-h-11 max-w-full whitespace-normal rounded-full border-border bg-surface px-4 py-2 text-left text-[13px] font-semibold [[data-tone=ink]_&]:border-cream/40 [[data-tone=ink]_&]:bg-transparent [[data-tone=ink]_&]:text-cream">
+            {busy ? 'Saving…' : skipGrade.label}
+          </Button>
+        )}
         {!primary && more.length > 0 && (
           <Button variant="outline" disabled={busy} data-tour={tour ? 'board-card-action' : undefined}
             onClick={e => { e.preventDefault(); onAction(card, more[0]) }}
