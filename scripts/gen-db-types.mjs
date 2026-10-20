@@ -516,6 +516,24 @@ const GHOST_TABLES = {
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
   ],
+  // content_tracker — THE CONTENT TRACKER'S OWN COLUMNS (the owner, 20 Oct 2026, the team's Google sheet: "Client
+  //   Name, Required # Graphics, Scheduled Graphics, Required Deliverable # Reels, # of Scheduled Reels, # of
+  //   Scheduled Stories, Scheduled Until, LinkedIn, Status, Needed, Notes, Responsible, In Asana"). One row per
+  //   client per month, id `<client_id>__<YYYY-MM>`; the scheduled counts are read live, only what a person
+  //   types is kept here (app/lib/content-tracker-core.ts).
+  content_tracker: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['month', col('string', false)],
+    ['required_graphics', col('number', true)],
+    ['required_reels', col('number', true)],
+    ['notes', col('string', true)],
+    ['responsible', col('string', true)],
+    ['in_asana', col('boolean', true)],
+    ['updated_by', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
   schedule_notes: [
     ['id', col('string', false)],
     ['client_id', col('string', false)],

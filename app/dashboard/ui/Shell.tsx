@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
-  CalendarClock, CalendarDays, Search, ListChecks, StickyNote, Radar } from 'lucide-react'
+  CalendarClock, CalendarDays, Search, ListChecks, StickyNote, Radar, GalleryHorizontalEnd } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
 import { ActAsButton, ActingBar, useActAs } from './ActAs'
 import { visiblePages } from '@/app/lib/page-access-core'
@@ -93,6 +93,8 @@ export const NAV_SOCIAL_CHILDREN: NavItem[] = [
   { href: '/dashboard/social/schedule',    label: 'Schedule',    icon: CalendarDays },
   // then "did it go out?", the question people come to Social with next
   { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
+  // every post that went live, per client and month, from Zernio (the owner, 20 Oct 2026)
+  { href: '/dashboard/social/content-tracker', label: 'Content tracker', icon: GalleryHorizontalEnd },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },
   // (People was here until 30 Sep 2026 — the owner took it out with the follower scan it was built on)
   // a comment-to-DM automation on ONE post turns commenters into people in a conversation (the owner, 29 Sep 2026)
@@ -137,6 +139,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/dashboard/social':        'Social channels',
   '/dashboard/social/schedule': 'Schedule',
   '/dashboard/social/activity': 'Posts',
+  '/dashboard/social/content-tracker': 'Content tracker',
   '/dashboard/social/inbox':  'Inbox',
   '/dashboard/social/analytics': 'Analytics',
   '/dashboard/social/automations': 'Automations',

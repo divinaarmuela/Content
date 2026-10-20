@@ -48,6 +48,9 @@ export interface Publisher {
   getPost(postId: string): Promise<unknown>
   /** Per-post analytics, including posts published outside this dashboard. */
   postAnalytics(postId?: string): Promise<unknown>
+  /** One page of every post published between two days (YYYY-MM-DD, inclusive), newest first, with its numbers —
+   *  the Content tracker's source; covers posts made outside the app too. */
+  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number }): Promise<unknown>
   /** One post's numbers day by day since it went up (needs the Analytics add-on). */
   postTimeline(postId: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
@@ -792,6 +795,14 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/analytics${postId ? `?postId=${encodeURIComponent(postId)}` : ''}`)
   }
 
+  analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number }) {
+    const qs = new URLSearchParams({
+      fromDate: params.fromDate, toDate: params.toDate, page: String(params.page), limit: String(params.limit),
+      sortBy: 'date', order: 'desc',
+    })
+    return this.getJson(`/analytics?${qs}`)
+  }
+
   /** `{ postId, timeline: [{ date, platform, impressions, likes, … }] }` — one
    *  row per day per platform since publishing. */
   postTimeline(postId: string) {
@@ -1010,6 +1021,7 @@ class UnconfiguredPublisher implements Publisher {
   async accountPosts() { return null }
   async getPost() { return null }
   async postAnalytics() { return null }
+  async analyticsPage() { return null }
   async postTimeline() { return null }
   async listComments() { return null }
   async listConversations() { return null }

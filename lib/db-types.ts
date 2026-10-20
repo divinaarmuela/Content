@@ -39,6 +39,7 @@ export type TableName =
   | 'content_applications'
   | 'content_assets'
   | 'content_items'
+  | 'content_tracker'
   | 'data_deletion_requests'
   | 'deliverable_groups'
   | 'drive_connection'
@@ -719,6 +720,20 @@ export interface ContentItem {
   posted_slides: unknown | null
   asked_ids: unknown | null
   asked_at: string | null
+}
+
+export interface ContentTracker {
+  id: string
+  client_id: string
+  month: string
+  required_graphics: number | null
+  required_reels: number | null
+  notes: string | null
+  responsible: string | null
+  in_asana: boolean | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface DataDeletionRequest {
@@ -1777,6 +1792,7 @@ export const TABLE_COLUMNS = {
   content_applications: ['id', 'created_at', 'first_name', 'last_name', 'email', 'phone', 'business', 'industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['id', 'client_id', 'title', 'platform', 'slug', 'dest_url', 'post_url', 'provider_post_id', 'source', 'offer_code', 'keyword', 'published_at', 'created_at'],
   content_items: ['archived_at', 'archived_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'posting_approval_state', 'id', 'created_at', 'updated_at', 'client_id', 'batch_id', 'title', 'content_type', 'platform_targets', 'status', 'owner_id', 'assigned_by', 'due_date', 'priority', 'caption', 'client_approval_required', 'current_version_number', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_tracker: ['id', 'client_id', 'month', 'required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by', 'created_at', 'updated_at'],
   data_deletion_requests: ['id', 'meta_user_id', 'received_at', 'status', 'note', 'updated_at'],
   deliverable_groups: ['id', 'client_id', 'batch_id', 'content_type', 'title', 'target', 'work_kind_id', 'created_by', 'created_at', 'planned'],
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
@@ -1879,6 +1895,7 @@ export const NULLABLE_COLUMNS = {
   content_applications: ['industry', 'model_interest', 'content_needed', 'budget', 'timeline'],
   content_assets: ['client_id', 'platform', 'dest_url', 'post_url', 'provider_post_id', 'offer_code', 'keyword', 'published_at'],
   content_items: ['archived_at', 'archived_by', 'group_id', 'deliver_only', 'blocked_need', 'blocked_from_id', 'blocked_note', 'blocked_at', 'blocked_nudged_12_at', 'blocked_nudged_24_at', 'ack_nudged_at', 'qc_done_version', 'handover_drive_at', 'handover_source_at', 'drive_folder_id', 'drive_url', 'link_final', 'link_versions', 'delivered_at', 'batch_id', 'owner_id', 'assigned_by', 'due_date', 'caption', 'raw_assets_url', 'brief', 'raw_assets', 'review_link', 'review_note', 'scheduler_ids', 'brief_url', 'work_kind_id', 'portal_hidden', 'graded_round', 'split_from_id', 'split_round', 'split_at', 'adhoc_post', 'for_contact_id', 'clip_approvals', 'edit_round', 'include_plan', 'final_files', 'change_assets', 'drive_handins', 'client_round', 'client_rounds', 'client_frozen', 'share_token', 'accepted_at', 'accepted_round', 'link_url', 'link_kind', 'change_note', 'change_note_by', 'change_note_at', 'posted_slides', 'asked_ids', 'asked_at'],
+  content_tracker: ['required_graphics', 'required_reels', 'notes', 'responsible', 'in_asana', 'updated_by'],
   data_deletion_requests: ['note'],
   deliverable_groups: ['batch_id', 'work_kind_id', 'created_by', 'planned'],
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
@@ -1988,6 +2005,7 @@ export const JSON_COLUMNS = {
   content_applications: [],
   content_assets: [],
   content_items: ['link_versions', 'raw_assets', 'scheduler_ids', 'clip_approvals', 'final_files', 'change_assets', 'drive_handins', 'client_rounds', 'client_frozen', 'posted_slides', 'asked_ids'],
+  content_tracker: [],
   data_deletion_requests: [],
   deliverable_groups: ['planned'],
   drive_connection: [],
@@ -2096,6 +2114,7 @@ export const JSON_ARRAY_COLUMNS = {
   content_applications: [],
   content_assets: [],
   content_items: ['raw_assets', 'scheduler_ids', 'asked_ids'],
+  content_tracker: [],
   data_deletion_requests: [],
   deliverable_groups: [],
   drive_connection: [],
