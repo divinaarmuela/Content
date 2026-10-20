@@ -1,4 +1,5 @@
 import 'server-only'
+import { isArchived } from './archive-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
 import type { ContentItem, DrivePull, ItemComment } from '@/lib/db-types'
@@ -66,7 +67,7 @@ export async function editingPortalWaiting(rawToken: string, itemId: string): Pr
   const owner = await portalOwnerByToken(rawToken)
   if (!owner) return null
   const item = await table<ContentItem>('content_items').get(itemId)
-  if (!item || item.client_id !== owner.client.id || !belongsToPortal(item, owner.scope)) return null
+  if (!item || item.client_id !== owner.client.id || !belongsToPortal(item, owner.scope) || isArchived(item)) return null
   if (!portalWaitingOnFiles(item as never)) return null
   return { title: item.title, portal_name: portalName(owner.client.name, owner.scope) }
 }
@@ -78,6 +79,8 @@ export async function editingPortalItem(rawToken: string, itemId: string) {
   const item = await table<ContentItem>('content_items').get(itemId)
   if (!item || item.client_id !== owner.client.id) return null
   if (!belongsToPortal(item, owner.scope)) return null
+  // an archived card is off the portal (20 Oct 2026)
+  if (isArchived(item)) return null
   if (!portalHasWork(item as never)) return null
   // a card handed in as files has no folder — its uploads are the work (17 Sep 2026)
   const folder = editingPortalFolder(item) ?? { url: '', folderId: 'uploads', kind: 'folder' as const }

@@ -22,6 +22,7 @@
  * listener repaints the moment the row lands.
  */
 
+import { byArchive, isArchived } from '../lib/archive-core'
 import { useEffect, useMemo, useState } from 'react'
 import { useRow, useTable } from '@/lib/db-client'
 import type {
@@ -196,8 +197,8 @@ export function useWorkRows(
     return new Map([...latest].map(([id, v]) => [id, slidesOf(v).length]))
   }, [t.versions.rows])
 
-  /** the joined, annotated, scoped board rows — the items API's answer */
-  const items: LiveItem[] = useMemo(() => {
+  /** the joined, annotated, scoped board rows — the items API's answer — archived or not (split below) */
+  const allItems: LiveItem[] = useMemo(() => {
     if (!viewer) return []
     const scoped = visibleItems(
       viewer,
@@ -254,12 +255,13 @@ export function useWorkRows(
   ])
 
   /** the shoots, scoped as `/api/production/batches` scopes them, each with
-   *  its "3 items" count */
-  const batches: LiveBatch[] = useMemo(() => {
+   *  its "3 items" count — archived or not (split below) */
+  const allBatches: LiveBatch[] = useMemo(() => {
     if (!viewer) return []
     const countByBatch = new Map<string, number>()
     for (const it of t.items.rows) {
-      if (it.batch_id) countByBatch.set(it.batch_id, (countByBatch.get(it.batch_id) ?? 0) + 1)
+      // an archived card is not one of the shoot's "3 items"
+      if (it.batch_id && !isArchived(it)) countByBatch.set(it.batch_id, (countByBatch.get(it.batch_id) ?? 0) + 1)
     }
     return visibleBatches(viewer, t.batches.rows, t.items.rows, t.assignments.rows, tagAssignments.batches)
       .map(b => ({
@@ -306,6 +308,13 @@ export function useWorkRows(
     })
   }, [viewer, t.groups.rows, t.assignments.rows, kindById])
 
+  // ARCHIVE (the owner, 20 Oct 2026, archive-core): every page that reads these rows — Shoots, Editor, Designer,
+  // the Overview, Post approval — sees only what is not archived; the pages' "Archived" view reads the other half
+  const items = useMemo(() => byArchive(allItems), [allItems])
+  const archivedItems = useMemo(() => byArchive(allItems, true), [allItems])
+  const batches = useMemo(() => byArchive(allBatches), [allBatches])
+  const archivedBatches = useMemo(() => byArchive(allBatches, true), [allBatches])
+
   // The first paint waits only on what the cards are made of. Credits and
   // slide counts arrive a beat later and only add a line to a card.
   const loading = viewer === null
@@ -328,8 +337,8 @@ export function useWorkRows(
   // Overview derives its whole payload from it), and a fresh literal per
   // render would re-run every one of those on every keystroke
   return useMemo(
-    () => ({ items, batches, clients, groups, tagged, tables: t, loading, error }),
-    [items, batches, clients, groups, tagged, t, loading, error],
+    () => ({ items, batches, archivedItems, archivedBatches, clients, groups, tagged, tables: t, loading, error }),
+    [items, batches, archivedItems, archivedBatches, clients, groups, tagged, t, loading, error],
   )
 }
 

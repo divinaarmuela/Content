@@ -93,7 +93,7 @@ describe('the Boards tab, and taking a piece off the portal (2 Oct 2026)', () =>
     expect(page).toContain("{tab === 'boards' && <OnePortalList rows={boardRows}")
   })
   it('a piece a manager took off is not shown, and only a manager may take it off', () => {
-    expect(readFileSync('app/lib/one-portal-page.ts', 'utf8')).toContain('?.portal_hidden !== true)')
+    expect(readFileSync('app/lib/one-portal-page.ts', 'utf8')).toContain('it?.portal_hidden !== true && !isArchived(it)')
     const route = readFileSync('app/api/production/items/[id]/route.ts', 'utf8')
     expect(route).toMatch(/hasOwnProperty\.call\(body, 'portal_hidden'\)\) \{\s+if \(!\['account_manager', 'super_admin'\]\.includes\(user\.role\)\)/)
     expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('Take it off the client&apos;s portal — they will not see it there.')

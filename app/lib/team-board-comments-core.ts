@@ -41,9 +41,10 @@ export function mayShareTeamBoard(viewer: TeamBoardViewer, board: { client_id?: 
   return mayManageTeamBoards(viewer) && !!board?.client_id
 }
 
-/** what the client can open: their own board, and only once it was shared — an unshared board is simply not there */
-export function clientMaySeeTeamBoard(board: { client_id?: string | null; shared_with_client?: boolean | null } | null | undefined, clientId: string): boolean {
-  return !!board && !!clientId && board.client_id === clientId && board.shared_with_client === true
+/** what the client can open: their own board, and only once it was shared — an unshared board is simply not there;
+ *  nor an archived one (20 Oct 2026), shared or not */
+export function clientMaySeeTeamBoard(board: { client_id?: string | null; shared_with_client?: boolean | null; archived_at?: string | null } | null | undefined, clientId: string): boolean {
+  return !!board && !!clientId && board.client_id === clientId && board.shared_with_client === true && !board.archived_at
 }
 
 /** "Glass den 1st shoot — on: Hero reel image" — the subject of the manager's email */

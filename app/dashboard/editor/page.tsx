@@ -1,5 +1,6 @@
 'use client'
 
+import { ArchivedList, ArchivedToggle } from '../ui/Archived'
 import { managesClients, personLabel } from '../../lib/identity-core'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -67,6 +68,12 @@ export default function EditorPage() {
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)
+  // ARCHIVE (20 Oct 2026): the cards put away, behind "Archived" by the title, each with Bring back
+  const [showArchived, setShowArchived] = useState(false)
+  const archivedRows = useMemo(() => (live.archivedItems as unknown as BoardCardRow[])
+    .filter(c => !['shoot_brief', 'graphics'].includes(c.work_kinds?.slug ?? ''))
+    .map(c => ({ id: c.id, title: c.title, client: c.clients?.name ?? null, archived_at: (c as { archived_at?: string | null }).archived_at ?? null })),
+  [live.archivedItems])
 
   /** id → name for everyone on the team, from the rows already on the wire */
   const names = useMemo(
@@ -166,11 +173,16 @@ export default function EditorPage() {
         summary={isManager
           ? `Everything still being made, in the editors’ columns: ${EDITOR_LANE_WORDS}. A submitted card goes straight to the quality reviewer; send it back from there if it needs changes.`
           : `Your cards, in their columns: ${EDITOR_LANE_WORDS}. Press "I am on it" the day a card lands, read the brief, hand in the final from Google Drive, tick your checks and submit — it goes straight to the quality reviewer.`}
-        actions={viewer && canCreate && (
-          <Button onClick={() => setNewOpen(true)}
-            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
-            <Plus className="h-4 w-4" /> New card
-          </Button>
+        actions={viewer && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchivedToggle count={archivedRows.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
+            {canCreate && (
+              <Button onClick={() => setNewOpen(true)}
+                className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
+                <Plus className="h-4 w-4" /> New card
+              </Button>
+            )}
+          </div>
         )}
       />
 
@@ -180,6 +192,8 @@ export default function EditorPage() {
         <div className="grid gap-3.5 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-card" />)}
         </div>
+      ) : showArchived ? (
+        <ArchivedList kind="card" rows={archivedRows} empty="Nothing archived. A card you archive from its menu waits here, off this page and the client's portal, until you bring it back." />
       ) : (
         <Board
           cards={cards}

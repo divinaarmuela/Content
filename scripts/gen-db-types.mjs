@@ -311,6 +311,10 @@ const GHOST_TABLES = {
     //   milanote_id — the Milanote board it was brought from; the import re-runs without doubling it
     ['board_type', col('string', true)],
     ['milanote_id', col('string', true)],
+    //   archived_at / archived_by — put away (20 Oct 2026, docs/schema-history/archive.sql): off the Boards list and
+    //                 the client's portal, nothing deleted
+    ['archived_at', col('string', true)],
+    ['archived_by', col('string', true)],
   ],
   // milanote_media — EVERY MILANOTE IMAGE AND FILE, COPIED INTO OUR STORAGE (20 Oct 2026, docs/MILANOTE_MERGE.md).
   //   One row per file, written by scripts/milanote-media-rows.mjs from the snapshot; the `milanote-media-copy`

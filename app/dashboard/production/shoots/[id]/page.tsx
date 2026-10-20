@@ -1,5 +1,6 @@
 'use client'
 
+import { setArchived } from '../../../ui/Archived'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Copy, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, Trash2, Archive } from 'lucide-react'
 import { copyText } from '../../../../lib/copy-text-client'
 import { useProductionLive } from '../../useProductionLive'
 import BriefCanvas, { type CanvasOp } from './BriefCanvas'
@@ -374,6 +375,11 @@ export default function ShootPage({ params }: { params: Promise<{ id: string }> 
             <Button variant="outline" className="h-11 w-fit rounded-full px-4 text-[13px] font-semibold" onClick={() => setDetailsToSelect(null)}>Close</Button>
           </div>
         )}
+        {/* ARCHIVE (20 Oct 2026): off Shoots and the client's portal, nothing deleted; Shoots' "Archived" brings it back */}
+        <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold"
+          onClick={async () => { if (await setArchived('shoot', batch.id, !(batch as { archived_at?: string | null }).archived_at)) router.push('/dashboard/production') }}>
+          <Archive className="h-4 w-4" aria-hidden /> {(batch as { archived_at?: string | null }).archived_at ? 'Bring back' : 'Archive'}
+        </Button>
         {items.length === 0 && (
           <Button variant="outline" className="h-11 rounded-full px-4 text-[14px] font-semibold text-accent-red-deep"
             onClick={() => setDeleteOpen(true)}>

@@ -1,5 +1,6 @@
 'use client'
 
+import { ArchivedList, ArchivedToggle } from '../ui/Archived'
 import { managesClients, personLabel } from '../../lib/identity-core'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,12 @@ export default function DesignerPage() {
   const [today, setToday] = useState<string | null>(null)
   useEffect(() => { setToday(todayKey()) }, [])
   const [newOpen, setNewOpen] = useState(false)
+  // ARCHIVE (20 Oct 2026): the cards put away, behind "Archived" by the title, each with Bring back
+  const [showArchived, setShowArchived] = useState(false)
+  const archivedRows = useMemo(() => (live.archivedItems as unknown as BoardCardRow[])
+    .filter(c => (c.work_kinds?.slug ?? '') === 'graphics')
+    .map(c => ({ id: c.id, title: c.title, client: c.clients?.name ?? null, archived_at: (c as { archived_at?: string | null }).archived_at ?? null })),
+  [live.archivedItems])
 
   const names = useMemo(
     () => new Map(live.tables.team.rows.map(u => [u.id, personLabel(u.name, u.email)])),
@@ -143,11 +150,16 @@ export default function DesignerPage() {
         summary={isManager
           ? `Every graphics card still being made, in its columns: ${DESIGN_LANE_WORDS}. A designer uploads the finished files onto the card; then it goes the same way as an edit — quality check, the client, the scheduler.`
           : `Your graphics cards, in their columns: ${DESIGN_LANE_WORDS}. Press "I am on it" the day a card lands, upload the finished files, tick your checks and submit — it goes straight to the quality reviewer.`}
-        actions={viewer && canCreate && (
-          <Button onClick={() => setNewOpen(true)}
-            className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
-            <Plus className="h-4 w-4" /> New card
-          </Button>
+        actions={viewer && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchivedToggle count={archivedRows.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
+            {canCreate && (
+              <Button onClick={() => setNewOpen(true)}
+                className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">
+                <Plus className="h-4 w-4" /> New card
+              </Button>
+            )}
+          </div>
         )}
       />
 
@@ -155,6 +167,8 @@ export default function DesignerPage() {
         <div className="grid gap-3.5 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 w-full rounded-card" />)}
         </div>
+      ) : showArchived ? (
+        <ArchivedList kind="card" rows={archivedRows} empty="Nothing archived. A card you archive from its menu waits here, off this page and the client's portal, until you bring it back." />
       ) : (
         <Board
           cards={cards}

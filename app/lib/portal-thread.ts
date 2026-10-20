@@ -1,4 +1,5 @@
 import 'server-only'
+import { isArchived } from './archive-core'
 import { sanitiseScripts } from './script-core'
 import { table } from '@/lib/db'
 import { attachOne } from '@/lib/db-join'
@@ -100,7 +101,8 @@ export async function getPortalItemDetail(rawToken: string, itemId: string): Pro
   // portal overview: the shoot itself lives in SHOOT PLANS, and no other
   // internal work (research, strategy, admin) is the client's content either
   const kind = item?.work_kinds as { slug?: string | null; uses_media?: boolean | null } | null
-  if (!item || kind?.slug === 'shoot_brief' || isInternalKind(kind)) return null
+  // …and an archived card is off the portal (20 Oct 2026)
+  if (!item || kind?.slug === 'shoot_brief' || isInternalKind(kind) || isArchived(item)) return null
 
   const status = item.status as ItemStatus
   // media only once the piece reached THEM — an edit the team approved and
@@ -175,8 +177,8 @@ export async function getPortalShootDetail(rawToken: string, batchId: string): P
   if (!client) return null
   const batch = await table<Batch>('batches').get(batchId)
   const b = batch && batch.client_id === client.id ? batch : null
-  // an unshared shoot is simply not there, as far as the client can tell
-  if (!b || !b.shared_with_client) return null
+  // an unshared shoot is simply not there, as far as the client can tell — nor an archived one (20 Oct 2026)
+  if (!b || !b.shared_with_client || isArchived(b)) return null
 
   // thread degrades to empty until the batch_comments migration runs
   const [comments, briefRows, amName] = await Promise.all([

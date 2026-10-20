@@ -78,6 +78,8 @@ export async function GET(req: Request) {
         if (statusFilter && (ITEM_STATUSES as readonly string[]).includes(statusFilter)
           && r.status !== statusFilter) return false
         if (batchFilter && r.batch_id !== batchFilter) return false
+        // an archived card is off every list (20 Oct 2026, archive-core)
+        if (r.archived_at) return false
         return true
       },
       orderBy: [['updated_at', 'desc']],

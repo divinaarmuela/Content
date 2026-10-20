@@ -3,7 +3,7 @@
 import { DELIVER_ONLY_CHIP } from '@/app/lib/deliver-only-core'
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, MessageCircle, MoreHorizontal, Trash2, UserPlus, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -89,7 +89,7 @@ export function CompactCard({ card, today, onOpen, names }: {
   )
 }
 export function BoardCard({
-  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, stats,
+  card, viewer, names, today, busy, canEdit, onOpen, onAction, onMove, onLink, onKind, onHandTo, canDelete, onDelete, onArchive, stats,
   statsHref, booking, tour, onAcknowledge, page, managers = [],
 }: {
   card: BoardViewCard & { work_kinds?: { name: string; slug?: string; color?: string } | null }
@@ -114,6 +114,8 @@ export function BoardCard({
   /** may this person delete the card — a manager, matching the route */
   canDelete?: boolean
   onDelete?: (card: BoardViewCard) => void
+  /** put the card away (20 Oct 2026, archive-core) — off this page and the client's portal; absent when not allowed */
+  onArchive?: (card: BoardViewCard) => void
   /** in Posted: "42 interactions · +12 followers" — how the live post did */
   stats?: string | null
   /** the post's own page, when the card was posted from a composition. The
@@ -194,7 +196,7 @@ export function BoardCard({
   const mayDelete = Boolean(canDelete && onDelete)
   const settled = card.status === 'scheduled' || card.status === 'published'
   const adhocPost = (card as { adhoc_post?: unknown }).adhoc_post === true
-  const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete
+  const hasMenu = more.length > 0 || targets.length > 0 || canEdit || mayDelete || !!onArchive
 
   return (
     <>
@@ -407,6 +409,14 @@ export function BoardCard({
                       <UserPlus className="h-4 w-4" aria-hidden /> Hand to…
                     </DropdownMenuItem>
                   )}
+                </>
+              )}
+              {onArchive && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="min-h-11" onClick={() => onArchive(card)}>
+                    <Archive className="h-4 w-4" aria-hidden /> Archive
+                  </DropdownMenuItem>
                 </>
               )}
               {mayDelete && (

@@ -1,4 +1,5 @@
 import { deliverOnly } from './deliver-only-core'
+import { isArchived } from './archive-core'
 import { liveFilesAt } from './final-files-core'
 import { pieceKindOf, pieceWords } from './editing-portal-core'
 import { roundOf } from './edit-round-core'
@@ -380,7 +381,8 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
 
   const [itemRows, commitmentRow, brandRow, shootRows, amRes, intake] = await Promise.all([
     table<ContentItem>('content_items')
-      .list({ by: { client_id: clientId }, orderBy: [['updated_at', 'desc']], limit: 300 })
+      // an archived card is off the portal (20 Oct 2026, archive-core) — filtered in the read, so it never uses up the 300
+      .list({ by: { client_id: clientId }, where: r => !isArchived(r), orderBy: [['updated_at', 'desc']], limit: 300 })
       .then(rows => attachOne(rows, 'work_kind_id', 'work_kinds', ['slug', 'uses_media', 'name'])),
     table<MonthlyCommitment>('monthly_commitments')
       .list({ by: { client_id: clientId }, where: r => r.month === month && r.year === year, limit: 1 })
@@ -393,7 +395,8 @@ export async function getPortalData(clientId: string, scope: PortalScope = { kin
     // on the board as the same card, saying so, rather than vanishing
     table<Batch>('batches').list({
       by: { client_id: clientId },
-      where: r => r.shared_with_client === true || ['locked', 'shot', 'wrapped'].includes(r.status ?? ''),
+      // …never an archived shoot (20 Oct 2026), and inside the read, so it does not use up the six
+      where: r => !isArchived(r) && (r.shared_with_client === true || ['locked', 'shot', 'wrapped'].includes(r.status ?? '')),
       orderBy: [['shoot_date', 'desc']],
       limit: 6,
     }).then(rows => rows.filter(b => belongsToPortal(b as { for_contact_id?: string | null }, scope))).catch(() => [] as Batch[]),

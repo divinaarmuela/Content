@@ -1,5 +1,7 @@
 'use client'
 
+import { setArchived } from '../ui/Archived'
+import { mayArchiveCard } from '../../lib/archive-core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -329,6 +331,9 @@ export function Board({
                 // …and never on a card the channel holds or has published
                 canDelete={mayDeleteCard(viewer, c as never)}
                 onDelete={setDeleteFor}
+                // ARCHIVE (20 Oct 2026): off the page and the client's portal, nothing deleted — the managers', or the
+                // card's own editor's or designer's; the page's "Archived" view brings it back
+                onArchive={mayArchiveCard(viewer, c as never) ? card => { void setArchived('card', card.id, true) } : undefined}
                 stats={statsByItem.get(c.id) ?? null}
                 statsHref={postByItem.has(c.id) ? postPageHref(postByItem.get(c.id)!) : null}
                 booking={bookingByItem.get(c.id) ?? null}

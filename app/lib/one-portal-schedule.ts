@@ -1,4 +1,5 @@
 import 'server-only'
+import { isArchived } from './archive-core'
 import { table } from '@/lib/db'
 import type { ContentItem, PostVersion, SocialAccount, SocialPost } from '@/lib/db-types'
 import { getPublisher } from './publisher'
@@ -134,6 +135,8 @@ export async function loadScheduling(
   const posts = rows
     .map(r => readPostState(r as unknown as Record<string, unknown>))
     .filter((p): p is PostState => !!p && postOnPortal(contactOf(p), scope))
+    // a post from an archived card is off the portal with its card (20 Oct 2026)
+    .filter(p => !(p.source_item_id && isArchived(itemById.get(p.source_item_id))))
     .filter(p => p.stage === 'booked'
       || (p.stage === 'ready' && ifNoAnswerOf(p) === 'wait' && unanswered(p) && p.sent_version != null)
       || (p.stage === 'draft' && p.client_review?.verdict === 'not_approved'))

@@ -1,4 +1,5 @@
 import 'server-only'
+import { isArchived } from './archive-core'
 import { table } from '@/lib/db'
 import type { Client, ContentItem } from '@/lib/db-types'
 import { portalOwnerByToken } from './portal-owner'
@@ -85,7 +86,11 @@ export async function loadOnePortal(rawToken: string): Promise<OnePortalPage | n
   // "Being made now" — the hand-over moves the CARD back to draft for posting, the client's answer stands)
   const itemById = new Map(items.map(i => [i.id, i]))
   // a piece the team took off the portal is not shown at all
-  const work = work0.filter(c => (itemById.get(c.id) as { portal_hidden?: unknown } | undefined)?.portal_hidden !== true)
+  // …nor an archived one (20 Oct 2026)
+  const work = work0.filter(c => {
+    const it = itemById.get(c.id) as { portal_hidden?: unknown; archived_at?: string | null } | undefined
+    return it?.portal_hidden !== true && !isArchived(it)
+  })
   const shown = work.map(c => withClientFace(c, itemById.get(c.id)))
   const editing = shown.filter(c => (tabOf.get(c.id) ?? 'editing') === 'editing')
   const designing = shown.filter(c => tabOf.get(c.id) === 'designing')

@@ -1,9 +1,11 @@
 'use client'
 
+import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
+import { byArchive } from '../../lib/archive-core'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Link2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Link2, Pencil, Plus, Trash2, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,9 +76,16 @@ export default function TeamBoardsPage() {
   const [editClient, setEditClient] = useState(NO_CLIENT)
   const [deleting, setDeleting] = useState<Row | null>(null)
   const [busy, setBusy] = useState(false)
+  // ARCHIVE (20 Oct 2026): boards put away are off the lanes and the client's portal, behind "Archived"
+  const [showArchived, setShowArchived] = useState(false)
+  const archivedBoards = useMemo(() => byArchive(rows, true).map(b => ({
+    id: b.id, title: b.name, client: clientOf(b), archived_at: b.archived_at ?? null,
+  })),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [rows, clients])
 
   const boards = useMemo(
-    () => sortTeamBoards(rows).filter(b => matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
+    () => sortTeamBoards(byArchive(rows)).filter(b => matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, search, team, clients])
   const lanes = useMemo(() => lanesOf(boards), [boards])
@@ -174,6 +183,8 @@ export default function TeamBoardsPage() {
             <>
               <Button variant="ghost" size="icon" className="ml-auto h-11 w-11 rounded-full text-muted-foreground" aria-label={`Edit ${b.name}`}
                 onClick={() => { setEditing(b); setEditName(b.name); setEditClient(b.client_id ?? NO_CLIENT) }}><Pencil className="h-4 w-4" aria-hidden /></Button>
+              <Button variant="ghost" size="icon" className="h-11 w-11 rounded-full text-muted-foreground" aria-label={`Archive ${b.name}`} title="Archive — off this page and the client's portal"
+                onClick={() => { void setArchived('board', b.id, true) }}><Archive className="h-4 w-4" aria-hidden /></Button>
               <Button variant="ghost" size="icon" className="h-11 w-11 rounded-full text-muted-foreground hover:text-accent-red-deep" aria-label={`Delete ${b.name}`}
                 onClick={() => setDeleting(b)}><Trash2 className="h-4 w-4" aria-hidden /></Button>
             </>
@@ -189,9 +200,12 @@ export default function TeamBoardsPage() {
         title="Boards"
         summary="Inspo boards — one per client, the same canvas as a shoot’s plan. Make one, fill it, send it to the quality check, and it is approved or comes back with a note. Copy its link to point someone at it."
         actions={manager ? (
-          <Button onClick={() => setMaking(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden /> New board
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchivedToggle count={archivedBoards.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
+            <Button onClick={() => setMaking(true)} className="h-11 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background hover:bg-foreground/90">
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden /> New board
+            </Button>
+          </div>
         ) : undefined}
       />
 
@@ -202,6 +216,9 @@ export default function TeamBoardsPage() {
 
       {error ? (
         <LoadFailed what="the boards" detail={error} onRetry={() => window.location.reload()} />
+      ) : showArchived && !loading ? (
+        <ArchivedList kind="board" rows={archivedBoards}
+          empty="Nothing archived. A board you archive waits here, off this page and the client's portal, until you bring it back." />
       ) : loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-card" />)}</div>
       ) : boards.length === 0 ? (

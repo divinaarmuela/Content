@@ -1,5 +1,6 @@
 'use client'
 
+import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,8 @@ export default function ProductionPage() {
   const [planOpen, setPlanOpen] = useState(false)
   // a shoot card's "Duplicate brief" opens the plan dialog copying that shoot (20 Oct 2026)
   const [copyFrom, setCopyFrom] = useState<string | undefined>(undefined)
+  // ARCHIVE (20 Oct 2026): shoots put away, behind "Archived" by the title, each with Bring back
+  const [showArchived, setShowArchived] = useState(false)
 
   const { me, role, loading, can } = useRole()
   // anyone on the team plans a shoot — the shoot page decides whose it then is
@@ -90,6 +93,16 @@ export default function ProductionPage() {
   const clients = live.clients as unknown as ClientRow[]
   // schema not migrated yet: rows come back with no status — show the setup card
   const needsSchema = shoots !== null && shoots.length > 0 && shoots.every(r => !r.status)
+
+  /** who may archive a shoot: whoever runs it (canManageShoot) — the server checks the same */
+  const mayArchiveShoot = (s: { owner_id?: string | null; created_by?: string | null }) => !!viewer
+    && (['super_admin', 'general', 'account_manager'].includes(viewer.role) || s.owner_id === viewer.id || s.created_by === viewer.id)
+  const archivedShoots = useMemo(() => (live.archivedBatches as unknown as Shoot[]).map(s => ({
+    id: s.id, title: s.title, client: s.clients?.name ?? null,
+    archived_at: (s as { archived_at?: string | null }).archived_at ?? null,
+    note: s.shoot_date ? `shoot ${new Date(`${String(s.shoot_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}` : null,
+    owner_id: (s as { owner_id?: string | null }).owner_id ?? null, created_by: (s as { created_by?: string | null }).created_by ?? null,
+  })), [live.archivedBatches])
 
   const liveError = live.error
   useEffect(() => {
@@ -199,10 +212,13 @@ export default function ProductionPage() {
         title="Shoots"
         summary={summary}
         actions={canPlan ? (
-          <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
-            onClick={() => setPlanOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden /> New shoot plan
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchivedToggle count={archivedShoots.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
+            <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
+              onClick={() => setPlanOpen(true)}>
+              <Plus className="h-4 w-4" aria-hidden /> New shoot plan
+            </Button>
+          </div>
         ) : undefined}
       />
 
@@ -244,6 +260,9 @@ export default function ProductionPage() {
         <div className="flex gap-3.5 overflow-x-hidden" role="status" aria-busy="true" aria-label="Loading the shoots">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[200px] flex-1 rounded-card" />)}
         </div>
+      ) : showArchived ? (
+        <ArchivedList kind="shoot" rows={archivedShoots} mayRestore={r => mayArchiveShoot(r as never)}
+          empty="Nothing archived. A shoot you archive from its card's menu waits here, off this page and the client's portal, until you bring it back." />
       ) : view === 'date' ? (
         <WorkCalendar
           events={calendar}
@@ -271,6 +290,9 @@ export default function ProductionPage() {
           today={today}
           onMove={moveShoot}
           onDuplicate={canPlan ? (shoot => { setCopyFrom(shoot.id); setPlanOpen(true) }) : undefined}
+          // whoever runs a shoot may archive it — the server checks the same (canManageBatch)
+          onArchive={shoot => { void setArchived('shoot', shoot.id, true) }}
+          mayArchive={s => mayArchiveShoot(s as never)}
           busyId={stageBusy}
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
