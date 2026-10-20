@@ -38,6 +38,11 @@ export async function onePortalFormRedirect(kind: FormKind, token: string): Prom
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null
   const row = (await table<FormRow>(TABLE[kind] as never).list({ by: { token } as never, limit: 1 }).catch(() => [] as FormRow[]))[0]
   if (!row) return null
+  // A DRAFT OPENS AS ITSELF (the owner, 20 Oct 2026, "Open the client's view" on Justin's unsent form: "why this is
+  // taking me to the main portal"): the portal shows no draft, so sending the link there landed the team on the
+  // portal's home. Unsent, the form is shown on its own page — what the client will see; once sent, the portal
+  // carries it as before.
+  if (row.status === 'draft') return null
   const client = await table<Client>('clients').get(row.client_id).catch(() => null)
   const home = typeof client?.share_token === 'string' ? client.share_token.trim() : ''
   if (!client || !onePortal(client) || !home) return null

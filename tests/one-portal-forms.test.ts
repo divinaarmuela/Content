@@ -84,3 +84,10 @@ describe('a failed Drive hand-in leaves the tray once a later one on the card wo
     expect(src).toContain("const done = handIn?.status === 'done' || putRight")
   })
 })
+
+describe("a draft form opens as itself (20 Oct 2026, \"Open the client's view\" on an unsent form)", () => {
+  it('the old link only moves into the portal once the form is no longer a draft', () => {
+    const src = readFileSync('app/lib/one-portal-forms.ts', 'utf8')
+    expect(src).toMatch(/if \(!row\) return null\s*\n(\s*\/\/.*\n)*\s*if \(row\.status === 'draft'\) return null/)
+  })
+})
