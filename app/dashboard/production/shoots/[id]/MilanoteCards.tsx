@@ -247,6 +247,22 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
   /* ── a board, or a link to one: Milanote's row — a coloured square icon, the name, what it holds ── */
   if (card.kind === 'board' || card.kind === 'boardlink') {
     const hex = card.hex ?? '#b9b9b9'
+    // ON THE CANVAS, Milanote's tile (measured, 20 Oct 2026): a 64 px rounded square in the board's colour with its
+    // icon, the name centred under it, what it holds under that; double-click (or Open) goes in
+    if (!card.col) {
+      return (
+        <div data-mn={`${card.kind}-tile`} className="flex flex-col items-center gap-1.5 pt-1" style={{ width: card.w }}>
+          <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-[14px] shadow-[0_1px_3px_rgba(0,0,0,0.14)]" style={{ backgroundColor: hex, color: inkOn(hex) }}>
+            {card.icon_url
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={card.icon_url} alt="" className={card.icon_url.includes('/element-icons/') ? 'h-8 w-8 object-contain' : 'h-full w-full object-cover'} draggable={false} />
+              : <span className="text-[24px] font-semibold" style={{ fontFamily: MN_SERIF }}>{(card.name ?? '').trim()[0]?.toUpperCase() ?? ''}</span>}
+          </span>
+          <span className="w-full text-center text-[14px] font-semibold leading-tight text-[#2b2b2b] [overflow-wrap:anywhere] dark:text-[#ececec]">{card.name || 'Board'}</span>
+          {insideLabel && <span className="text-center text-[11px] text-[#8a8a8a]">{insideLabel}</span>}
+        </div>
+      )
+    }
     return (
       <div data-mn={card.kind} className={`${CARD} flex items-center gap-3 px-3 py-3`} style={box(card)}>
         <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[10px]" style={{ backgroundColor: hex, color: inkOn(hex) }}>

@@ -368,6 +368,8 @@ export type CanvasCard = {
   target?: string
   /** the Milanote element this card was brought from — what makes the import run twice without doubling */
   mn?: string
+  /** a board tile's own picture — Milanote's icon or cover (https only) */
+  icon_url?: string
 }
 
 export type CanvasLine = {
@@ -690,6 +692,7 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...(kind === 'boardlink' && typeof r.target === 'string' && r.target
         ? { target: r.target.slice(0, 60), icon: iconOf(typeof r.icon === 'string' ? r.icon : undefined), colour: colourOf('board', typeof r.colour === 'string' ? r.colour : undefined) } : {}),
       ...(typeof r.mn === 'string' && r.mn ? { mn: r.mn.slice(0, 40) } : {}),
+      ...((kind === 'board' || kind === 'boardlink') && typeof r.icon_url === 'string' && /^https:\/\//i.test(r.icon_url) ? { icon_url: r.icon_url.slice(0, 1000) } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
       ...(kind === 'todo'
         ? {

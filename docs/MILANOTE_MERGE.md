@@ -83,3 +83,15 @@ New kinds: `column`, `document`, `table`, `swatch`, `file`, `boardlink`. A Milan
    missing clients, writes every board and card with its exact place. Dry run first — a count per board — then
    writes; idempotent on the Milanote id.
 5. **The check**: every board's counts against Milanote's; side by side on screen, Renée's boards first.
+
+## Measured on screen (20 Oct 2026, "Rollie X Sheet Society Collaboration" at Milanote's 100%)
+
+- **One Milanote unit is 9 px.** Positions: x 7 → 61 is 486 px; y 2 → 16 is 126 px. Widths: `width` 101 draws
+  907 px, 49 draws 439 px, an image's 51 draws 457 px — so a card is `width × 9 − 2` px wide.
+- **No `width` is Milanote's default card: 34 units, 304 px.**
+- **Comments come with the board** (`GET /api/boards/<id>` → `comments`, keyed `cm_…`, each with `threadId`,
+  `userId`, ProseMirror `text`, `createdAt`); names from `GET /api/users?ids=…`. 4 comments in 7 threads
+  (Alex Barnes of Rollie, Raina Rao). `milanote-snapshot-2.json` (Downloads) holds them; the first snapshot did not.
+- **Boards shared from another workspace** show to this login as `SKELETON` elements with no title and no content
+  (1VJQK11DkemdSJ and the boards under it). They cannot be read from this account; the person who owns them must
+  share them to it (or the import is run from theirs).
