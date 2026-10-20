@@ -58,9 +58,9 @@ const NOTIFICATIONS = '/dashboard/notifications'
 
 /** The Post approval columns, as the board draws them — quoted in more than
  *  one tutorial, so said once. */
-export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, Colour grade, With client, Ready to post, Booked in, Posted'
+export const POST_APPROVAL_COLUMNS = 'Draft, Quality check, Colour grade, Ready for client, Ready to post, Booked in, Posted'
 /** The Editor columns. */
-export const EDITOR_COLUMNS = 'In Progress, Quality check, With client, For Handoff, Done'
+export const EDITOR_COLUMNS = 'In Progress, Quality check, Ready for client, For Handoff, Done'
 /** The Shoots columns. */
 export const SHOOT_COLUMNS = 'Draft, Quality review, Shared with team, Confirmed, Reminder sent, Shoot day, Footage in'
 
@@ -419,7 +419,7 @@ const MANAGER: Tutorial = {
         `Six columns: ${POST_APPROVAL_COLUMNS}. A submitted card lands in Quality check, with the reviewer — Abby’s rule: maker, then the reviewer, then the scheduler.`,
         'You are told when a card reaches Quality check for your clients. Look at it there; "Ask for changes" sends it back to the maker with your note, in your words. You cannot send it to the client yourself: only the reviewer, or a super admin standing in, passes it on.',
         'The card says where the reviewer should look when the maker gave a Canva link and page.',
-        'Once the reviewer passes it, the card goes With client and "Sent to client" is stamped — that is the delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
+        'Once the reviewer passes it, the card goes to Ready for client and "Sent to client" is stamped — that is the delivery date. The client approves on their portal, or you log their answer with "Log the client’s approval".',
         'On the client’s yes the card goes to Ready to post and is handed to the client’s schedulers by itself. Some clients post their own content: their cards stop at Delivered.',
         'Filter by Client and by People at the top to see who is doing what.',
       ],

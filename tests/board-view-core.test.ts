@@ -135,11 +135,12 @@ describe('the control on a card', () => {
 
   // a DESIGN passes to the client as before; a video edit passes to colour grade (docs/COLOUR_GRADE_SPLIT_SPEC.md C1)
   const design = (over: Partial<BoardViewCard> = {}) => card({ work_kinds: { name: 'Graphics', slug: 'graphics', color: 'pink' }, ...over })
-  it('a video edit passes the quality check to colour grade, never straight to the client', () => {
+  it('a video edit passes the quality check to colour grade — or, on purpose, straight to the client (20 Oct 2026)', () => {
     const joy = { id: 'u-joy', role: 'editor' as const, quality_reviewer: true }
     const { primary, more } = cardActions(card({ status: 'quality_check' }), joy)
     expect(primary).toEqual({ kind: 'transition', to: 'colour_grade', label: 'Passed — to colour grade' })
-    expect(more.map(a => a.to)).toEqual(['revision_required'])
+    expect(more.map(a => a.to).sort()).toEqual(['client_review', 'revision_required'])
+    expect(more.find(a => a.to === 'client_review')?.label).toBe('Passed — skip colour grade, to client')
     // the colourist puts it on the client's portal; nobody else's turn
     const martin = { id: 'u-martin', role: 'editor' as const, colourist: true }
     expect(cardActions(card({ status: 'colour_grade' }), martin).primary).toEqual({ kind: 'transition', to: 'client_review', label: "Put it on the client's portal" })
@@ -354,11 +355,11 @@ describe('the lanes each page arranges the eight columns into', () => {
     expect(keys).toContain('booked')
   })
 
-  it('the Editor page is six lanes: In Progress, Quality check, Colour grade, With client, For Handoff, Done', () => {
+  it('the Editor page is six lanes: In Progress, Quality check, Colour grade, Ready for client, For Handoff, Done', () => {
     // Abby's rule (11 Sep 2026): the maker's submit goes to Joy; the
     // client's look sits inside the same lane with a chip saying who has it
     const lanes = pageLanes('editor')
-    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'Colour grade', 'With client', 'For Handoff', 'Done'])
+    expect(lanes.map(l => l.label)).toEqual(['In Progress', 'Quality check', 'Colour grade', 'Ready for client', 'For Handoff', 'Done'])
     expect(lanes.map(l => l.folded)).toEqual([false, false, false, false, false, true])
     expect(lanes.map(l => l.columns)).toEqual([['draft'], ['quality_check'], ['colour_grade'], ['with_client'], ['ready_to_post'], ['booked', 'posted', 'delivered']])
     // every column is in exactly one lane, so no card can fall off the page

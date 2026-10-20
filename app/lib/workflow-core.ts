@@ -235,7 +235,8 @@ export const STATUS_LABELS: Record<ItemStatus, string> = {
   revision_complete: 'Changes made — check again',
   quality_check: 'Quality check',
   colour_grade: 'Colour grade',
-  client_review: 'With client',
+  // "Ready for client", not "With client" (the owner, 20 Oct 2026)
+  client_review: 'Ready for client',
   client_changes_requested: 'Client wants changes',
   // NOT "Approved": beside "Signed off. Needs a posting time." that read as
   // finished, and the word already meant four different things across the
@@ -476,8 +477,9 @@ export function presentTransitions(
   // manager's stages); from Draft the maker's one button is the gate itself
   const isGate = (roles.includes(QUALITY_HAT) || roles.includes('super_admin')) && transitions.some(t => t.to === 'client_review')
   const visible = transitions
-    // C1: at the quality check a video edit goes to colour grade, everything else to the client as before
-    .filter(t => from !== 'quality_check' || (ctx.gradeFirst ? t.to !== 'client_review' && t.to !== 'approved_for_scheduling' : t.to !== 'colour_grade'))
+    // C1: at the quality check a video edit goes to colour grade, everything else to the client as before — and a video
+    // may skip the grade straight to the client, on purpose (the owner, 20 Oct 2026); see SKIP_GRADE_LABEL
+    .filter(t => from !== 'quality_check' || (ctx.gradeFirst ? t.to !== 'approved_for_scheduling' : t.to !== 'colour_grade'))
     .filter(t => !(t.to === 'approved_for_scheduling' && from !== 'client_review' && ctx.clientApprovalRequired))
     .filter(t => !(isGate && t.to === 'quality_check'))
 
@@ -511,8 +513,17 @@ export function presentTransitions(
     }
   }
 
+  // a video at the quality check: colour grade is the button; straight to the client is the smaller one, said plainly
+  if (from === 'quality_check' && ctx.gradeFirst) {
+    const skip = (t: Presented): Presented => t.to === 'client_review' ? { ...t, label: SKIP_GRADE_LABEL } : t
+    return { primary: primary ? skip(primary) : null, secondary: visible.filter(t => t !== primary).map(skip) }
+  }
+
   return { primary, secondary: visible.filter(t => t !== primary) }
 }
+
+/** the quality checker's button that sends a video edit to the client without the colour grade (20 Oct 2026) */
+export const SKIP_GRADE_LABEL = 'Passed — skip colour grade, to client'
 
 /**
  * Whose move is it, is it mine, and is the seat empty? `turns` is the same

@@ -22,7 +22,7 @@ describe('the seven columns', () => {
     // "Booked in", never "Scheduled" — the owner's word for a post the
     // channel holds (11 Sep 2026: a booked post sat under Posted and read as live)
     expect(BOARD_COLUMNS.map(c => c.label)).toEqual([
-      'Draft', 'Quality check', 'Colour grade', 'With client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
+      'Draft', 'Quality check', 'Colour grade', 'Ready for client', 'Ready to post', 'Booked in', 'Posted', 'Delivered',
     ])
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Internal check')
     expect(BOARD_COLUMNS.map(c => c.label)).not.toContain('Scheduled')

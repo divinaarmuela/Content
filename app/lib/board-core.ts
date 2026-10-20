@@ -66,7 +66,8 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
   },
   {
     key: 'with_client',
-    label: 'With client',
+    // "Ready for client" (the owner, 20 Oct 2026)
+    label: 'Ready for client',
     meaning: 'The client is looking at it, or has asked for changes.',
     statuses: ['client_review', 'client_changes_requested'],
   },

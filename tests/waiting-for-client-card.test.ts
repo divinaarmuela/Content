@@ -47,7 +47,7 @@ describe('the Post approval column "Scheduled but awaiting client approval"', ()
     expect(lane(post({ if_no_answer: 'post' }))).toBe('approved')
     expect(lane(post({ stage: 'ready', booking: null, if_no_answer: 'wait' }))).toBe('approved')
     // nothing is dragged in: a post arrives by itself
-    const d = dropOnPostLane(post(), 'awaiting_client', ['super_admin'], NOW)
+    const d = dropOnPostLane(post(), 'awaiting_client', ['sa'], NOW)
     expect(d.ok).toBe(false)
   })
 })

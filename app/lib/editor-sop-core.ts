@@ -45,7 +45,7 @@ export const EDITOR_LANES: readonly {
   { key: 'quality_check', label: 'Quality check', columns: ['quality_check'], folded: false, empty: 'Nothing with the quality reviewer.' },
   // the colourist's lane (COLOUR_GRADE_SPLIT_SPEC): a passed video edit waits here for the graded cut
   { key: 'colour_grade', label: 'Colour grade', columns: ['colour_grade'], folded: false, empty: 'Nothing being colour graded.' },
-  { key: 'with_client', label: 'With client', columns: ['with_client'], folded: false, empty: 'Nothing with a client.' },
+  { key: 'with_client', label: 'Ready for client', columns: ['with_client'], folded: false, empty: 'Nothing ready for a client.' },
   { key: 'for_handoff', label: 'For Handoff', columns: ['ready_to_post'], folded: false, empty: 'Nothing approved yet.' },
   { key: 'done', label: 'Done', columns: ['booked', 'posted', 'delivered'], folded: true, empty: 'Nothing done yet.' },
 ]

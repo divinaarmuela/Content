@@ -34,7 +34,7 @@ export const TASK_KIND_LABELS: Record<ItemStatus, string> = {
   quality_check: 'Being checked',
   // a task never reaches colour grade; the dictionary is whole
   colour_grade: 'Being checked',
-  client_review: 'With client',
+  client_review: 'Ready for client',
   client_changes_requested: 'Client wants changes',
   approved_for_scheduling: 'Done',
   scheduled: 'Done',
