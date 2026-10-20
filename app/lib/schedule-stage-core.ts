@@ -20,7 +20,7 @@
  */
 
 import {
-  MISSED_LABEL, MISSED_TONE, STAGE_LABEL, STAGE_TONE, SCHEDULE_LANES,
+  MISSED_LABEL, MISSED_TONE, STAGE_LABEL, STAGE_TONE, SCHEDULE_LANES, WAITING_FOR_CLIENT, waitingForClient,
   failedNetworks, liveNetworks, lostChannels, postActions, postedWords, slotMissed, waitingOn,
   type AccountRef, type NowLike, type OfferedAction, type PostHat, type PostStage, type PostState, type StageTone,
 } from './post-stage-core'
@@ -140,21 +140,24 @@ export function scheduleFacts(post: PostState, accounts: readonly AccountRef[], 
   // why it came back from the schedule (a failed booking, or nothing went out)
   if (post.stage === 'ready' && post.problem) alerts.push(post.problem)
 
+  const holding = waitingForClient(post)
   const label = missed ? MISSED_LABEL
     : post.stage === 'posted' ? postedWords(post)
-      : STAGE_LABEL[post.stage]
+      : holding ? WAITING_FOR_CLIENT.label
+        : STAGE_LABEL[post.stage]
 
   const tone: StageTone = missed || alerts.length > 0 ? MISSED_TONE
     // live somewhere is good news with a gap in it — amber, never red (audit S7)
     : partial ? 'amber'
-      : STAGE_TONE[post.stage]
+      : holding ? WAITING_FOR_CLIENT.tone
+        : STAGE_TONE[post.stage]
 
   return {
     stage: post.stage,
     label,
     tone,
     missed,
-    line: waitingOn(post, now).line,
+    line: holding && !missed ? WAITING_FOR_CLIENT.meaning : waitingOn(post, now).line,
     alert: alerts.length > 0 ? alerts.join(' ') : null,
     networks: networkLines(post, accounts),
     partial,

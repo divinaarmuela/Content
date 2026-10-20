@@ -58,7 +58,7 @@ import { readPostAutomation, type PostAutomation } from './comment-automation-co
 import { isTestClient } from './test-clients-core'
 import { readPostBatch, type PostBatch } from './post-batch-core'
 import {
-  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, insideLastSlot, onePortal, readClientReview, readReviewAsked,
+  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, onePortal, readClientReview, readReviewAsked,
   type ClientReview, type ClientVerdict, type IfNoAnswer, type ReviewAsked,
 } from './one-portal-core'
 
@@ -109,7 +109,24 @@ export const MISSED_TONE: StageTone = 'red'
  */
 export function postTone(post: PostState, now: NowLike): StageTone {
   if (slotMissed(post, now) || (post.problem && post.stage !== 'cancelled')) return 'red'
+  if (waitingForClient(post)) return WAITING_FOR_CLIENT.tone
   return STAGE_TONE[post.stage]
+}
+
+/**
+ * "WAIT FOR THE CLIENT" AND THEY HAVE NOT APPROVED (the owner, 20 Oct 2026: "make sure on the card shows amber
+ * colour waiting for client … post will not go out unless they approve"). Booked on the provider, but taken off
+ * 15 minutes before its time unless the client approves (one-portal-core.holdDue — the same rule, so the card
+ * cannot say one thing while the sweep does another). Amber on every card, never Booked in's blue.
+ */
+export const WAITING_FOR_CLIENT = {
+  label: 'Waiting for client',
+  meaning: 'Will not go out unless the client approves — it comes off 15 minutes before its time.',
+  tone: 'amber' as StageTone,
+}
+export function waitingForClient(post: Pick<PostState, 'stage' | 'if_no_answer' | 'client_review'>): boolean {
+  if (post.stage !== 'booked' || ifNoAnswerOf(post) !== 'wait') return false
+  return readClientReview(post.client_review)?.verdict !== 'approved'
 }
 
 /**

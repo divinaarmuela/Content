@@ -28,7 +28,7 @@
 import {
   APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
   STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine, reminderWords,
-  STAGE_PAGE, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
+  STAGE_PAGE, WAITING_FOR_CLIENT, waitingForClient, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
 } from './post-stage-core'
@@ -474,7 +474,9 @@ export function postCardFace(
     title: postTitle(post, opts.sourceTitle),
     client: String(opts.clientName ?? '').trim() || 'This client',
     clientId: post.client_id,
-    stage: { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
+    stage: waitingForClient(post)
+      ? { label: WAITING_FOR_CLIENT.label, tone: WAITING_FOR_CLIENT.tone }
+      : { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
     tone: postTone(post, opts.now),
     networks: opts.platformOf ? faceNetworks(post, opts.platformOf) : [],
     waiting: { ...wait, sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
