@@ -172,9 +172,10 @@ describe('shape', () => {
     expect(bars?.detail).toContain('16:9')
     expect(bars?.detail).toContain('9:16 vertical')
     expect(bars?.consequence).toMatch(/your call/)
-    // a still IS cropped
-    const still = assessAssets({ probes: [{ url: 'https://x/a.jpg', type: 'image', width: 1920, height: 1080, bytes: MB }], platforms: ['tiktok'] })
-    expect(still.find(f => f.headline === 'Cropped to fit')).toBeTruthy()
+    // a TikTok photo is not cropped either: it floats whole with a fill (20 Oct 2026, MGMT's 4:5 carousel)
+    const still = assessAssets({ probes: [{ url: 'https://x/a.jpg', type: 'image', width: 1080, height: 1350, bytes: MB }], platforms: ['tiktok'] })
+    expect(still.find(f => f.headline === 'Shown with bars')?.consequence).toMatch(/nothing is cut off/)
+    expect(still.find(f => f.headline === 'Cropped to fit')).toBeUndefined()
   })
 
   // 9 Sep 2026: the modal said "Quality drops" on Instagram beside an
@@ -646,10 +647,11 @@ describe('displayFrame — the box each channel shows a file in', () => {
     expect(displayFrame('instagram', undefined, 'video', vertical).note).toBe('Fills the screen')
     expect(displayFrame('youtube', 'reel', 'video', vertical).name).toBe('9:16')
   })
-  it('a still on TikTok or a Story is cropped to 9:16, not barred', () => {
+  it('a still on TikTok is shown whole with bars; a Story fills the screen', () => {
     const f = displayFrame('tiktok', undefined, 'image', landscape)
-    expect(f.fit).toBe('cover')
-    expect(f.note).toBe('Cropped to 9:16')
+    expect(f.fit).toBe('contain')
+    expect(f.note).toBe('Shown whole, with bars')
+    expect(displayFrame('instagram', 'story', 'image', landscape).note).toBe('Cropped to 9:16')
     expect(displayFrame('instagram', 'story', 'image', vertical).note).toBe('Fills the screen')
   })
   it('a YouTube video sits in a 16:9 player; a vertical one gets bars at the sides', () => {

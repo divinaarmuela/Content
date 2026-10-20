@@ -550,18 +550,22 @@ export function assessAssets(input: {
               detail: `${spec.label} takes between 1:2.4 and 2.4:1`,
               consequence: 'The upload fails while processing — it never appears at all.',
             })
-          } else if (probe.type === 'video' && rule.aspectName) {
+          } else if ((probe.type === 'video' || platform === 'tiktok') && rule.aspectName) {
             // a video is never cropped on the vertical channels — it is shown
             // whole, small, with bars above and below. Saying "cropped" sent
             // people looking for a lost edge (9 Sep 2026); the real cost is
             // that a 16:9 clip fills a third of the phone screen
+            // …and neither is a TikTok photo: a 4:5 slide floats whole in the 9:16 screen with a fill above and
+            // below (the owner, 20 Oct 2026, on MGMT's 4:5 carousel: "tiktok is wrong" — it read "Cropped to 9:16")
             push({
               level: 'reframed',
               headline: 'Shown with bars',
               detail: `${shape}; ${spec.label}${kindWord(kind)} shows ${rule.aspectName}`,
-              consequence:
-                'It posts whole, but small, with black bars above and below on a phone. ' +
-                'It is your call — a 9:16 cut of the same footage fills the screen.',
+              consequence: probe.type === 'video'
+                ? 'It posts whole, but small, with black bars above and below on a phone. ' +
+                  'It is your call — a 9:16 cut of the same footage fills the screen.'
+                : 'It posts whole — nothing is cut off — with a plain fill above and below on a phone. ' +
+                  'A 9:16 version of the same design fills the screen.',
             })
           } else {
             push({
@@ -988,6 +992,11 @@ export function displayFrame(
       const media = own ?? VERTICAL
       const same = Math.abs(media - VERTICAL) < 0.05
       return { fit: 'contain', frame: VERTICAL, media, name: '9:16', note: same ? 'Fills the screen' : 'Shown with bars — small on a phone' }
+    }
+    // a TikTok photo is shown whole inside the 9:16 screen (bars), not cropped; a Story or Reel still fills it
+    if (platform === 'tiktok') {
+      const media = own ?? VERTICAL
+      return { fit: 'contain', frame: VERTICAL, media, name: '9:16', note: Math.abs(media - VERTICAL) < 0.05 ? 'Fills the screen' : 'Shown whole, with bars' }
     }
     return { fit: 'cover', frame: VERTICAL, media: VERTICAL, name: '9:16', note: own && Math.abs(own - VERTICAL) >= 0.05 ? 'Cropped to 9:16' : 'Fills the screen' }
   }

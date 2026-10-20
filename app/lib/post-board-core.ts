@@ -479,7 +479,8 @@ export function postCardFace(
       : { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
     tone: postTone(post, opts.now),
     networks: opts.platformOf ? faceNetworks(post, opts.platformOf) : [],
-    waiting: { ...wait, sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
+    // "Waiting for client" on the chip, so not "Booked in — it goes out at its time" under it (20 Oct 2026)
+    waiting: { ...wait, ...(waitingForClient(post) ? { line: WAITING_FOR_CLIENT.meaning } : {}), sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
     sent: sentLine && post.stage === 'with_client' ? [sentLine, sentDay, reminded].filter(Boolean).join(' · ') : null,

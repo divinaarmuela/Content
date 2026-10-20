@@ -28,3 +28,12 @@ describe('a booked post waiting for the client', () => {
     expect(scheduleFacts(post(), ACCOUNTS, NOW).tone).toBe('blue')
   })
 })
+
+describe('the Post approval card', () => {
+  it('says it will not go out unless the client approves, not "it goes out at its time"', async () => {
+    const { postCardFace } = await import('@/app/lib/post-board-core')
+    const face = postCardFace(post({ if_no_answer: 'wait' }), { now: NOW, today: '2026-10-20' })
+    expect(face.stage).toEqual({ label: 'Waiting for client', tone: 'amber' })
+    expect(face.waiting.line).toMatch(/Will not go out unless the client approves/)
+  })
+})
