@@ -28,7 +28,7 @@
 import {
   APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
   STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine, reminderWords,
-  STAGE_PAGE, WAITING_FOR_CLIENT, waitingForClient, laneOf, mayWorkOnPost, pageLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
+  STAGE_PAGE, WAITING_FOR_CLIENT, waitingForClient, laneOf, mayWorkOnPost, pageLaneOf, postLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
 } from './post-stage-core'
@@ -101,12 +101,12 @@ const STAGE_ORDER: Record<PostStage, number> = {
  * STAGE it holds — never a rewrite of the stage (audit B1, B11). Oldest wait
  * first in the approval lanes; in Approved, by stage, the newest first.
  */
-export function groupPosts<T extends Pick<PostState, 'id' | 'stage' | 'stage_at'>>(
+export function groupPosts<T extends Pick<PostState, 'id' | 'stage' | 'stage_at'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review'>>>(
   posts: readonly T[], lanes: readonly Lane[] = POST_APPROVAL_LANES,
 ): { lane: Lane; posts: T[] }[] {
   const buckets = new Map<string, T[]>(lanes.map(l => [l.key, []]))
   for (const p of posts) {
-    const key = pageLaneOf(lanes, laneOf(p))
+    const key = postLaneOf(lanes, p)
     if (key) buckets.get(key)!.push(p)
   }
   return lanes.map(lane => {
@@ -306,7 +306,8 @@ export type PostDrop = { ok: true; action: OfferedAction } | { ok: false; reason
 function landingLane(post: PostState, action: PostAction, lanes: readonly Lane[]): string | null {
   const to = ROW_OF[action].to
   if (to === 'deleted') return null
-  return pageLaneOf(lanes, to === 'same' ? post.stage : to)
+  // a move that keeps the stage keeps the card where it is drawn (the awaiting-client lane included)
+  return to === 'same' ? postLaneOf(lanes, post) : pageLaneOf(lanes, to)
 }
 
 export const FIRST_THE_CHECK = 'Send it for quality check first — every post passes the quality check before it goes to the client or is approved.'
@@ -327,8 +328,11 @@ export function dropOnPostLane(
 ): PostDrop {
   const target = lanes.find(l => l.key === laneKey)
   if (!target) return { ok: false, reason: 'That is not a column on this board.' }
-  const here = pageLaneOf(lanes, laneOf(post))
+  const here = postLaneOf(lanes, post)
   if (here === laneKey) return { ok: false, reason: `Already in ${target.label}` }
+  if (laneKey === 'awaiting_client') {
+    return { ok: false, reason: 'A post comes here by itself: booked, set to wait for the client, and not approved by them yet.' }
+  }
 
   const candidates = offeredList(boardActions(post, hats, now, ctx))
     .filter(a => landingLane(post, a.action, lanes) === laneKey)

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
-  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck, Send,
+  LayoutGrid, Inbox, Users, Globe, Kanban, Activity, Camera, CalendarCheck,
   BarChart3, Sparkles, Bell, Settings, Menu, Sun, Moon, Share2, Megaphone,
   CalendarClock, CalendarDays, Search, ListChecks, StickyNote, Radar, GalleryHorizontalEnd } from 'lucide-react'
 import NotificationBell from '../NotificationBell'
@@ -92,7 +92,8 @@ export const NAV_SOCIAL_CHILDREN: NavItem[] = [
   // decide what goes out and when, and the one the rest of Social feeds
   { href: '/dashboard/social/schedule',    label: 'Schedule',    icon: CalendarDays },
   // then "did it go out?", the question people come to Social with next
-  { href: '/dashboard/social/activity',    label: 'Posts',       icon: Send },
+  // (Posts was here until 20 Oct 2026 — the owner took it off the sidebar for the Content tracker; the page stays
+  //  for the links that open it)
   // every post that went live, per client and month, from Zernio (the owner, 20 Oct 2026)
   { href: '/dashboard/social/content-tracker', label: 'Content tracker', icon: GalleryHorizontalEnd },
   { href: '/dashboard/social/inbox',       label: 'Inbox',       icon: Inbox },

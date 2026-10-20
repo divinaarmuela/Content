@@ -13,23 +13,30 @@ import {
   type BoardIcon, type CanvasColour,
 } from '@/app/lib/board-canvas-core'
 import { ICON, SWATCH_CLASS } from './canvasTone'
+import { MILANOTE_ICONS, iconWords, milanoteIconUrl, searchIcons } from '@/app/lib/board-icons-core'
 
 /**
  * One button makes a board: a name, an icon and a colour. The same dialog
  * renames one. Colours are the swatch row — never a picker — so a board
  * tile reads in both themes.
  */
-export default function NewBoardDialog({ open, onOpenChange, onSubmit, initial, title = 'New board', submitLabel = 'Make the board' }: {
+export default function NewBoardDialog({ open, onOpenChange, onSubmit, initial, title = 'New board', submitLabel = 'Make the board', imageIcons = false }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (v: { name: string; icon: BoardIcon; colour: CanvasColour }) => Promise<void> | void
-  initial?: { name: string; icon: string; colour: string }
+  /** `icon_url` only when `imageIcons`: one of Milanote's icons, or null for one of our own set */
+  onSubmit: (v: { name: string; icon: BoardIcon; colour: CanvasColour; icon_url?: string | null }) => Promise<void> | void
+  initial?: { name: string; icon: string; colour: string; icon_url?: string | null }
+  /** offer Milanote's icons too (the team boards, 20 Oct 2026: "these icons are not available in our software?") */
+  imageIcons?: boolean
   title?: string
   submitLabel?: string
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [icon, setIcon] = useState<BoardIcon>(DEFAULT_ICON)
   const [colour, setColour] = useState<CanvasColour>(DEFAULT_COLOUR.board)
+  const [iconUrl, setIconUrl] = useState<string | null>(null)
+  const [more, setMore] = useState(false)
+  const [find, setFind] = useState('')
   const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState<string | null>(null)
 
@@ -39,15 +46,18 @@ export default function NewBoardDialog({ open, onOpenChange, onSubmit, initial, 
     setName(initial?.name ?? '')
     setIcon(v.ok ? v.icon : DEFAULT_ICON)
     setColour(v.ok ? v.colour : DEFAULT_COLOUR.board)
+    setIconUrl(initial?.icon_url ?? null)
+    setMore(!!initial?.icon_url)
+    setFind('')
     setReason(null)
-  }, [open, initial?.name, initial?.icon, initial?.colour])
+  }, [open, initial?.name, initial?.icon, initial?.colour, initial?.icon_url])
 
   const submit = async () => {
     const v = validateBoard({ name, icon, colour })
     if (!v.ok) { setReason(v.reason); return }
     setBusy(true)
     try {
-      await onSubmit({ name: v.name, icon: v.icon, colour: v.colour })
+      await onSubmit({ name: v.name, icon: v.icon, colour: v.colour, ...(imageIcons ? { icon_url: iconUrl } : {}) })
       onOpenChange(false)
     } finally {
       setBusy(false)
@@ -77,11 +87,11 @@ export default function NewBoardDialog({ open, onOpenChange, onSubmit, initial, 
                     key={name}
                     type="button"
                     aria-label={name}
-                    aria-pressed={icon === name}
-                    onClick={() => setIcon(name)}
+                    aria-pressed={!iconUrl && icon === name}
+                    onClick={() => { setIcon(name); setIconUrl(null) }}
                     className={cn(
                       'inline-flex h-11 w-11 items-center justify-center rounded-tile border border-border bg-surface hover:bg-foreground/[0.04]',
-                      icon === name && 'border-foreground ring-2 ring-foreground',
+                      !iconUrl && icon === name && 'border-foreground ring-2 ring-foreground',
                     )}
                   >
                     <I className="h-5 w-5" />
@@ -89,6 +99,33 @@ export default function NewBoardDialog({ open, onOpenChange, onSubmit, initial, 
                 )
               })}
             </div>
+            {imageIcons && (
+              <>
+                <button type="button" onClick={() => setMore(m => !m)} className="self-start text-[13px] font-medium underline underline-offset-2">
+                  {more ? 'Fewer icons' : `More icons (${MILANOTE_ICONS.length})`}
+                </button>
+                {more && (
+                  <div className="flex flex-col gap-2">
+                    <Input value={find} onChange={e => setFind(e.target.value)} placeholder="Find an icon — star, camera, file…" aria-label="Find an icon" />
+                    <div className="grid max-h-56 grid-cols-8 gap-1.5 overflow-y-auto rounded-tile border border-border p-1.5">
+                      {searchIcons(find).map(n => {
+                        const url = milanoteIconUrl(n)
+                        return (
+                          <button key={n} type="button" title={iconWords(n)} aria-label={iconWords(n)} aria-pressed={iconUrl === url}
+                            onClick={() => setIconUrl(url)}
+                            className={cn('inline-flex h-10 w-10 items-center justify-center rounded-tile border border-transparent bg-surface hover:border-border',
+                              iconUrl === url && 'border-foreground ring-2 ring-foreground')}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="h-6 w-6 object-contain dark:invert" />
+                          </button>
+                        )
+                      })}
+                      {searchIcons(find).length === 0 && <p className="col-span-8 p-2 text-[13px] text-muted-foreground">No icon called that.</p>}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Colour</Label>

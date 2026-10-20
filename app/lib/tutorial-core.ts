@@ -54,7 +54,6 @@ const SCHEDULE = '/dashboard/social/schedule'
 const POST_APPROVAL = '/dashboard/scheduler'
 const EDITOR_PAGE = '/dashboard/editor'
 const SHOOTS = '/dashboard/production'
-const POSTS = '/dashboard/social/activity'
 const NOTIFICATIONS = '/dashboard/notifications'
 
 /** The Post approval columns, as the board draws them — quoted in more than
@@ -189,20 +188,8 @@ const SCHEDULER: Tutorial = {
       href: POST_APPROVAL,
       linkLabel: 'Open Post approval',
     },
-    {
-      title: 'Posts: what actually went out',
-      see: [
-        'Three piles: Scheduled, Did not post, Posted. One row per post, with a line per channel saying what kind of post it was and what happened to it.',
-        'A refused channel shows the reason in plain words, with Send again. A booked post can be cancelled here while the channel still holds it.',
-        'The last 30 days per client along the top: posted, scheduled, did not post.',
-      ],
-      actions: [
-        'Open Posts in the sidebar once a day.',
-        'On anything in Did not post, read the reason, fix it, press Send again.',
-      ],
-      href: POSTS,
-      linkLabel: 'Open Posts',
-    },
+    // (a Posts step was here until 20 Oct 2026 — Posts left the sidebar; a post that did not go out comes back to
+    //  the Schedule tile in red with the reason, the step above)
     WHERE_ANSWERS_ARRIVE,
   ],
 }

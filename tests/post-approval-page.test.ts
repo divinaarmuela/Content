@@ -43,9 +43,10 @@ describe('one source of truth: the post’s stage', () => {
     expect(src).not.toMatch(/\.status\s*===\s*'(pending|approved|scheduled|published|changes)'/)
   })
 
-  it('the lanes are the stage, through groupPosts (laneOf)', () => {
+  it('the lanes are the stage, through groupPosts (postLaneOf: the stage, or awaiting the client — 20 Oct 2026)', () => {
     const core = code(read('app/lib/post-board-core.ts'))
-    expect(core).toMatch(/pageLaneOf\(lanes, laneOf\(p\)\)/)
+    expect(core).toMatch(/postLaneOf\(lanes, p\)/)
+    expect(code(read('app/lib/post-stage-core.ts'))).toMatch(/return pageLaneOf\(lanes, laneOf\(post\)\)/)
     const board = code(read(`${BOARD_DIR}/PostBoard.tsx`))
     expect(board).toMatch(/groupPosts\(/)
     expect(board).not.toMatch(/groupByLane|pageLanes|BOARD_COLUMNS/)

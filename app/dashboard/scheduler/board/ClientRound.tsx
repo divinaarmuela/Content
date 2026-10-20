@@ -26,12 +26,26 @@ export default function ClientRound({ posts, now, choicesFor }: {
   choicesFor: (post: Pick<PostState, 'client_id'>) => ClientRecipient[]
 }) {
   const groups = useMemo(() => roundCandidates(posts, now).filter(g => g.posts.length >= 2), [posts, now])
+  // A BUTTON, NOT A BOX (the owner, 20 Oct 2026: "that thing at the top is bothering"): it opens when wanted
+  const [shown, setShown] = useState(false)
   if (groups.length === 0) return null
+  if (!shown) {
+    return (
+      <button type="button" onClick={() => setShown(true)}
+        className="inline-flex h-10 items-center gap-2 self-start rounded-full border border-border bg-surface px-4 text-[13px] font-semibold hover:bg-muted">
+        Send several to a client in one email
+        <span className="rounded-full bg-muted px-2 text-[12px] tabular-nums">{groups.reduce((n, g) => n + g.posts.length, 0)}</span>
+      </button>
+    )
+  }
   return (
     <section aria-label="Send several posts to a client in one email" className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
-      <div>
-        <h2 className="text-[15px] font-semibold">Send several to the client in one email</h2>
-        <p className="text-[13px] text-muted-foreground">The client gets one email listing every post you tick, with one link to all of them.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold">Send several to the client in one email</h2>
+          <p className="text-[13px] text-muted-foreground">The client gets one email listing every post you tick, with one link to all of them.</p>
+        </div>
+        <button type="button" onClick={() => setShown(false)} className="text-[13px] font-medium underline underline-offset-2">Hide</button>
       </div>
       {groups.map(g => <RoundForClient key={g.clientId} group={g} choices={choicesFor({ client_id: g.clientId })} />)}
     </section>

@@ -1,5 +1,6 @@
 'use client'
 
+import { isGlyphIcon } from '@/app/lib/board-icons-core'
 import { ALL_CLIENTS, NO_CLIENT_FILTER, boardForClient, clientsWithBoards } from '../../lib/milanote-briefs-core'
 import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
 import { byArchive } from '../../lib/archive-core'
@@ -169,7 +170,7 @@ export default function TeamBoardsPage() {
             <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.14)]" style={{ backgroundColor: b.hex ?? '#b9b9b9' }}>
               {b.icon_url
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={b.icon_url} alt="" className={b.icon_url.includes('/element-icons/') ? 'h-6 w-6 object-contain' : 'h-full w-full object-cover'} />
+                ? <img src={b.icon_url} alt="" className={isGlyphIcon(b.icon_url) ? 'h-6 w-6 object-contain' : 'h-full w-full object-cover'} />
                 : <span className="text-[18px] font-semibold text-white">{b.name.trim()[0]?.toUpperCase()}</span>}
             </span>
           )}

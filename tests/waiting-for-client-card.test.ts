@@ -37,3 +37,17 @@ describe('the Post approval card', () => {
     expect(face.waiting.line).toMatch(/Will not go out unless the client approves/)
   })
 })
+
+describe('the Post approval column "Scheduled but awaiting client approval"', () => {
+  it('holds a booked post waiting for the client, and lets it go when they approve or it is set to post anyway', async () => {
+    const { groupPosts, dropOnPostLane } = await import('@/app/lib/post-board-core')
+    const lane = (p: PostState) => groupPosts([p]).find(g => g.posts.length)?.lane.key
+    expect(lane(post({ if_no_answer: 'wait' }))).toBe('awaiting_client')
+    expect(lane(post({ if_no_answer: 'wait', client_review: { version: 1, verdict: 'approved', note: null, by: 'the client', at: NOW } }))).toBe('approved')
+    expect(lane(post({ if_no_answer: 'post' }))).toBe('approved')
+    expect(lane(post({ stage: 'ready', booking: null, if_no_answer: 'wait' }))).toBe('approved')
+    // nothing is dragged in: a post arrives by itself
+    const d = dropOnPostLane(post(), 'awaiting_client', ['super_admin'], NOW)
+    expect(d.ok).toBe(false)
+  })
+})

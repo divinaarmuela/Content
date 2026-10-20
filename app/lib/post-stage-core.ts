@@ -146,6 +146,10 @@ export const POST_APPROVAL_LANES: readonly Lane[] = [
   { key: 'draft', label: STAGE_LABEL.draft, stages: ['draft'] },
   { key: 'quality_check', label: STAGE_LABEL.quality_check, stages: ['quality_check'] },
   { key: 'with_client', label: STAGE_LABEL.with_client, stages: ['with_client'] },
+  // no stage of its own: a booked post waiting for the client sits here until they approve or it is set to post
+  // anyway (the owner, 20 Oct 2026: "the column should be Scheduled but awaiting client approval … and then changes
+  // either when client approved or when we change the settings it the card posts anyway") — postLaneOf
+  { key: 'awaiting_client', label: 'Scheduled but awaiting client approval', stages: [] },
   { key: 'approved', label: 'Approved', stages: ['ready', 'booked', 'posted'] },
 ]
 
@@ -159,6 +163,13 @@ export const SCHEDULE_LANES: readonly Lane[] = [
 /** The lane a card is drawn in IS its stage — one line, no rewriting (audit B1, B9-B13). */
 export function laneOf(post: Pick<PostState, 'stage'>): PostStage {
   return post.stage
+}
+
+/** The board lane a POST is drawn in: its stage's, except that a booked post waiting for the client's approval is
+ *  in "Scheduled but awaiting client approval" on a board that has that lane (`waitingForClient`). */
+export function postLaneOf(lanes: readonly Lane[], post: Pick<PostState, 'stage'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review'>>): string | null {
+  if (lanes.some(l => l.key === 'awaiting_client') && waitingForClient({ if_no_answer: null, client_review: null, ...post })) return 'awaiting_client'
+  return pageLaneOf(lanes, laneOf(post))
 }
 
 /** The board lane (by `Lane.key`) that holds this stage on the given page, or null when that page does not show it. */

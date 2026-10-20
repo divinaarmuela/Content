@@ -122,11 +122,11 @@ describe('resolveNav by role', () => {
       '/dashboard/todos',
     ].sort())
     const nav = resolveNav('scheduler', [], [], '/dashboard/social/schedule')
-    // Schedule and Posts, and nothing else of Social (the owner, 11 Sep
+    // Schedule (Posts left the sidebar on 20 Oct 2026), and nothing else of Social (the owner, 11 Sep
     // 2026: "scheduler should see posts page")
     // …and Automations, to look at (29 Sep 2026: "schedulers may view"; the routes keep setting one up
     // an account manager's)
-    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule', '/dashboard/social/activity', '/dashboard/social/automations'])
+    expect(nav.children.map(c => c.href)).toEqual(['/dashboard/social/schedule', '/dashboard/social/automations'])
     expect(nav.allowed.has('/dashboard/social')).toBe(false)
     // and the rail knows where they are
     expect(nav.current).toBe('/dashboard/social/schedule')
@@ -178,13 +178,13 @@ describe('resolveNav by role', () => {
   })
 
   it('opens all the Social children when Social itself is visible, and none to an editor', () => {
-    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(6)
-    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(6)
+    expect(resolveNav('super_admin', [], [], '/dashboard').children).toHaveLength(5)
+    expect(resolveNav('account_manager', [], [], '/dashboard').children).toHaveLength(5)
     expect(resolveNav('editor', [], [], '/dashboard').children).toEqual([])
     // hiding Social hides what rides on it
     expect(resolveNav('super_admin', [], ['/dashboard/social'], '/dashboard').children).toEqual([])
     // a grant of Social opens all of it
-    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(6)
+    expect(resolveNav('editor', ['/dashboard/social'], [], '/dashboard').children).toHaveLength(5)
   })
 })
 

@@ -3,6 +3,9 @@
 import React from 'react'
 import { Check, ExternalLink, FileText, LayoutGrid, Paperclip } from 'lucide-react'
 import { type CanvasCard as Card } from '../../../../lib/batch-brief-core'
+import { isGlyphIcon } from '../../../../lib/board-icons-core'
+import { isBoardIcon } from '../../../../lib/board-canvas-core'
+import { ICON } from '../../../boards/canvasTone'
 import { htmlText, sanitiseCanvasHtml, wordCount } from '../../../../lib/canvas-rich-core'
 
 /**
@@ -255,7 +258,9 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
           <span className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-[14px] shadow-[0_1px_3px_rgba(0,0,0,0.14)]" style={{ backgroundColor: hex, color: inkOn(hex) }}>
             {card.icon_url
               // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={card.icon_url} alt="" className={card.icon_url.includes('/element-icons/') ? 'h-8 w-8 object-contain' : 'h-full w-full object-cover'} draggable={false} />
+              ? <img src={card.icon_url} alt="" className={isGlyphIcon(card.icon_url) ? 'h-8 w-8 object-contain' : 'h-full w-full object-cover'} draggable={false} />
+              // one of our own icons, picked in the dialog (folder is the dialog's default, so it keeps the letter)
+              : isBoardIcon(card.icon) && card.icon !== 'folder' ? React.createElement(ICON[card.icon], { className: 'h-7 w-7' })
               : <span className="text-[24px] font-semibold" style={{ fontFamily: MN_SERIF }}>{(card.name ?? '').trim()[0]?.toUpperCase() ?? ''}</span>}
           </span>
           <span className="w-full text-center text-[14px] font-semibold leading-tight text-[#2b2b2b] [overflow-wrap:anywhere] dark:text-[#ececec]">{card.name || 'Board'}</span>

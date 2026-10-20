@@ -68,18 +68,18 @@ const names = (id: string | null | undefined) => ({ 'u-joy': 'Joy', 'u-akmal': '
 
 describe('the lanes', () => {
   it('are Draft, Quality check, With client, Approved — the owner’s decision 1', () => {
-    expect(POST_APPROVAL_LANES.map(l => l.label)).toEqual(['Draft', 'Quality check', 'With client', 'Approved'])
+    expect(POST_APPROVAL_LANES.map(l => l.label)).toEqual(['Draft', 'Quality check', 'With client', 'Scheduled but awaiting client approval', 'Approved'])
   })
 
   it('a post sits in the lane that holds its stage — never a rewrite of it (audit B1, B11)', () => {
     const posts = (['draft', 'quality_check', 'with_client', 'ready', 'booked', 'posted'] as PostStage[])
       .map((s, i) => post(s, { id: `p${i}`, stage_at: at(-i) }))
     const grouped = groupPosts(posts)
-    expect(grouped.map(g => g.lane.key)).toEqual(['draft', 'quality_check', 'with_client', 'approved'])
+    expect(grouped.map(g => g.lane.key)).toEqual(['draft', 'quality_check', 'with_client', 'awaiting_client', 'approved'])
     for (const g of grouped) for (const p of g.posts) expect(g.lane.stages).toContain(laneOf(p))
     expect(grouped.find(g => g.lane.key === 'approved')!.posts.map(p => p.stage)).toEqual(['ready', 'booked', 'posted'])
     // every lane present, even empty ones; nothing lost
-    expect(groupPosts([]).map(g => g.posts.length)).toEqual([0, 0, 0, 0])
+    expect(groupPosts([]).map(g => g.posts.length)).toEqual([0, 0, 0, 0, 0])
     expect(grouped.reduce((n, g) => n + g.posts.length, 0)).toBe(posts.length)
   })
 

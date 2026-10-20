@@ -78,9 +78,9 @@ const SCHEDULER: GettingStartedPanel = {
     },
     {
       title: 'Booked in is not posted',
-      body: 'Booked in means the channel has it and a time is set. Posted means it is live on every channel. The Posts page says what happened on each one, and why if it did not go out.',
-      href: '/dashboard/social/activity',
-      linkLabel: 'Open Posts',
+      body: 'Booked in means the channel has it and a time is set. Posted means it is live on every channel. A post that did not go out comes back to its Schedule tile in red, with the reason.',
+      href: '/dashboard/social/schedule',
+      linkLabel: 'Open the Schedule page',
     },
   ],
 }

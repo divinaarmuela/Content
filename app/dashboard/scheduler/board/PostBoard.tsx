@@ -32,6 +32,7 @@ const LANE_MEANING: Record<string, string> = {
   draft: STAGE_MEANING.draft,
   quality_check: STAGE_MEANING.quality_check,
   with_client: STAGE_MEANING.with_client,
+  awaiting_client: 'Booked, but it will not go out unless the client approves — or it is set to post anyway.',
   approved: 'Approved. Booked on the Schedule page.',
 }
 
@@ -77,7 +78,7 @@ export function PostBoard({
     && offeredList(boardActions(bp.post, bp.hats, now, bp.ctx)).some(a => a.action === 'send_to_qc'))
 
   const grouped = useMemo(
-    () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, bp }))),
+    () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, if_no_answer: bp.post.if_no_answer, client_review: bp.post.client_review, bp }))),
     [posts])
   const reachable = useMemo(() => new Set(
     dragging ? postMoveTargets(dragging.post, dragging.hats, now, dragging.ctx).map(m => m.lane) : []),

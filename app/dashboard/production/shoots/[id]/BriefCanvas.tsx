@@ -1050,13 +1050,18 @@ export default function BriefCanvas({
   }
 
   /** A tile's name, icon and colour — from the dialog, new or renamed. */
-  const saveBoardTile = (v: { name: string; icon: string; colour: string }) => {
+  const saveBoardTile = (v: { name: string; icon: string; colour: string; icon_url?: string | null }) => {
     const existing = boardDialog?.card
+    // a Milanote icon picked in the dialog, or none: an icon of our own set clears the picture
+    const { icon_url, ...rest } = v
+    const look = icon_url ? { icon_url } : {}
     if (existing) {
-      const next = { ...existing, ...v }
+      const { icon_url: _old, ...kept } = existing
+      void _old
+      const next = { ...kept, ...rest, ...look } as CanvasCard
       upsertLocal(next); persist([next])
     } else {
-      addCard({ kind: 'board', ...v })
+      addCard({ kind: 'board', ...rest, ...look })
     }
   }
 
@@ -2120,8 +2125,9 @@ export default function BriefCanvas({
         onOpenChange={o => { if (!o) setBoardDialog(null) }}
         onSubmit={saveBoardTile}
         initial={boardDialog?.card
-          ? { name: boardDialog.card.name ?? '', icon: boardDialog.card.icon ?? '', colour: boardDialog.card.colour ?? '' }
+          ? { name: boardDialog.card.name ?? '', icon: boardDialog.card.icon ?? '', colour: boardDialog.card.colour ?? '', icon_url: boardDialog.card.icon_url ?? null }
           : undefined}
+        imageIcons
         title={boardDialog?.card ? 'Rename the board' : 'New board'}
         submitLabel={boardDialog?.card ? 'Save' : 'Make the board'}
       />

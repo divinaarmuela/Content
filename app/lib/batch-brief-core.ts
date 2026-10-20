@@ -10,6 +10,7 @@
  */
 
 import { SHOOT_BRIEF_SLUG } from './brief-task-core'
+import { isOwnIconUrl } from './board-icons-core'
 import type { Role } from './identity-core'
 import { planLines, type PlanLine } from './deliverable-group-core'
 import { colourOf, iconOf } from './board-canvas-core'
@@ -692,7 +693,8 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
       ...(kind === 'boardlink' && typeof r.target === 'string' && r.target
         ? { target: r.target.slice(0, 60), icon: iconOf(typeof r.icon === 'string' ? r.icon : undefined), colour: colourOf('board', typeof r.colour === 'string' ? r.colour : undefined) } : {}),
       ...(typeof r.mn === 'string' && r.mn ? { mn: r.mn.slice(0, 40) } : {}),
-      ...((kind === 'board' || kind === 'boardlink') && typeof r.icon_url === 'string' && /^https:\/\//i.test(r.icon_url) ? { icon_url: r.icon_url.slice(0, 1000) } : {}),
+      // a picture from the web, or one of the Milanote icons we keep (board-icons-core, 20 Oct 2026)
+      ...((kind === 'board' || kind === 'boardlink') && typeof r.icon_url === 'string' && (/^https:\/\//i.test(r.icon_url) || isOwnIconUrl(r.icon_url)) ? { icon_url: r.icon_url.slice(0, 1000) } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
       ...(kind === 'todo'
         ? {
