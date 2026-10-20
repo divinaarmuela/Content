@@ -1095,7 +1095,13 @@ export default function BriefCanvas({
   }, [cards, selected, editing, fullscreen, viewOnly, board, trail])
 
   const selectedCard = cards.find(c => c.id === selected) ?? null
-  const ordered = useMemo(() => [...visible].sort((a, b) => a.z - b.z), [visible])
+  // MILANOTE'S COLUMNS (20 Oct 2026, docs/MILANOTE_MERGE.md): a card inside a column is drawn by the column, in the
+  // column's order, never loose on the canvas
+  const columnIds = useMemo(() => new Set(visible.filter(c => c.kind === 'column').map(c => c.id)), [visible])
+  const ordered = useMemo(() => [...visible].filter(c => !(c.col && columnIds.has(c.col))).sort((a, b) => a.z - b.z), [visible, columnIds])
+  const inColumn = useCallback((columnId: string) => cards
+    .filter(c => c.col === columnId)
+    .sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0) || a.y - b.y), [cards])
 
   // THE SELECTED CARD SITS ABOVE ITS NEIGHBOURS, so its toolbar and handles
   // are never drawn behind the card next to it. Written to the DOM by hand:
@@ -1478,25 +1484,46 @@ export default function BriefCanvas({
               strokeLinecap="round" markerEnd="url(#brief-arrowhead-sel)"
               style={{ pointerEvents: 'none' }} />
             {ordered.filter(c => c.kind === 'arrow').map(arrow => {
-              const fromCard = cards.find(c => c.id === arrow.from)
-              const toCard = cards.find(c => c.id === arrow.to)
-              if (!fromCard || !toCard) return null
-              const a = centreOf(fromCard)
-              const b = centreOf(toCard)
+              const fromCard = arrow.from ? cards.find(c => c.id === arrow.from) : undefined
+              const toCard = arrow.to ? cards.find(c => c.id === arrow.to) : undefined
+              const ln = arrow.line
+              // an end joined to a card sits at its centre; Milanote's free ends sit at their points
+              const a = fromCard ? centreOf(fromCard) : ln?.fx !== undefined && ln?.fy !== undefined ? { cx: ln.fx, cy: ln.fy } : null
+              const b = toCard ? centreOf(toCard) : ln?.tx !== undefined && ln?.ty !== undefined ? { cx: ln.tx, cy: ln.ty } : null
+              if (!a || !b) return null
               const isSel = selected === arrow.id
+              // a curve through Milanote's handle, or straight
+              const d = ln?.cx !== undefined && ln?.cy !== undefined
+                ? `M${a.cx},${a.cy} Q${ln.cx},${ln.cy} ${b.cx},${b.cy}`
+                : `M${a.cx},${a.cy} L${b.cx},${b.cy}`
+              // our own arrows always point; Milanote's say which ends do
+              const endArrow = ln ? ln.end === 'arrow' : true
+              const startArrow = ln?.start === 'arrow'
+              const marker = isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'
+              const mid = ln?.cx !== undefined && ln?.cy !== undefined
+                ? { x: (a.cx + 2 * ln.cx + b.cx) / 4, y: (a.cy + 2 * ln.cy + b.cy) / 4 }
+                : { x: (a.cx + b.cx) / 2, y: (a.cy + b.cy) / 2 }
               return (
                 <g key={arrow.id} data-arrow={arrow.id}>
                   {/* wide invisible hit line so the arrow is clickable */}
-                  <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
+                  <path d={d} fill="none"
                     stroke="transparent" strokeWidth={14}
                     style={{ pointerEvents: viewOnly ? 'none' : 'stroke', cursor: 'pointer' }}
                     onClick={e => { e.stopPropagation(); setSelected(arrow.id) }} />
-                  <line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
-                    className={isSel ? 'stroke-accent-blue' : 'stroke-muted-foreground'}
-                    strokeWidth={isSel ? 1.75 : 1.25}
+                  <path d={d} fill="none"
+                    className={isSel ? 'stroke-accent-blue' : arrow.hex ? '' : ln ? 'stroke-foreground' : 'stroke-muted-foreground'}
+                    stroke={!isSel && arrow.hex ? arrow.hex : undefined}
+                    strokeWidth={isSel ? 1.75 : ln?.weight ? Math.max(1, ln.weight / 2) : 1.25}
+                    strokeDasharray={ln?.dashed ? '6 5' : undefined}
                     strokeLinecap="round"
-                    markerEnd={isSel ? 'url(#brief-arrowhead-sel)' : 'url(#brief-arrowhead)'}
+                    markerEnd={endArrow ? marker : undefined}
+                    markerStart={startArrow ? marker : undefined}
                     style={{ pointerEvents: 'none' }} />
+                  {ln?.label && (
+                    <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
+                      className="fill-foreground text-[13px]" stroke="var(--background, #fff)" strokeWidth={4} paintOrder="stroke"
+                      style={{ pointerEvents: 'none' }}>{ln.label}</text>
+                  )}
                 </g>
               )
             })}
@@ -1535,9 +1562,15 @@ export default function BriefCanvas({
               onDoubleClick={e => {
                 e.stopPropagation()
                 if (card.kind === 'board') { openBoard(card.id); return }
-                if (!viewOnly && (card.kind === 'note' || card.kind === 'label' || card.kind === 'mockup')) {
+                if (card.kind === 'boardlink' && card.target) { window.location.assign(`/dashboard/team-boards/${encodeURIComponent(card.target)}`); return }
+                // a card inside a column (Milanote's): the one pressed, not the column
+                const childId = (e.target as HTMLElement).closest?.('[data-col-child]')?.getAttribute('data-col-child')
+                const target = childId ? cards.find(c => c.id === childId) ?? card : card
+                // a document opens to read even for a viewer; a note or heading is edited
+                if (target.kind === 'document') { interactingRef.current = true; setEditing(target.id); return }
+                if (!viewOnly && (target.kind === 'note' || target.kind === 'label' || target.kind === 'mockup')) {
                   interactingRef.current = true
-                  setEditing(card.id)
+                  setEditing(target.id)
                 }
               }}
               onFocus={() => setSelected(card.id)}
@@ -1554,7 +1587,26 @@ export default function BriefCanvas({
                 sound={sound === card.id}
                 onSound={cardCallbacks(card.id).onSound}
                 insideLabel={card.kind === 'board' ? insideLabel(cards, card.id) : undefined}
-                onOpen={card.kind === 'board' ? cardCallbacks(card.id).onOpen : undefined}
+                onOpen={card.kind === 'board' ? cardCallbacks(card.id).onOpen
+                  : card.kind === 'boardlink' && card.target ? () => window.location.assign(`/dashboard/team-boards/${encodeURIComponent(card.target!)}`)
+                  : undefined}
+                columnCards={card.kind === 'column' ? inColumn(card.id) : undefined}
+                renderChild={card.kind === 'column' ? (child => (
+                  <CanvasCardView
+                    card={child}
+                    selected={selected === child.id}
+                    editing={editing === child.id}
+                    clientName={clientName}
+                    onCommitText={cardCallbacks(child.id).onCommitText}
+                    onUpdate={viewOnly ? undefined : cardCallbacks(child.id).onUpdate}
+                    playing={playing === child.id}
+                    onPlay={cardCallbacks(child.id).onPlay}
+                    sound={sound === child.id}
+                    onSound={cardCallbacks(child.id).onSound}
+                    insideLabel={child.kind === 'board' ? insideLabel(cards, child.id) : undefined}
+                    onOpen={child.kind === 'board' ? cardCallbacks(child.id).onOpen : undefined}
+                  />
+                )) : undefined}
               />
               {selected === card.id && !viewOnly && !editing && card.kind !== 'arrow' && (
                 <div

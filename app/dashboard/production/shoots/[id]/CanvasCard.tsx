@@ -28,6 +28,7 @@ import { COLOUR_CLASS, ICON } from '../../../boards/canvasTone'
 import { CanvasCommentBadge } from '../../../../components/canvas/CanvasComments'
 import { usePortalDriveScope } from '../../../../components/canvas/PortalDriveScope'
 import { growTextarea } from '../../../../lib/grow-textarea'
+import { MilanoteCard, drawnAsMilanote } from './MilanoteCards'
 
 /** Sticky-note palette — light and dark resolved as pairs, never inverted. */
 /** the words' own colour, when picked; '' = the box decides */
@@ -1233,10 +1234,19 @@ function CanvasCardInner({
 // renders nothing, so every other place the canvas is drawn is unchanged.
 // It rides in a fragment beside the card, absolutely positioned against the
 // canvas's own `[data-cid]` wrapper, so no card kind's markup is touched.
-export const CanvasCardView = React.memo(function CanvasCardView(props: Parameters<typeof CanvasCardInner>[0]) {
+export const CanvasCardView = React.memo(function CanvasCardView(props: Parameters<typeof CanvasCardInner>[0] & {
+  /** a column (Milanote's): the cards inside it, in order, and how to draw one */
+  columnCards?: Card[]
+  renderChild?: (child: Card) => React.ReactNode
+}) {
+  const { columnCards, renderChild, ...inner } = props
   return (
     <>
-      <CanvasCardInner {...props} />
+      {/* MILANOTE'S CARDS (20 Oct 2026, docs/MILANOTE_MERGE.md) are drawn as Milanote draws them */}
+      {drawnAsMilanote(props.card)
+        ? <MilanoteCard card={props.card} editing={props.editing} onUpdate={props.onUpdate} onOpen={props.onOpen}
+            insideLabel={props.insideLabel} columnCards={columnCards} renderChild={renderChild} />
+        : <CanvasCardInner {...inner} />}
       <CanvasCommentBadge cardId={props.card.id} />
     </>
   )
