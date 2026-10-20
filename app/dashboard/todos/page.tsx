@@ -289,7 +289,7 @@ export default function TodosPage() {
   return (
     // the sidebar in its own column; everything else in the second (Asana's layout)
     <div className="grid min-h-0 grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-6 md:[&>*:not([data-todo-nav])]:col-start-2" data-todos-page>
-      <div className="md:col-start-1 md:row-start-1 md:[grid-row:1/span_999]">
+      <div data-todo-nav className="md:col-start-1 md:row-start-1 md:[grid-row:1/span_999]">
         <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'} />
       </div>
       <header className="flex flex-col border-b border-border">
