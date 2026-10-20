@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Columns3, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Columns3, Copy, Highlighter, List, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2, X,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
@@ -30,6 +30,7 @@ import {
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
 import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
+import { toggleBullets, toggleHighlight } from '../../../../lib/note-format-core'
 import { COLUMN_COLOURS, NEW_COLUMN, columnAt, dropIndex, fitsInColumn, placeInColumn, takeOutOfColumn, type ColumnBox } from '../../../../lib/canvas-column-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
@@ -1333,6 +1334,51 @@ export default function BriefCanvas({
               }`}>
               <Bold className="h-3.5 w-3.5" />
             </button>
+            {/* DOT POINTS AND HIGHLIGHT (Manal, 20 Oct 2026: "she wants it to be highlighted and make it dot points") —
+                the lines or words picked in the note's box; with the note not open, Dot points does the whole note */}
+            {card.kind === 'note' && (
+              <>
+                <button type="button" aria-label="Dot points" title="Dot points — the highlighted lines, or the whole note"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => {
+                    const el = document.activeElement
+                    if (el instanceof HTMLTextAreaElement && el.closest(`[data-cid="${card.id}"]`)) {
+                      const r = toggleBullets(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
+                      el.value = r.text; el.setSelectionRange(r.start, r.end); el.dispatchEvent(new Event('input', { bubbles: true }))
+                      return
+                    }
+                    const text = String(card.text ?? '')
+                    const r = toggleBullets(text, 0, text.length)
+                    const next = { ...card, text: r.text }; upsertLocal(next); persist([next])
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11">
+                  <List className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" aria-label="Highlight" title="Highlight — the words picked in the note (Edit text, then select them)"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => {
+                    const el = document.activeElement
+                    if (el instanceof HTMLTextAreaElement && el.closest(`[data-cid="${card.id}"]`) && el.selectionStart !== el.selectionEnd) {
+                      const r = toggleHighlight(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
+                      el.value = r.text; el.setSelectionRange(r.start, r.end); el.dispatchEvent(new Event('input', { bubbles: true }))
+                      return
+                    }
+                    // the words picked on the note as shown
+                    const sel = typeof window !== 'undefined' ? window.getSelection() : null
+                    const picked = sel && !sel.isCollapsed ? sel.toString().trim() : ''
+                    const text = String(card.text ?? '')
+                    const at = picked ? text.indexOf(picked) : -1
+                    if (at >= 0) {
+                      const r = toggleHighlight(text, at, at + picked.length)
+                      const next = { ...card, text: r.text }; upsertLocal(next); persist([next]); sel?.removeAllRanges(); return
+                    }
+                    toast.message('Select the words to highlight, then press Highlight')
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11">
+                  <Highlighter className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
             {/* a to-do names itself on this bar; a board renames in its dialog */}
             {card.kind !== 'todo' && card.kind !== 'board' && (

@@ -9,14 +9,19 @@ import { postMediaOf, type PostMedia, DRIVE_PICTURE_SIZE, portalDriveStreamUrl, 
 import { Link2 } from 'lucide-react'
 import { LABEL_FONT_PX, NOTE_FONT_PX, textSizeOf, type CanvasCard as Card, textColorOf, textAlignOf, textBoldOf, boldRuns } from '../../../../lib/batch-brief-core'
 
-/** A note's words with their bold runs (**like this**) drawn bold. */
-function BoldWords({ text }: { text: string }) {
-  return <>{boldRuns(text).map((r, i) => r.bold ? <strong key={i} className="font-bold">{r.text}</strong> : <span key={i}>{r.text}</span>)}</>
+/** A note's words with their bold runs (**like this**) drawn bold and their highlights (==like this==) on a
+ *  highlighter colour (Manal, 20 Oct 2026 — note-format-core). */
+function BoldWords({ text, hl = '#fff066' }: { text: string; hl?: string }) {
+  const bold = (t: string, k: string) => boldRuns(t).map((r, i) => r.bold ? <strong key={`${k}${i}`} className="font-bold">{r.text}</strong> : <span key={`${k}${i}`}>{r.text}</span>)
+  return <>{markRuns(text).map((m, i) => m.mark
+    ? <mark key={i} className="rounded-[2px] px-0.5 text-[#1a1a1a] [box-decoration-break:clone]" style={{ backgroundColor: hl }}>{bold(m.text, `m${i}-`)}</mark>
+    : <React.Fragment key={i}>{bold(m.text, `p${i}-`)}</React.Fragment>)}</>
 }
 
 import { BoldableInput, BoldableTextarea } from './BoldBox'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
 import { cardLinkOf } from '../../../../lib/canvas-link-open-core'
+import { continueBullet, highlightColour, markRuns } from '../../../../lib/note-format-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
   instagramPlayHint, playableFileFor, soundCommand, YOUTUBE_LISTEN,
@@ -662,6 +667,17 @@ function CanvasCardInner({
             onBlur={e => onCommitText(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Escape') { e.stopPropagation(); (e.target as HTMLTextAreaElement).blur() }
+              // Enter on a dot point starts the next one; on an empty one, ends the list (20 Oct 2026)
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                const el = e.currentTarget
+                if (el.selectionStart !== el.selectionEnd) return
+                const next = continueBullet(el.value, el.selectionStart)
+                if (!next) return
+                e.preventDefault()
+                el.value = next.text
+                el.setSelectionRange(next.caret, next.caret)
+                el.dispatchEvent(new Event('input', { bubbles: true }))
+              }
             }}
             onPointerDown={e => e.stopPropagation()}
           />
@@ -669,7 +685,7 @@ function CanvasCardInner({
           // the words wrap and, in a box shorter than they are, scroll —
           // they never draw past the card's border
           <p data-scroll style={{ fontSize: noteFont, lineHeight: noteLine }} className={`min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words ${textBoldOf(card) ? 'font-bold' : ''} ${ALIGN_CLASS[textAlignOf(card)]} ${inkText}`}>
-            {card.text ? <BoldWords text={card.text} /> : <span className="text-muted-foreground">Write it down…</span>}
+            {card.text ? <BoldWords text={card.text} hl={highlightColour(card.color)} /> : <span className="text-muted-foreground">Write it down…</span>}
           </p>
         )}
       </div>
