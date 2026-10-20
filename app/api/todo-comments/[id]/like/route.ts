@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { todoViewerOf } from '../../../../lib/todo-viewer'
 import { table } from '@/lib/db'
 import type { Todo as TodoRow, TodoComment } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '../../../../lib/authz'
@@ -17,7 +18,7 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!c) return NextResponse.json({ error: 'That comment is gone' }, { status: 404 })
     const todo = await table<TodoRow>('todos').get(String(c.todo_id))
     const parent = todo?.parent_id ? await table<TodoRow>('todos').get(todo.parent_id) : null
-    if (!todo || !mayCommentOnTodo({ id: user.id, role: user.role }, todo as never, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
+    if (!todo || !mayCommentOnTodo(await todoViewerOf(user), todo as never, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
     const res = await table<TodoComment>('todo_comments').claim(id, cur => cur ? { ...cur, likes: toggleId(cur.likes, user.id, on) } as TodoComment : null)
     if (!res.claimed) return NextResponse.json({ error: 'That comment is gone' }, { status: 404 })
     return NextResponse.json(res.row)

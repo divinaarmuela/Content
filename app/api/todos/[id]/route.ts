@@ -1,9 +1,10 @@
 import { NextResponse, after } from 'next/server'
+import { resolveTags, taggableTeam } from '../../../lib/comment-tags'
 import { table } from '@/lib/db'
 import type { Todo as TodoRow, TodoComment } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '../../../lib/authz'
 import { logActivity } from '../../../lib/workflow'
-import { idsOf, mayDeleteTodo, mayDependOn, mayEditTodo, sanitiseTodoPatch, todoAudience, todoChanges, todoFilesOf } from '../../../lib/todo-core'
+import { idsOf, mayDeleteTodo, mayDependOn, mayEditTodo, sanitiseTodoPatch, todoAudience, todoChanges, todoFilesOf, toggleId } from '../../../lib/todo-core'
 import { notifyTodo } from '../../../lib/todo-notify'
 import { nextDue, nextTodoId, normaliseRepeat } from '../../../lib/todo-repeat-core'
 import { dayKeyInZone } from '../../../lib/timezone-core'
@@ -63,6 +64,22 @@ export async function PATCH(req: Request, ctx: Ctx) {
       await logActivity({ entityType: 'todo', entityId: id, action: `todo_changed:${c.field}`, actor: user, oldValue: c.from ?? undefined, newValue: c.field === 'note' ? undefined : c.to ?? undefined, detail: String(row.title ?? '').slice(0, 200) })
       if (c.field === 'owner_id' && c.to && c.to !== user.id) {
         after(() => notifyTodo({ actor: user, todo: row as never, recipientIds: [c.to as string], verb: 'assigned you', event: 'todo_assigned', eventKey: `assigned:${c.to}:${now}` }).catch(e => console.error('[todos] notify failed:', e)))
+      }
+    }
+    // TAGS IN THE DESCRIPTION (Manal, 20 Oct 2026, her video: tagging someone "doesn't notify them"): an @Name newly
+    // written into the description joins them to the to-do, so they can open it, and tells them — bell, email, Inbox
+    if ('note' in checked.patch && typeof checked.patch.note === 'string') {
+      const team = await taggableTeam()
+      const before = new Set(resolveTags(String(row.note ?? ''), [], team, user.id).map(t => t.id))
+      const added = resolveTags(checked.patch.note, [], team, user.id).map(t => t.id).filter(t => !before.has(t))
+      if (added.length) {
+        await table<TodoRow>('todos').claim(id, cur => {
+          if (!cur) return null
+          let followers: unknown = cur.followers
+          for (const p of added) if (p !== cur.owner_id && p !== cur.created_by) followers = toggleId(followers, p, true)
+          return { ...cur, followers } as TodoRow
+        })
+        after(() => notifyTodo({ actor: user, todo: row as never, recipientIds: added, verb: 'mentioned you in', event: 'todo_mentioned', eventKey: `note:${now}`, quote: checked.patch.note as string }).catch(e => console.error('[todos] notify failed:', e)))
       }
     }
     if ('blocked_by' in checked.patch) {

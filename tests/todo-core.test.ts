@@ -63,7 +63,8 @@ describe('todo-core — who sees and changes what (17 Sep 2026)', () => {
     expect(page).toContain("useTable<TodoRow>('todos')")
     // 18 Oct 2026: collaborators see a to-do too, and the uploads moved into the task panel
     expect(page).toContain('visibleWithFollowers(viewer, raw as never[])')
-    expect(page).toContain('{canFilterPeople && (')
+    // the person picker: a manager's, and anyone's inside a client project — never on My tasks (20 Oct 2026)
+    expect(page).toContain("{(canFilterPeople || !!projectId) && place !== 'mine' && (")
     const panel = readFileSync('app/dashboard/todos/TodoPanel.tsx', 'utf8')
     expect(panel).toContain("uploadFiles(picked, { purpose: 'social' })")
     expect(panel).toContain('<UploadRows uploads={uploading} compact />')

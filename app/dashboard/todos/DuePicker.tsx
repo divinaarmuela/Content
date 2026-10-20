@@ -4,7 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight, Repeat, X } from 'lucide-react'
 import {
-  MONTH_DAYS, REPEAT_FREQS, REPEAT_LABEL, WEEKDAY_LETTER, dayWords, normaliseRepeat, repeatWords, type RepeatFreq, type TodoRepeat,
+  MONTH_DAYS, MONTH_NTHS, REPEAT_FREQS, REPEAT_LABEL, WEEKDAY_LETTER, WEEKDAY_NAMES, dayWords, normaliseRepeat, repeatWords, upcomingDues,
+  type MonthNth, type RepeatFreq, type TodoRepeat,
 } from '../../lib/todo-repeat-core'
 import { dueTone, shortDue } from './todo-words'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -94,6 +95,17 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
   const dueDay = (): number | 'last' => { const d = Number((due ?? today).slice(8, 10)); return d > 28 ? 'last' : d }
   const setFreq = (f: RepeatFreq | 'never') => onChange({ repeat: f === 'never' ? null : normaliseRepeat({ ...(rule ?? {}), freq: f, ...(f === 'monthly' && !rule?.day ? { day: dueDay() } : {}) }) })
   const byMonth = rule?.freq === 'monthly' || (rule?.freq === 'custom' && rule.unit === 'month')
+  // "On the …": the task's own weekday and which one of the month it is — due Tue 20 Oct → the third Tuesday
+  const dueNth = (): { nth: MonthNth; weekday: number } => {
+    const d = due ?? today
+    const day = Number(d.slice(8, 10))
+    const [y, m] = d.split('-').map(Number)
+    const wd = (new Date(Date.UTC(y, m - 1, day)).getUTCDay() + 6) % 7
+    const daysIn = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return { nth: day + 7 > daysIn ? 'last' : (Math.ceil(day / 7) as MonthNth), weekday: wd }
+  }
+  // WHEN IT COMES ROUND (Manal, 20 Oct 2026: "I can't see … when it's gonna pop up next"): its next dates, marked
+  const coming = useMemo(() => new Set(upcomingDues(rule, due, 24)), [rule, due])
   const setRule = (patch: Partial<TodoRepeat>) => rule && onChange({ repeat: normaliseRepeat({ ...rule, ...patch }) })
 
   return (
@@ -130,15 +142,22 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
             {WEEKDAY_LETTER.map((l, i) => <span key={i} className="py-1 font-semibold text-muted-foreground">{l}</span>)}
             {cells.map(c => {
               const picked = c.key === due
+              const again = coming.has(c.key)
               return (
                 <button key={c.key} type="button" onClick={() => onChange({ due_date: c.key })} aria-pressed={picked}
-                  aria-label={c.key}
-                  className={`flex h-8 items-center justify-center rounded-full ${picked ? 'bg-foreground font-semibold text-background' : c.key === today ? 'ring-1 ring-foreground/40' : ''} ${c.inMonth ? '' : 'text-muted-foreground/50'} hover:bg-muted`}>
+                  aria-label={again ? `${c.key} — it repeats on this day` : c.key}
+                  className={`relative flex h-8 items-center justify-center rounded-full ${picked ? 'bg-foreground font-semibold text-background' : again ? 'bg-accent-blue/15 font-semibold text-accent-blue-deep' : c.key === today ? 'ring-1 ring-foreground/40' : ''} ${c.inMonth ? '' : 'text-muted-foreground/50'} hover:bg-muted`}>
                   {c.day}
+                  {again && <span aria-hidden className="absolute bottom-0.5 h-1 w-1 rounded-full bg-accent-blue" />}
                 </button>
               )
             })}
           </div>
+          {coming.size > 0 && (
+            <p className="-mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <span aria-hidden className="h-2 w-2 rounded-full bg-accent-blue" /> It comes round again on the blue days
+            </p>
+          )}
 
           {/* REPEATS — Asana's own words and order */}
           <div className="flex flex-col gap-2 border-t border-border pt-3">
@@ -189,18 +208,39 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
                   )}
               </div>
             )}
-            {/* ON DAY — Asana's "Every 1 Month · On day 20" (Manal, 20 Oct 2026): 1–28, then Last */}
-            {byMonth && (
-              <div className="flex items-center gap-2 text-[13px]">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-foreground"><span className="h-1.5 w-1.5 rounded-full bg-foreground" /></span>
-                <span>On day</span>
-                <Select value={String(rule?.day ?? dueDay())} onValueChange={v => setRule({ day: v === 'last' ? 'last' : Number(v) })}>
-                  <SelectTrigger aria-label="Day of the month" className="h-8 w-24 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-64">
-                    {MONTH_DAYS.map(d => <SelectItem key={String(d)} value={String(d)}>{d === 'last' ? 'Last' : d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <span className="text-muted-foreground">({dayWords(rule?.day ?? dueDay())})</span>
+            {/* ON THE … / ON DAY — Asana's two (Manal, 20 Oct 2026): "On the [Last] [Monday]" for clients who work by
+                weekday, "On day [20]" for those who work by date (1–28, then Last) */}
+            {byMonth && rule && (
+              <div role="radiogroup" aria-label="Which day of the month" className="flex flex-col gap-2 text-[13px]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="month-by" className="h-4 w-4 accent-foreground" checked={!!rule.on}
+                      onChange={() => setRule({ on: rule.on ?? dueNth(), day: undefined })} />
+                    On the
+                  </label>
+                  <Select value={String((rule.on ?? dueNth()).nth)} onValueChange={v => setRule({ on: { ...(rule.on ?? dueNth()), nth: (v === 'last' ? 'last' : Number(v)) as MonthNth }, day: undefined })}>
+                    <SelectTrigger aria-label="Which one of the month" className="h-8 w-24 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{MONTH_NTHS.map(n => <SelectItem key={String(n.key)} value={String(n.key)}>{n.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Select value={String((rule.on ?? dueNth()).weekday)} onValueChange={v => setRule({ on: { ...(rule.on ?? dueNth()), weekday: Number(v) }, day: undefined })}>
+                    <SelectTrigger aria-label="Which weekday" className="h-8 w-32 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>{WEEKDAY_NAMES.map((n, i) => <SelectItem key={n} value={String(i)}>{n}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="month-by" className="h-4 w-4 accent-foreground" checked={!rule.on}
+                      onChange={() => setRule({ on: undefined, day: rule.day ?? dueDay() })} />
+                    On day
+                  </label>
+                  <Select value={String(rule.day ?? dueDay())} onValueChange={v => setRule({ on: undefined, day: v === 'last' ? 'last' : Number(v) })}>
+                    <SelectTrigger aria-label="Day of the month" className="h-8 w-24 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-64">
+                      {MONTH_DAYS.map(d => <SelectItem key={String(d)} value={String(d)}>{d === 'last' ? 'Last' : d}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {!rule.on && <span className="text-muted-foreground">({dayWords(rule.day ?? dueDay())})</span>}
+                </div>
               </div>
             )}
             {rule && <p className="text-[12px] text-muted-foreground">{repeatWords(rule)} — ticking it done makes the next one.</p>}

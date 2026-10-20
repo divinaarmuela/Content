@@ -1,4 +1,5 @@
 import { NextResponse, after } from 'next/server'
+import { todoViewerOf } from '../../../../lib/todo-viewer'
 import { table } from '@/lib/db'
 import type { Todo as TodoRow, TodoComment } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '../../../../lib/authz'
@@ -25,7 +26,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const row = await table<TodoRow>('todos').get(id)
     if (!row) return NextResponse.json({ error: 'That to-do is gone' }, { status: 404 })
     const parent = row.parent_id ? await table<TodoRow>('todos').get(row.parent_id) : null
-    if (!mayCommentOnTodo({ id: user.id, role: user.role }, row as never, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
+    if (!mayCommentOnTodo(await todoViewerOf(user), row as never, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
     const team = await taggableTeam()
     const tagged = resolveTags(clean.body, Array.isArray(body?.mention_ids) ? body.mention_ids.map(String) : [], team, user.id)
     const now = new Date().toISOString()

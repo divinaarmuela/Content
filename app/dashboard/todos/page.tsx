@@ -19,8 +19,9 @@ import {
 } from '../../lib/todo-core'
 import TodoPanel, { Avatar, CheckCircle } from './TodoPanel'
 import Celebration from './Celebration'
+import { ProjectIcon, TodoInbox, TodoSidebar, useTodoInbox, type Place, type Project } from './TodoNav'
 import { MONTH_NAMES, dueTone, monthGrid, shortDue } from './todo-words'
-import { normaliseRepeat, repeatWords } from '../../lib/todo-repeat-core'
+import { normaliseRepeat, repeatWords, upcomingDues } from '../../lib/todo-repeat-core'
 
 /**
  * THE TO-DOS PAGE, AS ASANA'S MY TASKS (the owner, 18 Oct 2026: "create
@@ -57,7 +58,10 @@ const store = {
 
 export default function TodosPage() {
   const { me, loading: meLoading } = useRole()
-  const viewer = useMemo(() => (me && me.role !== 'client' ? { id: me.id, role: me.role } : null), [me])
+  // the clients I am on — a client's project shows everyone's to-dos for it (20 Oct 2026, todo-core)
+  const { rows: links } = useTable<{ id: string; team_user_id: string; client_id: string }>('team_user_clients')
+  const myClientIds = useMemo(() => (me ? links.filter(l => l.team_user_id === me.id).map(l => l.client_id) : []), [links, me])
+  const viewer = useMemo(() => (me && me.role !== 'client' ? { id: me.id, role: me.role, clientIds: myClientIds } : null), [me, myClientIds])
   const { rows: raw, loading } = useTable<TodoRow>('todos')
   const { rows: team } = useTable<TeamUser>('team_users')
   const { rows: clients } = useTable<Client>('clients')
@@ -76,6 +80,18 @@ export default function TodosPage() {
   const commentCount = useMemo(() => { const m = new Map<string, number>(); for (const c of comments) m.set(String(c.todo_id), (m.get(String(c.todo_id)) ?? 0) + 1); return m }, [comments])
   const subCount = useMemo(() => { const m = new Map<string, number>(); for (const t of visibleAll) if (t.parent_id) m.set(t.parent_id, (m.get(t.parent_id) ?? 0) + 1); return m }, [visibleAll])
 
+  // WHERE ON THE PAGE (the owner, 20 Oct 2026, Manal's video of Asana): Inbox, My tasks (everyone's own, first), a
+  // super admin's Everyone's tasks, or a client's project
+  const [place, setPlace] = useState<Place>('mine')
+  const [projects, setProjects] = useState<Project[]>([])
+  useEffect(() => {
+    const saved = store.get('mdm.todos.place')
+    if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:')) setPlace(saved as Place)
+    fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
+  }, [])
+  const inbox = useTodoInbox()
+  const project = place.startsWith('project:') ? projects.find(p => `project:${p.id}` === place) ?? null : null
+  const projectId = place.startsWith('project:') ? place.slice(8) : null
   const [view, setView] = useState<View>('list')
   const [sort, setSort] = useState<TodoSort>('due')
   const [groupBy, setGroupBy] = useState<TodoGroupBy>('date')
@@ -96,12 +112,21 @@ export default function TodosPage() {
   const pickView = (v: View) => { setView(v); store.set('mdm.todos.view', v) }
   const pickSort = (v: TodoSort) => { setSort(v); store.set('mdm.todos.sort', v) }
   const pickGroup = (v: TodoGroupBy) => { setGroupBy(v); store.set('mdm.todos.group', v) }
+  /** go somewhere in the sidebar; a project opens grouped by who is doing what, as Manal asked */
+  const goPlace = (p: Place) => {
+    setPlace(p); store.set('mdm.todos.place', p); setSelected(new Set())
+    if (p.startsWith('project:')) setGroupBy('assignee')
+    else { const g = store.get('mdm.todos.group'); setGroupBy(TODO_GROUP_BYS.some(x => x.key === g) ? (g as TodoGroupBy) : 'date') }
+    if (p !== 'all' && !p.startsWith('project:')) setPerson('')
+  }
 
   // the top-level to-dos (subtasks live in their parent's panel, as in Asana's My Tasks)
   const shown = useMemo(() => visibleAll.filter(t => !t.parent_id
     && (status === 'all' || (status === 'done' ? t.status === 'done' : t.status !== 'done'))
-    && (!person || !canFilterPeople || t.owner_id === person)
-    && (!client || t.client_id === client)), [visibleAll, status, person, client, canFilterPeople])
+    // MY TASKS is mine alone; a project is that client's, everyone's on it; Everyone's tasks is a super admin's all
+    && (place === 'mine' ? t.owner_id === me?.id : projectId ? t.client_id === projectId : true)
+    && (!person || place === 'mine' || (!canFilterPeople && !projectId) || t.owner_id === person)
+    && (!client || !!projectId || t.client_id === client)), [visibleAll, status, person, client, canFilterPeople, place, projectId, me?.id])
   const nameOf = useCallback((id: string | null) => (id ? names.get(id) ?? 'Someone' : ''), [names])
   const clientOf = useCallback((id: string | null) => (id ? clientNames.get(id) ?? 'A client' : ''), [clientNames])
   const listGroups = useMemo(() => {
@@ -145,7 +170,7 @@ export default function TodosPage() {
     if (ok && done && celebrate && Math.random() < 0.34) setParty(p => p + 1)
   }, [patchTodo, visibleAll, celebrate])
   const create = (title: string, g: TodoGroup<TodoRow> | null, due?: string | null) => {
-    const body: Record<string, unknown> = { title, owner_id: person || me?.id || null, client_id: client || null, files: [] }
+    const body: Record<string, unknown> = { title, owner_id: person || me?.id || null, client_id: projectId || client || null, files: [] }
     body.due_date = due !== undefined ? due : g?.dateKey ? dueForGroup(g.dateKey, today!) : null
     if (g?.key.startsWith('assignee:')) body.owner_id = g.key.slice(9) || me?.id || null
     if (g?.key.startsWith('client:')) body.client_id = g.key.slice(7) || null
@@ -262,14 +287,21 @@ export default function TodosPage() {
   const tool = 'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium'
 
   return (
-    <div className="flex min-h-0 flex-col" data-todos-page>
+    // the sidebar in its own column; everything else in the second (Asana's layout)
+    <div className="grid min-h-0 grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-6 md:[&>*:not([data-todo-nav])]:col-start-2" data-todos-page>
+      <div className="md:col-start-1 md:row-start-1 md:[grid-row:1/span_999]">
+        <TodoSidebar place={place} onPlace={goPlace} projects={projects} unread={inbox.unread} everyone={viewer?.role === 'super_admin'} />
+      </div>
       <header className="flex flex-col border-b border-border">
         <div className="flex h-14 items-center gap-2.5">
-          <Avatar name={(me && names.get(me.id)) || 'Me'} size="md" />
-          <h1 className="text-[20px] font-semibold tracking-tight">{viewer?.role === 'super_admin' ? 'Everyone’s to-dos' : 'My to-dos'}</h1>
+          {project ? <ProjectIcon p={project} size={28} /> : <Avatar name={(me && names.get(me.id)) || 'Me'} size="md" />}
+          <h1 className="text-[20px] font-semibold tracking-tight">
+            {place === 'inbox' ? 'Inbox' : place === 'all' ? 'Everyone’s tasks' : project ? project.name : projectId ? 'Project' : 'My tasks'}
+          </h1>
+          {project && <span className="text-[13px] text-muted-foreground">everyone&rsquo;s tasks for this client, by who is doing them</span>}
           <button type="button" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><Keyboard className="h-4 w-4" aria-hidden /></button>
         </div>
-        <nav className="flex h-9 items-end gap-5" role="tablist" aria-label="Views">
+        <nav className={`flex h-9 items-end gap-5 ${place === 'inbox' ? 'hidden' : ''}`} role="tablist" aria-label="Views">
           {VIEWS.map(v => (
             <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => pickView(v.key)}
               className={`border-b-2 pb-1.5 text-[14px] font-medium ${view === v.key ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -279,7 +311,7 @@ export default function TodosPage() {
         </nav>
       </header>
 
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border py-2">
+      <div className={`flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border py-2 ${place === 'inbox' ? 'hidden' : ''}`}>
         {viewer && (
           <button type="button" onClick={() => { pickView('list'); const g = listGroups.find(x => x.key !== 'done'); if (g) { setCollapsed(c => { const n = new Set(c); n.delete(g.key); return n }); setAdding(g.key) } }}
             title="Add task (Tab + Q)" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-semibold text-background hover:bg-foreground/90">
@@ -333,7 +365,7 @@ export default function TodosPage() {
         </div>
         {filtersOpen && (
           <div className="flex w-full flex-wrap items-center gap-2 pt-1">
-            {canFilterPeople && (
+            {(canFilterPeople || !!projectId) && place !== 'mine' && (
               <Select value={person || 'everyone'} onValueChange={v => setPerson(v === 'everyone' ? '' : v)}>
                 <SelectTrigger className="h-8 w-52 rounded-md text-[13px]" aria-label="Whose to-dos"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -355,6 +387,8 @@ export default function TodosPage() {
 
       {!ready ? (
         <div className="flex flex-col pt-3">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="my-[9px] h-[19px] w-1/3 rounded" />)}</div>
+      ) : place === 'inbox' ? (
+        <TodoInbox items={inbox.items} today={today!} onOpen={id => openTask(id)} markRead={inbox.markRead} />
       ) : view === 'list' ? (
         <div role="table" aria-label="To-dos" aria-multiselectable className="pb-28">
           <div role="row" className={`${GRID} sticky top-0 z-10 border-b border-border bg-background text-[12px] text-muted-foreground`}>
@@ -671,6 +705,16 @@ function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAd
   const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }))
   const days = useMemo(() => monthGrid(ym.y, ym.m), [ym])
   const byDay = useMemo(() => { const m = new Map<string, TodoRow[]>(); for (const t of rows) if (t.due_date) m.set(t.due_date, [...(m.get(t.due_date) ?? []), t]); return m }, [rows])
+  // WHEN A REPEATING TASK COMES ROUND (Manal, 20 Oct 2026: "I can't see in my calendar when it's gonna pop up next …
+  // add a little code for the colour"): its next dates, faded and marked, until the real one is made
+  const repeatsByDay = useMemo(() => {
+    const m = new Map<string, TodoRow[]>()
+    for (const t of rows) {
+      if (t.status === 'done' || !t.due_date) continue
+      for (const d of upcomingDues(normaliseRepeat(t.repeat), t.due_date, 14)) m.set(d, [...(m.get(d) ?? []), t])
+    }
+    return m
+  }, [rows])
   const undated = rows.filter(t => !t.due_date).length
   const [over, setOver] = useState<string | null>(null)
   const [adding, setAdding] = useState<string | null>(null)
@@ -704,6 +748,13 @@ function CalendarView({ rows, today, names, openId, onOpen, onMove, onAdd, canAd
                   title={`${t.title}${t.owner_id ? ` · ${names.get(t.owner_id) ?? ''}` : ''}`}
                   className={`truncate rounded px-1.5 py-1 text-left text-[12px] ${t.status === 'done' ? 'text-muted-foreground line-through' : ''} ${openId === t.id ? 'bg-accent-blue-deep/20' : t.due_date && t.due_date < today && t.status !== 'done' ? 'bg-accent-red-deep/10' : 'bg-foreground/[0.06]'} hover:bg-foreground/10`}>
                   {t.title}
+                </button>
+              ))}
+              {(repeatsByDay.get(day) ?? []).map(t => (
+                <button key={`again:${t.id}`} type="button" onClick={() => onOpen(t.id)} data-todo-repeat
+                  title={`${t.title} — comes round again on this day (${repeatWords(normaliseRepeat(t.repeat))})`}
+                  className="flex min-w-0 items-center gap-1 truncate rounded border border-dashed border-accent-blue/50 bg-accent-blue/[0.06] px-1.5 py-1 text-left text-[12px] text-accent-blue-deep hover:bg-accent-blue/10">
+                  <Repeat className="h-3 w-3 shrink-0" aria-hidden /><span className="truncate">{t.title}</span>
                 </button>
               ))}
               {adding === day && (

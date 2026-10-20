@@ -37,7 +37,9 @@ export type Todo = {
   repeat_of?: string | null
 }
 
-export type TodoViewer = { id: string; role: string }
+/** who is looking — and, for a client's PROJECT (the owner, 20 Oct 2026, Manal's video of Asana's Projects: "if I am
+ *  looking at StretchWorks I can see what other people are working on"), the clients they are on */
+export type TodoViewer = { id: string; role: string; clientIds?: readonly string[] }
 
 const clean = (v: unknown): string | null => {
   const s = typeof v === 'string' ? v.trim() : ''
@@ -200,20 +202,26 @@ export function isOnTodo(viewerId: string, todo: { owner_id?: string | null; cre
   return todo.owner_id === viewerId || todo.created_by === viewerId || idsOf(todo.followers).includes(viewerId)
 }
 
+/** on the client's project: the viewer is on the to-do's client (Asana's project members see the whole project) */
+export function inTodoProject(viewer: TodoViewer, todo: { client_id?: string | null }): boolean {
+  return !!todo.client_id && !!viewer.clientIds?.includes(todo.client_id)
+}
+
 /** WHO SEES WHAT, with collaborators: a follower sees the to-do too, and a
- *  subtask is seen by whoever sees its parent */
-export function visibleWithFollowers<T extends { id?: string; owner_id?: string | null; created_by?: string | null; followers?: unknown; parent_id?: string | null }>(viewer: TodoViewer | null, rows: readonly T[]): T[] {
+ *  subtask is seen by whoever sees its parent; everyone on a client sees that client's to-dos (its project) */
+export function visibleWithFollowers<T extends { id?: string; owner_id?: string | null; created_by?: string | null; followers?: unknown; parent_id?: string | null; client_id?: string | null }>(viewer: TodoViewer | null, rows: readonly T[]): T[] {
   if (!viewer || viewer.role === 'client') return []
   if (viewer.role === 'super_admin') return [...rows]
-  const mine = new Set(rows.filter(r => isOnTodo(viewer.id, r)).map(r => r.id))
+  const mine = new Set(rows.filter(r => isOnTodo(viewer.id, r) || inTodoProject(viewer, r)).map(r => r.id))
   return rows.filter(r => mine.has(r.id) || (!!r.parent_id && mine.has(r.parent_id)))
 }
 
-/** who may READ and COMMENT on a to-do: whoever is on it (or on its parent), and a super admin */
-export function mayCommentOnTodo(viewer: TodoViewer | null, todo: { owner_id?: string | null; created_by?: string | null; followers?: unknown }, parent?: { owner_id?: string | null; created_by?: string | null; followers?: unknown } | null): boolean {
+/** who may READ and COMMENT on a to-do: whoever is on it (or on its parent), everyone on its client's project, and a
+ *  super admin */
+export function mayCommentOnTodo(viewer: TodoViewer | null, todo: { owner_id?: string | null; created_by?: string | null; followers?: unknown; client_id?: string | null }, parent?: { owner_id?: string | null; created_by?: string | null; followers?: unknown; client_id?: string | null } | null): boolean {
   if (!viewer || viewer.role === 'client') return false
   if (viewer.role === 'super_admin') return true
-  return isOnTodo(viewer.id, todo) || (!!parent && isOnTodo(viewer.id, parent))
+  return isOnTodo(viewer.id, todo) || (!!parent && isOnTodo(viewer.id, parent)) || inTodoProject(viewer, todo) || (!!parent && inTodoProject(viewer, parent))
 }
 
 /** a comment's text, cleaned: trimmed, capped at 4,000 characters, never empty */

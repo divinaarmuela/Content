@@ -1,4 +1,5 @@
 import { NextResponse, after } from 'next/server'
+import { todoViewerOf } from '../../lib/todo-viewer'
 import { table } from '@/lib/db'
 import type { Todo as TodoRow } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '../../lib/authz'
@@ -18,7 +19,7 @@ export async function GET() {
   try {
     const user = await requireRole('scheduler')   // any team role
     const rows = await table<TodoRow>('todos').list()
-    return NextResponse.json({ todos: visibleWithFollowers({ id: user.id, role: user.role }, rows as never) })
+    return NextResponse.json({ todos: visibleWithFollowers(await todoViewerOf(user), rows as never) })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     const parentId = typeof body?.parent_id === 'string' && body.parent_id.trim() ? body.parent_id.trim() : null
     const parent = parentId ? await table<TodoRow>('todos').get(parentId) : null
     if (parentId && (!parent || parent.parent_id)) return NextResponse.json({ error: 'That to-do is gone' }, { status: 404 })
-    if (parent && !mayCommentOnTodo({ id: user.id, role: user.role }, parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
+    if (parent && !mayCommentOnTodo(await todoViewerOf(user), parent as never)) return NextResponse.json({ error: 'Not your to-do' }, { status: 403 })
     const now = new Date().toISOString()
     const row = await table<TodoRow>('todos').insert({
       parent_id: parent?.id ?? null,
