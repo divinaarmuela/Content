@@ -54,7 +54,7 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
   })
   return (
     <nav data-todo-nav aria-label="To-dos" className="flex flex-col gap-1 border-border pb-2 md:sticky md:top-0 md:max-h-[calc(100vh-120px)] md:border-r md:pr-3 md:pt-3">
-      <ul className="flex flex-row gap-1 overflow-x-auto md:flex-col">
+      <ul className="flex shrink-0 flex-row gap-1 overflow-x-auto md:flex-col md:overflow-visible">
         <li>
           <button type="button" onClick={() => onPlace('inbox')} aria-current={place === 'inbox' ? 'page' : undefined} className={item(place === 'inbox')}>
             <Bell className="h-4 w-4 shrink-0" aria-hidden /> <span className="flex-1">Inbox</span>
