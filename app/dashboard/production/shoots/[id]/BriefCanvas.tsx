@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronRight, Columns3, Copy, ExternalLink, FolderOpen, Folder as BoardIcon, HardDrive, ImagePlus, Link2, ListTodo, Maximize2,
   Minimize2, Minus, MoveUpRight, Pencil, Plus, Scan, Smartphone, StickyNote, Trash2, Type, Undo2, X,
 } from 'lucide-react'
 import { uploadMedia } from '../../../uploadMedia'
@@ -29,6 +29,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun } from '../../../../lib/batch-brief-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
+import { COLUMN_COLOURS, NEW_COLUMN, columnAt, dropIndex, fitsInColumn, placeInColumn, takeOutOfColumn, type ColumnBox } from '../../../../lib/canvas-column-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -358,6 +359,12 @@ export default function BriefCanvas({
     /** the arrow endpoints this card owns, resolved once at pointerdown */
     ends: { line: SVGLineElement; end: 'from' | 'to' }[]
     raf: number; nx: number; ny: number
+    /** a card inside a column: the column holding it (the element pressed is the column's) — it moves by an offset */
+    host?: string
+    /** every column on the open board, measured at the press, for where a drop lands */
+    columns: ColumnBox[]
+    /** the column the card is over now, outlined while it is */
+    over: HTMLElement | null
   } | null>(null)
   /* ── corner resize: both axes. `oh` is the height MEASURED at pointerdown
    *  (a card without an h of its own is as tall as its content), so a drag
@@ -430,11 +437,45 @@ export default function BriefCanvas({
         if (c.to === card.id) ends.push({ line, end: 'to' })
       }
     }
-    dragState.current = {
-      id: card.id, startX: e.clientX, startY: e.clientY,
-      ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
+    // MILANOTE'S COLUMNS (20 Oct 2026): a card pressed inside a column is the one that moves — out of it, to
+    // another place in it, or into another column — and every column is measured now for where it may land
+    const columns: ColumnBox[] = visible.filter(c => c.kind === 'column' && !(c.col)).map(c => {
+      const box = viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${c.id}"]`)
+      return { id: c.id, x: c.x, y: c.y, w: box?.offsetWidth || c.w, h: box?.offsetHeight || 100, z: c.z }
+    })
+    const childEl = card.kind === 'column' ? (e.target as HTMLElement).closest<HTMLElement>('[data-col-child]') : null
+    const child = childEl ? cards.find(c => c.id === childEl.getAttribute('data-col-child')) : undefined
+    if (childEl && child) {
+      const r = childEl.getBoundingClientRect()
+      const at = toWorld(r.left, r.top)
+      dragState.current = {
+        id: child.id, host: card.id, startX: e.clientX, startY: e.clientY,
+        ox: at.x, oy: at.y, moved: false, el: childEl, half: { w: 0, h: 0 }, ends: [], raf: 0, nx: at.x, ny: at.y,
+        columns, over: null,
+      }
+    } else {
+      dragState.current = {
+        id: card.id, startX: e.clientX, startY: e.clientY,
+        ox: card.x, oy: card.y, moved: false, el, half, ends, raf: 0, nx: card.x, ny: card.y,
+        columns, over: null,
+      }
     }
     try { el.setPointerCapture(e.pointerId) } catch { /* see startResize */ }
+  }
+
+  /** where a card dragged from inside a column is drawn: moved by how far it went, it is still in the column's flow */
+  const dragTransform = (d: { host?: string; nx: number; ny: number; ox: number; oy: number }) =>
+    d.host ? `translate(${d.nx - d.ox}px, ${d.ny - d.oy}px)` : `translate(${d.nx}px, ${d.ny}px)`
+
+  /** outline the column a dragged card would drop into */
+  const markColumn = (d: NonNullable<typeof dragState.current>, clientX: number, clientY: number) => {
+    const moving = cards.find(c => c.id === d.id)
+    const id = moving && fitsInColumn(moving.kind) ? columnAt(toWorld(clientX, clientY), d.columns, d.id) : null
+    const el = id ? viewportRef.current?.querySelector<HTMLElement>(`[data-cid="${id}"] [data-mn="column"]`) ?? null : null
+    if (el === d.over) return
+    if (d.over) d.over.style.outline = ''
+    if (el) { el.style.outline = '2px solid rgb(59 130 246 / 0.7)'; el.style.outlineOffset = '2px' }
+    d.over = el
   }
 
   /** One visual update per FRAME, from whatever the latest pointer position
@@ -443,7 +484,7 @@ export default function BriefCanvas({
     const d = dragState.current
     if (!d) return
     d.raf = 0
-    if (d.el) d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
+    if (d.el) d.el.style.transform = dragTransform(d)
     const cx = d.nx + d.half.w
     const cy = d.ny + d.half.h
     for (const { line, end } of d.ends) {
@@ -460,7 +501,7 @@ export default function BriefCanvas({
   useLayoutEffect(() => {
     const d = dragState.current
     if (!d?.moved || !d.el) return
-    d.el.style.transform = `translate(${d.nx}px, ${d.ny}px)`
+    d.el.style.transform = dragTransform(d)
     d.el.style.zIndex = '9999'
     const r = resizeState.current
     if (r?.el) paintResize(r.el, r.live, r.liveH, r.wrap, r.liveX, r.oy)
@@ -468,7 +509,7 @@ export default function BriefCanvas({
 
   const onCardPointerMove = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
-    if (!d || d.id !== card.id) return
+    if (!d || (d.host ?? d.id) !== card.id) return
     const dx = e.clientX - d.startX
     const dy = e.clientY - d.startY
     if (!d.moved && Math.hypot(dx, dy) < 4) return
@@ -487,6 +528,7 @@ export default function BriefCanvas({
     const s = camRef.current.s
     d.nx = d.ox + dx / s
     d.ny = d.oy + dy / s
+    if (d.columns.length) markColumn(d, e.clientX, e.clientY)
     if (!d.raf) d.raf = requestAnimationFrame(paintDrag)
   }
 
@@ -497,7 +539,8 @@ export default function BriefCanvas({
     if (d) {
       dragState.current = null
       if (d.raf) cancelAnimationFrame(d.raf)
-      if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = `translate(${d.ox}px, ${d.oy}px)` }
+      if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = ''; d.el.style.transform = d.host ? '' : `translate(${d.ox}px, ${d.oy}px)` }
+      if (d.over) d.over.style.outline = ''
       const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
       if (bar) bar.style.display = ''
     }
@@ -526,9 +569,10 @@ export default function BriefCanvas({
 
   const onCardPointerUp = (e: React.PointerEvent, card: CanvasCard) => {
     const d = dragState.current
-    if (!d || d.id !== card.id) return
+    if (!d || (d.host ?? d.id) !== card.id) return
     dragState.current = null
     if (d.raf) cancelAnimationFrame(d.raf)
+    if (d.over) d.over.style.outline = ''
     // a plain press KEEPS the lift: clearing it here and waiting for the
     // selection render to put it back left the card behind its neighbours
     // whenever it was already the selected one (no render came) — the owner
@@ -537,8 +581,29 @@ export default function BriefCanvas({
     const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
     if (bar) bar.style.display = ''
     interactingRef.current = false
-    if (!d.moved) { setSelected(card.id); return }
+    if (!d.moved) { if (d.host && d.el) d.el.style.transform = ''; setSelected(card.id); return }
     const s = camRef.current.s
+    // INTO A COLUMN, OUT OF ONE, OR TO ANOTHER PLACE IN IT (Milanote's columns, 20 Oct 2026)
+    const moving = cards.find(c => c.id === d.id)
+    const target = moving && fitsInColumn(moving.kind) ? columnAt(toWorld(e.clientX, e.clientY), d.columns, d.id) : null
+    if (moving && target) {
+      const p = toWorld(e.clientX, e.clientY)
+      const kids = Array.from(viewportRef.current?.querySelectorAll<HTMLElement>(`[data-cid="${target}"] [data-col-child]`) ?? [])
+        .filter(k => k.getAttribute('data-col-child') !== d.id)
+        .map(k => { const r = k.getBoundingClientRect(); return { top: toWorld(r.left, r.top).y, bottom: toWorld(r.left, r.bottom).y } })
+      const changed = placeInColumn(cards, d.id, target, dropIndex(p.y, kids))
+      if (d.host && d.el) d.el.style.transform = ''
+      for (const c of changed) upsertLocal(c)
+      if (changed.length) persist(changed)
+      setSelected(target)
+      return
+    }
+    if (moving && d.host) {
+      if (d.el) d.el.style.transform = ''
+      const out = takeOutOfColumn(moving, snap(d.nx), snap(d.ny), Math.max(0, ...cards.map(c => c.z)) + 1)
+      upsertLocal(out); persist([out]); setSelected(out.id)
+      return
+    }
     const next: CanvasCard = {
       ...card,
       x: snap(d.ox + (e.clientX - d.startX) / s),
@@ -1282,6 +1347,45 @@ export default function BriefCanvas({
             </Button>
           </>
         )}
+        {card.kind === 'column' && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            {/* MILANOTE'S COLUMN TOOLS (20 Oct 2026): its colour, its name, folded down to its title */}
+            <div role="group" aria-label="Column colour" className="flex items-center gap-1">
+              {COLUMN_COLOURS.map(c => (
+                <button key={c.name} type="button" aria-label={`Colour ${c.name}`} title={c.name}
+                  aria-pressed={(card.hex ?? undefined) === c.hex}
+                  onClick={() => { const { hex: _hex, ...rest } = card; void _hex; const next = c.hex ? { ...rest, hex: c.hex } : rest; upsertLocal(next); persist([next]) }}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 ${
+                    (card.hex ?? undefined) === c.hex ? 'border-accent-blue ring-2 ring-accent-blue/30' : 'border-border'
+                  }`}
+                  style={c.hex ? { backgroundColor: c.hex } : { backgroundColor: '#ffffff' }}>
+                  {!c.hex && <X className="h-3 w-3 text-muted-foreground" aria-hidden />}
+                </button>
+              ))}
+            </div>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <input
+              key={card.id + (card.name ?? '')}
+              defaultValue={card.name ?? ''}
+              placeholder="Name this column…"
+              aria-label="Name of the column"
+              className="h-8 w-40 rounded-inner border border-border bg-surface px-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-accent-blue/50 [@media(pointer:coarse)]:h-11"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur() }}
+              onBlur={e => {
+                const name = e.target.value.trim().slice(0, 300)
+                if (name === (card.name ?? '')) return
+                const next = { ...card, name }
+                upsertLocal(next); persist([next])
+              }}
+            />
+            <Button size="sm" variant="ghost" className={tb}
+              title={card.collapsed ? 'Show the cards in this column' : 'Fold the column down to its title'}
+              onClick={() => { const { collapsed: _c, ...rest } = card; void _c; const next = card.collapsed ? rest : { ...rest, collapsed: true }; upsertLocal(next); persist([next]) }}>
+              {card.collapsed ? 'Unfold' : 'Fold'}
+            </Button>
+          </>
+        )}
         {card.kind === 'todo' && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
@@ -1760,6 +1864,11 @@ export default function BriefCanvas({
             <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => addCard({ kind: 'todo', w: 224, items: [{ id: mint(), text: 'New task', done: false }] })}>
               <ListTodo className="h-3.5 w-3.5" /> To-do
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-secondary-13"
+              title="A column, as Milanote has — drag cards into it"
+              onClick={() => addCard({ ...NEW_COLUMN })}>
+              <Columns3 className="h-3.5 w-3.5" /> Column
             </Button>
             <Button size="sm" variant={connectFrom !== null ? 'default' : 'ghost'} className="h-7 gap-1.5 px-2 text-secondary-13"
               onClick={() => setConnectFrom(v => (v === null ? '' : null))}>

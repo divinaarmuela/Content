@@ -125,13 +125,21 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
     const bg = card.hex ? { backgroundColor: card.hex } : {}
     return (
       <div data-mn="column" className={`${CARD} flex flex-col`} style={{ ...box(card), ...bg }}>
-        <div className="px-4 pb-3 pt-5 text-center">
+        {/* a coloured column (Milanote, the owner's clip of Luxe Laser, 20 Oct 2026): the whole panel takes the colour,
+            its cards stay white, and the title and count turn readable on it */}
+        <div className="px-4 pb-3 pt-5 text-center" style={card.hex ? { color: inkOn(card.hex) } : undefined}>
           <p className="text-[17px] font-semibold leading-tight" style={{ fontFamily: MN_SERIF }}>{card.name || 'Untitled'}</p>
-          <p className="mt-1 text-[12px] text-[#8a8a8a]">{columnCountWords(kids)}</p>
+          <p className={`mt-1 text-[12px] ${card.hex ? 'opacity-70' : 'text-[#8a8a8a]'}`}>{columnCountWords(kids)}</p>
         </div>
         {!card.collapsed && kids.length > 0 && (
           <div className="flex flex-col gap-2 px-2 pb-2">
-            {kids.map(k => <div key={k.id} data-col-child={k.id}>{renderChild?.({ ...k, w: card.w - 16 })}</div>)}
+            {kids.map(k => <div key={k.id} data-col-child={k.id} className="relative">{renderChild?.({ ...k, w: card.w - 16 })}</div>)}
+          </div>
+        )}
+        {/* an empty column, as Milanote draws a new one: a pale well to drop cards into */}
+        {!card.collapsed && kids.length === 0 && (
+          <div className="mx-2 mb-2 flex h-20 items-center justify-center rounded-[3px] bg-black/[0.04] text-[12px] text-[#9a9a9a] dark:bg-white/[0.06]">
+            Drag cards here
           </div>
         )}
       </div>
