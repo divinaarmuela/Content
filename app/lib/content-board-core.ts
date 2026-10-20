@@ -104,7 +104,12 @@ export function scheduledItems(raw: unknown, clientOf: (accountId: string | null
     const at = str(p.scheduledFor)
     if (!id || !at || (p.status && p.status !== 'scheduled')) continue
     const plats = (Array.isArray(p.platforms) ? p.platforms : []).map(obj)
-    const media = (Array.isArray(p.mediaItems) ? p.mediaItems : []).map(obj)
+    // the app books each network with its own file (`platforms[].customMedia`) and no shared `mediaItems` — Justin's
+    // two scheduled reels read as text posts until this looked there (live check, 20 Oct 2026)
+    const media = [
+      ...(Array.isArray(p.mediaItems) ? p.mediaItems : []),
+      ...plats.flatMap(x => (Array.isArray(x.customMedia) ? x.customMedia : [])),
+    ].map(obj)
     const storyOn = (x: Record<string, unknown>) => String(obj(x.platformSpecificData).contentType ?? '').toLowerCase() === 'story'
     const kind: ItemKind = plats.length > 0 && plats.every(storyOn) ? 'story'
       : media.length === 0 ? 'text' : media.some(m => m.type === 'video') ? 'reel' : 'graphic'

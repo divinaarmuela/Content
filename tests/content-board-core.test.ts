@@ -41,6 +41,11 @@ describe('published, from Zernio', () => {
 
 describe('scheduled, from Zernio', () => {
   const items = scheduledItems(scheduled, clientOf)
+  it('reads each network’s own file when the post has no shared media (how the app books)', () => {
+    const [i] = scheduledItems({ posts: [{ _id: 'j1', status: 'scheduled', scheduledFor: '2026-10-22T07:00:00Z',
+      platforms: [{ platform: 'instagram', accountId: 'ig-jw', customMedia: [{ type: 'video', url: 'https://c.mp4', thumbnail: 'https://c.jpg' }] }] }] }, clientOf)
+    expect(i).toMatchObject({ kind: 'reel', thumbnail: 'https://c.jpg' })
+  })
   it('a video is a reel, a story only when every network posts it as one', () => {
     expect(items.map(i => [i.key, i.kind, i.clientId])).toEqual([['s:s1', 'reel', 'jordan'], ['s:s2', 'story', 'jordan'], ['s:s3', 'graphic', 'jordan']])
     expect(items[0].networks.map(n => n.platform)).toEqual(['instagram', 'linkedin'])
