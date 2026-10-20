@@ -62,6 +62,8 @@ type Shoot = StageShoot & {
 export default function ProductionPage() {
   const [search, setSearch] = useState('')
   const [planOpen, setPlanOpen] = useState(false)
+  // a shoot card's "Duplicate brief" opens the plan dialog copying that shoot (20 Oct 2026)
+  const [copyFrom, setCopyFrom] = useState<string | undefined>(undefined)
 
   const { me, role, loading, can } = useRole()
   // anyone on the team plans a shoot — the shoot page decides whose it then is
@@ -268,6 +270,7 @@ export default function ProductionPage() {
           reviewer={viewer.quality_reviewer}
           today={today}
           onMove={moveShoot}
+          onDuplicate={canPlan ? (shoot => { setCopyFrom(shoot.id); setPlanOpen(true) }) : undefined}
           busyId={stageBusy}
           laneEmpty={label => filteredEmpty(label, chosen, filterNames)}
         />
@@ -277,7 +280,8 @@ export default function ProductionPage() {
           the shoot's page with its canvas, checklist and sign-off */}
       <NewShootPlanDialog
         open={planOpen}
-        onOpenChange={setPlanOpen}
+        onOpenChange={o => { setPlanOpen(o); if (!o) setCopyFrom(undefined) }}
+        copyFrom={copyFrom}
         onCreated={() => setView('stage')}
         clients={clients}
         batches={shoots ?? []}

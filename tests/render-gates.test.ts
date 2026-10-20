@@ -345,7 +345,7 @@ describe('the shoot canvas is editable on a touch device (13 Sep 2026)', () => {
   it('draws edge and corner handles and a toolbar above the selected card, with 44px grab areas', () => {
     expect(canvas).toMatch(/data-resize=\{mode\}/)
     expect(canvas).toMatch(/data-resize="se"/)
-    expect(canvas).toMatch(/data-card-toolbar role="toolbar"/)
+    expect(canvas).toMatch(/data-card-toolbar[^>]*role="toolbar"/)
     expect(canvas).toMatch(/h-11 w-11 touch-none cursor-ew-resize/)
     // a heading's side handles sit on its bottom edge, clear of the comment bubble
     expect(canvas).toMatch(/card\.kind === 'label' \? '' : 'top-1\/2 -translate-y-1\/2'/)

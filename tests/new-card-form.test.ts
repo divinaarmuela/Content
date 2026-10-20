@@ -50,7 +50,7 @@ describe('New shoot plan form — one shoot, one card', () => {
   })
 
   it('"What this shoot is for" is one box, right under the title, above the shoot date', () => {
-    const title = SRC.indexOf('<Label>Title *</Label>')
+    const title = SRC.indexOf('<Label>Title')
     const box = SRC.indexOf('<Label>What this shoot is for</Label>')
     const date = SRC.indexOf('<Label>Shoot date</Label>')
     expect(title).toBeGreaterThan(-1)
@@ -87,7 +87,8 @@ describe('New shoot plan form — one shoot, one card', () => {
   })
 
   it('says what it is: New shoot plan — one shoot, one card', () => {
-    expect(SRC).toMatch(/<DialogTitle>New shoot plan <HelpHint term="shoot_plan" \/><\/DialogTitle>/)
+    // …or "Duplicate a shoot plan" when it starts from an existing one (20 Oct 2026)
+    expect(SRC).toMatch(/<DialogTitle>.*New shoot plan <HelpHint term="shoot_plan" \/>.*<\/DialogTitle>/)
     expect(SRC).toMatch(/One shoot, one plan\. .*\* required/)
     expect(SRC).toMatch(/Create the shoot plan/)
     // every control is 44px

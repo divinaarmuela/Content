@@ -21,6 +21,7 @@ import HelpHint from '../HelpHint'
 import { STAGE_STRIP } from '../../lib/shoot-sop-core'
 import type { TeamMember } from './workHooks'
 import ShootFor from './ShootFor'
+import { DEFAULT_COPY, type CopyParts } from '../../lib/brief-copy-core'
 
 export type ClientRow = { id: string; name: string }
 export type Batch = {
@@ -57,7 +58,7 @@ const BLANK = {
  * The page says what it already knows (`preset`); the dialog owns the rest.
  */
 export default function NewShootPlanDialog({
-  open, onOpenChange, onCreated, preset, clients, batches, team: teamProp,
+  open, onOpenChange, onCreated, preset, clients, batches, team: teamProp, copyFrom: copyFromPreset,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -70,10 +71,24 @@ export default function NewShootPlanDialog({
   /** the assignable members the PAGE already fetched (useTeamMembers) — pass
    *  it so the dialog does not ask `/api/team` a second time */
   team?: TeamMember[]
+  /** a shoot card's "Duplicate brief": the dialog opens copying this shoot */
+  copyFrom?: string
 }) {
   const router = useRouter()
   const [newBusy, setNewBusy] = useState(false)
   const [draft, setDraft] = useState({ ...BLANK })
+  // DUPLICATING A BRIEF (the owner, 20 Oct 2026): start from an existing shoot, and tick what comes across
+  const [copyFrom, setCopyFrom] = useState('')
+  const [copy, setCopy] = useState<CopyParts>({ ...DEFAULT_COPY })
+  const source = copyFrom ? batches.find(b => b.id === copyFrom) ?? null : null
+  useEffect(() => {
+    if (!open || !copyFromPreset) return
+    const src = batches.find(b => b.id === copyFromPreset)
+    setCopyFrom(copyFromPreset)
+    setCopy({ ...DEFAULT_COPY })
+    if (src) setDraft(d => ({ ...d, client_id: src.client_id, batch_id: '', for_contact_id: '' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, copyFromPreset])
 
   // managers assign the plan to somebody at creation; that person gets the
   // job-pack email (what needs doing + the target date)
@@ -137,7 +152,7 @@ export default function NewShootPlanDialog({
 
 
   const createPlan = async () => {
-    if (!draft.client_id || !draft.title.trim()) return toast.error('Client and title are required')
+    if (!draft.client_id || (!draft.title.trim() && !source)) return toast.error('Client and title are required')
     setNewBusy(true)
     try {
       // THE SHOOT IS THE PLAN (13 Sep 2026): one request makes the shoot,
@@ -153,15 +168,19 @@ export default function NewShootPlanDialog({
           shoot_date: draft.due_date || null,
           ...(draft.owner_id ? { owner_id: draft.owner_id } : {}),
           ...(draft.for_contact_id ? { for_contact_id: draft.for_contact_id } : {}),
+          ...(source ? { copy_from: source.id, copy } : {}),
         }),
       })
       const created = await res.json().catch(() => null)
       if (!res.ok) throw new Error(created?.error ?? 'Create failed')
       const made = created as { id: string; owner_id?: string | null }
-      toastOpen('Shoot plan created — it is in Draft on Shoots', `/dashboard/production/shoots/${made.id}`, router.push)
       onOpenChange(false)
       setDraft({ ...BLANK })
+      setCopyFrom(''); setCopy({ ...DEFAULT_COPY })
       onCreated([made])
+      // a copy opens straight away — its plan and board are there to change
+      if (source) { toast.success('Shoot plan duplicated — it is in Draft on Shoots'); router.push(`/dashboard/production/shoots/${made.id}`) }
+      else toastOpen('Shoot plan created — it is in Draft on Shoots', `/dashboard/production/shoots/${made.id}`, router.push)
     } catch (e) {
       // "Failed to fetch" is the RESPONSE dying, not the request — the server
       // may well have created it. Check before inviting a retry that would
@@ -180,14 +199,15 @@ export default function NewShootPlanDialog({
 
   /** What still stops Create, in one line under the button. */
   const missing: string | null = !draft.client_id ? 'Choose a client first.'
-    : !draft.title.trim() ? 'Give it a title.'
+    : !draft.title.trim() && !source ? 'Give it a title.'
+    : source && !copy.details && !copy.board && !copy.people ? 'Tick at least one thing to copy.'
     : null
 
   return (
-    <Dialog open={open} onOpenChange={o => { if (newBusy) return; onOpenChange(o) }}>
+    <Dialog open={open} onOpenChange={o => { if (newBusy) return; if (!o) { setCopyFrom(''); setCopy({ ...DEFAULT_COPY }) } onOpenChange(o) }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>New shoot plan <HelpHint term="shoot_plan" /></DialogTitle>
+          <DialogTitle>{source ? 'Duplicate a shoot plan' : <>New shoot plan <HelpHint term="shoot_plan" /></>}</DialogTitle>
           <DialogDescription className="text-secondary-13">
             One shoot, one plan. The nine parts of the plan are filled in on the plan page after this. * required
           </DialogDescription>
@@ -199,6 +219,60 @@ export default function NewShootPlanDialog({
         {/* every cell min-w-0: a long name in a picker must never push the
             window wider (the owner, 13 Sep 2026: "the picker is going far right") */}
         <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
+          {/* START FROM AN EXISTING BRIEF (20 Oct 2026): a blank plan, or a copy of one already written */}
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label>Start from</Label>
+            <Select value={copyFrom || 'blank'} onValueChange={v => {
+              const id = v === 'blank' ? '' : v
+              setCopyFrom(id)
+              const src = batches.find(b => b.id === id)
+              if (src) setDraft(d => ({ ...d, client_id: src.client_id, batch_id: '', for_contact_id: '' }))
+            }}>
+              <SelectTrigger className="min-w-0">
+                <SelectValue>
+                  <span className="block truncate">{source ? `A copy of ${source.title}${source.clients?.name ? ` · ${source.clients.name}` : ''}` : 'A blank plan'}</span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-[50vh] max-w-[min(92vw,520px)]">
+                <SelectItem value="blank">A blank plan</SelectItem>
+                {batches.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>A copy of an existing shoot plan</SelectLabel>
+                    {batches.map(b => (
+                      <SelectItem key={b.id} value={b.id} textValue={b.title}>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{b.title}</span>
+                          <span className="truncate text-[12px] text-muted-foreground">
+                            {[b.clients?.name, b.shoot_date ? new Date(`${b.shoot_date.slice(0, 10)}T00:00:00`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'no date'].filter(Boolean).join(' · ')}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          {source && (
+            <fieldset className="grid gap-2 rounded-inner border border-border p-3 sm:col-span-2">
+              <legend className="px-1 text-[13px] font-semibold">What to copy</legend>
+              {([
+                ['details', 'The plan details', 'Objective, deliverables, shot list, script, location, call time, talent, props, priorities'],
+                ['board', 'The board', 'Every card on the plan canvas, and the boards inside it'],
+                ['people', 'The people', 'The editor and the crew on the day'],
+              ] as const).map(([key, label, hint]) => (
+                <label key={key} className="flex cursor-pointer items-start gap-2.5">
+                  <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-foreground" checked={copy[key]}
+                    onChange={e => { const on = e.target.checked; setCopy(c => ({ ...c, [key]: on })) }} />
+                  <span className="flex flex-col">
+                    <span className="text-[14px] font-medium">{label}</span>
+                    <span className="text-[12px] text-muted-foreground">{hint}</span>
+                  </span>
+                </label>
+              ))}
+              <p className="text-[12px] text-muted-foreground">Never copied: the dates, who has read or signed off the plan, and the footage. The copy starts in Draft.</p>
+            </fieldset>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="plan-client">Client *</Label>
             {/* type the name, pick from what matches (13 Sep 2026) */}
@@ -244,8 +318,8 @@ export default function NewShootPlanDialog({
             </div>
           )}
           <div className="grid gap-1.5 sm:col-span-2">
-            <Label>Title *</Label>
-            <Input value={draft.title} placeholder="e.g. October clinic day" onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
+            <Label>Title{source ? '' : ' *'}</Label>
+            <Input value={draft.title} placeholder={source ? `Copy of ${source.title}` : 'e.g. October clinic day'} onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} />
           </div>
           {/* the requirement, right under the title. Stored as `brief`, and
               it goes to whoever is assigned. */}
@@ -329,7 +403,7 @@ export default function NewShootPlanDialog({
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button variant="outline" className="h-11 rounded-full border-border bg-surface px-5 text-[14px] font-semibold" onClick={() => onOpenChange(false)} disabled={newBusy}>Cancel</Button>
           <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90" onClick={createPlan} disabled={newBusy || missing !== null}>
-            {newBusy ? 'Creating…' : 'Create the shoot plan'}
+            {newBusy ? 'Creating…' : source ? 'Duplicate the shoot plan' : 'Create the shoot plan'}
           </Button>
         </DialogFooter>
         {/* the reason the button is grey, said where the person is looking —

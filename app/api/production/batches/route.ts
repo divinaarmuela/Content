@@ -8,6 +8,7 @@ import { logActivity } from '../../../lib/workflow'
 import { announceBatchChange } from '../../../lib/production-live'
 import { onBatchCreated } from '../../../lib/gdrive-hooks'
 import { notifyShootOwner } from '../../../lib/shoot-sop-notify'
+import { briefCopyFields, copiedWords, copyPartsOf, copyTitle, nothingToCopy } from '../../../lib/brief-copy-core'
 
 const melbourneToday = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' })
 import {
@@ -56,10 +57,24 @@ export async function POST(req: Request) {
   try {
     const user = await requireRole('scheduler')
     const body = await req.json()
+    const clientIds = await batchClientIds(user)
+    // DUPLICATING A BRIEF (20 Oct 2026, brief-copy-core): the shoot copied from must be one this person may open,
+    // and at least one part — details, board, people — must be ticked
+    let source: Batch | null = null
+    const parts = copyPartsOf(body.copy)
+    if (body.copy_from) {
+      source = await table<Batch>('batches').get(String(body.copy_from))
+      if (!source) return NextResponse.json({ error: 'The shoot plan to copy is gone' }, { status: 404 })
+      const held = clientIds === null ? [] : await heldBatchIds(user)
+      if (clientIds !== null && !clientIds.includes(source.client_id) && !held.includes(source.id)) {
+        return NextResponse.json({ error: 'You are not on the client of the shoot plan you are copying' }, { status: 403 })
+      }
+      if (nothingToCopy(parts)) return NextResponse.json({ error: 'Tick what to copy — the details, the board or the people' }, { status: 400 })
+      body.title = copyTitle(source.title, body.title)
+    }
     if (!body.client_id || !body.title) {
       return NextResponse.json({ error: 'client_id and title are required' }, { status: 400 })
     }
-    const clientIds = await batchClientIds(user)
     if (clientIds !== null && !clientIds.includes(body.client_id)) {
       return NextResponse.json({ error: 'You are not assigned to that client' }, { status: 403 })
     }
@@ -118,6 +133,9 @@ export async function POST(req: Request) {
         shot_list: sanitiseShotList(body.shot_list),
         planned_deliverables: sanitisePlannedDeliverables(body.planned_deliverables),
         reference_media: sanitiseReferenceMedia(body.reference_media),
+        // the copied parts of the old brief; what was typed in the dialog ("What this shoot is for") still wins
+        ...(source ? briefCopyFields(source, parts) : {}),
+        ...(source && body.description ? { description: String(body.description), objective: String(body.description) } : {}),
         month,
         year,
         // the account manager on the shoot: the one named in the popup, or
@@ -132,6 +150,7 @@ export async function POST(req: Request) {
       actor: user, clientId: data.client_id,
       entityType: 'batch', entityId: data.id,
       action: 'created', newValue: data.title,
+      ...(source ? { detail: copiedWords(parts, source.title) } : {}),
     })
     announceBatchChange({ batch_id: data.id, client_id: data.client_id, status: data.status ?? 'brief', kind: 'created' })
     // the account manager named by somebody else is told the shoot is theirs

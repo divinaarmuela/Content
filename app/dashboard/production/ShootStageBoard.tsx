@@ -2,10 +2,10 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, ChevronDown, Clapperboard } from 'lucide-react'
+import { CalendarDays, ChevronDown, Clapperboard, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
   FOOTAGE_ONLY_WORDS, SHOOT_STAGES, ackState, briefChecklist, briefIsLate, clientPlanWords, clockWords, isFootageOnly, overrideWords, planReviewChip, planReviewRequired, shootStage, stageMove,
@@ -53,8 +53,10 @@ function whenShort(iso: string | null | undefined) {
 }
 
 export function ShootStageBoard({
-  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty, reviewer = false,
+  shoots, itemCounts, names, roles, role, viewerId, today, onMove, busyId, laneEmpty, reviewer = false, onDuplicate,
 }: {
+  /** "Duplicate brief" on a card (20 Oct 2026) — absent for someone who cannot plan shoots */
+  onDuplicate?: (shoot: StageShoot) => void
   shoots: StageShoot[]
   /** an empty column's sentence while the page is narrowed to a client or a
    *  person — "No cards for Ada in Shared with team" */
@@ -188,12 +190,12 @@ export function ShootStageBoard({
             })()}
           </>}
           note={<>{who}{note ? <><br />{note}</> : null}</>}
-          actions={moves.length > 0 ? (
+          actions={moves.length > 0 || onDuplicate ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" disabled={busyId === s.id}
                   className="h-11 rounded-full border-border bg-surface px-4 text-[14px] font-semibold">
-                  Move… <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                  {moves.length > 0 ? 'Move…' : 'More…'} <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">
@@ -202,6 +204,14 @@ export function ShootStageBoard({
                     {st.label}
                   </DropdownMenuItem>
                 ))}
+                {onDuplicate && (
+                  <>
+                    {moves.length > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuItem className="min-h-11" onClick={() => onDuplicate(s)}>
+                      <Copy className="h-4 w-4" aria-hidden /> Duplicate shoot plan
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : <></>}
