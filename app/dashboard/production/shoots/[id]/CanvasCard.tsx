@@ -16,6 +16,7 @@ function BoldWords({ text }: { text: string }) {
 
 import { BoldableInput, BoldableTextarea } from './BoldBox'
 import { embedUrlFor, isPlayableFile } from '../../../../lib/link-preview-core'
+import { cardLinkOf } from '../../../../lib/canvas-link-open-core'
 import {
   autoplayEmbedUrlFor, autoplayKindFor, decideAutoplay, framePlayerOf, instagramEmbedUrlFor,
   instagramPlayHint, playableFileFor, soundCommand, YOUTUBE_LISTEN,
@@ -1234,6 +1235,31 @@ function CanvasCardInner({
 // renders nothing, so every other place the canvas is drawn is unchanged.
 // It rides in a fragment beside the card, absolutely positioned against the
 // canvas's own `[data-cid]` wrapper, so no card kind's markup is touched.
+/**
+ * THE POST'S OWN LINK, UNDER IT (Manal and the owner, 20 Oct 2026, a screenshot of Milanote: under an Instagram post
+ * Milanote shows the post's title as an underlined orange link — "we need this as part of the video link there").
+ * Under every post on the board and every link card that shows a post: its title (or its address), underlined,
+ * opening the real page in a new tab. A plain link card already reads as its link and gets no second one.
+ */
+function PostLinkLine({ card }: { card: Card }) {
+  const url = cardLinkOf(card)
+  if (!url) return null
+  const isPost = card.kind === 'mockup' || !!(card.thumb || card.video || card.provider)
+  if (!isPost) return null
+  const title = (card.kind === 'mockup' ? card.preview?.title : card.title)?.trim()
+  let shown = title
+  if (!shown) { try { const u = new URL(url); shown = `${u.hostname.replace(/^www\./, '')}${u.pathname.replace(/\/$/, '')}` } catch { shown = url } }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" data-post-link
+      onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}
+      title={url}
+      className="mt-1.5 block rounded-[3px] bg-white px-2.5 py-1.5 text-[11px] leading-snug text-[#e1306c] underline decoration-[#e1306c]/60 underline-offset-2 shadow-[0_1px_2px_rgba(0,0,0,0.08)] hover:decoration-[#e1306c] dark:bg-[#2a2a2a]"
+      style={{ width: card.w }}>
+      <span className="line-clamp-3 break-words">{shown}</span>
+    </a>
+  )
+}
+
 export const CanvasCardView = React.memo(function CanvasCardView(props: Parameters<typeof CanvasCardInner>[0] & {
   /** a column (Milanote's): the cards inside it, in order, and how to draw one */
   columnCards?: Card[]
@@ -1247,6 +1273,7 @@ export const CanvasCardView = React.memo(function CanvasCardView(props: Paramete
         ? <MilanoteCard card={props.card} editing={props.editing} onUpdate={props.onUpdate} onOpen={props.onOpen}
             insideLabel={props.insideLabel} columnCards={columnCards} renderChild={renderChild} />
         : <CanvasCardInner {...inner} />}
+      {!props.editing && <PostLinkLine card={props.card} />}
       <CanvasCommentBadge cardId={props.card.id} />
     </>
   )

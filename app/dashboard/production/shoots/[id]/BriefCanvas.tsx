@@ -29,6 +29,7 @@ import {
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun } from '../../../../lib/batch-brief-core'
 import { applyBold } from './BoldBox'
 import { holdPageScroll } from '../../../../lib/hold-page-scroll'
+import { cardLinkOf, opensOnClick } from '../../../../lib/canvas-link-open-core'
 import { COLUMN_COLOURS, NEW_COLUMN, columnAt, dropIndex, fitsInColumn, placeInColumn, takeOutOfColumn, type ColumnBox } from '../../../../lib/canvas-column-core'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
@@ -433,7 +434,18 @@ export default function BriefCanvas({
     setSelected(arrow.id)
   }
 
+  /** the last press on a card moved it — its click is the drop, not a click (a link must not open on a drag) */
+  const draggedRef = useRef(false)
+  /** a link opens a beat after the click, so a double-click (edit a post's caption) can call it off */
+  const openTimer = useRef<number | null>(null)
+  const openLinkSoon = (url: string) => {
+    if (openTimer.current) window.clearTimeout(openTimer.current)
+    openTimer.current = window.setTimeout(() => { openTimer.current = null; window.open(url, '_blank', 'noopener,noreferrer') }, 260)
+  }
+  const cancelLinkOpen = () => { if (openTimer.current) { window.clearTimeout(openTimer.current); openTimer.current = null } }
+
   const onCardPointerDown = (e: React.PointerEvent, card: CanvasCard) => {
+    draggedRef.current = false
     if (viewOnly || editing === card.id) return
     if (e.button !== 0) return
     e.stopPropagation()
@@ -606,6 +618,7 @@ export default function BriefCanvas({
     if (bar) { bar.style.display = ''; keepToolbarInView() }
     interactingRef.current = false
     if (!d.moved) { if (d.host && d.el) d.el.style.transform = ''; setSelected(card.id); return }
+    draggedRef.current = true
     const s = camRef.current.s
     // INTO A COLUMN, OUT OF ONE, OR TO ANOTHER PLACE IN IT (Milanote's columns, 20 Oct 2026)
     const moving = cards.find(c => c.id === d.id)
@@ -1329,6 +1342,15 @@ export default function BriefCanvas({
             )}
           </>
         )}
+        {cardLinkOf(card) && (
+          <>
+            <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
+            <Button size="sm" variant="ghost" className={tb} title={cardLinkOf(card)}
+              onClick={() => window.open(cardLinkOf(card)!, '_blank', 'noopener,noreferrer')}>
+              <ExternalLink className="h-3.5 w-3.5" /> Open link
+            </Button>
+          </>
+        )}
         {card.kind === 'mockup' && (
           <>
             <span className="mx-0.5 h-5 w-px bg-foreground/[0.08]" />
@@ -1674,9 +1696,17 @@ export default function BriefCanvas({
               onPointerUp={e => onCardPointerUp(e, card)}
               onClick={e => {
                 e.stopPropagation()
+                // A LINK OPENS ITS PAGE (Manal, 20 Oct 2026: a pasted link "becomes instagram video … it should take
+                // them to the actual link in new tab"): a click on a link card or a post — not on its play button,
+                // not after a drag, not mid-edit — opens the real link in a new tab; inside a column, the card pressed
+                const childId = (e.target as HTMLElement).closest?.('[data-col-child]')?.getAttribute('data-col-child')
+                const pressed = childId ? cards.find(c => c.id === childId) ?? card : card
+                const link = cardLinkOf(pressed)
+                if (link && connectFrom === null && opensOnClick(e.target as HTMLElement, { dragged: draggedRef.current, editing: editing === pressed.id })) openLinkSoon(link)
                 if (viewOnly) {
                   if (card.kind === 'board') openBoard(card.id)
-                  else setSheetCard(card)
+                  // a client's click on a post or a link opens the post itself, not the card's sheet
+                  else if (!link) setSheetCard(card)
                   return
                 }
                 if (connectFrom === '') { setConnectFrom(card.id); return }
@@ -1685,11 +1715,11 @@ export default function BriefCanvas({
                   setConnectFrom(null)
                   return
                 }
-                if (card.kind === 'link' && (e.ctrlKey || e.metaKey) && card.url) window.open(card.url, '_blank')
                 setSelected(card.id)
               }}
               onDoubleClick={e => {
                 e.stopPropagation()
+                cancelLinkOpen()
                 if (card.kind === 'board') { openBoard(card.id); return }
                 if (card.kind === 'boardlink' && card.target) { window.location.assign(`/dashboard/team-boards/${encodeURIComponent(card.target)}`); return }
                 // a card inside a column (Milanote's): the one pressed, not the column
