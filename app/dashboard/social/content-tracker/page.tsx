@@ -21,7 +21,7 @@ import { networkName } from '../../../lib/publish-core'
  */
 
 type TrackerClient = { id: string; name: string; logo: string | null }
-type Answer = { month: string; lines: TrackerLine[]; posts: TrackerPost[]; clients: TrackerClient[]; complete: boolean; fetchedAt: string }
+type Answer = { month: string; lines: TrackerLine[]; posts: TrackerPost[]; clients: TrackerClient[]; addable: { id: string; name: string }[]; complete: boolean; fetchedAt: string }
 type Sort = 'newest' | 'views' | 'engagement'
 type Via = 'all' | 'app' | 'native'
 
@@ -38,7 +38,8 @@ export default function ContentTrackerPage() {
   const [error, setError] = useState<string | null>(null)
   const [client, setClient] = useState<string>(ALL)
   const [network, setNetwork] = useState<string>(ALL)
-  const [via, setVia] = useState<Via>('all')
+  // ours by default: a connected account's own posts are in Zernio's list too (Pattons, 20 Oct 2026)
+  const [via, setVia] = useState<Via>('app')
   const [sort, setSort] = useState<Sort>('newest')
   const [tab, setTab] = useState<'tracker' | 'posts'>('tracker')
 
@@ -110,7 +111,7 @@ export default function ContentTrackerPage() {
       )}
 
       {tab === 'tracker' ? (
-        <TrackerTable month={month} lines={data?.lines ?? []} clients={data?.clients ?? []} loading={loading} onSaved={() => void load(month)} />
+        <TrackerTable month={month} lines={data?.lines ?? []} clients={data?.clients ?? []} addable={data?.addable ?? []} loading={loading} onSaved={() => void load(month)} />
       ) : <>
       {/* the filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -131,9 +132,9 @@ export default function ContentTrackerPage() {
           ))}
         </div>
         <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-          <Pill on={via === 'all'} onClick={() => setVia('all')}>All posts</Pill>
-          <Pill on={via === 'app'} onClick={() => setVia('app')}>Through the app</Pill>
-          <Pill on={via === 'native'} onClick={() => setVia('native')}>On the network</Pill>
+          <Pill on={via === 'app'} onClick={() => setVia('app')}>Posted by us</Pill>
+          <Pill on={via === 'native'} onClick={() => setVia('native')}>Posted by the client</Pill>
+          <Pill on={via === 'all'} onClick={() => setVia('all')}>Both</Pill>
         </div>
       </div>
 
@@ -295,8 +296,8 @@ function PostTile({ post, client }: { post: TrackerPost; client: string | null }
           <PlatformIcon platform={post.platform} size={14} />{post.kind}
         </span>
         {post.via === 'native' && (
-          <span className="absolute right-2 top-2 rounded-full bg-ink/80 px-2 py-1 text-[11px] font-semibold text-cream" title="Posted straight on the network, not through the app">
-            On the network
+          <span className="absolute right-2 top-2 rounded-full bg-ink/80 px-2 py-1 text-[11px] font-semibold text-cream" title="Posted by the client on the network, not through Zernio">
+            By the client
           </span>
         )}
         {post.url && (

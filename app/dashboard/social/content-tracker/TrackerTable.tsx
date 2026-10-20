@@ -22,10 +22,12 @@ const STATUS_LOOK: Record<TrackerStatus, string> = {
 }
 const UNTIL = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
 
-export default function TrackerTable({ month, lines, clients, loading, onSaved }: {
+export default function TrackerTable({ month, lines, clients, addable, loading, onSaved }: {
   month: string
   lines: TrackerLine[]
   clients: TrackerClient[]
+  /** active clients not on the sheet yet: one is added by giving it a row */
+  addable: { id: string; name: string }[]
   loading: boolean
   /** the server's answer changes the counts (Needed, Status): reload quietly */
   onSaved: () => void
@@ -74,7 +76,7 @@ export default function TrackerTable({ month, lines, clients, loading, onSaved }
             {loading && lines.length === 0 ? (
               <tr><td colSpan={13} className="p-6 text-center text-muted-foreground">Loading…</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={13} className="p-6 text-center text-muted-foreground">No clients with connected accounts yet.</td></tr>
+              <tr><td colSpan={13} className="p-6 text-center text-muted-foreground">Nothing published through Zernio this month yet. Add a client below to set their targets.</td></tr>
             ) : sorted.map(l => {
               const c = byId.get(l.clientId)
               return (
@@ -115,10 +117,20 @@ export default function TrackerTable({ month, lines, clients, loading, onSaved }
           </tbody>
         </table>
       </div>
-      <p className="border-t border-border px-4 py-2 text-[12px] text-muted-foreground">
-        Scheduled counts what is booked in or posted this month — through the app, in Zernio, or straight on the network.
-        A post on several networks counts once. Required numbers carry over from last month until changed (shown in grey).
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-2">
+        <p className="max-w-3xl text-[12px] text-muted-foreground">
+          Scheduled counts the client’s posts in Zernio for this month, already published or still waiting to go; a post on several networks counts once. Posts the client puts up themselves are not counted.
+          Scheduled until is their last post waiting in Zernio. Required numbers carry over from last month until changed (grey).
+        </p>
+        {addable.length > 0 && (
+          <select value="" aria-label="Add a client to the sheet"
+            onChange={e => { if (e.target.value) void save(e.target.value, { in_asana: false }) }}
+            className="h-9 rounded-full border border-border bg-surface px-3 text-[13px]">
+            <option value="">+ Add a client</option>
+            {addable.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+      </div>
     </section>
   )
 }

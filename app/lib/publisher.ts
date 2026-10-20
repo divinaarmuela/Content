@@ -51,6 +51,8 @@ export interface Publisher {
   /** One page of every post published between two days (YYYY-MM-DD, inclusive), newest first, with its numbers —
    *  the Content tracker's source; covers posts made outside the app too. */
   analyticsPage(params: { fromDate: string; toDate: string; page: number; limit: number }): Promise<unknown>
+  /** One page of the posts waiting in Zernio to go out (GET /posts?status=scheduled). */
+  scheduledPage(params: { page: number; limit: number }): Promise<unknown>
   /** One post's numbers day by day since it went up (needs the Analytics add-on). */
   postTimeline(postId: string): Promise<unknown>
   /** Posts that have comments, across connected accounts. */
@@ -803,6 +805,10 @@ class ZernioPublisher implements Publisher {
     return this.getJson(`/analytics?${qs}`)
   }
 
+  scheduledPage(params: { page: number; limit: number }) {
+    return this.getJson(`/posts?status=scheduled&page=${params.page}&limit=${params.limit}`)
+  }
+
   /** `{ postId, timeline: [{ date, platform, impressions, likes, … }] }` — one
    *  row per day per platform since publishing. */
   postTimeline(postId: string) {
@@ -1022,6 +1028,7 @@ class UnconfiguredPublisher implements Publisher {
   async getPost() { return null }
   async postAnalytics() { return null }
   async analyticsPage() { return null }
+  async scheduledPage() { return null }
   async postTimeline() { return null }
   async listComments() { return null }
   async listConversations() { return null }

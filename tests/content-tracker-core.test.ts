@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  piecesFromZernioScheduled, scheduledUntilByClient,
   byClient, compact, engagement, inMonth, kindOf, monthKey, monthRange, piecesFromApp, piecesFromZernio, platformsIn,
   sanitiseTrackerPatch, shiftMonth, totals, trackerLine, trackerPosts,
 } from '../app/lib/content-tracker-core'
@@ -93,14 +94,16 @@ describe('the deliverables sheet', () => {
   it('counts each booked or posted post once, a story on its own, nothing not yet booked', () => {
     expect(app.map(p => [p.key, p.kind])).toEqual([['a:p1', 'graphic'], ['a:p2', 'reel'], ['a:p3', 'reel'], ['a:p4:story', 'story']])
   })
-  it('counts what Zernio has that the app did not book, a post on several networks once', () => {
+  it('counts only what went out through Zernio, a post on several networks once — never the client’s own posts', () => {
     const z = piecesFromZernio({ posts: [
       { ...native, _id: 'n1' },
       { ...reel, _id: 'r-ig' },                                                    // the app's own: skipped
       { _id: 'd1', latePostId: 'zz', publishedAt: at, status: 'published', mediaType: 'image', platforms: [{ platform: 'instagram', accountId: 'ig-jw' }] },
       { _id: 'd2', latePostId: 'zz', publishedAt: at, status: 'published', mediaType: 'image', platforms: [{ platform: 'linkedin', accountId: 'li-jw' }] },
     ] }, clientOf, new Set(['z1']))
-    expect(z.map(p => [p.key, p.kind, p.linkedin])).toEqual([['z:n1', 'reel', false], ['z:zz', 'graphic', true]])
+    // n1 has no Zernio post id: the client posted it themselves (Pattons, 20 Oct 2026)
+    expect(z.map(p => [p.key, p.kind, p.linkedin])).toEqual([['z:zz', 'graphic', true]])
+    expect(piecesFromZernio({ posts: [reel] }, clientOf).map(p => [p.key, p.clientId])).toEqual([['z:z1', 'jordan']])
   })
   it('a client\'s month: required against scheduled, what is needed, until when', () => {
     const line = trackerLine('c', app, '2026-10', { required_graphics: 3, required_reels: 1, notes: 'links on stories' }, null, 'Karly')
@@ -126,5 +129,27 @@ describe('the deliverables sheet', () => {
     expect(sanitiseTrackerPatch({ required_graphics: '6', required_reels: -2, notes: '  hi ', in_asana: true, other: 1 }))
       .toEqual({ required_graphics: 6, notes: 'hi', in_asana: true })
     expect(sanitiseTrackerPatch({ required_reels: '' })).toEqual({ required_reels: null })
+  })
+})
+
+describe('scheduled until', () => {
+  it('is each client’s last post waiting in Zernio, whichever way the account is named', () => {
+    const m = scheduledUntilByClient({ posts: [
+      { status: 'scheduled', scheduledFor: '2026-10-28T07:00:00Z', platforms: [{ accountId: 'ig-jw' }] },
+      { status: 'scheduled', scheduledFor: '2026-11-03T07:00:00Z', platforms: [{ accountId: { _id: 'ig-jw' } }] },
+      { status: 'scheduled', scheduledFor: '2026-12-01T07:00:00Z', platforms: [{ accountId: 'someone-else' }] },
+    ] }, clientOf)
+    expect(m.get('jordan')).toBe('2026-11-03T07:00:00Z')
+    expect(m.size).toBe(1)
+  })
+})
+
+describe('what is still waiting in Zernio counts as scheduled for its month', () => {
+  it('one piece per post, a reel by its video, a story beside it', () => {
+    const p = piecesFromZernioScheduled({ posts: [
+      { _id: 's1', status: 'scheduled', scheduledFor: '2026-10-28T07:00:00Z', mediaItems: [{ type: 'video' }], platforms: [{ platform: 'instagram', accountId: { _id: 'ig-jw' } }, { platform: 'linkedin', accountId: 'li' }] },
+      { _id: 's2', status: 'scheduled', scheduledFor: '2026-10-29T07:00:00Z', mediaItems: [{ type: 'image' }], platforms: [{ platform: 'instagram', accountId: 'ig-jw', platformSpecificData: { contentType: 'story' } }] },
+    ] }, clientOf)
+    expect(p.map(x => [x.key, x.kind, x.clientId, x.linkedin])).toEqual([['zs:s1', 'reel', 'jordan', true], ['zs:s2:story', 'story', 'jordan', false]])
   })
 })

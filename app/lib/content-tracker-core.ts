@@ -200,12 +200,17 @@ export function compact(n: number): string {
 export type PieceKind = 'graphic' | 'reel' | 'story' | 'text'
 export type Piece = { key: string; clientId: string | null; kind: PieceKind; linkedin: boolean; at: string; state: 'posted' | 'booked' }
 
+/** a Zernio account id, given as a string or as `{ _id }` */
+export function accountIdOf(v: unknown): string | null {
+  return str(v) ?? str(obj(v)._id)
+}
+
 /**
- * The pieces Zernio has that the app did not book: posted straight on the network, or put up in Zernio itself.
- * The networks of one Zernio post (`latePostId`) are one piece; an app booking's Zernio id is in `appIds` and
- * skipped — the app's own posts are counted from the post, booked or posted (`piecesFromApp`).
+ * WHAT ZERNIO SAYS WAS PUBLISHED (the owner, 20 Oct 2026: "didn't i tell u to get from zernio whats published") —
+ * every published post, booked through the app or not. The networks of one Zernio post (`latePostId`) are one
+ * piece. `skip` is for a caller that counts some posts another way; the tracker passes none.
  */
-export function piecesFromZernio(raw: unknown, clientOf: (accountId: string | null) => string | null, appIds: ReadonlySet<string>): Piece[] {
+export function piecesFromZernio(raw: unknown, clientOf: (accountId: string | null) => string | null, skip: ReadonlySet<string> = new Set()): Piece[] {
   const list = Array.isArray(obj(raw).posts) ? obj(raw).posts as unknown[] : []
   const groups = new Map<string, Piece>()
   for (const r of list) {
@@ -213,7 +218,10 @@ export function piecesFromZernio(raw: unknown, clientOf: (accountId: string | nu
     const id = str(p._id)
     const at = str(p.publishedAt)
     const late = str(p.latePostId)
-    if (!id || !at || (p.status && p.status !== 'published') || (late && appIds.has(late))) continue
+    // ONLY WHAT WENT OUT THROUGH ZERNIO (`latePostId`): a connected account's own posts are synced into this list
+    // too — Pattons' 17 Instagram posts since July, none of them ours (the owner, 20 Oct 2026: "how come we have
+    // pattons … we posted it?")
+    if (!id || !at || !late || (p.status && p.status !== 'published') || skip.has(late)) continue
     const plats = Array.isArray(p.platforms) && p.platforms.length ? p.platforms as unknown[] : [{ platform: p.platform, accountId: null }]
     const first = obj(plats[0])
     const platform = String(first.platform ?? p.platform ?? '').toLowerCase()
@@ -223,11 +231,11 @@ export function piecesFromZernio(raw: unknown, clientOf: (accountId: string | nu
     const kind: PieceKind = product === 'STORY' ? 'story'
       : media === 'video' || product === 'REELS' ? 'reel'
         : media === 'image' || media === 'photo' || media === 'carousel' || items > 0 ? 'graphic' : 'text'
-    const key = late ?? id
+    const key = late
     const linkedin = plats.some(x => String(obj(x).platform ?? '').toLowerCase() === 'linkedin') || platform === 'linkedin'
     const had = groups.get(key)
     if (had) { had.linkedin = had.linkedin || linkedin; if (at > had.at) had.at = at; continue }
-    groups.set(key, { key: `z:${key}`, clientId: clientOf(str(first.accountId)), kind, linkedin, at, state: 'posted' })
+    groups.set(key, { key: `z:${key}`, clientId: clientOf(accountIdOf(first.accountId)), kind, linkedin, at, state: 'posted' })
   }
   return [...groups.values()]
 }
@@ -257,6 +265,48 @@ export function piecesFromApp(
   return out
 }
 
+/**
+ * THE POSTS WAITING IN ZERNIO (GET /posts?status=scheduled), as pieces: the sheet's "Scheduled" for a month is what
+ * Zernio has for it, gone out or still to go (the owner, 20 Oct 2026: "do u even read what the column says"). A post
+ * on several networks is one piece; a story is one when any network posts it as a story.
+ */
+export function piecesFromZernioScheduled(raw: unknown, clientOf: (accountId: string | null) => string | null): Piece[] {
+  const list = Array.isArray(obj(raw).posts) ? obj(raw).posts as unknown[] : Array.isArray(raw) ? raw as unknown[] : []
+  const out: Piece[] = []
+  for (const r of list) {
+    const p = obj(r)
+    const id = str(p._id) ?? str(p.id)
+    const at = str(p.scheduledFor)
+    if (!id || !at || (p.status && p.status !== 'scheduled')) continue
+    const plats = (Array.isArray(p.platforms) ? p.platforms : []).map(obj)
+    const clientId = plats.map(x => clientOf(accountIdOf(x.accountId))).find(Boolean) ?? null
+    const items = (Array.isArray(p.mediaItems) ? p.mediaItems : []).map(obj)
+    const story = plats.some(x => String(obj(x.platformSpecificData).contentType ?? '').toLowerCase() === 'story')
+    const feed = plats.some(x => String(obj(x.platformSpecificData).contentType ?? '').toLowerCase() !== 'story')
+    const linkedin = plats.some(x => String(x.platform ?? '').toLowerCase() === 'linkedin')
+    const kind: PieceKind = items.length === 0 ? 'text' : items.some(m => m.type === 'video') ? 'reel' : 'graphic'
+    if (feed || plats.length === 0) out.push({ key: `zs:${id}`, clientId, kind, linkedin, at, state: 'booked' })
+    if (story) out.push({ key: `zs:${id}:story`, clientId, kind: 'story', linkedin: false, at, state: 'booked' })
+  }
+  return out
+}
+
+/** each client's last post waiting in Zernio (GET /posts?status=scheduled): how far ahead they are covered */
+export function scheduledUntilByClient(raw: unknown, clientOf: (accountId: string | null) => string | null): Map<string, string> {
+  const list = Array.isArray(obj(raw).posts) ? obj(raw).posts as unknown[] : Array.isArray(raw) ? raw as unknown[] : []
+  const out = new Map<string, string>()
+  for (const r of list) {
+    const p = obj(r)
+    const at = str(p.scheduledFor)
+    if (!at || (p.status && p.status !== 'scheduled')) continue
+    for (const x of Array.isArray(p.platforms) ? p.platforms as unknown[] : []) {
+      const c = clientOf(accountIdOf(obj(x).accountId))
+      if (c && (!out.has(c) || at > out.get(c)!)) out.set(c, at)
+    }
+  }
+  return out
+}
+
 export type TrackerInput = {
   required_graphics?: number | null
   required_reels?: number | null
@@ -272,7 +322,7 @@ export type TrackerLine = {
   reels: { required: number | null; scheduled: number }
   stories: number
   linkedin: number
-  /** the last booked or posted piece, any month: how far ahead the client is covered */
+  /** the last post waiting in Zernio — how far ahead the client is covered; else the last one published */
   scheduledUntil: string | null
   status: TrackerStatus
   needed: string | null
@@ -287,7 +337,7 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
 /**
  * One client's month, as the sheet has it. Targets are this month's own, else last month's carried over (a client's
- * package rarely changes month to month). Scheduled counts what is booked or posted in the month.
+ * package rarely changes month to month). "Scheduled" counts what Zernio says was published in the month.
  */
 export function trackerLine(
   clientId: string,
@@ -296,6 +346,7 @@ export function trackerLine(
   row: TrackerInput | null | undefined,
   previous: TrackerInput | null | undefined,
   defaultResponsible = '',
+  scheduledUntil: string | null = null,
 ): TrackerLine {
   const all = pieces.filter(p => p.clientId === clientId)
   const mine = all.filter(p => monthKey(p.at) === month)
@@ -317,7 +368,7 @@ export function trackerLine(
     clientId, graphics, reels,
     stories: count('story'),
     linkedin: mine.filter(p => p.linkedin).length,
-    scheduledUntil: all.map(p => p.at).sort().pop() ?? null,
+    scheduledUntil: scheduledUntil ?? all.map(p => p.at).sort().pop() ?? null,
     status,
     needed: short.length ? short.join(', ') : null,
     notes: row?.notes ?? '',
