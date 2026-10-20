@@ -85,7 +85,6 @@ export default function ContentTrackerPage() {
     <div className="flex flex-col gap-6 pb-12">
       <PageTitle
         title="Content tracker"
-        summary="Every client’s month in Zernio: reels, stories and graphics that went out and are still to go, and how they did."
         actions={<>
           <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
             <button type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month"
@@ -289,7 +288,7 @@ function ClientDetail({ board, client, month, target, onSaved }: {
           <Logo src={client?.logo} name={name} size={48} />
           <div className="min-w-0">
             <SheetTitle className="truncate text-[20px]">{name}</SheetTitle>
-            <SheetDescription>{monthWords(month)} in Zernio</SheetDescription>
+            <SheetDescription>{monthWords(month)}</SheetDescription>
           </div>
         </div>
         <div className="pt-2"><Cover until={board.scheduledUntil} /></div>
