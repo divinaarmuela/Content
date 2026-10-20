@@ -70,6 +70,8 @@ export default function ProductionPage() {
   const [showArchived, setShowArchived] = useState(false)
   // PAST BRIEFS (20 Oct 2026): Milanote's shoot briefs, which live on their clients' boards
   const [showPast, setShowPast] = useState(false)
+  // back from a past plan (?past=1) — the list again, not the stages
+  useEffect(() => { try { if (new URLSearchParams(window.location.search).get('past') === '1') setShowPast(true) } catch { /* no address */ } }, [])
 
   const { me, role, loading, can } = useRole()
   // anyone on the team plans a shoot — the shoot page decides whose it then is

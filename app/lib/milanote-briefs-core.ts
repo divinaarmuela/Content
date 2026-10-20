@@ -49,9 +49,10 @@ export function pastBriefs(boards: readonly TeamBoardRow[]): PastBrief[] {
   return out
 }
 
-/** the link that opens a brief where it is */
+/** the link that opens a past plan ON SHOOTS (the owner, 20 Oct 2026: "why past shoot plans when clicked it took me
+ *  to boards") — its own page there, inside the plan, saved to its client's board */
 export function pastBriefHref(p: Pick<PastBrief, 'teamBoardId' | 'boardCardId'>): string {
-  return `/dashboard/team-boards/${p.teamBoardId}${p.boardCardId ? `?board=${encodeURIComponent(p.boardCardId)}` : ''}`
+  return `/dashboard/production/past/${p.teamBoardId}${p.boardCardId ? `?board=${encodeURIComponent(p.boardCardId)}` : ''}`
 }
 
 /** the Boards page's filter: every board, the team's own, or those brought over from Milanote */

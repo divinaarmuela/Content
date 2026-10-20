@@ -163,7 +163,7 @@ const main = async () => {
       // passed the quality check, and on the client's portal (the owner, 20 Oct 2026: "mark it as passed quality
       // review … and make sure its on their portal") — stamped as the owner's own; sharing this way emails nobody
       reviewed_by: OWNER_ID, reviewed_at: now, review_note: null,
-      shared_with_client: true, client_shared_at: now, client_shared_by: OWNER_ID,
+      shared_with_client: false,
       board_type: 'other', milanote_id: r.plan.boardId,
       created_by: null, updated_by: null, created_at: now, updated_at: now,
     })

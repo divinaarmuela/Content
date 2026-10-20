@@ -18,7 +18,7 @@ describe('past briefs from Milanote, on Shoots (20 Oct 2026)', () => {
       { id: 'tb3', name: 'Old shoot', client_id: 'c1', milanote_id: 'm3', archived_at: '2026-10-20', canvas_cards: [] },
     ]
     expect(pastBriefs(boards)).toEqual([{ teamBoardId: 'tb1', boardCardId: 's4', title: 'SHOOT 4', clientId: 'c1', path: 'Luxe laser › SHOOT 4', cards: 1 }])
-    expect(pastBriefHref({ teamBoardId: 'tb1', boardCardId: 's4' })).toBe('/dashboard/team-boards/tb1?board=s4')
+    expect(pastBriefHref({ teamBoardId: 'tb1', boardCardId: 's4' })).toBe('/dashboard/production/past/tb1?board=s4')
   })
 
   it('the Boards filter: all, the team’s own, or from Milanote', () => {
