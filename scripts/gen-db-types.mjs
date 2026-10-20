@@ -315,6 +315,10 @@ const GHOST_TABLES = {
     //                 the client's portal, nothing deleted
     ['archived_at', col('string', true)],
     ['archived_by', col('string', true)],
+    //   icon_url / hex — the board's own look, from Milanote (20 Oct 2026): its icon or cover, its colour; the
+    //                 Boards page draws them on the tile
+    ['icon_url', col('string', true)],
+    ['hex', col('string', true)],
   ],
   // milanote_media — EVERY MILANOTE IMAGE AND FILE, COPIED INTO OUR STORAGE (20 Oct 2026, docs/MILANOTE_MERGE.md).
   //   One row per file, written by scripts/milanote-media-rows.mjs from the snapshot; the `milanote-media-copy`

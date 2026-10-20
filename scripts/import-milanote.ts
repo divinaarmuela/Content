@@ -68,6 +68,17 @@ for (const [id, client] of Object.entries(HOME_BOARDS)) plans.push({ boardId: id
 // the hub: MD Media's own page, its client boards as links
 plans.push({ boardId: snap.mdMedia, name: 'MD Media (from Milanote)', client: 'MD Media' })
 
+/** a Milanote board's own colour and icon (or cover) */
+const boardLook = (id: string): { hex?: string; icon_url?: string } => {
+  const c = (E[id]?.content ?? {}) as { color?: unknown; icon?: { png?: string } | null; image?: { regular?: string } }
+  const hex = typeof c.color === 'string' && /^#[0-9a-f]{6}$/i.test(c.color) ? c.color.toLowerCase() : undefined
+  const url = c.image?.regular ?? c.icon?.png
+  return { ...(hex ? { hex } : {}), ...(typeof url === 'string' && url.startsWith('https://') ? { icon_url: url } : {}) }
+}
+
+/** the owner (Akmal Ashwin, super admin) — who the import's quality check and sharing are recorded as */
+const OWNER_ID = '01450dc3-0393-4d7c-906a-ff4c8851cf27'
+
 /* ── what we hold ── */
 const main = async () => {
   const [clientsObj, boardsObj, mediaObj, teamObj] = await Promise.all([dbGet('clients'), dbGet('team_boards'), dbGet('milanote_media'), dbGet('team_users')])
@@ -146,8 +157,14 @@ const main = async () => {
     if (r.skip) continue
     const c = clientFor.get(r.plan.boardId)!
     await dbPut('team_boards', r.id, {
-      id: r.id, name: r.plan.name, client_id: c.id, status: 'draft', canvas_cards: r.cards,
-      shared_with_client: false, board_type: 'other', milanote_id: r.plan.boardId,
+      // a finished board from Milanote is Approved, not a new Inspo (the owner, 20 Oct 2026: "since this boards have
+      // been created why is it in draft"); its own colour and icon go on its tile
+      id: r.id, name: r.plan.name, client_id: c.id, status: 'approved', canvas_cards: r.cards, ...boardLook(r.plan.boardId),
+      // passed the quality check, and on the client's portal (the owner, 20 Oct 2026: "mark it as passed quality
+      // review … and make sure its on their portal") — stamped as the owner's own; sharing this way emails nobody
+      reviewed_by: OWNER_ID, reviewed_at: now, review_note: null,
+      shared_with_client: true, client_shared_at: now, client_shared_by: OWNER_ID,
+      board_type: 'other', milanote_id: r.plan.boardId,
       created_by: null, updated_by: null, created_at: now, updated_at: now,
     })
     for (const cm of r.comments) await dbPut('team_board_comments', (cm as { id: string }).id, cm)

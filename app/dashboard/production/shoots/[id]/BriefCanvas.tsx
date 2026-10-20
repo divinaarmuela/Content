@@ -74,8 +74,10 @@ const MOCKUP_MENU: { group: string; items: { pf: NonNullable<CanvasCard['platfor
  * hundred cards pan at 60fps without a single re-render.
  */
 export default function BriefCanvas({
-  cards: savedCards, references, canEdit, clientName, onOp,
+  cards: savedCards, references, canEdit, clientName, onOp, initialBoard,
 }: {
+  /** open inside this board tile first (a link to a Milanote shoot brief, 20 Oct 2026) */
+  initialBoard?: string | null
   cards: CanvasCard[]
   references: ReferenceMedia[]
   canEdit: boolean
@@ -94,6 +96,16 @@ export default function BriefCanvas({
   /** The board tile that is open; null is the shoot's own board. Cards are
    *  ONE array to any depth — this only decides which of them are shown. */
   const [board, setBoard] = useState<string | null>(null)
+  // A LINK TO A BOARD INSIDE (Past briefs on Shoots, 20 Oct 2026): once its tile has arrived, open it — once
+  const initialDone = useRef(false)
+  useEffect(() => {
+    if (initialDone.current || !initialBoard) return
+    if (!savedCards.some(c => c.id === initialBoard && c.kind === 'board')) return
+    initialDone.current = true
+    // land on the brief's own cards, as going into a board does
+    fitDoneRef.current = false
+    setBoard(initialBoard)
+  }, [initialBoard, savedCards])
   /** DRAG AND DROP PICTURES ONTO THE BOARD (the owner, 17 Sep 2026: "on the
    *  shoot brief allow drag-drop image"): a drag carrying files lights the
    *  board up; dropping adds each picture as an image card, the same road the

@@ -1,5 +1,6 @@
 'use client'
 
+import { BOARD_SOURCES, boardFromSource, type BoardSource } from '../../lib/milanote-briefs-core'
 import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
 import { byArchive } from '../../lib/archive-core'
 import { useMemo, useState } from 'react'
@@ -78,6 +79,8 @@ export default function TeamBoardsPage() {
   const [busy, setBusy] = useState(false)
   // ARCHIVE (20 Oct 2026): boards put away are off the lanes and the client's portal, behind "Archived"
   const [showArchived, setShowArchived] = useState(false)
+  // WHERE A BOARD CAME FROM (20 Oct 2026): the team's own, or brought over from Milanote
+  const [source, setSource] = useState<BoardSource>('all')
   const archivedBoards = useMemo(() => byArchive(rows, true).map(b => ({
     id: b.id, title: b.name, client: clientOf(b), archived_at: b.archived_at ?? null,
   })),
@@ -85,9 +88,9 @@ export default function TeamBoardsPage() {
   [rows, clients])
 
   const boards = useMemo(
-    () => sortTeamBoards(byArchive(rows)).filter(b => matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
+    () => sortTeamBoards(byArchive(rows)).filter(b => boardFromSource(b, source) && matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, search, team, clients])
+    [rows, search, team, clients, source])
   const lanes = useMemo(() => lanesOf(boards), [boards])
 
   const copyLink = async (b: Row) => {
@@ -158,11 +161,22 @@ export default function TeamBoardsPage() {
     const status = boardStatusOf(b)
     return (
       <li key={b.id} className="flex flex-col gap-2.5 rounded-card border border-border bg-card p-4">
-        <Link href={teamBoardPath(b.id)} className="flex min-h-11 flex-col gap-1">
-          {/* the client's name leads the tile — the board is theirs (22 Sep 2026) */}
-          <span className={`font-mono text-[10.5px] uppercase tracking-wider ${client ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>{client ?? INTERNAL_BOARD_WORD}</span>
-          <span className="text-[16px] font-semibold leading-snug">{b.name}</span>
-          <span className="text-[13px] text-muted-foreground">{cardCountWords(b.canvas_cards)}</span>
+        <Link href={teamBoardPath(b.id)} className="flex min-h-11 items-start gap-3">
+          {/* THE BOARD'S OWN LOOK (20 Oct 2026): a board from Milanote keeps its colour and icon, as Milanote draws it */}
+          {(b.hex || b.icon_url) && (
+            <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.14)]" style={{ backgroundColor: b.hex ?? '#b9b9b9' }}>
+              {b.icon_url
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={b.icon_url} alt="" className={b.icon_url.includes('/element-icons/') ? 'h-6 w-6 object-contain' : 'h-full w-full object-cover'} />
+                : <span className="text-[18px] font-semibold text-white">{b.name.trim()[0]?.toUpperCase()}</span>}
+            </span>
+          )}
+          <span className="flex min-w-0 flex-col gap-1">
+            {/* the client's name leads the tile — the board is theirs (22 Sep 2026) */}
+            <span className={`font-mono text-[10.5px] uppercase tracking-wider ${client ? 'text-accent-blue-deep' : 'text-muted-foreground'}`}>{client ?? INTERNAL_BOARD_WORD}</span>
+            <span className="text-[16px] font-semibold leading-snug">{b.name}</span>
+            <span className="text-[13px] text-muted-foreground">{cardCountWords(b.canvas_cards)}{b.milanote_id ? ' · from Milanote' : ''}</span>
+          </span>
         </Link>
         <div className="flex flex-wrap items-center gap-1.5">
           <Chip tone={STATUS_TONE[status]}>{TEAM_BOARD_STATUS_LABEL[status]}</Chip>
@@ -211,6 +225,14 @@ export default function TeamBoardsPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search boards, clients, or who made them…" className="h-11 max-w-xs rounded-full bg-surface px-4" aria-label="Search boards" />
+        <div role="group" aria-label="Where the board came from" className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
+          {BOARD_SOURCES.map(s => (
+            <button key={s.key} type="button" aria-pressed={source === s.key} onClick={() => setSource(s.key)}
+              className={`h-9 rounded-full px-3.5 text-[13px] font-semibold ${source === s.key ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
         {!manager && <span className="text-[13px] text-muted-foreground">An account manager or a super admin makes new boards.</span>}
       </div>
 

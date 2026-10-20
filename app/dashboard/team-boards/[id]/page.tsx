@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Check, Link2, Send, Undo2, Users } from 'lucide-react'
@@ -47,6 +47,10 @@ const STATUS_TONE: Record<TeamBoardStatus, ChipTone> = { draft: 'muted', quality
 const NO_CLIENT = 'none'
 
 export default function TeamBoardPage() {
+  // ?board=<tile> — open inside that board (a past brief from Milanote, linked from Shoots, 20 Oct 2026)
+  const [openAt, setOpenAt] = useState<string | null>(null)
+  useEffect(() => { try { setOpenAt(new URLSearchParams(window.location.search).get('board')) } catch { /* no address */ } }, [])
+
   const { id } = useParams<{ id: string }>()
   const { me } = useRole()
   const { row: board, loading } = useRow<Row>('team_boards', id)
@@ -187,7 +191,7 @@ export default function TeamBoardPage() {
         </div>
       )}
       <TeamBoardComments boardId={id} cards={cards} team={team}>
-        <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} />
+        <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} />
       </TeamBoardComments>
 
       <Dialog open={asking} onOpenChange={o => { if (!busy) setAsking(o) }}>

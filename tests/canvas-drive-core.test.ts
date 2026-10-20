@@ -177,7 +177,7 @@ describe('the board and the card, as drawn', () => {
     // the Post tool is on every board's toolbar, the team's included: it is
     // not behind any prop, only behind being allowed to edit
     expect(canvas).toContain('<Smartphone className="h-3.5 w-3.5" /> Post')
-    expect(src('app/dashboard/team-boards/[id]/page.tsx')).toContain('<BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} />')
+    expect(src('app/dashboard/team-boards/[id]/page.tsx')).toContain('<BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} />')
 
     const card = src('app/dashboard/production/shoots/[id]/CanvasCard.tsx')
     expect(card).toContain('<PostMediaFrame key={driveOne.key} media={driveOne} playing={playing} onPlay={onPlay} />')
