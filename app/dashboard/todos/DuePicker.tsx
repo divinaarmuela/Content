@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight, Repeat, X } from 'lucide-react'
 import {
   MONTH_DAYS, REPEAT_FREQS, REPEAT_LABEL, WEEKDAY_LETTER, dayWords, normaliseRepeat, repeatWords, type RepeatFreq, type TodoRepeat,
@@ -27,7 +28,33 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
   const rule = normaliseRepeat(repeat)
+  /**
+   * WHERE THE PANEL SITS (20 Oct 2026, the owner: "why its broken like that?" — drawn inside the task panel, its
+   * bottom half went under the panel's comment box and Repeats could not be reached). It is drawn at the top of the
+   * dashboard instead, fixed under the date — or above it, when there is more room above — no taller than the room
+   * there is, scrolling inside itself if the screen is short.
+   */
+  const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number; maxHeight: number } | null>(null)
+  const measure = useCallback(() => {
+    const r = box.current?.getBoundingClientRect()
+    if (!r) return
+    const gap = 6, edge = 8, width = 300
+    const below = window.innerHeight - r.bottom - gap - edge
+    const above = r.top - gap - edge
+    const left = Math.max(edge, Math.min(r.left, window.innerWidth - width - edge))
+    setPlace(below >= 420 || below >= above
+      ? { left, top: r.bottom + gap, maxHeight: below }
+      : { left, bottom: window.innerHeight - r.top + gap, maxHeight: above })
+  }, [])
+  useLayoutEffect(() => { if (open) measure() }, [open, measure])
+  useEffect(() => {
+    if (!open) return
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => { window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true) }
+  }, [open, measure])
   const [month, setMonth] = useState(() => (due ?? today).slice(0, 7))
 
   useEffect(() => {
@@ -35,7 +62,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
     // a press inside a dropdown's own list (drawn outside this box) is not a press away
     const away = (e: MouseEvent) => {
       const t = e.target as Element
-      if (box.current?.contains(t) || t.closest?.('[data-radix-popper-content-wrapper]')) return
+      if (box.current?.contains(t) || panel.current?.contains(t) || t.closest?.('[data-radix-popper-content-wrapper]')) return
       setOpen(false)
     }
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
@@ -85,9 +112,10 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
         </button>
       )}
 
-      {open && (
-        <div role="dialog" aria-label="Due date and repeat"
-          className="absolute left-0 top-9 z-50 flex w-[300px] flex-col gap-3 rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+      {open && place && createPortal(
+        <div ref={panel} role="dialog" aria-label="Due date and repeat"
+          style={{ position: 'fixed', left: place.left, top: place.top, bottom: place.bottom, maxHeight: place.maxHeight }}
+          className="z-[60] flex w-[300px] flex-col gap-3 overflow-y-auto overscroll-contain rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
           <div className="flex items-center gap-2">
             <input type="date" value={due ?? ''} onChange={e => { onChange({ due_date: e.target.value || null }); if (e.target.value) setMonth(e.target.value.slice(0, 7)) }}
               aria-label="Due date" className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-[13px]" />
@@ -178,7 +206,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
             {rule && <p className="text-[12px] text-muted-foreground">{repeatWords(rule)} — ticking it done makes the next one.</p>}
           </div>
         </div>
-      )}
+      , box.current?.closest('.dbx') ?? document.body)}
     </div>
   )
 }
