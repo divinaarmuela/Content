@@ -31,3 +31,21 @@ describe('monthly by weekday, and when it comes round (Manal, 20 Oct 2026)', () 
     expect(upcomingDues(null, '2026-10-20')).toEqual([])
   })
 })
+
+describe('custom: every N weeks, on these days if needed (Manal, 21 Oct 2026)', () => {
+  // 2026-10-19 is a Monday
+  it('moves to the next chosen day this week, then N weeks on to the first chosen day', async () => {
+    const { nextDue, normaliseRepeat, repeatWords } = await import('../app/lib/todo-repeat-core')
+    const r = normaliseRepeat({ freq: 'custom', every: 2, unit: 'week', days: [2, 0] })!
+    expect(r.days).toEqual([0, 2])
+    expect(nextDue(r, '2026-10-19', '2026-10-19')).toBe('2026-10-21')   // Mon → Wed, same week
+    expect(nextDue(r, '2026-10-21', '2026-10-21')).toBe('2026-11-02')   // Wed → Mon two weeks on
+    expect(repeatWords(r)).toBe('Every 2 weeks on Mon, Wed')
+  })
+  it('with no days chosen, it is the same weekday every N weeks, as before', async () => {
+    const { nextDue, normaliseRepeat } = await import('../app/lib/todo-repeat-core')
+    const r = normaliseRepeat({ freq: 'custom', every: 3, unit: 'week' })!
+    expect(r.days).toBeUndefined()
+    expect(nextDue(r, '2026-10-21', '2026-10-21')).toBe('2026-11-11')
+  })
+})

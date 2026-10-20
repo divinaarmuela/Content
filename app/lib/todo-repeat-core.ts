@@ -17,7 +17,8 @@ export type RepeatUnit = 'day' | 'week' | 'month' | 'year'
 
 export type TodoRepeat = {
   freq: RepeatFreq
-  /** weekly: the days it falls on, 0 = Monday … 6 = Sunday (Asana's "On these days") */
+  /** weekly, and custom by weeks: the days it falls on, 0 = Monday … 6 = Sunday (Asana's "On these days"; Manal, 21 Oct
+   *  2026: "in custom every … weeks … then you can also choose if needed on these days") */
   days?: number[]
   /** periodically: days after it is DONE; custom: every N `unit` from its due date */
   every?: number
@@ -71,6 +72,11 @@ export function normaliseRepeat(raw: unknown): TodoRepeat | null {
     out.every = Number.isFinite(n) && n >= 1 ? Math.min(n, 365) : 1
   }
   if (freq === 'custom') out.unit = UNITS.find(u => u === r.unit) ?? 'week'
+  if (freq === 'custom' && out.unit === 'week') {
+    // optional here: none means "the same weekday, every N weeks", as before
+    const days = [...new Set((Array.isArray(r.days) ? r.days : []).map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
+    if (days.length) out.days = days
+  }
   if (freq === 'monthly' || (freq === 'custom' && out.unit === 'month')) {
     const on = r.on as Record<string, unknown> | undefined
     const nth = on && (on.nth === 'last' ? 'last' : [1, 2, 3, 4].find(n => n === Number(on.nth)))
@@ -143,6 +149,13 @@ export function nextDue(repeat: TodoRepeat, due: string | null | undefined, done
     case 'custom': {
       const n = repeat.every ?? 1
       const unit = repeat.unit ?? 'week'
+      // every N weeks on chosen days: the next chosen day this week, else the first chosen day N weeks on
+      if (unit === 'week' && repeat.days?.length) {
+        const today = weekday(base)
+        const later = repeat.days.filter(d => d > today)
+        if (later.length) return addDays(base, later[0] - today)
+        return addDays(base, 7 * n - today + repeat.days[0])
+      }
       if (unit === 'month' && repeat.on) return monthOnNth(base, n, repeat.on.nth, repeat.on.weekday)
       if (unit === 'month' && repeat.day) return monthOnDay(base, n, repeat.day)
       return unit === 'day' ? addDays(base, n) : unit === 'week' ? addDays(base, 7 * n) : addMonths(base, unit === 'month' ? n : 12 * n)
@@ -172,7 +185,7 @@ export function repeatWords(repeat: TodoRepeat | null | undefined): string {
       return `Weekly on ${weekdays ? 'Mon–Fri' : days.map(d => WEEKDAY_SHORT[d]).join(', ')}`
     }
     case 'periodically': return `${repeat.every ?? 1} day${(repeat.every ?? 1) === 1 ? '' : 's'} after it's done`
-    case 'custom': return `Every ${repeat.every ?? 1} ${repeat.unit ?? 'week'}${(repeat.every ?? 1) === 1 ? '' : 's'}${repeat.unit === 'month' && repeat.on ? ` on ${nthWords(repeat.on)}` : repeat.unit === 'month' && repeat.day ? ` on ${dayWords(repeat.day)}` : ''}`
+    case 'custom': return `Every ${repeat.every ?? 1} ${repeat.unit ?? 'week'}${(repeat.every ?? 1) === 1 ? '' : 's'}${repeat.unit === 'week' && repeat.days?.length ? ` on ${repeat.days.map(d => WEEKDAY_SHORT[d]).join(', ')}` : repeat.unit === 'month' && repeat.on ? ` on ${nthWords(repeat.on)}` : repeat.unit === 'month' && repeat.day ? ` on ${dayWords(repeat.day)}` : ''}`
     case 'monthly': return `Monthly${repeat.on ? ` on ${nthWords(repeat.on)}` : repeat.day ? ` on ${dayWords(repeat.day)}` : ''}`
     default: return REPEAT_LABEL[repeat.freq]
   }

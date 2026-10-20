@@ -172,9 +172,10 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
               </Select>
             </div>
 
-            {rule?.freq === 'weekly' && (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-muted-foreground">On these days</span>
+            {/* "on these days" — for Weekly, and for Custom every N weeks (Manal, 21 Oct 2026), where it is optional */}
+            {(rule?.freq === 'weekly' || (rule?.freq === 'custom' && (rule.unit ?? 'week') === 'week')) && (
+              <div className={`flex flex-col gap-1.5 ${rule.freq === 'custom' ? 'order-1' : ''}`}>
+                <span className="text-[12px] font-semibold text-muted-foreground">{rule.freq === 'custom' ? 'On these days (if needed)' : 'On these days'}</span>
                 <div className="flex justify-between">
                   {WEEKDAY_LETTER.map((l, i) => {
                     const on = rule.days?.includes(i) ?? false
@@ -243,7 +244,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
                 </div>
               </div>
             )}
-            {rule && <p className="text-[12px] text-muted-foreground">{repeatWords(rule)} — ticking it done makes the next one.</p>}
+            {rule && <p className="order-2 text-[12px] text-muted-foreground">{repeatWords(rule)} — ticking it done makes the next one.</p>}
           </div>
         </div>
       , box.current?.closest('.dbx') ?? document.body)}

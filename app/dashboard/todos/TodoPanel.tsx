@@ -207,6 +207,21 @@ export default function TodoPanel({
   const wrap = full ? 'mx-auto w-full max-w-3xl' : ''
   const label = 'w-28 shrink-0 text-[12px] text-muted-foreground'
 
+  // A CLICK OUTSIDE CLOSES IT, as Asana's does (the owner, 21 Oct 2026). Not a click on another task (that opens it in
+  // here), nor inside anything this panel opened over the page — the date picker, a menu, a list, a confirm, a toast
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      const el = e.target as Element | null
+      if (!el || !el.isConnected || !el.closest) return
+      if (el.closest('[data-todo-panel],[role="dialog"],[role="alertdialog"],[role="listbox"],[role="menu"],[data-radix-popper-content-wrapper],[data-sonner-toaster],[data-todo-id],[data-todo-card]')) return
+      onCloseRef.current()
+    }
+    document.addEventListener('pointerdown', down, true)
+    return () => document.removeEventListener('pointerdown', down, true)
+  }, [])
+
   return (
     <aside role="dialog" aria-label={`To-do: ${t.title}`} data-todo-panel
       className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col bg-card ${full ? 'left-0 max-w-none' : 'max-w-[700px] border-l border-border shadow-[-8px_0_24px_rgba(0,0,0,0.08)] motion-safe:animate-sheet-in-right'}`}>
