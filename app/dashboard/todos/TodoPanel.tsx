@@ -1,5 +1,7 @@
 'use client'
 
+import { FieldControl } from './TodoFields'
+import { orderedFields, orderedSections, type TodoFieldDef } from '../../lib/todo-fields-core'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightToLine, Bold, Check, ChevronLeft, Hourglass, Italic, List, ListOrdered, Download, ExternalLink, Link2, Maximize2, Minimize2, Paperclip, Plus, ThumbsUp, Trash2, X,
@@ -67,8 +69,12 @@ const when = (iso: string) => {
 }
 
 export default function TodoPanel({
-  t, all, today, viewer, people, clients, names, clientNames, onClose, onOpen, onDeleted, onTick,
+  t, all, today, viewer, people, clients, names, clientNames, onClose, onOpen, onDeleted, onTick, fieldDefs = [], projectSections = [],
 }: {
+  /** Asana's custom fields (todo-fields-core), in their order */
+  fieldDefs?: TodoFieldDef[]
+  /** every client project's sections; the task's own client's are offered */
+  projectSections?: { id: string; client_id: string; name: string; position?: number | null }[]
   t: TodoRow
   /** every to-do this viewer may see: subtasks are read from here */
   all: TodoRow[]
@@ -290,6 +296,36 @@ export default function TodoPanel({
                 </Select>
               </dd>
             </div>
+            {/* THE PROJECT'S SECTION AND THE CUSTOM FIELDS — Asana's rows under Projects (20 Oct 2026) */}
+            {(() => {
+              const secs = orderedSections(projectSections.filter(x => x.client_id === t.client_id))
+              if (!t.client_id || secs.length === 0) return null
+              const cur = (t as { project_section_id?: string | null }).project_section_id ?? null
+              return (
+                <div className="flex min-h-9 items-center gap-3">
+                  <dt className={label}>Section</dt>
+                  <dd className="flex min-w-0 flex-wrap items-center gap-2">
+                    <Select disabled={!editable} value={cur && secs.some(x => x.id === cur) ? cur : 'none'} onValueChange={v => void patch({ project_section_id: v === 'none' ? null : v })}>
+                      <SelectTrigger className="h-8 w-56 rounded-md border-transparent px-2 text-[14px] hover:border-border" aria-label="Section on the client's project"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Untitled section</SelectItem>
+                        {secs.map(x => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </dd>
+                </div>
+              )
+            })()}
+            {orderedFields(fieldDefs).map(def => (
+              <div key={def.id} className="flex min-h-9 items-center gap-3">
+                <dt className={label}>{def.name}</dt>
+                <dd className="min-w-0 w-56">
+                  <FieldControl def={def} editable={editable} compact
+                    value={((t as { fields?: Record<string, unknown> | null }).fields ?? {})[def.id]}
+                    onChange={v => void patch({ fields: { [def.id]: v } })} />
+                </dd>
+              </div>
+            ))}
             {/* DEPENDENCIES — Asana's "waiting on": tasks that must be done first */}
             <div className="flex min-h-9 items-start gap-3">
               <dt className={`${label} pt-2`}>Dependencies</dt>

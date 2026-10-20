@@ -35,6 +35,10 @@ export type Todo = {
   /** Asana's "Repeats" (todo-repeat-core) */
   repeat?: TodoRepeat | null
   repeat_of?: string | null
+  /** custom fields' values, by field id (todo-fields-core) */
+  fields?: Record<string, string | number> | null
+  /** its section on its client's project (todo_project_sections) */
+  project_section_id?: string | null
 }
 
 /** who is looking — and, for a client's PROJECT (the owner, 20 Oct 2026, Manal's video of Asana's Projects: "if I am
@@ -120,6 +124,12 @@ export function sanitiseTodoPatch(raw: unknown): { ok: true; patch: Partial<Todo
   if ('blocked_by' in p) patch.blocked_by = idsOf(p.blocked_by).slice(0, 50)
   // 20 Oct 2026: Asana's "Repeats" — anything that is not a rule is "doesn't repeat"
   if ('repeat' in p) patch.repeat = normaliseRepeat(p.repeat)
+  // 20 Oct 2026: a project's section, and custom fields' values (checked against the fields by the route)
+  if ('project_section_id' in p) patch.project_section_id = clean(p.project_section_id)
+  if ('fields' in p) {
+    if (!p.fields || typeof p.fields !== 'object' || Array.isArray(p.fields)) return { ok: false, reason: 'The fields are not fields' }
+    patch.fields = p.fields as never
+  }
   return { ok: true, patch }
 }
 
@@ -296,10 +306,12 @@ export const TODO_SORTS: { key: TodoSort; label: string }[] = [
   { key: 'alpha', label: 'Alphabetical' },
   { key: 'assignee', label: 'Assignee' },
 ]
-export type TodoGroupBy = 'date' | 'sections' | 'assignee' | 'client' | 'none'
+export type TodoGroupBy = 'date' | 'sections' | 'project' | 'assignee' | 'client' | 'none'
 export const TODO_GROUP_BYS: { key: TodoGroupBy; label: string }[] = [
   { key: 'date', label: 'Due date sections' },
   { key: 'sections', label: 'My sections' },
+  // a client project's own sections, Asana's columns (20 Oct 2026) — offered inside a project
+  { key: 'project', label: 'Project sections' },
   { key: 'assignee', label: 'Assignee' },
   { key: 'client', label: 'Client' },
   { key: 'none', label: 'None' },
@@ -323,15 +335,25 @@ export function sortTodosBy<T extends Sortable>(rows: readonly T[], by: TodoSort
   })
 }
 
-export type TodoGroup<T> = { key: string; label: string; rows: T[]; tone?: 'red'; sectionId?: string | null; dateKey?: TodoGroupKey }
+export type TodoGroup<T> = { key: string; label: string; rows: T[]; tone?: 'red'; sectionId?: string | null; dateKey?: TodoGroupKey; projectSectionId?: string | null }
 
 /** the list cut into groups the chosen way. `sections` are the viewer's own, in order. */
-export function groupTodosBy<T extends Sortable & { section_id?: string | null; client_id?: string | null }>(
+export function groupTodosBy<T extends Sortable & { section_id?: string | null; client_id?: string | null; project_section_id?: string | null }>(
   rows: readonly T[], by: TodoGroupBy,
-  ctx: { today: string; sort: TodoSort; sections: readonly { id: string; name: string }[]; nameOf: (id: string | null) => string; clientOf: (id: string | null) => string },
+  ctx: { today: string; sort: TodoSort; sections: readonly { id: string; name: string }[]; nameOf: (id: string | null) => string; clientOf: (id: string | null) => string; projectSections?: readonly { id: string; name: string }[] },
 ): TodoGroup<T>[] {
   const sorted = sortTodosBy(rows, ctx.sort, ctx.nameOf)
   if (by === 'none') return [{ key: 'all', label: 'Tasks', rows: sorted }]
+  // A CLIENT PROJECT'S SECTIONS, as Asana's (20 Oct 2026): its own, in order, then the tasks in none
+  if (by === 'project') {
+    const ps = ctx.projectSections ?? []
+    const known = new Set(ps.map(x => x.id))
+    const loose = sorted.filter(r => !r.project_section_id || !known.has(r.project_section_id))
+    return [
+      ...(loose.length || ps.length === 0 ? [{ key: 'psec:', label: 'Untitled section', projectSectionId: null, rows: loose }] : []),
+      ...ps.map(x => ({ key: `psec:${x.id}`, label: x.name, projectSectionId: x.id, rows: sorted.filter(r => r.project_section_id === x.id) })),
+    ]
+  }
   if (by === 'date') {
     return TODO_GROUPS.map(g => ({ key: g.key, label: g.label, dateKey: g.key, tone: g.key === 'overdue' ? 'red' as const : undefined, rows: sorted.filter(r => todoGroupOf(r, ctx.today) === g.key) }))
   }

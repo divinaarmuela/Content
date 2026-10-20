@@ -316,7 +316,6 @@ function NavLinks({ nav, onNavigate, part }: {
         return (
           <div key={group.label} className="contents">
             {groupLabel(group.label)}
-            {looseAcquisition && <div className="contents" data-nav="acquisition">{leadsChildren.map(c => link({ ...c, label: `Acquisition · ${c.label}` }))}</div>}
             {items.map(item => (
               <div key={item.href} className="contents">
                 {link(item)}
@@ -324,6 +323,9 @@ function NavLinks({ nav, onNavigate, part }: {
                 {item.href === '/dashboard/leads' && leadsChildren.map(c => link(c, true))}
               </div>
             ))}
+            {/* under their own small heading, not "Acquisition · " on every link (the owner, 20 Oct 2026: "why are the dashes
+                on acquisition links … remove that") */}
+            {looseAcquisition && <div className="contents" data-nav="acquisition">{groupLabel('Acquisition')}{leadsChildren.map(c => link(c))}</div>}
           </div>
         )
       })}

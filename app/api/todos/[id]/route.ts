@@ -1,7 +1,8 @@
 import { NextResponse, after } from 'next/server'
 import { resolveTags, taggableTeam } from '../../../lib/comment-tags'
 import { table } from '@/lib/db'
-import type { Todo as TodoRow, TodoComment } from '@/lib/db-types'
+import type { Todo as TodoRow, TodoComment, TodoField as TodoFieldRow, TodoProjectSection } from '@/lib/db-types'
+import { mergeFieldValues } from '../../../lib/todo-fields-core'
 import { authzErrorResponse, requireRole } from '../../../lib/authz'
 import { logActivity } from '../../../lib/workflow'
 import { idsOf, mayDeleteTodo, mayDependOn, mayEditTodo, sanitiseTodoPatch, todoAudience, todoChanges, todoFilesOf, toggleId } from '../../../lib/todo-core'
@@ -30,6 +31,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
     const now = new Date().toISOString()
     const patch: Record<string, unknown> = { ...checked.patch, updated_at: now }
+    // CUSTOM FIELDS (20 Oct 2026): the posted values merged onto what it had, each checked against its field
+    if ('fields' in checked.patch) {
+      const defs = await table<TodoFieldRow>('todo_fields').list()
+      patch.fields = mergeFieldValues(row.fields, checked.patch.fields, defs.map(d => ({ id: d.id, name: d.name, type: d.type as never, options: (d.options ?? []) as never })))
+    }
+    // A PROJECT'S SECTION must be one of its own client's
+    if (checked.patch.project_section_id) {
+      const sec = await table<TodoProjectSection>('todo_project_sections').get(checked.patch.project_section_id)
+      const clientId = 'client_id' in checked.patch ? checked.patch.client_id : row.client_id
+      if (!sec || sec.client_id !== clientId) return NextResponse.json({ error: 'That section is not on this client\'s project' }, { status: 400 })
+    }
     // ticking it done stamps who and when; reopening clears them
     if (checked.patch.status === 'done' && row.status !== 'done') { patch.done_at = now; patch.done_by = user.id }
     if (checked.patch.status === 'open') { patch.done_at = null; patch.done_by = null }

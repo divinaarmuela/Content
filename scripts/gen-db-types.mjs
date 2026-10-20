@@ -460,6 +460,34 @@ const GHOST_TABLES = {
     //   repeat_of — the to-do this one came after, when a repeat made it
     ['repeat', col('unknown', true, true)],
     ['repeat_of', col('string', true)],
+    //   fields — its custom fields' values, { <todo_fields id>: <value> } (Asana's custom columns, 20 Oct 2026)
+    //   project_section_id — its section on its client's project board (todo_project_sections; Asana's columns)
+    ['fields', col('unknown', true, true)],
+    ['project_section_id', col('string', true)],
+  ],
+  // todo_fields — CUSTOM FIELDS ON TO-DOS (the owner, 20 Oct 2026: "asana has custom names of the columns … add this
+  //   as a feature"; Asana's Priority, Task Progress and Service Line, copied with their options and colours). One
+  //   row per field; type select | text | number | date; options [{ id, name, colour }] for a select.
+  todo_fields: [
+    ['id', col('string', false)],
+    ['name', col('string', false)],
+    ['type', col('string', false)],
+    ['options', col('unknown', true, true)],
+    ['position', col('number', true)],
+    ['asana_gid', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  // todo_project_sections — A CLIENT PROJECT'S OWN SECTIONS (Asana's board columns: "Core Deliverables", "Editing
+  //   Queu", "Done" …, copied by name and order from each Asana project, 20 Oct 2026). One row per section.
+  todo_project_sections: [
+    ['id', col('string', false)],
+    ['client_id', col('string', false)],
+    ['name', col('string', false)],
+    ['position', col('number', true)],
+    ['asana_gid', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
   ],
   // todo_sections - a person's own sections on My to-dos (Asana's "Add section",
   //   18 Oct 2026). One row per section; owner_id is whose list it is.
