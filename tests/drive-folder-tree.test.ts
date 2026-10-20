@@ -22,6 +22,11 @@ describe('tileTree', () => {
     expect(scheduled.folders[0].path).toBe('SCHEDULED/Video Carousel')
   })
 
+  it("orders files as Drive does: 1, 2 … 10, not 1, 10, 2", () => {
+    const top = tileTree(['V/1.mov', 'V/10.mov', 'V/11.mov', 'V/2.mov', 'V/3.mov'].map(name => ({ name })))
+    expect(top.folders[0].files.map(f => baseName(f.name))).toEqual(['1.mov', '2.mov', '3.mov', '10.mov', '11.mov'])
+  })
+
   it('leaves a set with no folders as one flat level', () => {
     const top = tileTree([{ name: 'a.mp4' }, { name: 'b.mp4' }])
     expect(top.folders).toHaveLength(0)

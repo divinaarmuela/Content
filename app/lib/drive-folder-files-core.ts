@@ -159,8 +159,11 @@ export function tileTree<T extends { name: string }>(tiles: readonly T[]): TileF
     }
     at.files.push(t)
   }
+  // Drive's order: 1, 2 … 10, not 1, 10, 11, 2 (19 Oct 2026, Ryan's "Video Carousel" on live)
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
   const sort = (f: TileFolder<T>) => {
-    f.folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    f.folders.sort((a, b) => byName(a.name, b.name))
+    f.files.sort((a, b) => byName(baseName(a.name), baseName(b.name)))
     f.folders.forEach(sort)
   }
   sort(top)
