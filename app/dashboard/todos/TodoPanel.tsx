@@ -14,7 +14,7 @@ import { downloadHref } from '../../lib/download-core'
 import { extractMentions } from '../../lib/mention-core'
 import { uploadFiles } from '../uploadQueue'
 import { UploadRows, useUploadGroup } from '../UploadRows'
-import { activityWords, idsOf, mayCommentOnTodo, mayDependOn, mayEditTodo, openBlockers, parseNote, todoFilesOf, type NoteSpan, type TodoFile } from '../../lib/todo-core'
+import { activityWords, idsOf, mayCommentOnTodo, mayDependOn, mayEditTodo, openBlockers, parseNote, todoFilesOf, type NoteSpan, type TodoFile, linkParts } from '../../lib/todo-core'
 import { dueTone, shortDue } from './todo-words'
 import DuePicker from './DuePicker'
 import { normaliseRepeat } from '../../lib/todo-repeat-core'
@@ -522,8 +522,17 @@ function CommentItem({ c, viewer, names, nameOf, when, send }: {
   )
 }
 
+/** the words, with every address in them a link that opens in a new tab (20 Oct 2026) — a press on one opens it,
+ *  it does not start editing the description */
+function Linked({ text }: { text: string }) {
+  return <>{linkParts(text).map((p, i) => p.href
+    ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+        className="break-all text-accent-blue-deep underline underline-offset-2 hover:text-accent-blue">{p.text}</a>
+    : <span key={i}>{p.text}</span>)}</>
+}
+
 function Spans({ spans }: { spans: NoteSpan[] }) {
-  return <>{spans.map((sp, i) => sp.bold ? <strong key={i} className="font-semibold">{sp.text}</strong> : sp.italic ? <em key={i}>{sp.text}</em> : <span key={i}>{sp.text}</span>)}</>
+  return <>{spans.map((sp, i) => sp.bold ? <strong key={i} className="font-semibold"><Linked text={sp.text} /></strong> : sp.italic ? <em key={i}><Linked text={sp.text} /></em> : <Linked key={i} text={sp.text} />)}</>
 }
 
 /** the description as it reads: paragraphs, bullets, numbers, bold, italic — built as elements, never as HTML */

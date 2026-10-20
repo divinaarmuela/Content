@@ -407,3 +407,28 @@ export function parseNote(text: string | null | undefined): NoteBlock[] {
   }
   return blocks
 }
+
+/**
+ * LINKS IN A TO-DO'S WORDS ARE LINKS (the owner, 20 Oct 2026: "on todos the description comments etc section make
+ * the links hyperlinks … currently existing ones are just texts"). Found when the words are drawn, so every to-do
+ * and comment already written gets them too: an https:// or http:// address, or one starting www. — without the full
+ * stop or bracket that ends the sentence around it.
+ */
+export type LinkPart = { text: string; href?: string }
+export function linkParts(text: string): LinkPart[] {
+  const out: LinkPart[] = []
+  const re = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi
+  let last = 0
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    let url = m[0]
+    // the sentence's own ending is not part of the address
+    while (/[.,;:!?)\]}'"]$/.test(url) && !(url.endsWith(')') && url.includes('('))) url = url.slice(0, -1)
+    if (!url) continue
+    if (m.index > last) out.push({ text: text.slice(last, m.index) })
+    out.push({ text: url, href: /^www\./i.test(url) ? `https://${url}` : url })
+    last = m.index + url.length
+    re.lastIndex = last
+  }
+  if (last < text.length) out.push({ text: text.slice(last) })
+  return out
+}
