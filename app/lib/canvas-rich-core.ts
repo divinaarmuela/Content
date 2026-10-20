@@ -85,6 +85,11 @@ export function wordCount(html: string): number {
 /* ── Milanote's text → our HTML ─────────────────────────────────────────── */
 
 type PmMark = { type?: string; attrs?: Record<string, unknown> }
+/** Milanote's named highlighters: blue, green and pink measured on its page; the rest matched to its palette */
+const MN_HIGHLIGHT: Record<string, string> = {
+  blue: '#8ae0ff', green: '#c9f201', pink: '#ffa4de', yellow: '#fff27a', orange: '#ffc46b', grey: '#dcdcdc', gray: '#dcdcdc', red: '#ff9b9b', purple: '#d7b8ff',
+}
+
 type PmNode = { type?: string; text?: string; marks?: PmMark[]; attrs?: Record<string, unknown>; content?: PmNode[] }
 
 function wrapMarks(text: string, marks: PmMark[] | undefined): string {
@@ -97,8 +102,10 @@ function wrapMarks(text: string, marks: PmMark[] | undefined): string {
       case 'strike': case 'strikethrough': out = `<s>${out}</s>`; break
       case 'code': out = `<code>${out}</code>`; break
       case 'highlight': {
-        const c = String(mk.attrs?.color ?? '')
-        out = HEX.test(c) ? `<mark style="background-color:${c}">${out}</mark>` : `<mark>${out}</mark>`
+        // Milanote names its highlighters; their shades read off Milanote's own page (20 Oct 2026)
+        const raw = String(mk.attrs?.color ?? '')
+        const c = HEX.test(raw) ? raw : MN_HIGHLIGHT[raw.toLowerCase()] ?? ''
+        out = c ? `<mark style="background-color:${c}">${out}</mark>` : `<mark>${out}</mark>`
         break
       }
       case 'link': {

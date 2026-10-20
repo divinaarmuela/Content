@@ -42,3 +42,11 @@ describe("Milanote's text", () => {
     expect(htmlText('<p>a</p><ul><li>b</li></ul>')).toBe('a\nb')
   })
 })
+
+import { milanoteToHtml as mnHtml } from '../app/lib/canvas-rich-core'
+describe("Milanote's named highlighters (20 Oct 2026)", () => {
+  it('keep their colour, as Milanote draws them', () => {
+    const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'SCRIPT', marks: [{ type: 'highlight', attrs: { color: 'blue' } }] }] }] }
+    expect(mnHtml(doc)).toContain('<mark style="background-color:#8ae0ff">SCRIPT</mark>')
+  })
+})
