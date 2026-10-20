@@ -27,7 +27,7 @@ const scheduled = { posts: [
 describe('published, from Zernio', () => {
   const items = publishedItems(analytics, clientOf)
   it('one item per post however many networks, numbers summed, links kept per network', () => {
-    const reel = items.find(i => i.key === 'p:z1')!
+    const reel = items.find(i => i.key === 'p:z:z1')!
     expect(reel).toMatchObject({ kind: 'reel', clientId: 'jordan', state: 'published', views: 130, likes: 10, at: '2026-10-20T08:17:57Z' })
     expect(reel.networks).toEqual([{ platform: 'instagram', url: 'https://instagram.com/reel/x' }, { platform: 'tiktok', url: 'https://tiktok.com/x' }])
   })
@@ -35,7 +35,7 @@ describe('published, from Zernio', () => {
     expect(items.some(i => i.clientId === 'pattons')).toBe(false)
   })
   it('a carousel is a graphic; impressions stand in for views', () => {
-    expect(items.find(i => i.key === 'p:z2')).toMatchObject({ kind: 'graphic', views: 50 })
+    expect(items.find(i => i.key === 'p:z:z2')).toMatchObject({ kind: 'graphic', views: 50 })
   })
 })
 
@@ -66,7 +66,7 @@ describe('a client’s month', () => {
     expect(b.scheduledUntil).toBe('2026-11-04T07:00:00Z')
     expect(b.next).toBe('2026-10-28T07:00:00Z')
     expect(b.metrics.views).toBe(180)
-    expect(b.top?.key).toBe('p:z1')
+    expect(b.top?.key).toBe('p:z:z1')
     expect(b.networks).toEqual({ instagram: 3, tiktok: 1, linkedin: 2 })
   })
   it('the busiest client first', () => {
@@ -107,5 +107,41 @@ describe('per network, in each network’s words (20 Oct 2026)', () => {
     expect(itemWord({ kind: 'reel', networks: [{ platform: 'instagram', url: null }] })).toBe('Reel')
     expect(itemWord({ kind: 'reel', networks: [{ platform: 'instagram', url: null }, { platform: 'linkedin', url: null }] })).toBe('Video')
     expect(itemWord({ kind: 'graphic', networks: [] })).toBe('Static')
+  })
+})
+
+describe('Zernio’s Posts page is the count (20 Oct 2026: "it means we posted it cuz we used the api")', () => {
+  const list = { posts: [
+    { _id: 'z1', status: 'published', publishedAt: '2026-10-07T08:00:00Z', content: 'Reel', mediaItems: [{ type: 'video' }],
+      platforms: [
+        { platform: 'instagram', accountId: 'ig-jw', status: 'published', platformPostUrl: 'https://www.instagram.com/reel/AbC/' },
+        { platform: 'facebook', accountId: { _id: 'ig-jw' }, status: 'published', platformPostUrl: 'https://www.facebook.com/reel/1542772580856426/' },
+        { platform: 'tiktok', accountId: 'tt-jw', status: 'failed' },
+      ] },
+    { _id: 'z2', status: 'partial', publishedAt: '2026-10-08T08:00:00Z', mediaItems: [{ type: 'image' }, { type: 'image' }],
+      platforms: [{ platform: 'linkedin', accountId: 'li-jw', status: 'published' }, { platform: 'instagram', accountId: 'ig-jw', status: 'failed' }] },
+    { _id: 'z3', status: 'failed', publishedAt: '2026-10-09T08:00:00Z', platforms: [{ platform: 'instagram', accountId: 'ig-jw' }] },
+    { _id: 'z4', status: 'scheduled', scheduledFor: '2026-10-28T07:00:00Z', platforms: [{ platform: 'instagram', accountId: 'ig-jw', customMedia: [{ type: 'video' }] }] },
+  ] }
+  // the analytics list: Instagram carries the Zernio id, Facebook comes back with none — matched on its link
+  const analytics = { posts: [
+    { latePostId: 'z1', platforms: [{ platform: 'instagram', platformPostUrl: 'https://www.instagram.com/reel/AbC/', analytics: { views: 100, likes: 5 } }] },
+    { latePostId: null, platform: 'facebook', platformPostUrl: 'https://www.facebook.com/reel/1542772580856426', analytics: { views: 40, likes: 1 } },
+  ] }
+  it('counts each network Zernio says went out — a failed one is not counted, a failed post not at all', async () => {
+    const { postsListItems, metricsIndex, byNetwork } = await import('../app/lib/content-board-core')
+    const items = postsListItems(list, clientOf, metricsIndex(analytics))
+    expect(items.map(i => [i.key, i.state, i.kind, i.networks.map(n => n.platform).join('+')])).toEqual([
+      ['p:z1', 'published', 'reel', 'instagram+facebook'],
+      ['p:z2', 'published', 'graphic', 'linkedin'],
+      ['s:z4', 'scheduled', 'reel', 'instagram'],
+    ])
+    expect(items[0]).toMatchObject({ views: 140, likes: 6 })
+    expect(byNetwork(items).facebook.video).toEqual({ published: 1, scheduled: 0 })
+  })
+  it('a link matches with or without its trailing slash or query', async () => {
+    const { linkKey } = await import('../app/lib/content-board-core')
+    expect(linkKey('facebook', 'https://www.facebook.com/reel/1542772580856426/')).toBe(linkKey('facebook', 'https://facebook.com/reel/1542772580856426?x=1'))
+    expect(linkKey('facebook', null)).toBeNull()
   })
 })

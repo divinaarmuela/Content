@@ -530,7 +530,7 @@ describe('typing @ in a team note offers the people on the card (14 Sep 2026)', 
     }
     expect(src('app/dashboard/MentionBox.tsx')).toMatch(/\[m\.hint, m\.email\]\.filter\(Boolean\)\.join\(' · '\)/)
     // "Revisions done — ready for quality check" ran out of the card
-    expect((src('app/dashboard/board/BoardCard.tsx').match(/h-auto min-h-11 max-w-full whitespace-normal rounded-full/g) ?? []).length).toBe(2)
+    expect((src('app/dashboard/board/BoardCard.tsx').match(/h-auto min-h-11 max-w-full whitespace-normal rounded-full/g) ?? []).length).toBe(3) // the skip-colour-grade button too (20 Oct 2026)
   })
 })
 

@@ -4,7 +4,7 @@ import type { Client, ContentTracker, SocialAccount } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
 import { monthKey, monthRange, sanitiseTrackerPatch, shiftMonth, trackerRowId } from '@/app/lib/content-tracker-core'
-import { boardOrder, clientBoard, itemsInMonth, publishedItems, scheduledItems } from '@/app/lib/content-board-core'
+import { boardOrder, clientBoard, itemsInMonth, metricsIndex, postsListItems } from '@/app/lib/content-board-core'
 
 /**
  * THE CONTENT TRACKER (app/lib/content-tracker-core.ts) — the team's monthly sheet, live.
@@ -26,22 +26,27 @@ const PAGE = 100
 const MAX_PAGES = 30
 const KEEP_MS = 5 * 60_000
 const cache = new Map<string, { at: number; raw: unknown[] }>()
-let waiting: { at: number; raw: unknown[] } | null = null
+const listCache = new Map<string, { at: number; raw: unknown[] }>()
 
-/** every post waiting in Zernio to go out */
-async function scheduledInZernio(fresh: boolean): Promise<unknown[]> {
-  if (!fresh && waiting && Date.now() - waiting.at < KEEP_MS) return waiting.raw
+/** Zernio's own posts list for one status — what its Posts page shows — newest first, page by page */
+async function postsInZernio(status: string, range: { from: string; to: string } | null, fresh: boolean): Promise<{ raw: unknown[]; complete: boolean }> {
+  const key = `${status}:${range?.from ?? ''}`
+  const hit = listCache.get(key)
+  if (!fresh && hit && Date.now() - hit.at < KEEP_MS) return { raw: hit.raw, complete: true }
   const publisher = getPublisher()
-  if (!publisher.configured()) return []
+  if (!publisher.configured()) return { raw: [], complete: false }
   const raw: unknown[] = []
-  for (let page = 1; page <= 10; page++) {
-    const res = await publisher.scheduledPage({ page, limit: PAGE }) as { posts?: unknown[]; pagination?: { pages?: number } } | null
-    if (!res) break
+  let complete = true
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await publisher.postsPage({ page, limit: PAGE, status, ...(range ? { dateFrom: range.from, dateTo: range.to } : {}) }) as
+      { posts?: unknown[]; pagination?: { pages?: number } } | null
+    if (!res) { complete = page > 1; break }
     raw.push(...(res.posts ?? []))
     if (page >= Number(res.pagination?.pages ?? 1) || (res.posts ?? []).length === 0) break
+    if (page === MAX_PAGES) complete = false
   }
-  waiting = { at: Date.now(), raw }
-  return raw
+  listCache.set(key, { at: Date.now(), raw })
+  return { raw, complete }
 }
 
 async function monthFromZernio(month: string, fresh: boolean): Promise<{ raw: unknown[]; complete: boolean }> {
@@ -73,9 +78,11 @@ export async function GET(req: Request) {
     if (!monthRange(month)) return NextResponse.json({ error: 'month is YYYY-MM' }, { status: 400 })
     const previous = shiftMonth(month, -1)
     const fresh = url.searchParams.get('fresh') === '1'
-    const [{ raw, complete }, queued, accounts, clients, rows, links, team] = await Promise.all([
+    const [{ raw, complete }, published, partial, queued, accounts, clients, rows, links, team] = await Promise.all([
       monthFromZernio(month, fresh),
-      scheduledInZernio(fresh),
+      postsInZernio('published', null, fresh),
+      postsInZernio('partial', null, fresh),
+      postsInZernio('scheduled', null, fresh),
       table<SocialAccount>('social_accounts').list(),
       table<Client>('clients').list(),
       table<ContentTracker>('content_tracker').list({ where: r => r.month === month || r.month === previous }),
@@ -86,9 +93,11 @@ export async function GET(req: Request) {
     const clientOfAccount = new Map(accounts.filter(a => a.provider_account_id).map(a => [String(a.provider_account_id), a.client_id ?? null]))
     const clientOf = (id: string | null) => (id ? clientOfAccount.get(id) ?? null : null)
 
-    // the month in Zernio: what went out through it, and what is still waiting to go
-    const waiting = scheduledItems({ posts: queued }, clientOf)
-    const month_ = itemsInMonth([...publishedItems({ posts: raw }, clientOf), ...waiting], month)
+    // ZERNIO'S POSTS PAGE (the owner, 20 Oct 2026): everything sent through the API that went out this month, and what is
+    // still waiting to go; the analytics list only lends the numbers
+    const metrics = metricsIndex({ posts: raw })
+    const waiting = postsListItems({ posts: queued.raw }, clientOf, metrics)
+    const month_ = itemsInMonth([...postsListItems({ posts: [...published.raw, ...partial.raw] }, clientOf, metrics), ...waiting], month)
     const ids = [...new Set(month_.map(i => i.clientId).filter((x): x is string => !!x))]
     const boards = ids.map(id => clientBoard(id, month_, waiting)).sort(boardOrder)
 
@@ -113,7 +122,7 @@ export async function GET(req: Request) {
     const named = clients.filter(c => ids.includes(c.id)).map(c => ({ id: c.id, name: c.name, logo: logo.get(c.id) ?? null }))
     const unlinked = month_.filter(i => !i.clientId).length
 
-    return NextResponse.json({ month, boards, clients: named, targets, unlinked, complete, fetchedAt: new Date().toISOString() })
+    return NextResponse.json({ month, boards, clients: named, targets, unlinked, complete: complete && published.complete && queued.complete, fetchedAt: new Date().toISOString() })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })

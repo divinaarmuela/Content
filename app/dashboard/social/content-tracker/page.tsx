@@ -13,7 +13,7 @@ import PageTitle from '../../ui/PageTitle'
 import PlatformIcon from '../PlatformIcon'
 import { compact, monthKey, monthWords, platformsIn, shiftMonth } from '../../../lib/content-tracker-core'
 import {
-  FORMATS, byNetwork, itemWord, coverWords, formatWord, overall, type BoardItem, type ClientBoard, type ItemKind, type KindCount,
+  FORMATS, byNetwork, itemWord, type FormatCounts, type FormatKey, coverWords, formatWord, overall, type BoardItem, type ClientBoard, type ItemKind, type KindCount,
 } from '../../../lib/content-board-core'
 import { networkName } from '../../../lib/publish-core'
 
@@ -208,20 +208,32 @@ function Cover({ until }: { until: string | null }) {
 }
 
 /** one cell: what went out and what is still to go, in the network's own word ("3 reels · 1 to go") */
-function FormatCell({ count, word, target }: { count: KindCount; word: string; target?: number | null }) {
-  const total = count.published + count.scheduled
-  if (total === 0 && !target) return <span className="text-muted-foreground">—</span>
-  const met = target != null && total >= target
+/** "1 reel", "3 reels" — the word in the count's own number */
+const counted = (n: number, plural: string) => `${n} ${n === 1 ? plural.replace(/ies$/, 'y').replace(/s$/, '') : plural}`.toLowerCase()
+
+function FormatCell({ count, word }: { count: KindCount; word: string }) {
+  if (count.published + count.scheduled === 0) return <span className="text-muted-foreground">—</span>
+  const [n, ...rest] = counted(count.published, word).split(' ')
   return (
     <span className="tabular-nums">
-      <b className="text-[14px]">{count.published}</b> <span className="text-muted-foreground">{word.toLowerCase()}</span>
+      <b className="text-[14px]">{n}</b> <span className="text-muted-foreground">{rest.join(' ')}</span>
       {count.scheduled > 0 && <span className="text-accent-blue"> · {count.scheduled} to go</span>}
-      {target != null && <span className={cn('ml-1 font-semibold', met ? 'text-accent-green' : 'text-amber-700 dark:text-amber-300')}>of {target}</span>}
     </span>
   )
 }
 
-/** each network's videos, statics and stories, then the client's overall — every number with its word */
+/** a format's posts across every network — the Total row */
+function sumNetworks(per: Record<string, FormatCounts>, f: FormatKey): KindCount {
+  return Object.values(per).reduce((t, n) => ({ published: t.published + n[f].published, scheduled: t.scheduled + n[f].scheduled }), { published: 0, scheduled: 0 })
+}
+
+/** "5 videos (target 8)", counting what went out and what is still to go */
+function madeWords(c: KindCount, plural: string, target: number | null | undefined): string {
+  const n = c.published + c.scheduled
+  return `${counted(n, plural)}${target != null ? ` of ${target}` : ''}`
+}
+
+/** each network's videos, statics and stories, then the total across them — every number with its word */
 function FormatTable({ board, target }: { board: ClientBoard; target: Target | undefined }) {
   const per = byNetwork(board.items)
   const nets = platformsIn(Object.keys(per).map(platform => ({ platform })))
@@ -246,14 +258,19 @@ function FormatTable({ board, target }: { board: ClientBoard; target: Target | u
           </tr>
         ))}
         <tr className="border-t-2 border-foreground/20">
-          <td className="py-1.5 pr-2 font-semibold">Overall</td>
-          {formats.map(f => (
-            <td key={f} className="py-1.5 pr-2">
-              <FormatCell count={all[f]} word={formatWord(f, null)} target={f === 'video' ? target?.reels : f === 'static' ? target?.graphics : null} />
-            </td>
-          ))}
+          <td className="py-1.5 pr-2 font-semibold">Total</td>
+          {formats.map(f => <td key={f} className="py-1.5 pr-2"><FormatCell count={sumNetworks(per, f)} word={formatWord(f, null)} /></td>)}
         </tr>
       </tbody>
+      <tfoot>
+        <tr>
+          <td colSpan={formats.length + 1} className="pt-2 text-[12px] text-muted-foreground">
+            {/* the content itself, once each — what a target counts (a reel on four networks is one video made) */}
+            Content made: {madeWords(all.video, 'videos', target?.reels)} · {madeWords(all.static, 'statics', target?.graphics)}
+            {all.story.published + all.story.scheduled > 0 && <> · {madeWords(all.story, 'stories', null)}</>}
+          </td>
+        </tr>
+      </tfoot>
     </table>
   )
 }

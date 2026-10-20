@@ -58,28 +58,69 @@ function kindOfPublished(p: Record<string, unknown>): ItemKind {
   return 'text'
 }
 
+/** a live link's own id, per network — the same post read from Zernio and from our record match on it (Facebook comes
+ *  back from Zernio with no Zernio post id, so the link is the only way to know it is ours: 20 Oct 2026) */
+export function linkKey(platform: string, url: string | null | undefined): string | null {
+  if (!url) return null
+  let path = ''
+  try { path = new URL(url).pathname } catch { return null }
+  const seg = path.replace(/\/+$/, '').split('/').filter(Boolean).pop()
+  return seg ? `${platform.toLowerCase()}:${decodeURIComponent(seg).toLowerCase()}` : null
+}
+
+/** our own posts, as the keys Zernio's entries are matched on: each Zernio post id we booked, and each live link we
+ *  recorded — both pointing at the one post they belong to */
+export function ourPostIndex(
+  posts: readonly { id: string; outcomes?: unknown; booking?: unknown }[],
+  jobs: readonly { id: string; provider_post_id?: string | null; resend_of?: string | null }[],
+): Map<string, string> {
+  const out = new Map<string, string>()
+  const jobPost = new Map<string, string>()
+  for (const p of posts) {
+    const b = obj(p.booking)
+    for (const j of Array.isArray(b.job_ids) ? b.job_ids : []) jobPost.set(String(j), p.id)
+    for (const [platform, o] of Object.entries(obj(p.outcomes))) {
+      const k = linkKey(platform, str(obj(o).url))
+      if (k) out.set(k, p.id)
+    }
+  }
+  for (const j of jobs) {
+    const post = jobPost.get(j.id) ?? (j.resend_of ? jobPost.get(j.resend_of) : undefined)
+    if (post && j.provider_post_id) out.set(`late:${j.provider_post_id}`, post)
+  }
+  return out
+}
+
 /**
  * Zernio's analytics list → published items. Each network of a post comes back as its own entry carrying the same
  * `latePostId`; they are one item, numbers summed. An entry with no `latePostId` was posted by the client on the
  * network — not ours, left out.
  */
-export function publishedItems(raw: unknown, clientOf: (accountId: string | null) => string | null): BoardItem[] {
+export function publishedItems(
+  raw: unknown, clientOf: (accountId: string | null) => string | null, ours: ReadonlyMap<string, string> = new Map(),
+): BoardItem[] {
   const groups = new Map<string, BoardItem>()
   for (const r of listOf(raw)) {
     const p = obj(r)
     const late = str(p.latePostId)
     const at = str(p.publishedAt)
-    if (!late || !at || (p.status && p.status !== 'published')) continue
+    if (!at || (p.status && p.status !== 'published')) continue
     const plats = (Array.isArray(p.platforms) && p.platforms.length ? p.platforms : [{ platform: p.platform, platformPostUrl: p.platformPostUrl, analytics: p.analytics }]).map(obj)
-    let item = groups.get(late)
+    // OURS: our post by its Zernio id or by its live link; else Zernio's own post id; else the client posted it
+    const byLink = plats.map(x => linkKey(String(x.platform ?? p.platform ?? ''), str(x.platformPostUrl) ?? str(p.platformPostUrl)))
+      .map(k => (k ? ours.get(k) : undefined)).find(Boolean)
+    const owner = (late ? ours.get(`late:${late}`) : undefined) ?? byLink
+    const key = owner ? `a:${owner}` : late ? `z:${late}` : null
+    if (!key) continue
+    let item = groups.get(key)
     if (!item) {
       item = {
-        key: `p:${late}`, clientId: null, kind: kindOfPublished(p), state: 'published', at,
+        key: `p:${key}`, clientId: null, kind: kindOfPublished(p), state: 'published', at,
         caption: (str(p.content) ?? '').trim(),
         thumbnail: str(p.thumbnailUrl) ?? str(obj((p.mediaItems as unknown[] | undefined)?.[0]).thumbnail),
         networks: [], views: 0, likes: 0, comments: 0, shares: 0, saves: 0,
       }
-      groups.set(late, item)
+      groups.set(key, item)
     }
     if (at < item.at) item.at = at
     if (!item.thumbnail) item.thumbnail = str(p.thumbnailUrl)
@@ -234,5 +275,77 @@ export function byNetwork(items: readonly BoardItem[]): Record<string, FormatCou
 export function overall(items: readonly BoardItem[]): FormatCounts {
   const out = zeroFormats()
   for (const i of items) { const f = formatOf(i.kind); if (f) out[f][i.state]++ }
+  return out
+}
+
+/* ── ZERNIO'S POSTS PAGE IS THE COUNT (the owner, 20 Oct 2026: "make sure it's whatever under posts page on zernio
+ *    shows … it means we posted it cuz we used the api"). Every post sent through the API, as Zernio's own list holds
+ *    it: one item per post, its networks as Zernio records each one. The numbers come from the analytics list,
+ *    matched on the Zernio post id, or on the live link where Zernio leaves the id off (Facebook). ───────────── */
+
+/** the analytics list's numbers, by Zernio post id + network and by live link */
+export function metricsIndex(analytics: unknown): Map<string, ItemMetrics> {
+  const out = new Map<string, ItemMetrics>()
+  for (const r of listOf(analytics)) {
+    const p = obj(r)
+    const late = str(p.latePostId)
+    const plats = (Array.isArray(p.platforms) && p.platforms.length ? p.platforms : [{ platform: p.platform, platformPostUrl: p.platformPostUrl, analytics: p.analytics }]).map(obj)
+    for (const x of plats) {
+      const platform = String(x.platform ?? p.platform ?? '').toLowerCase()
+      const a = obj(x.analytics ?? p.analytics)
+      const m: ItemMetrics = { views: num(a.views) || num(a.impressions), likes: num(a.likes), comments: num(a.comments), shares: num(a.shares), saves: num(a.saves) }
+      if (late) out.set(`${late}:${platform}`, m)
+      const k = linkKey(platform, str(x.platformPostUrl) ?? str(p.platformPostUrl))
+      if (k) out.set(k, m)
+    }
+  }
+  return out
+}
+
+/** Zernio's posts list → items: published (the networks that went out) and scheduled (the networks it will go to) */
+export function postsListItems(raw: unknown, clientOf: (accountId: string | null) => string | null, metrics: ReadonlyMap<string, ItemMetrics> = new Map()): BoardItem[] {
+  const out: BoardItem[] = []
+  for (const r of listOf(raw)) {
+    const p = obj(r)
+    const id = str(p._id) ?? str(p.id)
+    const status = String(p.status ?? '').toLowerCase()
+    if (!id) continue
+    const plats = (Array.isArray(p.platforms) ? p.platforms : []).map(obj)
+    const media = [
+      ...(Array.isArray(p.mediaItems) ? p.mediaItems : []),
+      ...plats.flatMap(x => (Array.isArray(x.customMedia) ? x.customMedia : [])),
+    ].map(obj)
+    const storyOn = (x: Record<string, unknown>) => String(obj(x.platformSpecificData).contentType ?? '').toLowerCase() === 'story'
+    const kind: ItemKind = plats.length > 0 && plats.every(storyOn) ? 'story'
+      : media.length === 0 ? 'text' : media.some(m => m.type === 'video') ? 'reel' : 'graphic'
+    const clientId = plats.map(x => clientOf(accountIdOf(x.accountId))).find(Boolean) ?? null
+    const base = {
+      clientId, kind, caption: (str(p.content) ?? '').trim(),
+      thumbnail: str(media[0]?.thumbnail) ?? (media[0]?.type === 'image' ? str(media[0]?.url) : null),
+    }
+    if (status === 'scheduled') {
+      const at = str(p.scheduledFor)
+      if (!at) continue
+      const networks = [...new Set(plats.map(x => String(x.platform ?? '').toLowerCase()).filter(Boolean))].map(platform => ({ platform, url: null }))
+      out.push({ ...base, key: `s:${id}`, state: 'scheduled', at, networks, views: 0, likes: 0, comments: 0, shares: 0, saves: 0 })
+      continue
+    }
+    if (status !== 'published' && status !== 'partial') continue
+    // the networks Zernio says went out (a partial post counts only those)
+    const live = plats.filter(x => !x.status || String(x.status).toLowerCase() === 'published')
+    if (live.length === 0) continue
+    const at = str(p.publishedAt) ?? live.map(x => str(x.publishedAt)).find(Boolean) ?? str(p.scheduledFor)
+    if (!at) continue
+    const item: BoardItem = { ...base, key: `p:${id}`, state: 'published', at, networks: [], views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }
+    for (const x of live) {
+      const platform = String(x.platform ?? '').toLowerCase()
+      if (!platform || item.networks.some(n => n.platform === platform)) continue
+      const url = str(x.platformPostUrl)
+      item.networks.push({ platform, url })
+      const m = metrics.get(`${id}:${platform}`) ?? (linkKey(platform, url) ? metrics.get(linkKey(platform, url)!) : undefined)
+      if (m) for (const k of Object.keys(m) as (keyof ItemMetrics)[]) item[k] += m[k]
+    }
+    out.push(item)
+  }
   return out
 }
