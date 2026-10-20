@@ -16,6 +16,7 @@ import { colourOf, iconOf } from './board-canvas-core'
 import { pruneOrphans } from './shoot-board-core'
 import { providerFor, youtubeId } from './link-preview-core'
 import { sanitiseDriveFiles, type CanvasDriveFile } from './canvas-drive-core'
+import { sanitiseCanvasHtml } from './canvas-rich-core'
 
 export const BATCH_STATUSES = ['brief', 'locked', 'shot', 'wrapped'] as const
 export type BatchStatus = (typeof BATCH_STATUSES)[number]
@@ -190,7 +191,12 @@ export function sanitiseReferenceMedia(raw: unknown): ReferenceMedia[] {
 
 /* ── the brief canvas: freeform cards on a pan/zoom board ── */
 
-export const CANVAS_CARD_KINDS = ['note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo', 'board'] as const
+export const CANVAS_CARD_KINDS = [
+  'note', 'image', 'link', 'label', 'arrow', 'mockup', 'todo', 'board',
+  // MILANOTE'S KINDS (20 Oct 2026, docs/MILANOTE_MERGE.md): a column holding cards, a document, a table, a colour
+  // swatch, a file, and a link to another team board (Milanote's ALIAS)
+  'column', 'document', 'table', 'swatch', 'file', 'boardlink',
+] as const
 export const MOCKUP_PLATFORMS = [
   'ig_post', 'ig_reel', 'ig_story', 'ig_carousel', 'linkedin',
   'youtube', 'yt_short', 'tiktok', 'facebook', 'pinterest',
@@ -258,7 +264,9 @@ export function stepTextSize(size: CanvasTextSize, dir: 1 | -1): CanvasTextSize 
 const CANVAS_BOUND = 20_000
 /** across the WHOLE tree — a shoot with a few boards inside boards is still
  *  one array, so the cap is the shoot's, not one board's */
-const CANVAS_MAX_CARDS = 600
+// …raised for the Milanote merge (20 Oct 2026): a client's whole Milanote tree is one board here, and the largest
+// (Chantal Cutter) holds 621 items
+const CANVAS_MAX_CARDS = 1500
 
 export type CanvasCard = {
   id: string
@@ -336,6 +344,69 @@ export type CanvasCard = {
    *  One flat array, boards to any depth: a board is nothing more than its
    *  tile, and its contents are the cards that point at it. */
   parent?: string
+
+  /* ── MILANOTE'S SHAPE (20 Oct 2026, docs/MILANOTE_MERGE.md) ── */
+  /** an exact colour, `#rrggbb` — a note's, a column's, a board's or a swatch's — over the named palette */
+  hex?: string
+  /** rich text (canvas-rich-core's allowlist): a note's or a document's words with their bold, italics, lists,
+   *  links and colours. When present it is what is drawn; `text` stays the plain words. */
+  html?: string
+  /** the column this card sits in, and its place there (smaller first) */
+  col?: string
+  ord?: number
+  /** a column folded down to its title */
+  collapsed?: boolean
+  /** a table: its cells, rows of rich text; the first row a header when `header` */
+  rows?: string[][]
+  header?: boolean
+  /** an arrow drawn Milanote's way: free ends, a curve, a label, its ends' shapes, a weight. `from`/`to` still join
+   *  it to cards when set; otherwise its ends sit at these points */
+  line?: CanvasLine
+  /** a file on the board */
+  file?: { url: string; name: string; size?: number; mime?: string }
+  /** a board link: the team board it opens */
+  target?: string
+  /** the Milanote element this card was brought from — what makes the import run twice without doubling */
+  mn?: string
+}
+
+export type CanvasLine = {
+  fx?: number; fy?: number; tx?: number; ty?: number
+  /** the curve's handle; absent = straight */
+  cx?: number; cy?: number
+  label?: string
+  start?: 'none' | 'arrow'
+  end?: 'none' | 'arrow'
+  dashed?: boolean
+  weight?: number
+}
+
+const HEX_COLOUR = /^#[0-9a-f]{6}$/i
+const num = (v: unknown, lo: number, hi: number): number | undefined => {
+  const n = Number(v)
+  return v !== undefined && v !== null && Number.isFinite(n) ? clamp(Math.round(n), lo, hi) : undefined
+}
+function sanitiseLine(raw: unknown): CanvasLine | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  const out: CanvasLine = {}
+  for (const k of ['fx', 'fy', 'tx', 'ty', 'cx', 'cy'] as const) {
+    const n = num(r[k], -CANVAS_BOUND, CANVAS_BOUND)
+    if (n !== undefined) out[k] = n
+  }
+  if (typeof r.label === 'string' && r.label.trim()) out.label = r.label.trim().slice(0, 200)
+  if (r.start === 'arrow' || r.start === 'none') out.start = r.start
+  if (r.end === 'arrow' || r.end === 'none') out.end = r.end
+  if (r.dashed === true) out.dashed = true
+  const w = num(r.weight, 1, 12)
+  if (w !== undefined) out.weight = w
+  return Object.keys(out).length ? out : undefined
+}
+/** does an arrow have both its ends — on cards, or as points? */
+export function lineHasEnds(c: { from?: string; to?: string; line?: CanvasLine }): boolean {
+  const fromOk = !!c.from || (c.line?.fx !== undefined && c.line?.fy !== undefined)
+  const toOk = !!c.to || (c.line?.tx !== undefined && c.line?.ty !== undefined)
+  return fromOk && toOk
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -438,6 +509,13 @@ export const CANVAS_SIZE_LIMITS: Record<CanvasCard['kind'], CardSizeLimits> = {
   label:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
   mockup: { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
   arrow:  { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+  // Milanote's kinds — wide enough for its widest columns and tables
+  column:    { minW: 160, maxW: 2400, minH: null, maxH: 20000 },
+  document:  { minW: 160, maxW: 1200, minH: null, maxH: 2400 },
+  table:     { minW: 160, maxW: 4000, minH: null, maxH: 8000 },
+  swatch:    { minW: 80,  maxW: 1200, minH: 80,   maxH: 2400 },
+  file:      { minW: 120, maxW: 1200, minH: null, maxH: 2400 },
+  boardlink: { minW: 140, maxW: 1200, minH: 140,  maxH: 2400 },
 }
 
 /** Does this kind remember a height at all? */
@@ -508,7 +586,9 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
     // a mockup may exist as an empty frame awaiting its image
     const from = String(r.from ?? '').slice(0, 40)
     const to = String(r.to ?? '').slice(0, 40)
-    if (kind === 'arrow' && (!from || !to || from === to)) continue
+    const line = kind === 'arrow' ? sanitiseLine(r.line) : undefined
+    // an arrow needs both ends — on cards, or (Milanote's free lines) as points
+    if (kind === 'arrow' && ((from && to && from === to) || !lineHasEnds({ from, to, line }))) continue
     const platform = String(r.platform ?? '')
     if (kind === 'mockup' && !(MOCKUP_PLATFORMS as readonly string[]).includes(platform)) continue
     const id = String(r.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10)
@@ -584,7 +664,32 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
         ? { align: String(r.align) as CanvasTextAlign }
         : {}),
       ...(hasTextStyle(kind) && r.bold === true ? { bold: true } : {}),
-      ...(kind === 'arrow' ? { from, to } : {}),
+      ...(kind === 'arrow' ? { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(line ? { line } : {}) } : {}),
+      // ── Milanote's shape (20 Oct 2026) ──
+      ...(HEX_COLOUR.test(String(r.hex ?? '')) ? { hex: String(r.hex).toLowerCase() } : {}),
+      ...((kind === 'note' || kind === 'document' || kind === 'todo' || kind === 'column') && typeof r.html === 'string' && r.html.trim()
+        ? { html: sanitiseCanvasHtml(r.html, kind === 'document' ? 200_000 : 40_000) } : {}),
+      ...(kind === 'document' && typeof r.text === 'string' ? { text: r.text.slice(0, 200_000) } : {}),
+      ...(typeof r.col === 'string' && r.col && r.col !== id ? { col: r.col.slice(0, 40) } : {}),
+      ...(r.ord !== undefined && r.ord !== null && Number.isFinite(Number(r.ord)) ? { ord: Number(r.ord) } : {}),
+      ...(kind === 'column' && r.collapsed === true ? { collapsed: true } : {}),
+      ...((kind === 'column' || kind === 'document' || kind === 'swatch' || kind === 'file' || kind === 'boardlink' || kind === 'table' || kind === 'todo') && r.name
+        ? { name: String(r.name).slice(0, 300) } : {}),
+      ...(kind === 'table' && Array.isArray(r.rows)
+        ? {
+            rows: (r.rows as unknown[]).slice(0, 200).map(row => (Array.isArray(row) ? row : []).slice(0, 40).map(cell => sanitiseCanvasHtml(String(cell ?? ''), 4000))),
+            ...(r.header === true ? { header: true } : {}),
+          }
+        : {}),
+      ...(kind === 'file' && r.file && typeof r.file === 'object' && String((r.file as Record<string, unknown>).url ?? '').startsWith('https://')
+        ? (() => {
+            const f = r.file as Record<string, unknown>
+            return { file: { url: String(f.url).slice(0, 2000), name: String(f.name ?? 'File').slice(0, 200), ...(Number(f.size) > 0 ? { size: Number(f.size) } : {}), ...(f.mime ? { mime: String(f.mime).slice(0, 100) } : {}) } }
+          })()
+        : {}),
+      ...(kind === 'boardlink' && typeof r.target === 'string' && r.target
+        ? { target: r.target.slice(0, 60), icon: iconOf(typeof r.icon === 'string' ? r.icon : undefined), colour: colourOf('board', typeof r.colour === 'string' ? r.colour : undefined) } : {}),
+      ...(typeof r.mn === 'string' && r.mn ? { mn: r.mn.slice(0, 40) } : {}),
       ...(kind === 'mockup' ? { platform: platform as CanvasCard['platform'] } : {}),
       ...(kind === 'todo'
         ? {
@@ -592,10 +697,11 @@ export function sanitiseCanvasCards(raw: unknown): CanvasCard[] {
               .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
               .map(t => ({
                 id: String(t.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10),
-                text: String(t.text ?? '').slice(0, 200),
+                text: String(t.text ?? '').slice(0, 1000),
                 done: t.done === true,
               }))
-              .slice(0, 30),
+              // Milanote's task lists run long (CECC: 20 checks a list)
+              .slice(0, 100),
           }
         : {}),
     }
@@ -618,8 +724,12 @@ export function applyCanvasOp(
   // arrows with it, whoever deleted it
   const solid = new Set([...byId.values()].filter(c => c.kind !== 'arrow').map(c => c.id))
   for (const c of [...byId.values()]) {
-    if (c.kind === 'arrow' && (!solid.has(c.from ?? '') || !solid.has(c.to ?? ''))) byId.delete(c.id)
+    // a joined end needs its card; a free end (Milanote's lines) needs nothing
+    if (c.kind === 'arrow' && ((c.from && !solid.has(c.from)) || (c.to && !solid.has(c.to)))) byId.delete(c.id)
   }
+  // deleting a column takes its cards with it
+  const columns = new Set([...byId.values()].filter(c => c.kind === 'column').map(c => c.id))
+  for (const c of [...byId.values()]) if (c.col && !columns.has(c.col)) byId.delete(c.id)
   // deleting a board tile deletes everything inside it, to any depth, whoever
   // deleted it and whatever the client sent — a card whose board is gone has
   // nowhere to be shown

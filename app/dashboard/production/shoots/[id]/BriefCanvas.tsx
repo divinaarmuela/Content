@@ -44,6 +44,8 @@ const snap = (n: number) => Math.round(n / 8) * 8
  *  things, and the word is the first thing on the bar */
 const KIND_WORD: Record<CanvasCard['kind'], string> = {
   note: 'Note', label: 'Heading', image: 'Image', link: 'Link', mockup: 'Post', todo: 'To-do', board: 'Board', arrow: 'Arrow',
+  // Milanote's kinds (20 Oct 2026)
+  column: 'Column', document: 'Document', table: 'Table', swatch: 'Colour', file: 'File', boardlink: 'Board link',
 }
 
 /** the "add a post" menu, grouped the way people think — by platform */

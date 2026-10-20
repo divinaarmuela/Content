@@ -239,15 +239,16 @@ describe('todo cards', () => {
       id: 't1', kind: 'todo', x: 0, y: 0,
       items: [
         { id: 'a', text: 'shoot the hero image', done: true },
-        { text: 'x'.repeat(500), done: 'yes' }, // no id, over-long, truthy-but-not-true
-        ...Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, text: `t${i}`, done: false })),
+        { text: 'x'.repeat(1500), done: 'yes' }, // no id, over-long, truthy-but-not-true
+        ...Array.from({ length: 140 }, (_, i) => ({ id: `f${i}`, text: `t${i}`, done: false })),
       ],
     }])
     expect(card.kind).toBe('todo')
-    expect(card.items).toHaveLength(30)
+    // the caps rose for Milanote's long task lists (20 Oct 2026): 100 rows, 1,000 letters
+    expect(card.items).toHaveLength(100)
     expect(card.items?.[0]).toEqual({ id: 'a', text: 'shoot the hero image', done: true })
     expect(card.items?.[1].id).toBeTruthy()
-    expect(card.items?.[1].text).toHaveLength(200)
+    expect(card.items?.[1].text).toHaveLength(1000)
     expect(card.items?.[1].done).toBe(false)
   })
 
