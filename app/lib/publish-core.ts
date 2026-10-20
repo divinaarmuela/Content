@@ -1786,6 +1786,53 @@ export function childJobFor(
   }
 }
 
+/* ── a network whose copy is late goes on its own ─────────────────────────── */
+
+/** how close to its time a booking stops waiting for its slowest copy: the networks that are ready are handed over
+ *  (still at their time), and the late one is split off to go the moment its copy lands */
+export const SPLIT_LATE_LEAD_MS = 15 * 60_000
+
+/**
+ * SEND WHAT IS READY ON TIME (the owner, 20 Oct 2026). Jordan Wilson's 6:30 pm post waited for all three clean
+ * copies; Instagram's finished at 7:02, so LinkedIn and TikTok — ready since 5:32 — missed their time with it.
+ * Near its time a booking still waiting on some networks' copies is split: the waiting networks each become their
+ * own job (`resend_of` the parent, `late_slot` the post's time), and the parent goes on with the rest.
+ * Empty when there is nothing to split: not near its time yet, every network waiting, or a re-send itself.
+ */
+export function lateSplitPlan(
+  job: { resend_of?: string | null; resent_platforms?: unknown; targets?: unknown; scheduled_for?: string | null },
+  waiting: readonly string[],
+  now: Date = new Date(),
+): string[] {
+  if (job.resend_of) return []
+  const slot = job.scheduled_for ? Date.parse(job.scheduled_for) : now.getTime()
+  if (!Number.isFinite(slot) || slot - now.getTime() > SPLIT_LATE_LEAD_MS) return []
+  const targeted = (Array.isArray(job.targets) ? job.targets : []).map(t => String((t as { platform?: unknown })?.platform ?? '').toLowerCase()).filter(Boolean)
+  const done = new Set((Array.isArray(job.resent_platforms) ? job.resent_platforms : []).map(p => String(p).toLowerCase()))
+  const out = [...new Set(waiting.map(p => p.toLowerCase()))].filter(p => targeted.includes(p) && !done.has(p))
+  // nothing would be left to send now: the whole job waits, as before
+  return out.length > 0 && out.length < targeted.length ? out : []
+}
+
+/** the row of a network split off to wait for its copy: at the post's own time (or at once if that has gone),
+ *  remembering that time in `late_slot` so it stops trying 3 hours after it (post-outcome-core.providerTiming) */
+export function lateChildJobFor(
+  job: Parameters<typeof childJobFor>[0] & { scheduled_for?: string | null },
+  platform: string,
+  ids: { id: string; requestId: string },
+  now: Date,
+): Record<string, unknown> | null {
+  const row = childJobFor(job, platform, 0, ids, now)
+  if (!row) return null
+  const slot = job.scheduled_for && Number.isFinite(Date.parse(job.scheduled_for)) ? job.scheduled_for : now.toISOString()
+  return { ...row, scheduled_for: Date.parse(slot) > now.getTime() ? slot : now.toISOString(), late_slot: slot }
+}
+
+/** the sentence on the parent row once its late networks are split off */
+export function lateSplitWords(platforms: readonly string[]): string {
+  return platforms.length ? ` ${platforms.join(', ')} will go out as soon as its video copy is ready.` : ''
+}
+
 /** the sentence on the parent row once its failed networks are re-sent */
 export function resendWords(platforms: readonly string[]): string {
   return platforms.length ? ' Re-sending ' + platforms.join(', ') + ' — one at a time, ' + RESEND_GAP_MINUTES + ' minutes apart.' : ''

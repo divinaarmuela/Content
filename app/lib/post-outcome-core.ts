@@ -626,7 +626,7 @@ export function keepLive(stored: readonly PlatformOutcome[] | null | undefined, 
  */
 
 /** A job as the post's record reads it: its own outcome, plus who it re-sends. */
-export type BookingJob = OutcomeJob & { id: string; resend_of?: string | null; created_at?: string | null }
+export type BookingJob = OutcomeJob & { id: string; resend_of?: string | null; created_at?: string | null; late_slot?: string | null }
 
 /**
  * The jobs of one booking: the ids it holds, and every re-send made of any of
@@ -746,7 +746,10 @@ export function postNetworkOutcomes(
     .map(t => String(t?.platform ?? '').toLowerCase()).filter(Boolean))]
   const roots = ordered.filter(j => !isChild(j))
   const standing = roots.filter(j => j.status !== 'cancelled' || lost.has(j.id))
-  const platforms = [...new Set((standing.length ? standing : roots).flatMap(targetsOfJob))]
+  // a network split off to wait for its copy (late_slot) is still one of the booking's networks: the parent no
+  // longer targets it, and without this the post would read as out the moment the others went
+  const split = ordered.filter(j => isChild(j) && !!j.late_slot && j.status !== 'cancelled')
+  const platforms = [...new Set([...(standing.length ? standing : roots), ...split].flatMap(targetsOfJob))]
 
   const out: Record<string, NetworkOutcome> = {}
   const put = (platform: string, next: NetworkOutcome) => {
@@ -863,6 +866,14 @@ export const LATE_SEND_GRACE_MS = 15 * 60_000
 export const TIME_PASSED_UNSENT =
   'The posting time passed before it could be sent, so it was not posted. Pick a new time and book it again.'
 
+/** A network whose clean copy is still being made keeps trying this long past its time, and goes out the moment
+ *  the copy lands (the owner, 20 Oct 2026, after Jordan Wilson's 6:30 pm post missed all three networks because
+ *  Instagram's copy finished at 7:02: "until 3 hours is fine"). */
+export const LATE_COPY_LIMIT_MS = 3 * 60 * 60_000
+
+export const LATE_COPY_UNSENT =
+  'The video copy for this network was still not ready 3 hours after the posting time, so it was not posted. Book it again.'
+
 /**
  * What the provider is told about WHEN (the owner's decision 11). The provider
  * publishes a time that has already passed AT ONCE, so a past time is never
@@ -876,9 +887,12 @@ export const TIME_PASSED_UNSENT =
  *             back to Ready to post with the reason (T18)
  */
 export function providerTiming(
-  job: { scheduled_for?: string | null; resend_of?: string | null },
+  job: { scheduled_for?: string | null; resend_of?: string | null; waiting_on_copy?: boolean | null; late_slot?: string | null },
   now: Date = new Date(),
 ): { send: 'now' } | { send: 'at'; at: string } | { send: 'refuse'; reason: string } {
+  // a network split off to wait for its copy (late_slot = the post's own time) goes at once — for 3 hours
+  const slot = job.late_slot ? Date.parse(job.late_slot) : NaN
+  if (Number.isFinite(slot) && now.getTime() - slot > LATE_COPY_LIMIT_MS) return { send: 'refuse', reason: LATE_COPY_UNSENT }
   if (!job.scheduled_for) return { send: 'now' }
   const t = Date.parse(job.scheduled_for)
   if (!Number.isFinite(t)) {
@@ -887,5 +901,7 @@ export function providerTiming(
   if (t > now.getTime()) return { send: 'at', at: new Date(t).toISOString() }
   if (job.resend_of) return { send: 'now' }
   if (now.getTime() - t <= LATE_SEND_GRACE_MS) return { send: 'now' }
+  // late only because its clean copy is still being made: it keeps trying, and goes when the copy lands
+  if (job.waiting_on_copy) return now.getTime() - t <= LATE_COPY_LIMIT_MS ? { send: 'now' } : { send: 'refuse', reason: LATE_COPY_UNSENT }
   return { send: 'refuse', reason: TIME_PASSED_UNSENT }
 }

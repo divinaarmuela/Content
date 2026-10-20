@@ -76,6 +76,10 @@ const publishJob = (id: string): Row => ({
   created_at: '2026-09-03T00:00:00.000Z', updated_at: '2026-09-03T00:00:00.000Z',
 }) as unknown as Row
 
+/** booked for tomorrow: long before its time, a job waits whole for its copy (near its time the waiting network
+ *  is split off and the rest go — publish-core.lateSplitPlan, below) */
+const aheadJob = (id: string): Row => ({ ...publishJob(id), scheduled_for: new Date(Date.now() + 86_400_000).toISOString() }) as unknown as Row
+
 const encodeJob = (over: Record<string, unknown>): Row => ({
   id: encodeJobId(MASTER, 'instagram'),
   source_url: MASTER, platform: 'instagram',
@@ -116,7 +120,7 @@ const row = (id: string) => table<PublishJobRow>('publish_jobs').get(id)
 
 describe('a post whose channel is still having a copy made', () => {
   it('goes back to the queue and says why, without sending anything', async () => {
-    fake = seedDb({ publish_jobs: [publishJob('j1')], encode_jobs: [encodeJob({ status: 'running' })] })
+    fake = seedDb({ publish_jobs: [aheadJob('j1')], encode_jobs: [encodeJob({ status: 'running' })] })
     expect(await runPublishJob('j1')).toBe('queued')
     expect(published).toEqual([])
 
@@ -128,11 +132,26 @@ describe('a post whose channel is still having a copy made', () => {
   })
 
   it('asks for the copy the first time it looks, if nobody has yet', async () => {
-    fake = seedDb({ publish_jobs: [publishJob('j1')], encode_jobs: [] })
+    fake = seedDb({ publish_jobs: [aheadJob('j1')], encode_jobs: [] })
     expect(await runPublishJob('j1')).toBe('queued')
     expect(sent.map(e => e.name)).toEqual(['media/encode'])
     expect(sent[0].data).toMatchObject({ sourceUrl: MASTER, platform: 'instagram', kind: 'reel' })
     expect(published).toEqual([])
+  })
+})
+
+describe('near its time, what is ready goes without the slow copy (20 Oct 2026)', () => {
+  it('sends YouTube now and splits Instagram off to go when its copy lands', async () => {
+    fake = seedDb({ publish_jobs: [publishJob('j1')], encode_jobs: [encodeJob({ status: 'running' })] })
+    expect(await runPublishJob('j1')).toBe('published')
+    expect(published).toHaveLength(1)
+    expect((published[0].targets as { platform: string }[]).map(t => t.platform)).toEqual(['youtube'])
+    const jobs = await table<PublishJobRow>('publish_jobs').list({})
+    const child = jobs.find(j => j.id !== 'j1')!
+    expect(child).toMatchObject({ status: 'queued', resend_of: 'j1' })
+    expect((child.targets as { platform: string }[]).map(t => t.platform)).toEqual(['instagram'])
+    expect(child.media).toEqual([{ url: MASTER, type: 'video' }])
+    expect((await row('j1'))!.resent_platforms).toEqual(['instagram'])
   })
 })
 
@@ -199,7 +218,7 @@ describe('when no encoder is configured', () => {
 describe('how long the clip is', () => {
   it('is looked up and carried into the ask', async () => {
     fake = seedDb({
-      publish_jobs: [publishJob('j1')],
+      publish_jobs: [aheadJob('j1')],
       encode_jobs: [],
       video_previews: [previewRow(20)],
     })
@@ -222,7 +241,7 @@ describe('how long the clip is', () => {
     delete process.env.CLOUDFLARE_ACCOUNT_ID
     delete process.env.CLOUDFLARE_STREAM_TOKEN
     fake = seedDb({
-      publish_jobs: [publishJob('j1')],
+      publish_jobs: [aheadJob('j1')],
       encode_jobs: [],
       video_previews: [previewRow(20)],
     })
@@ -232,7 +251,7 @@ describe('how long the clip is', () => {
 
   it('falls back, and says so, when nothing measured it', async () => {
     fake = seedDb({
-      publish_jobs: [publishJob('j1')],
+      publish_jobs: [aheadJob('j1')],
       encode_jobs: [],
       video_previews: [previewRow(null)],
     })

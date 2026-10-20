@@ -1130,6 +1130,12 @@ const GHOST_COLUMNS = {
     //     queue the same one (app/lib/publish-core.ts resendPlanFor).
     ['resend_of', col('string', true)],
     ['resent_platforms', col('unknown', true, true, true)],
+    //   publish_jobs.waiting_on_copy / late_slot — A LATE COPY KEEPS TRYING (20 Oct 2026). A job held for a network's
+    //     clean copy is marked `waiting_on_copy` and may go up to 3 hours past its time, not 15 minutes; near its
+    //     time the waiting networks are split off as their own jobs, each remembering the post's time in
+    //     `late_slot` (app/lib/publish-core.ts lateSplitPlan, post-outcome-core.ts providerTiming).
+    ['waiting_on_copy', col('boolean', true)],
+    ['late_slot', col('string', true)],
     //   publish_jobs.provider / meta_ig — INSTAGRAM THROUGH OUR OWN META APP (1 Oct 2026, branch meta-publish).
     //     `provider` is null for every ordinary job (Zernio, exactly as before) and 'meta_ig' for a job booked
     //     to go to Instagram through the agency's own Meta connection (app/lib/meta-route-core.ts decides,

@@ -1336,6 +1336,8 @@ export interface PublishJob {
   updated_at: string
   published_at: string | null
   platform_results: unknown | null
+  waiting_on_copy: boolean | null
+  late_slot: string | null
   provider: string | null
   meta_ig: unknown | null
 }
@@ -1810,7 +1812,7 @@ export const TABLE_COLUMNS = {
   prospect_events: ['id', 'prospect_id', 'kind', 'at', 'by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['id', 'business', 'lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['id', 'provider', 'provider_hook_id', 'url', 'events', 'secret_encrypted', 'active', 'registered_by', 'created_at', 'updated_at'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results', 'provider', 'meta_ig'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'id', 'client_id', 'content_item_id', 'schedule_entry_id', 'caption', 'media', 'targets', 'scheduled_for', 'timezone', 'status', 'request_id', 'provider_post_id', 'permalink', 'error', 'attempts', 'created_by', 'created_at', 'updated_at', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'provider', 'meta_ig'],
   report_settings: ['id', 'updated_at', 'enabled', 'recipients', 'send_day', 'data_from', 'last_sent_for'],
   room_invite_requests: ['id', 'name', 'email', 'about', 'created_at'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'email', 'enabled', 'label', 'source', 'created_at', 'updated_at', 'updated_by', 'id'],
@@ -1912,7 +1914,7 @@ export const NULLABLE_COLUMNS = {
   prospect_events: ['by', 'source', 'detail', 'points', 'confirmed', 'evidence_id', 'confidence', 'dismissed_at', 'dismissed_by'],
   prospects: ['lead_id', 'tier', 'industry', 'website', 'instagram', 'linkedin', 'contact_name', 'contact_role', 'email', 'phone', 'source', 'source_detail', 'stage', 'stage_entered_at', 'owner_id', 'added_by', 'audit_angle', 'loom_url', 'post_url', 'cta_url', 'outreach_at', 'outreach_channel', 'outreach_by', 'replied_at', 'call_at', 'call_notes', 'proposal_url', 'proposal_sent_at', 'deal_value', 'invoice_ref', 'deposit_amount', 'deposit_sent_at', 'deposit_paid_at', 'contract_url', 'signed_at', 'client_id', 'next_action', 'next_action_at', 'not_now_at', 'reopen_at', 'dormant_at', 'notes', 'created_at', 'updated_at', 'agent_checked_at', 'weakness_tags'],
   provider_webhooks: ['provider_hook_id', 'secret_encrypted', 'registered_by'],
-  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results', 'provider', 'meta_ig'],
+  publish_jobs: ['resend_of', 'resent_platforms', 'client_id', 'content_item_id', 'schedule_entry_id', 'scheduled_for', 'provider_post_id', 'permalink', 'error', 'created_by', 'published_at', 'platform_results', 'waiting_on_copy', 'late_slot', 'provider', 'meta_ig'],
   report_settings: ['data_from', 'last_sent_for'],
   room_invite_requests: ['about'],
   scan_mailboxes: ['refresh_token_encrypted', 'connected_at', 'connected_by', 'scopes', 'signature', 'label', 'updated_by'],

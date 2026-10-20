@@ -17,7 +17,7 @@ import { PLATFORM_MEDIA, copyTooBigReason, type AssetProbe } from './media-fit-c
 import { keepLive, providerTiming, readPlatformResults, resultsForAll, resultsFromRemote, type OutcomeJob } from './post-outcome-core'
 import {
   validatePost, isPlatform, describeRemoteOutcome, isStillProcessing, LIVE_JOB_STATUSES,
-  resendPlanFor, childJobFor, resendWords, publishDoorRefusal,
+  resendPlanFor, childJobFor, resendWords, publishDoorRefusal, lateSplitPlan, lateChildJobFor, lateSplitWords,
   type MediaItem, type PostKind, type Platform, type PostOptions, type Target,
   type RemotePlatformRow,
 } from './publish-core'
@@ -416,6 +416,38 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
     return 'queued'
   }
 
+  /** The late networks, each queued as its own job; answers the networks that were. */
+  const splitLate = async (plan: string[]): Promise<string[]> => {
+    const jobs = table<PublishJobRow>('publish_jobs')
+    const taken = await jobs.claim(jobId, cur => {
+      if (!cur) return null
+      const have = (Array.isArray((cur as { resent_platforms?: unknown }).resent_platforms) ? (cur as { resent_platforms: unknown[] }).resent_platforms : []).map(String)
+      if (plan.some(p => have.includes(p))) return null
+      return { ...cur, resent_platforms: [...have, ...plan], updated_at: new Date().toISOString() } as PublishJobRow
+    })
+    if (!taken.claimed) return []
+    const now = new Date()
+    const made: string[] = []
+    const ids: string[] = []
+    for (const platform of plan) {
+      // the post's own targets and master file: the child makes (or waits for) its copy like any job
+      const row = lateChildJobFor({ ...(claimed as never as Parameters<typeof lateChildJobFor>[0]), media: job.media ?? [] }, platform, { id: randomUUID(), requestId: randomUUID() }, now)
+      if (!row) continue
+      try {
+        await jobs.insert(row as never)
+        made.push(platform)
+        ids.push(String(row.id))
+      } catch (e) {
+        console.error('[publish] could not split off', platform, 'from job', jobId, e instanceof Error ? e.message : e)
+      }
+    }
+    if (made.length) {
+      await table('publish_jobs').update(jobId, { error: lateSplitWords(made).trim() }).catch(() => {})
+      console.log(`[publish ${jobId}] ${made.join(', ')} split off to wait for its copy:`, ids.join(', '))
+    }
+    return made
+  }
+
   /** NEVER A TIME THAT HAS PASSED (the owner's decision 11): the provider posts
    *  a past time at once, so a booking whose time is long gone is not sent at
    *  all — the post comes back to Ready to post to be given a new time. */
@@ -446,8 +478,28 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
      */
     const waited = await awaitCleanCopies(job)
     if (waited.wait) {
-      await settle({ status: 'queued', error: waited.reason, platform_results: perChannel('queued', { reason: waited.reason }) })
-      return 'queued'
+      /**
+       * SEND WHAT IS READY ON TIME (the owner, 20 Oct 2026). Near its time, the networks still waiting for their
+       * copy are split off as their own jobs (publish-core.lateSplitPlan) and this job goes on with the rest, so
+       * one slow copy no longer holds every network past its time. The split is claimed on `resent_platforms`,
+       * so two workers cannot both make the same network's job.
+       */
+      const plan = waited.waiting ? lateSplitPlan(claimed as never, waited.waiting) : []
+      const made = plan.length ? await splitLate(plan) : []
+      const rest = ((waited.targets ?? job.targets ?? []) as Target[]).filter(t => !made.includes(String(t.platform).toLowerCase()))
+      if (made.length === 0 || made.length < plan.length) {
+        // the whole job waits — with 3 hours past its time, not 15 minutes (post-outcome-core.providerTiming)
+        if (made.length) job.targets = rest
+        await settle({
+          status: 'queued', waiting_on_copy: true, error: waited.reason,
+          ...(made.length ? { targets: rest } : {}),
+          platform_results: perChannel('queued', { reason: waited.reason }),
+        })
+        return 'queued'
+      }
+      waited.targets = rest
+      waited.clearMedia = rest.length > 0 && rest.every(t => (t.options?.media?.length ?? 0) > 0) ? true : undefined
+      waited.wait = undefined
     }
     if (waited.failed) {
       await settle({ status: 'failed', attempts: job.attempts + 1, error: waited.reason, platform_results: perChannel('failed', { reason: waited.reason }) })
@@ -678,6 +730,8 @@ async function attemptPublishJob(jobId: string): Promise<string | null> {
  */
 async function awaitCleanCopies(job: PublishJob): Promise<{
   wait?: true; failed?: true; reason?: string; targets?: Target[]; clearMedia?: true
+  /** the networks whose copy is still being made (with `wait`); the others' copies are in `targets` */
+  waiting?: Platform[]
 }> {
   if (!encoderConfigured()) return {}
   const media = job.media ?? []
@@ -740,10 +794,13 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
   if (needing.length === 0) return allCovered(targets) ? { clearMedia: true } : {}
 
   const copies = new Map<Platform, { url: string }>()
+  const waiting: Platform[] = []
   for (const platform of needing) {
     const state = await smallerCopyOf(url, platform, kinds[platform], seconds)
     if (state.status === 'encoding') {
-      return { wait: true, reason: cleanCopyWords(PLATFORM_MEDIA[platform]?.label ?? platform) }
+      // every network is asked, so the ones that are ready can go on time without the slow one (lateSplitPlan)
+      waiting.push(platform)
+      continue
     }
     if (state.status === 'failed') {
       return {
@@ -772,6 +829,7 @@ async function awaitCleanCopies(job: PublishJob): Promise<{
     if (!copy || t.options?.media?.length) return t
     return { ...t, options: { ...(t.options ?? {}), media: [{ url: copy.url, type: 'video' as const }] } }
   })
+  if (waiting.length) return { wait: true, reason: cleanCopyWords(PLATFORM_MEDIA[waiting[0]]?.label ?? waiting[0]), waiting, targets: next }
   return allCovered(next) ? { targets: next, clearMedia: true } : { targets: next }
 }
 
