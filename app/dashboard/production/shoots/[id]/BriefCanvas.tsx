@@ -28,6 +28,7 @@ import {
   type CanvasCard, type CanvasTextSize, type ReferenceMedia, CANVAS_TEXT_COLORS, textColorOf, CANVAS_TEXT_ALIGNS, textAlignOf,
   hasTextStyle, defaultAlignOf, textBoldOf, boldWordsIn, inBoldRun } from '../../../../lib/batch-brief-core'
 import { applyBold } from './BoldBox'
+import { holdPageScroll } from '../../../../lib/hold-page-scroll'
 import {
   boardTrail, childrenOf, deleteWarning, descendantsOf, freeSpot, insideLabel, stillThere, type Box,
 } from '../../../../lib/shoot-board-core'
@@ -119,6 +120,8 @@ export default function BriefCanvas({
   }, [savedCards])
 
   const viewportRef = useRef<HTMLDivElement>(null)
+  // typing in a note never throws the page up (Manal, 20 Oct 2026) — app/lib/hold-page-scroll.ts
+  useEffect(() => { const v = viewportRef.current; return v ? holdPageScroll(v) : undefined }, [])
   const worldRef = useRef<HTMLDivElement>(null)
   const camRef = useRef<Camera>({ x: 0, y: 0, s: 1 })
   const [, forceRender] = useState(0)
