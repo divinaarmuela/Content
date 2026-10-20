@@ -12,7 +12,9 @@ import { cn } from '@/lib/utils'
 import PageTitle from '../../ui/PageTitle'
 import PlatformIcon from '../PlatformIcon'
 import { compact, monthKey, monthWords, platformsIn, shiftMonth } from '../../../lib/content-tracker-core'
-import { KIND_WORDS, coverWords, type BoardItem, type ClientBoard, type ItemKind } from '../../../lib/content-board-core'
+import {
+  FORMATS, byNetwork, itemWord, coverWords, formatWord, overall, type BoardItem, type ClientBoard, type ItemKind, type KindCount,
+} from '../../../lib/content-board-core'
 import { networkName } from '../../../lib/publish-core'
 
 /**
@@ -30,7 +32,6 @@ type Answer = {
 }
 type Show = 'all' | 'attention' | 'covered'
 
-const SHOWN_KINDS: ItemKind[] = ['reel', 'story', 'graphic']
 const WHEN = new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Melbourne' })
 
 /** a client needs a look: nothing booked a week ahead, or short of a target */
@@ -105,9 +106,9 @@ export default function ContentTrackerPage() {
         <Stat label="Clients" value={blank ? null : String(all.length)} />
         <Stat label="Published" value={blank ? null : String(all.reduce((n, b) => n + b.published, 0))} />
         <Stat label="Scheduled" value={blank ? null : String(all.reduce((n, b) => n + b.scheduled, 0))} />
-        <Stat label="Reels" value={blank ? null : String(sum('reel'))} />
+        <Stat label="Videos and reels" value={blank ? null : String(sum('reel'))} />
+        <Stat label="Statics" value={blank ? null : String(sum('graphic'))} />
         <Stat label="Stories" value={blank ? null : String(sum('story'))} />
-        <Stat label="Graphics" value={blank ? null : String(sum('graphic'))} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -206,24 +207,54 @@ function Cover({ until }: { until: string | null }) {
   )
 }
 
-/** one kind's line: a bar of what went out (solid) and what is still to go (light), against a target if one is set */
-function KindRow({ kind, count, target }: { kind: ItemKind; count: { published: number; scheduled: number }; target: number | null }) {
+/** one cell: what went out and what is still to go, in the network's own word ("3 reels · 1 to go") */
+function FormatCell({ count, word, target }: { count: KindCount; word: string; target?: number | null }) {
   const total = count.published + count.scheduled
-  const scale = Math.max(target ?? 0, total, 1)
-  const met = target !== null && total >= target
+  if (total === 0 && !target) return <span className="text-muted-foreground">—</span>
+  const met = target != null && total >= target
   return (
-    <div className="grid grid-cols-[72px_1fr_auto] items-center gap-3">
-      <span className="text-[13px] font-semibold">{KIND_WORDS[kind].many}</span>
-      <div className="relative h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-        <div className="absolute inset-y-0 left-0 bg-foreground" style={{ width: `${(count.published / scale) * 100}%` }} />
-        <div className="absolute inset-y-0 bg-foreground/30" style={{ left: `${(count.published / scale) * 100}%`, width: `${(count.scheduled / scale) * 100}%` }} />
-        {target !== null && target > 0 && <div className="absolute inset-y-0 w-0.5 bg-accent-blue" style={{ left: `calc(${(target / scale) * 100}% - 1px)` }} />}
-      </div>
-      <span className="min-w-[132px] text-right text-[12px] tabular-nums text-muted-foreground">
-        <b className="text-foreground">{count.published}</b> out · <b className="text-foreground">{count.scheduled}</b> to go
-        {target !== null && <span className={cn('ml-1', met ? 'text-accent-green' : 'text-amber-700 dark:text-amber-300')}>/ {target}</span>}
-      </span>
-    </div>
+    <span className="tabular-nums">
+      <b className="text-[14px]">{count.published}</b> <span className="text-muted-foreground">{word.toLowerCase()}</span>
+      {count.scheduled > 0 && <span className="text-accent-blue"> · {count.scheduled} to go</span>}
+      {target != null && <span className={cn('ml-1 font-semibold', met ? 'text-accent-green' : 'text-amber-700 dark:text-amber-300')}>of {target}</span>}
+    </span>
+  )
+}
+
+/** each network's videos, statics and stories, then the client's overall — every number with its word */
+function FormatTable({ board, target }: { board: ClientBoard; target: Target | undefined }) {
+  const per = byNetwork(board.items)
+  const nets = platformsIn(Object.keys(per).map(platform => ({ platform })))
+  const all = overall(board.items)
+  const formats = FORMATS.filter(f => f !== 'story' || all.story.published + all.story.scheduled > 0)
+  if (nets.length === 0) return <p className="text-[13px] text-muted-foreground">Nothing in Zernio this month.</p>
+  return (
+    <table className="w-full text-[12px]">
+      <thead>
+        <tr className="text-left text-[11px] text-muted-foreground">
+          <th className="pb-1.5 font-medium">Network</th>
+          {formats.map(f => <th key={f} className="pb-1.5 font-medium">{f === 'video' ? 'Videos / reels' : formatWord(f, null)}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {nets.map(n => (
+          <tr key={n} className="border-t border-border">
+            <td className="py-1.5 pr-2">
+              <span className="inline-flex items-center gap-1.5 font-medium"><PlatformIcon platform={n} size={14} />{networkName(n)}</span>
+            </td>
+            {formats.map(f => <td key={f} className="py-1.5 pr-2"><FormatCell count={per[n][f]} word={formatWord(f, n)} /></td>)}
+          </tr>
+        ))}
+        <tr className="border-t-2 border-foreground/20">
+          <td className="py-1.5 pr-2 font-semibold">Overall</td>
+          {formats.map(f => (
+            <td key={f} className="py-1.5 pr-2">
+              <FormatCell count={all[f]} word={formatWord(f, null)} target={f === 'video' ? target?.reels : f === 'static' ? target?.graphics : null} />
+            </td>
+          ))}
+        </tr>
+      </tbody>
+    </table>
   )
 }
 
@@ -241,26 +272,13 @@ function ClientCard({ board, client, target, onOpen }: { board: ClientBoard; cli
         <Cover until={board.scheduledUntil} />
       </div>
 
-      <div className="flex flex-col gap-2.5">
-        {SHOWN_KINDS.map(k => (
-          <KindRow key={k} kind={k} count={board.counts[k]}
-            target={k === 'reel' ? target?.reels ?? null : k === 'graphic' ? target?.graphics ?? null : null} />
-        ))}
-      </div>
+      <FormatTable board={board} target={target} />
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-        <span className="flex items-center gap-2.5">
-          {platformsIn(Object.keys(board.networks).map(platform => ({ platform }))).map(p => (
-            <span key={p} className="inline-flex items-center gap-1 text-[12px] tabular-nums" title={`${board.networks[p]} on ${networkName(p)}`}>
-              <PlatformIcon platform={p} size={15} />{board.networks[p]}
-            </span>
-          ))}
-        </span>
-        <span className="flex items-center gap-3 text-[12px] tabular-nums text-muted-foreground">
-          <span className="inline-flex items-center gap-1" title="Views on what went out"><Eye className="h-3.5 w-3.5" />{compact(board.metrics.views)}</span>
-          <span className="inline-flex items-center gap-1" title="Likes"><Heart className="h-3.5 w-3.5" />{compact(board.metrics.likes)}</span>
-          {board.engagement !== null && <span title="Likes, comments, shares and saves over views">{board.engagement}% eng.</span>}
-        </span>
+      <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-[12px] tabular-nums text-muted-foreground">
+        <span><b className="text-foreground">{compact(board.metrics.views)}</b> views</span>
+        <span><b className="text-foreground">{compact(board.metrics.likes)}</b> likes</span>
+        <span><b className="text-foreground">{compact(board.metrics.comments)}</b> comments</span>
+        {board.engagement !== null && <span title="Likes, comments, shares and saves over views"><b className="text-foreground">{board.engagement}%</b> engagement</span>}
       </div>
     </button>
   )
@@ -304,8 +322,8 @@ function ClientDetail({ board, client, month, target, onSaved }: {
       <section className="flex flex-col gap-3 rounded-inner border border-border p-3">
         <h3 className="text-[13px] font-semibold">This month’s plan</h3>
         <div className="grid grid-cols-2 gap-3">
-          <TargetInput label="Reels needed" value={target?.reels ?? null} onSave={v => save({ required_reels: v })} />
-          <TargetInput label="Graphics needed" value={target?.graphics ?? null} onSave={v => save({ required_graphics: v })} />
+          <TargetInput label="Videos and reels needed" value={target?.reels ?? null} onSave={v => save({ required_reels: v })} />
+          <TargetInput label="Statics needed" value={target?.graphics ?? null} onSave={v => save({ required_graphics: v })} />
         </div>
         <TextInput label="Responsible" value={target?.responsible ?? ''} onSave={v => save({ responsible: v })} />
         <TextInput label="Notes" value={target?.notes ?? ''} onSave={v => save({ notes: v })} />
@@ -344,12 +362,12 @@ function ItemRow({ item }: { item: BoardItem }) {
         {item.thumbnail && !broken
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={item.thumbnail} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover" />
-          : <span className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">{KIND_WORDS[item.kind].one}</span>}
+          : <span className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">{itemWord(item)}</span>}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <span className={cn('rounded-full px-2 py-0.5 font-semibold', live ? 'bg-foreground text-background' : 'bg-accent-blue/15 text-accent-blue')}>
-            {KIND_WORDS[item.kind].one}
+            {itemWord(item)}
           </span>
           <span className="text-muted-foreground">{live ? 'Went out' : 'Goes out'} {WHEN.format(new Date(item.at))}</span>
         </div>

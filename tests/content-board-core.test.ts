@@ -84,3 +84,28 @@ describe('how far ahead', () => {
     expect(coverWords('2026-10-01T00:00:00Z', now).tone).toBe('none')
   })
 })
+
+describe('per network, in each network’s words (20 Oct 2026)', () => {
+  const waiting = scheduledItems(scheduled, clientOf)
+  const items = itemsInMonth([...publishedItems(analytics, clientOf), ...waiting], '2026-10').filter(i => i.clientId === 'jordan')
+  it('counts each network’s videos, statics and stories — a post on three networks on each', async () => {
+    const { byNetwork, overall } = await import('../app/lib/content-board-core')
+    const n = byNetwork(items)
+    expect(n.instagram.video).toEqual({ published: 1, scheduled: 1 })
+    expect(n.instagram.story).toEqual({ published: 0, scheduled: 1 })
+    expect(n.tiktok.video).toEqual({ published: 1, scheduled: 0 })
+    expect(n.linkedin.static).toEqual({ published: 1, scheduled: 0 })
+    expect(n.linkedin.video).toEqual({ published: 0, scheduled: 1 })
+    // overall: each piece once
+    expect(overall(items).video).toEqual({ published: 1, scheduled: 1 })
+  })
+  it('a video is a Reel on Instagram only', async () => {
+    const { formatWord, itemWord } = await import('../app/lib/content-board-core')
+    expect(formatWord('video', 'instagram')).toBe('Reels')
+    expect(formatWord('video', 'linkedin')).toBe('Videos')
+    expect(formatWord('static', 'tiktok')).toBe('Statics')
+    expect(itemWord({ kind: 'reel', networks: [{ platform: 'instagram', url: null }] })).toBe('Reel')
+    expect(itemWord({ kind: 'reel', networks: [{ platform: 'instagram', url: null }, { platform: 'linkedin', url: null }] })).toBe('Video')
+    expect(itemWord({ kind: 'graphic', networks: [] })).toBe('Static')
+  })
+})

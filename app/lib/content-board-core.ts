@@ -12,10 +12,17 @@ import { monthKey } from './content-tracker-core'
 export type ItemKind = 'reel' | 'story' | 'graphic' | 'text'
 export const KINDS: readonly ItemKind[] = ['reel', 'story', 'graphic', 'text']
 export const KIND_WORDS: Record<ItemKind, { one: string; many: string }> = {
-  reel: { one: 'Reel', many: 'Reels' },
+  // a video is a Reel only on Instagram (itemWord); "Static" is a photo or a carousel (the owner, 20 Oct 2026)
+  reel: { one: 'Video', many: 'Videos' },
   story: { one: 'Story', many: 'Stories' },
-  graphic: { one: 'Graphic', many: 'Graphics' },
+  graphic: { one: 'Static', many: 'Statics' },
   text: { one: 'Text post', many: 'Text posts' },
+}
+
+/** one post's word: a video only on Instagram is a Reel; a carousel says so */
+export function itemWord(item: Pick<BoardItem, 'kind' | 'networks'>): string {
+  if (item.kind === 'reel' && item.networks.length > 0 && item.networks.every(n => n.platform === 'instagram')) return 'Reel'
+  return KIND_WORDS[item.kind].one
 }
 
 export type ItemMetrics = { views: number; likes: number; comments: number; shares: number; saves: number }
@@ -190,4 +197,42 @@ export function coverWords(until: string | null, now = Date.now()): { text: stri
   if (days < 0) return { text: 'Nothing scheduled ahead', tone: 'none' }
   const date = new Date(until).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Melbourne' })
   return { text: `Scheduled until ${date}`, tone: days < 7 ? 'soon' : 'good' }
+}
+
+/* ── per network (the owner, 20 Oct 2026: "so far how many reels posted in … instagram, then tiktok how many videos
+ *    posted, same for linkedin and then the overall … same for statics which include carousels … saying reel for all
+ *    4 platforms is wrong … icons with 8 doesn't mean anything") ─────────────────────────────────────────────────── */
+
+/** the sheet's three kinds: a video, a static (a photo or a carousel), a story */
+export type FormatKey = 'video' | 'static' | 'story'
+export const FORMATS: readonly FormatKey[] = ['video', 'static', 'story']
+export const formatOf = (kind: ItemKind): FormatKey | null =>
+  kind === 'reel' ? 'video' : kind === 'graphic' ? 'static' : kind === 'story' ? 'story' : null
+
+/** what each network calls a video: a Reel on Instagram, a video everywhere else */
+export function formatWord(format: FormatKey, platform: string | null): string {
+  if (format === 'video') return platform === 'instagram' ? 'Reels' : 'Videos'
+  if (format === 'static') return 'Statics'
+  return 'Stories'
+}
+
+export type FormatCounts = Record<FormatKey, KindCount>
+const zeroFormats = (): FormatCounts => ({ video: { published: 0, scheduled: 0 }, static: { published: 0, scheduled: 0 }, story: { published: 0, scheduled: 0 } })
+
+/** each network's videos, statics and stories, out and to go — a post on three networks counts on each of them */
+export function byNetwork(items: readonly BoardItem[]): Record<string, FormatCounts> {
+  const out: Record<string, FormatCounts> = {}
+  for (const i of items) {
+    const f = formatOf(i.kind)
+    if (!f) continue
+    for (const n of i.networks) (out[n.platform] ??= zeroFormats())[f][i.state]++
+  }
+  return out
+}
+
+/** the client's whole month: each piece once, however many networks it went to */
+export function overall(items: readonly BoardItem[]): FormatCounts {
+  const out = zeroFormats()
+  for (const i of items) { const f = formatOf(i.kind); if (f) out[f][i.state]++ }
+  return out
 }
