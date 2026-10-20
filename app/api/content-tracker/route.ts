@@ -3,10 +3,8 @@ import { table } from '@/lib/db'
 import type { Client, ContentTracker, SocialAccount } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { getPublisher } from '@/app/lib/publisher'
-import {
-  inMonth, monthKey, monthRange, piecesFromZernio, piecesFromZernioScheduled, sanitiseTrackerPatch, scheduledUntilByClient, shiftMonth,
-  trackerLine, trackerPosts, trackerRowId, type TrackerPost,
-} from '@/app/lib/content-tracker-core'
+import { monthKey, monthRange, sanitiseTrackerPatch, shiftMonth, trackerRowId } from '@/app/lib/content-tracker-core'
+import { boardOrder, clientBoard, itemsInMonth, publishedItems, scheduledItems } from '@/app/lib/content-board-core'
 
 /**
  * THE CONTENT TRACKER (app/lib/content-tracker-core.ts) — the team's monthly sheet, live.
@@ -74,7 +72,6 @@ export async function GET(req: Request) {
     const month = url.searchParams.get('month') || monthKey(new Date().toISOString())!
     if (!monthRange(month)) return NextResponse.json({ error: 'month is YYYY-MM' }, { status: 400 })
     const previous = shiftMonth(month, -1)
-
     const fresh = url.searchParams.get('fresh') === '1'
     const [{ raw, complete }, queued, accounts, clients, rows, links, team] = await Promise.all([
       monthFromZernio(month, fresh),
@@ -89,19 +86,11 @@ export async function GET(req: Request) {
     const clientOfAccount = new Map(accounts.filter(a => a.provider_account_id).map(a => [String(a.provider_account_id), a.client_id ?? null]))
     const clientOf = (id: string | null) => (id ? clientOfAccount.get(id) ?? null : null)
 
-    const feed: TrackerPost[] = inMonth(trackerPosts({ posts: raw }, clientOf), month)
     // the month in Zernio: what went out through it, and what is still waiting to go
-    const pieces = [...piecesFromZernio({ posts: raw }, clientOf), ...piecesFromZernioScheduled({ posts: queued }, clientOf)]
-    const until = scheduledUntilByClient({ posts: queued }, clientOf)
-
-    // the clients on the sheet: Zernio published for them this month, or someone set their targets (this month or
-    // last) — not every connected account (Pattons posts on its own; none of it is ours)
-    const withPieces = new Set(pieces.filter(p => p.clientId && monthKey(p.at) === month).map(p => String(p.clientId)))
-    const withRows = new Set(rows.map(r => r.client_id))
-    const onSheet = clients.filter(c => withPieces.has(c.id) || (withRows.has(c.id) && (c.status ?? 'active') === 'active'))
-    // the rest of the active clients, so one can be added to the sheet
-    const addable = clients.filter(c => (c.status ?? 'active') === 'active' && !onSheet.some(o => o.id === c.id))
-      .map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name))
+    const waiting = scheduledItems({ posts: queued }, clientOf)
+    const month_ = itemsInMonth([...publishedItems({ posts: raw }, clientOf), ...waiting], month)
+    const ids = [...new Set(month_.map(i => i.clientId).filter((x): x is string => !!x))]
+    const boards = ids.map(id => clientBoard(id, month_, waiting)).sort(boardOrder)
 
     const logo = new Map<string, string>()
     for (const a of accounts) {
@@ -111,13 +100,20 @@ export async function GET(req: Request) {
     const people = new Map(team.filter(t => t.active_status && (t.role === 'account_manager' || t.role === 'super_admin')).map(t => [t.id, t.name]))
     const managers = (clientId: string) => links.filter(l => l.client_id === clientId).map(l => people.get(l.team_user_id)).filter(Boolean).join(' / ')
     const rowOf = (clientId: string, m: string) => rows.find(r => r.id === trackerRowId(clientId, m)) ?? null
+    // what a person set for the client: this month's, else last month's carried over
+    const targets = Object.fromEntries(ids.map(id => {
+      const own = rowOf(id, month), prev = rowOf(id, previous)
+      return [id, {
+        reels: own?.required_reels ?? prev?.required_reels ?? null,
+        graphics: own?.required_graphics ?? prev?.required_graphics ?? null,
+        notes: own?.notes ?? '',
+        responsible: own?.responsible ?? managers(id),
+      }]
+    }))
+    const named = clients.filter(c => ids.includes(c.id)).map(c => ({ id: c.id, name: c.name, logo: logo.get(c.id) ?? null }))
+    const unlinked = month_.filter(i => !i.clientId).length
 
-    const lines = onSheet.map(c => trackerLine(c.id, pieces, month, rowOf(c.id, month) as never, rowOf(c.id, previous) as never, managers(c.id), until.get(c.id) ?? null))
-    const named = clients
-      .filter(c => onSheet.some(o => o.id === c.id) || feed.some(p => p.clientId === c.id))
-      .map(c => ({ id: c.id, name: c.name, logo: logo.get(c.id) ?? null }))
-
-    return NextResponse.json({ month, lines, posts: feed, clients: named, addable, complete, fetchedAt: new Date().toISOString() })
+    return NextResponse.json({ month, boards, clients: named, targets, unlinked, complete, fetchedAt: new Date().toISOString() })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)
     return NextResponse.json({ error }, { status })
