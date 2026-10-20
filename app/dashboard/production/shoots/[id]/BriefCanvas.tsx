@@ -74,8 +74,10 @@ const MOCKUP_MENU: { group: string; items: { pf: NonNullable<CanvasCard['platfor
  * hundred cards pan at 60fps without a single re-render.
  */
 export default function BriefCanvas({
-  cards: savedCards, references, canEdit, clientName, onOp, initialBoard,
+  cards: savedCards, references, canEdit, clientName, onOp, initialBoard, rootName,
 }: {
+  /** what the top of the breadcrumb says — a team board's own name; a shoot's board says "Shoot brief" */
+  rootName?: string
   /** open inside this board tile first (a link to a Milanote shoot brief, 20 Oct 2026) */
   initialBoard?: string | null
   cards: CanvasCard[]
@@ -1567,12 +1569,12 @@ export default function BriefCanvas({
             {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
             {last ? (
               <span aria-current="page" className="inline-flex h-11 items-center gap-1.5 px-2 text-body-15 font-semibold">
-                <FolderOpen className="h-4 w-4" /> {c.name}
+                <FolderOpen className="h-4 w-4" /> {c.id ? c.name : (rootName || c.name)}
               </span>
             ) : (
               <button type="button" onClick={() => openBoard(c.id)}
                 className="inline-flex h-11 items-center rounded-full px-3 text-body-15 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
-                {c.name}
+                {c.id ? c.name : (rootName || c.name)}
               </button>
             )}
           </span>

@@ -168,7 +168,7 @@ export default function ShootBoard({
             <PortalTokenProvider value={token}>
               {/* the Drive files on the board play through the client's own route (22 Sep 2026) */}
               <PortalDriveScopeProvider value={token ? { token, kind: thread, id: shootId } : null}>
-                <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} />
+                <BriefCanvas cards={cards} references={[]} canEdit={false} clientName={clientName} onOp={async () => false} rootName={thread === 'team_board' ? boardName ?? undefined : undefined} />
               </PortalDriveScopeProvider>
             </PortalTokenProvider>
           </div>

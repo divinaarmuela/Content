@@ -124,7 +124,7 @@ describe('team boards (21 Sep 2026)', () => {
       expect(src).toContain('teamBoardLink(window.location.origin,')
     }
     const page = readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')
-    expect(page).toContain('<BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} />')
+    expect(page).toContain('<BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} rootName={board?.name} />')
     const shell = readFileSync('app/dashboard/ui/Shell.tsx', 'utf8')
     expect(shell).toContain("{ href: '/dashboard/team-boards',   label: 'Boards',        icon: StickyNote },")
   })

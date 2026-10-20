@@ -191,7 +191,7 @@ export default function TeamBoardPage() {
         </div>
       )}
       <TeamBoardComments boardId={id} cards={cards} team={team}>
-        <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} />
+        <BriefCanvas cards={cards} references={[]} canEdit={mayEditTeamBoard(me)} onOp={onOp} initialBoard={openAt} rootName={board?.name} />
       </TeamBoardComments>
 
       <Dialog open={asking} onOpenChange={o => { if (!busy) setAsking(o) }}>
