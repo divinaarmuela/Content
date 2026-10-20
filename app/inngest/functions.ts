@@ -992,7 +992,39 @@ export const acquisitionResearch = inngest.createFunction(
   },
 )
 
+/**
+ * MILANOTE'S IMAGES AND FILES, COPIED INTO OUR STORAGE (20 Oct 2026, docs/MILANOTE_MERGE.md). Started once by the
+ * super admin's route; works through `milanote_media` a few files a step until nothing is left, so a 2.2 GB copy
+ * needs no browser and survives any one failure (each file claimed, retried up to three times).
+ * CLAUDE.md trap 5b: a NEW function — re-sync Inngest after deploying it.
+ */
+export const milanoteMediaCopy = inngest.createFunction(
+  {
+    id: 'milanote-media-copy',
+    name: 'Copy Milanote images and files into storage',
+    triggers: [{ event: 'milanote/media.copy' }],
+    retries: 2,
+    concurrency: { limit: 1 },
+  },
+  async ({ step }) => withRequestCache(async () => {
+    let copied = 0, failed = 0
+    for (let i = 0; i < 400; i++) {
+      const batch = await step.run(`batch-${i}`, async () => {
+        const { copyMilanoteBatch } = await import('../lib/milanote-media')
+        return copyMilanoteBatch(6)
+      })
+      copied += batch.copied
+      failed += batch.failed
+      if (batch.tried === 0) return { copied, failed, finished: true }
+    }
+    // a very long list: hand on to a fresh run rather than one endless one
+    await step.sendEvent('carry-on', { name: 'milanote/media.copy', data: {} })
+    return { copied, failed, finished: false }
+  }),
+)
+
 export const functions = [
+  milanoteMediaCopy,
   acquisitionAgent,
   acquisitionDm,
   acquisitionResearch,

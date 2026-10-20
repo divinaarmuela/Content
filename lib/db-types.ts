@@ -60,6 +60,7 @@ export type TableName =
   | 'linktree_states'
   | 'meta_ig_accounts'
   | 'meta_ig_events'
+  | 'milanote_media'
   | 'monthly_commitments'
   | 'monthly_updates'
   | 'newsletter_subscribers'
@@ -1044,6 +1045,19 @@ export interface MetaIgEvent {
   delivery_id: string | null
 }
 
+export interface MilanoteMedia {
+  id: string
+  src: string
+  name: string
+  mime: string | null
+  size: number | null
+  url: string | null
+  status: string
+  attempts: number
+  error: string | null
+  updated_at: string
+}
+
 export interface MonthlyCommitment {
   video_quota: number | null
   id: string
@@ -1530,6 +1544,8 @@ export interface TeamBoard {
   updated_by: string | null
   created_at: string
   updated_at: string
+  board_type: string | null
+  milanote_id: string | null
 }
 
 export interface TeamInvite {
@@ -1747,6 +1763,7 @@ export const TABLE_COLUMNS = {
   linktree_states: ['id', 'client_id', 'user_id', 'verifier_enc', 'used_at', 'created_at'],
   meta_ig_accounts: ['id', 'client_id', 'username', 'account_type', 'access_token_encrypted', 'token_expires_at', 'scopes', 'connected_by', 'connected_at', 'refreshed_at', 'status', 'last_error'],
   meta_ig_events: ['id', 'ig_user_id', 'client_id', 'kind', 'payload', 'occurred_at', 'received_at', 'delivery_id'],
+  milanote_media: ['id', 'src', 'name', 'mime', 'size', 'url', 'status', 'attempts', 'error', 'updated_at'],
   monthly_commitments: ['video_quota', 'id', 'created_at', 'client_id', 'month', 'year', 'reel_quota', 'carousel_quota', 'story_quota', 'static_quota', 'other_quota', 'notes'],
   monthly_updates: ['id', 'created_at', 'client_id', 'month', 'year', 'definition', 'token', 'status', 'answers', 'notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'title', 'created_by'],
   newsletter_subscribers: ['id', 'email', 'source', 'created_at'],
@@ -1773,7 +1790,7 @@ export const TABLE_COLUMNS = {
   social_accounts_retired: ['id', 'client_id', 'platform', 'provider_account_id', 'username', 'row', 'retired_at'],
   social_posts: ['id', 'client_id', 'item_id', 'version_id', 'version_number', 'slides', 'caption', 'per_channel', 'channels', 'scheduled_for', 'timezone', 'status', 'publish_job_ids', 'created_by', 'created_at', 'updated_at', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
   team_board_comments: ['id', 'board_id', 'author_id', 'body', 'card_id', 'assigned_to', 'resolved', 'created_at'],
-  team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at'],
+  team_boards: ['id', 'name', 'client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'created_at', 'updated_at', 'board_type', 'milanote_id'],
   team_invites: ['id', 'created_at', 'email', 'role', 'employment_type', 'timezone', 'client_id', 'assigned_client_ids', 'invited_by', 'clerk_invitation_id', 'status'],
   team_user_clients: ['team_user_id', 'client_id', 'assigned_at', 'assigned_by', 'id'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'id', 'created_at', 'updated_at', 'clerk_user_id', 'email', 'name', 'role', 'employment_type', 'timezone', 'workday_start', 'workday_end', 'client_id', 'asana_user_gid', 'notification_prefs', 'active_status', 'quality_reviewer', 'ops_contact', 'colourist'],
@@ -1846,6 +1863,7 @@ export const NULLABLE_COLUMNS = {
   linktree_states: ['used_at'],
   meta_ig_accounts: ['username', 'account_type', 'token_expires_at', 'connected_by', 'refreshed_at', 'last_error'],
   meta_ig_events: ['client_id', 'occurred_at', 'delivery_id'],
+  milanote_media: ['mime', 'size', 'url', 'error'],
   monthly_commitments: ['video_quota', 'notes'],
   monthly_updates: ['notify_emails', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by'],
   newsletter_subscribers: [],
@@ -1872,7 +1890,7 @@ export const NULLABLE_COLUMNS = {
   social_accounts_retired: ['client_id', 'username'],
   social_posts: ['version_id', 'version_number', 'caption', 'scheduled_for', 'created_by', 'sent_at', 'approved_at', 'approved_by', 'approval_mode', 'note', 'stage', 'rev', 'stage_at', 'draft_version', 'sent_version', 'approval_steps', 'approval', 'qc_pass', 'changes_asked', 'client_send', 'last_client_send', 'booking', 'outcomes', 'problem', 'cancelled', 'assigned_to', 'source_item_id', 'source_deleted', 'sending', 'automation', 'batch', 'if_no_answer', 'client_review', 'review_asked', 'client_reviews'],
   team_board_comments: ['author_id', 'card_id', 'assigned_to', 'resolved'],
-  team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by'],
+  team_boards: ['client_id', 'status', 'submitted_by', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_note', 'canvas_cards', 'shared_with_client', 'client_shared_at', 'client_shared_by', 'created_by', 'updated_by', 'board_type', 'milanote_id'],
   team_invites: ['client_id', 'invited_by', 'clerk_invitation_id'],
   team_user_clients: ['assigned_by'],
   team_users: ['editors_lead', 'getting_started_dismissed_at', 'getting_started_dismissed_role', 'getting_started_dismissed_pages', 'clerk_user_id', 'client_id', 'asana_user_gid', 'ops_contact', 'colourist'],
@@ -1952,6 +1970,7 @@ export const JSON_COLUMNS = {
   linktree_states: [],
   meta_ig_accounts: ['scopes'],
   meta_ig_events: ['payload'],
+  milanote_media: [],
   monthly_commitments: [],
   monthly_updates: ['definition', 'answers'],
   newsletter_subscribers: [],
@@ -2057,6 +2076,7 @@ export const JSON_ARRAY_COLUMNS = {
   linktree_states: [],
   meta_ig_accounts: ['scopes'],
   meta_ig_events: [],
+  milanote_media: [],
   monthly_commitments: [],
   monthly_updates: [],
   newsletter_subscribers: [],

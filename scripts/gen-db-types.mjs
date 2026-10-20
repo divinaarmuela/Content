@@ -306,6 +306,27 @@ const GHOST_TABLES = {
     ['updated_by', col('string', true)],
     ['created_at', col('string', false)],
     ['updated_at', col('string', false)],
+    //   board_type  — what the board is for (docs/MILANOTE_MERGE.md, 20 Oct 2026): shoot | inspo | strategy |
+    //                 monthly | other; the Boards page filters by it. Absent = other.
+    //   milanote_id — the Milanote board it was brought from; the import re-runs without doubling it
+    ['board_type', col('string', true)],
+    ['milanote_id', col('string', true)],
+  ],
+  // milanote_media — EVERY MILANOTE IMAGE AND FILE, COPIED INTO OUR STORAGE (20 Oct 2026, docs/MILANOTE_MERGE.md).
+  //   One row per file, written by scripts/milanote-media-rows.mjs from the snapshot; the `milanote-media-copy`
+  //   Inngest job takes rows still `todo`, downloads `src` from Milanote (read only), stores it in R2 with the
+  //   live app's own keys and writes `url`. Milanote's links die with the account; ours do not. `id` is the Milanote element + kind.
+  milanote_media: [
+    ['id', col('string', false)],
+    ['src', col('string', false)],
+    ['name', col('string', false)],
+    ['mime', col('string', true)],
+    ['size', col('number', true)],
+    ['url', col('string', true)],
+    ['status', col('string', false)],      // todo | copying | done | failed
+    ['attempts', col('number', false)],
+    ['error', col('string', true)],
+    ['updated_at', col('string', false)],
   ],
   // team_board_comments — COMMENTS ON A TEAM BOARD'S CARDS (the owner, 22 Sep
   //   2026: "internal comments … like tagging" and the client's, "like how we
