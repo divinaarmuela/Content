@@ -180,11 +180,30 @@ export default function BriefCanvas({
   // work on touch; `coarse` now only sizes the viewport.
   const viewOnly = readOnly
 
+  /** THE SELECTED CARD'S TOOLBAR STAYS ON THE BOARD (the owner, 20 Oct 2026, a column at the board's left edge: its
+   *  toolbar ran off the side and its first colours could not be reached). Centred over the card where it fits;
+   *  slid sideways just enough to stay inside the board where it does not. Run after every render and every pan. */
+  const keepToolbarInView = useCallback(() => {
+    const vp = viewportRef.current
+    const bar = vp?.querySelector<HTMLElement>('[data-card-toolbar]')
+    if (!vp || !bar) return
+    const base = Number(bar.dataset.baseLeft ?? 0)
+    bar.style.left = `${base}px`
+    const r = bar.getBoundingClientRect()
+    if (!r.width) return
+    const v = vp.getBoundingClientRect()
+    const pad = 8
+    const shift = r.width > v.width - 2 * pad || r.left < v.left + pad ? v.left + pad - r.left
+      : r.right > v.right - pad ? v.right - pad - r.right : 0
+    if (shift) bar.style.left = `${base + shift / camRef.current.s}px`
+  }, [])
+
   const paint = useCallback(() => {
     const { x, y, s } = camRef.current
     if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px) scale(${s})`
+    keepToolbarInView()
     // no dot grid behind the cards (the owner, 21 Sep 2026: "remove the dots") — a plain surface
-  }, [])
+  }, [keepToolbarInView])
 
   const commitCamera = useCallback(() => {
     setScalePct(Math.round(camRef.current.s * 100))
@@ -579,7 +598,7 @@ export default function BriefCanvas({
     // saw the toolbar "behind the right side" for ten seconds (13 Sep 2026)
     if (d.el) { d.el.style.willChange = ''; d.el.style.zIndex = d.moved ? '' : '5000' }
     const bar = d.el?.querySelector<HTMLElement>('[data-card-toolbar]')
-    if (bar) bar.style.display = ''
+    if (bar) { bar.style.display = ''; keepToolbarInView() }
     interactingRef.current = false
     if (!d.moved) { if (d.host && d.el) d.el.style.transform = ''; setSelected(card.id); return }
     const s = camRef.current.s
@@ -1178,6 +1197,7 @@ export default function BriefCanvas({
     for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-cid]'))) {
       el.style.zIndex = el.getAttribute('data-cid') === selected ? '5000' : ''
     }
+    keepToolbarInView()
   })
 
   /* ── the card's own tools, by kind ──
@@ -1795,7 +1815,7 @@ export default function BriefCanvas({
                 const s = camRef.current.s
                 const nearTop = camRef.current.y + card.y * s < 72
                 return (
-                  <div data-card-toolbar role="toolbar" aria-label={`${KIND_WORD[card.kind]} tools`}
+                  <div data-card-toolbar data-base-left={card.w / 2} role="toolbar" aria-label={`${KIND_WORD[card.kind]} tools`}
                     // two short rows at most: one line of seventeen swatches ran
                     // 1290px wide, off the canvas and across the cards above
                     // (the owner, 13 Sep 2026: "the toolbar is getting overlapped")

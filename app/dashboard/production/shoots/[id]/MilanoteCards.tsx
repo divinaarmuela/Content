@@ -127,7 +127,8 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
       <div data-mn="column" className={`${CARD} flex flex-col`} style={{ ...box(card), ...bg }}>
         {/* a coloured column (Milanote, the owner's clip of Luxe Laser, 20 Oct 2026): the whole panel takes the colour,
             its cards stay white, and the title and count turn readable on it */}
-        <div className="px-4 pb-3 pt-5 text-center" style={card.hex ? { color: inkOn(card.hex) } : undefined}>
+        {/* select-none: dragging a card out across the title highlighted the count (20 Oct 2026) */}
+        <div className="select-none px-4 pb-3 pt-5 text-center" style={card.hex ? { color: inkOn(card.hex) } : undefined}>
           <p className="text-[17px] font-semibold leading-tight" style={{ fontFamily: MN_SERIF }}>{card.name || 'Untitled'}</p>
           <p className={`mt-1 text-[12px] ${card.hex ? 'opacity-70' : 'text-[#8a8a8a]'}`}>{columnCountWords(kids)}</p>
         </div>
@@ -138,7 +139,7 @@ export function MilanoteCard({ card, editing, onUpdate, onOpen, insideLabel, col
         )}
         {/* an empty column, as Milanote draws a new one: a pale well to drop cards into */}
         {!card.collapsed && kids.length === 0 && (
-          <div className="mx-2 mb-2 flex h-20 items-center justify-center rounded-[3px] bg-black/[0.04] text-[12px] text-[#9a9a9a] dark:bg-white/[0.06]">
+          <div className="mx-2 mb-2 flex h-20 select-none items-center justify-center rounded-[3px] bg-black/[0.04] text-[12px] text-[#9a9a9a] dark:bg-white/[0.06]">
             Drag cards here
           </div>
         )}
