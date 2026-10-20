@@ -1,30 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { boardFromSource, isShootBriefName, pastBriefHref, pastBriefs } from '../app/lib/milanote-briefs-core'
+import { ALL_CLIENTS, NO_CLIENT_FILTER, boardForClient, boardFromSource, clientsWithBoards } from '../app/lib/milanote-briefs-core'
 
-describe('past briefs from Milanote, on Shoots (20 Oct 2026)', () => {
-  it("knows a shoot's plan by its name", () => {
-    for (const n of ['SHOOT 4', 'Shoot Brief 6/5', 'first shoot 29th AUG', 'Shooy Brief 1/5', 'Shot list - video #4']) expect(isShootBriefName(n)).toBe(true)
-    for (const n of ['Graphics', 'Inspo Board', 'September 2025']) expect(isShootBriefName(n)).toBe(false)
-  })
-
-  it('finds them inside the imported boards, with where they sit, and never on a board made here or archived', () => {
-    const boards = [
-      { id: 'tb1', name: 'Luxe laser', client_id: 'c1', milanote_id: 'm1', canvas_cards: [
-        { id: 'g', kind: 'board', name: 'Graphics' },
-        { id: 's4', kind: 'board', name: 'SHOOT 4' },
-        { id: 'n', kind: 'note', parent: 's4' }, { id: 'a', kind: 'arrow', parent: 's4' },
-      ] },
-      { id: 'tb2', name: 'Shoot plan we made', client_id: 'c1', canvas_cards: [] },
-      { id: 'tb3', name: 'Old shoot', client_id: 'c1', milanote_id: 'm3', archived_at: '2026-10-20', canvas_cards: [] },
-    ]
-    expect(pastBriefs(boards)).toEqual([{ teamBoardId: 'tb1', boardCardId: 's4', title: 'SHOOT 4', clientId: 'c1', path: 'Luxe laser › SHOOT 4', cards: 1 }])
-    expect(pastBriefHref({ teamBoardId: 'tb1', boardCardId: 's4' })).toBe('/dashboard/production/past/tb1?board=s4')
-  })
-
-  it('the Boards filter: all, the team’s own, or from Milanote', () => {
+describe("the Boards page's filters (20 Oct 2026)", () => {
+  it('where a board came from: all, the team’s own, or from Milanote', () => {
     expect(boardFromSource({ milanote_id: 'x' }, 'milanote')).toBe(true)
     expect(boardFromSource({ milanote_id: 'x' }, 'here')).toBe(false)
     expect(boardFromSource({}, 'here')).toBe(true)
     expect(boardFromSource({}, 'all')).toBe(true)
+  })
+
+  it("one client's boards, the team's own, or all", () => {
+    expect(boardForClient({ client_id: 'c1' }, 'c1')).toBe(true)
+    expect(boardForClient({ client_id: 'c2' }, 'c1')).toBe(false)
+    expect(boardForClient({ client_id: null }, NO_CLIENT_FILTER)).toBe(true)
+    expect(boardForClient({ client_id: 'c1' }, ALL_CLIENTS)).toBe(true)
+  })
+
+  it('the dropdown lists only clients with a board, by name, with how many', () => {
+    const boards = [{ client_id: 'b' }, { client_id: 'a' }, { client_id: 'b' }, { client_id: null }]
+    const clients = [{ id: 'a', name: 'Luxe' }, { id: 'b', name: 'Basfoods' }, { id: 'c', name: 'Nobody' }]
+    expect(clientsWithBoards(boards, clients)).toEqual([{ id: 'b', name: 'Basfoods', count: 2 }, { id: 'a', name: 'Luxe', count: 1 }])
   })
 })

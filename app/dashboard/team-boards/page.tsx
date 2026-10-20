@@ -1,6 +1,6 @@
 'use client'
 
-import { BOARD_SOURCES, boardFromSource, type BoardSource } from '../../lib/milanote-briefs-core'
+import { ALL_CLIENTS, NO_CLIENT_FILTER, boardForClient, clientsWithBoards } from '../../lib/milanote-briefs-core'
 import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
 import { byArchive } from '../../lib/archive-core'
 import { useMemo, useState } from 'react'
@@ -79,8 +79,10 @@ export default function TeamBoardsPage() {
   const [busy, setBusy] = useState(false)
   // ARCHIVE (20 Oct 2026): boards put away are off the lanes and the client's portal, behind "Archived"
   const [showArchived, setShowArchived] = useState(false)
-  // WHERE A BOARD CAME FROM (20 Oct 2026): the team's own, or brought over from Milanote
-  const [source, setSource] = useState<BoardSource>('all')
+  // THE CLIENT FILTER (the owner, 20 Oct 2026: "add the right filter client filters not search … a filter which
+  // showcases which one we can pick"): pick a client, see only their boards
+  const [clientFilter, setClientFilter] = useState(ALL_CLIENTS)
+  const filterClients = useMemo(() => clientsWithBoards(byArchive(rows), clients), [rows, clients])
   const archivedBoards = useMemo(() => byArchive(rows, true).map(b => ({
     id: b.id, title: b.name, client: clientOf(b), archived_at: b.archived_at ?? null,
   })),
@@ -88,9 +90,9 @@ export default function TeamBoardsPage() {
   [rows, clients])
 
   const boards = useMemo(
-    () => sortTeamBoards(byArchive(rows)).filter(b => boardFromSource(b, source) && matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
+    () => sortTeamBoards(byArchive(rows)).filter(b => boardForClient(b, clientFilter) && matchesBoardSearch(b, nameOf(b.created_by), search, clientOf(b))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, search, team, clients, source])
+    [rows, search, team, clients, clientFilter])
   const lanes = useMemo(() => lanesOf(boards), [boards])
 
   const copyLink = async (b: Row) => {
@@ -225,14 +227,16 @@ export default function TeamBoardsPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search boards, clients, or who made them…" className="h-11 max-w-xs rounded-full bg-surface px-4" aria-label="Search boards" />
-        <div role="group" aria-label="Where the board came from" className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-          {BOARD_SOURCES.map(s => (
-            <button key={s.key} type="button" aria-pressed={source === s.key} onClick={() => setSource(s.key)}
-              className={`h-9 rounded-full px-3.5 text-[13px] font-semibold ${source === s.key ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <Select value={clientFilter} onValueChange={setClientFilter}>
+          <SelectTrigger aria-label="Show the boards of one client" className="h-11 w-64 rounded-full border-border bg-surface px-4">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-[60vh] bg-popover">
+            <SelectItem value={ALL_CLIENTS}>All clients</SelectItem>
+            <SelectItem value={NO_CLIENT_FILTER}>{INTERNAL_BOARD_WORD} — no client</SelectItem>
+            {filterClients.map(c => <SelectItem key={c.id} value={c.id}>{c.name} · {c.count}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {!manager && <span className="text-[13px] text-muted-foreground">An account manager or a super admin makes new boards.</span>}
       </div>
 

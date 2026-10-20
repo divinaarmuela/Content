@@ -1,6 +1,5 @@
 'use client'
 
-import PastBriefs, { PastBriefsToggle } from './PastBriefs'
 import { ArchivedList, ArchivedToggle, setArchived } from '../ui/Archived'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -68,10 +67,6 @@ export default function ProductionPage() {
   const [copyFrom, setCopyFrom] = useState<string | undefined>(undefined)
   // ARCHIVE (20 Oct 2026): shoots put away, behind "Archived" by the title, each with Bring back
   const [showArchived, setShowArchived] = useState(false)
-  // PAST BRIEFS (20 Oct 2026): Milanote's shoot briefs, which live on their clients' boards
-  const [showPast, setShowPast] = useState(false)
-  // back from a past plan (?past=1) — the list again, not the stages
-  useEffect(() => { try { if (new URLSearchParams(window.location.search).get('past') === '1') setShowPast(true) } catch { /* no address */ } }, [])
 
   const { me, role, loading, can } = useRole()
   // anyone on the team plans a shoot — the shoot page decides whose it then is
@@ -218,8 +213,7 @@ export default function ProductionPage() {
         summary={summary}
         actions={canPlan ? (
           <div className="flex flex-wrap items-center gap-2">
-            <PastBriefsToggle open={showPast} onToggle={() => { setShowPast(v => !v); setShowArchived(false) }} />
-            <ArchivedToggle count={archivedShoots.length} open={showArchived} onToggle={() => { setShowArchived(v => !v); setShowPast(false) }} />
+            <ArchivedToggle count={archivedShoots.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
             <Button className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90"
               onClick={() => setPlanOpen(true)}>
               <Plus className="h-4 w-4" aria-hidden /> New shoot plan
@@ -266,8 +260,6 @@ export default function ProductionPage() {
         <div className="flex gap-3.5 overflow-x-hidden" role="status" aria-busy="true" aria-label="Loading the shoots">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72 min-w-[200px] flex-1 rounded-card" />)}
         </div>
-      ) : showPast ? (
-        <PastBriefs />
       ) : showArchived ? (
         <ArchivedList kind="shoot" rows={archivedShoots} mayRestore={r => mayArchiveShoot(r as never)}
           empty="Nothing archived. A shoot you archive from its card's menu waits here, off this page and the client's portal, until you bring it back." />
