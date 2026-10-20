@@ -53,7 +53,7 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
     )
   })
   return (
-    <nav data-todo-nav aria-label="To-dos" className="flex flex-col gap-1 border-border pb-2 md:sticky md:top-0 md:max-h-[calc(100vh-120px)] md:overflow-y-auto md:border-r md:pr-3 md:pt-3">
+    <nav data-todo-nav aria-label="To-dos" className="flex flex-col gap-1 border-border pb-2 md:sticky md:top-0 md:max-h-[calc(100vh-120px)] md:border-r md:pr-3 md:pt-3">
       <ul className="flex flex-row gap-1 overflow-x-auto md:flex-col">
         <li>
           <button type="button" onClick={() => onPlace('inbox')} aria-current={place === 'inbox' ? 'page' : undefined} className={item(place === 'inbox')}>
@@ -75,7 +75,7 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
         )}
       </ul>
       {projects.length > 0 && (
-        <div className="mt-3 hidden flex-col gap-1 md:flex">
+        <div className="mt-3 hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto [overflow-anchor:none] md:flex">
           <p className="flex items-center gap-1.5 px-2.5 text-[12px] font-semibold text-muted-foreground"><FolderKanban className="h-3.5 w-3.5" aria-hidden /> Projects</p>
           <ul className="flex flex-col gap-0.5">{list(mine)}</ul>
           {others.length > 0 && (

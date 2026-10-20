@@ -87,6 +87,8 @@ export default function TodosPage() {
   useEffect(() => {
     const saved = store.get('mdm.todos.place')
     if (saved === 'inbox' || saved === 'mine' || saved === 'all' || saved?.startsWith('project:')) setPlace(saved as Place)
+    // a project reopens as it opened: by who is doing what
+    if (saved?.startsWith('project:')) setGroupBy('assignee')
     fetch('/api/todos/projects', { cache: 'no-store' }).then(r => (r.ok ? r.json() : { projects: [] })).then(j => setProjects(j.projects ?? [])).catch(() => undefined)
   }, [])
   const inbox = useTodoInbox()
@@ -106,7 +108,8 @@ export default function TodosPage() {
   useEffect(() => {
     const v = store.get('mdm.todos.view'); if (v === 'list' || v === 'board' || v === 'calendar') setView(v)
     const s = store.get('mdm.todos.sort'); if (TODO_SORTS.some(x => x.key === s)) setSort(s as TodoSort)
-    const g = store.get('mdm.todos.group'); if (TODO_GROUP_BYS.some(x => x.key === g)) setGroupBy(g as TodoGroupBy)
+    // the saved grouping is My tasks'; a project opens by who is doing what
+    const g = store.get('mdm.todos.group'); if (TODO_GROUP_BYS.some(x => x.key === g) && !store.get('mdm.todos.place')?.startsWith('project:')) setGroupBy(g as TodoGroupBy)
     if (store.get('mdm.todos.celebrate') === '0') setCelebrate(false)
   }, [])
   const pickView = (v: View) => { setView(v); store.set('mdm.todos.view', v) }
