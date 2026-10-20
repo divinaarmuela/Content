@@ -188,14 +188,19 @@ export default function BriefCanvas({
     const bar = vp?.querySelector<HTMLElement>('[data-card-toolbar]')
     if (!vp || !bar) return
     const base = Number(bar.dataset.baseLeft ?? 0)
-    bar.style.left = `${base}px`
-    const r = bar.getBoundingClientRect()
-    if (!r.width) return
+    // worked out from the card's place and the toolbar's own width — not the toolbar's drawn box, which mid-zoom
+    // still wears the old zoom's size (it measured short and stayed half off the board)
+    const width = bar.offsetWidth
+    const wrap = bar.parentElement
+    if (!width || !wrap) return
+    const s = camRef.current.s
     const v = vp.getBoundingClientRect()
+    const centre = wrap.getBoundingClientRect().left + base * s
+    const left = centre - width / 2
     const pad = 8
-    const shift = r.width > v.width - 2 * pad || r.left < v.left + pad ? v.left + pad - r.left
-      : r.right > v.right - pad ? v.right - pad - r.right : 0
-    if (shift) bar.style.left = `${base + shift / camRef.current.s}px`
+    const shift = width > v.width - 2 * pad || left < v.left + pad ? v.left + pad - left
+      : left + width > v.right - pad ? v.right - pad - (left + width) : 0
+    bar.style.left = `${base + shift / s}px`
   }, [])
 
   const paint = useCallback(() => {
