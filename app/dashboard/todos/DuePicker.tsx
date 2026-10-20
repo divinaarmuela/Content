@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Repeat, X } from 'lucide-react'
 import {
-  REPEAT_FREQS, REPEAT_LABEL, WEEKDAY_LETTER, normaliseRepeat, repeatWords, type RepeatFreq, type TodoRepeat,
+  MONTH_DAYS, REPEAT_FREQS, REPEAT_LABEL, WEEKDAY_LETTER, dayWords, normaliseRepeat, repeatWords, type RepeatFreq, type TodoRepeat,
 } from '../../lib/todo-repeat-core'
 import { dueTone, shortDue } from './todo-words'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -63,7 +63,10 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
     setMonth(new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7))
   }
 
-  const setFreq = (f: RepeatFreq | 'never') => onChange({ repeat: f === 'never' ? null : normaliseRepeat({ ...(rule ?? {}), freq: f }) })
+  // a month's day starts on the task's own: due the 20th → "On day 20" (past the 28th → Last, as Asana's list does)
+  const dueDay = (): number | 'last' => { const d = Number((due ?? today).slice(8, 10)); return d > 28 ? 'last' : d }
+  const setFreq = (f: RepeatFreq | 'never') => onChange({ repeat: f === 'never' ? null : normaliseRepeat({ ...(rule ?? {}), freq: f, ...(f === 'monthly' && !rule?.day ? { day: dueDay() } : {}) }) })
+  const byMonth = rule?.freq === 'monthly' || (rule?.freq === 'custom' && rule.unit === 'month')
   const setRule = (patch: Partial<TodoRepeat>) => rule && onChange({ repeat: normaliseRepeat({ ...rule, ...patch }) })
 
   return (
@@ -148,7 +151,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
                 {rule.freq === 'periodically'
                   ? <span>days after it&rsquo;s done</span>
                   : (
-                    <Select value={rule.unit ?? 'week'} onValueChange={v => setRule({ unit: v as TodoRepeat['unit'] })}>
+                    <Select value={rule.unit ?? 'week'} onValueChange={v => setRule({ unit: v as TodoRepeat['unit'], ...(v === 'month' && !rule.day ? { day: dueDay() } : {}) })}>
                       <SelectTrigger aria-label="Days, weeks, months or years" className="h-8 w-28 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="day">days</SelectItem><SelectItem value="week">weeks</SelectItem>
@@ -156,6 +159,20 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
                       </SelectContent>
                     </Select>
                   )}
+              </div>
+            )}
+            {/* ON DAY — Asana's "Every 1 Month · On day 20" (Manal, 20 Oct 2026): 1–28, then Last */}
+            {byMonth && (
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-foreground"><span className="h-1.5 w-1.5 rounded-full bg-foreground" /></span>
+                <span>On day</span>
+                <Select value={String(rule?.day ?? dueDay())} onValueChange={v => setRule({ day: v === 'last' ? 'last' : Number(v) })}>
+                  <SelectTrigger aria-label="Day of the month" className="h-8 w-24 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {MONTH_DAYS.map(d => <SelectItem key={String(d)} value={String(d)}>{d === 'last' ? 'Last' : d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground">({dayWords(rule?.day ?? dueDay())})</span>
               </div>
             )}
             {rule && <p className="text-[12px] text-muted-foreground">{repeatWords(rule)} — ticking it done makes the next one.</p>}

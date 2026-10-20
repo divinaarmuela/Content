@@ -22,7 +22,15 @@ export type TodoRepeat = {
   /** periodically: days after it is DONE; custom: every N `unit` from its due date */
   every?: number
   unit?: RepeatUnit
+  /**
+   * monthly, and custom by months: the day of the month it falls on — 1 to 28, or 'last' (Manal, 20 Oct 2026, with a
+   * video of Asana's "Every 1 Month · On day 20"; Asana's own list stops at 28 then "Last", so it lands every month)
+   */
+  day?: number | 'last'
 }
+
+/** Asana's day list: 1–28, then Last */
+export const MONTH_DAYS: (number | 'last')[] = [...Array.from({ length: 28 }, (_, i) => i + 1), 'last']
 
 /** The menu, in Asana's order and words */
 export const REPEAT_LABEL: Record<RepeatFreq, string> = {
@@ -50,6 +58,13 @@ export function normaliseRepeat(raw: unknown): TodoRepeat | null {
     out.every = Number.isFinite(n) && n >= 1 ? Math.min(n, 365) : 1
   }
   if (freq === 'custom') out.unit = UNITS.find(u => u === r.unit) ?? 'week'
+  if (freq === 'monthly' || (freq === 'custom' && out.unit === 'month')) {
+    if (r.day === 'last') out.day = 'last'
+    else {
+      const d = Math.floor(Number(r.day))
+      if (Number.isFinite(d) && d >= 1 && d <= 28) out.day = d
+    }
+  }
   return out
 }
 
@@ -59,6 +74,12 @@ const fmt = (d: Date) => d.toISOString().slice(0, 10)
 const addDays = (d: string, n: number) => { const x = parse(d); x.setUTCDate(x.getUTCDate() + n); return fmt(x) }
 /** Monday = 0 */
 const weekday = (d: string) => (parse(d).getUTCDay() + 6) % 7
+/** n months on, on a chosen day of that month: 1–28, or its last day */
+const monthOnDay = (d: string, n: number, day: number | 'last') => {
+  const x = parse(d)
+  const last = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + n + 1, 0)).getUTCDate()
+  return fmt(new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + n, day === 'last' ? last : Math.min(day, last))))
+}
 const addMonths = (d: string, n: number) => {
   const x = parse(d)
   const day = x.getUTCDate()
@@ -84,15 +105,23 @@ export function nextDue(repeat: TodoRepeat, due: string | null | undefined, done
       }
       return addDays(base, 7)
     }
-    case 'monthly': return addMonths(base, 1)
+    case 'monthly': return repeat.day ? monthOnDay(base, 1, repeat.day) : addMonths(base, 1)
     case 'yearly': return addMonths(base, 12)
     case 'periodically': return addDays(doneOn, repeat.every ?? 1)
     case 'custom': {
       const n = repeat.every ?? 1
       const unit = repeat.unit ?? 'week'
+      if (unit === 'month' && repeat.day) return monthOnDay(base, n, repeat.day)
       return unit === 'day' ? addDays(base, n) : unit === 'week' ? addDays(base, 7 * n) : addMonths(base, unit === 'month' ? n : 12 * n)
     }
   }
+}
+
+/** "the 20th", "the last day" */
+export function dayWords(day: number | 'last'): string {
+  if (day === 'last') return 'the last day'
+  const s = day % 100 >= 11 && day % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][day % 10] ?? 'th'
+  return `the ${day}${s}`
 }
 
 /** The rule in a few words, for the chip's hover and the picker: "Weekly on Mon–Fri" */
@@ -105,7 +134,8 @@ export function repeatWords(repeat: TodoRepeat | null | undefined): string {
       return `Weekly on ${weekdays ? 'Mon–Fri' : days.map(d => WEEKDAY_SHORT[d]).join(', ')}`
     }
     case 'periodically': return `${repeat.every ?? 1} day${(repeat.every ?? 1) === 1 ? '' : 's'} after it's done`
-    case 'custom': return `Every ${repeat.every ?? 1} ${repeat.unit ?? 'week'}${(repeat.every ?? 1) === 1 ? '' : 's'}`
+    case 'custom': return `Every ${repeat.every ?? 1} ${repeat.unit ?? 'week'}${(repeat.every ?? 1) === 1 ? '' : 's'}${repeat.unit === 'month' && repeat.day ? ` on ${dayWords(repeat.day)}` : ''}`
+    case 'monthly': return `Monthly${repeat.day ? ` on ${dayWords(repeat.day)}` : ''}`
     default: return REPEAT_LABEL[repeat.freq]
   }
 }

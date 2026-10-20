@@ -23,6 +23,13 @@ describe('nextDue', () => {
     expect(nextDue({ freq: 'yearly' }, '2028-02-29', '2028-02-29')).toBe('2029-02-28')
   })
 
+  it("monthly on a chosen day, as Manal asked (Asana's \"On day 20\")", () => {
+    expect(nextDue({ freq: 'monthly', day: 20 }, '2026-10-20', '2026-10-20')).toBe('2026-11-20')
+    expect(nextDue({ freq: 'monthly', day: 20 }, '2026-10-05', '2026-10-05')).toBe('2026-11-20')
+    expect(nextDue({ freq: 'monthly', day: 'last' }, '2026-01-31', '2026-01-31')).toBe('2026-02-28')
+    expect(nextDue({ freq: 'custom', every: 3, unit: 'month', day: 1 }, '2026-10-20', '2026-10-20')).toBe('2027-01-01')
+  })
+
   it('periodically counts from the day it was done', () => {
     expect(nextDue({ freq: 'periodically', every: 3 }, '2026-10-10', '2026-10-20')).toBe('2026-10-23')
   })
@@ -47,12 +54,17 @@ describe('the rule, made safe', () => {
     expect(normaliseRepeat({ freq: 'weekly', days: [] })!.days).toEqual([0, 1, 2, 3, 4])
     expect(normaliseRepeat({ freq: 'weekly', days: [4, 9, 0, 0] })!.days).toEqual([0, 4])
     expect(normaliseRepeat({ freq: 'custom', every: -2, unit: 'fortnight' })).toEqual({ freq: 'custom', every: 1, unit: 'week' })
+    expect(normaliseRepeat({ freq: 'monthly', day: 31 })).toEqual({ freq: 'monthly' })
+    expect(normaliseRepeat({ freq: 'weekly', day: 5 })!.day).toBeUndefined()
   })
   it('says the rule in words', () => {
     expect(repeatWords(normaliseRepeat({ freq: 'weekly', days: [0, 1, 2, 3, 4] }))).toBe('Weekly on Mon–Fri')
     expect(repeatWords({ freq: 'weekly', days: [0, 2] })).toBe('Weekly on Mon, Wed')
     expect(repeatWords({ freq: 'periodically', every: 1 })).toBe("1 day after it's done")
     expect(repeatWords(null)).toBe("Doesn't repeat")
+    expect(repeatWords(normaliseRepeat({ freq: 'monthly', day: 20 }))).toBe('Monthly on the 20th')
+    expect(repeatWords(normaliseRepeat({ freq: 'custom', every: 3, unit: 'month', day: 'last' }))).toBe('Every 3 months on the last day')
+    expect(repeatWords(normaliseRepeat({ freq: 'monthly', day: 22 }))).toBe('Monthly on the 22nd')
   })
   it('the next task has one id per task, and the id never grows round after round', () => {
     expect(nextTodoId('abc')).toBe(nextTodoId('abc'))
