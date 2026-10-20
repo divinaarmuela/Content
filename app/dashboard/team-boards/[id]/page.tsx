@@ -1,5 +1,6 @@
 'use client'
 
+import { ensureClientPortal } from '../../ui/ensurePortal'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -75,8 +76,11 @@ export default function TeamBoardPage() {
   // THE CLIENT'S LINK (22 Sep 2026): shares the board (a manager's switch) and copies the client's page for it
   const clientRow = board?.client_id ? clients.find(c => c.id === board.client_id) ?? null : null
   const copyClientLink = async () => {
-    const token = clientRow?.share_token
-    if (!token) { toast.error('This client has no portal link yet — make one on their client page first'); return }
+    // a client with no portal gets one in this same press (20 Oct 2026), the full one-link portal
+    const hadPortal = !!clientRow?.share_token
+    const token = clientRow ? await ensureClientPortal(clientRow.id, clientRow.share_token) : null
+    if (!token) { toast.error(clientRow ? 'Could not make their portal just now — try again' : 'This board is not for a client'); return }
+    if (!hadPortal) toast.success(`${client ?? 'The client'} has a portal now — nobody was emailed`)
     const ok = board?.shared_with_client === true ? true : await patch({ shared_with_client: true }, 'Shared with the client')
     if (!ok) return
     try {
@@ -159,7 +163,7 @@ export default function TeamBoardPage() {
             {mayShareTeamBoard(me, board) && (
               <Button variant="outline" disabled={busy} onClick={() => void copyClientLink()} className="h-11 rounded-full px-4 text-[13px] font-semibold"
                 title={board.shared_with_client ? 'The client can open this board and comment on its cards' : 'Share the board with the client and copy their link'}>
-                <Users className="mr-1.5 h-4 w-4" aria-hidden /> {board.shared_with_client ? 'Copy client link' : 'Share with client'}
+                <Users className="mr-1.5 h-4 w-4" aria-hidden /> {!clientRow?.share_token ? 'Make their portal and share' : board.shared_with_client ? 'Copy client link' : 'Share with client'}
               </Button>
             )}
             {/* TAKE IT OFF THE PORTAL (3 Oct 2026: "with editing, designing, shoot and board we can take it off the portal?") —

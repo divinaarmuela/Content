@@ -151,7 +151,9 @@ const main = async () => {
   const now = new Date().toISOString()
   for (const c of newClients) {
     const slug = c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    await dbPut('clients', c.id, { id: c.id, name: c.name, slug, status: 'archived', notes: 'A past client, brought over from Milanote (20 Oct 2026).', created_at: now })
+    await dbPut('clients', c.id, { id: c.id, name: c.name, slug, status: 'archived', notes: 'A past client, brought over from Milanote (20 Oct 2026).', created_at: now,
+      // their portal link, as adding a client in the app gives one — the one-link portal every client is on
+      share_token: randomUUID(), portal_one: true })
   }
   for (const r of rows) {
     if (r.skip) continue
