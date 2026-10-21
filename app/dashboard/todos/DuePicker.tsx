@@ -93,7 +93,13 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
 
   // a month's day starts on the task's own: due the 20th → "On day 20" (past the 28th → Last, as Asana's list does)
   const dueDay = (): number | 'last' => { const d = Number((due ?? today).slice(8, 10)); return d > 28 ? 'last' : d }
-  const setFreq = (f: RepeatFreq | 'never') => onChange({ repeat: f === 'never' ? null : normaliseRepeat({ ...(rule ?? {}), freq: f, ...(f === 'monthly' && !rule?.day ? { day: dueDay() } : {}) }) })
+  // the task's own weekday, Monday = 0 — Asana ticks it when Custom weeks opens (Manal's video, 21 Oct 2026: due Wed → W)
+  const dueWeekday = () => { const [y, m, d] = (due ?? today).split('-').map(Number); return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7 }
+  const setFreq = (f: RepeatFreq | 'never') => onChange({ repeat: f === 'never' ? null : normaliseRepeat({
+    ...(rule ?? {}), freq: f,
+    ...(f === 'monthly' && !rule?.day ? { day: dueDay() } : {}),
+    ...(f === 'custom' && (rule?.unit ?? 'week') === 'week' && !rule?.days?.length ? { days: [dueWeekday()] } : {}),
+  }) })
   const byMonth = rule?.freq === 'monthly' || (rule?.freq === 'custom' && rule.unit === 'month')
   // "On the …": the task's own weekday and which one of the month it is — due Tue 20 Oct → the third Tuesday
   const dueNth = (): { nth: MonthNth; weekday: number } => {
@@ -175,7 +181,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
             {/* "on these days" — for Weekly, and for Custom every N weeks (Manal, 21 Oct 2026), where it is optional */}
             {(rule?.freq === 'weekly' || (rule?.freq === 'custom' && (rule.unit ?? 'week') === 'week')) && (
               <div className={`flex flex-col gap-1.5 ${rule.freq === 'custom' ? 'order-1' : ''}`}>
-                <span className="text-[12px] font-semibold text-muted-foreground">{rule.freq === 'custom' ? 'On these days (if needed)' : 'On these days'}</span>
+                <span className="text-[12px] font-semibold text-muted-foreground">On these days</span>
                 <div className="flex justify-between">
                   {WEEKDAY_LETTER.map((l, i) => {
                     const on = rule.days?.includes(i) ?? false
@@ -194,18 +200,36 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
             {(rule?.freq === 'periodically' || rule?.freq === 'custom') && (
               <div className="flex items-center gap-2 text-[13px]">
                 <span>{rule.freq === 'periodically' ? 'Repeat' : 'Every'}</span>
-                <input type="number" min={1} max={365} value={rule.every ?? 1} onChange={e => setRule({ every: Number(e.target.value) })}
-                  aria-label="How many" className="h-8 w-16 rounded-md border border-border bg-background px-2" />
                 {rule.freq === 'periodically'
-                  ? <span>days after it&rsquo;s done</span>
+                  ? <>
+                    <input type="number" min={1} max={365} value={rule.every ?? 1} onChange={e => setRule({ every: Number(e.target.value) })}
+                      aria-label="How many" className="h-8 w-16 rounded-md border border-border bg-background px-2" />
+                    <span>days after it&rsquo;s done</span>
+                  </>
                   : (
-                    <Select value={rule.unit ?? 'week'} onValueChange={v => setRule({ unit: v as TodoRepeat['unit'], ...(v === 'month' && !rule.day ? { day: dueDay() } : {}) })}>
-                      <SelectTrigger aria-label="Days, weeks, months or years" className="h-8 w-28 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="day">days</SelectItem><SelectItem value="week">weeks</SelectItem>
-                        <SelectItem value="month">months</SelectItem><SelectItem value="year">years</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    /* CUSTOM AS ASANA HAS IT (Manal's video, 21 Oct 2026): "Every [2 ▾] [Weeks ▾]" — a list of numbers,
+                       and Weeks or Months only. A rule saved earlier by days or years keeps its own word in the list. */
+                    <span className="ml-auto flex items-center gap-2">
+                      <Select value={String(rule.every ?? 1)} onValueChange={v => setRule({ every: Number(v) })}>
+                        <SelectTrigger aria-label="How many" className="h-8 w-16 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                        <SelectContent className="max-h-64">
+                          {Array.from({ length: Math.max(30, rule.every ?? 1) }, (_, i) => i + 1).map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={rule.unit ?? 'week'} onValueChange={v => setRule({
+                        unit: v as TodoRepeat['unit'],
+                        ...(v === 'month' && !rule.day ? { day: dueDay() } : {}),
+                        ...(v === 'week' && !rule.days?.length ? { days: [dueWeekday()] } : {}),
+                      })}>
+                        <SelectTrigger aria-label="Weeks or months" className="h-8 w-28 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {rule.unit === 'day' && <SelectItem value="day">Days</SelectItem>}
+                          <SelectItem value="week">Weeks</SelectItem>
+                          <SelectItem value="month">Months</SelectItem>
+                          {rule.unit === 'year' && <SelectItem value="year">Years</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                    </span>
                   )}
               </div>
             )}
