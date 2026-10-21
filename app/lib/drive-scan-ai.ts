@@ -92,10 +92,10 @@ async function askAi(newProbe: Probe, cands: { label: string; asset: string; nam
 }
 
 /** the card's videos the scan compares against — every one (the name decides nothing), newest cut of each */
-export function cardVideosOf(item: ContentItem): { url: string; asset: string; name: string }[] {
+export function cardVideosOf(item: ContentItem): { url: string; asset: string; name: string; size: number | null }[] {
   const round = roundOf(item)
   return currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name }) && /^https:\/\//.test(f.url))
-    .slice(0, MAX_CARD_VIDEOS).map(f => ({ url: f.url, asset: assetIdOf(f), name: f.name }))
+    .slice(0, MAX_CARD_VIDEOS).map(f => ({ url: f.url, asset: assetIdOf(f), name: f.name, size: typeof f.size === 'number' ? f.size : null }))
 }
 const newKey = (row: DriveSeen) => `drive:${row.drive_file_id}:${row.md5 ?? row.revision ?? `${row.size}@${row.modified}`}`
 const cardKey = (url: string) => `r2:${url}`
@@ -150,15 +150,16 @@ export async function measureNewFile(seenId: string): Promise<{ ok: boolean }> {
  * Drive links (Draft, v2, V3 and final of one video sit side by side before any is handed in); and the newest videos on
  * the same client's other Editor cards (one shoot folder held the cuts of three cards).
  */
-type Comparable = { asset: string; name: string; where: string; url: string; key: string; otherCard: { id: string; title: string } | null }
+type Comparable = { asset: string; name: string; where: string; url: string; key: string; size: number | null; otherCard: { id: string; title: string } | null }
 async function comparablesOf(item: ContentItem, exceptSeen: string | null): Promise<Comparable[]> {
-  const own: Comparable[] = cardVideosOf(item).map(v => ({ asset: v.asset, name: v.name, where: 'a video on this card', url: v.url, key: cardKey(v.url), otherCard: null }))
+  const own: Comparable[] = cardVideosOf(item).map(v => ({ asset: v.asset, name: v.name, where: 'a video on this card', url: v.url, key: cardKey(v.url), size: v.size, otherCard: null }))
   const seen = await table<DriveSeen>('drive_seen').list({ where: r => r.item_id === item.id && r.id !== exceptSeen })
   const drive: Comparable[] = seen
-    // a taken file is on the card already (compared as the card's video); only files measured by their own scans
-    .filter(r => ['scanned', 'locked', 'scanning'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
-    .filter(r => typeof (r.scan as { duration_ms?: unknown } | null)?.duration_ms === 'number')
-    .map(r => ({ asset: `seen:${r.id}`, name: r.path, where: "another file in this card's Drive links", url: drivePublicUrl(r.drive_file_id), key: newKey(r), otherCard: null }))
+    // EVERY other video in the card's Drive links, measured before any decision (each once, cached — no AI cost), so
+    // every file on a card is judged against the same set (the owner, 21 Oct 2026: "checking 7 videos some 10");
+    // a taken file is on the card already and is compared as the card's video
+    .filter(r => ['new', 'scanning', 'scanned', 'locked'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
+    .map(r => ({ asset: `seen:${r.id}`, name: r.path, where: "another file in this card's Drive links", url: drivePublicUrl(r.drive_file_id), key: newKey(r), size: r.size ?? null, otherCard: null }))
   const kinds = new Map((await table<WorkKind>('work_kinds').list()).map(k => [k.id, k.slug]))
   const siblings = (await table<ContentItem>('content_items').list({
     where: r => r.client_id === item.client_id && r.id !== item.id && !!laneOf(r.status) && isEditorCard(r as never, kinds.get(String(r.work_kind_id ?? ''))),
@@ -166,19 +167,19 @@ async function comparablesOf(item: ContentItem, exceptSeen: string | null): Prom
   const other: Comparable[] = []
   for (const s of siblings) for (const v of cardVideosOf(s)) {
     if (other.length >= MAX_OTHER_VIDEOS) break
-    other.push({ asset: `card:${s.id}:${v.asset}`, name: v.name, where: `a video on another card of this client, "${s.title ?? 'untitled'}"`, url: v.url, key: cardKey(v.url), otherCard: { id: s.id, title: String(s.title ?? 'untitled') } })
+    other.push({ asset: `card:${s.id}:${v.asset}`, name: v.name, where: `a video on another card of this client, "${s.title ?? 'untitled'}"`, url: v.url, key: cardKey(v.url), size: v.size, otherCard: { id: s.id, title: String(s.title ?? 'untitled') } })
   }
   return [...own, ...drive, ...other]
 }
 
-/** the videos to measure before deciding: the card's and the client's other cards' (Drive files are measured by their own scans) */
-export async function cardVideoUrls(itemId: string): Promise<string[]> {
+/** every video to measure before deciding: the card's, its other Drive files and the client's other cards' */
+export async function cardVideoUrls(itemId: string, exceptSeen: string | null = null): Promise<{ url: string; key: string }[]> {
   const item = await table<ContentItem>('content_items').get(itemId)
-  return item ? (await comparablesOf(item, null)).filter(c => c.key.startsWith('r2:')).map(c => c.url) : []
+  return item ? (await comparablesOf(item, exceptSeen)).map(c => ({ url: c.url, key: c.key })) : []
 }
 
-export async function measureCardVideo(url: string): Promise<{ ok: boolean; ms: number | null }> {
-  const p = await probeVideo(url, cardKey(url))
+export async function measureCardVideo(url: string, key: string = cardKey(url)): Promise<{ ok: boolean; ms: number | null }> {
+  const p = await probeVideo(url, key)
   return { ok: !!p.durationMs, ms: p.durationMs }
 }
 
@@ -203,6 +204,18 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     if (!compared.length) {
       await finish(seenId, { kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })
       return { ok: true, note: 'new_video (nothing to compare)' }
+    }
+    // THE SAME FILE AGAIN: the same size to the byte and the same length is a copy — said without asking the AI (live,
+    // 21 Oct 2026: five New Menu Medley files of 177,601,535 bytes each, one of them called a "re-cut")
+    const twin = row.size ? compared.find(c => c.size === row.size && c.s.lengthGapMs !== null && c.s.lengthGapMs <= 150) : undefined
+    if (twin) {
+      await finish(seenId, {
+        pool: pool.length, kind: 'copy', asset: twin.asset, other_card: twin.otherCard, confidence: 0.99, ask: !!twin.otherCard, model: 'measures only',
+        reasons: ['The same file again: the same size to the byte and the same length'],
+        words: `${KIND_WORDS.copy} of ${twin.name}${twin.otherCard ? ` — on “${twin.otherCard.title}”` : twin.asset.startsWith('seen:') ? ' (in Drive)' : ''}`,
+        steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' },
+      })
+      return { ok: true, note: `copy of ${twin.asset}` }
     }
     const top = compared.slice(0, 3).map((c, i) => ({ ...c, label: `C${i + 1}`, words: comparisonWords(c.s) }))
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)

@@ -1062,9 +1062,9 @@ export const driveScanFile = inngest.createFunction(
     // in one (live, 21 Oct 2026)
     const fresh = await step.run('measure-new', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureNewFile(id)))
     if (!fresh.ok) return { failed: 'the new file could not be measured' }
-    const urls = await step.run('card-videos', async () => (await import('../lib/drive-scan-ai')).cardVideoUrls(itemId))
+    const urls = await step.run('card-videos', async () => (await import('../lib/drive-scan-ai')).cardVideoUrls(itemId, id))
     for (let i = 0; i < urls.length; i++) {
-      await step.run(`measure-card-${i}`, async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureCardVideo(urls[i])))
+      await step.run(`measure-card-${i}`, async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureCardVideo(urls[i].url, urls[i].key)))
     }
     const decided = await step.run('decide', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).decideScan(id)))
     // the last scan on a card: any file scanned before its siblings were measured is scanned again, so every file on
