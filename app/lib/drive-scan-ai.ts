@@ -220,7 +220,8 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     }
     let answer = ai ?? measuresSay
     if (ai && (ai.match !== measuresSay.match || ai.same_edit !== measuresSay.same_edit)) answer.confidence = Math.min(answer.confidence, 0.6)
-    answer = heldToMeasures(answer, top.find(t => t.asset === answer.match)?.s ?? null)
+    const matched = top.find(t => t.asset === answer.match)
+    answer = heldToMeasures(answer, matched?.s ?? null, matched?.probe.durationMs && probe.durationMs ? Math.min(matched.probe.durationMs, probe.durationMs) : null)
     const candidates = top.map(t => ({ asset: t.asset, name: t.name, score: signalScore(t.s), why: t.words }))
     const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
     const best = top.find(t => t.asset === v.asset)
@@ -249,7 +250,9 @@ export async function staleScans(itemId: string): Promise<string[]> {
   if (rows.some(r => r.state === 'new' || r.state === 'scanning')) return []   // not the last one yet
   const item = await table<ContentItem>('content_items').get(itemId)
   if (!item) return []
-  const scanned = rows.filter(r => r.state === 'scanned' && typeof (r.scan as { pool?: unknown } | null)?.pool === 'number')
+  // only a file called new can change: one already matched to a video keeps its match (each rescan is an AI call —
+  // the owner, 21 Oct 2026: "u are burning my token prices")
+  const scanned = rows.filter(r => r.state === 'scanned' && typeof (r.scan as { pool?: unknown } | null)?.pool === 'number' && (r.scan as { kind?: string }).kind === 'new_video')
   if (!scanned.length) return []
   const full = (await comparablesOf(item, null)).length   // every file's set is this, less itself when it is a Drive file
   const out: string[] = []

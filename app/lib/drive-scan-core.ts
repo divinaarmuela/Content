@@ -264,10 +264,12 @@ export function signalAnswer(best: { asset: string; s: Signals } | null): AiAnsw
  * stands only when the AI is sure; otherwise it is a new video, asked. Live, 21 Oct 2026: Haiku called two unrelated
  * videos "re-cuts" while its own reasons said "different subject matter".
  */
-export function heldToMeasures(ai: AiAnswer, s: Signals | null): AiAnswer {
+export function heldToMeasures(ai: AiAnswer, s: Signals | null, shorterMs: number | null = null): AiAnswer {
   if (ai.match === 'new' || !s || ai.confidence >= 0.85) return ai
   const noSound = s.sound !== null && s.sound < 0.3
-  const farLength = s.lengthGapMs !== null && s.lengthGapMs > 20_000
+  // far apart: over 20s, or over a fifth of the shorter video — short clips from one set (live, 21 Oct 2026: Cecconi's
+  // 13s Caviar and 17s Pour, sound 26% alike, were called one video)
+  const farLength = s.lengthGapMs !== null && (s.lengthGapMs > 20_000 || (shorterMs !== null && shorterMs > 0 && s.lengthGapMs > shorterMs * 0.2))
   if (!(noSound && farLength)) return ai
   return { match: 'new', same_edit: false, colour_changed: false, confidence: Math.min(ai.confidence, 0.6), reasons: ['The sound and the length match none of the card’s videos', ...ai.reasons] }
 }

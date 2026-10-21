@@ -173,3 +173,12 @@ describe('signalAnswer on silent videos', () => {
     expect(signalAnswer({ asset: 'A', s: { lengthGapMs: 0, sound: null, colourShift: 9, punchier: true } })).toMatchObject({ match: 'A', same_edit: false })
   })
 })
+
+describe('heldToMeasures on short clips', () => {
+  it('a 13s and a 17s clip with different sound are not one video, unless the AI is sure', () => {
+    const ai = { match: 'A1', same_edit: false, colour_changed: false, confidence: 0.6, reasons: [] }
+    const s = { lengthGapMs: 3720, sound: 0.26, colourShift: 10, punchier: true }
+    expect(heldToMeasures(ai, s, 13_320).match).toBe('new')
+    expect(heldToMeasures(ai, s, 60_000).match).toBe('A1')
+  })
+})
