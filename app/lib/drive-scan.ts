@@ -1,6 +1,7 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { ContentItem, DriveSeen, DriveSource } from '@/lib/db-types'
+import type { ContentItem, DriveSeen, DriveSource, WorkKind } from '@/lib/db-types'
+import { isEditorCard } from './editor-preview-core'
 import { driveLinkTarget, driveHandInsOf } from './drive-handin-core'
 import { readDriveTarget } from './drive-pull'
 import { finalFilesOf, assetIdOf } from './final-files-core'
@@ -60,7 +61,11 @@ export type WatchResult = { sources: number; read: number; seen: number; toScan:
 export async function watchSources(opts: { limit?: number; budgetMs?: number } = {}): Promise<WatchResult> {
   const started = Date.now()
   const budget = opts.budgetMs ?? 40_000
-  const items = await table<ContentItem>('content_items').list({ where: r => WATCHED_STATUSES.includes(String(r.status ?? '')), fresh: true })
+  // only the Editor's cards: never a post uploaded on the Schedule page, a shoot plan or graphics
+  const kinds = new Map((await table<WorkKind>('work_kinds').list()).map(k => [k.id, k.slug]))
+  const items = await table<ContentItem>('content_items').list({
+    where: r => WATCHED_STATUSES.includes(String(r.status ?? '')) && isEditorCard(r as never, kinds.get(String(r.work_kind_id ?? ''))), fresh: true,
+  })
   await seedSources(items)
   const byId = new Map(items.map(i => [i.id, i]))
   // the longest-unread first, inside a time budget: a big folder that runs a request out of time must not stop the

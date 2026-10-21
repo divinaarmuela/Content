@@ -24,6 +24,17 @@ export function laneOf(status: unknown): PreviewLane | null {
   return PREVIEW_LANES.find(l => l.statuses.includes(s)) ?? null
 }
 
+/**
+ * A CARD THE EDITOR WORKS ON — what the live Editor shows (board-view-core.pageCards): not archived, not a shoot plan
+ * or a designer's graphics, and not a post uploaded straight onto the Schedule page (`adhoc_post`: its card only holds
+ * the file; live, 21 Oct 2026, 73 of the preview board's 106 cards were those posts).
+ */
+export function isEditorCard(item: { archived_at?: unknown; adhoc_post?: unknown }, kindSlug: string | null | undefined): boolean {
+  if (item.archived_at) return false
+  if (item.adhoc_post === true) return false
+  return !['shoot_brief', 'graphics'].includes(kindSlug ?? '')
+}
+
 /** the stepper: where the card is on the road */
 export const STEPS = ['Editing', 'Quality check', 'Colour grade', 'With client', 'Approved'] as const
 export function stepOf(status: unknown): number {

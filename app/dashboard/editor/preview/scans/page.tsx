@@ -6,6 +6,7 @@ import { Lock, Sparkles } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
 import type { Client, ContentItem, DriveSeen } from '@/lib/db-types'
 import { KIND_WORDS, STATE_WORDS, type CutKind, type SeenState } from '../../../../lib/drive-scan-core'
+import { isEditorCard } from '../../../../lib/editor-preview-core'
 import PreviewFrame, { AiScanning, usePreviewAccess } from '../PreviewFrame'
 
 /**
@@ -27,11 +28,13 @@ export default function EditorPreviewScans() {
   const itemById = useMemo(() => new Map(items.rows.map(i => [i.id, i])), [items.rows])
   const clientName = useMemo(() => new Map(clients.rows.map(c => [c.id, c.name])), [clients.rows])
   const f = FILTERS.find(x => x.key === filter)!
-  const rows = useMemo(() => seen.rows
+  // only the Editor's cards (rows recorded before posts were left out stay hidden)
+  const ours = useMemo(() => seen.rows.filter(r => { const i = itemById.get(r.item_id); return !!i && isEditorCard(i as never, null) }), [seen.rows, itemById])
+  const rows = useMemo(() => ours
     .filter(r => !f.states || (f.states as string[]).includes(r.state))
     .sort((a, b) => b.first_seen_at.localeCompare(a.first_seen_at))
-    .slice(0, 300), [seen.rows, f])
-  const scanning = seen.rows.filter(r => r.state === 'new' || r.state === 'scanning').length
+    .slice(0, 300), [ours, f])
+  const scanning = ours.filter(r => r.state === 'new' || r.state === 'scanning').length
 
   return (
     <PreviewFrame>

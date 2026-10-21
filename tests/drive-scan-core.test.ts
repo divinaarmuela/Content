@@ -3,7 +3,7 @@ import {
   contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf,
   type CardFile, type SeenFile,
 } from '../app/lib/drive-scan-core'
-import { cardFace, laneOf, stepOf } from '../app/lib/editor-preview-core'
+import { cardFace, isEditorCard, laneOf, stepOf } from '../app/lib/editor-preview-core'
 
 const file = (over: Partial<SeenFile> = {}): SeenFile => ({ id: 'd1', name: 'Reels/Pasta.mp4', mime: 'video/mp4', md5: 'aaa', ...over })
 const card: CardFile[] = [
@@ -141,5 +141,16 @@ describe('cardLinksOf and camera originals', () => {
     expect(isFootage({ name: 'MXF/Script 1.mxf' })).toBe(true)
     expect(isFootage({ name: 'Script 2.mxf' })).toBe(true)
     expect(isFootage({ name: 'New Menu Medley_v2.mov' })).toBe(false)
+  })
+})
+
+describe('isEditorCard', () => {
+  it("is the live Editor's cards: never a Schedule-page post, a shoot plan, graphics or archived", () => {
+    expect(isEditorCard({}, 'edit')).toBe(true)
+    expect(isEditorCard({}, null)).toBe(true)
+    expect(isEditorCard({ adhoc_post: true }, 'edit')).toBe(false)
+    expect(isEditorCard({}, 'shoot_brief')).toBe(false)
+    expect(isEditorCard({}, 'graphics')).toBe(false)
+    expect(isEditorCard({ archived_at: '2026-10-01' }, 'edit')).toBe(false)
   })
 })

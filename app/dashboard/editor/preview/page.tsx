@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { CheckCircle2, Film, FolderOpen, Hourglass, Palette } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
 import type { Client, ContentItem, DriveSeen, DriveSource, WorkKind } from '@/lib/db-types'
-import { PREVIEW_LANES, cardFace, laneOf } from '../../../lib/editor-preview-core'
+import { PREVIEW_LANES, cardFace, isEditorCard, laneOf } from '../../../lib/editor-preview-core'
 import { needsColourGrade } from '../../../lib/colour-grade-core'
 import PreviewFrame, { AiScanning, usePreviewAccess } from './PreviewFrame'
 
@@ -29,8 +29,7 @@ export default function EditorPreviewBoard() {
   const clientName = useMemo(() => new Map(clients.rows.map(c => [c.id, c.name])), [clients.rows])
   const kindOf = useMemo(() => new Map(kinds.rows.map(k => [k.id, k])), [kinds.rows])
   const cards = useMemo(() => items.rows
-    .filter(i => !(i as { archived_at?: unknown }).archived_at)
-    .filter(i => { const k = kindOf.get(String(i.work_kind_id ?? '')); return !k || !['shoot_brief', 'graphics'].includes(k.slug) })
+    .filter(i => isEditorCard(i as never, kindOf.get(String(i.work_kind_id ?? ''))?.slug))
     .filter(i => laneOf(i.status))
     .map(i => ({ item: i, face: cardFace(i, seen.rows, sources.rows), grade: needsColourGrade(kindOf.get(String(i.work_kind_id ?? ''))?.slug) }))
     .sort((a, b) => String(b.item.updated_at ?? '').localeCompare(String(a.item.updated_at ?? ''))),
