@@ -57,15 +57,22 @@ export type WatchResult = { sources: number; read: number; seen: number; toScan:
  * ONE MINUTE'S CHECK. Each source of a card being made is read; each file not yet seen at its content gets one row,
  * in the state the card and its stage give it (drive-scan-core.firstState). The rows that need the AI are returned.
  */
-export async function watchSources(opts: { limit?: number } = {}): Promise<WatchResult> {
+export async function watchSources(opts: { limit?: number; budgetMs?: number } = {}): Promise<WatchResult> {
+  const started = Date.now()
+  const budget = opts.budgetMs ?? 40_000
   const items = await table<ContentItem>('content_items').list({ where: r => WATCHED_STATUSES.includes(String(r.status ?? '')), fresh: true })
   await seedSources(items)
   const byId = new Map(items.map(i => [i.id, i]))
-  const sources = (await table<DriveSource>('drive_sources').list({ fresh: true })).filter(s => byId.has(s.item_id)).slice(0, opts.limit ?? 60)
+  // the longest-unread first, inside a time budget: a big folder that runs a request out of time must not stop the
+  // links behind it from ever being read (live, 21 Oct 2026: "September 18th", 23 files, ended the first check)
+  const sources = (await table<DriveSource>('drive_sources').list({ fresh: true })).filter(s => byId.has(s.item_id))
+    .sort((a, b) => String(a.last_checked_at ?? '').localeCompare(String(b.last_checked_at ?? '')))
+    .slice(0, opts.limit ?? 60)
   const seenTable = table<DriveSeen>('drive_seen')
   const seenIds = new Set((await seenTable.list({ fresh: true })).map(r => r.id))
   const out: WatchResult = { sources: sources.length, read: 0, seen: 0, toScan: [], errors: 0 }
   for (const s of sources) {
+    if (Date.now() - started > budget) break
     const item = byId.get(s.item_id)!
     const now = new Date().toISOString()
     try {
