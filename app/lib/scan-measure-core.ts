@@ -44,7 +44,10 @@ export function parseProbeLog(log: string): Omit<ProbeSample, 'at_pct' | 'at_s'>
 }
 
 /** how alike two loudness traces are, 0–1 (Pearson's r, clipped) — the same sound moment for moment is near 1 */
-export function soundAlike(a: readonly number[], b: readonly number[]): number | null {
+export function soundAlike(a: readonly number[] | null | undefined, b: readonly number[] | null | undefined): number | null {
+  // a video with no sound track has no trace — and the database drops an empty list, so it reads back as nothing
+  // (live, 21 Oct 2026: 23 of Alia's silent carousels failed on it)
+  if (!a || !b) return null
   const n = Math.min(a.length, b.length)
   if (n < 6) return null
   const x = a.slice(0, n), y = b.slice(0, n)
@@ -78,7 +81,7 @@ export function compareProbes(
   a: { durationMs: number | null; samples: readonly ProbeSample[] },
   b: { durationMs: number | null; samples: readonly ProbeSample[] },
 ): Comparison {
-  const pairs = a.samples.map(s => [s, b.samples.find(t => Math.abs(t.at_pct - s.at_pct) < 0.01)] as const).filter((p): p is readonly [ProbeSample, ProbeSample] => !!p[1])
+  const pairs = (a.samples ?? []).map(s => [s, (b.samples ?? []).find(t => Math.abs(t.at_pct - s.at_pct) < 0.01)] as const).filter((p): p is readonly [ProbeSample, ProbeSample] => !!p[1])
   const sounds = pairs.map(([x, y]) => soundAlike(x.rms, y.rms)).filter((v): v is number => v !== null)
   const shifts: number[] = [], contrastUp: number[] = [], satUp: number[] = []
   for (const [x, y] of pairs) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf, namedReasons,
+  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf, namedReasons, signalAnswer,
   type CardFile, type SeenFile,
 } from '../app/lib/drive-scan-core'
 import { cardFace, isEditorCard, laneOf, stepOf } from '../app/lib/editor-preview-core'
@@ -164,5 +164,12 @@ describe('namedReasons', () => {
   })
   it('drops talk of instructions and what it was provided', () => {
     expect(namedReasons(['No card videos (C1/C2) were provided to compare against', "default to 'new' per instructions", 'Different dish'], names)).toEqual(['Different dish'])
+  })
+})
+
+describe('signalAnswer on silent videos', () => {
+  it('calls the same length with unchanged colour a copy, and moved colour a grade', () => {
+    expect(signalAnswer({ asset: 'A', s: { lengthGapMs: 0, sound: null, colourShift: 0.5, punchier: false } })).toMatchObject({ match: 'A', same_edit: true, colour_changed: false })
+    expect(signalAnswer({ asset: 'A', s: { lengthGapMs: 0, sound: null, colourShift: 9, punchier: true } })).toMatchObject({ match: 'A', same_edit: false })
   })
 })

@@ -251,7 +251,8 @@ export function signalAnswer(best: { asset: string; s: Signals } | null): AiAnsw
   if (!best) return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.6, reasons: ['No video on the card sounds like it'] }
   const { s } = best
   const sameLength = s.lengthGapMs !== null && s.lengthGapMs <= 150
-  const sameSound = s.sound !== null && s.sound >= 0.8
+  // no sound to compare (a silent video): the same length with the colour within a hair stands in for it
+  const sameSound = s.sound !== null ? s.sound >= 0.8 : sameLength && s.colourShift !== null && s.colourShift < 3
   const moved = s.colourShift !== null && s.colourShift >= 6
   if (sameSound && sameLength) return { match: best.asset, same_edit: true, colour_changed: moved, confidence: 0.85, reasons: [] }
   if ((s.sound ?? 0) >= 0.5 || sameLength) return { match: best.asset, same_edit: false, colour_changed: moved, confidence: 0.65, reasons: [] }

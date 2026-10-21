@@ -59,3 +59,11 @@ describe('the same edit is known by its sound; a grade by its colour', () => {
     expect(signalScore(same)).toBeGreaterThan(signalScore(other))
   })
 })
+
+describe('a silent video', () => {
+  it('has no sound to compare, and does not break the comparison', () => {
+    expect(soundAlike(undefined, [1, 2, 3, 4, 5, 6])).toBeNull()
+    const silent = { durationMs: 10_000, samples: [{ at_pct: 0.1, at_s: 1, yavg: 100, satavg: 50, ymin: 16, ymax: 235 } as never] }
+    expect(compareProbes(silent, silent)).toMatchObject({ lengthGapMs: 0, sound: null, colourShift: 0 })
+  })
+})
