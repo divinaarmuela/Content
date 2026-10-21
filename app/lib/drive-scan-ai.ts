@@ -120,7 +120,8 @@ export async function startScan(seenId: string): Promise<{ go: boolean; itemId?:
     if (!cur || (!['new', 'locked', 'failed'].includes(cur.state) && !stale)) return null
     if ((cur.scan as { kind?: string } | null)?.kind && cur.state === 'locked') return null   // scanned already, waiting
     const was = cur.state === 'locked' || (stale && (cur.scan as { was_locked?: boolean } | null)?.was_locked === true)
-    return { ...cur, state: 'scanning', scan: { steps: { measure: 'running' }, was_locked: was, started_at: new Date().toISOString() }, updated_at: new Date().toISOString() } as DriveSeen
+    const kept = (cur.scan as { duration_ms?: unknown } | null)?.duration_ms   // a rescan stays comparable to its siblings
+    return { ...cur, state: 'scanning', scan: { steps: { measure: 'running' }, was_locked: was, started_at: new Date().toISOString(), ...(typeof kept === 'number' ? { duration_ms: kept } : {}) }, updated_at: new Date().toISOString() } as DriveSeen
   })
   if (!start.claimed) return { go: false, note: 'not waiting for a scan' }
   const row = start.row
