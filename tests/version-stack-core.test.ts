@@ -77,3 +77,16 @@ describe('the latest version: by date, then by name on the same day', () => {
     expect(s.latest.key).toBe('s:v2')
   })
 })
+
+describe('files byte for byte the same', () => {
+  it('are one version together, tied to the video their verdict names', () => {
+    const [s] = stackVersions([
+      { ...f('o:c2:a1', ''), source: 'other', otherCard: 'Flinders Lane' },
+      f('s:one', '2026-10-19', { kind: 'recut', matchKey: 'o:c2:a1', otherCard: 'Flinders Lane' }),
+      f('s:draft', '2026-10-12', { kind: 'recut', matchKey: 'o:c2:a1', sameAs: 's:one' }),
+      f('s:v3', '2026-10-12', { kind: 'recut', matchKey: 'o:c2:a1', sameAs: 's:one' }),
+    ])
+    expect(s.versions).toEqual(['V1', 'V2'])
+    expect(s.entries.filter(e => e.label === 'V2').map(e => e.key).sort()).toEqual(['s:draft', 's:one', 's:v3'])
+  })
+})

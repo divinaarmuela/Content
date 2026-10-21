@@ -200,22 +200,33 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     const compared = measured.filter(m => m.probe.durationMs).map(m => ({ ...m.c, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
       .sort((a, b) => signalScore(b.s) - signalScore(a.s))
     await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: compared.length ? 'running' : 'skipped' }, { checked: compared.length, compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, where: c.where, ...c.s })) })
+    // THE SAME FILE AGAIN: the same size to the byte and the same length is one file saved twice (live, 21 Oct 2026:
+    // five New Menu Medley files of 177,601,535 bytes each). It is not judged against its twins — it takes the
+    // verdict one of them already has, or is judged against everything else, so the whole group stays tied to the
+    // video it is a version of (on another card, for New Menu Medley) and the AI is asked once for all of them
+    const twins = row.size ? compared.filter(c => c.size === row.size && c.s.lengthGapMs !== null && c.s.lengthGapMs <= 150 && c.asset.startsWith('seen:')) : []
+    if (twins.length) {
+      const twinRows = await Promise.all(twins.map(t => table<DriveSeen>('drive_seen').get(t.asset.slice(5)).catch(() => null)))
+      const decided = twinRows.find(r => r?.state === 'scanned' && (r.scan as { kind?: string } | null)?.kind)
+      if (decided) {
+        const d = decided.scan as Record<string, unknown>
+        await finish(seenId, {
+          pool: pool.length, checked: compared.length, kind: d.kind, asset: d.asset ?? null, other_card: d.other_card ?? null, confidence: d.confidence, ask: d.ask,
+          same_as: `seen:${decided.id}`, model: 'same file as another — its verdict',
+          reasons: [`The same file as ${decided.path} (same size to the byte, same length)`, ...((d.reasons as string[] | undefined) ?? [])].slice(0, 6),
+          words: `${String(d.words ?? '')} — same file as ${decided.path}`,
+          steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' },
+        })
+        return { ok: true, note: `same as ${decided.id}` }
+      }
+    }
+    const twinSet = new Set(twins.map(t => t.asset))
+    for (let i = compared.length - 1; i >= 0; i--) if (twinSet.has(compared[i].asset)) compared.splice(i, 1)
+    const sameAs = twins[0]?.asset ?? null
     // nothing to compare with: the first cut of a new video, said plainly, with no AI call to describe it
     if (!compared.length) {
-      await finish(seenId, { kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })
+      await finish(seenId, { pool: pool.length, same_as: sameAs, kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })
       return { ok: true, note: 'new_video (nothing to compare)' }
-    }
-    // THE SAME FILE AGAIN: the same size to the byte and the same length is a copy — said without asking the AI (live,
-    // 21 Oct 2026: five New Menu Medley files of 177,601,535 bytes each, one of them called a "re-cut")
-    const twin = row.size ? compared.find(c => c.size === row.size && c.s.lengthGapMs !== null && c.s.lengthGapMs <= 150) : undefined
-    if (twin) {
-      await finish(seenId, {
-        pool: pool.length, kind: 'copy', asset: twin.asset, other_card: twin.otherCard, confidence: 0.99, ask: !!twin.otherCard, model: 'measures only',
-        reasons: ['The same file again: the same size to the byte and the same length'],
-        words: `${KIND_WORDS.copy} of ${twin.name}${twin.otherCard ? ` — on “${twin.otherCard.title}”` : twin.asset.startsWith('seen:') ? ' (in Drive)' : ''}`,
-        steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' },
-      })
-      return { ok: true, note: `copy of ${twin.asset}` }
     }
     const top = compared.slice(0, 3).map((c, i) => ({ ...c, label: `C${i + 1}`, words: comparisonWords(c.s) }))
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)
@@ -245,7 +256,7 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     ], new Map(top.map(t => [t.label, t.name])))
     const reasons = said.filter((x, i, arr) => x && arr.indexOf(x) === i).slice(0, 6)
     const words = `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}${best?.otherCard ? ` — on “${best.otherCard.title}”` : best?.asset.startsWith('seen:') ? ' (in Drive)' : ''}`
-    await finish(seenId, { pool: pool.length, kind: v.kind, asset: v.asset, other_card: best?.otherCard ?? null, confidence: v.confidence, ask, reasons, model, ai_error: aiError, words, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
+    await finish(seenId, { pool: pool.length, same_as: sameAs, kind: v.kind, asset: v.asset, other_card: best?.otherCard ?? null, confidence: v.confidence, ask, reasons, model, ai_error: aiError, words, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
     return { ok: true, note: `${v.kind}${v.asset ? ` of ${v.asset}` : ''}` }
   } catch (e) {
     await finish(seenId, { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)

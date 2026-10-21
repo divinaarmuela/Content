@@ -82,13 +82,14 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[]): StackFile[
   const drive: StackFile[] = rows
     .filter(r => !['taken', 'ignored', 'footage'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
     .map(r => {
-      const scan = (r.scan ?? null) as { kind?: string; asset?: string | null; ask?: boolean; confidence?: number; frames?: (string | null)[]; other_card?: { title?: string } | null } | null
+      const scan = (r.scan ?? null) as { kind?: string; asset?: string | null; same_as?: string | null; ask?: boolean; confidence?: number; frames?: (string | null)[]; other_card?: { title?: string } | null } | null
       const a = scan?.asset ?? null
       const matchKey = !a ? null : a.startsWith('seen:') ? `s:${a.slice(5)}` : a.startsWith('card:') ? `o:${a.slice(5)}` : `a:${a}`
       return {
         key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind ?? null, matchKey,
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
         confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
+        sameAs: scan?.same_as?.startsWith('seen:') ? `s:${scan.same_as.slice(5)}` : null,
       }
     })
   // a file matched to a video on ANOTHER card: that video is its earlier version (New Menu Medley's draft is on the

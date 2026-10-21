@@ -101,7 +101,9 @@ export function parsePublicFolderView(html: string, now: Date = new Date()): Pub
       ? 'application/vnd.google-apps.folder'
       : (/googleusercontent\.com\/\d+\/type\/([\w.+-]+\/[\w.+-]+)/.exec(block)?.[1] ?? '')
     const thumb = /<div class="flip-entry-thumb"><img src="(https:\/\/lh3\.googleusercontent\.com\/[^"]+)"/.exec(block)?.[1] ?? null
-    const shown = /flip-entry-last-modified"><div>([^<]*)<\/div>/.exec(block)?.[1]
+    // the date sits AFTER the title, up to the next entry
+    const after = html.slice((m.index ?? 0) + block.length, (m.index ?? 0) + block.length + 600)
+    const shown = /flip-entry-last-modified"><div>([^<]*)<\/div>/.exec(after.split('<div class="flip-entry"')[0])?.[1]
     out.push({
       id, name, mimeType: mime, size: null, modified: null, ownerName: null, ownerEmail: null,
       // the date the page shows ("Oct 12", "10:23 AM") — kept as `created`, never `modified`, so a file's identity

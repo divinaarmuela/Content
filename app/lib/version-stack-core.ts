@@ -24,6 +24,7 @@ export type StackFile = {
   thumb: string | null
   confidence: number | null
   otherCard: string | null        // the title of another card it belongs to
+  sameAs?: string | null          // a key of a file it is byte for byte (the same version, saved again)
 }
 
 export type StackEntry = StackFile & { label: string; graded: boolean; sameAsEarlier: boolean }
@@ -61,6 +62,7 @@ export function stackVersions(files: readonly StackFile[]): Stack[] {
   const edit = new Sets()    // files of one version (copies and grades of the same edit)
   for (const f of files) {
     video.find(f.key); edit.find(f.key)
+    if (f.sameAs) { video.join(f.sameAs, f.key); edit.join(f.sameAs, f.key) }
     if (!f.matchKey) continue
     video.join(f.matchKey, f.key)
     if (f.kind === 'copy' || f.kind === 'graded') edit.join(f.matchKey, f.key)
