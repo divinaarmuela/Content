@@ -16,6 +16,8 @@ import { assetHistory, assetIdOf, currentFiles, isRetiredAt } from '../../../../
 import { roundOf, versionLabel } from '../../../../lib/edit-round-core'
 import { clipApprovalsOf } from '../../../../lib/clip-approvals-core'
 import { formatBytes } from '../../../../lib/drive-pull-core'
+import { stackVersions, type Stack, type StackFile } from '../../../../lib/version-stack-core'
+import { isFootage, isVideo } from '../../../../lib/drive-scan-core'
 import PreviewFrame, { AiScanning, ScanSteps, usePreviewAccess } from '../PreviewFrame'
 
 /**
@@ -43,6 +45,7 @@ export default function EditorPreviewCard() {
       <Stepper status={item.status} />
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-6">
+          <Stacks item={item} rows={seen.rows} />
           <Inbox item={item} rows={seen.rows} />
           <Videos item={item} seen={seen.rows} />
         </div>
@@ -69,6 +72,92 @@ function Stepper({ status }: { status: unknown }) {
   )
 }
 
+/** the card's videos and the scanned Drive files, as the stacks' input */
+function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[]): StackFile[] {
+  const round = roundOf(item)
+  const card: StackFile[] = currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name })).map(f => {
+    const first = assetHistory(item, assetIdOf(f))[0] ?? f
+    return { key: `a:${assetIdOf(f)}`, name: f.name, at: first.uploaded_at, source: 'card', kind: null, matchKey: null, ask: false, busy: false, thumb: null, confidence: null, otherCard: null }
+  })
+  const drive: StackFile[] = rows
+    .filter(r => !['taken', 'ignored', 'footage'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
+    .map(r => {
+      const scan = (r.scan ?? null) as { kind?: string; asset?: string | null; ask?: boolean; confidence?: number; frames?: (string | null)[]; other_card?: { title?: string } | null } | null
+      const a = scan?.asset ?? null
+      const matchKey = !a ? null : a.startsWith('seen:') ? `s:${a.slice(5)}` : a.startsWith('card:') ? `o:${a.slice(5)}` : `a:${a}`
+      return {
+        key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind ?? null, matchKey,
+        ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
+        confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
+      }
+    })
+  return [...card, ...drive]
+}
+
+/**
+ * THE VIDEOS, STACKED (the owner, 21 Oct 2026: "the ui should immediately show the latest version stacked view …
+ * currently i have to read one by one"): one row per video, its latest version on top with V1 · V2 · V3 beside it,
+ * what needs a look first. Open a row for every version under it.
+ */
+function Stacks({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
+  const stacks = useMemo(() => stackVersions(stackFilesOf(item, rows)), [item, rows])
+  if (!stacks.length) return null
+  return (
+    <section className="rounded-card border border-border bg-surface p-5">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
+        <span className="text-[12px] text-muted-foreground">Latest version first · versions worked out by the AI, never from names</span>
+      </header>
+      <ul className="flex flex-col gap-2">{stacks.map(s => <StackRow key={s.key} s={s} />)}</ul>
+    </section>
+  )
+}
+
+function StackRow({ s }: { s: Stack }) {
+  const l = s.latest
+  const newestFirst = [...s.entries].reverse()
+  return (
+    <li className={`rounded-inner border bg-background ${s.ask && !s.busy ? 'border-accent-amber' : 'border-border'}`}>
+      <details>
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
+          {l.thumb
+            ? <img src={l.thumb} alt="" className="h-14 w-10 shrink-0 rounded object-cover" />
+            : <span className="flex h-14 w-10 shrink-0 items-center justify-center rounded bg-muted"><Film className="h-4 w-4 text-muted-foreground" aria-hidden /></span>}
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="truncate text-[15px] font-semibold">{s.title}</span>
+            <span className="flex flex-wrap items-center gap-1">
+              {s.versions.map(v => (
+                <span key={v} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${v === l.label ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}>{v}</span>
+              ))}
+              {l.graded && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-bold">Graded</span>}
+              <span className="ml-1 truncate text-[12px] text-muted-foreground">latest: {l.name} · {l.source === 'card' ? 'on the card' : 'in Drive'}</span>
+            </span>
+          </span>
+          <span className="shrink-0">
+            {s.busy ? <AiScanning n={s.entries.filter(e => e.busy).length} />
+              : s.otherCard ? <span className="rounded-full bg-tint-amber px-2.5 py-1 text-[12px] font-semibold">Belongs to “{s.otherCard}”?</span>
+              : s.ask ? <span className="rounded-full bg-tint-amber px-2.5 py-1 text-[12px] font-semibold">Check this one</span>
+              : <span className="text-[12px] text-muted-foreground">{s.entries.length} {s.entries.length === 1 ? 'file' : 'files'}</span>}
+          </span>
+        </summary>
+        <ol className="flex flex-col gap-1 border-t border-border px-3 py-2">
+          {newestFirst.map(e => (
+            <li key={e.key} className="flex flex-wrap items-center gap-2 text-[13px]">
+              <span className="w-7 font-bold">{e.label}</span>
+              {e.graded && <span className="rounded-full bg-tint-green px-1.5 text-[11px] font-semibold">graded</span>}
+              {e.sameAsEarlier && <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">same file again</span>}
+              <span className="min-w-0 flex-1 truncate">{e.name}</span>
+              <span className="text-[12px] text-muted-foreground">
+                {e.source === 'card' ? 'on the card' : e.busy ? 'AI scanning…' : `${e.kind ? KIND_WORDS[e.kind as CutKind] ?? e.kind : 'in Drive'}${e.confidence !== null ? ` · ${Math.round(e.confidence * 100)}% sure` : ''}`}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </li>
+  )
+}
+
 /** NEW IN DRIVE — what the minute check found, and what the AI made of it */
 function Inbox({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
   const open = rows.filter(r => (OPEN_STATES as string[]).includes(r.state)).sort((a, b) => b.first_seen_at.localeCompare(a.first_seen_at))
@@ -80,7 +169,7 @@ function Inbox({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
   return (
     <section className="rounded-card border border-border bg-surface p-5">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Sparkles className="h-4 w-4 text-accent-blue" aria-hidden /> New in Drive</h2>
+        <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Sparkles className="h-4 w-4 text-accent-blue" aria-hidden /> Every file the AI checked</h2>
         <AiScanning n={scanning} />
       </header>
       <p className="mb-4 text-[13px] text-muted-foreground">

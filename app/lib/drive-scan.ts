@@ -106,6 +106,14 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
       await table<DriveSource>('drive_sources').update(s.id, { last_checked_at: now, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 300) } as never).catch(() => undefined)
     }
   }
+  // A FILE LEFT WAITING IS ASKED FOR AGAIN: one still "new" ten minutes on (its event lost, or set back for a rescan)
+  // is queued again, and stamped so it is asked at most every ten minutes — a scan that never starts is never final
+  const stale = await table<DriveSeen>('drive_seen').list({ where: r => r.state === 'new' && Date.now() - Date.parse(r.updated_at) > 10 * 60_000, fresh: true })
+  for (const r of stale.slice(0, 60)) {
+    if (out.toScan.includes(r.id)) continue
+    const put = await table<DriveSeen>('drive_seen').claim(r.id, cur => cur?.state === 'new' ? { ...cur, updated_at: new Date().toISOString() } : null)
+    if (put.claimed) out.toScan.push(r.id)
+  }
   return out
 }
 
