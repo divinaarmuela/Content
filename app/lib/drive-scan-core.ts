@@ -255,7 +255,7 @@ export type ScanStepKey = (typeof SCAN_STEPS)[number]['key']
 export type StepState = 'waiting' | 'running' | 'done' | 'skipped' | 'failed'
 
 /** the signals of one comparison, as scan-measure-core gives them */
-export type Signals = { lengthGapMs: number | null; sound: number | null; colourShift: number | null; punchier: boolean | null }
+export type Signals = { lengthGapMs: number | null; sound: number | null; colourShift: number | null; punchier: boolean | null; picture?: number | null }
 
 /**
  * THE VERDICT FROM THE MEASURES ALONE — what the AI is checked against, and the answer when it can't be asked.
@@ -287,7 +287,8 @@ export function heldToMeasures(ai: AiAnswer, s: Signals | null, shorterMs: numbe
   // far apart: over 20s, or over a fifth of the shorter video — short clips from one set (live, 21 Oct 2026: Cecconi's
   // 13s Caviar and 17s Pour, sound 26% alike, were called one video)
   const farLength = s.lengthGapMs !== null && (s.lengthGapMs > 20_000 || (shorterMs !== null && shorterMs > 0 && s.lengthGapMs > shorterMs * 0.2))
-  if (!(noSound && farLength)) return ai
+  // the same pictures with new music and a new length is a re-edit — never overruled
+  if (!(noSound && farLength) || (s.picture ?? 0) >= 0.5) return ai
   // different sound AND far-apart lengths is a different video, plainly — said with confidence, not asked (the owner,
   // 21 Oct 2026, on The Pour: "opening doesnt matter it needs to be smart")
   return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.85, reasons: ['Different sound and a different length — a different video, even where a shot or the set is shared'] }
@@ -311,5 +312,6 @@ export function namedReasons(reasons: readonly string[], names: ReadonlyMap<stri
 
 /** how close a card video is on the measures — the AI is shown the best two */
 export function signalScore(s: Signals): number {
-  return (s.sound ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)
+  // the same pictures count as much as the same sound: a re-edit with new music keeps its shots
+  return (s.sound ?? 0) * 3 + (s.picture ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)
 }

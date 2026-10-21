@@ -26,6 +26,41 @@ export type ProbeSample = {
   ymax: number | null
   /** loudness every 100 ms over two seconds, in dB (silence is -120) */
   rms: number[]
+  /** the frame's fingerprint: a 64-bit difference hash, 16 hex digits — the same shot gives nearly the same hash */
+  hash?: string | null
+}
+
+/** a 9×8 greyscale frame (72 bytes, row by row) to its difference hash: each pixel brighter than its right neighbour */
+export function dHashOf(gray: ArrayLike<number>): string | null {
+  if (!gray || gray.length < 72) return null
+  let hex = ''
+  for (let row = 0; row < 8; row++) {
+    let byte = 0
+    for (let col = 0; col < 8; col++) byte = (byte << 1) | (gray[row * 9 + col] > gray[row * 9 + col + 1] ? 1 : 0)
+    hex += byte.toString(16).padStart(2, '0')
+  }
+  return hex
+}
+
+export function hamming(a: string, b: string): number {
+  let d = 0
+  for (let i = 0; i < Math.min(a.length, b.length); i += 2) {
+    let x = parseInt(a.slice(i, i + 2), 16) ^ parseInt(b.slice(i, i + 2), 16)
+    while (x) { d += x & 1; x >>= 1 }
+  }
+  return d
+}
+
+/**
+ * THE SAME PICTURES, anywhere in the video (0–1): the share of one video's frames that have a near-identical frame
+ * somewhere in the other. A re-edit keeps its shots wherever they moved to; another video of the same shoot shares
+ * the set but rarely the shot (live, 21 Oct 2026: Olimpia_P2C_VF was never shown its own draft, because the sound
+ * and length ranked two menu videos above it).
+ */
+export function pictureAlike(a: readonly (string | null | undefined)[], b: readonly (string | null | undefined)[], near = 10): number | null {
+  const x = a.filter((h): h is string => !!h), y = b.filter((h): h is string => !!h)
+  if (x.length < 3 || y.length < 3) return null
+  return x.filter(h => y.some(k => hamming(h, k) <= near)).length / x.length
 }
 
 export function parseDuration(log: string): { durationMs: number | null; width: number | null; height: number | null } {
@@ -79,6 +114,8 @@ export type Comparison = {
   colourShift: number | null
   /** the new one is punchier (more contrast and saturation) — a grade, not a wash-out */
   punchier: boolean | null
+  /** the same pictures anywhere in the other video (0–1) */
+  picture?: number | null
 }
 
 const avg = (v: number[]) => (v.length ? v.reduce((s, x) => s + x, 0) / v.length : null)
@@ -103,6 +140,7 @@ export function compareProbes(
     sound: avg(sounds),
     colourShift: avg(shifts),
     punchier: c === null || s === null ? null : c + s > 2,
+    picture: pictureAlike((a.samples ?? []).map(x => x.hash), (b.samples ?? []).map(x => x.hash)),
   }
 }
 
@@ -110,6 +148,7 @@ export function compareProbes(
 export function comparisonWords(c: Comparison): string[] {
   const out: string[] = []
   if (c.lengthGapMs !== null) out.push(c.lengthGapMs <= 100 ? 'same length' : `length differs by ${(c.lengthGapMs / 1000).toFixed(1)}s`)
+  if (c.picture != null) out.push(c.picture >= 0.6 ? 'the same shots' : c.picture >= 0.3 ? 'some of the same shots' : 'different shots')
   if (c.sound !== null) out.push(c.sound >= 0.8 ? 'same sound at the same moments' : c.sound >= 0.5 ? 'similar sound' : 'different sound')
   // colour only means something between two cuts of the same edit: different shots always differ in colour (the
   // owner, 21 Oct 2026: "Book Concept … colour changed — what does it mean")

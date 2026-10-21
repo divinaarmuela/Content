@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { VideoFrame } from '@/lib/db-types'
 import { putObject, r2Configured } from './storage'
-import { PROBE_POINTS, PROBE_VERSION, parseDuration, parseProbeLog, type ProbeSample } from './scan-measure-core'
+import { PROBE_POINTS, PROBE_VERSION, dHashOf, parseDuration, parseProbeLog, type ProbeSample } from './scan-measure-core'
 
 /**
  * MEASURING A VIDEO WITHOUT DOWNLOADING IT (the editor preview's AI scan, 21 Oct 2026). ffmpeg reads a video over
@@ -38,6 +38,20 @@ function run(args: string[], timeoutMs = 90_000): Promise<{ out: Buffer; log: st
   })
 }
 
+/** a frame's fingerprint: ffmpeg shrinks the JPEG to 9×8 grey, and the difference hash is taken of that */
+async function hashOf(jpeg: Buffer): Promise<string | null> {
+  return new Promise(resolve => {
+    const p = spawn(ffmpegPath(), ['-hide_banner', '-loglevel', 'error', '-f', 'image2pipe', '-i', 'pipe:0', '-vf', 'scale=9:8,format=gray', '-f', 'rawvideo', 'pipe:1'], { stdio: ['pipe', 'pipe', 'ignore'] })
+    const out: Buffer[] = []
+    const timer = setTimeout(() => p.kill('SIGKILL'), 15_000)
+    p.stdout.on('data', (d: Buffer) => out.push(d))
+    p.on('close', () => { clearTimeout(timer); resolve(dHashOf(Buffer.concat(out))) })
+    p.on('error', () => { clearTimeout(timer); resolve(null) })
+    p.stdin.on('error', () => undefined)
+    p.stdin.end(jpeg)
+  })
+}
+
 /** a public Drive file's bytes, as a link ffmpeg can range-read — the same public ask drive-stream.ts makes */
 export function drivePublicUrl(driveId: string, resourceKey?: string | null): string {
   const q = new URLSearchParams({ id: driveId, export: 'download', confirm: 't', ...(resourceKey ? { resourcekey: resourceKey } : {}) })
@@ -68,7 +82,16 @@ export async function probeVideo(src: string, cacheKey: string): Promise<Probe> 
   const id = keyOf(`${PROBE_VERSION}|${cacheKey}`)
   const cached = await table<VideoFrame>('video_frames').get(id).catch(() => null)
   if (cached && Array.isArray(cached.frames) && cached.frames.length) {
-    return { durationMs: cached.duration_ms ?? null, width: null, height: null, samples: cached.frames as never, ...(cached.error ? { error: cached.error } : {}) }
+    let frames = cached.frames as (ProbeSample & { url: string | null })[]
+    // measured before frames had fingerprints: take them once from the kept frames, and keep them
+    if (frames.some(f => f.url && !f.hash)) {
+      frames = await Promise.all(frames.map(async f => {
+        if (!f.url || f.hash) return f
+        try { const res = await fetch(f.url, { cache: 'no-store' }); return res.ok ? { ...f, hash: await hashOf(Buffer.from(await res.arrayBuffer())) } : f } catch { return f }
+      }))
+      await table<VideoFrame>('video_frames').update(id, { frames: frames as never, updated_at: new Date().toISOString() } as never).catch(() => undefined)
+    }
+    return { durationMs: cached.duration_ms ?? null, width: null, height: null, samples: frames, ...(cached.error ? { error: cached.error } : {}) }
   }
   const head = await run(['-hide_banner', '-i', src], 60_000)
   const meta = parseDuration(head.log)
@@ -83,11 +106,12 @@ export async function probeVideo(src: string, cacheKey: string): Promise<Probe> 
     shots.push(...await Promise.all(PROBE_POINTS.slice(i, i + 4).map(pct => sampleAt(src, Math.min(dur * pct, Math.max(0, dur - 2.2)), pct))))
   }
   const samples = await Promise.all(shots.map(async ({ sample, jpeg }, i) => {
+    const hash = jpeg ? await hashOf(jpeg) : null
     let url: string | null = null
     if (jpeg && r2Configured()) {
       try { url = (await putObject(`scan-frames/${id}-${i}.jpg`, jpeg, 'image/jpeg')).publicUrl } catch { url = null }
     }
-    return { ...sample, url }
+    return { ...sample, hash, url }
   }))
   const now = new Date().toISOString()
   await table<VideoFrame>('video_frames').claim(id, () => ({

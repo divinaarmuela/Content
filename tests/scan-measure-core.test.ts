@@ -67,3 +67,17 @@ describe('a silent video', () => {
     expect(compareProbes(silent, silent)).toMatchObject({ lengthGapMs: 0, sound: null, colourShift: 0 })
   })
 })
+
+describe('frame fingerprints', () => {
+  it('a 9x8 grey frame gives a 16-digit hash, and alike frames are a few bits apart', async () => {
+    const { dHashOf, hamming, pictureAlike } = await import('../app/lib/scan-measure-core')
+    const frame = Array.from({ length: 72 }, (_, i) => (i * 37) % 255)
+    const h = dHashOf(frame)!
+    expect(h).toMatch(/^[0-9a-f]{16}$/)
+    expect(hamming(h, h)).toBe(0)
+    expect(hamming('00', 'ff')).toBe(8)
+    expect(pictureAlike([h, h, h], [h, 'ffffffffffffffff', '0000000000000000'])).toBe(1)
+    expect(pictureAlike(['ffffffffffffffff', 'ffffffffffffffff', 'ffffffffffffffff'], ['0000000000000000', '0000000000000000', '0000000000000000'])).toBe(0)
+    expect(pictureAlike([h], [h, h, h])).toBeNull()
+  })
+})
