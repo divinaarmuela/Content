@@ -5,7 +5,7 @@ import type { ContentItem, DriveSeen, DriveSource, TeamUser } from '@/lib/db-typ
 import { assetIdOf, currentFiles, isRetiredAt } from './final-files-core'
 import { roundOf } from './edit-round-core'
 import {
-  GRADED_FOLDER, KIND_WORDS, isVideo, rankCandidates, signalAnswer, signalScore, verdictOf,
+  GRADED_FOLDER, KIND_WORDS, heldToMeasures, isVideo, rankCandidates, signalAnswer, signalScore, verdictOf,
   type AiAnswer, type ScanStepKey, type Signals, type StepState,
 } from './drive-scan-core'
 import { compareProbes, comparisonWords } from './scan-measure-core'
@@ -27,7 +27,7 @@ import { cardFilesOf } from './drive-scan'
  * confirms (drive-scan-core.verdictOf asks whenever the AI and the context disagree). Nothing here touches a card.
  */
 
-const MODEL = process.env.DRIVE_SCAN_MODEL || 'claude-haiku-4-5'
+const MODEL = process.env.DRIVE_SCAN_MODEL || 'claude-sonnet-5'   // Haiku misjudged unrelated videos as re-cuts (live, 21 Oct 2026); a few calls a day
 const MAX_CARD_VIDEOS = 12
 
 async function setSteps(id: string, patch: Partial<Record<ScanStepKey, StepState>>, extra: Record<string, unknown> = {}) {
@@ -71,7 +71,7 @@ async function askAi(newProbe: Probe, cands: { label: string; asset: string; nam
     content.push({ type: 'text', text: `${c.label} — the card's video "${c.name}", frames at the same moments. Measured against the new file: ${c.words.join('; ') || 'no measures'}.` })
     for (const s of c.probe.samples) { const b = await frameBlock(s.url); if (b) content.push(b) }
   }
-  content.push({ type: 'text', text: `${context}\n\nDecide which card video (if any) the new file is a cut of. Same edit = the same shots at the same moments; a re-cut = the same video edited differently (shots added, removed, trimmed, reordered); graded = the same edit with its colour deliberately changed (more contrast/saturation, a look). Judge from the pictures and the measures, never from file names. Answer with the verdict tool.` })
+  content.push({ type: 'text', text: `${context}\n\nDecide which card video (if any) the new file is a cut of. Same edit = the same shots at the same moments; a re-cut = the same video edited differently (shots added, removed, trimmed, reordered); graded = the same edit with its colour deliberately changed (more contrast/saturation, a look). Most new files are NOT a cut of any card video: answer "new" unless the same people, places and shots clearly appear in both. Different subject matter is always "new". Judge from the pictures and the measures, never from file names. Answer with the verdict tool.` })
   const anthropic = new Anthropic({ maxRetries: 1 })
   const res = await anthropic.messages.create({
     model: MODEL, max_tokens: 600, tools: [VERDICT_TOOL], tool_choice: { type: 'tool', name: 'verdict' },
@@ -182,8 +182,9 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
       ai = null
       aiError = (e instanceof Error ? e.message : String(e)).slice(0, 200)
     }
-    const answer = ai ?? measuresSay
+    let answer = ai ?? measuresSay
     if (ai && (ai.match !== measuresSay.match || ai.same_edit !== measuresSay.same_edit)) answer.confidence = Math.min(answer.confidence, 0.6)
+    answer = heldToMeasures(answer, top.find(t => t.asset === answer.match)?.s ?? null)
     const candidates = top.map(t => ({ asset: t.asset, name: t.name, score: signalScore(t.s), why: t.words }))
     const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
     const best = top.find(t => t.asset === v.asset)

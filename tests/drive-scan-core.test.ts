@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf,
+  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures,
   type CardFile, type SeenFile,
 } from '../app/lib/drive-scan-core'
 import { cardFace, laneOf, stepOf } from '../app/lib/editor-preview-core'
@@ -110,5 +110,18 @@ describe('the preview board', () => {
       { item_id: 'c', state: 'locked' }, { item_id: 'x', state: 'new' },
     ], [{ item_id: 'c' }])
     expect(face).toMatchObject({ scanning: 2, toConfirm: 1, waiting: 1, sources: 1, videos: 0 })
+  })
+})
+
+describe('heldToMeasures', () => {
+  const ai = { match: 'A1', same_edit: false, colour_changed: false, confidence: 0.6, reasons: ['shots look alike'] }
+  const far = { lengthGapMs: 52_000, sound: 0.1, colourShift: 7, punchier: false }
+  it('turns an unsure match the measures contradict into a new video', () => {
+    expect(heldToMeasures(ai, far)).toMatchObject({ match: 'new', confidence: 0.6 })
+  })
+  it('keeps a sure match, a match with shared sound, and a near length', () => {
+    expect(heldToMeasures({ ...ai, confidence: 0.9 }, far).match).toBe('A1')
+    expect(heldToMeasures(ai, { ...far, sound: 0.6 }).match).toBe('A1')
+    expect(heldToMeasures(ai, { ...far, lengthGapMs: 4000 }).match).toBe('A1')
   })
 })

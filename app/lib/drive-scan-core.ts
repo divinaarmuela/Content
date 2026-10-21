@@ -244,6 +244,19 @@ export function signalAnswer(best: { asset: string; s: Signals } | null): AiAnsw
   return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.6, reasons: [] }
 }
 
+/**
+ * THE AI HELD TO THE MEASURES. A match the measures flatly contradict — no shared sound and a very different length —
+ * stands only when the AI is sure; otherwise it is a new video, asked. Live, 21 Oct 2026: Haiku called two unrelated
+ * videos "re-cuts" while its own reasons said "different subject matter".
+ */
+export function heldToMeasures(ai: AiAnswer, s: Signals | null): AiAnswer {
+  if (ai.match === 'new' || !s || ai.confidence >= 0.85) return ai
+  const noSound = s.sound !== null && s.sound < 0.3
+  const farLength = s.lengthGapMs !== null && s.lengthGapMs > 20_000
+  if (!(noSound && farLength)) return ai
+  return { match: 'new', same_edit: false, colour_changed: false, confidence: Math.min(ai.confidence, 0.6), reasons: ['The sound and the length match none of the card’s videos', ...ai.reasons] }
+}
+
 /** how close a card video is on the measures — the AI is shown the best two */
 export function signalScore(s: Signals): number {
   return (s.sound ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)
