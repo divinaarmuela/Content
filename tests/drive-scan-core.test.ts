@@ -193,3 +193,15 @@ describe('unseen: a size Drive did not always give', () => {
     expect(unseen('I1', [{ ...f, size: 999 }], known)).toHaveLength(1)
   })
 })
+
+describe("the AI and the measures, 21 Oct 2026 on Cecconi's", () => {
+  it('a sure AI re-cut stands even with new music and a new length (New Menu Medley)', () => {
+    const ai = { match: 'A1', same_edit: false, colour_changed: false, confidence: 0.8, reasons: [] }
+    expect(heldToMeasures(ai, { lengthGapMs: 11_600, sound: 0.1, colourShift: 8, punchier: false }, 40_000).match).toBe('A1')
+  })
+  it('a file a second or more longer is never a grade or a copy (Olimpia v2)', () => {
+    const v = verdictOf({ match: 'A1', same_edit: true, colour_changed: true, confidence: 0.8, reasons: [] },
+      { status: 'colour_grade', candidates: [{ asset: 'A1', name: 'draft', score: 1, why: [] }], byColourist: false, gradedFolder: false, lengthGapMs: 1800 })
+    expect(v.kind).toBe('recut')
+  })
+})

@@ -214,7 +214,7 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
           pool: pool.length, checked: compared.length, kind: d.kind, asset: d.asset ?? null, other_card: d.other_card ?? null, confidence: d.confidence, ask: d.ask,
           same_as: `seen:${decided.id}`, model: 'same file as another — its verdict',
           reasons: [`The same file as ${decided.path} (same size to the byte, same length)`, ...((d.reasons as string[] | undefined) ?? [])].slice(0, 6),
-          words: `${String(d.words ?? '')} — same file as ${decided.path}`,
+          words: `${String(d.words ?? '').split(' — same file as ')[0]} — same file as ${decided.path}`,
           steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' },
         })
         return { ok: true, note: `same as ${decided.id}` }
@@ -243,11 +243,13 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
       aiError = (e instanceof Error ? e.message : String(e)).slice(0, 200)
     }
     let answer = ai ?? measuresSay
-    if (ai && (ai.match !== measuresSay.match || ai.same_edit !== measuresSay.same_edit)) answer.confidence = Math.min(answer.confidence, 0.6)
+    // held to the measures on the AI's OWN confidence, before a disagreement lowers it
     const matched = top.find(t => t.asset === answer.match)
-    answer = heldToMeasures(answer, matched?.s ?? null, matched?.probe.durationMs && probe.durationMs ? Math.min(matched.probe.durationMs, probe.durationMs) : null)
+    const held = heldToMeasures(answer, matched?.s ?? null, matched?.probe.durationMs && probe.durationMs ? Math.min(matched.probe.durationMs, probe.durationMs) : null)
+    if (held !== answer) answer = held
+    else if (ai && (ai.match !== measuresSay.match || ai.same_edit !== measuresSay.same_edit)) answer = { ...answer, confidence: Math.min(answer.confidence, 0.6) }
     const candidates = top.map(t => ({ asset: t.asset, name: t.name, score: signalScore(t.s), why: t.words }))
-    const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
+    const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder, lengthGapMs: top.find(t => t.asset === answer.match)?.s.lengthGapMs ?? null })
     const best = top.find(t => t.asset === v.asset)
     const ask = v.ask || !!best?.otherCard   // a cut of another card's video is the person's call
     const said = namedReasons([

@@ -214,11 +214,14 @@ export const SURE = 0.75
  * → a new video. The stage and who added it support the verdict — they never make it: a "graded" look added by the
  * editor while editing is asked about, not filed.
  */
-export function verdictOf(ai: AiAnswer, ctx: { status: unknown; candidates: readonly Candidate[]; byColourist: boolean; gradedFolder: boolean }): Verdict {
+export function verdictOf(ai: AiAnswer, ctx: { status: unknown; candidates: readonly Candidate[]; byColourist: boolean; gradedFolder: boolean; lengthGapMs?: number | null }): Verdict {
   const known = ai.match !== 'new' && ctx.candidates.some(c => c.asset === ai.match)
   const reasons = [...ai.reasons]
   if (!known) return { kind: 'new_video', asset: null, confidence: ai.confidence, reasons, ask: ai.confidence < SURE }
-  let kind: CutKind = ai.same_edit ? (ai.colour_changed ? 'graded' : 'copy') : 'recut'
+  // the same edit cannot differ in length: a grade or a copy is never a second longer or shorter (live, 21 Oct 2026:
+  // OLIMPIA_P2C_v2, 1.8s longer with B-roll added, was called graded)
+  const sameEdit = ai.same_edit && !(ctx.lengthGapMs != null && ctx.lengthGapMs > 1000)
+  let kind: CutKind = sameEdit ? (ai.colour_changed ? 'graded' : 'copy') : 'recut'
   let ask = ai.confidence < SURE
   const atGrade = String(ctx.status ?? '') === 'colour_grade'
   if (kind === 'graded' && !atGrade && !ctx.byColourist) { ask = true; reasons.push('Looks graded, but it was added outside colour grade — check it') }
@@ -277,7 +280,9 @@ export function signalAnswer(best: { asset: string; s: Signals } | null): AiAnsw
  * videos "re-cuts" while its own reasons said "different subject matter".
  */
 export function heldToMeasures(ai: AiAnswer, s: Signals | null, shorterMs: number | null = null): AiAnswer {
-  if (ai.match === 'new' || !s || ai.confidence >= 0.85) return ai
+  // a sure AI stands: a re-cut can have new music and a new length (live, 21 Oct 2026: New Menu Medley_1, re-ordered
+  // with new music, IS the Flinders Lane draft re-cut) — the measures overrule only an unsure one (The Pour)
+  if (ai.match === 'new' || !s || ai.confidence >= 0.75) return ai
   const noSound = s.sound !== null && s.sound < 0.3
   // far apart: over 20s, or over a fifth of the shorter video — short clips from one set (live, 21 Oct 2026: Cecconi's
   // 13s Caviar and 17s Pour, sound 26% alike, were called one video)
