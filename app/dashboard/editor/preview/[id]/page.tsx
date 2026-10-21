@@ -195,7 +195,10 @@ function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveS
   }
   const groups = new Map<string, Stack[]>()
   for (const s of stacks) { const k = folderOf(s); groups.set(k, [...(groups.get(k) ?? []), s]) }
-  const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Top of the link' ? -1 : b[0] === 'Top of the link' ? 1 : a[0].localeCompare(b[0])))
+  // subfolders first — they are the videos an editor grouped on purpose — then the loose ones at the top of the link
+  const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Top of the link' ? 1 : b[0] === 'Top of the link' ? -1 : a[0].localeCompare(b[0])))
+  const [folder, setFolder] = useState<string | null>(null)
+  const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
 
   if (!stacks.length) {
     return (
@@ -211,8 +214,22 @@ function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveS
         <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
         <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
       </header>
+      {/* THE FOLDERS, AT THE TOP (the owner, 22 Oct 2026: "the subfolder part make sure its at the top"): every
+          subfolder the editor used, with its count — press one to see only its videos */}
+      {ordered.length > 1 && (
+        <nav aria-label="Folders" className="mb-4 flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => setFolder(null)} aria-pressed={folder === null}
+            className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === null ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>All ({stacks.length})</button>
+          {ordered.map(([f, list]) => (
+            <button key={f} type="button" onClick={() => setFolder(f)} aria-pressed={folder === f}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === f ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
+              <FolderOpen className="h-3.5 w-3.5" aria-hidden />{f} ({list.length})
+            </button>
+          ))}
+        </nav>
+      )}
       <div className="flex flex-col gap-5">
-        {ordered.map(([folder, list]) => (
+        {shown.map(([folder, list]) => (
           <div key={folder}>
             <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground"><FolderOpen className="h-3.5 w-3.5" aria-hidden />{folder} <span>({list.length})</span></h3>
             <ul className="flex flex-col gap-2">
