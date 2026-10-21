@@ -58,7 +58,8 @@ export function TodoSidebar({ place, onPlace, projects, unread, everyone }: {
         <li>
           <button type="button" onClick={() => onPlace('inbox')} aria-current={place === 'inbox' ? 'page' : undefined} className={item(place === 'inbox')}>
             <Bell className="h-4 w-4 shrink-0" aria-hidden /> <span className="flex-1">Inbox</span>
-            {unread > 0 && <span className="rounded-full bg-accent-red-deep px-1.5 text-[11px] font-semibold leading-5 text-white">{unread}</span>}
+            {/* a quiet count, not an alarm (the owner, 21 Oct 2026: "the number 1 looks ugly red") — the sidebar's soft blue */}
+            {unread > 0 && <span aria-label={`${unread} unread`} className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-blue/15 px-1.5 text-[11px] font-semibold tabular-nums text-accent-blue-deep">{unread}</span>}
           </button>
         </li>
         <li>
