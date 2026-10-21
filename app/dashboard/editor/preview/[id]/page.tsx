@@ -72,7 +72,9 @@ function Stepper({ status }: { status: unknown }) {
 /** NEW IN DRIVE — what the minute check found, and what the AI made of it */
 function Inbox({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
   const open = rows.filter(r => (OPEN_STATES as string[]).includes(r.state)).sort((a, b) => b.first_seen_at.localeCompare(a.first_seen_at))
-  const done = rows.filter(r => !(OPEN_STATES as string[]).includes(r.state))
+  const done = rows.filter(r => !(OPEN_STATES as string[]).includes(r.state) && r.state !== 'footage')
+  // camera originals and footage are never cuts: one line, not a list (live, 21 Oct 2026: a card full of MXF rows)
+  const footage = rows.filter(r => r.state === 'footage')
   const scanning = open.filter(r => r.state === 'new' || r.state === 'scanning').length
   const rule = stageRule(item.status)
   return (
@@ -88,6 +90,12 @@ function Inbox({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
       <ul className="flex flex-col gap-2">
         {open.map(r => <SeenRow key={r.id} r={r} item={item} />)}
       </ul>
+      {footage.length > 0 && (
+        <details className="mt-4">
+          <summary className="cursor-pointer text-[13px] text-muted-foreground">{footage.length} shoot footage {footage.length === 1 ? 'file' : 'files'} skipped — camera files are never versions</summary>
+          <p className="mt-2 text-[12px] text-muted-foreground">{[...new Set(footage.map(r => r.path))].join(' · ')}</p>
+        </details>
+      )}
       {done.length > 0 && (
         <details className="mt-4">
           <summary className="cursor-pointer text-[13px] font-semibold text-muted-foreground">Already handled ({done.length})</summary>
