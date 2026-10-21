@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import PageTitle from '../../ui/PageTitle'
 import { useRole } from '../../useRole'
+import { SCAN_STEPS } from '../../../lib/drive-scan-core'
+
+const SCAN_STEP_LIST = SCAN_STEPS
 
 /**
  * THE EDITOR PREVIEW'S FRAME — its title, the Preview badge, its own child pages (Board · AI scans) and "Check Drive
@@ -88,5 +91,32 @@ export function AiScanning({ n, className = '' }: { n: number; className?: strin
       <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-blue opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-accent-blue" /></span>
       <Sparkles className="h-3.5 w-3.5" aria-hidden /> AI scanning {n} {n === 1 ? 'file' : 'files'}
     </span>
+  )
+}
+
+/**
+ * THE SCAN, STEP BY STEP (the owner, 21 Oct 2026: "build a nice ui to show whats happening and its automated"): each
+ * file shows its steps lighting up as the scan runs — measuring, sound, frames, colour, the AI — live from its row.
+ */
+export function ScanSteps({ state, steps }: { state: string; steps?: Record<string, string> | null }) {
+  const queued = state === 'new'
+  return (
+    <ol className="flex flex-wrap items-center gap-1.5" aria-label="AI scan steps">
+      {SCAN_STEP_LIST.map((s, i) => {
+        const st = queued ? 'waiting' : (steps?.[s.key] ?? (state === 'scanning' ? 'waiting' : 'done'))
+        const tone = st === 'done' ? 'bg-tint-green text-foreground' : st === 'running' ? 'bg-accent-blue/15 text-accent-blue-deep' : st === 'failed' ? 'bg-tint-red' : st === 'skipped' ? 'bg-muted text-muted-foreground line-through' : 'bg-muted text-muted-foreground'
+        return (
+          <li key={s.key} className="flex items-center gap-1.5" title={s.words}>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>
+              {st === 'running' && <span className="h-1.5 w-1.5 animate-ping rounded-full bg-accent-blue" aria-hidden />}
+              {st === 'done' && <span aria-hidden>✓</span>}
+              {s.label}
+            </span>
+            {i < SCAN_STEP_LIST.length - 1 && <span aria-hidden className="h-px w-2 bg-border" />}
+          </li>
+        )
+      })}
+      {queued && <span className="text-[11px] text-muted-foreground">queued for the AI</span>}
+    </ol>
   )
 }

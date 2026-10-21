@@ -1036,6 +1036,26 @@ export const driveScanWatch = inngest.createFunction(
     if (process.env.DRIVE_SCAN !== '1') return { off: true }
     const { watchSources } = await import('../lib/drive-scan')
     return watchSources()
+  }).then(async r => {
+    // every new file goes to the AI scan, one event each
+    const ids = (r as { toScan?: string[] }).toScan ?? []
+    if (ids.length) await step.sendEvent('scan', ids.map(id => ({ name: 'drive/scan.file', data: { seen_id: id } })))
+    return r
+  })),
+)
+
+/**
+ * THE AI SCAN OF ONE NEW FILE (app/lib/drive-scan-ai.ts): measured (length, frames, colour, sound — ffmpeg over HTTP
+ * ranges, no download), compared with every video on its card, and judged by the AI. Writes only `drive_seen` and the
+ * `video_frames` cache. Three at a time. A NEW function — re-sync after deploying it (trap 5b).
+ */
+export const driveScanFile = inngest.createFunction(
+  { id: 'drive-scan-file', name: 'Editor preview: AI scan of a new Drive file', triggers: [{ event: 'drive/scan.file' }], retries: 1, concurrency: { limit: 3 } },
+  async ({ event, step }) => withRequestCache(async () => step.run('scan', async () => {
+    const id = String((event.data as { seen_id?: unknown })?.seen_id ?? '')
+    if (!id) return { skipped: 'no seen_id' }
+    const { scanSeen } = await import('../lib/drive-scan-ai')
+    return scanSeen(id)
   })),
 )
 
@@ -1065,6 +1085,7 @@ export const functions = [
   encodeSweep,
   drivePullFolder,
   driveScanWatch,
+  driveScanFile,
   metaIgTokenRefresh,
 ]
 

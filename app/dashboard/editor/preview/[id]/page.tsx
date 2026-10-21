@@ -16,7 +16,7 @@ import { assetHistory, assetIdOf, currentFiles, isRetiredAt } from '../../../../
 import { roundOf, versionLabel } from '../../../../lib/edit-round-core'
 import { clipApprovalsOf } from '../../../../lib/clip-approvals-core'
 import { formatBytes } from '../../../../lib/drive-pull-core'
-import PreviewFrame, { AiScanning, usePreviewAccess } from '../PreviewFrame'
+import PreviewFrame, { AiScanning, ScanSteps, usePreviewAccess } from '../PreviewFrame'
 
 /**
  * THE NEW EDITOR — A CARD (preview). Where the card is on the road; the Drive links it was given and when each was
@@ -99,26 +99,72 @@ function Inbox({ item, rows }: { item: ContentItem; rows: DriveSeen[] }) {
 }
 
 function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: boolean }) {
-  const scan = (r.scan ?? null) as { kind?: CutKind; asset?: string | null; confidence?: number; reasons?: string[]; ask?: boolean } | null
+  const scan = (r.scan ?? null) as {
+    kind?: CutKind; asset?: string | null; confidence?: number; reasons?: string[]; ask?: boolean; model?: string; error?: string
+    steps?: Record<string, string>; frames?: (string | null)[]; duration_ms?: number
+    compared?: { asset: string; name: string; sound: number | null; lengthGapMs: number | null; colourShift: number | null }[]
+  } | null
   const target = scan?.asset ? currentFiles(item).find(f => assetIdOf(f) === scan.asset) : null
   const busy = r.state === 'new' || r.state === 'scanning'
+  const scannable = ['new', 'scanning', 'scanned', 'locked', 'failed'].includes(r.state) && !quiet
+  const [again, setAgain] = useState(false)
+  const rescan = async () => {
+    setAgain(true)
+    try {
+      const res = await fetch('/api/editor-preview/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seen_id: r.id }) })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? 'Could not scan it')
+      if (!j.ok) toast.message(j.note === 'not waiting for a scan' ? 'Already scanned' : `Scan: ${j.note}`)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not scan it') } finally { setAgain(false) }
+  }
+  const duration = scan?.duration_ms ?? r.duration_ms
   return (
-    <li className={`flex flex-col gap-1.5 rounded-inner border border-border p-3 ${quiet ? 'bg-background/50' : 'bg-background'}`}>
+    <li className={`flex flex-col gap-2 rounded-inner border p-3 ${scan?.ask && !busy ? 'border-accent-amber' : 'border-border'} ${quiet ? 'bg-background/50' : 'bg-background'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 truncate text-[14px] font-semibold" title={r.path}>{r.path}</span>
-        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold ${busy ? 'bg-accent-blue/15 text-accent-blue-deep' : r.state === 'locked' ? 'bg-muted text-muted-foreground' : r.state === 'scanned' ? 'bg-tint-amber' : 'bg-muted'}`}>
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold ${busy ? 'bg-accent-blue/15 text-accent-blue-deep' : r.state === 'locked' ? 'bg-muted text-muted-foreground' : r.state === 'scanned' ? 'bg-tint-amber' : r.state === 'failed' ? 'bg-tint-red' : 'bg-muted'}`}>
           {busy && <Sparkles className="h-3 w-3 animate-pulse" aria-hidden />}{r.state === 'locked' && <Lock className="h-3 w-3" aria-hidden />}
           {STATE_WORDS[r.state as SeenState] ?? r.state}
         </span>
       </div>
       <span className="text-[12px] text-muted-foreground">
-        {[r.size ? formatBytes(r.size) : null, r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : null, r.width && r.height ? `${r.width}×${r.height}` : null, r.last_modifying_user ? `by ${r.last_modifying_user}` : null, `found ${new Date(r.first_seen_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}`].filter(Boolean).join(' · ')}
+        {[r.size ? formatBytes(r.size) : null, duration ? `${(duration / 1000).toFixed(1)}s` : null, r.width && r.height ? `${r.width}×${r.height}` : null, `found ${new Date(r.first_seen_at).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })}`].filter(Boolean).join(' · ')}
       </span>
-      {scan?.kind && (
-        <span className="text-[13px]"><b>{KIND_WORDS[scan.kind]}</b>{target ? <> of <b>{target.name}</b></> : null}{typeof scan.confidence === 'number' ? <span className="text-muted-foreground"> · {Math.round(scan.confidence * 100)}% sure</span> : null}</span>
+      {scannable && (busy || scan?.steps) && <ScanSteps state={r.state} steps={scan?.steps} />}
+      {scan?.frames?.some(Boolean) && (
+        <div className="flex gap-1.5 overflow-x-auto" aria-label="Frames the AI looked at">
+          {scan.frames.map((u, i) => u ? <img key={i} src={u} alt={`Frame ${i + 1}`} className="h-20 w-auto rounded-md border border-border object-cover" /> : null)}
+        </div>
       )}
-      {scan?.reasons?.length ? <span className="text-[12px] text-muted-foreground">{scan.reasons.join(' · ')}</span> : null}
+      {scan?.kind && (
+        <div className="flex flex-col gap-1 rounded-md bg-muted/60 p-2.5">
+          <span className="flex flex-wrap items-center gap-1.5 text-[13px]">
+            <Sparkles className="h-3.5 w-3.5 text-accent-blue" aria-hidden />
+            <b>{KIND_WORDS[scan.kind]}</b>{target ? <> of <b>{target.name}</b></> : null}
+            {typeof scan.confidence === 'number' && <span className="text-muted-foreground">· {Math.round(scan.confidence * 100)}% sure</span>}
+            {scan.ask && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Check this one</span>}
+          </span>
+          {scan.reasons?.length ? <span className="text-[12px] text-muted-foreground">{scan.reasons.join(' · ')}</span> : null}
+          {scan.model && <span className="text-[11px] text-muted-foreground">Decided by {scan.model === 'measures only' ? 'the measures (AI not available)' : `AI (${scan.model}) checked against the measures`}</span>}
+        </div>
+      )}
+      {scan?.compared?.length ? (
+        <details className="text-[12px]">
+          <summary className="cursor-pointer font-semibold text-muted-foreground">Compared with {scan.compared.length} {scan.compared.length === 1 ? 'video' : 'videos'} on the card</summary>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {scan.compared.map(c => (
+              <li key={c.asset} className="text-muted-foreground">
+                <b className="text-foreground">{c.name}</b> — sound {c.sound === null ? '—' : `${Math.round(c.sound * 100)}%`} · length {c.lengthGapMs === null ? '—' : c.lengthGapMs <= 150 ? 'same' : `${(c.lengthGapMs / 1000).toFixed(1)}s off`} · colour {c.colourShift === null ? '—' : c.colourShift >= 6 ? 'changed' : 'same'}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {scan?.error && <span className="text-[12px] text-accent-red-deep">{scan.error}</span>}
       {r.state === 'locked' && !quiet && <span className="flex items-center gap-1 text-[12px] text-muted-foreground"><Hourglass className="h-3 w-3" aria-hidden />{stageRule(item.status).why}</span>}
+      {(r.state === 'failed' || r.state === 'new') && !quiet && (
+        <Button variant="outline" size="sm" className="self-start" disabled={again} onClick={rescan}>{again ? 'Scanning…' : r.state === 'failed' ? 'Scan again' : 'Scan now'}</Button>
+      )}
     </li>
   )
 }

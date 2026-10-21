@@ -5,7 +5,13 @@ const nextConfig: NextConfig = {
   // runtime paths. Bundling rewrites those paths (producing errors like
   // "ENOENT ... C:\ROOT\...\Helvetica.afm"), so keep it external and let it
   // load from node_modules normally.
-  serverExternalPackages: ['pdfkit'],
+  serverExternalPackages: ['pdfkit', 'ffmpeg-static'],
+  // THE EDITOR PREVIEW'S AI SCAN runs ffmpeg (app/lib/scan-measure.ts): its binary is a data file the tracer can't
+  // see from a require of a path, so the two routes that run it carry it explicitly
+  outputFileTracingIncludes: {
+    '/api/inngest': ['./node_modules/ffmpeg-static/ffmpeg'],
+    '/api/editor-preview/scan': ['./node_modules/ffmpeg-static/ffmpeg'],
+  },
 
   // content.mdmmarketing.com.au is a legacy alias of this same project (the
   // Linktree still points at it) — send it to the canonical site instead of

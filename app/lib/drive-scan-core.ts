@@ -212,3 +212,39 @@ export const STATE_WORDS: Record<SeenState, string> = {
 }
 /** the states still asking something of a person */
 export const OPEN_STATES: readonly SeenState[] = ['new', 'scanning', 'scanned', 'locked', 'failed']
+
+/* ─── the scan, step by step — what the page shows while it runs ────────── */
+
+export const SCAN_STEPS = [
+  { key: 'measure', label: 'Measuring', words: 'Reading the video from Drive' },
+  { key: 'sound', label: 'Sound', words: 'Comparing the sound at four moments' },
+  { key: 'frames', label: 'Frames', words: 'Comparing the shots at the same moments' },
+  { key: 'colour', label: 'Colour', words: 'Checking contrast and saturation for a grade' },
+  { key: 'ai', label: 'AI check', words: 'The AI looks at it all and decides' },
+] as const
+export type ScanStepKey = (typeof SCAN_STEPS)[number]['key']
+export type StepState = 'waiting' | 'running' | 'done' | 'skipped' | 'failed'
+
+/** the signals of one comparison, as scan-measure-core gives them */
+export type Signals = { lengthGapMs: number | null; sound: number | null; colourShift: number | null; punchier: boolean | null }
+
+/**
+ * THE VERDICT FROM THE MEASURES ALONE — what the AI is checked against, and the answer when it can't be asked.
+ * Same sound at the same moments and the same length = the same edit; with its colour moved = graded, unmoved = a
+ * copy; similar sound = a re-cut of that video; else a new video.
+ */
+export function signalAnswer(best: { asset: string; s: Signals } | null): AiAnswer {
+  if (!best) return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.6, reasons: ['No video on the card sounds like it'] }
+  const { s } = best
+  const sameLength = s.lengthGapMs !== null && s.lengthGapMs <= 150
+  const sameSound = s.sound !== null && s.sound >= 0.8
+  const moved = s.colourShift !== null && s.colourShift >= 6
+  if (sameSound && sameLength) return { match: best.asset, same_edit: true, colour_changed: moved, confidence: 0.85, reasons: [] }
+  if ((s.sound ?? 0) >= 0.5 || sameLength) return { match: best.asset, same_edit: false, colour_changed: moved, confidence: 0.65, reasons: [] }
+  return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.6, reasons: [] }
+}
+
+/** how close a card video is on the measures — the AI is shown the best two */
+export function signalScore(s: Signals): number {
+  return (s.sound ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)
+}
