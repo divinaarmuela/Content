@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { ArchivedList, ArchivedToggle } from '../ui/Archived'
 import { managesClients, personLabel } from '../../lib/identity-core'
 
@@ -176,6 +178,12 @@ export default function EditorPage() {
         actions={viewer && (
           <div className="flex flex-wrap items-center gap-2">
             <ArchivedToggle count={archivedRows.length} open={showArchived} onToggle={() => setShowArchived(v => !v)} />
+            {/* THE NEW EDITOR, IN PREVIEW (the owner, 21 Oct 2026) — super admins only while it is walked */}
+            {viewer.role === 'super_admin' && (
+              <Button asChild variant="outline" className="h-11 rounded-full px-5 text-[14px] font-semibold">
+                <Link href="/dashboard/editor/preview">Try the new Editor <span className="ml-1 rounded-full bg-tint-blue px-2 text-[11px] uppercase tracking-wider">Preview</span></Link>
+              </Button>
+            )}
             {canCreate && (
               <Button onClick={() => setNewOpen(true)}
                 className="h-11 rounded-full bg-foreground px-5 text-[14px] font-semibold text-background hover:bg-foreground/90">

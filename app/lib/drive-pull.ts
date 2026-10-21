@@ -143,7 +143,7 @@ export function cancelReplacedPullSoon(opts: Parameters<typeof cancelReplacedPul
   afterResponse('drive pull cancel', () => cancelReplacedPull(opts))
 }
 
-export type DriveTargetFile = { id: string; name: string; mime: string; size: number | null; modified: string | null; md5?: string | null; revision?: string | null }
+export type DriveTargetFile = { id: string; name: string; mime: string; size: number | null; modified: string | null; md5?: string | null; revision?: string | null; created?: string | null; lastModifier?: string | null; durationMs?: number | null; width?: number | null; height?: number | null }
 
 /**
  * WHAT A DRIVE LINK HOLDS — read only (trap 13): one file's name, type and size from Drive; or a folder walked
@@ -158,13 +158,13 @@ export async function readDriveTarget(kind: 'folder' | 'file', driveId: string, 
     for (const e of listing.entries) {
       if (seen.length >= MAX_FILES) break
       if (kindOf(e.mimeType, e.name) === 'folder') { await walk(e.id, `${prefix}${e.name}/`, depth + 1); continue }
-      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null, md5: e.md5 ?? null, revision: e.revision ?? null })
+      seen.push({ id: e.id, name: `${prefix}${e.name}`, mime: e.mimeType || 'application/octet-stream', size: typeof e.size === 'number' ? e.size : null, modified: (e as { modified?: string | null }).modified ?? null, md5: e.md5 ?? null, revision: e.revision ?? null, created: e.created ?? null, lastModifier: e.lastModifier ?? null, durationMs: e.durationMs ?? null, width: e.width ?? null, height: e.height ?? null })
     }
   }
   if (kind === 'file') {
     // one file: its name, type and size from Drive, nothing to walk
     const meta = await driveFileMeta(driveId)
-    if (meta) seen.push({ id: driveId, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified, md5: meta.md5 ?? null, revision: meta.revision ?? null })
+    if (meta) seen.push({ id: driveId, name: meta.name, mime: meta.mime, size: meta.size, modified: meta.modified, md5: meta.md5 ?? null, revision: meta.revision ?? null, created: meta.created ?? null, lastModifier: meta.lastModifier ?? null, durationMs: meta.durationMs ?? null, width: meta.width ?? null, height: meta.height ?? null })
   } else {
     await walk(driveId, '', 0)
     // WHICH CUT EACH FILE IS (30 Sep 2026): a folder read through Google's public view carries no change time and no

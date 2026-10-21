@@ -405,7 +405,7 @@ export async function revokePermission(
  *  not in bytes: a 100-file page fetched with `*` is a few hundred KB of JSON
  *  crossing the wire on every folder click. This list is what the page draws. */
 const ENTRY_FIELDS =
-  'id,name,mimeType,size,modifiedTime,md5Checksum,headRevisionId,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress)'
+  'id,name,mimeType,size,modifiedTime,md5Checksum,headRevisionId,webViewLink,hasThumbnail,resourceKey,owners(displayName,emailAddress),createdTime,lastModifyingUser(displayName,emailAddress),videoMediaMetadata(durationMillis,width,height)'
 
 type RawEntry = {
   id?: string
@@ -419,6 +419,9 @@ type RawEntry = {
   md5Checksum?: string
   headRevisionId?: string
   owners?: { displayName?: string; emailAddress?: string }[]
+  createdTime?: string
+  lastModifyingUser?: { displayName?: string; emailAddress?: string }
+  videoMediaMetadata?: { durationMillis?: string; width?: number; height?: number }
 }
 
 function toEntry(raw: RawEntry): DriveEntry | null {
@@ -437,6 +440,11 @@ function toEntry(raw: RawEntry): DriveEntry | null {
     resourceKey: raw.resourceKey ?? null,
     md5: raw.md5Checksum ?? null,
     revision: raw.headRevisionId ?? null,
+    created: raw.createdTime ?? null,
+    lastModifier: raw.lastModifyingUser?.emailAddress ?? raw.lastModifyingUser?.displayName ?? null,
+    durationMs: raw.videoMediaMetadata?.durationMillis && /^\d+$/.test(raw.videoMediaMetadata.durationMillis) ? Number(raw.videoMediaMetadata.durationMillis) : null,
+    width: raw.videoMediaMetadata?.width ?? null,
+    height: raw.videoMediaMetadata?.height ?? null,
   }
 }
 

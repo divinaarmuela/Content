@@ -313,7 +313,7 @@ export function mergeDriveHandIn(
         ?? current.find(f => !used.has(assetIdOf(f)) && clipKey(f.name) === clipKey(base))
         ?? null
     }
-    const extra = { source: 'drive' as const, drive_file_id: d, drive_modified: copy.modified ?? null, ...(copy.md5 ? { drive_md5: copy.md5 } : {}), ...(copy.revision ? { drive_revision: copy.revision } : {}) }
+    const extra = { source: 'drive' as const, drive_file_id: d, drive_modified: copy.modified ?? null, ...(copy.md5 ? { drive_md5: copy.md5 } : {}), ...(copy.revision ? { drive_revision: copy.revision } : {}), ...(copy.name.includes('/') ? { drive_path: copy.name.slice(0, 500) } : {}) }
     const file = { name: base, url: String(copy.url), mime: copy.mime, size: copy.size }
     if (piece) {
       const a = assetIdOf(piece)

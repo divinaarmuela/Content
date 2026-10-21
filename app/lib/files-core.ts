@@ -171,6 +171,14 @@ export type DriveEntry = {
    *  itself keeps its id and changes these. Absent for Google's own formats and on the public folder view. */
   md5?: string | null
   revision?: string | null
+  /** WHO AND WHEN, AND THE VIDEO'S OWN MEASURE (the editor preview's Drive inbox, 21 Oct 2026): when the file was
+   *  created, who last changed it, and a video's length and frame size — read only, with no download. Absent on the
+   *  public folder view. */
+  created?: string | null
+  lastModifier?: string | null
+  durationMs?: number | null
+  width?: number | null
+  height?: number | null
 }
 
 /** the header Google wants with a by-id call on a link-shared file: `<id>/<key>` */

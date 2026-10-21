@@ -1024,19 +1024,18 @@ export const milanoteMediaCopy = inngest.createFunction(
 )
 
 /**
- * DRIVE WATCH — every minute, the Drive link of each card still being made (until the quality check passes) is read
- * again and anything new or re-exported is copied in (drive-handin-core "DRIVE WATCH"; the owner, 21 Oct 2026: "they
- * might add new folders and more videos in the version 1"). Read only (trap 13). One step: a quiet minute is one run.
- * A NEW function — re-sync after deploying it (trap 5b).
+ * THE EDITOR PREVIEW'S DRIVE INBOX — every minute, each link a card being made was given is read again (READ ONLY,
+ * trap 13) and every file not yet seen at its content is recorded once in `drive_seen` (app/lib/drive-scan.ts; the
+ * owner, 21 Oct 2026: "we need ai everytime a file is modified and crosschecks with the current submitted files").
+ * It writes the inbox's own tables and never a card. OFF unless DRIVE_SCAN=1. A NEW function — re-sync after
+ * deploying it (trap 5b).
  */
-export const driveHandInWatch = inngest.createFunction(
-  { id: 'drive-handin-watch', name: 'Check hand-in Drive links for new files', triggers: [{ cron: '* * * * *' }], retries: 0, concurrency: { limit: 1 } },
+export const driveScanWatch = inngest.createFunction(
+  { id: 'drive-scan-watch', name: 'Editor preview: read card Drive links for new files', triggers: [{ cron: '* * * * *' }], retries: 0, concurrency: { limit: 1 } },
   async ({ step }) => withRequestCache(async () => step.run('watch', async () => {
-    // OFF until the owner agrees how one master Drive link holds drafts AND graded cuts (21 Oct 2026: "think this
-    // universally … we have color graded etc") — Vercel env DRIVE_WATCH=1 turns it on
-    if (process.env.DRIVE_WATCH !== '1') return { off: true }
-    const { watchDriveHandIns } = await import('../lib/drive-handin')
-    return watchDriveHandIns()
+    if (process.env.DRIVE_SCAN !== '1') return { off: true }
+    const { watchSources } = await import('../lib/drive-scan')
+    return watchSources()
   })),
 )
 
@@ -1065,7 +1064,7 @@ export const functions = [
   mediaEncodeFinished,
   encodeSweep,
   drivePullFolder,
-  driveHandInWatch,
+  driveScanWatch,
   metaIgTokenRefresh,
 ]
 

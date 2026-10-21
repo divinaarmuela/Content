@@ -82,3 +82,11 @@ describe('an automatic copy never takes a piece off the card', () => {
     expect(byHand.ok && byHand.retired).toEqual(['f2'])
   })
 })
+
+describe('a hand-in keeps the folders above each file (the owner, 21 Oct 2026: "sub folder need to stay")', () => {
+  it('a file from a subfolder is named by itself and keeps its path', () => {
+    const pulled = [{ id: 'c', name: 'V1/Reels/Pasta.mp4', mime: 'video/mp4', size: 1, done: 1, status: 'done', url: 'https://r2/c', md5: 'md5-c' }] as never[]
+    const r = mergeDriveHandIn([], pulled, { drive_ids: ['c'], round: 1, by: 'ed', whole: true }, { status: 'draft_uploaded', final_files: [] }, 1, '2026-10-21T03:00:00Z')
+    expect(r.ok && r.files[0]).toMatchObject({ name: 'Pasta.mp4', drive_path: 'V1/Reels/Pasta.mp4' })
+  })
+})

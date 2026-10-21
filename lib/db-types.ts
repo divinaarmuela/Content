@@ -45,6 +45,8 @@ export type TableName =
   | 'drive_connection'
   | 'drive_files'
   | 'drive_pulls'
+  | 'drive_seen'
+  | 'drive_sources'
   | 'drive_uploads'
   | 'email_ingest_log'
   | 'encode_jobs'
@@ -98,6 +100,7 @@ export type TableName =
   | 'todo_sections'
   | 'todos'
   | 'user_page_access'
+  | 'video_frames'
   | 'video_previews'
   | 'webhook_deliveries'
   | 'website'
@@ -814,6 +817,48 @@ export interface DrivePull {
   only_ids: unknown | null
   handin_id: string | null
   version: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DriveSeen {
+  id: string
+  item_id: string
+  source_id: string
+  drive_file_id: string
+  path: string
+  name: string
+  mime: string
+  size: number | null
+  md5: string | null
+  revision: string | null
+  modified: string | null
+  created_time: string | null
+  last_modifying_user: string | null
+  duration_ms: number | null
+  width: number | null
+  height: number | null
+  stage_at_seen: string
+  state: string
+  scan: unknown | null
+  decided_by: string | null
+  decided_at: string | null
+  first_seen_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DriveSource {
+  id: string
+  item_id: string
+  link: string
+  drive_id: string
+  kind: string
+  added_by: string | null
+  stage_at_add: string | null
+  last_checked_at: string | null
+  last_error: string | null
+  file_count: number | null
   created_at: string
   updated_at: string
 }
@@ -1701,6 +1746,16 @@ export interface UserPageAccess {
   id: string
 }
 
+export interface VideoFrame {
+  id: string
+  source: string
+  duration_ms: number | null
+  frames: unknown | null
+  error: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface VideoPreview {
   id: string
   source_url: string
@@ -1798,6 +1853,8 @@ export const TABLE_COLUMNS = {
   drive_connection: ['id', 'account_email', 'account_name', 'refresh_token_encrypted', 'root_name', 'root_folder_id', 'connected_by', 'connected_at', 'created_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'id', 'item_id', 'client_id', 'source_url', 'target', 'drive_file_id', 'drive_url', 'bytes', 'created_at'],
   drive_pulls: ['id', 'folder_id', 'folder_url', 'kind', 'scope_id', 'purpose', 'status', 'total_files', 'total_bytes', 'done_files', 'done_bytes', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version', 'created_at', 'updated_at'],
+  drive_seen: ['id', 'item_id', 'source_id', 'drive_file_id', 'path', 'name', 'mime', 'size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'stage_at_seen', 'state', 'scan', 'decided_by', 'decided_at', 'first_seen_at', 'created_at', 'updated_at'],
+  drive_sources: ['id', 'item_id', 'link', 'drive_id', 'kind', 'added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count', 'created_at', 'updated_at'],
   drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
@@ -1851,6 +1908,7 @@ export const TABLE_COLUMNS = {
   todo_sections: ['id', 'owner_id', 'name', 'position', 'created_at', 'updated_at'],
   todos: ['id', 'prospect_id', 'title', 'note', 'status', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'created_at', 'updated_at', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
   user_page_access: ['team_user_id', 'href', 'granted_at', 'granted_by', 'id'],
+  video_frames: ['id', 'source', 'duration_ms', 'frames', 'error', 'created_at', 'updated_at'],
   video_previews: ['id', 'source_url', 'stream_uid', 'state', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error', 'created_at', 'updated_at'],
   webhook_deliveries: ['id', 'provider', 'event', 'provider_event_id', 'received_at', 'handled', 'note'],
   website: ['id'],
@@ -1901,6 +1959,8 @@ export const NULLABLE_COLUMNS = {
   drive_connection: ['account_email', 'account_name', 'refresh_token_encrypted', 'root_folder_id', 'connected_by', 'connected_at', 'root_folder_name', 'root_owner_email', 'root_origin', 'root_picked_at', 'root_picked_by', 'clients_folder_id', 'root_account_changed'],
   drive_files: ['parent_id', 'name', 'uploaded_by', 'moved_at', 'item_id', 'client_id', 'drive_file_id', 'drive_url', 'bytes'],
   drive_pulls: ['purpose', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version'],
+  drive_seen: ['size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'scan', 'decided_by', 'decided_at'],
+  drive_sources: ['added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count'],
   drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
@@ -1954,6 +2014,7 @@ export const NULLABLE_COLUMNS = {
   todo_sections: ['position'],
   todos: ['prospect_id', 'note', 'due_date', 'owner_id', 'created_by', 'client_id', 'files', 'done_at', 'done_by', 'parent_id', 'followers', 'likes', 'section_id', 'position', 'blocked_by', 'asana_gid', 'repeat', 'repeat_of', 'fields', 'project_section_id'],
   user_page_access: ['granted_by'],
+  video_frames: ['duration_ms', 'frames', 'error'],
   video_previews: ['stream_uid', 'playback_hls', 'thumbnail_url', 'duration_sec', 'width', 'height', 'error'],
   webhook_deliveries: ['note'],
   website: [],
@@ -2011,6 +2072,8 @@ export const JSON_COLUMNS = {
   drive_connection: [],
   drive_files: [],
   drive_pulls: ['files', 'only_ids'],
+  drive_seen: ['scan'],
+  drive_sources: [],
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
@@ -2064,6 +2127,7 @@ export const JSON_COLUMNS = {
   todo_sections: [],
   todos: ['files', 'followers', 'likes', 'blocked_by', 'repeat', 'fields'],
   user_page_access: [],
+  video_frames: ['frames'],
   video_previews: [],
   webhook_deliveries: [],
   website: [],
@@ -2120,6 +2184,8 @@ export const JSON_ARRAY_COLUMNS = {
   drive_connection: [],
   drive_files: [],
   drive_pulls: [],
+  drive_seen: [],
+  drive_sources: [],
   drive_uploads: [],
   email_ingest_log: [],
   encode_jobs: [],
@@ -2173,6 +2239,7 @@ export const JSON_ARRAY_COLUMNS = {
   todo_sections: [],
   todos: [],
   user_page_access: [],
+  video_frames: [],
   video_previews: [],
   webhook_deliveries: [],
   website: [],
@@ -2180,7 +2247,7 @@ export const JSON_ARRAY_COLUMNS = {
   workflow_activity: [],
 } as const satisfies Record<TableName, readonly string[]>
 
-export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos'])
+export const UPDATED_AT_TABLES: ReadonlySet<TableName> = new Set<TableName>(['agency_credentials', 'automation_sends', 'batches', 'board_items', 'boards', 'client_agreements', 'client_contacts', 'client_credentials', 'client_notes', 'comment_automations', 'content_items', 'data_deletion_requests', 'drive_pulls', 'drive_seen', 'drive_sources', 'drive_uploads', 'encode_jobs', 'inbox_touches', 'instagram_videos', 'journal_posts', 'post_comments', 'projects', 'report_settings', 'schedule_notes', 'social_posts', 'team_users', 'todo_comments', 'todo_sections', 'todos', 'video_frames'])
 
 export function encodeKey(s: string): string {
   return s.replace(/[.#$\[\]\/%]/g, ch => '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))

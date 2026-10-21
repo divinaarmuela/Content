@@ -945,13 +945,68 @@ const GHOST_TABLES = {
     ['note', col('string', true)],
     ['updated_at', col('string', false)],
   ],
+  // drive_sources / drive_seen / video_frames — THE EDITOR PREVIEW'S DRIVE INBOX (the owner, 21 Oct 2026: "we need ai
+  //   everytime a file is modified and crosschecks with the current submitted files"; app/lib/drive-scan-core.ts).
+  //   Drive is the inbox and the app keeps the versions: every link a card is given (a master link, the colourist's own)
+  //   is a SOURCE; every file met in one, at each content (Drive id + checksum), is SEEN once, with what Drive says of it
+  //   and what the AI made of it. Nothing here is a card's files — accepting a seen file is an ordinary hand-in.
+  drive_sources: [
+    ['id', col('string', false)],            // item_id~drive_id
+    ['item_id', col('string', false)],
+    ['link', col('string', false)],
+    ['drive_id', col('string', false)],
+    ['kind', col('string', false)],           // folder | file
+    ['added_by', col('string', true)],
+    ['stage_at_add', col('string', true)],
+    ['last_checked_at', col('string', true)],
+    ['last_error', col('string', true)],
+    ['file_count', col('number', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  drive_seen: [
+    ['id', col('string', false)],            // item_id~drive_file_id~content key
+    ['item_id', col('string', false)],
+    ['source_id', col('string', false)],
+    ['drive_file_id', col('string', false)],
+    ['path', col('string', false)],
+    ['name', col('string', false)],
+    ['mime', col('string', false)],
+    ['size', col('number', true)],
+    ['md5', col('string', true)],
+    ['revision', col('string', true)],
+    ['modified', col('string', true)],
+    ['created_time', col('string', true)],
+    ['last_modifying_user', col('string', true)],
+    ['duration_ms', col('number', true)],
+    ['width', col('number', true)],
+    ['height', col('number', true)],
+    ['stage_at_seen', col('string', false)],
+    // new | scanning | scanned | taken | ignored | locked | copy | footage | failed
+    ['state', col('string', false)],
+    ['scan', col('unknown', true, true)],
+    ['decided_by', col('string', true)],
+    ['decided_at', col('string', true)],
+    ['first_seen_at', col('string', false)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
+  video_frames: [
+    ['id', col('string', false)],            // a hash of the source (R2 url, or Drive id + checksum)
+    ['source', col('string', false)],
+    ['duration_ms', col('number', true)],
+    ['frames', col('unknown', true, true)],   // [{ at_pct, url, yavg, satavg, ymin, ymax }]
+    ['error', col('string', true)],
+    ['created_at', col('string', false)],
+    ['updated_at', col('string', false)],
+  ],
 }
 for (const [ghost, cols] of Object.entries(GHOST_TABLES)) {
   if (!tables.has(ghost)) tables.set(ghost, new Map(cols.map(([c, def]) => [c, { ...def }])))
 }
 // Ghost tables have no `create trigger` line to be read from, so the ones that
 // carry updated_at say so here — lib/db.ts stamps the column from this set.
-for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
+for (const ghost of ['social_posts', 'post_comments', 'todos', 'todo_comments', 'todo_sections', 'schedule_notes', 'drive_uploads', 'drive_pulls', 'encode_jobs', 'drive_sources', 'drive_seen', 'video_frames', 'boards', 'board_items', 'instagram_videos', 'inbox_touches', 'comment_automations', 'automation_sends', 'data_deletion_requests']) updatedAt.add(ghost)
 
 // Columns the code writes but no SQL ever created.
 //   notification_log.claimed_at — when a retrier last took the row. The stale
