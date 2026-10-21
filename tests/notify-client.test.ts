@@ -22,7 +22,7 @@ describe('notify the client', () => {
     expect((route.match(/await assertClientAccess\(user, id\)/g) ?? []).length).toBe(2)
   })
   it('the button is on the edit / design card, the shoot brief, the shared board and the sent intake form', () => {
-    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain("<NotifyClientButton clientId={item.client_id} tab={design ? 'designing' : 'editing'} id={item.id}")
+    expect((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))).toContain("<NotifyClientButton clientId={item.client_id} tab={design ? 'designing' : 'editing'} id={item.id}")
     expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain('<NotifyClientButton clientId={batch.client_id} tab="shoot" id={batch.id}')
     expect(readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')).toContain('<NotifyClientButton clientId={board.client_id} tab="boards" id={board.id}')
     expect(readFileSync('app/dashboard/clients/[id]/IntakePanel.tsx', 'utf8')).toContain('<NotifyClientButton clientId={clientId} tab="forms" id={form.id}')
@@ -31,7 +31,7 @@ describe('notify the client', () => {
 
 describe('every page on the portal can be taken off it (3 Oct 2026)', () => {
   it('edit / design card, shoot brief and shared board each have a take-off', () => {
-    expect(readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8')).toContain('Take it off the client&apos;s portal')
+    expect((readFileSync('app/dashboard/editor/[id]/page.tsx', 'utf8') + readFileSync('app/dashboard/board/CardAnswers.tsx', 'utf8'))).toContain('Take it off the client&apos;s portal')
     expect(readFileSync('app/dashboard/production/shoots/[id]/ShootSop.tsx', 'utf8')).toContain("onPatch('shared_with_client', false)}>Take it off the portal")
     const board = readFileSync('app/dashboard/team-boards/[id]/page.tsx', 'utf8')
     expect(board).toContain("onClick={() => void patch({ shared_with_client: false }")

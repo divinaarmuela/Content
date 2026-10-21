@@ -86,3 +86,42 @@ export function agoWords(iso: string | null | undefined, nowMs: number): string 
   if (m < 60) return `checked ${m} min ago`
   return `checked ${Math.round(m / 60)} h ago`
 }
+
+/* ─── what happens next to each video (the owner, 22 Oct 2026: "easy to know exactly v1 etc and know which one to go
+ * to grade or not and which one goes to portal") ─────────────────────────────────────────────────────────────── */
+
+export type NextTone = 'muted' | 'amber' | 'blue' | 'green'
+export type VideoNext = { words: string; tone: NextTone }
+
+/**
+ * ONE VIDEO'S NEXT STEP, in the card's process: with the editor → quality check → colour grade (a video edit) →
+ * the client's portal → approved. Pure: the card's stage, whether its kind is graded, whether this round's grade has
+ * landed, whether the client approved this video, and whether a new cut of it is waiting in Drive.
+ */
+export function videoNext(v: {
+  status: unknown; needsGrade: boolean; gradedThisRound: boolean; approved: boolean; newInDrive: boolean; gone?: boolean
+}): VideoNext {
+  if (v.gone) return { words: 'Removed from Drive — the card keeps its copy', tone: 'muted' }
+  if (v.newInDrive) return { words: 'New cut in Drive — confirm it', tone: 'amber' }
+  if (v.approved) return { words: 'Approved by the client', tone: 'green' }
+  switch (String(v.status ?? '')) {
+    case 'draft_uploaded': case 'revision_required': case 'revision_complete': case 'client_changes_requested':
+      return { words: 'With the editor', tone: 'muted' }
+    case 'quality_check': case 'internal_review':
+      return { words: v.needsGrade ? 'Quality check — then colour grade' : 'Quality check — then the portal', tone: 'amber' }
+    case 'colour_grade':
+      return v.gradedThisRound ? { words: 'Graded — ready for the portal', tone: 'blue' } : { words: 'Needs colour grade', tone: 'blue' }
+    case 'client_review':
+      return { words: 'On the client’s portal', tone: 'blue' }
+    case 'approved_for_scheduling': case 'scheduled': case 'published':
+      return { words: 'Approved', tone: 'green' }
+    default:
+      return { words: '—', tone: 'muted' }
+  }
+}
+
+/** a person's initials for a card face: "Ryan Patumaka" → "RP" */
+export function initialsOfName(name: string | null | undefined): string {
+  const parts = String(name ?? '').trim().split(/[\s@._-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?'
+}

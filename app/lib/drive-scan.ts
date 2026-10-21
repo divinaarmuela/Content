@@ -85,6 +85,15 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
     try {
       const files = await readDriveTarget(s.kind === 'file' ? 'file' : 'folder', s.drive_id, { cuts: true }) as SeenFile[]
       out.read++
+      // A FILE TAKEN OUT OF DRIVE (the owner, 22 Oct 2026: "what happens if a video is deleted in the drive?"): once the
+      // link reads fine, a file it no longer holds is marked gone — never offered again; the card keeps its own copy
+      // (a read cut off at its 400-file limit is not proof a file went)
+      if (files.length && files.length < 400) {
+        const here = new Set(files.map(f => f.id))
+        for (const r of seenRows.filter(x => x.source_id === s.id && x.state !== 'gone' && !here.has(x.drive_file_id))) {
+          await seenTable.claim(r.id, cur => cur && cur.state !== 'gone' ? { ...cur, state: 'gone', updated_at: now } as DriveSeen : null).catch(() => undefined)
+        }
+      }
       // a file seen before Drive's shown date was read gets it now, once (the version stacks order by it)
       for (const f of files) {
         const known = seenId(item.id, f)

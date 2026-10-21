@@ -18,7 +18,7 @@
  * Drive is only read (CLAUDE.md trap 13). Pure: no I/O.
  */
 
-export type SeenState = 'new' | 'scanning' | 'scanned' | 'taken' | 'ignored' | 'locked' | 'copy' | 'footage' | 'failed'
+export type SeenState = 'new' | 'scanning' | 'scanned' | 'taken' | 'ignored' | 'locked' | 'copy' | 'footage' | 'failed' | 'gone'
 export type CutKind = 'draft' | 'recut' | 'graded' | 'copy' | 'footage' | 'new_video'
 
 /** what one listing says of one file — DriveTargetFile's shape, re-said here so this file stays pure */
@@ -238,6 +238,7 @@ export const KIND_WORDS: Record<CutKind, string> = {
 export const STATE_WORDS: Record<SeenState, string> = {
   new: 'Waiting for the AI', scanning: 'AI scanning…', scanned: 'Ready to confirm', taken: 'On the card', ignored: 'Ignored',
   locked: 'Waiting — the card has moved on', copy: 'Same as a file on the card', footage: 'Skipped — footage or not a video', failed: 'Couldn’t scan',
+  gone: 'Removed from Drive — the card keeps its copy',
 }
 /** the states still asking something of a person */
 export const OPEN_STATES: readonly SeenState[] = ['new', 'scanning', 'scanned', 'locked', 'failed']

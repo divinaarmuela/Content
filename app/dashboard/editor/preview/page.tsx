@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useMemo } from 'react'
 import { CheckCircle2, Film, FolderOpen, Hourglass, Palette } from 'lucide-react'
 import { useTable } from '@/lib/db-client'
-import type { Client, ContentItem, DriveSeen, DriveSource, WorkKind } from '@/lib/db-types'
-import { PREVIEW_LANES, cardFace, isEditorCard, laneOf } from '../../../lib/editor-preview-core'
+import type { Client, ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
+import { PREVIEW_LANES, cardFace, initialsOfName, isEditorCard, laneOf } from '../../../lib/editor-preview-core'
 import { needsColourGrade } from '../../../lib/colour-grade-core'
 import PreviewFrame, { AiScanning, usePreviewAccess } from './PreviewFrame'
 
@@ -23,6 +23,8 @@ export default function EditorPreviewBoard() {
   const items = useTable<ContentItem>('content_items', { enabled: allowed })
   const clients = useTable<Client>('clients', { enabled: allowed })
   const kinds = useTable<WorkKind>('work_kinds', { enabled: allowed })
+  const team = useTable<TeamUser>('team_users', { enabled: allowed })
+  const nameOf = useMemo(() => new Map(team.rows.map(u => [u.id, u.name || u.email])), [team.rows])
   const seen = useTable<DriveSeen>('drive_seen', { enabled: allowed })
   const sources = useTable<DriveSource>('drive_sources', { enabled: allowed })
 
@@ -53,7 +55,13 @@ export default function EditorPreviewBoard() {
               {mine.map(({ item, face, grade }) => (
                 <Link key={item.id} href={`/dashboard/editor/preview/${item.id}`}
                   className="group flex flex-col gap-2 rounded-inner border border-border bg-background p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                  <span className="text-[12px] font-semibold text-muted-foreground">{clientName.get(String(item.client_id)) ?? 'No client'}</span>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-semibold text-muted-foreground">{clientName.get(String(item.client_id)) ?? 'No client'}</span>
+                    {/* who holds it, as the live Editor's cards show (the owner, 22 Oct 2026) */}
+                    {item.owner_id
+                      ? <span title={nameOf.get(String(item.owner_id)) ?? 'Assigned'} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">{initialsOfName(nameOf.get(String(item.owner_id)))}</span>
+                      : <span className="shrink-0 rounded-full border border-dashed border-border px-2 text-[11px] text-muted-foreground">Unassigned</span>}
+                  </span>
                   <span className="line-clamp-2 text-[15px] font-semibold leading-snug">{item.title}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-[12px]">
                     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5"><Film className="h-3 w-3" aria-hidden />{face.videos} {face.videos === 1 ? 'video' : 'videos'}</span>

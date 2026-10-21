@@ -23,7 +23,7 @@ describe('the Editor page opens a card as a page', () => {
 })
 
 describe('the card’s page', () => {
-  const page = src('app/dashboard/editor/[id]/page.tsx')
+  const page = (src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/board/CardAnswers.tsx'))
   it('Select mode ticks files across every tab and opens them side by side, two across, each with its comments (16 Sep 2026)', async () => {
     const box = src('app/dashboard/board/FilesToWorkFrom.tsx')
     expect(box).toContain("{selecting ? 'Done picking' : 'Select'}")

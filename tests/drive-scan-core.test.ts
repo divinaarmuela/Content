@@ -205,3 +205,21 @@ describe("the AI and the measures, 21 Oct 2026 on Cecconi's", () => {
     expect(v.kind).toBe('recut')
   })
 })
+
+describe('videoNext — each video\'s next step on the card', () => {
+  it('reads the card\'s process in plain words', async () => {
+    const { videoNext, initialsOfName } = await import('../app/lib/editor-preview-core')
+    const v = (o: object) => videoNext({ status: 'draft_uploaded', needsGrade: true, gradedThisRound: false, approved: false, newInDrive: false, ...o })
+    expect(v({}).words).toBe('With the editor')
+    expect(v({ status: 'quality_check' }).words).toBe('Quality check — then colour grade')
+    expect(v({ status: 'quality_check', needsGrade: false }).words).toBe('Quality check — then the portal')
+    expect(v({ status: 'colour_grade' }).words).toBe('Needs colour grade')
+    expect(v({ status: 'colour_grade', gradedThisRound: true }).words).toBe('Graded — ready for the portal')
+    expect(v({ status: 'client_review' }).words).toBe('On the client’s portal')
+    expect(v({ status: 'client_review', approved: true }).words).toBe('Approved by the client')
+    expect(v({ newInDrive: true }).words).toBe('New cut in Drive — confirm it')
+    expect(v({ gone: true }).tone).toBe('muted')
+    expect(initialsOfName('Ryan Patumaka')).toBe('RP')
+    expect(initialsOfName('martin')).toBe('M')
+  })
+})

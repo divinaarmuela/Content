@@ -195,7 +195,7 @@ describe('the route moves the card, the shoot’s editor follows, the new editor
 describe('the card page offers it (source pins)', () => {
   const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
   it('a manager sees "Transfer the editing job" on the card page, and the dialog posts to the route', () => {
-    const page = src('app/dashboard/editor/[id]/page.tsx')
+    const page = (src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/board/CardAnswers.tsx'))
     expect(page).toContain("const transferable = canTransferEditing({ id: viewer.id, role: viewer.role, clientIds: null }, item as never)")
     expect(page).toContain('Transfer the editing job')
     expect(page).toContain('<TransferEditingDialog open={transferOpen} itemId={item.id} itemTitle={item.title} currentOwnerId={item.owner_id ?? null}')
@@ -204,7 +204,7 @@ describe('the card page offers it (source pins)', () => {
     expect(dialog).toContain("EDITING_ROLES.includes(t.role) && t.id !== currentOwnerId")
   })
   it('a card nobody holds offers a manager "Assign an editor" — the same route, the plain words (16 Sep 2026)', () => {
-    const page = src('app/dashboard/editor/[id]/page.tsx')
+    const page = (src('app/dashboard/editor/[id]/page.tsx') + src('app/dashboard/board/CardAnswers.tsx'))
     expect(page).toContain('const unassigned = transferable && !item.owner_id')
     expect(page).toContain('Assign an editor')
     expect(page).toContain('{transferable && !unassigned && (')
