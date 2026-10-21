@@ -1027,13 +1027,13 @@ export const milanoteMediaCopy = inngest.createFunction(
  * THE EDITOR PREVIEW'S DRIVE INBOX — every minute, each link a card being made was given is read again (READ ONLY,
  * trap 13) and every file not yet seen at its content is recorded once in `drive_seen` (app/lib/drive-scan.ts; the
  * owner, 21 Oct 2026: "we need ai everytime a file is modified and crosschecks with the current submitted files").
- * It writes the inbox's own tables and never a card. OFF unless DRIVE_SCAN=1. A NEW function — re-sync after
+ * It writes the inbox's own tables and never a card. ON since 21 Oct 2026 (the owner: "can we make this live now"); DRIVE_SCAN=0 stops it. A NEW function — re-sync after
  * deploying it (trap 5b).
  */
 export const driveScanWatch = inngest.createFunction(
   { id: 'drive-scan-watch', name: 'Editor preview: read card Drive links for new files', triggers: [{ cron: '* * * * *' }], retries: 0, concurrency: { limit: 1 } },
   async ({ step }) => withRequestCache(async () => step.run('watch', async () => {
-    if (process.env.DRIVE_SCAN !== '1') return { off: true }
+    if (process.env.DRIVE_SCAN === '0') return { off: true }
     const { watchSources } = await import('../lib/drive-scan')
     return watchSources()
   }).then(async r => {

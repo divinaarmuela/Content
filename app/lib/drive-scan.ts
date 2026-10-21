@@ -5,7 +5,7 @@ import { driveLinkTarget, driveHandInsOf } from './drive-handin-core'
 import { readDriveTarget } from './drive-pull'
 import { finalFilesOf, assetIdOf } from './final-files-core'
 import {
-  WATCHED_STATUSES, firstState, seenId, sourceId, unseen,
+  WATCHED_STATUSES, cardLinksOf, firstState, seenId, sourceId, unseen,
   type CardFile, type SeenFile,
 } from './drive-scan-core'
 
@@ -16,7 +16,7 @@ import {
  *   watch   — each source read again (READ ONLY, trap 13), each file not yet seen at its content recorded once in
  *             `drive_seen` with what Drive says of it. It writes these two tables and nothing else: never a card.
  *
- * Run every minute by the `drive-scan-watch` job when DRIVE_SCAN=1.
+ * Run every minute by the `drive-scan-watch` job (DRIVE_SCAN=0 stops it).
  */
 
 export function cardFilesOf(item: { final_files?: unknown }): CardFile[] {
@@ -38,14 +38,14 @@ export async function ensureSource(item: { id: string; status?: unknown }, link:
   return put.claimed ? put.row : (put.current as DriveSource | null)
 }
 
-/** every card being made, with the links of its Drive hand-ins as sources (the first run seeds them) */
+/** every card being made, with its Drive links as sources (drive-scan-core.cardLinksOf; the first run seeds them) */
 async function seedSources(items: readonly ContentItem[]): Promise<void> {
   const have = new Set((await table<DriveSource>('drive_sources').list({ fresh: true })).map(s => s.id))
   for (const i of items) {
-    for (const h of driveHandInsOf(i as never)) {
+    for (const h of cardLinksOf(i as never, driveHandInsOf(i as never))) {
       const t = driveLinkTarget(h.link)
       if (!t.ok || have.has(sourceId(i.id, t.id))) continue
-      await ensureSource(i, h.link, h.by ?? null).catch(() => null)
+      await ensureSource(i, h.link, h.by).catch(() => null)
       have.add(sourceId(i.id, t.id))
     }
   }

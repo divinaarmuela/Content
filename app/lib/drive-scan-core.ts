@@ -72,7 +72,7 @@ export const WATCHED_STATUSES: readonly string[] = [
 
 /* ─── what a file is, without looking at it ─────────────────────────────── */
 
-const FOOTAGE_FOLDER = /^(raw|raws|footage|rushes|camera|cam ?[a-z0-9]?|b-?roll|selects|source|sources|audio|music|sfx|project|projects|assets)$/i
+const FOOTAGE_FOLDER = /^(raw|raws|footage|rushes|camera|cam ?[a-z0-9]?|b-?roll|selects|source|sources|audio|music|sfx|project|projects|assets|mxf)$/i
 const CAMERA_NAME = /^(img|mvi|dji|dsc|pxl|gopr|gx\d*|vid)_?\d+|^c\d{4}\b|^a\d{3}c\d{3}/i
 
 export function isVideo(f: Pick<SeenFile, 'mime' | 'name'>): boolean {
@@ -87,7 +87,22 @@ export const baseOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 /** shoot footage, not finished work: in a Raw/Footage/… folder, or named the way a camera names a clip */
 export function isFootage(f: Pick<SeenFile, 'name'>): boolean {
   if (folderOf(f.name).split('/').some(p => FOOTAGE_FOLDER.test(p.trim()))) return true
+  if (/\.(mxf|braw|r3d|ari|crm)$/i.test(f.name)) return true   // camera originals, never a cut
   return CAMERA_NAME.test(baseOf(f.name))
+}
+
+/**
+ * THE LINKS A CARD IS WATCHED THROUGH — its Drive hand-ins, its own Drive link and the links of its earlier versions
+ * (the owner, 21 Oct 2026: editors keep adding cuts to the card's link). Never the raw footage link.
+ */
+export function cardLinksOf(item: { link_url?: unknown; raw_assets_url?: unknown; link_versions?: unknown }, handIns: readonly { link: string; by?: string | null }[]): { link: string; by: string | null }[] {
+  const raw = typeof item.raw_assets_url === 'string' ? item.raw_assets_url.trim() : ''
+  const out: { link: string; by: string | null }[] = handIns.map(h => ({ link: h.link, by: h.by ?? null }))
+  if (typeof item.link_url === 'string' && /drive\.google\.com/.test(item.link_url)) out.push({ link: item.link_url.trim(), by: null })
+  for (const v of Array.isArray(item.link_versions) ? item.link_versions as { url?: unknown }[] : []) {
+    if (typeof v?.url === 'string' && /drive\.google\.com/.test(v.url)) out.push({ link: v.url.trim(), by: null })
+  }
+  return out.filter(l => l.link && l.link !== raw)
 }
 
 /** a folder that says "graded" — a hint only, never the decision */

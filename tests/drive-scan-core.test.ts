@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures,
+  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf,
   type CardFile, type SeenFile,
 } from '../app/lib/drive-scan-core'
 import { cardFace, laneOf, stepOf } from '../app/lib/editor-preview-core'
@@ -123,5 +123,23 @@ describe('heldToMeasures', () => {
     expect(heldToMeasures({ ...ai, confidence: 0.9 }, far).match).toBe('A1')
     expect(heldToMeasures(ai, { ...far, sound: 0.6 }).match).toBe('A1')
     expect(heldToMeasures(ai, { ...far, lengthGapMs: 4000 }).match).toBe('A1')
+  })
+})
+
+describe('cardLinksOf and camera originals', () => {
+  it("watches the hand-ins, the card's own link and its earlier version links, never the raw footage link", () => {
+    const links = cardLinksOf({
+      link_url: 'https://drive.google.com/drive/folders/WORK',
+      raw_assets_url: 'https://drive.google.com/drive/folders/RAW',
+      link_versions: [{ url: 'https://drive.google.com/file/d/V1/view' }, { url: 'https://vimeo.com/1' }, { url: 'https://drive.google.com/drive/folders/RAW' }],
+    }, [{ link: 'https://drive.google.com/drive/folders/HANDIN', by: 'u1' }])
+    expect(links.map(l => l.link)).toEqual([
+      'https://drive.google.com/drive/folders/HANDIN', 'https://drive.google.com/drive/folders/WORK', 'https://drive.google.com/file/d/V1/view',
+    ])
+  })
+  it('skips MXF and other camera originals as footage', () => {
+    expect(isFootage({ name: 'MXF/Script 1.mxf' })).toBe(true)
+    expect(isFootage({ name: 'Script 2.mxf' })).toBe(true)
+    expect(isFootage({ name: 'New Menu Medley_v2.mov' })).toBe(false)
   })
 })
