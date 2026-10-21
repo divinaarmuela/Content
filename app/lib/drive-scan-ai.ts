@@ -1,11 +1,12 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { table } from '@/lib/db'
-import type { ContentItem, DriveSeen, DriveSource, TeamUser } from '@/lib/db-types'
+import type { ContentItem, DriveSeen, DriveSource, TeamUser, WorkKind } from '@/lib/db-types'
+import { isEditorCard, laneOf } from './editor-preview-core'
 import { assetIdOf, currentFiles, isRetiredAt } from './final-files-core'
 import { roundOf } from './edit-round-core'
 import {
-  GRADED_FOLDER, KIND_WORDS, heldToMeasures, isVideo, rankCandidates, signalAnswer, signalScore, verdictOf,
+  GRADED_FOLDER, KIND_WORDS, heldToMeasures, isFootage, isVideo, namedReasons, rankCandidates, signalAnswer, signalScore, verdictOf,
   type AiAnswer, type ScanStepKey, type Signals, type StepState,
 } from './drive-scan-core'
 import { compareProbes, comparisonWords } from './scan-measure-core'
@@ -29,6 +30,7 @@ import { cardFilesOf } from './drive-scan'
 
 const MODEL = process.env.DRIVE_SCAN_MODEL || 'claude-sonnet-5'   // Haiku misjudged unrelated videos as re-cuts (live, 21 Oct 2026); a few calls a day
 const MAX_CARD_VIDEOS = 12
+const MAX_OTHER_VIDEOS = 12   // the client's other cards: their newest videos, measured once each
 
 async function setSteps(id: string, patch: Partial<Record<ScanStepKey, StepState>>, extra: Record<string, unknown> = {}) {
   await table<DriveSeen>('drive_seen').claim(id, cur => {
@@ -53,22 +55,22 @@ const VERDICT_TOOL = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      match: { type: 'string', description: 'the id of the matching video (C1 or C2 as labelled), or "new"' },
+      match: { type: 'string', description: 'the label of the matching video (C1, C2 or C3), or "new"' },
       same_edit: { type: 'boolean', description: 'the same shots in the same order at the same moments' },
       colour_changed: { type: 'boolean', description: 'the colour/contrast/saturation was deliberately changed (graded) compared with the match' },
       confidence: { type: 'number', description: '0 to 1' },
-      reasons: { type: 'array', items: { type: 'string' }, description: 'two to four short plain reasons a video editor would understand' },
+      reasons: { type: 'array', items: { type: 'string' }, description: 'two to four short plain reasons a video editor would understand — name videos by their file names, never by their labels' },
     },
     required: ['match', 'same_edit', 'colour_changed', 'confidence', 'reasons'],
   },
 }
 
-async function askAi(newProbe: Probe, cands: { label: string; asset: string; name: string; probe: Probe; words: string[] }[], context: string): Promise<AiAnswer | null> {
+async function askAi(newProbe: Probe, cands: { label: string; asset: string; name: string; where: string; probe: Probe; words: string[] }[], context: string): Promise<AiAnswer | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   const content: unknown[] = [{ type: 'text', text: `NEW FILE — four frames at 10%, 35%, 60% and 85% of its length:` }]
   for (const s of newProbe.samples) { const b = await frameBlock(s.url); if (b) content.push(b) }
   for (const c of cands) {
-    content.push({ type: 'text', text: `${c.label} — the card's video "${c.name}", frames at the same moments. Measured against the new file: ${c.words.join('; ') || 'no measures'}.` })
+    content.push({ type: 'text', text: `${c.label} — ${c.where}: "${c.name}", frames at the same moments. Measured against the new file: ${c.words.join('; ') || 'no measures'}.` })
     for (const s of c.probe.samples) { const b = await frameBlock(s.url); if (b) content.push(b) }
   }
   content.push({ type: 'text', text: `${context}\n\nDecide which card video (if any) the new file is a cut of. Same edit = the same shots at the same moments; a re-cut = the same video edited differently (shots added, removed, trimmed, reordered); graded = the same edit with its colour deliberately changed (more contrast/saturation, a look). Most new files are NOT a cut of any card video: answer "new" unless the same people, places and shots clearly appear in both. Different subject matter is always "new". Judge from the pictures and the measures, never from file names. Answer with the verdict tool.` })
@@ -142,9 +144,36 @@ export async function measureNewFile(seenId: string): Promise<{ ok: boolean }> {
   return { ok: true }
 }
 
+/**
+ * WHAT A NEW FILE IS COMPARED WITH (the owner, 21 Oct 2026, on Cecconi's): the card's videos; the other files in its
+ * Drive links (Draft, v2, V3 and final of one video sit side by side before any is handed in); and the newest videos on
+ * the same client's other Editor cards (one shoot folder held the cuts of three cards).
+ */
+type Comparable = { asset: string; name: string; where: string; url: string; key: string; otherCard: { id: string; title: string } | null }
+async function comparablesOf(item: ContentItem, exceptSeen: string | null): Promise<Comparable[]> {
+  const own: Comparable[] = cardVideosOf(item).map(v => ({ asset: v.asset, name: v.name, where: 'a video on this card', url: v.url, key: cardKey(v.url), otherCard: null }))
+  const seen = await table<DriveSeen>('drive_seen').list({ where: r => r.item_id === item.id && r.id !== exceptSeen })
+  const drive: Comparable[] = seen
+    // a taken file is on the card already (compared as the card's video); only files measured by their own scans
+    .filter(r => ['scanned', 'locked', 'scanning'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
+    .filter(r => typeof (r.scan as { duration_ms?: unknown } | null)?.duration_ms === 'number')
+    .map(r => ({ asset: `seen:${r.id}`, name: r.path, where: "another file in this card's Drive links", url: drivePublicUrl(r.drive_file_id), key: newKey(r), otherCard: null }))
+  const kinds = new Map((await table<WorkKind>('work_kinds').list()).map(k => [k.id, k.slug]))
+  const siblings = (await table<ContentItem>('content_items').list({
+    where: r => r.client_id === item.client_id && r.id !== item.id && !!laneOf(r.status) && isEditorCard(r as never, kinds.get(String(r.work_kind_id ?? ''))),
+  })).sort((x, y) => String(y.updated_at ?? '').localeCompare(String(x.updated_at ?? '')))
+  const other: Comparable[] = []
+  for (const s of siblings) for (const v of cardVideosOf(s)) {
+    if (other.length >= MAX_OTHER_VIDEOS) break
+    other.push({ asset: `card:${s.id}:${v.asset}`, name: v.name, where: `a video on another card of this client, "${s.title ?? 'untitled'}"`, url: v.url, key: cardKey(v.url), otherCard: { id: s.id, title: String(s.title ?? 'untitled') } })
+  }
+  return [...own, ...drive, ...other]
+}
+
+/** the videos to measure before deciding: the card's and the client's other cards' (Drive files are measured by their own scans) */
 export async function cardVideoUrls(itemId: string): Promise<string[]> {
   const item = await table<ContentItem>('content_items').get(itemId)
-  return item ? cardVideosOf(item).map(v => v.url) : []
+  return item ? (await comparablesOf(item, null)).filter(c => c.key.startsWith('r2:')).map(c => c.url) : []
 }
 
 export async function measureCardVideo(url: string): Promise<{ ok: boolean; ms: number | null }> {
@@ -164,11 +193,17 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     const gradedFolder = GRADED_FOLDER.test(row.path)
     const probe = await probeVideo(drivePublicUrl(row.drive_file_id), newKey(row))   // cached by measureNewFile
     if (!probe.durationMs) { await finish(seenId, { error: probe.error ?? 'The video could not be read' }, true); return { ok: false, note: 'unreadable' } }
-    const measured = await Promise.all(cardVideosOf(item).map(async v => ({ v, probe: await probeVideo(v.url, cardKey(v.url)) })))   // cached
-    const compared = measured.filter(m => m.probe.durationMs).map(m => ({ asset: m.v.asset, name: m.v.name, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
+    const pool = await comparablesOf(item, seenId)
+    const measured = await Promise.all(pool.map(async c => ({ c, probe: await probeVideo(c.url, c.key) })))   // cached
+    const compared = measured.filter(m => m.probe.durationMs).map(m => ({ ...m.c, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
       .sort((a, b) => signalScore(b.s) - signalScore(a.s))
-    await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: 'running' }, { compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, ...c.s })) })
-    const top = compared.slice(0, 2).map((c, i) => ({ label: `C${i + 1}`, asset: c.asset, name: c.name, probe: c.probe, words: comparisonWords(c.s), s: c.s }))
+    await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: compared.length ? 'running' : 'skipped' }, { compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, where: c.where, ...c.s })) })
+    // nothing to compare with: the first cut of a new video, said plainly, with no AI call to describe it
+    if (!compared.length) {
+      await finish(seenId, { kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })
+      return { ok: true, note: 'new_video (nothing to compare)' }
+    }
+    const top = compared.slice(0, 3).map((c, i) => ({ ...c, label: `C${i + 1}`, words: comparisonWords(c.s) }))
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)
     let ai: AiAnswer | null = null
     let model = 'measures only'
@@ -188,8 +223,14 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     const candidates = top.map(t => ({ asset: t.asset, name: t.name, score: signalScore(t.s), why: t.words }))
     const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
     const best = top.find(t => t.asset === v.asset)
-    const reasons = [...(best ? comparisonWords(best.s) : []), ...v.reasons].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 6)
-    await finish(seenId, { kind: v.kind, asset: v.asset, confidence: v.confidence, ask: v.ask, reasons, model, ai_error: aiError, words: `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}`, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
+    const ask = v.ask || !!best?.otherCard   // a cut of another card's video is the person's call
+    const said = namedReasons([
+      ...(best?.otherCard ? [`This looks like a video on another card: “${best.otherCard.title}”`] : []),
+      ...(best ? comparisonWords(best.s) : []), ...v.reasons,
+    ], new Map(top.map(t => [t.label, t.name])))
+    const reasons = said.filter((x, i, arr) => x && arr.indexOf(x) === i).slice(0, 6)
+    const words = `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}${best?.otherCard ? ` — on “${best.otherCard.title}”` : best?.asset.startsWith('seen:') ? ' (in Drive)' : ''}`
+    await finish(seenId, { kind: v.kind, asset: v.asset, other_card: best?.otherCard ?? null, confidence: v.confidence, ask, reasons, model, ai_error: aiError, words, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
     return { ok: true, note: `${v.kind}${v.asset ? ` of ${v.asset}` : ''}` }
   } catch (e) {
     await finish(seenId, { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)

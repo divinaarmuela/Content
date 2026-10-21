@@ -271,6 +271,21 @@ export function heldToMeasures(ai: AiAnswer, s: Signals | null): AiAnswer {
   return { match: 'new', same_edit: false, colour_changed: false, confidence: Math.min(ai.confidence, 0.6), reasons: ['The sound and the length match none of the card’s videos', ...ai.reasons] }
 }
 
+/**
+ * THE AI'S REASONS IN PLAIN WORDS: its labels (C1, C2…) become the videos' names, and its talk of "instructions" or
+ * what it "was provided" goes (live, 21 Oct 2026: "No card videos (C1/C2) were provided … per instructions").
+ */
+export function namedReasons(reasons: readonly string[], names: ReadonlyMap<string, string>): string[] {
+  return reasons
+    .filter(r => !/\b(instructions?|were provided|was provided|not provided)\b/i.test(r))
+    .map(r => r.replace(/\(?\bC(\d)(?:\s*\/\s*C(\d))?\b\)?/g, (m: string, x: string, y?: string) => {
+      const one = names.get(`C${x}`)
+      const two = y ? names.get(`C${y}`) : null
+      if (!one) return m
+      return two ? `“${one}” and “${two}”` : `“${one}”`
+    }))
+}
+
 /** how close a card video is on the measures — the AI is shown the best two */
 export function signalScore(s: Signals): number {
   return (s.sound ?? 0) * 3 + (s.lengthGapMs === null ? 0 : s.lengthGapMs <= 150 ? 2 : s.lengthGapMs <= 3000 ? 0.5 : 0)

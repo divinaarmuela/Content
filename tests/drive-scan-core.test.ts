@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf,
+  contentKey, firstState, isFootage, nameStem, rankCandidates, seenId, stageRule, unseen, verdictOf, heldToMeasures, cardLinksOf, namedReasons,
   type CardFile, type SeenFile,
 } from '../app/lib/drive-scan-core'
 import { cardFace, isEditorCard, laneOf, stepOf } from '../app/lib/editor-preview-core'
@@ -152,5 +152,17 @@ describe('isEditorCard', () => {
     expect(isEditorCard({}, 'shoot_brief')).toBe(false)
     expect(isEditorCard({}, 'graphics')).toBe(false)
     expect(isEditorCard({ archived_at: '2026-10-01' }, 'edit')).toBe(false)
+  })
+})
+
+describe('namedReasons', () => {
+  const names = new Map([['C1', 'Pasta_draft.mov'], ['C2', 'Lobster.mov']])
+  it('puts the videos names where the AI wrote its labels', () => {
+    expect(namedReasons(['Same shots as C1 at every frame', 'C1/C2 both show a bottle'], names)).toEqual([
+      'Same shots as “Pasta_draft.mov” at every frame', '“Pasta_draft.mov” and “Lobster.mov” both show a bottle',
+    ])
+  })
+  it('drops talk of instructions and what it was provided', () => {
+    expect(namedReasons(['No card videos (C1/C2) were provided to compare against', "default to 'new' per instructions", 'Different dish'], names)).toEqual(['Different dish'])
   })
 })
