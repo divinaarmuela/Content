@@ -128,3 +128,16 @@ describe('a folder the agency account was never shared on (the owner, 15 Sep 202
     expect(c).toContain('{state.note ?? folderFilesWords(state.tiles.length, state.folders)}')
   })
 })
+
+describe('publicDateOf — the date Drive\'s public folder page shows', () => {
+  const now = new Date('2026-10-21T12:00:00Z')
+  it('reads a day, a day with a year, a time today and a day-first date', async () => {
+    const { publicDateOf } = await import('../app/lib/drive-folder-files-core')
+    expect(publicDateOf('Oct 12', now)).toBe('2026-10-12T00:00:00.000Z')
+    expect(publicDateOf('Dec 3', now)).toBe('2025-12-03T00:00:00.000Z')
+    expect(publicDateOf('Oct 12, 2024', now)).toBe('2024-10-12T00:00:00.000Z')
+    expect(publicDateOf('10:23 AM', now)).toBe('2026-10-21T10:23:00.000Z')
+    expect(publicDateOf('12/10/2025', now)).toBe('2025-10-12T00:00:00.000Z')
+    expect(publicDateOf('yesterday', now)).toBeNull()
+  })
+})

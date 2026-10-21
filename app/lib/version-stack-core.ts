@@ -44,6 +44,16 @@ class Sets {
   join(a: string, b: string) { const ra = this.find(a), rb = this.find(b); if (ra !== rb) this.up.set(rb, ra) }
 }
 
+/** where a name puts a cut, for files of one day only: raw/draft first, then v1, v2…, then final */
+export function nameRank(path: string): number {
+  const n = path.slice(path.lastIndexOf('/') + 1).toLowerCase()
+  if (/\bfinal\b|_final|\bvf\b|_vf\b/.test(n)) return 900
+  const v = /(?:\bv|_v|version ?)(\d{1,2})(?!\d)/.exec(n)
+  if (v) return 100 + Number(v[1])
+  if (/draft|rough|\bwip\b/.test(n)) return 50
+  return 100
+}
+
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1).replace(/\.[a-z0-9]{2,4}$/i, '').trim()
 
 export function stackVersions(files: readonly StackFile[]): Stack[] {
@@ -60,7 +70,8 @@ export function stackVersions(files: readonly StackFile[]): Stack[] {
 
   const stacks: Stack[] = []
   for (const [key, group] of byVideo) {
-    const sorted = [...group].sort((a, b) => a.at.localeCompare(b.at) || (a.source === b.source ? 0 : a.source === 'card' ? -1 : 1))
+    // by when each appeared; on the same day, by what its name says (draft before v2 before final) — a tie-break only
+    const sorted = [...group].sort((a, b) => a.at.slice(0, 10).localeCompare(b.at.slice(0, 10)) || nameRank(a.name) - nameRank(b.name) || a.at.localeCompare(b.at) || (a.source === b.source ? 0 : a.source === 'card' ? -1 : 1))
     // a version is numbered when its first file appeared
     const labelOf = new Map<string, string>()
     let n = 0

@@ -74,7 +74,9 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
     .sort((a, b) => String(a.last_checked_at ?? '').localeCompare(String(b.last_checked_at ?? '')))
     .slice(0, opts.limit ?? 60)
   const seenTable = table<DriveSeen>('drive_seen')
-  const seenIds = new Set((await seenTable.list({ fresh: true })).map(r => r.id))
+  const seenRows = await seenTable.list({ fresh: true })
+  const seenIds = new Set(seenRows.map(r => r.id))
+  const undated = new Set(seenRows.filter(r => !r.created_time).map(r => r.id))
   const out: WatchResult = { sources: sources.length, read: 0, seen: 0, toScan: [], errors: 0 }
   for (const s of sources) {
     if (Date.now() - started > budget) break
@@ -83,6 +85,13 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
     try {
       const files = await readDriveTarget(s.kind === 'file' ? 'file' : 'folder', s.drive_id, { cuts: true }) as SeenFile[]
       out.read++
+      // a file seen before Drive's shown date was read gets it now, once (the version stacks order by it)
+      for (const f of files) {
+        const known = seenId(item.id, f)
+        if (!f.created || !undated.has(known)) continue
+        await seenTable.update(known, { created_time: f.created } as never).catch(() => undefined)
+        undated.delete(known)
+      }
       const fresh = unseen(item.id, files, seenIds)
       const cardFiles = cardFilesOf(item)
       for (const f of fresh) {

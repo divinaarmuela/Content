@@ -56,3 +56,24 @@ describe('a video whose first version is on another card', () => {
     expect(s.latest.label).toBe('V2')
   })
 })
+
+describe('the latest version: by date, then by name on the same day', () => {
+  it('orders one day\'s files draft, v2, V3, final', () => {
+    const day = '2026-10-12T00:00:00.000Z'
+    const [s] = stackVersions([
+      f('s:final', day, { name: 'Medley_final.mov', kind: 'recut', matchKey: 's:v3' }),
+      f('s:draft', day, { name: 'Medley_Draft.mov' }),
+      f('s:v3', day, { name: 'Medley V3 .mov', kind: 'recut', matchKey: 's:v2' }),
+      f('s:v2', day, { name: 'Medley_v2.mov', kind: 'recut', matchKey: 's:draft' }),
+    ])
+    expect(s.entries.map(e => [e.key, e.label])).toEqual([['s:draft', 'V1'], ['s:v2', 'V2'], ['s:v3', 'V3'], ['s:final', 'V4']])
+    expect(s.latest.key).toBe('s:final')
+  })
+  it('a later day wins over the name', () => {
+    const [s] = stackVersions([
+      f('s:final', '2026-10-11T00:00:00.000Z', { name: 'X_final.mov' }),
+      f('s:v2', '2026-10-19T00:00:00.000Z', { name: 'X_v2.mov', kind: 'recut', matchKey: 's:final' }),
+    ])
+    expect(s.latest.key).toBe('s:v2')
+  })
+})

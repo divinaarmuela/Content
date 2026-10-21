@@ -88,7 +88,7 @@ export const PUBLIC_FOLDER_VIEW = (folderId: string) =>
 
 export type PublicEntry = DriveEntry & { thumbUrl: string | null }
 
-export function parsePublicFolderView(html: string): PublicEntry[] {
+export function parsePublicFolderView(html: string, now: Date = new Date()): PublicEntry[] {
   const out: PublicEntry[] = []
   const entry = /<div class="flip-entry" id="entry-([\w-]+)"[\s\S]*?<div class="flip-entry-title">([^<]*)<\/div>/g
   for (const m of html.matchAll(entry)) {
@@ -101,8 +101,12 @@ export function parsePublicFolderView(html: string): PublicEntry[] {
       ? 'application/vnd.google-apps.folder'
       : (/googleusercontent\.com\/\d+\/type\/([\w.+-]+\/[\w.+-]+)/.exec(block)?.[1] ?? '')
     const thumb = /<div class="flip-entry-thumb"><img src="(https:\/\/lh3\.googleusercontent\.com\/[^"]+)"/.exec(block)?.[1] ?? null
+    const shown = /flip-entry-last-modified"><div>([^<]*)<\/div>/.exec(block)?.[1]
     out.push({
       id, name, mimeType: mime, size: null, modified: null, ownerName: null, ownerEmail: null,
+      // the date the page shows ("Oct 12", "10:23 AM") — kept as `created`, never `modified`, so a file's identity
+      // (drive-scan-core.contentKey) does not change with it; the Editor's version stacks order by it
+      created: shown ? publicDateOf(decodeHtml(shown).trim(), now) : null,
       hasThumbnail: thumb !== null,
       webViewLink: folder ? `https://drive.google.com/drive/folders/${id}` : `https://drive.google.com/file/d/${id}/view`,
       // Drive's own picture, at tile size, public — no proxy needed
@@ -110,6 +114,34 @@ export function parsePublicFolderView(html: string): PublicEntry[] {
     })
   }
   return out
+}
+
+/**
+ * THE DATE DRIVE'S PUBLIC FOLDER PAGE SHOWS, as an ISO time: "10:23 AM" is today, "Oct 12" this year (last year when
+ * that would be ahead of today), "Oct 12, 2025" that year, "12/10/2025" day first. Anything else: null. A day only —
+ * enough to put one cut before another (the owner, 21 Oct 2026: "how about knowing which videos are the latest").
+ */
+export function publicDateOf(text: string, now: Date): string | null {
+  const t = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(text)
+  if (t) {
+    const h = (Number(t[1]) % 12) + (/p/i.test(t[3]) ? 12 : 0)
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, Number(t[2]))).toISOString()
+  }
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  const md = /^([A-Za-z]{3})[a-z]*\.? (\d{1,2})(?:, (\d{4}))?$/.exec(text)
+  if (md) {
+    const m = MONTHS.indexOf(md[1].toLowerCase())
+    if (m < 0) return null
+    let y = md[3] ? Number(md[3]) : now.getUTCFullYear()
+    if (!md[3] && Date.UTC(y, m, Number(md[2])) > now.getTime() + 86_400_000) y -= 1
+    return new Date(Date.UTC(y, m, Number(md[2]))).toISOString()
+  }
+  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(text)
+  if (dmy) {
+    const y = Number(dmy[3]) < 100 ? 2000 + Number(dmy[3]) : Number(dmy[3])
+    return new Date(Date.UTC(y, Number(dmy[2]) - 1, Number(dmy[1]))).toISOString()
+  }
+  return null
 }
 
 function decodeHtml(s: string): string {
