@@ -91,7 +91,19 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[]): StackFile[
         confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
       }
     })
-  return [...card, ...drive]
+  // a file matched to a video on ANOTHER card: that video is its earlier version (New Menu Medley's draft is on the
+  // Flinders Lane card, so Ryan's cut in this card's Drive is V2 — live, 21 Oct 2026)
+  const others: StackFile[] = []
+  for (const r of rows) {
+    const scan = (r.scan ?? null) as { asset?: string | null; other_card?: { title?: string } | null; compared?: { asset: string; name: string }[] } | null
+    const a = scan?.asset
+    if (!a?.startsWith('card:') || others.some(o => o.key === `o:${a.slice(5)}`)) continue
+    others.push({
+      key: `o:${a.slice(5)}`, name: scan?.compared?.find(c => c.asset === a)?.name ?? 'a video', at: '', source: 'other', kind: null, matchKey: null,
+      ask: false, busy: false, thumb: null, confidence: null, otherCard: scan?.other_card?.title ?? null,
+    })
+  }
+  return [...others, ...card, ...drive]
 }
 
 /**
@@ -130,7 +142,7 @@ function StackRow({ s }: { s: Stack }) {
                 <span key={v} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${v === l.label ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}>{v}</span>
               ))}
               {l.graded && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-bold">Graded</span>}
-              <span className="ml-1 truncate text-[12px] text-muted-foreground">latest: {l.name} · {l.source === 'card' ? 'on the card' : 'in Drive'}</span>
+              <span className="ml-1 truncate text-[12px] text-muted-foreground">latest: {l.name} · {l.source === 'card' ? 'on the card' : l.source === 'other' ? `on “${l.otherCard}”` : 'in Drive'}</span>
             </span>
           </span>
           <span className="shrink-0">
@@ -148,7 +160,7 @@ function StackRow({ s }: { s: Stack }) {
               {e.sameAsEarlier && <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">same file again</span>}
               <span className="min-w-0 flex-1 truncate">{e.name}</span>
               <span className="text-[12px] text-muted-foreground">
-                {e.source === 'card' ? 'on the card' : e.busy ? 'AI scanning…' : `${e.kind ? KIND_WORDS[e.kind as CutKind] ?? e.kind : 'in Drive'}${e.confidence !== null ? ` · ${Math.round(e.confidence * 100)}% sure` : ''}`}
+                {e.source === 'card' ? 'on the card' : e.source === 'other' ? `on the card “${e.otherCard}”` : e.busy ? 'AI scanning…' : `${e.kind ? KIND_WORDS[e.kind as CutKind] ?? e.kind : 'in Drive'}${e.confidence !== null ? ` · ${Math.round(e.confidence * 100)}% sure` : ''}`}
               </span>
             </li>
           ))}

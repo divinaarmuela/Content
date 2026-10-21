@@ -16,7 +16,7 @@ export type StackFile = {
   key: string                     // 'a:<asset>' a video on the card · 's:<drive_seen id>' a file in Drive
   name: string
   at: string                      // when it first appeared
-  source: 'card' | 'drive'
+  source: 'card' | 'drive' | 'other'   // other: the video on another card it was matched to — the earlier version
   kind: string | null             // the AI's verdict for a Drive file: copy | graded | recut | new_video …
   matchKey: string | null         // what the AI matched it to, as a key ('a:…', 's:…', 'o:<item>:<asset>')
   ask: boolean

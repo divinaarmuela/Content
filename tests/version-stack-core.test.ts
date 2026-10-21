@@ -44,3 +44,15 @@ describe('stackVersions', () => {
     expect(s.otherCard).toBe('Olimpia Book')
   })
 })
+
+describe('a video whose first version is on another card', () => {
+  it("counts that card's video as V1, so the cut in this card's Drive is V2", () => {
+    const [s] = stackVersions([
+      { ...f('o:card2:a1', ''), source: 'other', otherCard: 'New Menu Medley' },
+      f('s:final', '2026-10-20', { kind: 'recut', matchKey: 'o:card2:a1', ask: true, otherCard: 'New Menu Medley' }),
+      f('s:one', '2026-10-21', { kind: 'copy', matchKey: 's:final' }),
+    ])
+    expect(s.entries.map(e => [e.key, e.label])).toEqual([['o:card2:a1', 'V1'], ['s:final', 'V2'], ['s:one', 'V2']])
+    expect(s.latest.label).toBe('V2')
+  })
+})

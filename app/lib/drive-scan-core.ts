@@ -279,6 +279,7 @@ export function heldToMeasures(ai: AiAnswer, s: Signals | null): AiAnswer {
 export function namedReasons(reasons: readonly string[], names: ReadonlyMap<string, string>): string[] {
   return reasons
     .filter(r => !/\b(instructions?|were provided|was provided|not provided)\b/i.test(r))
+    .map(r => r.replace(/\b(any |the )?C videos?\b/g, 'the videos it was checked against'))
     .map(r => r.replace(/\(?\bC(\d)(?:\s*\/\s*C(\d))?\b\)?/g, (m: string, x: string, y?: string) => {
       const one = names.get(`C${x}`)
       const two = y ? names.get(`C${y}`) : null
