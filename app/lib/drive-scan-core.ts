@@ -142,7 +142,19 @@ export function firstState(f: SeenFile, cardFiles: readonly CardFile[], status: 
 
 /** the listing's files not yet seen at this content */
 export function unseen<T extends SeenFile>(itemId: string, listing: readonly T[], seenIds: ReadonlySet<string>): T[] {
-  return listing.filter(f => !seenIds.has(seenId(itemId, f)))
+  return listing.filter(f => {
+    const id = seenId(itemId, f)
+    if (seenIds.has(id)) return false
+    // Drive does not always say a file's size: one read with it and one without is the SAME file, not a change
+    // (live, 21 Oct 2026: Book Concept recorded twice). Only a known size that differs is a new cut.
+    if (!f.md5 && !f.revision) {
+      const unknown = seenId(itemId, { ...f, size: null, modified: null })
+      const prefix = `${itemId}~${f.id}~`.replace(/[.#$[\]/]/g, '_')
+      if (f.size == null && [...seenIds].some(k => k.startsWith(prefix))) return false
+      if (seenIds.has(unknown)) return false
+    }
+    return true
+  })
 }
 
 /* ─── which video it may be, before any AI ──────────────────────────────── */

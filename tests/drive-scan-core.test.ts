@@ -182,3 +182,14 @@ describe('heldToMeasures on short clips', () => {
     expect(heldToMeasures(ai, s, 60_000).match).toBe('A1')
   })
 })
+
+describe('unseen: a size Drive did not always give', () => {
+  it('a read without the size, or with it after one without, is the same file', () => {
+    const f = { id: 'D1', name: 'Book.mov', mime: 'video/quicktime', size: 160926278, modified: null, md5: null, revision: null }
+    const known = new Set([seenId('I1', f)])
+    expect(unseen('I1', [{ ...f, size: null }], known)).toEqual([])
+    const unsized = new Set([seenId('I1', { ...f, size: null })])
+    expect(unseen('I1', [f], unsized)).toEqual([])
+    expect(unseen('I1', [{ ...f, size: 999 }], known)).toHaveLength(1)
+  })
+})
