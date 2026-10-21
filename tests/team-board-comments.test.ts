@@ -67,7 +67,7 @@ describe('the pages and routes are wired the same way as a shoot’s board', () 
     const s = read('app/lib/comment-tags.ts')
     expect(s).toContain("target: { kind: 'item' | 'shoot' | 'board' | 'post'; id: string; title: string; path?: string }")
     expect(s).toContain("? `${DASHBOARD_URL}${target.path ?? `/dashboard/team-boards/${target.id}`}`")
-    expect(s).toContain("target.kind === 'item' ? OPEN_ITEM_CTA : target.kind === 'board' ? 'Open the board' : 'Open the shoot'")
+    expect(s).toContain("target.kind === 'item' ? OPEN_ITEM_CTA : target.kind === 'board' ? 'Open the board' : target.kind === 'post' ? 'Open the post' : 'Open the shoot'")
   })
   it('the board page wraps its canvas in the comments, reads the rows live, and offers the client link to a manager', () => {
     const page = read('app/dashboard/team-boards/[id]/page.tsx')
