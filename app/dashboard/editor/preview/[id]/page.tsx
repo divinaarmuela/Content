@@ -145,7 +145,7 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
             {scan.ask && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Check this one</span>}
           </span>
           {scan.reasons?.length ? <span className="text-[12px] text-muted-foreground">{scan.reasons.join(' · ')}</span> : null}
-          {scan.model && <span className="text-[11px] text-muted-foreground">Decided by {scan.model === 'measures only' ? 'the measures (AI not available)' : `AI (${scan.model}) checked against the measures`}</span>}
+          {scan.model && <span className="text-[11px] text-muted-foreground">Decided by {scan.model === 'measures only' ? `the measures alone — the AI wasn’t reached${(scan as { ai_error?: string }).ai_error ? ` (${(scan as { ai_error?: string }).ai_error})` : ''}` : `AI (${scan.model}) checked against the measures`}</span>}
         </div>
       )}
       {scan?.compared?.length ? (

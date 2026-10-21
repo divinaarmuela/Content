@@ -172,17 +172,23 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)
     let ai: AiAnswer | null = null
     let model = 'measures only'
+    let aiError: string | null = null
     try {
       ai = await askAi(probe, top, `The card is at "${String(item.status)}". The link was added by ${adder ? `${adder.name ?? adder.email}${byColourist ? ' (the colourist)' : ''}` : 'someone'}; the file sits in "${row.path}".`)
       if (ai) model = MODEL
-    } catch { ai = null }
+      else aiError = process.env.ANTHROPIC_API_KEY ? 'The AI gave no verdict' : 'No AI key on this server'
+    } catch (e) {
+      // why the AI was not asked, kept on the scan so it is seen, not guessed at
+      ai = null
+      aiError = (e instanceof Error ? e.message : String(e)).slice(0, 200)
+    }
     const answer = ai ?? measuresSay
     if (ai && (ai.match !== measuresSay.match || ai.same_edit !== measuresSay.same_edit)) answer.confidence = Math.min(answer.confidence, 0.6)
     const candidates = top.map(t => ({ asset: t.asset, name: t.name, score: signalScore(t.s), why: t.words }))
     const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
     const best = top.find(t => t.asset === v.asset)
     const reasons = [...(best ? comparisonWords(best.s) : []), ...v.reasons].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 6)
-    await finish(seenId, { kind: v.kind, asset: v.asset, confidence: v.confidence, ask: v.ask, reasons, model, words: `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}`, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
+    await finish(seenId, { kind: v.kind, asset: v.asset, confidence: v.confidence, ask: v.ask, reasons, model, ai_error: aiError, words: `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}`, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
     return { ok: true, note: `${v.kind}${v.asset ? ` of ${v.asset}` : ''}` }
   } catch (e) {
     await finish(seenId, { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)
