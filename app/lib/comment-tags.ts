@@ -49,7 +49,7 @@ export async function notifyTagged(input: {
   text: string
   /** the thing the comment is on */
   /** the thing the comment is on; a board (22 Sep 2026) says its own path, opened on the card */
-  target: { kind: 'item' | 'shoot' | 'board'; id: string; title: string; path?: string }
+  target: { kind: 'item' | 'shoot' | 'board' | 'post'; id: string; title: string; path?: string }
   commentId: string
 }): Promise<void> {
   const { actor, tagged, text, target, commentId } = input
@@ -59,10 +59,10 @@ export async function notifyTagged(input: {
     // link was the retired full-card page
     const href = target.kind === 'item'
       ? `${DASHBOARD_URL}${cardPathForRole(t.role, target.id)}`
-      : target.kind === 'board'
+      : target.kind === 'board' || target.kind === 'post'
         ? `${DASHBOARD_URL}${target.path ?? `/dashboard/team-boards/${target.id}`}`
         : `${DASHBOARD_URL}/dashboard/production/shoots/${target.id}`
-    const where = target.kind === 'item' ? 'item' : target.kind === 'board' ? 'board' : 'shoot'
+    const where = target.kind === 'item' ? 'item' : target.kind === 'board' ? 'board' : target.kind === 'post' ? 'post' : 'shoot'
     await notify({
       actorName: actor.name,
       actorEmail: actor.email,
@@ -70,7 +70,7 @@ export async function notifyTagged(input: {
       eventType: 'comment_assigned',
       // the ITEM (or shoot) is the entity, so the row routes to the page;
       // the comment id rides after '#' to keep the dedupe key per comment
-      entityType: target.kind === 'item' ? 'content_item' : target.kind === 'board' ? 'team_board' : 'shoot',
+      entityType: target.kind === 'item' ? 'content_item' : target.kind === 'board' ? 'team_board' : target.kind === 'post' ? 'social_post' : 'shoot',
       entityId: `${target.id}#${commentId}`,
       recipientId: t.id,
       recipientEmail: t.email,
@@ -80,7 +80,7 @@ export async function notifyTagged(input: {
         `<p><strong>${escapeHtml(who)}</strong> asked you to look at something on <strong>${escapeHtml(target.title)}</strong>:</p>` +
         `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #e4e4e7;color:#3f3f46;">${escapeHtml(text.slice(0, 500))}</blockquote>` +
         `<p><strong>What happens next:</strong> it stays under &ldquo;Waiting on you&rdquo; until you mark it done on the ${where} page.</p>`,
-        target.kind === 'item' ? OPEN_ITEM_CTA : target.kind === 'board' ? 'Open the board' : 'Open the shoot',
+        target.kind === 'item' ? OPEN_ITEM_CTA : target.kind === 'board' ? 'Open the board' : target.kind === 'post' ? 'Open the post' : 'Open the shoot',
         href,
       ),
     })

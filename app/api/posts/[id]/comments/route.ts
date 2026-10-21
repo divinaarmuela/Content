@@ -4,6 +4,8 @@ import type { PostComment, SocialPost } from '@/lib/db-types'
 import { authzErrorResponse, requireRole } from '@/app/lib/authz'
 import { mayActOnRow } from '@/app/lib/post-stage'
 import { parseNoteInput } from '@/app/lib/post-window-core'
+import { notifyTagged, resolveTags, taggableTeam } from '@/app/lib/comment-tags'
+import { teamPostPath } from '@/app/lib/post-notify-core'
 
 /**
  * A NOTE ON A POST — pinned to one file, or to the whole post (the owner's
@@ -12,8 +14,8 @@ import { parseNoteInput } from '@/app/lib/post-window-core'
  * Two threads. Team is the default and never reaches the client; Client is
  * the thread the portal shows (P6 reads it with `commentVisibleTo`). A note is
  * appended, never edited here, so there is nothing to race: every insert is
- * its own row. It emails nobody — nothing in the posting flow ever writes to
- * a client on its own.
+ * its own row. It never writes to a client. A TEAM member tagged in it ("@Manal Rizwan") is told — an email and
+ * the bell, linked to the post — like a tag on a card (the owner, 22 Oct 2026: "why doesnt it get notified")
  *
  * Team members only (`requireRole('scheduler')` is the whole team ladder), and
  * only on a post of a client they may work on. The browser reads the notes
@@ -51,6 +53,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         created_at: now,
         updated_at: now,
       })
+      // the people tagged in a team note are told; a client-thread note tags nobody (it is the client's to read)
+      if (parsed.note.visibility === 'team' && parsed.note.body.includes('@')) {
+        const tagged = resolveTags(parsed.note.body, [], await taggableTeam(), user.id)
+        if (tagged.length) {
+          const title = String((post as { caption?: string | null }).caption ?? '').split(/\r?\n/)[0].slice(0, 60) || 'a post'
+          await notifyTagged({
+            actor: user, tagged, text: parsed.note.body, commentId: String((comment as { id?: string }).id ?? now),
+            target: { kind: 'post', id: post.id, title: `the post “${title}”`, path: teamPostPath(post as never) },
+          }).catch(e => console.error('post comment tag notify failed', e))
+        }
+      }
       return NextResponse.json({ comment })
     } catch (e) {
       const { error, status } = authzErrorResponse(e)
