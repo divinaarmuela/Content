@@ -92,17 +92,16 @@ export function isFootage(f: Pick<SeenFile, 'name'>): boolean {
 }
 
 /**
- * THE LINKS A CARD IS WATCHED THROUGH — its Drive hand-ins, its own Drive link and the links of its earlier versions
- * (the owner, 21 Oct 2026: editors keep adding cuts to the card's link). Never the raw footage link.
+ * THE LINKS A CARD IS WATCHED THROUGH — every Drive link the card has: its hand-ins, its own link, its raw-footage link
+ * and the links of its earlier versions (the owner, 21 Oct 2026: editors keep adding cuts to the card's links — OCT
+ * Spring Shoot's raw link holds New Menu Medley Draft, v2, V3 and final). Camera files in them are skipped as footage.
  */
 export function cardLinksOf(item: { link_url?: unknown; raw_assets_url?: unknown; link_versions?: unknown }, handIns: readonly { link: string; by?: string | null }[]): { link: string; by: string | null }[] {
-  const raw = typeof item.raw_assets_url === 'string' ? item.raw_assets_url.trim() : ''
+  const isDrive = (v: unknown): v is string => typeof v === 'string' && /drive\.google\.com/.test(v)
   const out: { link: string; by: string | null }[] = handIns.map(h => ({ link: h.link, by: h.by ?? null }))
-  if (typeof item.link_url === 'string' && /drive\.google\.com/.test(item.link_url)) out.push({ link: item.link_url.trim(), by: null })
-  for (const v of Array.isArray(item.link_versions) ? item.link_versions as { url?: unknown }[] : []) {
-    if (typeof v?.url === 'string' && /drive\.google\.com/.test(v.url)) out.push({ link: v.url.trim(), by: null })
-  }
-  return out.filter(l => l.link && l.link !== raw)
+  for (const v of [item.link_url, item.raw_assets_url]) if (isDrive(v)) out.push({ link: v.trim(), by: null })
+  for (const v of Array.isArray(item.link_versions) ? item.link_versions as { url?: unknown }[] : []) if (isDrive(v?.url)) out.push({ link: v.url.trim(), by: null })
+  return out.filter((l, k) => l.link && out.findIndex(o => o.link === l.link) === k)
 }
 
 /** a folder that says "graded" — a hint only, never the decision */

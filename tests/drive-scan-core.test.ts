@@ -127,14 +127,14 @@ describe('heldToMeasures', () => {
 })
 
 describe('cardLinksOf and camera originals', () => {
-  it("watches the hand-ins, the card's own link and its earlier version links, never the raw footage link", () => {
+  it("watches every Drive link the card has — hand-ins, its own, raw footage, earlier versions — once each", () => {
     const links = cardLinksOf({
       link_url: 'https://drive.google.com/drive/folders/WORK',
       raw_assets_url: 'https://drive.google.com/drive/folders/RAW',
-      link_versions: [{ url: 'https://drive.google.com/file/d/V1/view' }, { url: 'https://vimeo.com/1' }, { url: 'https://drive.google.com/drive/folders/RAW' }],
+      link_versions: [{ url: 'https://drive.google.com/file/d/V1/view' }, { url: 'https://vimeo.com/1' }, { url: 'https://drive.google.com/drive/folders/WORK' }],
     }, [{ link: 'https://drive.google.com/drive/folders/HANDIN', by: 'u1' }])
     expect(links.map(l => l.link)).toEqual([
-      'https://drive.google.com/drive/folders/HANDIN', 'https://drive.google.com/drive/folders/WORK', 'https://drive.google.com/file/d/V1/view',
+      'https://drive.google.com/drive/folders/HANDIN', 'https://drive.google.com/drive/folders/WORK', 'https://drive.google.com/drive/folders/RAW', 'https://drive.google.com/file/d/V1/view',
     ])
   })
   it('skips MXF and other camera originals as footage', () => {
