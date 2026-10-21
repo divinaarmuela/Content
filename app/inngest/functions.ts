@@ -1032,6 +1032,9 @@ export const milanoteMediaCopy = inngest.createFunction(
 export const driveHandInWatch = inngest.createFunction(
   { id: 'drive-handin-watch', name: 'Check hand-in Drive links for new files', triggers: [{ cron: '* * * * *' }], retries: 0, concurrency: { limit: 1 } },
   async ({ step }) => withRequestCache(async () => step.run('watch', async () => {
+    // OFF until the owner agrees how one master Drive link holds drafts AND graded cuts (21 Oct 2026: "think this
+    // universally … we have color graded etc") — Vercel env DRIVE_WATCH=1 turns it on
+    if (process.env.DRIVE_WATCH !== '1') return { off: true }
     const { watchDriveHandIns } = await import('../lib/drive-handin')
     return watchDriveHandIns()
   })),
