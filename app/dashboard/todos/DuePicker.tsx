@@ -78,7 +78,7 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
   const measure = useCallback(() => {
     const r = box.current?.getBoundingClientRect()
     if (!r) return
-    const gap = 6, edge = 8, width = 300
+    const gap = 6, edge = 8, width = 320
     const below = window.innerHeight - r.bottom - gap - edge
     const above = r.top - gap - edge
     const left = Math.max(edge, Math.min(r.left, window.innerWidth - width - edge))
@@ -170,7 +170,7 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
       {open && place && createPortal(
         <div ref={panel} role="dialog" aria-label="Due date and repeat"
           style={{ position: 'fixed', left: place.left, top: place.top, bottom: place.bottom, maxHeight: place.maxHeight }}
-          className="z-[60] flex w-[300px] flex-col gap-3 overflow-y-auto overscroll-contain rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+          className="z-[60] flex w-[320px] flex-col gap-3 overflow-y-auto overscroll-contain rounded-inner border border-border bg-popover p-3 text-popover-foreground shadow-lg">
           <div className="flex items-center gap-2">
             <input type="date" value={due ?? ''} onChange={e => { onChange({ due_date: e.target.value || null }); if (e.target.value) setMonth(e.target.value.slice(0, 7)) }}
               aria-label="Due date" className="h-9 flex-1 rounded-md border border-border bg-background px-2 text-[13px]" />
@@ -274,18 +274,18 @@ export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, d
                 weekday, "On day [20]" for those who work by date (1–28, then Last) */}
             {byMonth && rule && (
               <div role="radiogroup" aria-label="Which day of the month" className="flex flex-col gap-2 text-[13px]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex cursor-pointer items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="flex shrink-0 cursor-pointer items-center gap-2">
                     <input type="radio" name="month-by" className="h-4 w-4 accent-foreground" checked={!!rule.on}
                       onChange={() => setRule({ on: rule.on ?? dueNth(), day: undefined })} />
                     On the
                   </label>
                   <Select value={String((rule.on ?? dueNth()).nth)} onValueChange={v => setRule({ on: { ...(rule.on ?? dueNth()), nth: (v === 'last' ? 'last' : Number(v)) as MonthNth }, day: undefined })}>
-                    <SelectTrigger aria-label="Which one of the month" className="h-8 w-24 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Which one of the month" className="h-8 w-[5.5rem] rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
                     <SelectContent>{MONTH_NTHS.map(n => <SelectItem key={String(n.key)} value={String(n.key)}>{n.label}</SelectItem>)}</SelectContent>
                   </Select>
                   <Select value={String((rule.on ?? dueNth()).weekday)} onValueChange={v => setRule({ on: { ...(rule.on ?? dueNth()), weekday: Number(v) }, day: undefined })}>
-                    <SelectTrigger aria-label="Which weekday" className="h-8 w-32 rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Which weekday" className="h-8 w-[7.5rem] rounded-md border-border bg-background px-2 text-[13px]"><SelectValue /></SelectTrigger>
                     <SelectContent>{WEEKDAY_NAMES.map((n, i) => <SelectItem key={n} value={String(i)}>{n}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
