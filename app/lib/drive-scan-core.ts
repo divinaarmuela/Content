@@ -283,7 +283,9 @@ export function heldToMeasures(ai: AiAnswer, s: Signals | null, shorterMs: numbe
   // 13s Caviar and 17s Pour, sound 26% alike, were called one video)
   const farLength = s.lengthGapMs !== null && (s.lengthGapMs > 20_000 || (shorterMs !== null && shorterMs > 0 && s.lengthGapMs > shorterMs * 0.2))
   if (!(noSound && farLength)) return ai
-  return { match: 'new', same_edit: false, colour_changed: false, confidence: Math.min(ai.confidence, 0.6), reasons: ['The sound and the length match none of the card’s videos', ...ai.reasons] }
+  // different sound AND far-apart lengths is a different video, plainly — said with confidence, not asked (the owner,
+  // 21 Oct 2026, on The Pour: "opening doesnt matter it needs to be smart")
+  return { match: 'new', same_edit: false, colour_changed: false, confidence: 0.85, reasons: ['Different sound and a different length — a different video, even where a shot or the set is shared'] }
 }
 
 /**

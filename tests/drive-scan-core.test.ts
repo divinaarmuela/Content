@@ -117,7 +117,7 @@ describe('heldToMeasures', () => {
   const ai = { match: 'A1', same_edit: false, colour_changed: false, confidence: 0.6, reasons: ['shots look alike'] }
   const far = { lengthGapMs: 52_000, sound: 0.1, colourShift: 7, punchier: false }
   it('turns an unsure match the measures contradict into a new video', () => {
-    expect(heldToMeasures(ai, far)).toMatchObject({ match: 'new', confidence: 0.6 })
+    expect(heldToMeasures(ai, far)).toMatchObject({ match: 'new', confidence: 0.85 })
   })
   it('keeps a sure match, a match with shared sound, and a near length', () => {
     expect(heldToMeasures({ ...ai, confidence: 0.9 }, far).match).toBe('A1')
