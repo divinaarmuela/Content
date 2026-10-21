@@ -17,7 +17,7 @@ import { cardFilesOf } from './drive-scan'
  * THE AI SCAN OF ONE NEW FILE (the owner, 21 Oct 2026: "we need ai everytime a file is modified and crosschecks with
  * the current submitted files … my only question is how u would know its graded").
  *
- *   1 measure — the new video's length, four frames, their colour, and its sound at those moments (scan-measure.ts);
+ *   1 measure — the new video's length, twelve frames, their colour, and its sound at those moments (scan-measure.ts);
  *   2 sound   — against every video on the card (measured once, cached): the same sound at the same moments is the
  *               same edit; the name of the file is never evidence;
  *   3 frames  — the best two are shown to the AI frame for frame;
@@ -55,7 +55,7 @@ const VERDICT_TOOL = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      match: { type: 'string', description: 'the label of the matching video (C1, C2 or C3), or "new"' },
+      match: { type: 'string', description: 'the label of the matching video (C1 or C2), or "new"' },
       same_edit: { type: 'boolean', description: 'the same shots in the same order at the same moments' },
       colour_changed: { type: 'boolean', description: 'the colour/contrast/saturation was deliberately changed (graded) compared with the match' },
       confidence: { type: 'number', description: '0 to 1' },
@@ -67,16 +67,16 @@ const VERDICT_TOOL = {
 
 async function askAi(newProbe: Probe, cands: { label: string; asset: string; name: string; where: string; probe: Probe; words: string[] }[], context: string): Promise<AiAnswer | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  const content: unknown[] = [{ type: 'text', text: `NEW FILE — four frames at 10%, 35%, 60% and 85% of its length:` }]
+  const content: unknown[] = [{ type: 'text', text: `NEW FILE — twelve frames, evenly from start to end:` }]
   for (const s of newProbe.samples) { const b = await frameBlock(s.url); if (b) content.push(b) }
   for (const c of cands) {
     content.push({ type: 'text', text: `${c.label} — ${c.where}: "${c.name}", frames at the same moments. Measured against the new file: ${c.words.join('; ') || 'no measures'}.` })
     for (const s of c.probe.samples) { const b = await frameBlock(s.url); if (b) content.push(b) }
   }
-  content.push({ type: 'text', text: `${context}\n\nDecide which card video (if any) the new file is a cut of. Same edit = the same shots at the same moments; a re-cut = the same video edited differently (shots added, removed, trimmed, reordered); graded = the same edit with its colour deliberately changed (more contrast/saturation, a look). Most new files are NOT a cut of any card video: answer "new" unless the same people, places and shots clearly appear in both. Videos from one shoot share the set, the people and often an opening shot — that does not make them one video: a re-cut keeps most of the same shots in the same order and the same sound; judge the whole video across all four moments, not one shared shot. Different subject matter is always "new". Judge from the pictures and the measures, never from file names. Answer with the verdict tool.` })
+  content.push({ type: 'text', text: `${context}\n\nDecide which card video (if any) the new file is a cut of. Same edit = the same shots at the same moments; a re-cut = the same video edited differently (shots added, removed, trimmed, reordered); graded = the same edit with its colour deliberately changed (more contrast/saturation, a look). Most new files are NOT a cut of any card video: answer "new" unless the same people, places and shots clearly appear in both. Videos from one shoot share the set, the people and often an opening shot — that does not make them one video: a re-cut keeps most of the same shots in the same order and the same sound; judge the whole run of shots across all twelve frames, not one shared shot. READ THE ON-SCREEN TEXT in every frame — titles, captions, dish or product names, subtitles of what is said: the same titles and captions (even re-ordered, or with some added or cut) mean the same video re-edited; different titles or a different spoken script mean a different video, however alike the set. Name the text you matched or did not in your reasons. Different subject matter is always "new". Judge from the pictures and the measures, never from file names. Answer with the verdict tool.` })
   const anthropic = new Anthropic({ maxRetries: 1 })
   const res = await anthropic.messages.create({
-    model: MODEL, max_tokens: 600, tools: [VERDICT_TOOL], tool_choice: { type: 'tool', name: 'verdict' },
+    model: MODEL, max_tokens: 900, tools: [VERDICT_TOOL], tool_choice: { type: 'tool', name: 'verdict' },
     messages: [{ role: 'user', content: content as never }],
   }, { timeout: 90_000 })
   const tool = res.content.find(b => b.type === 'tool_use')
@@ -228,7 +228,8 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
       await finish(seenId, { pool: pool.length, same_as: sameAs, kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })
       return { ok: true, note: 'new_video (nothing to compare)' }
     }
-    const top = compared.slice(0, 3).map((c, i) => ({ ...c, label: `C${i + 1}`, words: comparisonWords(c.s) }))
+    // the closest two, at twelve frames each: the AI sees whole runs of shots, not glimpses of three
+    const top = compared.slice(0, 2).map((c, i) => ({ ...c, label: `C${i + 1}`, words: comparisonWords(c.s) }))
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)
     let ai: AiAnswer | null = null
     let model = 'measures only'

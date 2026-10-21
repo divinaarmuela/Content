@@ -8,7 +8,13 @@
  */
 
 /** the four moments looked at: away from the very start and end, where titles and black frames sit */
-export const PROBE_POINTS = [0.1, 0.35, 0.6, 0.85] as const
+/**
+ * TWELVE MOMENTS, evenly from 4% to 96% (the owner, 21 Oct 2026: four frames could not tell a re-edit from another
+ * video of the same shoot — the AI needs the whole run of shots, and their on-screen text, to judge)
+ */
+export const PROBE_POINTS = Array.from({ length: 12 }, (_, i) => Math.round((0.04 + i * (0.92 / 11)) * 1000) / 1000)
+/** the measures cached under this version; a new set of moments is a new version, measured afresh */
+export const PROBE_VERSION = 'p12'
 
 export type ProbeSample = {
   at_pct: number

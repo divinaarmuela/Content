@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto'
 import { table } from '@/lib/db'
 import type { VideoFrame } from '@/lib/db-types'
 import { putObject, r2Configured } from './storage'
-import { PROBE_POINTS, parseDuration, parseProbeLog, type ProbeSample } from './scan-measure-core'
+import { PROBE_POINTS, PROBE_VERSION, parseDuration, parseProbeLog, type ProbeSample } from './scan-measure-core'
 
 /**
  * MEASURING A VIDEO WITHOUT DOWNLOADING IT (the editor preview's AI scan, 21 Oct 2026). ffmpeg reads a video over
- * HTTP ranges — a public Drive link or our own R2 copy — and at four moments takes one small frame, its colour
+ * HTTP ranges — a public Drive link or our own R2 copy — and at twelve moments takes one small frame, its colour
  * readings (brightness, saturation, black and white points) and two seconds of sound as loudness readings. That is
  * what the comparison and the AI look at: the research (Avid Matchbox, duplicate finders) matches an edit by its sound
  * and cut points, and a grade by its colour — never by the file's name.
@@ -65,7 +65,7 @@ const keyOf = (source: string) => createHash('sha256').update(source).digest('he
  * checksum or size), so a re-export is measured again and the same file never is.
  */
 export async function probeVideo(src: string, cacheKey: string): Promise<Probe> {
-  const id = keyOf(cacheKey)
+  const id = keyOf(`${PROBE_VERSION}|${cacheKey}`)
   const cached = await table<VideoFrame>('video_frames').get(id).catch(() => null)
   if (cached && Array.isArray(cached.frames) && cached.frames.length) {
     return { durationMs: cached.duration_ms ?? null, width: null, height: null, samples: cached.frames as never, ...(cached.error ? { error: cached.error } : {}) }
@@ -77,7 +77,11 @@ export async function probeVideo(src: string, cacheKey: string): Promise<Probe> 
     return { durationMs: null, width: null, height: null, samples: [], error }
   }
   const dur = meta.durationMs / 1000
-  const shots = await Promise.all(PROBE_POINTS.map(pct => sampleAt(src, Math.min(dur * pct, Math.max(0, dur - 2.2)), pct)))
+  // four at a time: twelve 4K decodes at once is more than a server function has
+  const shots: Awaited<ReturnType<typeof sampleAt>>[] = []
+  for (let i = 0; i < PROBE_POINTS.length; i += 4) {
+    shots.push(...await Promise.all(PROBE_POINTS.slice(i, i + 4).map(pct => sampleAt(src, Math.min(dur * pct, Math.max(0, dur - 2.2)), pct))))
+  }
   const samples = await Promise.all(shots.map(async ({ sample, jpeg }, i) => {
     let url: string | null = null
     if (jpeg && r2Configured()) {

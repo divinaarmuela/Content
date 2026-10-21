@@ -243,7 +243,7 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
       {scannable && (busy || scan?.steps) && <ScanSteps state={r.state} steps={scan?.steps} />}
       {scan?.frames?.some(Boolean) && (
         <div className="flex gap-1.5 overflow-x-auto" aria-label="Frames the AI looked at">
-          {scan.frames.map((u, i) => u ? <img key={i} src={u} alt={`Frame ${i + 1}`} className="h-20 w-auto rounded-md border border-border object-cover" /> : null)}
+          {scan.frames.map((u, i) => u ? <img key={i} src={u} alt={`Frame ${i + 1}`} className="h-16 w-auto rounded-md border border-border object-cover" /> : null)}
         </div>
       )}
       {scan?.kind && (

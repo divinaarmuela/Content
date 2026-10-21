@@ -246,7 +246,7 @@ export const OPEN_STATES: readonly SeenState[] = ['new', 'scanning', 'scanned', 
 
 export const SCAN_STEPS = [
   { key: 'measure', label: 'Measuring', words: 'Reading the video from Drive' },
-  { key: 'sound', label: 'Sound', words: 'Comparing the sound at four moments' },
+  { key: 'sound', label: 'Sound', words: 'Comparing the sound at twelve moments' },
   { key: 'frames', label: 'Frames', words: 'Comparing the shots at the same moments' },
   { key: 'colour', label: 'Colour', words: 'Checking contrast and saturation for a grade' },
   { key: 'ai', label: 'AI check', words: 'The AI looks at it all and decides' },
