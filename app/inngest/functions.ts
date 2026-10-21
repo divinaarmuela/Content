@@ -1023,6 +1023,20 @@ export const milanoteMediaCopy = inngest.createFunction(
   }),
 )
 
+/**
+ * DRIVE WATCH — every minute, the Drive link of each card still being made (until the quality check passes) is read
+ * again and anything new or re-exported is copied in (drive-handin-core "DRIVE WATCH"; the owner, 21 Oct 2026: "they
+ * might add new folders and more videos in the version 1"). Read only (trap 13). One step: a quiet minute is one run.
+ * A NEW function — re-sync after deploying it (trap 5b).
+ */
+export const driveHandInWatch = inngest.createFunction(
+  { id: 'drive-handin-watch', name: 'Check hand-in Drive links for new files', triggers: [{ cron: '* * * * *' }], retries: 0, concurrency: { limit: 1 } },
+  async ({ step }) => withRequestCache(async () => step.run('watch', async () => {
+    const { watchDriveHandIns } = await import('../lib/drive-handin')
+    return watchDriveHandIns()
+  })),
+)
+
 export const functions = [
   milanoteMediaCopy,
   acquisitionAgent,
@@ -1048,6 +1062,7 @@ export const functions = [
   mediaEncodeFinished,
   encodeSweep,
   drivePullFolder,
+  driveHandInWatch,
   metaIgTokenRefresh,
 ]
 

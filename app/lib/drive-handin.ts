@@ -5,8 +5,8 @@ import type { TeamUser } from './authz'
 import { filesOf, pullInFlight } from './drive-pull-core'
 import { readDriveTarget, startPull, type DriveTargetFile } from './drive-pull'
 import {
-  NOT_SHARED_WORDS, driveHandInsOf, driveLinkTarget, handInPullId, handInRefusal, mergeDriveHandIn, pendingHandIn,
-  sanitiseMap, sanitisePicked, settledHandIn, withHandIn, type DriveHandIn, type MergeResult,
+  DRIVE_WATCH_STATUSES, NOT_SHARED_WORDS, driveHandInsOf, driveLinkTarget, driveWatchChanges, handInPullId, handInRefusal, mergeDriveHandIn, pendingHandIn,
+  sanitiseMap, sanitisePicked, settledHandIn, watchedHandIn, withHandIn, type DriveHandIn, type MergeResult,
 } from './drive-handin-core'
 import { LOOKING_STATUSES, finalFilesChangeRefusal, finalFilesOf, needsAdoption } from './final-files-core'
 import { handInRound, versionLabel } from './edit-round-core'
@@ -161,6 +161,11 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
     const round = handInRound(cur as never)
     const before = finalFilesOf(cur as never)
     let result = mergeDriveHandIn(before, pulled, h, cur as never, round, now)
+    // the minute check's copy lands only while the card is still being made: gone to colour grade or the client in
+    // the meantime, the folder is frozen and these files are not put on it
+    if (result.ok && h.auto && (!DRIVE_WATCH_STATUSES.includes(String((cur as { status?: unknown }).status ?? '')) || round !== h.round)) {
+      result = { ok: false, error: 'New files from the Drive folder were not added — the card moved on past the quality check while they copied. Hand them in again if they are needed.', failed: [] }
+    }
     if (result.ok) {
       // the same server rules a save of the list follows (the audit of 25 Sep 2026)
       // a hand-in the editor made BEFORE submitting finishes landing at the quality check — the reviewer is waiting on
@@ -199,4 +204,66 @@ export async function settleDriveHandIn(pullId: string): Promise<{ settled: bool
   }).catch(() => undefined)
   announceItemChange({ item_id: item.id, client_id: item.client_id, status: String(fresh?.status ?? item.status), kind: 'updated' })
   return { settled: true, result: done.result }
+}
+
+/**
+ * DRIVE WATCH, THE SERVER HALF (drive-handin-core "DRIVE WATCH" has the rules and the why): every card still being made
+ * whose version came from a Drive link has the link read again — read only — and anything new or re-exported is
+ * copied in as an `auto` hand-in through the same copy job. Run every minute by the `drive-handin-watch` job.
+ */
+export async function watchDriveHandIns(): Promise<{ cards: number; started: number; noted: number }> {
+  const items = table<ContentItem>('content_items')
+  const now = Date.now()
+  const all = await items.list({ where: r => DRIVE_WATCH_STATUSES.includes(String(r.status ?? '')), fresh: true })
+  const due = all.map(i => ({ i, h: watchedHandIn(i as never, now) })).filter((x): x is { i: ContentItem; h: DriveHandIn } => !!x.h).slice(0, 40)
+  let started = 0, noted = 0
+  for (const { i, h } of due) {
+    try {
+      const listing = await listDriveHandIn(h.link)
+      if (!listing.ok) continue   // unshared or Drive down: say nothing, try next minute
+      const media = listing.files.filter(f => HANDIN_KINDS.includes(kindOf(f.mime, f.name)))
+      const diff = driveWatchChanges(i as never, media)
+      // the note for files gone from the folder — written only when it changes, not every minute
+      const was = JSON.stringify(((i as { drive_watch?: { missing?: unknown } }).drive_watch?.missing) ?? [])
+      if (was !== JSON.stringify(diff.missing)) {
+        await items.claim(i.id, cur => cur ? { ...cur, drive_watch: { missing: diff.missing, checked_at: new Date().toISOString(), link: h.link } } as unknown as ContentItem : null).catch(() => undefined)
+        noted++
+      }
+      if (!diff.changed) continue
+      const ids = sanitisePicked(media.map(f => f.id), listing.files)
+      if (!ids.ok) continue
+      const pull = handInPullId(listing.id, i.id)
+      const stamp = new Date().toISOString()
+      const round = handInRound(i as never)
+      const handIn: DriveHandIn = {
+        id: `${pull}#${stamp}`, pull_id: pull, link: listing.url, drive_ids: ids.ids,
+        names: Object.fromEntries(listing.files.filter(f => ids.ids.includes(f.id)).map(f => [f.id, f.name])),
+        map: {}, round, whole: true, auto: true, by: h.by, manager: false, requested_at: stamp, status: 'copying',
+      }
+      const put = await items.claim(i.id, cur => {
+        if (!cur || watchedHandIn(cur as never, Date.now())?.id !== h.id) return null   // moved on, or a hand-in started
+        return { ...cur, drive_handins: withHandIn(driveHandInsOf(cur as never), handIn), updated_at: stamp } as unknown as ContentItem
+      })
+      if (!put.claimed) continue
+      const go = await startPull({
+        kind: 'item', scopeId: i.id, folderUrl: listing.url, version: round, by: h.by, purpose: 'handin',
+        handIn: { pullId: pull, onlyIds: ids.ids, handInId: handIn.id },
+      })
+      if (!go.started) {
+        await markHandIn(i.id, handIn.id, { status: 'failed', error: go.reason ?? 'The copy from Drive could not be started', settled_at: new Date().toISOString() })
+        continue
+      }
+      started++
+      const by = h.by ? await table('team_users').get(h.by).catch(() => null) : null
+      await logActivity({
+        actor: (by as TeamUser | null) ?? null, clientId: i.client_id, entityType: 'content_item', entityId: i.id,
+        action: 'drive_handin_started', newValue: `v${round}`,
+        detail: `New in the Drive folder, picked up by the minute check: ${[diff.added.length ? `${diff.added.length} new` : '', diff.updated.length ? `${diff.updated.length} re-exported` : ''].filter(Boolean).join(', ')} — copying into ${versionLabel(i as never, round)}`,
+      }).catch(() => undefined)
+      announceItemChange({ item_id: i.id, client_id: i.client_id, status: String(i.status), kind: 'updated' })
+    } catch (e) {
+      console.error('[drive-watch]', i.id, e instanceof Error ? e.message : e)
+    }
+  }
+  return { cards: due.length, started, noted }
 }

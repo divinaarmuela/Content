@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRow } from '@/lib/db-client'
 import type { DrivePull } from '@/lib/db-types'
-import { handInOutdated, driveLinkTarget, handInWords, latestHandIn, pendingHandIn } from '../../lib/drive-handin-core'
+import { handInOutdated, driveLinkTarget, driveWatchNote, handInWords, latestHandIn, pendingHandIn, watchedHandIn } from '../../lib/drive-handin-core'
 import { roundLabel as plainRoundLabel } from '../../lib/edit-round-core'
 import { watchDriveCopy } from '../driveCopyWatch'
 
@@ -81,7 +81,7 @@ export function DriveHandInDialog({ open, onOpenChange, item, round, label }: {
 }
 
 /** THE LINE ON THE CARD for the newest Drive hand-in: copying (live, from the pull row), done, or what stopped it */
-export function DriveHandInStatus({ item }: { item: { drive_handins?: unknown; change_note_at?: unknown } }) {
+export function DriveHandInStatus({ item }: { item: { drive_handins?: unknown; change_note_at?: unknown; status?: unknown; drive_watch?: unknown } }) {
   const latest = handInOutdated(item) ? null : latestHandIn(item)
   const pending = pendingHandIn(item)
   const { row } = useRow<DrivePull>('drive_pulls', pending ? pending.pull_id : null)
@@ -92,7 +92,16 @@ export function DriveHandInStatus({ item }: { item: { drive_handins?: unknown; c
     return () => clearInterval(t)
   }, [pending])
   const said = handInWords(row as never, latest, now)
+  // THE MINUTE CHECK, SAID (the owner, 21 Oct 2026): the editor knows more videos dropped in the folder will come in
+  const watching = !pending && !!watchedHandIn(item as never, now)
+  const gone = watching ? driveWatchNote(item.drive_watch) : null
   if (!said) return null
   const tone = said.tone === 'failed' ? 'bg-tint-red' : said.tone === 'done' ? 'bg-tint-green' : 'bg-tint-amber'
-  return <p role="status" data-drive-handin-status className={`rounded-inner ${tone} p-2.5 text-[13px] font-semibold`}>{said.words}</p>
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p role="status" data-drive-handin-status className={`rounded-inner ${tone} p-2.5 text-[13px] font-semibold`}>{said.words}</p>
+      {gone && <p data-drive-watch-missing className="rounded-inner bg-tint-amber p-2.5 text-[13px]">{gone}</p>}
+      {watching && <p data-drive-watch className="text-[12px] text-muted-foreground">The Drive link is checked every minute until the quality check passes — new or re-exported videos added to it come onto this version on their own.</p>}
+    </div>
+  )
 }

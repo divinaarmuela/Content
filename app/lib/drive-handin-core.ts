@@ -88,6 +88,9 @@ export type DriveHandIn = {
   /** THE WHOLE LINK IS THE VERSION (30 Sep 2026): every file in it, matched to the card's pieces by Drive id then
    *  name; a piece not in it is dropped from this version (kept in the ones before) */
   whole?: boolean
+  /** made by the minute-by-minute check of the link (DRIVE_WATCH below), not by a person pressing Submit: it adds and
+   *  swaps, and never takes a piece off because it is gone from the folder */
+  auto?: boolean
   /** the pieces dropped from this version because they were not in the link */
   retired?: string[]
   /** of file_ids, the ones that are new pieces (the rest are new cuts of pieces already on the card) */
@@ -276,7 +279,7 @@ export type MergeResult =
 export function mergeDriveHandIn(
   list: readonly FinalFile[],
   pulled: readonly PullFile[],
-  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager' | 'whole'>,
+  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager' | 'whole' | 'auto'>,
   item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown },
   round: number,
   now: string,
@@ -344,8 +347,9 @@ export function mergeDriveHandIn(
     added.push(files[files.length - 1].id)
     fresh.push(files[files.length - 1].id)
   }
-  // …and a piece no longer in the folder is out of this version — kept, with everything said on it, in the ones before
-  if (whole) {
+  // …and a piece no longer in the folder is out of this version — kept, with everything said on it, in the ones before.
+  // Not when the minute check made it: a file deleted or moved in Drive by mistake must not wipe the work off the card
+  if (whole && !handIn.auto) {
     for (const f of currentFiles({ final_files: files })) {
       const a = assetIdOf(f)
       if (used.has(a) || f.retired_round || added.includes(f.id)) continue
@@ -399,7 +403,7 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
     // green over a greyed Submit) — it says so, and what to do
     if (n === 0 && kept > 0 && dropped === 0) return { tone: 'working', words: unchangedWords(kept) }
     const fresh = Math.min(n, h.new_ids?.length ?? 0)
-    const head = `${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
+    const head = `${h.auto ? 'New from the Drive folder, added on its own: ' : ''}${total} ${total === 1 ? 'file' : 'files'} handed in — ${[`${fresh} new`, `${n - fresh} updated`, kept ? `${kept} unchanged` : ''].filter(Boolean).join(', ')}`
     return { tone: 'done', words: [head, left ? `${left} left out (${h.skipped![0].why})` : '', dropped ? `${dropped} no longer in the folder — left out of this version, kept in the ones before` : ''].filter(Boolean).join(' · ') }
   }
   if (!row) return { tone: 'working', words: 'Waiting to start copying from Google Drive…' }
@@ -418,4 +422,76 @@ export function handInWords(row: PullRow | null | undefined, h: DriveHandIn | nu
   const rate = Number.isFinite(started) && landed > 0 ? landed / Math.max(1, (nowMs - started) / 1000) : null
   const left = rate && bytes > landed ? formatLeft((bytes - landed) / rate) : null
   return { tone: 'working', words: [`Copying ${Math.min(done + 1, total)} of ${total} from Google Drive…`, bytes > 0 ? `${formatBytes(landed)} of ${formatBytes(bytes)}` : '', left ?? ''].filter(Boolean).join(' · ') }
+}
+
+/**
+ * DRIVE WATCH — THE LINK IS CHECKED EVERY MINUTE (the owner, 21 Oct 2026: "in editor page we need to do a check every
+ * minute … because they might add new folders and more videos in the version 1"; the rules were left to us: "what do
+ * u suggest?").
+ *
+ *   - Until the quality check passes: while the editor is working, sent back, or at the check. Once it goes to colour
+ *     grade or the client the folder is frozen, so nobody approves a set that changes under them (Jordan Wilson's
+ *     Version 2, 25 Sep 2026, is why a live folder was ever refused).
+ *   - Only the version being made: the newest hand-in that landed, at the version the card is on now. After the client
+ *     asks for changes the old link is not watched until the editor hands in the next version.
+ *   - A new file in the folder (subfolders too) is added; a re-exported file (same Drive file, new bytes, PROVED by
+ *     Drive) swaps in at the same version; a file gone from the folder stays on the card, with a note.
+ *
+ * Drive is only read (trap 13). The copy is the ordinary hand-in copy, marked `auto`.
+ */
+export const DRIVE_WATCH_STATUSES: readonly string[] = ['draft_uploaded', 'revision_required', 'revision_complete', 'quality_check']
+/** a check whose copy failed is tried again after this, not every minute */
+export const DRIVE_WATCH_RETRY_MS = 15 * 60_000
+
+export function watchedHandIn(
+  item: { status?: unknown; drive_handins?: unknown; edit_round?: unknown; client_round?: unknown; client_rounds?: unknown },
+  nowMs: number,
+): DriveHandIn | null {
+  if (!DRIVE_WATCH_STATUSES.includes(String(item.status ?? ''))) return null
+  const list = driveHandInsOf(item)
+  const last = list[list.length - 1]
+  if (!last || last.status === 'copying') return null
+  if (last.status === 'failed' && last.auto && nowMs - Date.parse(String(last.settled_at ?? last.requested_at)) < DRIVE_WATCH_RETRY_MS) return null
+  const done = [...list].reverse().find(h => h.status === 'done')
+  // only a hand-in of THE WHOLE LINK: one where the editor picked some files (the older picker) left the rest out on
+  // purpose — "September 18th" picked 9 of 23, and the check would have pulled in the other 14 (dry run, 21 Oct 2026)
+  if (!done || done.whole !== true) return null
+  if ((done.settled_round ?? done.round) !== handInRound(item)) return null
+  return done
+}
+
+export type WatchFile = { id: string; name: string; mime: string; modified?: string | null; md5?: string | null; revision?: string | null }
+
+/** what the link holds now against the card: anything to copy, and the pieces gone from the folder */
+export function driveWatchChanges(
+  item: { final_files?: unknown },
+  media: readonly WatchFile[],
+): { changed: boolean; added: string[]; updated: string[]; missing: { asset: string; name: string }[] } {
+  const current = currentFiles(item).filter(f => !f.retired_round)
+  const added: string[] = [], updated: string[] = []
+  for (const m of media) {
+    const base = m.name.split('/').pop() || m.name
+    const piece = current.find(f => f.drive_file_id === m.id) ?? current.find(f => !f.drive_file_id && f.id === m.id)
+    if (!piece) {
+      // a new Drive file with a piece's name is that piece's new cut — unless that piece's own Drive file is still here
+      const named = current.find(f => clipKey(f.name) === clipKey(base))
+      if (named && named.drive_file_id && media.some(x => x.id === named.drive_file_id)) { added.push(m.id); continue }
+      ;(named ? updated : added).push(m.id)
+      continue
+    }
+    // changed only when Drive PROVES it: with nothing to compare, a check every minute would copy it every minute
+    const proof = (m.md5 && piece.drive_md5) || (m.revision && piece.drive_revision) || (m.modified && piece.drive_modified)
+    if (proof && !sameDriveCut({ md5: piece.drive_md5, revision: piece.drive_revision, modified: piece.drive_modified }, m)) updated.push(m.id)
+  }
+  const here = new Set(media.map(m => m.id))
+  const missing = current.filter(f => f.drive_file_id && !here.has(f.drive_file_id)).map(f => ({ asset: assetIdOf(f), name: f.name }))
+  return { changed: added.length + updated.length > 0, added, updated, missing }
+}
+
+/** the card's note for pieces gone from the folder: "Script 3.mp4 is no longer in the Drive folder — kept on the card" */
+export function driveWatchNote(watch: unknown): string | null {
+  const missing = (watch && typeof watch === 'object' && Array.isArray((watch as { missing?: unknown }).missing)) ? (watch as { missing: { name?: unknown }[] }).missing : []
+  const names = missing.map(m => String(m?.name ?? '')).filter(Boolean)
+  if (!names.length) return null
+  return `${names.length === 1 ? names[0] : `${names.length} files (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''})`} ${names.length === 1 ? 'is' : 'are'} no longer in the Drive folder — kept on the card. Remove ${names.length === 1 ? 'it' : 'them'} here if that was meant.`
 }
