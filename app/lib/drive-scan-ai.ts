@@ -30,7 +30,7 @@ import { cardFilesOf } from './drive-scan'
 
 const MODEL = process.env.DRIVE_SCAN_MODEL || 'claude-sonnet-5'   // Haiku misjudged unrelated videos as re-cuts (live, 21 Oct 2026); a few calls a day
 const MAX_CARD_VIDEOS = 12
-const MAX_OTHER_VIDEOS = 12   // the client's other cards: their newest videos, measured once each
+const MAX_OTHER_VIDEOS = 40   // the client's other Editor cards: all their current videos (each measured once, then cached)
 
 async function setSteps(id: string, patch: Partial<Record<ScanStepKey, StepState>>, extra: Record<string, unknown> = {}) {
   await table<DriveSeen>('drive_seen').claim(id, cur => {
