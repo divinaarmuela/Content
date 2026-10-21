@@ -49,8 +49,10 @@ export type Probe = { durationMs: number | null; width: number | null; height: n
 /** one moment: a frame (scaled, its colour readings) and two seconds of sound as loudness every 100 ms */
 async function sampleAt(src: string, atS: number, pct: number): Promise<{ sample: ProbeSample; jpeg: Buffer | null }> {
   const { out, log } = await run([
-    '-hide_banner', '-nostats', '-ss', String(Math.max(0, atS)), '-t', '2', '-i', src,
-    '-map', '0:v:0', '-frames:v', '1', '-vf', 'scale=384:-2,signalstats,metadata=print', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
+    // the nearest keyframe, not the exact frame: decoding 4K up to an exact moment ran a live scan out of time
+    // (21 Oct 2026); the same keyframe is taken from every copy of an edit, so comparisons still line up
+    '-hide_banner', '-nostats', '-noaccurate_seek', '-ss', String(Math.max(0, atS)), '-t', '2', '-i', src,
+    '-map', '0:v:0', '-frames:v', '1', '-threads', '2', '-vf', 'scale=384:-2,signalstats,metadata=print', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
     '-map', '0:a:0?', '-af', 'aresample=8000,asetnsamples=n=800,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level', '-f', 'null', '-',
   ])
   return { sample: { ...parseProbeLog(log), at_pct: pct, at_s: atS }, jpeg: out.length > 500 ? out : null }

@@ -89,62 +89,86 @@ async function askAi(newProbe: Probe, cands: { label: string; asset: string; nam
   }
 }
 
-/** run in small batches: a card's videos are measured three at a time */
-async function inBatches<T, R>(xs: readonly T[], n: number, f: (x: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = []
-  for (let i = 0; i < xs.length; i += n) out.push(...await Promise.all(xs.slice(i, i + n).map(f)))
-  return out
+/** the card's videos the scan compares against — every one (the name decides nothing), newest cut of each */
+export function cardVideosOf(item: ContentItem): { url: string; asset: string; name: string }[] {
+  const round = roundOf(item)
+  return currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name }) && /^https:\/\//.test(f.url))
+    .slice(0, MAX_CARD_VIDEOS).map(f => ({ url: f.url, asset: assetIdOf(f), name: f.name }))
+}
+const newKey = (row: DriveSeen) => `drive:${row.drive_file_id}:${row.md5 ?? row.revision ?? `${row.size}@${row.modified}`}`
+const cardKey = (url: string) => `r2:${url}`
+
+async function finish(seenId: string, scan: Record<string, unknown>, failed = false) {
+  await table<DriveSeen>('drive_seen').claim(seenId, cur => {
+    if (!cur) return null
+    const was = (cur.scan as { was_locked?: boolean } | null)?.was_locked === true
+    return { ...cur, state: failed ? 'failed' : was ? 'locked' : 'scanned', scan: { ...((cur.scan as object) ?? {}), ...scan, at: new Date().toISOString() }, updated_at: new Date().toISOString() } as DriveSeen
+  })
 }
 
-export async function scanSeen(seenId: string): Promise<{ ok: boolean; note: string }> {
-  const seenT = table<DriveSeen>('drive_seen')
-  // claim it for this scan — one scan at a time per file
-  let wasLocked = false
-  const start = await seenT.claim(seenId, cur => {
-    if (!cur || !['new', 'locked', 'failed'].includes(cur.state)) return null
-    if ((cur.scan as { kind?: string } | null)?.kind && cur.state === 'locked') return null   // already scanned, waiting
-    wasLocked = cur.state === 'locked'
-    return { ...cur, state: 'scanning', scan: { steps: { measure: 'running' }, was_locked: wasLocked, started_at: new Date().toISOString() }, updated_at: new Date().toISOString() } as DriveSeen
+/**
+ * THE SCAN, IN STEPS — the drive-scan-file job runs each as its own step, so no one step runs out of time (live,
+ * 21 Oct 2026: one step measuring five 4K card videos never finished):
+ *   startScan → measureNewFile → measureCardVideo × each → decideScan
+ */
+export async function startScan(seenId: string): Promise<{ go: boolean; itemId?: string; note: string }> {
+  const start = await table<DriveSeen>('drive_seen').claim(seenId, cur => {
+    // a scan killed part-way is taken again after six minutes, never left "scanning" for ever
+    const stale = cur?.state === 'scanning' && Date.now() - Date.parse(String((cur.scan as { started_at?: string } | null)?.started_at ?? cur.updated_at)) > 6 * 60_000
+    if (!cur || (!['new', 'locked', 'failed'].includes(cur.state) && !stale)) return null
+    if ((cur.scan as { kind?: string } | null)?.kind && cur.state === 'locked') return null   // scanned already, waiting
+    const was = cur.state === 'locked' || (stale && (cur.scan as { was_locked?: boolean } | null)?.was_locked === true)
+    return { ...cur, state: 'scanning', scan: { steps: { measure: 'running' }, was_locked: was, started_at: new Date().toISOString() }, updated_at: new Date().toISOString() } as DriveSeen
   })
-  if (!start.claimed) return { ok: false, note: 'not waiting for a scan' }
+  if (!start.claimed) return { go: false, note: 'not waiting for a scan' }
   const row = start.row
-  const settle = async (scan: Record<string, unknown>, failed = false) => {
-    await seenT.claim(seenId, cur => cur ? { ...cur, state: failed ? 'failed' : wasLocked ? 'locked' : 'scanned', scan: { ...(cur.scan as object ?? {}), ...scan, at: new Date().toISOString() }, updated_at: new Date().toISOString() } as DriveSeen : null)
+  const item = await table<ContentItem>('content_items').get(row.item_id)
+  if (!item) { await finish(seenId, { error: 'The card is gone' }, true); return { go: false, note: 'no card' } }
+  // pictures and PDFs: matched by name only, and always asked
+  if (!isVideo({ mime: row.mime, name: row.path })) {
+    const c = rankCandidates({ id: row.drive_file_id, name: row.path, mime: row.mime }, cardFilesOf(item), 1)[0]
+    await finish(seenId, { kind: c ? 'recut' : 'new_video', asset: c?.asset ?? null, confidence: 0.5, ask: true, reasons: ['Pictures and PDFs are matched by name — check it'], steps: { measure: 'skipped', sound: 'skipped', frames: 'skipped', colour: 'skipped', ai: 'skipped' } })
+    return { go: false, note: 'not a video' }
   }
+  return { go: true, itemId: item.id, note: 'started' }
+}
+
+export async function measureNewFile(seenId: string): Promise<{ ok: boolean }> {
+  const row = await table<DriveSeen>('drive_seen').get(seenId)
+  if (!row) return { ok: false }
+  const probe = await probeVideo(drivePublicUrl(row.drive_file_id), newKey(row))
+  if (!probe.durationMs) { await finish(seenId, { error: probe.error ?? 'The video could not be read', steps: { measure: 'failed' } }, true); return { ok: false } }
+  await setSteps(seenId, { measure: 'done', sound: 'running' }, { duration_ms: probe.durationMs, frames: probe.samples.map(s => s.url), colour: probe.samples.map(s => ({ sat: s.satavg, ymin: s.ymin, ymax: s.ymax })) })
+  return { ok: true }
+}
+
+export async function cardVideoUrls(itemId: string): Promise<string[]> {
+  const item = await table<ContentItem>('content_items').get(itemId)
+  return item ? cardVideosOf(item).map(v => v.url) : []
+}
+
+export async function measureCardVideo(url: string): Promise<{ ok: boolean; ms: number | null }> {
+  const p = await probeVideo(url, cardKey(url))
+  return { ok: !!p.durationMs, ms: p.durationMs }
+}
+
+export async function decideScan(seenId: string): Promise<{ ok: boolean; note: string }> {
+  const row = await table<DriveSeen>('drive_seen').get(seenId)
+  if (!row || row.state !== 'scanning') return { ok: false, note: 'not scanning' }
   try {
     const item = await table<ContentItem>('content_items').get(row.item_id)
-    if (!item) { await settle({ error: 'The card is gone' }, true); return { ok: false, note: 'no card' } }
+    if (!item) { await finish(seenId, { error: 'The card is gone' }, true); return { ok: false, note: 'no card' } }
     const source = await table<DriveSource>('drive_sources').get(row.source_id).catch(() => null)
     const adder = source?.added_by ? await table<TeamUser>('team_users').get(source.added_by).catch(() => null) : null
     const byColourist = adder?.colourist === true
     const gradedFolder = GRADED_FOLDER.test(row.path)
-
-    // pictures and PDFs: matched by name only, and always asked
-    if (!isVideo({ mime: row.mime, name: row.path })) {
-      const c = rankCandidates({ id: row.drive_file_id, name: row.path, mime: row.mime }, cardFilesOf(item), 1)[0]
-      await settle({ kind: c ? 'recut' : 'new_video', asset: c?.asset ?? null, confidence: 0.5, ask: true, reasons: ['Pictures and PDFs are matched by name — check it'], steps: { measure: 'skipped', sound: 'skipped', frames: 'skipped', colour: 'skipped', ai: 'skipped' } })
-      return { ok: true, note: 'not a video' }
-    }
-
-    // 1 measure the new file
-    const key = `drive:${row.drive_file_id}:${row.md5 ?? row.revision ?? `${row.size}@${row.modified}`}`
-    const probe = await probeVideo(drivePublicUrl(row.drive_file_id), key)
-    if (!probe.durationMs) { await settle({ error: probe.error ?? 'The video could not be read', steps: { measure: 'failed' } }, true); return { ok: false, note: 'unreadable' } }
-    await setSteps(seenId, { measure: 'done', sound: 'running' }, { duration_ms: probe.durationMs, frames: probe.samples.map(s => s.url), colour: probe.samples.map(s => ({ sat: s.satavg, ymin: s.ymin, ymax: s.ymax })) })
-
-    // 2 the card's videos, measured (cached) and compared — every one, the name decides nothing
-    const round = roundOf(item)
-    const videos = currentFiles(item).filter(f => !isRetiredAt(f, round) && isVideo({ mime: f.mime, name: f.name }) && /^https:\/\//.test(f.url)).slice(0, MAX_CARD_VIDEOS)
-    const measured = await inBatches(videos, 3, async f => ({ f, probe: await probeVideo(f.url, `r2:${f.url}`) }))
-    const compared = measured.filter(m => m.probe.durationMs).map(m => ({ asset: assetIdOf(m.f), name: m.f.name, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
+    const probe = await probeVideo(drivePublicUrl(row.drive_file_id), newKey(row))   // cached by measureNewFile
+    if (!probe.durationMs) { await finish(seenId, { error: probe.error ?? 'The video could not be read' }, true); return { ok: false, note: 'unreadable' } }
+    const measured = await Promise.all(cardVideosOf(item).map(async v => ({ v, probe: await probeVideo(v.url, cardKey(v.url)) })))   // cached
+    const compared = measured.filter(m => m.probe.durationMs).map(m => ({ asset: m.v.asset, name: m.v.name, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
       .sort((a, b) => signalScore(b.s) - signalScore(a.s))
-    await setSteps(seenId, { sound: 'done', frames: 'running' }, { compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, ...c.s })) })
-
-    // 3–4 the best two, frame for frame, with the colour readings
+    await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: 'running' }, { compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, ...c.s })) })
     const top = compared.slice(0, 2).map((c, i) => ({ label: `C${i + 1}`, asset: c.asset, name: c.name, probe: c.probe, words: comparisonWords(c.s), s: c.s }))
-    await setSteps(seenId, { frames: 'done', colour: 'done', ai: 'running' })
-
-    // 5 the AI decides, checked against the measures
     const measuresSay = signalAnswer(top[0] ? { asset: top[0].asset, s: top[0].s } : null)
     let ai: AiAnswer | null = null
     let model = 'measures only'
@@ -158,10 +182,10 @@ export async function scanSeen(seenId: string): Promise<{ ok: boolean; note: str
     const v = verdictOf(answer, { status: item.status, candidates, byColourist, gradedFolder })
     const best = top.find(t => t.asset === v.asset)
     const reasons = [...(best ? comparisonWords(best.s) : []), ...v.reasons].filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 6)
-    await settle({ kind: v.kind, asset: v.asset, confidence: v.confidence, ask: v.ask, reasons, model, words: `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}`, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
+    await finish(seenId, { kind: v.kind, asset: v.asset, confidence: v.confidence, ask: v.ask, reasons, model, words: `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}`, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
     return { ok: true, note: `${v.kind}${v.asset ? ` of ${v.asset}` : ''}` }
   } catch (e) {
-    await settle({ error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)
+    await finish(seenId, { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)
     return { ok: false, note: 'failed' }
   }
 }

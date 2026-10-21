@@ -114,7 +114,7 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
       const res = await fetch('/api/editor-preview/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seen_id: r.id }) })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? 'Could not scan it')
-      if (!j.ok) toast.message(j.note === 'not waiting for a scan' ? 'Already scanned' : `Scan: ${j.note}`)
+      toast.success('Queued for the AI — watch the steps light up')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not scan it') } finally { setAgain(false) }
   }
   const duration = scan?.duration_ms ?? r.duration_ms
@@ -162,7 +162,7 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
       ) : null}
       {scan?.error && <span className="text-[12px] text-accent-red-deep">{scan.error}</span>}
       {r.state === 'locked' && !quiet && <span className="flex items-center gap-1 text-[12px] text-muted-foreground"><Hourglass className="h-3 w-3" aria-hidden />{stageRule(item.status).why}</span>}
-      {(r.state === 'failed' || r.state === 'new') && !quiet && (
+      {(r.state === 'failed' || r.state === 'new' || (r.state === 'scanning' && Date.now() - Date.parse(String((scan as { started_at?: string } | null)?.started_at ?? r.updated_at)) > 6 * 60_000)) && !quiet && (
         <Button variant="outline" size="sm" className="self-start" disabled={again} onClick={rescan}>{again ? 'Scanning…' : r.state === 'failed' ? 'Scan again' : 'Scan now'}</Button>
       )}
     </li>

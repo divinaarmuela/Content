@@ -7,10 +7,9 @@ const nextConfig: NextConfig = {
   // load from node_modules normally.
   serverExternalPackages: ['pdfkit', 'ffmpeg-static'],
   // THE EDITOR PREVIEW'S AI SCAN runs ffmpeg (app/lib/scan-measure.ts): its binary is a data file the tracer can't
-  // see from a require of a path, so the two routes that run it carry it explicitly
+  // see from a require of a path, so the route that runs it (the background jobs) carries it explicitly
   outputFileTracingIncludes: {
     '/api/inngest': ['./node_modules/ffmpeg-static/ffmpeg'],
-    '/api/editor-preview/scan': ['./node_modules/ffmpeg-static/ffmpeg'],
   },
 
   // content.mdmmarketing.com.au is a legacy alias of this same project (the

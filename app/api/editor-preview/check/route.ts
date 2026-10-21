@@ -15,7 +15,7 @@ export async function POST() {
     await requireRole('super_admin')
     const r = await watchSources()
     // every new file goes to the AI scan (drive-scan-file)
-    if (r.toScan.length) await inngest.send(r.toScan.map(id => ({ name: 'drive/scan.file', data: { seen_id: id } })))
+    if (r.toScan.length) await inngest.send(r.toScan.map(id => ({ name: 'drive/scan.file', data: { seen_id: id, item_id: id.split('~')[0] } })))
     return NextResponse.json({ ok: true, ...r })
   } catch (e) {
     const { error, status } = authzErrorResponse(e)

@@ -1039,7 +1039,7 @@ export const driveScanWatch = inngest.createFunction(
   }).then(async r => {
     // every new file goes to the AI scan, one event each
     const ids = (r as { toScan?: string[] }).toScan ?? []
-    if (ids.length) await step.sendEvent('scan', ids.map(id => ({ name: 'drive/scan.file', data: { seen_id: id } })))
+    if (ids.length) await step.sendEvent('scan', ids.map(id => ({ name: 'drive/scan.file', data: { seen_id: id, item_id: id.split('~')[0] } })))
     return r
   })),
 )
@@ -1050,13 +1050,24 @@ export const driveScanWatch = inngest.createFunction(
  * `video_frames` cache. Three at a time. A NEW function — re-sync after deploying it (trap 5b).
  */
 export const driveScanFile = inngest.createFunction(
-  { id: 'drive-scan-file', name: 'Editor preview: AI scan of a new Drive file', triggers: [{ event: 'drive/scan.file' }], retries: 1, concurrency: { limit: 3 } },
-  async ({ event, step }) => withRequestCache(async () => step.run('scan', async () => {
+  // three at a time, but one at a time per card: the first scan measures the card's videos, the rest reuse them
+  { id: 'drive-scan-file', name: 'Editor preview: AI scan of a new Drive file', triggers: [{ event: 'drive/scan.file' }], retries: 1, concurrency: [{ limit: 3 }, { limit: 1, key: 'event.data.item_id' }] },
+  async ({ event, step }) => {
     const id = String((event.data as { seen_id?: unknown })?.seen_id ?? '')
     if (!id) return { skipped: 'no seen_id' }
-    const { scanSeen } = await import('../lib/drive-scan-ai')
-    return scanSeen(id)
-  })),
+    const started = await step.run('start', async () => (await import('../lib/drive-scan-ai')).startScan(id))
+    if (!started.go || !started.itemId) return started
+    const itemId = started.itemId
+    // each measure is its own step: a 4K video read over the network can take a minute, and five of them never fit
+    // in one (live, 21 Oct 2026)
+    const fresh = await step.run('measure-new', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureNewFile(id)))
+    if (!fresh.ok) return { failed: 'the new file could not be measured' }
+    const urls = await step.run('card-videos', async () => (await import('../lib/drive-scan-ai')).cardVideoUrls(itemId))
+    for (let i = 0; i < urls.length; i++) {
+      await step.run(`measure-card-${i}`, async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureCardVideo(urls[i])))
+    }
+    return step.run('decide', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).decideScan(id)))
+  },
 )
 
 export const functions = [
