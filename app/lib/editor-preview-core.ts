@@ -99,10 +99,11 @@ export type VideoNext = { words: string; tone: NextTone }
  * landed, whether the client approved this video, and whether a new cut of it is waiting in Drive.
  */
 export function videoNext(v: {
-  status: unknown; needsGrade: boolean; gradedThisRound: boolean; approved: boolean; newInDrive: boolean; gone?: boolean
+  status: unknown; needsGrade: boolean; gradedThisRound: boolean; approved: boolean; newInDrive: boolean; gone?: boolean; onCard?: boolean
 }): VideoNext {
   if (v.gone) return { words: 'Removed from Drive — the card keeps its copy', tone: 'muted' }
-  if (v.newInDrive) return { words: 'New cut in Drive — confirm it', tone: 'amber' }
+  // a new cut of a video on the card, or a whole new video
+  if (v.newInDrive) return { words: v.onCard === false ? 'New video in Drive — confirm it' : 'New cut in Drive — confirm it', tone: 'amber' }
   if (v.approved) return { words: 'Approved by the client', tone: 'green' }
   switch (String(v.status ?? '')) {
     case 'draft_uploaded': case 'revision_required': case 'revision_complete': case 'client_changes_requested':

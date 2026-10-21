@@ -221,7 +221,7 @@ function VideoList({ item, rows, needsGrade }: { item: ContentItem; rows: DriveS
                 const file = asset ? current.find(f => assetIdOf(f) === asset) : null
                 const pending = s.entries.filter(e => e.source === 'drive' && rowById.get(e.key.slice(2))?.state === 'scanned' && e.kind !== 'copy')
                 const gone = s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone') && s.entries.some(e => e.source === 'drive')
-                const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone })
+                const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
                 return <VideoRow key={s.key} item={item} s={s} next={next} pending={pending.map(e => rowById.get(e.key.slice(2))!).filter(Boolean)} rowById={rowById} />
               })}
             </ul>

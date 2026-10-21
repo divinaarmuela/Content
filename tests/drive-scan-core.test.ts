@@ -218,6 +218,7 @@ describe('videoNext — each video\'s next step on the card', () => {
     expect(v({ status: 'client_review' }).words).toBe('On the client’s portal')
     expect(v({ status: 'client_review', approved: true }).words).toBe('Approved by the client')
     expect(v({ newInDrive: true }).words).toBe('New cut in Drive — confirm it')
+    expect(v({ newInDrive: true, onCard: false }).words).toBe('New video in Drive — confirm it')
     expect(v({ gone: true }).tone).toBe('muted')
     expect(initialsOfName('Ryan Patumaka')).toBe('RP')
     expect(initialsOfName('martin')).toBe('M')
