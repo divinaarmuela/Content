@@ -141,7 +141,7 @@ export default function TodoPanel({
       return true
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not save that'); return false }
   }, [])
-  const patch = (body: Record<string, unknown>, said?: string) => send(`/api/todos/${t.id}`, { method: 'PATCH', body: JSON.stringify(body) }, said).then(ok => { if (ok) void loadActivity() })
+  const patch = (body: Record<string, unknown>, said?: string) => send(`/api/todos/${t.id}`, { method: 'PATCH', body: JSON.stringify(body) }, said).then(ok => { if (ok) void loadActivity(); return ok })
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target as HTMLElement)?.closest?.('input,textarea,[role=listbox]')) onClose() }
@@ -211,11 +211,22 @@ export default function TodoPanel({
   // here), nor inside anything this panel opened over the page — the date picker, a menu, a list, a confirm, a toast
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  //
+  // WHY IT CLOSED ON CLICKS INSIDE IT (the owner, 21 Oct 2026: "I'm clicking some stuff and it just stops and closes"):
+  // while a dropdown is open (Repeats, Every, Weeks, the assignee…) Radix turns pointer events off on the whole page, so
+  // the click that only meant "close this list" lands on <html>, not on the panel, and was read as a click outside. So:
+  // while any list, menu or picker is open a click only closes THAT (as Asana's does), and a click inside the panel's
+  // own box never closes it, whatever element the browser says it hit.
+  const panelRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     const down = (e: PointerEvent) => {
       const el = e.target as Element | null
       if (!el || !el.isConnected || !el.closest) return
-      if (el.closest('[data-todo-panel],[role="dialog"],[role="alertdialog"],[role="listbox"],[role="menu"],[data-radix-popper-content-wrapper],[data-sonner-toaster],[data-todo-id],[data-todo-card]')) return
+      if (el === document.documentElement || el === document.body) return
+      if (document.querySelector('[role="listbox"],[role="menu"],[data-radix-popper-content-wrapper],[role="dialog"]:not([data-todo-panel]),[role="alertdialog"]')) return
+      const r = panelRef.current?.getBoundingClientRect()
+      if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return
+      if (el.closest('[data-todo-panel],[data-sonner-toaster],[data-todo-id],[data-todo-card]')) return
       onCloseRef.current()
     }
     document.addEventListener('pointerdown', down, true)
@@ -223,7 +234,7 @@ export default function TodoPanel({
   }, [])
 
   return (
-    <aside role="dialog" aria-label={`To-do: ${t.title}`} data-todo-panel
+    <aside ref={panelRef} role="dialog" aria-label={`To-do: ${t.title}`} data-todo-panel
       className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col bg-card ${full ? 'left-0 max-w-none' : 'max-w-[700px] border-l border-border shadow-[-8px_0_24px_rgba(0,0,0,0.08)] motion-safe:animate-sheet-in-right'}`}>
       {/* TOP BAR */}
       <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-5">
@@ -295,7 +306,7 @@ export default function TodoPanel({
               <dd className="flex items-center gap-1">
                 {/* Asana's due date and "Repeats" (20 Oct 2026) */}
                 <DuePicker due={t.due_date} repeat={normaliseRepeat((t as { repeat?: unknown }).repeat)} today={today} done={done} editable={editable}
-                  onChange={p => void patch(p as never)} />
+                  onChange={p => patch(p as never)} />
               </dd>
             </div>
             {/* CLIENT — Asana's "Projects" row: the client this is for */}

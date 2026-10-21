@@ -19,14 +19,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
  * Its own small panel rather than a popover package: one more dependency for one picker was not worth it. It sits
  * on the popover surface so it does not vanish into the page in dark mode (trap 3).
  */
-export default function DuePicker({ due, repeat, today, done, editable, onChange }: {
+export default function DuePicker({ due: savedDue, repeat: savedRepeat, today, done, editable, onChange: save }: {
   due: string | null
   repeat: TodoRepeat | null
   today: string
   done: boolean
   editable: boolean
-  onChange: (patch: { due_date?: string | null; repeat?: TodoRepeat | null }) => void
+  onChange: (patch: { due_date?: string | null; repeat?: TodoRepeat | null }) => void | Promise<unknown>
 }) {
+  /**
+   * SHOWN AT ONCE, SAVED BEHIND (the owner, 21 Oct 2026: "when choosing custom it takes time to update … laggy"): each
+   * pick used to wait for the save AND the database to send the task back before the picker moved, and a second tick
+   * made in that wait was built on the old rule and lost the first. The picker now keeps its own copy, changes it on
+   * the click, and saves one after another; it takes the saved task back only when nothing of its own is still saving.
+   */
+  const [local, setLocal] = useState<{ due: string | null; repeat: TodoRepeat | null }>({ due: savedDue, repeat: savedRepeat })
+  const latest = useRef(local)
+  const pending = useRef(0)
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  const savedKey = JSON.stringify([savedDue, savedRepeat])
+  const saved = useRef({ due: savedDue, repeat: savedRepeat })
+  saved.current = { due: savedDue, repeat: savedRepeat }
+  const failed = useRef(false)
+  useEffect(() => {
+    if (pending.current > 0) return
+    const next = { due: savedDue, repeat: savedRepeat }
+    latest.current = next
+    setLocal(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey])
+  const onChange = (patch: { due_date?: string | null; repeat?: TodoRepeat | null }) => {
+    const next = {
+      due: 'due_date' in patch ? patch.due_date ?? null : latest.current.due,
+      repeat: 'repeat' in patch ? patch.repeat ?? null : latest.current.repeat,
+    }
+    latest.current = next
+    setLocal(next)
+    pending.current++
+    // a save that fails (it says so in a toast) puts the picker back to what the task really holds
+    queue.current = queue.current.then(() => save(patch)).then(r => { if (r === false) failed.current = true }, () => { failed.current = true })
+      .finally(() => {
+        if (--pending.current === 0 && failed.current) { failed.current = false; latest.current = saved.current; setLocal(saved.current) }
+      })
+  }
+  const due = local.due
+  const repeat = local.repeat
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -112,7 +149,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
   }
   // WHEN IT COMES ROUND (Manal, 20 Oct 2026: "I can't see … when it's gonna pop up next"): its next dates, marked
   const coming = useMemo(() => new Set(upcomingDues(rule, due, 24)), [rule, due])
-  const setRule = (patch: Partial<TodoRepeat>) => rule && onChange({ repeat: normaliseRepeat({ ...rule, ...patch }) })
+  const setRule = (patch: Partial<TodoRepeat>) => { const cur = normaliseRepeat(latest.current.repeat); if (cur) onChange({ repeat: normaliseRepeat({ ...cur, ...patch }) }) }
 
   return (
     <div ref={box} className="relative flex items-center gap-1">
@@ -189,7 +226,7 @@ export default function DuePicker({ due, repeat, today, done, editable, onChange
                       <label key={i} className="flex flex-col items-center gap-0.5 text-[11px] font-semibold">
                         <input type="checkbox" checked={on} className="h-4 w-4 accent-foreground"
                           aria-label={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}
-                          onChange={() => setRule({ days: on ? (rule.days ?? []).filter(d => d !== i) : [...(rule.days ?? []), i] })} />
+                          onChange={() => { const now = normaliseRepeat(latest.current.repeat)?.days ?? []; setRule({ days: now.includes(i) ? now.filter(d => d !== i) : [...now, i] }) }} />
                         {l}
                       </label>
                     )
