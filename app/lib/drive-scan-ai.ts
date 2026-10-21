@@ -231,10 +231,35 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     ], new Map(top.map(t => [t.label, t.name])))
     const reasons = said.filter((x, i, arr) => x && arr.indexOf(x) === i).slice(0, 6)
     const words = `${KIND_WORDS[v.kind]}${best ? ` of ${best.name}` : ''}${best?.otherCard ? ` — on “${best.otherCard.title}”` : best?.asset.startsWith('seen:') ? ' (in Drive)' : ''}`
-    await finish(seenId, { kind: v.kind, asset: v.asset, other_card: best?.otherCard ?? null, confidence: v.confidence, ask, reasons, model, ai_error: aiError, words, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
+    await finish(seenId, { pool: pool.length, kind: v.kind, asset: v.asset, other_card: best?.otherCard ?? null, confidence: v.confidence, ask, reasons, model, ai_error: aiError, words, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: ai ? 'done' : 'skipped' } })
     return { ok: true, note: `${v.kind}${v.asset ? ` of ${v.asset}` : ''}` }
   } catch (e) {
     await finish(seenId, { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }, true).catch(() => undefined)
     return { ok: false, note: 'failed' }
   }
+}
+
+/**
+ * THE SCANS TO RUN AGAIN once a card's scans have all finished: a file scanned before its siblings in Drive were
+ * measured was judged against fewer videos than the rest. Each is set back to "new" (its length kept) and returned; a
+ * rescan checks against the full set, so the next pass finds nothing to redo.
+ */
+export async function staleScans(itemId: string): Promise<string[]> {
+  const rows = await table<DriveSeen>('drive_seen').list({ where: r => r.item_id === itemId, fresh: true })
+  if (rows.some(r => r.state === 'new' || r.state === 'scanning')) return []   // not the last one yet
+  const item = await table<ContentItem>('content_items').get(itemId)
+  if (!item) return []
+  const scanned = rows.filter(r => r.state === 'scanned' && typeof (r.scan as { pool?: unknown } | null)?.pool === 'number')
+  if (!scanned.length) return []
+  const full = (await comparablesOf(item, null)).length   // every file's set is this, less itself when it is a Drive file
+  const out: string[] = []
+  for (const r of scanned) {
+    const pool = (r.scan as { pool: number }).pool
+    if (pool >= full - 1) continue
+    const d = (r.scan as { duration_ms?: unknown }).duration_ms
+    const put = await table<DriveSeen>('drive_seen').claim(r.id, cur => cur?.state === 'scanned'
+      ? { ...cur, state: 'new', scan: typeof d === 'number' ? { duration_ms: d } : null, updated_at: new Date().toISOString() } as DriveSeen : null)
+    if (put.claimed) out.push(r.id)
+  }
+  return out
 }

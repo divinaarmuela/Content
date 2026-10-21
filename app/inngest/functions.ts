@@ -1066,7 +1066,12 @@ export const driveScanFile = inngest.createFunction(
     for (let i = 0; i < urls.length; i++) {
       await step.run(`measure-card-${i}`, async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).measureCardVideo(urls[i])))
     }
-    return step.run('decide', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).decideScan(id)))
+    const decided = await step.run('decide', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).decideScan(id)))
+    // the last scan on a card: any file scanned before its siblings were measured is scanned again, so every file on
+    // the card is judged against the same set (the owner, 21 Oct 2026: "why are the comparison inconsistent?")
+    const again = await step.run('again', async () => withRequestCache(async () => (await import('../lib/drive-scan-ai')).staleScans(itemId)))
+    if (again.length) await step.sendEvent('scan-again', again.map(seen_id => ({ name: 'drive/scan.file', data: { seen_id, item_id: itemId } })))
+    return { ...decided, again: again.length }
   },
 )
 

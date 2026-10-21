@@ -105,6 +105,8 @@ export function comparisonWords(c: Comparison): string[] {
   const out: string[] = []
   if (c.lengthGapMs !== null) out.push(c.lengthGapMs <= 100 ? 'same length' : `length differs by ${(c.lengthGapMs / 1000).toFixed(1)}s`)
   if (c.sound !== null) out.push(c.sound >= 0.8 ? 'same sound at the same moments' : c.sound >= 0.5 ? 'similar sound' : 'different sound')
-  if (c.colourShift !== null) out.push(c.colourShift >= 6 ? `colour changed${c.punchier ? ' (more contrast and saturation)' : ''}` : 'colour unchanged')
+  // colour only means something between two cuts of the same edit: different shots always differ in colour (the
+  // owner, 21 Oct 2026: "Book Concept … colour changed — what does it mean")
+  if (c.colourShift !== null && c.lengthGapMs !== null && c.lengthGapMs <= 150) out.push(c.colourShift >= 6 ? `colour changed${c.punchier ? ' (more contrast and saturation)' : ''}` : 'colour unchanged')
   return out
 }

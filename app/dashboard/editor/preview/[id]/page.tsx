@@ -158,11 +158,11 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
       )}
       {scan?.compared?.length ? (
         <details className="text-[12px]">
-          <summary className="cursor-pointer font-semibold text-muted-foreground">Compared with {scan.compared.length} {scan.compared.length === 1 ? 'video' : 'videos'} on the card</summary>
+          <summary className="cursor-pointer font-semibold text-muted-foreground">The {scan.compared.length} closest {scan.compared.length === 1 ? 'video' : 'videos'} it was checked against — not matches</summary>
           <ul className="mt-1 flex flex-col gap-0.5">
             {scan.compared.map(c => (
               <li key={c.asset} className="text-muted-foreground">
-                <b className="text-foreground">{c.name}</b> — sound {c.sound === null ? '—' : `${Math.round(c.sound * 100)}%`} · length {c.lengthGapMs === null ? '—' : c.lengthGapMs <= 150 ? 'same' : `${(c.lengthGapMs / 1000).toFixed(1)}s off`} · colour {c.colourShift === null ? '—' : c.colourShift >= 6 ? 'changed' : 'same'}
+                <b className="text-foreground">{c.name}</b> — sound {c.sound === null ? '—' : `${Math.round(c.sound * 100)}%`} · length {c.lengthGapMs === null ? '—' : c.lengthGapMs <= 150 ? 'same' : `${(c.lengthGapMs / 1000).toFixed(1)}s off`} {c.lengthGapMs !== null && c.lengthGapMs <= 150 && c.colourShift !== null ? ` · colour ${c.colourShift >= 6 ? 'changed' : 'same'}` : ''}
               </li>
             ))}
           </ul>
@@ -186,9 +186,10 @@ function Videos({ item, seen }: { item: ContentItem; seen: DriveSeen[] }) {
   const live = currentFiles(item).filter(f => !isRetiredAt(f, round))
   const approved = new Set(clipApprovalsOf(item).map(a => a.file_id))
   const fromDrive = useMemo(() => new Map(seen.map(s => [s.drive_file_id, s])), [seen])
-  // the folder a video came from: its Drive path where we have it (any of its cuts), else where it was uploaded
+  // the folder a video LIVES in: where its first cut came from (the owner, 21 Oct 2026: version 1 handed in as
+  // subfolders — every later version of a video goes in that video's folder, wherever its new file sits in Drive)
   const folderOfVideo = (assetId: string) => {
-    for (const v of [...assetHistory(item, assetId)].reverse()) {
+    for (const v of assetHistory(item, assetId)) {
       const s = v.drive_file_id ? fromDrive.get(v.drive_file_id) : null
       if (s) { const i = s.path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : s.path.slice(0, i) }
       const kept = (v as { drive_path?: string | null }).drive_path
