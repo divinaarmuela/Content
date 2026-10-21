@@ -198,7 +198,7 @@ export async function decideScan(seenId: string): Promise<{ ok: boolean; note: s
     const measured = await Promise.all(pool.map(async c => ({ c, probe: await probeVideo(c.url, c.key) })))   // cached
     const compared = measured.filter(m => m.probe.durationMs).map(m => ({ ...m.c, probe: m.probe, s: compareProbes(probe, m.probe) as Signals }))
       .sort((a, b) => signalScore(b.s) - signalScore(a.s))
-    await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: compared.length ? 'running' : 'skipped' }, { compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, where: c.where, ...c.s })) })
+    await setSteps(seenId, { sound: 'done', frames: 'done', colour: 'done', ai: compared.length ? 'running' : 'skipped' }, { checked: compared.length, compared: compared.slice(0, 5).map(c => ({ asset: c.asset, name: c.name, where: c.where, ...c.s })) })
     // nothing to compare with: the first cut of a new video, said plainly, with no AI call to describe it
     if (!compared.length) {
       await finish(seenId, { kind: 'new_video', asset: null, confidence: 0.9, ask: false, reasons: ['Nothing on this card, in its Drive links or on the client’s other cards to compare it with yet — the first cut of a video'], model: 'measures only', words: KIND_WORDS.new_video, steps: { measure: 'done', sound: 'done', frames: 'done', colour: 'done', ai: 'skipped' } })

@@ -247,7 +247,7 @@ function SeenRow({ r, item, quiet }: { r: DriveSeen; item: ContentItem; quiet?: 
       )}
       {scan?.compared?.length ? (
         <details className="text-[12px]">
-          <summary className="cursor-pointer font-semibold text-muted-foreground">The {scan.compared.length} closest {scan.compared.length === 1 ? 'video' : 'videos'} it was checked against — not matches</summary>
+          <summary className="cursor-pointer font-semibold text-muted-foreground">Checked against {(scan as { checked?: number }).checked ?? scan.compared.length} {((scan as { checked?: number }).checked ?? scan.compared.length) === 1 ? 'video' : 'videos'} — the closest {scan.compared.length} (not matches)</summary>
           <ul className="mt-1 flex flex-col gap-0.5">
             {scan.compared.map(c => (
               <li key={c.asset} className="text-muted-foreground">
