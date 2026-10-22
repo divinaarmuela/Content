@@ -58,7 +58,7 @@ import { readPostAutomation, type PostAutomation } from './comment-automation-co
 import { isTestClient } from './test-clients-core'
 import { readPostBatch, type PostBatch } from './post-batch-core'
 import {
-  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, onePortal, readClientReview, readReviewAsked,
+  ANSWER_LIVE, ANSWER_NOTE_NEEDED, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, isAgencyClient, onePortal, readClientReview, readReviewAsked,
   type ClientReview, type ClientVerdict, type IfNoAnswer, type ReviewAsked,
 } from './one-portal-core'
 
@@ -108,7 +108,7 @@ export const MISSED_TONE: StageTone = 'red'
  * post that will not go out never looks like one that will (audit S13).
  */
 export function postTone(post: PostState, now: NowLike): StageTone {
-  if (slotMissed(post, now) || (post.problem && post.stage !== 'cancelled')) return 'red'
+  if (slotMissed(post, now) || (post.problem && post.stage !== 'cancelled') || heldForClient(post)) return 'red'
   if (waitingForClient(post)) return WAITING_FOR_CLIENT.tone
   return STAGE_TONE[post.stage]
 }
@@ -124,8 +124,26 @@ export const WAITING_FOR_CLIENT = {
   meaning: 'Will not go out unless the client approves — it comes off 15 minutes before its time.',
   tone: 'amber' as StageTone,
 }
-export function waitingForClient(post: Pick<PostState, 'stage' | 'if_no_answer' | 'client_review'>): boolean {
+export function waitingForClient(post: Pick<PostState, 'stage' | 'if_no_answer' | 'client_review'> & { client_id?: string | null }): boolean {
   if (post.stage !== 'booked' || ifNoAnswerOf(post) !== 'wait') return false
+  // MD Media posting for itself waits on nobody (one-portal-core.isAgencyClient, 22 Oct 2026)
+  if (isAgencyClient(post.client_id)) return false
+  return readClientReview(post.client_review)?.verdict !== 'approved'
+}
+
+/**
+ * TAKEN OFF BECAUSE THE CLIENT DID NOT APPROVE (the owner, 22 Oct 2026, Justin's VIDEO 2: "by right justin's post
+ * should be in red in awaiting client approval"). A "wait" post the client never approved is back on Ready — the
+ * hold (holdDue) took it off — and it still waits on them: it stays in the client column, red, never "Approved".
+ */
+export const HELD_FOR_CLIENT = {
+  label: 'Taken off — client has not approved',
+  meaning: 'It came off because the client did not approve in time. When they approve it goes at the next free slot — or set a new time and Book in.',
+  tone: 'red' as StageTone,
+}
+export function heldForClient(post: Pick<PostState, 'stage' | 'if_no_answer' | 'client_review'> & { client_id?: string | null; sent_version?: number | null }): boolean {
+  if (post.stage !== 'ready' || ifNoAnswerOf(post) !== 'wait' || post.sent_version == null) return false
+  if (isAgencyClient(post.client_id)) return false
   return readClientReview(post.client_review)?.verdict !== 'approved'
 }
 
@@ -167,8 +185,9 @@ export function laneOf(post: Pick<PostState, 'stage'>): PostStage {
 
 /** The board lane a POST is drawn in: its stage's, except that a booked post waiting for the client's approval is
  *  in "Scheduled but awaiting client approval" on a board that has that lane (`waitingForClient`). */
-export function postLaneOf(lanes: readonly Lane[], post: Pick<PostState, 'stage'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review'>>): string | null {
-  if (lanes.some(l => l.key === 'awaiting_client') && waitingForClient({ if_no_answer: null, client_review: null, ...post })) return 'awaiting_client'
+export function postLaneOf(lanes: readonly Lane[], post: Pick<PostState, 'stage'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review' | 'client_id' | 'sent_version'>>): string | null {
+  const p = { if_no_answer: null, client_review: null, ...post }
+  if (lanes.some(l => l.key === 'awaiting_client') && (waitingForClient(p) || heldForClient(p))) return 'awaiting_client'
   return pageLaneOf(lanes, laneOf(post))
 }
 

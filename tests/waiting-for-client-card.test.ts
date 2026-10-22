@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { scheduleFacts } from '@/app/lib/schedule-stage-core'
 import { WAITING_FOR_CLIENT, postTone, readPostState, type AccountRef, type PostState } from '@/app/lib/post-stage-core'
+import { AGENCY_CLIENT_ID } from '@/app/lib/one-portal-core'
 
 // the owner, 20 Oct 2026: a "Wait for the client" post shows amber "Waiting for client" on the card, not Booked in
 const NOW = '2026-10-20T00:00:00.000Z'
@@ -45,7 +46,15 @@ describe('the Post approval column "Scheduled but awaiting client approval"', ()
     expect(lane(post({ if_no_answer: 'wait' }))).toBe('awaiting_client')
     expect(lane(post({ if_no_answer: 'wait', client_review: { version: 1, verdict: 'approved', note: null, by: 'the client', at: NOW } }))).toBe('approved')
     expect(lane(post({ if_no_answer: 'post' }))).toBe('approved')
-    expect(lane(post({ stage: 'ready', booking: null, if_no_answer: 'wait' }))).toBe('approved')
+    // TAKEN OFF because the client never approved: still theirs to answer, so it stays here, red (the owner, 22 Oct
+    // 2026: "by right justin's post should be in red in awaiting client approval")
+    const held = post({ stage: 'ready', booking: null, if_no_answer: 'wait' })
+    expect(lane(held)).toBe('awaiting_client')
+    expect(postTone(held, NOW)).toBe('red')
+    expect(scheduleFacts(held, ACCOUNTS, NOW).label).toBe('Taken off — client has not approved')
+    // MD Media posting for itself waits on nobody: booked or not, it is never in the client column
+    expect(lane(post({ if_no_answer: 'wait', client_id: AGENCY_CLIENT_ID }))).toBe('approved')
+    expect(lane(post({ stage: 'ready', booking: null, if_no_answer: 'wait', client_id: AGENCY_CLIENT_ID }))).toBe('approved')
     // nothing is dragged in: a post arrives by itself
     const d = dropOnPostLane(post(), 'awaiting_client', ['sa'], NOW)
     expect(d.ok).toBe(false)

@@ -20,7 +20,7 @@
  */
 
 import {
-  MISSED_LABEL, MISSED_TONE, STAGE_LABEL, STAGE_TONE, SCHEDULE_LANES, WAITING_FOR_CLIENT, waitingForClient,
+  MISSED_LABEL, MISSED_TONE, STAGE_LABEL, STAGE_TONE, SCHEDULE_LANES, WAITING_FOR_CLIENT, waitingForClient, HELD_FOR_CLIENT, heldForClient,
   failedNetworks, liveNetworks, lostChannels, postActions, postedWords, slotMissed, waitingOn,
   type AccountRef, type NowLike, type OfferedAction, type PostHat, type PostStage, type PostState, type StageTone,
 } from './post-stage-core'
@@ -144,6 +144,7 @@ export function scheduleFacts(post: PostState, accounts: readonly AccountRef[], 
   const label = missed ? MISSED_LABEL
     : post.stage === 'posted' ? postedWords(post)
       : holding ? WAITING_FOR_CLIENT.label
+        : heldForClient(post) ? HELD_FOR_CLIENT.label
         : STAGE_LABEL[post.stage]
 
   const tone: StageTone = missed || alerts.length > 0 ? MISSED_TONE

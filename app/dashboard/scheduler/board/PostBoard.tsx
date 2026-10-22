@@ -78,7 +78,7 @@ export function PostBoard({
     && offeredList(boardActions(bp.post, bp.hats, now, bp.ctx)).some(a => a.action === 'send_to_qc'))
 
   const grouped = useMemo(
-    () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, if_no_answer: bp.post.if_no_answer, client_review: bp.post.client_review, bp }))),
+    () => groupPosts(posts.map(bp => ({ id: bp.post.id, stage: bp.post.stage, stage_at: bp.post.stage_at, if_no_answer: bp.post.if_no_answer, client_review: bp.post.client_review, client_id: bp.post.client_id, sent_version: bp.post.sent_version, bp }))),
     [posts])
   const reachable = useMemo(() => new Set(
     dragging ? postMoveTargets(dragging.post, dragging.hats, now, dragging.ctx).map(m => m.lane) : []),

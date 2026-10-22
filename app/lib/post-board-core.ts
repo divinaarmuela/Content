@@ -28,7 +28,7 @@
 import {
   APPROVAL_STEPS_LABEL, MISSED_LABEL, POST_APPROVAL_LANES, POST_TRANSITIONS, ROW_OF, STAGE_LABEL, approveByOf,
   STAGE_WORDS, approvalLine, approvalStepsOf, changesAskedLine, checkPostTransition, clientSendLine, reminderWords,
-  STAGE_PAGE, WAITING_FOR_CLIENT, waitingForClient, laneOf, mayWorkOnPost, pageLaneOf, postLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
+  HELD_FOR_CLIENT, heldForClient, STAGE_PAGE, WAITING_FOR_CLIENT, waitingForClient, laneOf, mayWorkOnPost, pageLaneOf, postLaneOf, postActions, postTitle, postTone, postedWords, slotMissed, waitingOn,
   type Lane, type NowLike, type OfferedAction, type PostAction, type PostActionList, type PostHat,
   type PostStage, type PostState, type StageTone, type TransitionContext, type Waiting,
 } from './post-stage-core'
@@ -101,7 +101,7 @@ const STAGE_ORDER: Record<PostStage, number> = {
  * STAGE it holds — never a rewrite of the stage (audit B1, B11). Oldest wait
  * first in the approval lanes; in Approved, by stage, the newest first.
  */
-export function groupPosts<T extends Pick<PostState, 'id' | 'stage' | 'stage_at'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review'>>>(
+export function groupPosts<T extends Pick<PostState, 'id' | 'stage' | 'stage_at'> & Partial<Pick<PostState, 'if_no_answer' | 'client_review' | 'client_id' | 'sent_version'>>>(
   posts: readonly T[], lanes: readonly Lane[] = POST_APPROVAL_LANES,
 ): { lane: Lane; posts: T[] }[] {
   const buckets = new Map<string, T[]>(lanes.map(l => [l.key, []]))
@@ -480,11 +480,12 @@ export function postCardFace(
     clientId: post.client_id,
     stage: waitingForClient(post)
       ? { label: WAITING_FOR_CLIENT.label, tone: WAITING_FOR_CLIENT.tone }
+      : heldForClient(post) ? { label: HELD_FOR_CLIENT.label, tone: HELD_FOR_CLIENT.tone }
       : { label: STAGE_WORDS[post.stage].label, tone: STAGE_WORDS[post.stage].tone },
     tone: postTone(post, opts.now),
     networks: opts.platformOf ? faceNetworks(post, opts.platformOf) : [],
     // "Waiting for client" on the chip, so not "Booked in — it goes out at its time" under it (20 Oct 2026)
-    waiting: { ...wait, ...(waitingForClient(post) ? { line: WAITING_FOR_CLIENT.meaning } : {}), sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
+    waiting: { ...wait, ...(waitingForClient(post) ? { line: WAITING_FOR_CLIENT.meaning } : heldForClient(post) ? { line: HELD_FOR_CLIENT.meaning } : {}), sinceWords: sinceDay ? sinceWords(sinceDay, opts.today) : null },
     missed: slotMissed(post, opts.now) ? MISSED_LABEL : null,
     changes: asked && post.stage === 'draft' ? (ca?.note.trim() ? `${asked}: ${ca.note.trim()}` : asked) : null,
     sent: sentLine && post.stage === 'with_client' ? [sentLine, sentDay, reminded].filter(Boolean).join(' · ') : null,
