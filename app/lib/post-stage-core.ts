@@ -1455,6 +1455,9 @@ export function planPostTransition(
       effects.push({ when: 'before', kind: 'cancel_jobs', job_ids: jobs })
       patch.booking = null
       tellMakerAndHolder()
+      // …and the client's account manager, who chases the client (the owner, 22 Oct 2026: Justin's post came off and only
+      // its maker was told). One person on both lists gets one email: the dedupe key is per recipient.
+      notify('account_managers')
       break
     case 'set_if_no_answer':
       patch.if_no_answer = input.if_no_answer as IfNoAnswer

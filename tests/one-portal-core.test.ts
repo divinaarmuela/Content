@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ANSWER_LIVE, ANSWER_NOTE_NEEDED, ANSWER_NOT_OPEN, ANSWER_STALE, SLOT_MS,
-  changedSinceApproval, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, nextFreeSlot, onePortal,
+  AGENCY_CLIENT_ID, changedSinceApproval, clientAnswerProblem, holdDue, ifNoAnswerOf, insideLastSlot, nextFreeSlot, onePortal,
   onePortalPath, postOnPortal, readClientReview, readTab, reminderDue, reviewState, workTab,
 } from '../app/lib/one-portal-core'
 
@@ -105,6 +105,9 @@ describe('the sweep', () => {
     expect(holdDue({ ...wait, scheduled_for: '2026-10-02T03:20:00.000Z' }, NOW)).toBe(false)
     expect(holdDue({ ...wait, client_review: approved(3) }, NOW)).toBe(false)
     expect(holdDue({ ...wait, if_no_answer: 'post' }, NOW)).toBe(false)
+    // MD Media posting for itself is never held — nobody to wait for (22 Oct 2026)
+    expect(holdDue({ ...wait, client_id: AGENCY_CLIENT_ID }, NOW)).toBe(false)
+    expect(holdDue({ ...wait, client_id: 'someone-else' }, NOW)).toBe(true)
   })
 })
 

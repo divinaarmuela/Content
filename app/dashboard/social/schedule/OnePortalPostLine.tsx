@@ -7,7 +7,7 @@ import { postAct } from '@/app/lib/post-act-contract'
 import { NotifyClientButton } from '@/app/dashboard/board/NotifyClientDialog'
 import type { PostState } from '@/app/lib/post-stage-core'
 import {
-  IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, oldLinkTarget, onePortal, readClientReview, reviewState,
+  IF_NO_ANSWER_WORDS, REVIEW_WORDS, changedSinceApproval, ifNoAnswerOf, isAgencyClient, oldLinkTarget, onePortal, readClientReview, reviewState,
   type IfNoAnswer,
 } from '@/app/lib/one-portal-core'
 
@@ -36,7 +36,8 @@ export default function OnePortalPostLine({ post, editable, onMoved, onOwnChange
 }) {
   const { row: client } = useRow<{ id: string; portal_one?: boolean | null; share_token?: string | null }>('clients', post.client_id)
   const [busy, setBusy] = useState(false)
-  if (!onePortal(client)) return null
+  // MD Media posting for itself: nobody to wait for, it goes at its time (one-portal-core.isAgencyClient)
+  if (!onePortal(client) || isAgencyClient(post.client_id)) return null
   if (post.stage === 'posted' || post.stage === 'cancelled') return null
 
   const review = readClientReview(post.client_review)

@@ -113,6 +113,7 @@ describe('Wait for the client (R5, R7, R8)', () => {
     expect(plan.to).toBe('ready')
     expect(plan.patch.booking).toBeNull()
     expect(plan.patch.approval).toBeUndefined()
+    expect(plan.effects.filter(e => e.kind === 'notify').map(e => (e as { to: string }).to)).toContain('account_managers')
     expect(checkPostTransition(post({ if_no_answer: 'wait', scheduled_for: at(40) }), 'hold_for_client', { id: null, hats: ['system'] }, {}, ON))
       .toMatchObject({ ok: false, code: 'time' })
   })

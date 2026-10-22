@@ -19,6 +19,17 @@ export function onePortal(client: { portal_one?: unknown } | null | undefined): 
   return client?.portal_one === true
 }
 
+/**
+ * MD MEDIA'S OWN POSTS ARE NOT WAITING ON A CLIENT (the owner, 22 Oct 2026: "for posts that are md media there is no
+ * such thing as wait for client or post anyway", "by default it should be scheduled"). The agency is its own client
+ * here, so a booked MD Media post simply goes at its time — never taken off for want of an approval, and the card
+ * draws no "If the client hasn't approved" choice.
+ */
+export const AGENCY_CLIENT_ID = '4801dfab-1843-4e78-9638-3284c37a2418'
+export function isAgencyClient(clientId: unknown): boolean {
+  return clientId === AGENCY_CLIENT_ID
+}
+
 /* ── the client's word on a booked post ─────────────────────────────────── */
 
 export type IfNoAnswer = 'post' | 'wait'
@@ -159,10 +170,11 @@ export function reminderDue(
 
 /** A "wait" post with no approval, 15 minutes from its time: it comes off the schedule (R7). */
 export function holdDue(
-  post: { stage: string; scheduled_for: string | null; if_no_answer?: unknown; client_review?: unknown },
+  post: { stage: string; scheduled_for: string | null; if_no_answer?: unknown; client_review?: unknown; client_id?: unknown },
   nowMs: number,
 ): boolean {
   if (post.stage !== 'booked' || ifNoAnswerOf(post) !== 'wait') return false
+  if (isAgencyClient(post.client_id)) return false
   const r = readClientReview(post.client_review)
   if (r?.verdict === 'approved') return false
   const t = Date.parse(String(post.scheduled_for ?? ''))
