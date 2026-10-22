@@ -395,7 +395,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
           {shown.map(([f, list]) => (
             <div key={f}>
               {ordered.length > 1 && <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground"><FolderOpen className="h-3.5 w-3.5" aria-hidden />{f}</h3>}
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <ul className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                 {list.map(s => {
                   const { next, pending } = info(s)
                   const key = pickOf(s)
