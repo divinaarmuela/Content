@@ -1040,6 +1040,13 @@ export const driveScanWatch = inngest.createFunction(
     // every new file goes to the AI scan, one event each
     const ids = (r as { toScan?: string[] }).toScan ?? []
     if (ids.length) await step.sendEvent('scan', ids.map(id => ({ name: 'drive/scan.file', data: { seen_id: id, item_id: id.split('~')[0] } })))
+    // a few videos without a storyboard each minute (new ones, and the ones measured before storyboards existed)
+    const boards = await step.run('storyboards-due', async () => {
+      const { table } = await import('@/lib/db')
+      const rows = await table<{ id: string; source: string; duration_ms: number | null; storyboard?: unknown; frames?: unknown }>('video_frames').list()
+      return rows.filter(x => x.duration_ms && !x.storyboard && Array.isArray(x.frames) && x.frames.length >= 12).slice(0, 4).map(x => x.source)
+    })
+    if (boards.length) await step.sendEvent('storyboards', boards.map(key => ({ name: 'video/storyboard', data: { key } })))
     return r
   })),
 )
@@ -1049,6 +1056,19 @@ export const driveScanWatch = inngest.createFunction(
  * ranges, no download), compared with every video on its card, and judged by the AI. Writes only `drive_seen` and the
  * `video_frames` cache. Three at a time. A NEW function — re-sync after deploying it (trap 5b).
  */
+/**
+ * A VIDEO'S STORYBOARD (scan-measure.makeStoryboard): one small frame a second, made once, so the Editor card's
+ * timeline shows the picture under the cursor wherever it is. The minute check asks for the videos that have none.
+ */
+export const videoStoryboard = inngest.createFunction(
+  { id: 'video-storyboard', name: 'Editor: video storyboard', triggers: [{ event: 'video/storyboard' }], retries: 1, concurrency: { limit: 2 } },
+  async ({ event, step }) => {
+    const key = String((event.data as { key?: unknown })?.key ?? '')
+    if (!key) return { skipped: 'no key' }
+    return step.run('storyboard', async () => (await import('../lib/scan-measure')).makeStoryboard(key))
+  },
+)
+
 export const driveScanFile = inngest.createFunction(
   // three at a time, but one at a time per card: the first scan measures the card's videos, the rest reuse them
   { id: 'drive-scan-file', name: 'Editor preview: AI scan of a new Drive file', triggers: [{ event: 'drive/scan.file' }], retries: 1, concurrency: [{ limit: 3 }, { limit: 1, key: 'event.data.item_id' }] },
@@ -1102,6 +1122,7 @@ export const functions = [
   drivePullFolder,
   driveScanWatch,
   driveScanFile,
+  videoStoryboard,
   metaIgTokenRefresh,
 ]
 

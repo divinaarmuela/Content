@@ -57,8 +57,11 @@ export default function EditorCard() {
   // the twelve frames the scan kept of every video (scan-measure.ts), keyed by what it measured
   const framesTable = useTable<VideoFrame>('video_frames', { enabled: allowed })
   const framesOf = useMemo(() => {
-    const m = new Map<string, { url: string; at_s: number }[]>()
+    const m = new Map<string, { url: string; at_s: number }[]>() as FramesMap
+    m.boards = new Map()
     for (const r of framesTable.rows) {
+      const b = (r as { storyboard?: Board | null }).storyboard
+      if (b?.url) m.boards.set(r.source, b)
       const list = (Array.isArray(r.frames) ? r.frames as { url?: string | null; at_s?: number }[] : []).filter(f => f.url).map(f => ({ url: String(f.url), at_s: Number(f.at_s ?? 0) }))
       if (list.length > (m.get(r.source)?.length ?? 0)) m.set(r.source, list)
     }
@@ -167,7 +170,11 @@ function Stepper({ status }: { status: unknown }) {
 }
 
 /** the card's videos and the scanned Drive files, as the stacks' input */
-function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: Map<string, { url: string; at_s: number }[]> = new Map()): StackFile[] {
+type Board = { url: string; cols: number; rows: number; count: number; every_s: number }
+type FramesMap = Map<string, { url: string; at_s: number }[]> & { boards?: Map<string, Board> }
+const driveKey = (r: DriveSeen) => `drive:${r.drive_file_id}:${r.md5 ?? r.revision ?? `${r.size}@${r.modified}`}`
+
+function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: FramesMap = new Map()): StackFile[] {
   const round = roundOf(item)
   // EVERY VERSION HANDED IN IS ITS OWN TAB (the owner, 22 Oct 2026: "remember u click between versions of that video and
   // it opens up"): the first keeps the video's key (what the AI matches to), each later one follows the one before
@@ -180,6 +187,7 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: M
         key: i === 0 ? `a:${asset}` : `a:${asset}@${v.version}`, name: v.name, at: v.uploaded_at, source: 'card' as const,
         kind: i === 0 ? null : 'recut', matchKey: i === 0 ? null : (i === 1 ? `a:${asset}` : `a:${asset}@${history[i - 1].version}`),
         ask: false, busy: false, thumb: frames[0]?.url ?? null, frames, confidence: null, otherCard: null,
+        board: framesOf.boards?.get(`r2:${v.url}`) ?? null,
         file: { id: v.id, url: v.url, name: v.name, version: v.version },
       }
     })
@@ -194,6 +202,7 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: M
         key: `s:${r.id}`, name: r.path, at: r.created_time ?? r.modified ?? r.first_seen_at, source: 'drive', kind: scan?.kind ?? null, matchKey,
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
         frames: (scan?.frames ?? []).map((u, i) => ({ url: String(u ?? ''), at_s: i })).filter(x => x.url),
+        board: framesOf.boards?.get(driveKey(r)) ?? null,
         confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
         sameAs: scan?.same_as?.startsWith('seen:') ? `s:${scan.same_as.slice(5)}` : null,
       }
@@ -222,7 +231,7 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: Map<string, { url: string; at_s: number }[]> }) {
+function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string>; framesOf: FramesMap }) {
   const all = useMemo(() => stackVersions(stackFilesOf(item, rows, framesOf)), [item, rows, framesOf])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
@@ -328,7 +337,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                           : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
-                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} />
+                          <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} />
                           <span className="absolute left-1.5 top-1.5 flex gap-1">
                             {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
                             {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
@@ -362,21 +371,77 @@ function Elsewhere({ list }: { list: Stack[] }) {
   )
 }
 
-/** a tile's picture: the first frame, and as the cursor moves across, the frame at that point in the video — with a
- *  line showing where — all from the twelve small frames the scan kept, so it is instant */
-function HoverFrames({ frames, thumb }: { frames: { url: string; at_s: number }[]; thumb: string | null }) {
-  const [i, setI] = useState<number | null>(null)
-  const src = i !== null && frames[i] ? frames[i].url : thumb
-  if (!src) return <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+/** one frame of a storyboard, by its place in the tiled picture */
+function BoardFrame({ board, index, className = '' }: { board: Board; index: number; className?: string }) {
+  const i = Math.max(0, Math.min(board.count - 1, index))
+  const x = board.cols > 1 ? ((i % board.cols) / (board.cols - 1)) * 100 : 0
+  const y = board.rows > 1 ? (Math.floor(i / board.cols) / (board.rows - 1)) * 100 : 0
+  return <span className={`block bg-black bg-no-repeat ${className}`} style={{ backgroundImage: `url(${board.url})`, backgroundSize: `${board.cols * 100}% ${board.rows * 100}%`, backgroundPosition: `${x}% ${y}%` }} />
+}
+
+/**
+ * A TILE'S PICTURE — and, as the cursor moves across it, the picture at THAT point of the video with a line where the
+ * cursor is (the owner, 22 Oct 2026: "where is the long vertical line", "it should be wherever we drag it not fixed
+ * points"). From the storyboard (a frame a second) once it is made; until then, the nearest of the twelve frames.
+ */
+function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: number }[]; thumb: string | null; board: Board | null }) {
+  const [at, setAt] = useState<number | null>(null)   // 0–1 across the tile
+  if (!thumb && !board) return <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+  const fallback = at !== null && frames.length ? frames[Math.min(frames.length - 1, Math.floor(at * frames.length))].url : thumb
   return (
     <span className="absolute inset-0 block"
-      onMouseMove={e => { if (!frames.length) return; const r = e.currentTarget.getBoundingClientRect(); setI(Math.min(frames.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * frames.length)))) }}
-      onMouseLeave={() => setI(null)}>
-      <img src={src} alt="" className="h-full w-full object-cover" />
-      {/* every frame loaded up front, so moving is instant */}
-      {frames.map(f => <link key={f.url} rel="preload" as="image" href={f.url} />)}
-      {i !== null && frames.length > 1 && <span className="absolute bottom-0 left-0 h-1 bg-foreground" style={{ width: `${((i + 1) / frames.length) * 100}%` }} />}
+      onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); setAt(Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width))) }}
+      onMouseLeave={() => setAt(null)}>
+      {board && at !== null
+        ? <BoardFrame board={board} index={Math.floor(at * board.count)} className="h-full w-full" />
+        : fallback ? <img src={fallback} alt="" className="h-full w-full object-cover" /> : <BoardFrame board={board!} index={0} className="h-full w-full" />}
+      {board && <link rel="preload" as="image" href={board.url} />}
+      {at !== null && <span className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" style={{ left: `${at * 100}%` }} />}
     </span>
+  )
+}
+
+/**
+ * THE TIMELINE under the player: move along it and a line follows the cursor with the picture and the time at that
+ * moment; press or drag and the video goes there. The pictures come from the storyboard, so nothing streams while you
+ * look; only letting go asks the video to seek.
+ */
+function Timeline({ board, durationS, videoRef }: { board: Board | null; durationS: number | null; videoRef: React.RefObject<HTMLVideoElement | null> }) {
+  const [at, setAt] = useState<number | null>(null)
+  const [head, setHead] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const on = () => setHead(v.duration ? v.currentTime / v.duration : 0)
+    v.addEventListener('timeupdate', on)
+    return () => v.removeEventListener('timeupdate', on)
+  }, [videoRef])
+  const total = durationS ?? (board ? board.count * board.every_s : null)
+  if (!total) return null
+  const frac = (e: React.PointerEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) }
+  const seek = (f: number) => { const v = videoRef.current; if (v && v.duration) { v.currentTime = f * v.duration; setHead(f) } }
+  const time = (f: number) => { const t = Math.round(f * total); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
+  return (
+    <div className="relative select-none pt-1"
+      onPointerMove={e => { const f = frac(e); setAt(f); if (dragging) seek(f) }}
+      onPointerLeave={() => { if (!dragging) setAt(null) }}
+      onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); seek(frac(e)) }}
+      onPointerUp={e => { setDragging(false); seek(frac(e)) }}>
+      {/* the picture at the cursor, above the line */}
+      {at !== null && board && (
+        <span className="pointer-events-none absolute bottom-full z-10 mb-2 flex -translate-x-1/2 flex-col items-center gap-1" style={{ left: `${at * 100}%` }}>
+          <BoardFrame board={board} index={Math.floor((at * total) / board.every_s)} className="h-28 w-16 rounded border border-border" />
+          <span className="rounded bg-foreground px-1.5 text-[11px] font-semibold text-background">{time(at)}</span>
+        </span>
+      )}
+      <div className="relative h-8 cursor-pointer overflow-hidden rounded bg-muted">
+        {board && <span className="absolute inset-0 opacity-60" style={{ backgroundImage: `url(${board.url})`, backgroundSize: `${board.cols * 100}% ${board.rows * 100}%`, backgroundRepeat: 'no-repeat' }} />}
+        <span className="absolute inset-y-0 left-0 bg-foreground/25" style={{ width: `${head * 100}%` }} />
+        {at !== null && <span className="pointer-events-none absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `${at * 100}%` }} />}
+      </div>
+      {!board && <p className="mt-1 text-[11px] text-muted-foreground">The pictures along the timeline are being made — they show in a few minutes.</p>}
+    </div>
   )
 }
 
@@ -420,19 +485,9 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay" className="aspect-[9/16] w-full border-0" />
             : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
       </div>
-      {/* TWELVE FRAMES, INSTANT (the owner, 22 Oct 2026: "when i hover it should be instant to show parts of the
-          video"): the whole run of shots without streaming the 4K original; a press jumps the video there */}
-      {(entry.frames?.length ?? 0) > 0 && (
-        <div className="grid grid-cols-6 gap-1">
-          {entry.frames!.map((f, i) => (
-            <button key={i} type="button" title={cardFile ? `Jump to ${Math.round(f.at_s)}s` : undefined}
-              onClick={() => { const v = videoRef.current; if (v && cardFile) { v.currentTime = f.at_s; void v.play().catch(() => undefined) } }}
-              className="overflow-hidden rounded bg-black hover:ring-2 hover:ring-foreground">
-              <img src={f.url} alt="" className="aspect-[9/16] w-full object-cover" />
-            </button>
-          ))}
-        </div>
-      )}
+      {/* THE TIMELINE (the owner, 22 Oct 2026: "it should be wherever we drag it not fixed points") — a card video
+          seeks; a Drive one shows its pictures */}
+      <Timeline board={entry.board ?? null} durationS={(row?.scan as { duration_ms?: number } | null)?.duration_ms ? ((row!.scan as { duration_ms: number }).duration_ms / 1000) : null} videoRef={videoRef} />
       </div>
       <div className="flex min-w-0 flex-col gap-3">
         <div>

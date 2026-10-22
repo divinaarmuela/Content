@@ -24,6 +24,8 @@ export type StackFile = {
   thumb: string | null
   /** the twelve frames the scan kept, evenly through the video — hover them for an instant look */
   frames?: { url: string; at_s: number }[]
+  /** one small frame a second, tiled (scan-measure.makeStoryboard) — the timeline's pictures */
+  board?: { url: string; cols: number; rows: number; count: number; every_s: number } | null
   /** a version on the card: its own file, to play and compare */
   file?: { id: string; url: string; name: string; version: number } | null
   confidence: number | null
