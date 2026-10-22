@@ -361,7 +361,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
       <section className="rounded-card border border-border bg-surface p-5">
         <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos</h2>
         <p className="mt-2 text-[14px] text-muted-foreground">No videos yet — they show here as soon as the editor puts them in the card’s Drive link.</p>
-        {elsewhere.length > 0 && <Elsewhere list={elsewhere} />}
+        {/* another card's videos are not listed here at all (the owner, 23 Oct 2026: "open the card whats that") */}
       </section>
     )
   }
@@ -429,7 +429,9 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                         </span>
                         <span className="flex flex-col gap-1 p-2">
                           <span className="truncate text-[13px] font-semibold">{s.title}</span>
-                          <span className={`self-start rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONES[next.tone]}`}>{next.words}</span>
+                          {/* a tag only when the video differs from the card — not the same stage line on every video (the owner,
+                              23 Oct 2026: "the tags are still there") */}
+                          {!/^On the card — /.test(next.words) && <span className={`self-start rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONES[next.tone]}`}>{next.words}</span>}
                         </span>
                       </button>
                       {/* REPLACE BY THE PICTURE (the owner, 22 Oct 2026: "why cant it be easier to select video that needs to be
@@ -453,7 +455,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
             </div>
           ))}
         </div>
-        {elsewhere.length > 0 && <Elsewhere list={elsewhere} />}
+        {/* another card's videos are not listed here at all (the owner, 23 Oct 2026: "open the card whats that") */}
         {/* the new cut goes to the card's uploader (EditorCardDrawer listens): into the card's Drive folder, as this video's next version */}
         <input ref={replaceInput} type="file" accept="video/*,image/*,application/pdf" className="hidden" aria-label="The new version of this video"
           onChange={e => {

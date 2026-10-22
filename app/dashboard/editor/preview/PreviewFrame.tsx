@@ -59,7 +59,7 @@ export default function PreviewFrame({ title, summary, children, tabs = true, cl
       <PageTitle
         title={title ?? 'Editor'}
         summary={summary ?? (
-          <>Drive links are the inbox; the app keeps the versions. <span className="inline-flex items-center gap-1 font-semibold text-accent-blue-deep"><Sparkles className="h-3.5 w-3.5" aria-hidden />AI</span> checks every new or changed file against the card’s videos, and a person confirms.</>
+          <>Every video on the card, kept in the card’s own Google Drive folder.</>
         )}
         actions={<>
           {!classicHref && <Badge variant="outline" className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Preview</Badge>}
