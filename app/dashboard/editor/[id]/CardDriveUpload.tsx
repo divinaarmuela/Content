@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { Check, Copy, ExternalLink, FolderOpen, FolderPlus, Pencil, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,12 @@ import { PARALLEL_FILES, PROXY_CHUNK, versionFolderName } from '../../../lib/car
  * into Clients / {Client} / {Card} / V{n} in Google Drive, three at a time, in resumable pieces; when they are in,
  * the card copies them on as its version. A file stopped half way is carried on by picking it again — today or
  * tomorrow. The folder's link sits here for anyone to open or copy, and folders can be added and renamed inside it.
+ *
+ * At ANY stage, approved too (the owner, 22 Oct 2026: "we can enter files at any given time"). A file on the card is
+ * replaced through `replace()` — the card's Replace button: the new file goes into Drive the same way and lands as that
+ * piece's next version ("to replace a version we pick the file and put the new version with it").
  */
+export type CardUploadHandle = { replace: (assetId: string, assetName: string, file: File) => void }
 
 type Node = { id: string; name: string; fixed: boolean; children: Node[] }
 type State = {
@@ -21,12 +26,11 @@ type State = {
   folder?: { id: string; url: string } | null
   version?: number
   version_folder?: string | null
-  locked?: boolean
   tree?: Node[]
-  unfinished?: { id: string; name: string; size: number | null; received: number; parent: string; version: number | null }[]
+  unfinished?: { id: string; name: string; size: number | null; received: number; parent: string; version: number | null; replaces: string | null }[]
   waiting?: number
 }
-type Job = { key: string; file: File; sent: number; status: 'waiting' | 'sending' | 'done' | 'failed'; error?: string; upload?: string }
+type Job = { key: string; file: File; sent: number; status: 'waiting' | 'sending' | 'done' | 'failed'; error?: string; upload?: string; replaces?: { id: string; name: string } }
 
 const api = (id: string) => `/api/production/items/${id}/drive-upload`
 
@@ -57,7 +61,12 @@ function putDirect(uri: string, blob: Blob, start: number, total: number, onByte
   })
 }
 
-export default function CardDriveUpload({ itemId }: { itemId: string }) {
+export default function CardDriveUpload({ itemId, onAllowed, ref }: {
+  itemId: string
+  /** told once the server has said whether this client's cards upload into Drive — the card hides its older buttons */
+  onAllowed?: (allowed: boolean) => void
+  ref?: Ref<CardUploadHandle>
+}) {
   const [state, setState] = useState<State | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
   const [target, setTarget] = useState<string | null>(null)
@@ -68,8 +77,8 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
 
   const load = useCallback(async () => {
     const r = await fetch(api(itemId)).then(x => x.json()).catch(() => null)
-    if (r) setState(r as State)
-  }, [itemId])
+    if (r) { setState(r as State); onAllowed?.((r as State).allowed === true) }
+  }, [itemId, onAllowed])
   useEffect(() => { void load() }, [load])
 
   const busy = jobs.some(j => j.status === 'sending' || j.status === 'waiting')
@@ -87,7 +96,7 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
     patch(job.key, { status: 'sending' })
     try {
       const s = await postJson<{ upload: string; uri: string; received: number; done: boolean; chunk: number }>(api(itemId), {
-        action: 'start', name: job.file.name, size: job.file.size, mime: job.file.type, ...(parent ? { parent } : {}),
+        action: 'start', name: job.file.name, size: job.file.size, mime: job.file.type, ...(parent ? { parent } : {}), ...(job.replaces ? { replaces: job.replaces.id } : {}),
       })
       let at = s.received
       patch(job.key, { upload: s.upload, sent: at })
@@ -110,7 +119,7 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
           // a dropped piece: ask Google where it got to, and carry on from there
           if (++fails > 6) throw e
           await new Promise(r => setTimeout(r, Math.min(30_000, 1000 * 2 ** fails)))
-          const again = await postJson<{ received: number; done: boolean }>(api(itemId), { action: 'start', name: job.file.name, size: job.file.size, mime: job.file.type, ...(parent ? { parent } : {}) })
+          const again = await postJson<{ received: number; done: boolean }>(api(itemId), { action: 'start', name: job.file.name, size: job.file.size, mime: job.file.type, ...(parent ? { parent } : {}), ...(job.replaces ? { replaces: job.replaces.id } : {}) })
           if (again.done) break
           at = again.received
           continue
@@ -147,10 +156,10 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
     }
   }
 
-  const start = async (files: File[]) => {
-    if (files.length === 0 || state?.locked) return
+  const start = async (files: File[], replaces?: { id: string; name: string }) => {
+    if (files.length === 0) return
     const parent = target
-    const added: Job[] = files.map(f => ({ key: `${f.name}:${f.size}:${f.lastModified}:${Math.random()}`, file: f, sent: 0, status: 'waiting' }))
+    const added: Job[] = files.map(f => ({ key: `${f.name}:${f.size}:${f.lastModified}:${Math.random()}`, file: f, sent: 0, status: 'waiting', ...(replaces ? { replaces } : {}) }))
     setJobs(js => [...js.filter(j => j.status !== 'done'), ...added])
     const queue = [...added]
     const done: string[] = []
@@ -163,6 +172,8 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
     if (input.current) input.current.value = ''
     if (done.length > 0) await finish(done)
   }
+
+  useImperativeHandle(ref, () => ({ replace: (id, name, file) => { void start([file], { id, name }) } }))
 
   const saveName = async () => {
     if (!naming || !naming.name.trim()) return
@@ -207,10 +218,7 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
         Anyone with the link can view. You can also drop files into it from Google Drive on your computer.
       </p>
 
-      {state.locked ? (
-        <p className="mt-4 rounded-inner bg-muted px-3 py-2 text-[13px]">This card is approved. Send it back for changes before uploading a new version.</p>
-      ) : (
-        <>
+      <>
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
             <span className="font-semibold">Upload into</span>
             <select value={target ?? ''} onChange={e => setTarget(e.target.value || null)} className="rounded-inner border border-border bg-background px-2 py-1.5">
@@ -226,17 +234,16 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
             <p className="text-[13px]">Drop videos here, or</p>
             <Button size="sm" onClick={() => input.current?.click()} className="h-9 rounded-full px-4 text-[13px] font-semibold">Choose files</Button>
             <input ref={input} type="file" multiple className="hidden" onChange={e => void start([...(e.target.files ?? [])])} />
-            <p className="text-[12px] text-muted-foreground">Goes into {vName} in Drive and onto the card. Keep this page open until it says done.</p>
+            <p className="text-[12px] text-muted-foreground">New files go into {vName} in Drive and onto the card. To swap one in, press Replace on that file below. Keep this page open until it says done.</p>
           </div>
-        </>
-      )}
+      </>
 
       {jobs.length > 0 && (
         <ul className="mt-4 flex flex-col gap-2">
           {jobs.map(j => (
             <li key={j.key} className="rounded-inner border border-border px-3 py-2 text-[13px]">
               <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-medium">{j.file.name}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{j.file.name}{j.replaces && <span className="font-normal text-muted-foreground"> — new version of {j.replaces.name}</span>}</span>
                 <span className="shrink-0 text-muted-foreground">
                   {j.status === 'done' ? <span className="inline-flex items-center gap-1 text-accent-green"><Check className="h-3.5 w-3.5" aria-hidden />In Drive</span>
                     : j.status === 'failed' ? <span className="text-destructive">Stopped — pick it again to carry on</span>
@@ -260,7 +267,7 @@ export default function CardDriveUpload({ itemId }: { itemId: string }) {
           <p className="font-semibold">Not finished yet — pick these files again and they carry on where they stopped</p>
           <ul className="mt-1">
             {(state.unfinished ?? []).filter(u => !jobs.some(j => j.upload === u.id)).map(u => (
-              <li key={u.id}>{u.name} — {formatBytes(u.received)} of {u.size ? formatBytes(u.size) : '?'} sent</li>
+              <li key={u.id}>{u.name} — {formatBytes(u.received)} of {u.size ? formatBytes(u.size) : '?'} sent{u.replaces ? ' (a replacement — press Replace on that file and pick it again)' : ''}</li>
             ))}
           </ul>
         </div>

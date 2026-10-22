@@ -7,7 +7,7 @@ import { entryDetail, grantUserPermission, isInside, openUploadSession, pushUplo
 import { isDriveId } from './files-core'
 import { handInRound } from './edit-round-core'
 import { startDriveHandIn } from './drive-handin'
-import { LOCKED_STATUSES } from './final-files-core'
+import { assetIdOf, currentFiles } from './final-files-core'
 import {
   DIRECT_CHUNK, cardFilingAllowed, folderNameOf, isVersionFolderName, resumableMatch, sharingUrl, uniqueName, versionFolderName,
 } from './card-upload-core'
@@ -161,12 +161,15 @@ async function insideVersion(folderId: string, versionId: string): Promise<boole
  * (card-upload-core.resumableMatch) — a half-sent file is finished tomorrow, not sent twice. The session URI goes to
  * the browser so it can send the pieces to Google itself: it writes this one file and nothing else.
  */
-export async function startCardUpload(user: TeamUser, item: ContentItem, body: { name?: unknown; size?: unknown; mime?: unknown; parent?: unknown }, origin: string | null): Promise<
+export async function startCardUpload(user: TeamUser, item: ContentItem, body: { name?: unknown; size?: unknown; mime?: unknown; parent?: unknown; replaces?: unknown }, origin: string | null): Promise<
   { ok: true; upload: string; uri: string; received: number; done: boolean; chunk: number; version: number } | Fail
 > {
   if (!cardFilingAllowed(item.client_id)) return OFF
-  if (LOCKED_STATUSES.includes(String(item.status ?? ''))) {
-    return { ok: false, status: 409, error: 'This card is approved — send it back for changes before uploading a new version' }
+  // ANY STAGE, approved too (the owner, 22 Oct 2026: "we can enter files at any given time")
+  // REPLACE: the piece on the card this file is the new version of ("we pick the file and put the new version with it")
+  const replaces = body.replaces == null || body.replaces === '' ? null : String(body.replaces)
+  if (replaces && !currentFiles(item as never).some(f => assetIdOf(f) === replaces)) {
+    return { ok: false, status: 400, error: 'That file is not on the card any more — refresh and pick it again' }
   }
   const name = folderNameOf(body.name, '')
   const size = Number(body.size)
@@ -182,7 +185,7 @@ export async function startCardUpload(user: TeamUser, item: ContentItem, body: {
   const by = user.email ?? user.id
   const uploads = table<DriveUpload>('drive_uploads')
   const now = Date.now()
-  const open = (await uploads.list({ where: r => resumableMatch(r as never, { itemId: item.id, parentId: parent, name, size, by }, now) }))
+  const open = (await uploads.list({ where: r => resumableMatch(r as never, { itemId: item.id, parentId: parent, name, size, by, replaces }, now) }))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
   if (open) {
     // where Google is: an empty piece asks without sending anything
@@ -204,7 +207,7 @@ export async function startCardUpload(user: TeamUser, item: ContentItem, body: {
   const row = await uploads.insert({
     upload_uri: session.uri, name, parent_id: parent, mime_type: mime ?? null, size, received: 0, client_id: item.client_id,
     status: 'open', drive_file_id: null, created_by: by, created_at: stamp, updated_at: stamp,
-    purpose: 'card', item_id: item.id, version: folders.version, copied_at: null, final_file_id: null, error: null,
+    purpose: 'card', item_id: item.id, version: folders.version, copied_at: null, final_file_id: null, error: null, replaces,
   } as unknown as Omit<DriveUpload, 'id'>)
   return { ok: true, upload: row.id, uri: session.uri, received: 0, done: false, chunk: DIRECT_CHUNK, version: folders.version }
 }
@@ -257,7 +260,9 @@ export async function finishCardUploads(user: TeamUser, item: ContentItem, ids: 
     const inside = await Promise.all(rows.map(async r => ((await isInside(r.drive_file_id!, folderId)) === 'inside' ? r : null)))
     const ok = inside.filter((r): r is DriveUpload => !!r)
     if (ok.length === 0) continue
-    const started = await startDriveHandIn(user, fresh, { url: sharingUrl(vId), ids: ok.map(r => r.drive_file_id) }, { anyStage: true })
+    // each file says what it is: the new version of the piece picked with Replace, or a new piece
+    const map = Object.fromEntries(ok.map(r => [r.drive_file_id!, String(r.replaces ?? '') || 'new']))
+    const started = await startDriveHandIn(user, fresh, { url: sharingUrl(vId), ids: ok.map(r => r.drive_file_id), map }, { anyTime: true })
     if (!started.ok) {
       if (started.status === 409 && /still copying/i.test(started.error)) return { ok: true, handedIn, waiting: true }
       return { ok: false, status: started.status, error: started.error }
@@ -323,9 +328,8 @@ export async function cardUploadState(user: TeamUser, item: ContentItem) {
     folder: folderId ? { id: folderId, url: String(item.upload_folder_url ?? sharingUrl(folderId)) } : null,
     version: round,
     version_folder: versionFoldersOf(item)[versionKey(round)] ?? null,
-    locked: LOCKED_STATUSES.includes(String(item.status ?? '')),
     tree: folderId ? await cardFolderTree(item) : [],
-    unfinished: mine.map((r, i) => ({ id: r.id, name: r.name, size: r.size, received: had[i], parent: r.parent_id, version: r.version })),
+    unfinished: mine.map((r, i) => ({ id: r.id, name: r.name, size: r.size, received: had[i], parent: r.parent_id, version: r.version, replaces: r.replaces ?? null })),
     waiting: rows.filter(r => r.status === 'done' && !r.copied_at).length,
   }
 }

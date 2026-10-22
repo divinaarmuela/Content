@@ -21,7 +21,6 @@ import { formatBytes } from '../../../lib/drive-pull-core'
 import { stackVersions, type Stack, type StackFile } from '../../../lib/version-stack-core'
 import { editingPortalPath, portalHasWork } from '../../../lib/editing-portal-core'
 import { onePortalPath, workTab } from '../../../lib/one-portal-core'
-import { isTestClient } from '../../../lib/test-clients-core'
 import { ColourGradePanel } from '../../board/ColourGradePanel'
 import { HolderTransfer, ManagerActions } from '../../board/CardAnswers'
 import FilesToWorkFrom from '../../board/FilesToWorkFrom'
@@ -31,7 +30,6 @@ import { cardUsesPlan, workFrom } from '../../../lib/editor-sop-core'
 import { reviewPath } from '../../../lib/video-review-core'
 import EditorCardClassicPage from './classic/page'
 import EditorCardDrawer from '../../board/EditorCardDrawer'
-import CardDriveUpload from './CardDriveUpload'
 import PreviewFrame, { AiScanning, ScanSteps, usePreviewAccess } from '../preview/PreviewFrame'
 
 /**
@@ -140,7 +138,6 @@ export default function EditorCard() {
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
           {/* UPLOAD STRAIGHT INTO THE CARD'S DRIVE FOLDER (preview: test clients only — card-upload-core.ts) */}
-          {isTestClient(item.client_id) && <CardDriveUpload itemId={item.id} />}
           <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf} holder={holder ? (holder.name || holder.email) : null}
             gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />

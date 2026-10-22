@@ -76,3 +76,66 @@ describe('the guard is in the source', () => {
     }
   })
 })
+
+// the owner, 22 Oct 2026: "we can enter files at any given time"; "to replace a version we pick the file and put the
+// new version with it"; "make sure we have timeline of when the files added"
+describe('any time, and Replace', () => {
+  const now = '2026-10-22T10:00:00.000Z'
+  const up = (id: string, name: string, version: number, extra: Record<string, unknown> = {}) =>
+    ({ id, name, url: `https://r2/${id}`, mime: 'video/mp4', size: 10, version, uploaded_at: '2026-10-20T00:00:00.000Z', by: 'u', ...extra })
+  const copy = (id: string, name: string) =>
+    ({ id, name, status: 'done', url: `https://r2/copy-${id}`, mime: 'video/mp4', size: 20, version: 1 })
+
+  it('a file picked with Replace is that piece’s new version, even on an approved card', async () => {
+    const { mergeDriveHandIn } = await import('@/app/lib/drive-handin-core')
+    const list = [up('a1', 'Reel A.mp4', 1), up('b1', 'Reel B.mp4', 1)]
+    const card = { status: 'approved_for_scheduling', final_files: list }
+    const r = mergeDriveHandIn(list as never, [copy('d1', 'Reel A final.mp4')] as never,
+      { drive_ids: ['d1'], map: { d1: 'a1' }, round: 1, by: 'u', manager: true, any_time: true }, card, 1, now)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    const fresh = r.files.find(f => f.name === 'Reel A final.mp4')!
+    expect(fresh.asset_id).toBe('a1')
+    expect(fresh.replaces).toBe('a1')
+    expect(fresh.uploaded_at).toBe(now)
+    // the earlier cut stays — the file's timeline
+    expect(r.files.some(f => f.id === 'a1')).toBe(true)
+  })
+
+  it('without any_time the old rule stands: a piece not asked to change is left alone', async () => {
+    const { mergeDriveHandIn } = await import('@/app/lib/drive-handin-core')
+    const list = [up('a1', 'Reel A.mp4', 1)]
+    const r = mergeDriveHandIn(list as never, [copy('d1', 'Reel A final.mp4')] as never,
+      { drive_ids: ['d1'], map: { d1: 'a1' }, round: 2, by: 'u' }, { status: 'in_progress', final_files: list }, 2, now)
+    expect(r.ok && r.added.length).toBe(0)
+  })
+
+  it('the approved-card refusal is lifted for these uploads only; an earlier version is still never rewritten', async () => {
+    const { finalFilesChangeRefusal } = await import('@/app/lib/final-files-core')
+    const before = [up('a1', 'A.mp4', 1)] as never[]
+    const after = [...before, up('a2', 'A2.mp4', 1, { asset_id: 'a1', replaces: 'a1' })] as never[]
+    const card = { status: 'approved_for_scheduling', edit_round: 1 }
+    expect(finalFilesChangeRefusal(before, after, card, false)).toMatch(/approved/)
+    expect(finalFilesChangeRefusal(before, after, card, false, true)).toBeNull()
+    expect(finalFilesChangeRefusal(before, [], { status: 'in_progress', edit_round: 2 }, true, true)).toMatch(/earlier version/)
+  })
+
+  it('a half-sent replacement carries on only for the same piece', () => {
+    const row = { purpose: 'card', status: 'open', item_id: 'i', parent_id: 'p', name: 'A.mp4', size: 5, created_by: 'e', created_at: now, replaces: 'a1' }
+    const want = { itemId: 'i', parentId: 'p', name: 'A.mp4', size: 5, by: 'e' }
+    expect(resumableMatch(row, { ...want, replaces: 'a1' }, Date.parse(now))).toBe(true)
+    expect(resumableMatch(row, { ...want, replaces: null }, Date.parse(now))).toBe(false)
+    expect(resumableMatch(row, { ...want, replaces: 'b1' }, Date.parse(now))).toBe(false)
+  })
+
+  it('the card shows the uploader in Your work, with Replace and the timeline; the Drive scan is off unless asked for', () => {
+    const drawer = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
+    expect(drawer).toContain('<CardDriveUpload ref={cardUpload}')
+    expect(drawer).toContain('cardUpload.current.replace(')
+    expect(drawer).toContain('aria-label={`When ${f.name} was added`}')
+    const server = readFileSync('app/lib/card-upload.ts', 'utf8')
+    expect(server).not.toContain('LOCKED_STATUSES')
+    expect(server).toContain('{ anyTime: true }')
+    expect(readFileSync('app/inngest/functions.ts', 'utf8')).toContain("process.env.DRIVE_SCAN !== '1'")
+  })
+})

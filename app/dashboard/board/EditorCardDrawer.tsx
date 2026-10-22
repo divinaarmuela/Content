@@ -2,6 +2,7 @@
 
 import { driveHandInsOf, submitWaitsWords, lastCutPerVersion, pendingHandIn } from '../../lib/drive-handin-core'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import CardDriveUpload, { type CardUploadHandle } from '../editor/[id]/CardDriveUpload'
 import { toast } from 'sonner'
 import { AlertTriangle, Check, ExternalLink, FolderDown, Pencil, Upload, X } from 'lucide-react'
 import { DriveHandInDialog, DriveHandInStatus } from './DriveHandIn'
@@ -250,6 +251,10 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const designCard = ((item as { work_kinds?: { slug?: string } | null } | null)?.work_kinds?.slug ?? (kind as { slug?: string } | null)?.slug ?? '') === 'graphics'
   const uploadInput = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
+  // THE CARD'S OWN DRIVE FOLDER (card-upload-core.ts): on a client whose cards upload into Drive, the uploader below
+  // takes the place of the Drive-link hand-in and the plain upload, and every file can be replaced at any stage
+  const cardUpload = useRef<CardUploadHandle | null>(null)
+  const [driveFiling, setDriveFiling] = useState(false)
   const addFinalFiles = async (picked: File[]) => {
     if (!item || picked.length === 0) return
     setUploading(`Uploading ${picked.length} ${picked.length === 1 ? 'file' : 'files'}`)
@@ -668,7 +673,8 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <div className="flex flex-col gap-2" data-final-files>
             {/* the client asked for changes: an account manager decides first — a hand-in now would not count
                 (30 Sep 2026, the walk) */}
-            {mayFile && !frozen && item?.status !== 'client_changes_requested' && (
+            {item && <CardDriveUpload ref={cardUpload} itemId={item.id} onAllowed={setDriveFiling} />}
+            {!driveFiling && mayFile && !frozen && item?.status !== 'client_changes_requested' && (
               <div className="flex flex-wrap items-center gap-2">
                 {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) — not a second copy of the button
                     already at the top of the card for its holder */}
@@ -719,7 +725,13 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                               landed BESIDE the old one, and Version 2 offered the client both). On a graphics card each
                               file can be replaced by its new version, dropped from this version on, or — uploaded this
                               round by mistake — taken off. */}
-                          {designCard && (holder || isManager) && !frozen && (
+                          {/* ANYONE ON THE CARD, ANY STAGE (the owner, 22 Oct 2026: "to replace a version we pick the file and
+                              put the new version with it") — into the card's Drive folder, as this piece's next version */}
+                          {driveFiling && !dropped && (
+                            <button type="button" onClick={() => { setReplacing(a); replaceInput.current?.click() }}
+                              className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold underline underline-offset-4">Replace</button>
+                          )}
+                          {!driveFiling && designCard && (holder || isManager) && !frozen && (
                             dropped ? (
                               f.retired_round === handInRound(item as never) && (
                                 <button type="button" disabled={busy || uploading !== null} onClick={() => void dropAsset(a, true)}
@@ -742,7 +754,20 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                             )
                           )}
                         </div>
-                        {earlier.length > 0 && (
+                        {/* THE FILE'S TIMELINE (the owner, 22 Oct 2026: "make sure we have timeline of when the files added"):
+                            every cut of this piece, oldest first — when it went on, who put it on, and the cut itself */}
+                        {driveFiling ? (
+                          <ol className="ml-1 flex flex-col gap-0.5 border-l border-border pl-3 text-[12px] text-muted-foreground" aria-label={`When ${f.name} was added`}>
+                            {assetHistory(item as never, a).map(x => (
+                              <li key={x.id} className={x.id === f.id ? 'text-foreground' : undefined}>
+                                {formatInZone(x.uploaded_at, DEFAULT_TZ, 'short')}
+                                {' · '}{roundLabel(x.version)}{x.replaces ? ' · new version' : ' · added'}
+                                {x.by ? ` · ${(() => { const u = team.find(t => t.id === x.by); return personLabel(u?.name, u?.email) || 'someone' })()}` : ''}
+                                {' — '}<a href={x.url} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">{x.name}</a>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : earlier.length > 0 && (
                           <p className="pl-1 text-[12px] text-muted-foreground">Earlier: {earlier.map(x => <a key={x.id} href={x.url} target="_blank" rel="noreferrer noopener" className="mr-2 underline underline-offset-4">{roundLabel(x.version)} — {x.name}</a>)}</p>
                         )}
                       </li>
@@ -751,7 +776,15 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 </ul>
               )}
             <input ref={replaceInput} type="file" accept="image/*,video/*,application/pdf" className="hidden" aria-label="The new version of this file"
-              onChange={e => { if (replacing) void replaceAsset(replacing, e.target.files?.[0]) }} />
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (!replacing || !file) return
+                if (driveFiling && cardUpload.current) {
+                  const was = currentFiles(item as never).find(x => assetIdOf(x) === replacing)
+                  cardUpload.current.replace(replacing, was?.name ?? 'this file', file)
+                  setReplacing(null); e.target.value = ''
+                } else void replaceAsset(replacing, file)
+              }} />
           </div>
         ) : holder && !frozen ? (
           <div className="flex flex-wrap items-center gap-2">

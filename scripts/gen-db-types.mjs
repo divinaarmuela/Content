@@ -573,6 +573,8 @@ const GHOST_TABLES = {
     ['copied_at', col('string', true)],
     ['final_file_id', col('string', true)],
     ['error', col('string', true)],
+    // the piece (asset id) on the card this file is the new version of — picked with Replace; null = a new file
+    ['replaces', col('string', true)],
   ],
   // drive_pulls — A DRIVE FOLDER PULLED INTO OUR OWN STORAGE (the owner, 16
   //   Sep 2026: "I want a Drive link to be uploaded and it downloads it — a

@@ -91,6 +91,10 @@ export type DriveHandIn = {
   /** made by the minute-by-minute check of the link (DRIVE_WATCH below), not by a person pressing Submit: it adds and
    *  swaps, and never takes a piece off because it is gone from the folder */
   auto?: boolean
+  /** UPLOADED INTO THE CARD'S OWN DRIVE FOLDER (card-upload.ts): files may go on at any stage, approved too, and a
+   *  file picked with Replace becomes that piece's new version whatever was asked for (the owner, 22 Oct 2026: "we
+   *  can enter files at any given time"; "to replace a version we pick the file and put the new version with it") */
+  any_time?: boolean
   /** the pieces dropped from this version because they were not in the link */
   retired?: string[]
   /** of file_ids, the ones that are new pieces (the rest are new cuts of pieces already on the card) */
@@ -279,7 +283,7 @@ export type MergeResult =
 export function mergeDriveHandIn(
   list: readonly FinalFile[],
   pulled: readonly PullFile[],
-  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager' | 'whole' | 'auto'>,
+  handIn: Pick<DriveHandIn, 'drive_ids' | 'map' | 'names' | 'round' | 'by' | 'manager' | 'whole' | 'auto' | 'any_time'>,
   item: { final_files?: unknown; change_assets?: unknown; edit_round?: unknown; status?: unknown },
   round: number,
   now: string,
@@ -322,7 +326,9 @@ export function mergeDriveHandIn(
       if (sameCut(piece, d, copy)) { carried.push(d); continue }
       // THE WHOLE FOLDER IS THE VERSION (the owner, 30 Sep 2026: "submit the Drive link again and all will become
       // Version 2"): a changed file is its piece's new cut, whoever asked for what
-      if (!whole && !mayTakeNewVersion(item, piece, round, manager)) {
+      // …and a file the person picked with Replace is that piece's new cut, at any stage
+      const picked = handIn.any_time === true && !!said && said !== 'new'
+      if (!whole && !picked && !mayTakeNewVersion(item, piece, round, manager)) {
         skipped.push({ drive_id: d, why: `${piece.name} was not asked to change — it stays as it is` })
         continue
       }

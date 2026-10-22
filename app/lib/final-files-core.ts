@@ -387,14 +387,17 @@ export function finalFilesChangeRefusal(
   after: readonly FinalFile[],
   item: { status?: unknown; edit_round?: unknown; client_round?: unknown; client_rounds?: unknown },
   manager: boolean,
+  /** uploaded into the card's own Drive folder: any stage, approved too (drive-handin-core DriveHandIn.any_time) —
+   *  an earlier version's file is still never rewritten */
+  anyStage = false,
 ): string | null {
-  const same = (a: FinalFile, b: FinalFile) => a.url === b.url && a.version === b.version && (a.asset_id ?? a.id) === (b.asset_id ?? b.id) && (a.retired_round ?? null) === (b.retired_round ?? null)
+  const same =(a: FinalFile, b: FinalFile) => a.url === b.url && a.version === b.version && (a.asset_id ?? a.id) === (b.asset_id ?? b.id) && (a.retired_round ?? null) === (b.retired_round ?? null)
   const byId = new Map(after.map(f => [f.id, f]))
   const changed = before.length !== after.length || before.some(f => { const g = byId.get(f.id); return !g || !same(f, g) })
   if (!changed) return null
   const status = String(item.status ?? '')
-  if (LOCKED_STATUSES.includes(status)) return 'These files are approved — a change is a new version, sent back through the check and the client'
-  if (LOOKING_STATUSES.includes(status) && !manager) return 'The quality check or the client is looking at these files — only a manager can change them now'
+  if (!anyStage && LOCKED_STATUSES.includes(status)) return 'These files are approved — a change is a new version, sent back through the check and the client'
+  if (!anyStage && LOOKING_STATUSES.includes(status) && !manager) return 'The quality check or the client is looking at these files — only a manager can change them now'
   const round = handInRound(item)
   for (const f of before) {
     if (f.version >= round) continue

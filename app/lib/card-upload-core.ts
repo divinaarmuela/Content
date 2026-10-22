@@ -73,19 +73,21 @@ export const PARALLEL_FILES = 3
 export const RESUME_FOR_MS = 6 * 24 * 60 * 60 * 1000
 
 /**
- * IS THIS THE FILE THAT WAS HALF-SENT? Same card, same version folder, same name and same size, by the same person,
+ * IS THIS THE FILE THAT WAS HALF-SENT? Same card, same version folder, same name and same size, by the same person, for the same piece,
  * still open and not older than RESUME_FOR_MS. The browser cannot keep a file across a closed tab, so the person
  * picks it again; this is how the app knows to carry on instead of starting over.
  */
 export function resumableMatch(
-  row: { purpose?: string | null; item_id?: string | null; parent_id?: string | null; name?: string | null; size?: number | null; status?: string | null; created_by?: string | null; created_at?: string | null },
-  want: { itemId: string; parentId: string; name: string; size: number; by: string | null },
+  row: { purpose?: string | null; item_id?: string | null; parent_id?: string | null; name?: string | null; size?: number | null; status?: string | null; created_by?: string | null; created_at?: string | null; replaces?: string | null },
+  want: { itemId: string; parentId: string; name: string; size: number; by: string | null; replaces?: string | null },
   nowMs: number,
 ): boolean {
   if (row.purpose !== 'card' || row.status !== 'open') return false
   if (row.item_id !== want.itemId || row.parent_id !== want.parentId) return false
   if (row.name !== want.name || row.size !== want.size) return false
   if ((row.created_by ?? null) !== want.by) return false
+  // the same file meant for another piece (or as a new one) is another upload
+  if ((row.replaces ?? null) !== (want.replaces ?? null)) return false
   const at = Date.parse(String(row.created_at ?? ''))
   return Number.isFinite(at) && nowMs - at < RESUME_FOR_MS
 }

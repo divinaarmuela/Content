@@ -485,7 +485,7 @@ describe('the card after a send-back (30 Sep 2026, the walk)', () => {
   })
   it('the card: no hand-in while the client’s request waits on the manager, no old note, the status line knows', () => {
     const d = readFileSync('app/dashboard/board/EditorCardDrawer.tsx', 'utf8')
-    expect(d).toContain("{mayFile && !frozen && item?.status !== 'client_changes_requested' && (")
+    expect(d).toContain("{!driveFiling && mayFile && !frozen && item?.status !== 'client_changes_requested' && (")
     expect(d).toContain("change_note && item?.status !== 'client_changes_requested' && (")
     expect(d).toContain('const earlier = lastCutPerVersion(')
     expect(readFileSync('app/dashboard/board/DriveHandIn.tsx', 'utf8')).toContain('const latest = handInOutdated(item) ? null : latestHandIn(item)')

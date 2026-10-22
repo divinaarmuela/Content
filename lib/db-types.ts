@@ -888,6 +888,7 @@ export interface DriveUpload {
   copied_at: string | null
   final_file_id: string | null
   error: string | null
+  replaces: string | null
 }
 
 export interface EmailIngestLog {
@@ -1867,7 +1868,7 @@ export const TABLE_COLUMNS = {
   drive_pulls: ['id', 'folder_id', 'folder_url', 'kind', 'scope_id', 'purpose', 'status', 'total_files', 'total_bytes', 'done_files', 'done_bytes', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version', 'created_at', 'updated_at'],
   drive_seen: ['id', 'item_id', 'source_id', 'drive_file_id', 'path', 'name', 'mime', 'size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'stage_at_seen', 'state', 'scan', 'decided_by', 'decided_at', 'first_seen_at', 'created_at', 'updated_at'],
   drive_sources: ['id', 'item_id', 'link', 'drive_id', 'kind', 'added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count', 'created_at', 'updated_at'],
-  drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error'],
+  drive_uploads: ['id', 'upload_uri', 'name', 'parent_id', 'mime_type', 'size', 'received', 'client_id', 'status', 'drive_file_id', 'created_by', 'created_at', 'updated_at', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['id', 'created_at', 'gmail_message_id', 'mailbox', 'from_email', 'subject', 'received_at', 'status', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['id', 'source_url', 'platform', 'kind', 'asset_id', 'version_id', 'slide_index', 'status', 'attempts', 'output_key', 'target_source', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error', 'created_at', 'updated_at'],
   inbox_touches: ['id', 'account_id', 'client_id', 'username', 'name', 'kind', 'first_at', 'last_at', 'conversation_id', 'post_id', 'updated_at'],
@@ -1973,7 +1974,7 @@ export const NULLABLE_COLUMNS = {
   drive_pulls: ['purpose', 'files', 'error', 'started_at', 'finished_at', 'requested_by', 'cancelled_at', 'only_ids', 'handin_id', 'version'],
   drive_seen: ['size', 'md5', 'revision', 'modified', 'created_time', 'last_modifying_user', 'duration_ms', 'width', 'height', 'scan', 'decided_by', 'decided_at'],
   drive_sources: ['added_by', 'stage_at_add', 'last_checked_at', 'last_error', 'file_count'],
-  drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error'],
+  drive_uploads: ['mime_type', 'size', 'client_id', 'drive_file_id', 'created_by', 'purpose', 'item_id', 'version', 'copied_at', 'final_file_id', 'error', 'replaces'],
   email_ingest_log: ['from_email', 'subject', 'received_at', 'is_lead', 'confidence', 'reasoning', 'lead_id', 'error'],
   encode_jobs: ['kind', 'asset_id', 'version_id', 'slide_index', 'output_key', 'bytes', 'width', 'height', 'duration_sec', 'video_kbps', 'error'],
   inbox_touches: ['client_id', 'name', 'conversation_id', 'post_id'],
