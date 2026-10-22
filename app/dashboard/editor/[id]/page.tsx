@@ -306,6 +306,15 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const openSideBySide = (keys: string[]) => { if (keys.length) router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(keys.join(','))}`) }
   // PLAY IN PLACE (the owner, 22 Oct 2026: "play in place its confusing"): a press opens the video in a window over the
   // list — nothing scrolls, nothing plays until you press play
+  // A PRESS OPENS THE VIDEO'S OWN PAGE — the video on the left, its comments on the right (the owner, 22 Oct 2026:
+  // "clicking the video shouldnt be a popup where is the part where video left and comments on the right"); the window
+  // is kept only for a video the app holds no copy of
+  const pageOf = (s: Stack): string | null => {
+    const f = info(s).file
+    if (f) return reviewPath(item.id, f.id, f.name)
+    const r = s.entries.map(e => (e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined)).find(Boolean)
+    return r ? reviewPath(item.id, r.drive_file_id, r.name) : null
+  }
   const sel = pick ? stacks.find(s => s.key === pick.stack) ?? null : null
   const entry = sel ? (sel.entries.find(e => e.key === pick?.entry) ?? sel.latest) : null
   const info = (s: Stack) => {
@@ -386,7 +395,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                       <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
                         onClick={() => selecting
                           ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
-                          : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
+                          : pageOf(s) ? router.push(pageOf(s)!) : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
                         className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
                         <span className="relative block aspect-[9/12] w-full bg-muted">
                           <HoverFrames frames={s.latest.frames ?? []} thumb={s.latest.thumb} board={s.latest.board ?? null} />
