@@ -381,7 +381,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
   const submit = async () => {
     if (!submitting) return
     // a designer hands in files, an editor a link — either counts as finished work
-    if (!item || !workIn) { toast.error(designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first'); return }
+    if (!item || !workIn) { toast.error(designCard || driveFiling ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first'); return }
     const ok = await flag({ kind: 'qc_done', ticks }, 'Quality check recorded')
     if (!ok) return
     const moved = await post(`/api/production/items/${id}/transition`, { to: 'quality_check' }, item?.status === 'revision_required' ? 'Revisions done — the quality reviewer has it' : 'Sent for the quality check', 'Sending')
@@ -491,12 +491,14 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                   onClick={() => {
                     // the hand-in is a Drive link now (the owner, 30 Sep 2026) — the upload is the fallback lower down
                     if (designCard) { setUploadOpen(true); return }
+                    // no more Drive hand-in (the owner, 22 Oct 2026: "no more hand in drive"): to the card's uploader
+                    if (driveFiling) { setTab('work'); setTimeout(() => document.getElementById('card-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); return }
                     if (filesCard) { setDriveOpen(true); return }
                     const box = document.getElementById('ed-source')
                     box?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     box?.focus()
                   }}>
-                  {designCard
+                  {designCard || driveFiling
                     ? <><Upload className="h-4 w-4" aria-hidden /> Upload the finished files — {roundLabel(handInRound(item as never))}</>
                     : filesCard
                     ? <><FolderDown className="h-4 w-4" aria-hidden /> Hand in from Google Drive — {roundLabel(handInRound(item as never))}</>
@@ -673,7 +675,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
           <div className="flex flex-col gap-2" data-final-files>
             {/* the client asked for changes: an account manager decides first — a hand-in now would not count
                 (30 Sep 2026, the walk) */}
-            {item && <CardDriveUpload ref={cardUpload} itemId={item.id} onAllowed={setDriveFiling} />}
+            {item && <div id="card-upload"><CardDriveUpload ref={cardUpload} itemId={item.id} onAllowed={setDriveFiling} /></div>}
             {!driveFiling && mayFile && !frozen && item?.status !== 'client_changes_requested' && (
               <div className="flex flex-wrap items-center gap-2">
                 {/* the hand-in is a Drive link, copied onto the card as files (30 Sep 2026) — not a second copy of the button
@@ -843,7 +845,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
             </ul>
             <div className="flex flex-wrap items-center gap-2">
               <Button className={primaryBtn} disabled={busy || !qcComplete(ticks, designCard) || !workIn} onClick={() => void submit()}
-                title={!workIn ? (designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks, designCard) ? 'Tick every check first' : undefined}>
+                title={!workIn ? (designCard || driveFiling ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first') : !qcComplete(ticks, designCard) ? 'Tick every check first' : undefined}>
                 {status === 'revision_required' ? 'Revisions done — submit for quality check' : 'Submit for quality check'}
               </Button>
               {isSuper && (
@@ -870,7 +872,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
                 <p className="basis-full text-[12px] text-muted-foreground" role="status">Your finished edit is still copying in ({copyingWords}). You can submit now — the reviewer sees the files as they land.</p>
               )}
             </div>
-            {!workIn && <p className="text-[12px] text-muted-foreground">{designCard ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first.'}</p>}
+            {!workIn && <p className="text-[12px] text-muted-foreground">{designCard || driveFiling ? 'Upload the finished files first.' : filesCard ? submitWaitsWords(item) : 'Add the link to your finished edit first.'}</p>}
           </>
         ) : (
           <p className="text-[13px] text-muted-foreground">

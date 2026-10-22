@@ -48,7 +48,7 @@ const EDITOR: GettingStartedPanel = {
     },
     {
       title: 'Put the final on the card, then hand it on',
-      body: 'Press "Hand in from Google Drive" for the finished edit (a designer uploads the finished files instead), tick your checks, then press "Submit for quality check". It goes straight to the quality reviewer, then the client.',
+      body: 'Upload the finished files on the card — they go straight into the card’s Google Drive folder — tick your checks, then press "Submit for quality check". It goes straight to the quality reviewer, then the client.',
       href: '/dashboard/editor',
       linkLabel: 'Open my board',
     },
