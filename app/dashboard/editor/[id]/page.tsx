@@ -184,12 +184,17 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
     const asset = assetIdOf(f)
     const history = assetHistory(item, asset)
     return history.map((v, i) => {
-      const frames = framesOf.get(`r2:${v.url}`) ?? []
+      // the card's copy until it is measured itself: the frames the scan took of the same file in Drive (live, 22 Oct
+      // 2026: a video Ryan confirmed showed no picture)
+      const seenAs = v.drive_file_id ? rows.find(r => r.drive_file_id === v.drive_file_id) : null
+      const driveFrames = ((seenAs?.scan as { frames?: (string | null)[] } | null)?.frames ?? []).map((u, k) => ({ url: String(u ?? ''), at_s: k })).filter(x => x.url)
+      const own = framesOf.get(`r2:${v.url}`) ?? []
+      const frames = own.length ? own : driveFrames
       return {
         key: i === 0 ? `a:${asset}` : `a:${asset}@${v.version}`, name: v.name, at: v.uploaded_at, source: 'card' as const,
         kind: i === 0 ? null : 'recut', matchKey: i === 0 ? null : (i === 1 ? `a:${asset}` : `a:${asset}@${history[i - 1].version}`),
         ask: false, busy: false, thumb: frames[0]?.url ?? null, frames, confidence: null, otherCard: null,
-        board: framesOf.boards?.get(`r2:${v.url}`) ?? null,
+        board: framesOf.boards?.get(`r2:${v.url}`) ?? (seenAs ? framesOf.boards?.get(driveKey(seenAs)) ?? null : null),
         file: { id: v.id, url: v.url, name: v.name, version: v.version },
       }
     })
