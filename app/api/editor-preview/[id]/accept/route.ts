@@ -48,6 +48,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({ ok: true, ignored: rows.length })
       }
 
+      // ANOTHER CARD'S VIDEO IS NEVER HANDED IN HERE — the card points to where it is instead (the owner, 22 Oct 2026)
+      const theirs = rows.find(r => (r.scan as { other_card?: { title?: string } | null } | null)?.other_card)
+      if (theirs) {
+        const title = (theirs.scan as { other_card: { title?: string } }).other_card.title ?? 'another card'
+        return NextResponse.json({ error: `${theirs.name} is already on “${title}” — open that card to add it there.` }, { status: 409 })
+      }
       // AT COLOUR GRADE ONLY A GRADE IS HANDED IN: a file that was in Drive before the card went there (an editor's
       // re-cut) is not the colourist's work (the owner, 22 Oct 2026)
       if (String(item.status) === 'colour_grade') {

@@ -30,6 +30,7 @@ export type StackFile = {
   file?: { id: string; url: string; name: string; version: number } | null
   confidence: number | null
   otherCard: string | null        // the title of another card it belongs to
+  otherCardId?: string | null     // …and its id, to open it
   sameAs?: string | null          // a key of a file it is byte for byte (the same version, saved again)
 }
 
@@ -43,6 +44,7 @@ export type Stack = {
   ask: boolean
   busy: boolean
   otherCard: string | null
+  otherCardId: string | null
 }
 
 class Sets {
@@ -105,6 +107,7 @@ export function stackVersions(files: readonly StackFile[]): Stack[] {
       ask: entries.some(x => x.ask),
       busy: entries.some(x => x.busy),
       otherCard: entries.find(x => x.otherCard)?.otherCard ?? null,
+      otherCardId: entries.find(x => x.otherCardId)?.otherCardId ?? null,
     })
   }
   // what needs a look first, then the newest

@@ -210,7 +210,7 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
         ask: !!scan?.ask, busy: r.state === 'new' || r.state === 'scanning', thumb: scan?.frames?.find(Boolean) ?? null,
         frames: (scan?.frames ?? []).map((u, i) => ({ url: String(u ?? ''), at_s: i })).filter(x => x.url),
         board: framesOf.boards?.get(driveKey(r)) ?? null,
-        confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null,
+        confidence: typeof scan?.confidence === 'number' ? scan.confidence : null, otherCard: scan?.other_card?.title ?? null, otherCardId: (scan?.other_card as { id?: string } | null)?.id ?? null,
         sameAs: scan?.same_as?.startsWith('seen:') ? `s:${scan.same_as.slice(5)}` : null,
       }
     })
@@ -223,7 +223,7 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
     if (!a?.startsWith('card:') || others.some(o => o.key === `o:${a.slice(5)}`)) continue
     others.push({
       key: `o:${a.slice(5)}`, name: scan?.compared?.find(c => c.asset === a)?.name ?? 'a video', at: '', source: 'other', kind: null, matchKey: null,
-      ask: false, busy: false, thumb: null, confidence: null, otherCard: scan?.other_card?.title ?? null,
+      ask: false, busy: false, thumb: null, confidence: null, otherCard: scan?.other_card?.title ?? null, otherCardId: (scan?.other_card as { id?: string } | null)?.id ?? null,
     })
   }
   return [...others, ...card, ...drive]
@@ -243,7 +243,10 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
   // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
   // are videos getting checked with their own videos?" — the Flinders draft sat in the shoot's folder and on its card)
-  const elsewhere = all.filter(s => s.otherCard && s.entries.every(e => e.source !== 'card' && (e.source === 'other' || e.kind === 'copy')))
+  // A VIDEO THAT IS ANOTHER CARD'S — a copy of it, or a new cut of it — is never added here: the card says where it is,
+  // a press away (the owner, 22 Oct 2026: "if videos are appearing in multiple cards dont add it but prompt the card
+  // there and tell it where it is at so when they click it takes them there")
+  const elsewhere = all.filter(s => s.otherCard && s.entries.every(e => e.source !== 'card'))
   const stacks = all.filter(s => !elsewhere.includes(s))
   const round = roundOf(item)
   const gradedThisRound = gradedRoundOf(item) === round
@@ -370,12 +373,34 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
 
 /** the files in this card's links that are another card's videos — named, not counted as this card's */
 function Elsewhere({ list }: { list: Stack[] }) {
-  const cards = [...new Set(list.map(s => s.otherCard).filter(Boolean))]
+  const byCard = new Map<string, { title: string; files: string[] }>()
+  for (const s of list) {
+    const k = s.otherCardId ?? s.otherCard ?? ''
+    const names = s.entries.filter(e => e.source === 'drive').map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
+    byCard.set(k, { title: s.otherCard ?? 'another card', files: [...(byCard.get(k)?.files ?? []), ...names] })
+  }
   return (
-    <p className="mt-4 text-[12px] text-muted-foreground">
-      {list.length} {list.length === 1 ? 'file' : 'files'} in this card’s Drive {list.length === 1 ? 'is' : 'are'} already on {cards.map(c => `“${c}”`).join(', ')} — not counted here.
-    </p>
+    <div className="mt-4 flex flex-col gap-2">
+      {[...byCard.entries()].map(([id, c]) => <ElsewhereCard key={id} id={id} title={c.title} files={c.files} />)}
+    </div>
   )
+}
+
+/** one card a file here belongs to: its name, where it is, and the way there */
+function ElsewhereCard({ id, title, files }: { id: string; title: string; files: string[] }) {
+  const { row } = useRow<ContentItem>('content_items', /^[0-9a-f-]{36}$/.test(id) ? id : null)
+  const stage = row ? STEPS[stepOf(row.status)] ?? null : null
+  const body = (
+    <>
+      <span className="min-w-0 flex-1">
+        <b>{files.length === 1 ? files[0] : `${files.length} files`}</b> {files.length === 1 ? 'is' : 'are'} already on <b>“{row?.title ?? title}”</b>{stage ? ` — ${stage}` : ''}. Not added here.
+      </span>
+      {row && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[12px] font-semibold text-background">Open that card <ExternalLink className="h-3 w-3" aria-hidden /></span>}
+    </>
+  )
+  return row
+    ? <Link href={`/dashboard/editor/${row.id}`} className="flex flex-wrap items-center gap-2 rounded-inner border border-border bg-background p-3 text-[13px] hover:bg-muted">{body}</Link>
+    : <p className="flex flex-wrap items-center gap-2 rounded-inner border border-border bg-background p-3 text-[13px]">{body}</p>
 }
 
 /** one frame of a storyboard, by its place in the tiled picture */
