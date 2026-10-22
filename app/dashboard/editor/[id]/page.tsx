@@ -12,7 +12,7 @@ import { useRow, useTable } from '@/lib/db-client'
 import type { Batch, Client, ContentItem, DriveSeen, DriveSource, TeamUser, VideoFrame, WorkKind } from '@/lib/db-types'
 import { STEPS, agoWords, initialsOfName, isEditorCard, stepOf, videoNext, type NextTone } from '../../../lib/editor-preview-core'
 import { KIND_WORDS, OPEN_STATES, STATE_WORDS, gradeStanding, isFootage, isVideo, stageRule, type CutKind, type SeenState } from '../../../lib/drive-scan-core'
-import { assetHistory, assetIdOf, currentFiles, isRetiredAt } from '../../../lib/final-files-core'
+import { assetHistory, assetIdOf, currentFiles, finalFilesOf, isRetiredAt } from '../../../lib/final-files-core'
 import { roundOf } from '../../../lib/edit-round-core'
 import { clipApprovalsOf } from '../../../lib/clip-approvals-core'
 import { gradedRoundOf, needsColourGrade } from '../../../lib/colour-grade-core'
@@ -199,8 +199,10 @@ function stackFilesOf(item: ContentItem, rows: readonly DriveSeen[], framesOf: F
       }
     })
   })
+  const onCardIds = new Set(finalFilesOf(item as never).map(f => f.drive_file_id).filter(Boolean) as string[])
   const drive: StackFile[] = rows
-    .filter(r => !['taken', 'ignored', 'footage'].includes(r.state) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
+    // a file confirmed but not on the card yet (its copy is running, or being tried again) stays in sight, as copying
+    .filter(r => (!['taken', 'ignored', 'footage'].includes(r.state) || (r.state === 'taken' && !onCardIds.has(r.drive_file_id))) && isVideo({ mime: r.mime, name: r.path }) && !isFootage({ name: r.path }))
     .map(r => {
       const scan = (r.scan ?? null) as { kind?: string; asset?: string | null; same_as?: string | null; ask?: boolean; confidence?: number; frames?: (string | null)[]; other_card?: { title?: string } | null } | null
       const a = scan?.asset ?? null
@@ -292,6 +294,9 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
     const file = asset ? current.find(f => assetIdOf(f) === asset) : null
     const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy').map(e => rowById.get(e.key.slice(2))!)
     const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
+    const copying = s.entries.map(e => e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined).find(r => r?.state === 'taken')
+    const tries = Number((copying?.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
+    if (copying) return { file, pending, next: { words: tries ? `Copying onto the card — trying again (try ${tries + 1} of 6)` : 'Copying onto the card…', tone: 'blue' as NextTone } }
     const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
     return { file, pending, next }
   }
@@ -506,7 +511,7 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
         {offer && (
           <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3">
             <span className="min-w-0 flex-1 text-[13px]">{(offer.scan as { copy_failed?: boolean } | null)?.copy_failed
-              ? <><b>The copy from Drive failed</b> (Drive stopped handing the file out for a while) — confirm again to retry.</>
+              ? <><b>Not on the card yet.</b> The video is fine — Drive refused to let us copy it for a while, and six tries didn’t get through. Confirm again to try once more.</>
               : <><b>New in Drive.</b> Add it to the card as {entry.label}?</>}</span>
             <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
               <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}

@@ -1,6 +1,6 @@
 import 'server-only'
 import { table } from '@/lib/db'
-import type { ContentItem, DriveSeen, DriveSource, WorkKind } from '@/lib/db-types'
+import type { ContentItem, DriveSeen, DriveSource, TeamUser as TeamUserRow, WorkKind } from '@/lib/db-types'
 import { isEditorCard } from './editor-preview-core'
 import { driveLinkTarget, driveHandInsOf } from './drive-handin-core'
 import { readDriveTarget } from './drive-pull'
@@ -124,16 +124,33 @@ export async function watchSources(opts: { limit?: number; budgetMs?: number } =
       await table<DriveSource>('drive_sources').update(s.id, { last_checked_at: now, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 300) } as never).catch(() => undefined)
     }
   }
-  // A CONFIRMED FILE WHOSE COPY FAILED IS OFFERED AGAIN (live, 22 Oct 2026: Ryan confirmed Tagliolini Verde, Drive
-  // stopped handing it out, and it vanished from the card): taken by a person 15 minutes ago or more, and still not on
-  // the card, it goes back to "scanned" with a note — never silently lost
+  // A CONFIRMED FILE WHOSE COPY FAILED IS TRIED AGAIN, THEN OFFERED AGAIN (live, 22 Oct 2026: Ryan confirmed
+  // Tagliolini Verde, Drive stopped handing it out, and it vanished from the card; the owner: "why cant we add a retry
+  // of the drive if it fails?"). Still not on the card 30 minutes after the press (or the last try), it is handed in
+  // again in the name of whoever confirmed it — up to six tries, about three hours, which is how long Google's block on
+  // a much-read file usually lasts. After the sixth it goes back to "scanned" with a note — never silently lost.
   const cardsById = new Map(items.map(i => [i.id, i]))
-  for (const r of seenRows.filter(x => x.state === 'taken' && x.decided_by && x.decided_at && Date.now() - Date.parse(x.decided_at) > 15 * 60_000)) {
+  for (const r of seenRows.filter(x => x.state === 'taken' && x.decided_by && x.decided_at && Date.now() - Date.parse(x.decided_at) > 30 * 60_000).slice(0, 5)) {
     const item = cardsById.get(r.item_id)
     if (!item) continue
     const onCard = (Array.isArray((item as { final_files?: unknown }).final_files) ? (item as { final_files: { drive_file_id?: string }[] }).final_files : []).some(f => f.drive_file_id === r.drive_file_id)
     if (onCard) continue
-    await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, state: 'scanned', decided_by: null, decided_at: null, scan: { ...((cur.scan as object) ?? {}), copy_failed: true }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)
+    const tries = Number((r.scan as { copy_tries?: unknown } | null)?.copy_tries ?? 0)
+    if (tries >= 6) {
+      await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, state: 'scanned', decided_by: null, decided_at: null, scan: { ...((cur.scan as object) ?? {}), copy_failed: true }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)
+      continue
+    }
+    try {
+      const [{ startDriveHandIn }, user, source] = await Promise.all([
+        import('./drive-handin'), table<TeamUserRow>('team_users').get(String(r.decided_by)), table<DriveSource>('drive_sources').get(r.source_id),
+      ])
+      if (!user || !source) continue
+      const a = (r.scan as { asset?: string | null } | null)?.asset ?? null
+      const res = await startDriveHandIn(user as never, item as never, { url: source.link, ids: [r.drive_file_id], map: { [r.drive_file_id]: a && !a.startsWith('seen:') && !a.startsWith('card:') ? a : 'new' } })
+      // a copy still running on the card is waited for, not counted as a try
+      if (!res.ok && res.status === 409) continue
+      await seenTable.claim(r.id, cur => cur?.state === 'taken' ? { ...cur, decided_at: new Date().toISOString(), scan: { ...((cur.scan as object) ?? {}), copy_tries: tries + 1 }, updated_at: new Date().toISOString() } as DriveSeen : null).catch(() => undefined)
+    } catch { /* tried again next minute */ }
   }
   // A FILE LEFT WAITING IS ASKED FOR AGAIN: one still "new" ten minutes on (its event lost, or set back for a rescan)
   // is queued again, and stamped so it is asked at most every ten minutes — a scan that never starts is never final
