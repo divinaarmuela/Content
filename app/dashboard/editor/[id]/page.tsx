@@ -302,7 +302,15 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
   const router = useRouter()
   const [selecting, setSelecting] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
-  const pickOf = (s: Stack) => { const f = info(s).file; return f ? `${f.id}@${f.version}` : null }
+  // EVERY VIDEO CAN BE COMPARED (the owner, 22 Oct 2026: "why cant i do side by side feature with versions … every video
+  // i should be able to") — one on the card by its file and version, one still in the editor's Drive by the app's copy
+  const pickOfEntry = (e: Stack['entries'][number]): string | null => {
+    if (e.file) return `${e.file.id}@${e.file.version}`
+    const r = e.source === 'drive' ? rowById.get(e.key.slice(2)) : undefined
+    return r ? `${r.drive_file_id}@0` : null
+  }
+  const pickOf = (s: Stack) => { const f = info(s).file; return f ? `${f.id}@${f.version}` : pickOfEntry(s.latest) }
+  const versionPicks = (s: Stack) => [...new Set(s.entries.map(pickOfEntry).filter((k): k is string => !!k))]
   const openSideBySide = (keys: string[]) => { if (keys.length) router.push(`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(keys.join(','))}`) }
   // PLAY IN PLACE (the owner, 22 Oct 2026: "play in place its confusing"): a press opens the video in a window over the
   // list — nothing scrolls, nothing plays until you press play
@@ -394,7 +402,7 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                   const on = selecting ? !!key && picked.has(key) : sel?.key === s.key
                   return (
                     <li key={s.key} className="group relative">
-                      <button type="button" disabled={selecting && !key} title={selecting && !key ? 'Only videos on the card can be compared — confirm it first' : undefined}
+                      <button type="button" disabled={selecting && !key} title={selecting && !key ? 'This video has no copy to play yet' : undefined}
                         onClick={() => selecting
                           ? key && setPicked(m => { const n = new Set(m); if (n.has(key)) n.delete(key); else n.add(key); return n })
                           : pageOf(s) ? router.push(pageOf(s)!) : setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
@@ -413,6 +421,12 @@ function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated, framesOf
                       </button>
                       {/* REPLACE BY THE PICTURE (the owner, 22 Oct 2026: "why cant it be easier to select video that needs to be
                           replaced … reading a file name doesnt help a lot"): on the video itself, it goes to the card's uploader */}
+                      {!selecting && versionPicks(s).length > 1 && (
+                        <button type="button" onClick={() => openSideBySide(versionPicks(s))}
+                          className="absolute left-1.5 top-8 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold text-foreground shadow hover:bg-background">
+                          Side by side · {s.versions.join(' ')}
+                        </button>
+                      )}
                       {!selecting && info(s).file && (
                         <button type="button" onClick={() => { replaceFor.current = info(s).file!; replaceInput.current?.click() }}
                           className="absolute right-1.5 top-1.5 rounded-full bg-foreground px-2.5 py-1 text-[11px] font-semibold text-background shadow opacity-90 hover:opacity-100">
