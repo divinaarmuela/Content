@@ -103,7 +103,8 @@ export function videoNext(v: {
 }): VideoNext {
   if (v.gone) return { words: 'Removed from Drive — the card keeps its copy', tone: 'muted' }
   // a new cut of a video on the card, or a whole new video
-  if (v.newInDrive) return { words: v.onCard === false ? 'New video in Drive — confirm it' : 'New cut in Drive — confirm it', tone: 'amber' }
+  // no confirming any more (the owner, 23 Oct 2026: "why is there still new video in drive tag to confirm") — it is simply in Drive
+  if (v.newInDrive) return { words: v.onCard === false ? 'In Drive — not on the card' : 'Newer cut in Drive', tone: 'muted' }
   if (v.approved) return { words: 'Approved by the client', tone: 'green' }
   switch (String(v.status ?? '')) {
     case 'draft_uploaded': case 'revision_required': case 'revision_complete': case 'client_changes_requested':
