@@ -90,37 +90,40 @@ export default function EditorCard() {
     }>
       <Link href="/dashboard/editor" className="mb-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" aria-hidden /> Editor</Link>
       <Stepper status={item.status} />
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      {/* THE CARD'S BUTTONS, AT THE TOP (the owner, 22 Oct 2026: "the actions should be there and not in the bottom") —
+          the same ones the classic card had, so the process does not change */}
+      <div className="mt-4 overflow-hidden rounded-card border border-border bg-card">
+        {me && maker && <HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} />}
+        {me && !maker && (
+          <>
+            <ColourGradePanel item={item as never} mayGrade={me.role === 'account_manager' || me.role === 'super_admin' || (me as { colourist?: boolean }).colourist === true} />
+            <ManagerActions item={item} client={client ?? null} kindSlug={kindSlug} portalLink={portalLink}
+              viewer={{ id: me.id, role: me.role, quality_reviewer: (me as { quality_reviewer?: boolean }).quality_reviewer === true, colourist: (me as { colourist?: boolean }).colourist === true }} />
+          </>
+        )}
+        {from.footage && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
+            <a href={from.footage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold hover:bg-muted">
+              <FolderOpen className="h-4 w-4" aria-hidden /> Footage to work from <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          </div>
+        )}
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-6">
-          <VideoList item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)}
+          <Workspace item={item} rows={seen.rows} needsGrade={needsColourGrade(kindSlug)}
             gradeSince={moves.rows.filter(a => a.action === 'status_change' && a.new_value === 'colour_grade').map(a => String(a.created_at ?? '')).sort().pop() ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
-          {/* the footage to work from and every file on the card, playable here — what the editor opens first */}
-          <details open={maker} className="overflow-hidden rounded-card border border-border bg-card">
-            <summary className="cursor-pointer px-5 py-3 text-[14px] font-semibold">Files to work from and play</summary>
-            <FilesToWorkFrom item={item as never} isManager={me?.role === 'account_manager' || me?.role === 'super_admin'} holder={!!me?.id && item.owner_id === me.id} frozen={frozen} linkOnly
-              fallbackFolder={from.footage} wideFiles versions approvedIds={clipApprovalsOf(item).map(a => a.file_id)} reviewHref={t => reviewPath(id, t.id, t.name)} />
-          </details>
           <details className="rounded-card border border-border bg-surface p-4">
             <summary className="cursor-pointer text-[13px] font-semibold text-muted-foreground">Scan details — every file the AI looked at</summary>
             <div className="mt-4"><Inbox item={item} rows={seen.rows} /></div>
           </details>
         </div>
         <aside className="flex min-w-0 flex-col gap-4">
-          {me && maker && (
-            <div className="overflow-hidden rounded-card border border-border bg-card"><HolderTransfer item={item} viewer={{ id: me.id, role: me.role }} /></div>
-          )}
-          {me && !maker && (
-            <div className="overflow-hidden rounded-card border border-border bg-card">
-              <ColourGradePanel item={item as never} mayGrade={me.role === 'account_manager' || me.role === 'super_admin' || (me as { colourist?: boolean }).colourist === true} />
-              <ManagerActions item={item} client={client ?? null} kindSlug={kindSlug} portalLink={portalLink}
-                viewer={{ id: me.id, role: me.role, quality_reviewer: (me as { quality_reviewer?: boolean }).quality_reviewer === true, colourist: (me as { colourist?: boolean }).colourist === true }} />
-            </div>
-          )}
-          <Sources item={item} rows={sources.rows} now={now} />
           <div className="overflow-hidden rounded-card border border-border bg-card">
             <EditorCardDrawer key={id} id={id} onClose={() => router.push('/dashboard/editor')} hideFolderFiles />
           </div>
+          <Sources item={item} rows={sources.rows} now={now} />
         </aside>
       </div>
     </PreviewFrame>
@@ -197,18 +200,20 @@ const TONES: Record<NextTone, string> = {
  * make sure its at the top"). One row per video: its picture, its name, V1 · V2 · V3 (the current one dark), Graded,
  * and its next step. A new cut in Drive is one line on the row: Confirm or Not this.
  */
-function VideoList({ item, rows, needsGrade, gradeSince, sourceCreated }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string> }) {
-  // at colour grade a file is offered only as a grade — one already there before the card went to grade is not
-  const atGrade = String(item.status) === 'colour_grade'
-  const beforeGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'before').map(r => r.id) : [])
-  const offerable = (r: DriveSeen | undefined) => !!r && r.state === 'scanned' && (!atGrade || gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'grade')
-  const stacks = useMemo(() => stackVersions(stackFilesOf(item, rows)), [item, rows])
+function Workspace({ item, rows, needsGrade, gradeSince, sourceCreated }: { item: ContentItem; rows: DriveSeen[]; needsGrade: boolean; gradeSince: string | null; sourceCreated: Map<string, string> }) {
+  const all = useMemo(() => stackVersions(stackFilesOf(item, rows)), [item, rows])
   const rowById = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows])
+  // a file that is only a copy of ANOTHER card's video is that card's, not a video here (the owner, 22 Oct 2026: "why
+  // are videos getting checked with their own videos?" — the Flinders draft sat in the shoot's folder and on its card)
+  const elsewhere = all.filter(s => s.otherCard && s.entries.every(e => e.source !== 'card' && (e.source === 'other' || e.kind === 'copy')))
+  const stacks = all.filter(s => !elsewhere.includes(s))
   const round = roundOf(item)
   const gradedThisRound = gradedRoundOf(item) === round
   const approvedFiles = new Set(clipApprovalsOf(item).map(a => a.file_id))
   const current = currentFiles(item)
-  // the folder a video lives in: where its first file came from (later versions join it there)
+  const atGrade = String(item.status) === 'colour_grade'
+  const beforeGrade = new Set(atGrade ? rows.filter(r => r.state === 'scanned' && gradeStanding(r, sourceCreated.get(r.source_id), gradeSince) === 'before').map(r => r.id) : [])
+  const offerable = (r: DriveSeen | undefined) => !!r && r.state === 'scanned' && !beforeGrade.has(r.id)
   const folderOf = (s: Stack): string => {
     for (const e of s.entries) {
       if (e.source === 'drive') { const r = rowById.get(e.key.slice(2)); if (r) return folderName(r.path) }
@@ -226,132 +231,173 @@ function VideoList({ item, rows, needsGrade, gradeSince, sourceCreated }: { item
   }
   const groups = new Map<string, Stack[]>()
   for (const s of stacks) { const k = folderOf(s); groups.set(k, [...(groups.get(k) ?? []), s]) }
-  // subfolders first — they are the videos an editor grouped on purpose — then the loose ones at the top of the link
   const ordered = [...groups.entries()].sort((a, b) => (a[0] === 'Top of the link' ? 1 : b[0] === 'Top of the link' ? -1 : a[0].localeCompare(b[0])))
   const [folder, setFolder] = useState<string | null>(null)
   const shown = folder ? ordered.filter(([f]) => f === folder) : ordered
+  const [pick, setPick] = useState<{ stack: string; entry: string } | null>(null)
+  const sel = stacks.find(s => s.key === pick?.stack) ?? stacks[0] ?? null
+  const entry = sel ? (sel.entries.find(e => e.key === pick?.entry) ?? sel.latest) : null
+  const info = (s: Stack) => {
+    const asset = s.entries.find(e => e.source === 'card')?.key.slice(2) ?? null
+    const file = asset ? current.find(f => assetIdOf(f) === asset) : null
+    const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy').map(e => rowById.get(e.key.slice(2))!)
+    const gone = s.entries.some(e => e.source === 'drive') && s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone')
+    const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
+    return { file, pending, next }
+  }
 
   if (!stacks.length) {
     return (
       <section className="rounded-card border border-border bg-surface p-5">
         <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos</h2>
         <p className="mt-2 text-[14px] text-muted-foreground">No videos yet — they show here as soon as the editor puts them in the card’s Drive link.</p>
+        {elsewhere.length > 0 && <Elsewhere list={elsewhere} />}
       </section>
     )
   }
   return (
-    <section className="rounded-card border border-border bg-surface p-5">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-[17px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
-        <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
-      </header>
-      {/* THE FOLDERS, AT THE TOP (the owner, 22 Oct 2026: "the subfolder part make sure its at the top"): every
-          subfolder the editor used, with its count — press one to see only its videos */}
-      {ordered.length > 1 && (
-        <nav aria-label="Folders" className="mb-4 flex flex-wrap gap-1.5">
-          <button type="button" onClick={() => setFolder(null)} aria-pressed={folder === null}
-            className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === null ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>All ({stacks.length})</button>
-          {ordered.map(([f, list]) => (
-            <button key={f} type="button" onClick={() => setFolder(f)} aria-pressed={folder === f}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === f ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
-              <FolderOpen className="h-3.5 w-3.5" aria-hidden />{f} ({list.length})
-            </button>
+    <section className="flex flex-col gap-5 rounded-card border border-border bg-surface p-5">
+      {sel && entry && <Player item={item} s={sel} entry={entry} info={info(sel)} rowById={rowById} beforeGrade={beforeGrade} onEntry={k => setPick({ stack: sel.key, entry: k })} />}
+      <div>
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-[16px] font-semibold"><Film className="h-4 w-4" aria-hidden /> Videos <span className="text-muted-foreground">({stacks.length})</span></h2>
+          <AiScanning n={rows.filter(r => r.state === 'new' || r.state === 'scanning').length} />
+        </header>
+        {ordered.length > 1 && (
+          <nav aria-label="Folders" className="mb-3 flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setFolder(null)} aria-pressed={folder === null}
+              className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === null ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>All ({stacks.length})</button>
+            {ordered.map(([f, list]) => (
+              <button key={f} type="button" onClick={() => setFolder(f)} aria-pressed={folder === f}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold ${folder === f ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
+                <FolderOpen className="h-3.5 w-3.5" aria-hidden />{f} ({list.length})
+              </button>
+            ))}
+          </nav>
+        )}
+        <div className="flex flex-col gap-4">
+          {shown.map(([f, list]) => (
+            <div key={f}>
+              {ordered.length > 1 && <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground"><FolderOpen className="h-3.5 w-3.5" aria-hidden />{f}</h3>}
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {list.map(s => {
+                  const { next, pending } = info(s)
+                  const on = sel?.key === s.key
+                  return (
+                    <li key={s.key}>
+                      <button type="button" onClick={() => setPick({ stack: s.key, entry: s.latest.key })} aria-pressed={on}
+                        className={`flex w-full flex-col overflow-hidden rounded-inner border bg-background text-left transition hover:shadow-md ${on ? 'border-foreground ring-2 ring-foreground/20' : pending.length ? 'border-accent-amber' : 'border-border'}`}>
+                        <span className="relative block aspect-[9/12] w-full bg-muted">
+                          {s.latest.thumb
+                            ? <img src={s.latest.thumb} alt="" className="h-full w-full object-cover" />
+                            : <span className="flex h-full items-center justify-center"><Film className="h-5 w-5 text-muted-foreground" aria-hidden /></span>}
+                          <span className="absolute left-1.5 top-1.5 flex gap-1">
+                            {s.versions.map(v => <span key={v} className={`rounded-full px-1.5 text-[10px] font-bold ${v === s.latest.label ? 'bg-foreground text-background' : 'bg-background/80 text-foreground'}`}>{v}</span>)}
+                            {s.latest.graded && <span className="rounded-full bg-tint-green px-1.5 text-[10px] font-bold">Graded</span>}
+                          </span>
+                        </span>
+                        <span className="flex flex-col gap-1 p-2">
+                          <span className="truncate text-[13px] font-semibold">{s.title}</span>
+                          <span className={`self-start rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONES[next.tone]}`}>{next.words}</span>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
           ))}
-        </nav>
-      )}
-      <div className="flex flex-col gap-5">
-        {shown.map(([folder, list]) => (
-          <div key={folder}>
-            <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground"><FolderOpen className="h-3.5 w-3.5" aria-hidden />{folder} <span>({list.length})</span></h3>
-            <ul className="flex flex-col gap-2">
-              {list.map(s => {
-                const asset = s.entries.find(e => e.source === 'card')?.key.slice(2) ?? null
-                const file = asset ? current.find(f => assetIdOf(f) === asset) : null
-                const pending = s.entries.filter(e => e.source === 'drive' && offerable(rowById.get(e.key.slice(2))) && e.kind !== 'copy')
-                const gone = s.entries.every(e => e.source !== 'drive' || rowById.get(e.key.slice(2))?.state === 'gone') && s.entries.some(e => e.source === 'drive')
-                const next = videoNext({ status: item.status, needsGrade, gradedThisRound: gradedThisRound && !!file, approved: !!file && approvedFiles.has(file.id), newInDrive: pending.length > 0, gone, onCard: !!asset })
-                return <VideoRow key={s.key} item={item} s={s} next={next} pending={pending.map(e => rowById.get(e.key.slice(2))!).filter(Boolean)} rowById={rowById} beforeGrade={beforeGrade} />
-              })}
-            </ul>
-          </div>
-        ))}
+        </div>
+        {elsewhere.length > 0 && <Elsewhere list={elsewhere} />}
       </div>
     </section>
   )
 }
 
+/** the files in this card's links that are another card's videos — named, not counted as this card's */
+function Elsewhere({ list }: { list: Stack[] }) {
+  const cards = [...new Set(list.map(s => s.otherCard).filter(Boolean))]
+  return (
+    <p className="mt-4 text-[12px] text-muted-foreground">
+      {list.length} {list.length === 1 ? 'file' : 'files'} in this card’s Drive {list.length === 1 ? 'is' : 'are'} already on {cards.map(c => `“${c}”`).join(', ')} — not counted here.
+    </p>
+  )
+}
+
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Top of the link' : path.slice(0, i) }
 
-function VideoRow({ item, s, next, pending, rowById, beforeGrade }: { item: ContentItem; s: Stack; next: { words: string; tone: NextTone }; pending: DriveSeen[]; rowById: Map<string, DriveSeen>; beforeGrade: Set<string> }) {
-  const l = s.latest
+/**
+ * THE PLAYER — the chosen video, big, with its versions as tabs to click between (the owner, 22 Oct 2026: "why cant
+ * i click between versions here to see the video at the top"). A version on the card plays from the card's own copy,
+ * with its comments a press away; one in Drive plays from Drive; a new one has Confirm / Not this right under it.
+ */
+function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
+  item: ContentItem; s: Stack; entry: Stack['entries'][number]; info: { file: ReturnType<typeof currentFiles>[number] | null | undefined; pending: DriveSeen[]; next: { words: string; tone: NextTone } }
+  rowById: Map<string, DriveSeen>; beforeGrade: Set<string>; onEntry: (key: string) => void
+}) {
   const [busy, setBusy] = useState<string | null>(null)
-  // the newest new cut is the one confirmed; "Not this" sets every waiting one aside
-  const offer = [...pending].sort((a, b) => String(b.created_time ?? b.first_seen_at).localeCompare(String(a.created_time ?? a.first_seen_at)))[0] ?? null
-  const offerEntry = offer ? s.entries.find(e => e.key === `s:${offer.id}`) : null
+  const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
+  const cardFile = entry.source === 'card' ? info.file : null
+  const offer = row && info.pending.some(p => p.id === row.id) ? row : null
   const answer = async (action: 'confirm' | 'ignore') => {
     setBusy(action)
     try {
       const res = await fetch(`/api/editor-preview/${item.id}/accept`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, seen_ids: action === 'confirm' && offer ? [offer.id] : pending.map(p => p.id) }),
+        body: JSON.stringify({ action, seen_ids: action === 'confirm' && offer ? [offer.id] : info.pending.map(p => p.id) }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.error ?? 'Could not do that')
       toast.success(action === 'confirm' ? 'Handed in — it copies onto the card now' : 'Set aside — it won’t be offered again')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not do that') } finally { setBusy(null) }
   }
+  const why = ((row?.scan as { reasons?: string[] } | null)?.reasons ?? []).slice(0, 3)
   return (
-    <li className={`rounded-inner border bg-background ${pending.length ? 'border-accent-amber' : 'border-border'}`}>
-      <div className="flex items-center gap-3 p-3">
-        {l.thumb
-          ? <img src={l.thumb} alt="" className="h-16 w-11 shrink-0 rounded object-cover" />
-          : <span className="flex h-16 w-11 shrink-0 items-center justify-center rounded bg-muted"><Film className="h-4 w-4 text-muted-foreground" aria-hidden /></span>}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <span className="truncate text-[15px] font-semibold">{s.title}</span>
-          <span className="flex flex-wrap items-center gap-1">
-            {s.versions.map(v => (
-              <span key={v} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${v === l.label ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}>{v}</span>
-            ))}
-            {l.graded && <span className="rounded-full bg-tint-green px-2 py-0.5 text-[11px] font-bold">Graded</span>}
-            {s.otherCard && <span className="rounded-full bg-tint-amber px-2 py-0.5 text-[11px] font-semibold">Belongs to “{s.otherCard}”?</span>}
-          </span>
-        </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONES[next.tone]}`}>{next.words}</span>
+    <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">
+      <div className="overflow-hidden rounded-inner bg-black">
+        {cardFile?.url
+          ? <video key={cardFile.url} src={cardFile.url} controls playsInline preload="metadata" className="aspect-[9/16] w-full bg-black object-contain" />
+          : row
+            ? <iframe key={row.drive_file_id} src={`https://drive.google.com/file/d/${row.drive_file_id}/preview`} title={entry.name} allow="autoplay" className="aspect-[9/16] w-full border-0" />
+            : <div className="flex aspect-[9/16] items-center justify-center p-6 text-center text-[13px] text-white/70">{entry.source === 'other' ? `This version is on “${entry.otherCard}”` : 'No preview'}</div>}
       </div>
-      {offer && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-tint-amber/40 px-3 py-2">
-          <span className="min-w-0 flex-1 text-[13px]">
-            <b>{offerEntry?.label ?? 'New'} in Drive:</b> {offer.path.slice(offer.path.lastIndexOf('/') + 1)}
-          </span>
-          <Button size="sm" disabled={!!busy}
-            onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
-            <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
-          </Button>
-          <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
+      <div className="flex min-w-0 flex-col gap-3">
+        <div>
+          <h2 className="text-[20px] font-semibold leading-tight">{s.title}</h2>
+          <span className={`mt-1.5 inline-block rounded-full px-2.5 py-1 text-[12px] font-semibold ${TONES[info.next.tone]}`}>{info.next.words}</span>
         </div>
-      )}
-      <details className="border-t border-border px-3 py-1.5">
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-[12px] font-semibold text-muted-foreground"><ChevronDown className="h-3 w-3" aria-hidden /> Versions and why</summary>
-        <ol className="flex flex-col gap-1.5 py-2">
-          {[...s.entries].reverse().map(e => {
-            const r = e.source === 'drive' ? rowById.get(e.key.slice(2)) : null
-            const why = ((r?.scan as { reasons?: string[] } | null)?.reasons ?? []).slice(0, 2)
-            return (
-              <li key={e.key} className="flex flex-col gap-0.5 text-[13px]">
-                <span className="flex flex-wrap items-center gap-2">
-                  <b className="w-7">{e.label}</b>
-                  {e.graded && <span className="rounded-full bg-tint-green px-1.5 text-[11px] font-semibold">graded</span>}
-                  {e.sameAsEarlier && <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">same file again</span>}
-                  <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                  <span className="text-[12px] text-muted-foreground">{e.source === 'card' ? 'on the card' : e.source === 'other' ? `on “${e.otherCard}”` : r && beforeGrade.has(r.id) ? 'From before colour grade — not a grade' : r ? STATE_WORDS[r.state as SeenState] ?? r.state : 'in Drive'}</span>
-                </span>
-                {why.length > 0 && <span className="pl-9 text-[12px] text-muted-foreground">{why.join(' · ')}</span>}
-              </li>
-            )
-          })}
-        </ol>
-      </details>
-    </li>
+        {/* the versions, to click between */}
+        <div role="tablist" aria-label="Versions" className="flex flex-wrap gap-1.5">
+          {[...s.entries].reverse().filter(e => !e.sameAsEarlier).map(e => (
+            <button key={e.key} type="button" role="tab" aria-selected={e.key === entry.key} onClick={() => onEntry(e.key)}
+              className={`rounded-full px-3 py-1.5 text-[13px] font-semibold ${e.key === entry.key ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
+              {e.label}{e.graded ? ' · Graded' : ''}{e.source === 'card' ? ' · on the card' : e.source === 'other' ? ' · other card' : ''}
+            </button>
+          ))}
+        </div>
+        <p className="truncate text-[13px] text-muted-foreground">{entry.name}{row && beforeGrade.has(row.id) ? ' — from before colour grade, not a grade' : ''}</p>
+        {offer && (
+          <div className="flex flex-wrap items-center gap-2 rounded-inner border border-accent-amber bg-tint-amber/40 p-3">
+            <span className="min-w-0 flex-1 text-[13px]"><b>New in Drive.</b> Add it to the card as {entry.label}?</span>
+            <Button size="sm" disabled={!!busy} onClick={() => void answer('confirm')} className="h-9 rounded-full px-4 text-[13px] font-semibold">
+              <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
+          </div>
+        )}
+        {cardFile && (
+          <Link href={reviewPath(item.id, cardFile.id, cardFile.name)} className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold hover:bg-muted">
+            Comments on this video
+          </Link>
+        )}
+        {why.length > 0 && (
+          <details className="text-[12px] text-muted-foreground">
+            <summary className="cursor-pointer font-semibold">Why the AI put it here</summary>
+            <ul className="mt-1 list-disc pl-5">{why.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          </details>
+        )}
+      </div>
+    </div>
   )
 }
 
