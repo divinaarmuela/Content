@@ -63,7 +63,8 @@ export default function PreviewFrame({ title, summary, children, tabs = true, cl
         )}
         actions={<>
           {!classicHref && <Badge variant="outline" className="font-mono text-[12px] uppercase tracking-wider text-muted-foreground">Preview</Badge>}
-          {manager && (
+          {/* not on a card (the owner, 22 Oct 2026: "we are not using ai anymore") — the card's files come from its own upload */}
+          {manager && !classicHref && (
             <Button variant="outline" onClick={checkNow} disabled={checking} className="gap-2">
               <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} aria-hidden /> {checking ? 'Checking Drive…' : 'Check Drive now'}
             </Button>

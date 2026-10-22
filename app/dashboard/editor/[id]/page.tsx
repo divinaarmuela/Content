@@ -137,14 +137,9 @@ export default function EditorCard() {
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,520px)]">
         <div className="flex min-w-0 flex-col gap-6">
-          {/* UPLOAD STRAIGHT INTO THE CARD'S DRIVE FOLDER (preview: test clients only — card-upload-core.ts) */}
           <Workspace item={item} rows={allRows} needsGrade={needsColourGrade(kindSlug)} framesOf={framesOf} holder={holder ? (holder.name || holder.email) : null}
             gradeSince={extra?.gradeSince ?? null}
             sourceCreated={new Map(sources.rows.map(s => [s.id, s.created_at]))} />
-          <details className="rounded-card border border-border bg-surface p-4">
-            <summary className="cursor-pointer text-[13px] font-semibold text-muted-foreground">Scan details — every file the AI looked at</summary>
-            <div className="mt-4"><Inbox item={item} rows={seen.rows} /></div>
-          </details>
         </div>
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4 xl:self-start">
           {/* its own scroll, so its sticky tab bar sticks inside it — not over the app's top bar (the owner, 22 Oct
@@ -152,7 +147,6 @@ export default function EditorCard() {
           <div className="overflow-y-auto overflow-x-hidden rounded-card border border-border bg-card xl:max-h-[calc(100vh-6rem)]">
             <EditorCardDrawer key={id} id={id} onClose={() => router.push('/dashboard/editor')} hideFolderFiles />
           </div>
-          <Sources item={item} rows={sources.rows} now={now} />
         </aside>
       </div>
     </PreviewFrame>
