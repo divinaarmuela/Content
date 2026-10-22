@@ -394,7 +394,10 @@ export async function backfillPlan(itemId: string): Promise<{ ok: true; files: s
   if (!item) return { ok: false, status: 404, error: 'No such card' }
   const fromFolder = new Set((await table<DriveUpload>('drive_uploads').list({ where: r => r.purpose === 'card' && r.item_id === itemId && !!r.drive_file_id }))
     .map(r => String(r.drive_file_id)))
-  const files = backfillFilesOf(item).filter(f => !(f.drive_file_id && fromFolder.has(f.drive_file_id)))
+  // a Drive-link video already filed from the app's copy (backfillPullFile) and put on the card since is in the folder
+  const filedFromLink = new Set((await table<BackfillLock>('claim_locks').list({ where: r => String(r.id).startsWith(`card_backfill__pull__${itemId}__`) && r.status === 'done' }))
+    .map(r => String(r.file_id).split('@')[0]))
+  const files = backfillFilesOf(item).filter(f => !(f.drive_file_id && (fromFolder.has(f.drive_file_id) || filedFromLink.has(f.drive_file_id))))
   const pulls = (await linkVideosOf(item)).filter(c => !fromFolder.has(c.drive_id))
   // the folders first, once, so the file steps never race to make them
   const folder = await cardFolder(item)
