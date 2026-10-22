@@ -479,8 +479,18 @@ function HoverFrames({ frames, thumb, board }: { frames: { url: string; at_s: nu
 function versionWhere(e: Stack['entries'][number], rowById: Map<string, DriveSeen>): string {
   if (e.source === 'card') return ' · handed in'
   if (e.source === 'other') return ` · on “${e.otherCard}”`
+  // every state said as it is — a removed file never reads "in Drive" (the owner, 22 Oct 2026: "removed from drive but
+  // when clicking it says v1 in drive")
   const st = rowById.get(e.key.slice(2))?.state
-  return st === 'taken' ? ' · copying in' : st === 'locked' ? ' · in Drive, waiting' : ' · in Drive, not added yet'
+  switch (st) {
+    case 'gone': return ' · removed from Drive'
+    case 'taken': return ' · copying in'
+    case 'locked': return ' · in Drive, waiting for the next hand-in'
+    case 'failed': return ' · in Drive, not checked yet'
+    case 'new': case 'scanning': return ' · in Drive, AI checking'
+    case 'ignored': return ' · set aside'
+    default: return ' · in Drive, not added yet'
+  }
 }
 
 const folderName = (path: string) => { const i = path.lastIndexOf('/'); return i < 0 ? 'Main folder' : path.slice(0, i) }
@@ -496,9 +506,6 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  // SIDE BY SIDE, every version of this video — handed in or still in Drive (the owner, 22 Oct 2026: "why cant i do
-  // side by side here since versions here are 3 version")
-  const [sideBySide, setSideBySide] = useState(false)
   const distinct = [...s.entries].filter(e => !e.sameAsEarlier)
   const row = entry.source === 'drive' ? rowById.get(entry.key.slice(2)) ?? null : null
   // the version chosen plays its own file; the newest is the card's current one
@@ -553,17 +560,28 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
           const twins = s.entries.filter(e => e.label === entry.label && e.key !== entry.key && !e.graded).map(e => e.name.slice(e.name.lastIndexOf('/') + 1))
           return twins.length ? <p className="text-[12px] text-muted-foreground">Also saved as: {twins.join(', ')} — the same file, byte for byte</p> : null
         })()}
-        {distinct.length > 1 && (
-          <Button size="sm" variant={sideBySide ? 'default' : 'outline'} onClick={() => setSideBySide(v => !v)} className="h-9 w-fit rounded-full px-4 text-[13px] font-semibold">
-            {sideBySide ? 'Back to one video' : `Side by side — all ${distinct.length} versions`}
-          </Button>
-        )}
-        {cardFile && assetHistory(item, assetIdOf(cardFile)).length > 1 && (
-          <Link href={`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(assetHistory(item, assetIdOf(cardFile)).map(v => `${v.id}@${v.version}`).join(','))}`}
-            className="inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">
-            Compare with their comments
-          </Link>
-        )}
+        {/* SIDE BY SIDE = the compare page, every version on the card next to each other with their comments (the owner,
+            22 Oct 2026: "its suppose to open a new page to leave comments") */}
+        {(() => {
+          const onCard = distinct.filter(e => e.source === 'card' && e.file)
+          const inDrive = distinct.filter(e => e.source === 'drive')
+          if (distinct.length < 2) return null
+          return (
+            <div className="flex flex-col gap-1">
+              {onCard.length >= 2
+                ? <Link href={`/dashboard/editor/${item.id}/compare?f=${encodeURIComponent(onCard.map(e => `${e.file!.id}@${e.file!.version}`).join(','))}`}
+                    className="inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-[13px] font-semibold text-background">
+                    Side by side with comments — {onCard.length} versions
+                  </Link>
+                : <span className="inline-flex w-fit items-center rounded-full border border-dashed border-border px-4 py-2 text-[13px] text-muted-foreground">Side by side with comments</span>}
+              {inDrive.length > 0 && (
+                <span className="text-[12px] text-muted-foreground">
+                  {inDrive.map(e => e.label).join(', ')} {inDrive.length === 1 ? 'is' : 'are'} still in Drive — confirm {inDrive.length === 1 ? 'it' : 'them'} to compare and comment.
+                </span>
+              )}
+            </div>
+          )
+        })()}
         {cardFile && (
           <Link href={reviewPath(item.id, cardFile.id, cardFile.name)} className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-4 py-2 text-[13px] font-semibold hover:bg-muted">
             Comments on this video
@@ -587,27 +605,6 @@ function Player({ item, s, entry, info, rowById, beforeGrade, onEntry }: {
             <Check className="mr-1 h-3.5 w-3.5" aria-hidden />{busy === 'confirm' ? 'Handing in…' : 'Confirm'}
           </Button>
           <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void answer('ignore')} className="h-9 rounded-full px-4 text-[13px] font-semibold">Not this</Button>
-        </div>
-      )}
-      {sideBySide && (
-        <div className="grid gap-3 md:col-span-2" style={{ gridTemplateColumns: `repeat(${Math.min(distinct.length, 4)}, minmax(0, 1fr))` }}>
-          {distinct.map(e => {
-            const r = e.source === 'drive' ? rowById.get(e.key.slice(2)) : null
-            const url = e.source === 'card' ? e.file?.url ?? null : null
-            return (
-              <div key={e.key} className="flex min-w-0 flex-col gap-1">
-                <span className="truncate text-[12px] font-semibold">{e.label}{e.graded ? ' · Graded' : ''}{versionWhere(e, rowById)}</span>
-                <div className="overflow-hidden rounded-inner bg-black">
-                  {url
-                    ? <video src={url} controls playsInline preload="metadata" className="aspect-[9/16] w-full object-contain" />
-                    : r
-                      ? <iframe src={`https://drive.google.com/file/d/${r.drive_file_id}/preview`} title={e.name} allow="fullscreen" allowFullScreen className="aspect-[9/16] w-full border-0" />
-                      : <div className="flex aspect-[9/16] items-center justify-center p-3 text-center text-[12px] text-white/70">On “{e.otherCard}”</div>}
-                </div>
-                <span className="truncate text-[11px] text-muted-foreground">{e.name.slice(e.name.lastIndexOf('/') + 1)}</span>
-              </div>
-            )
-          })}
         </div>
       )}
     </div>
