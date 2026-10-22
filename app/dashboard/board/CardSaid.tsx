@@ -8,6 +8,7 @@ import Chip from '../ui/Chip'
 import MentionBox from '../MentionBox'
 import { splitSlideTag } from '../../lib/slide-comment-core'
 import type { CardPerson } from '../../lib/card-people-core'
+import CommentReactions from './CommentReactions'
 
 /**
  * WHAT WAS SAID — the one comments section, drawn the same on the Editor
@@ -23,6 +24,8 @@ export type SaidRow = {
   body?: string | null
   created_at?: string | null
   visibility?: string | null
+  /** { [emoji]: team_user_id[] } — comment-reactions-core */
+  reactions?: unknown
 }
 
 export default function CardSaid({
@@ -30,7 +33,7 @@ export default function CardSaid({
   isManager, clientName, readsClient,
   draft, setDraft, sending, onSend,
   toClient, setToClient,
-  placeholder, replyLabel, onClearReply, noteBox, extras, mentionable,
+  placeholder, replyLabel, onClearReply, noteBox, extras, mentionable, itemId,
 }: {
   rows: SaidRow[]
   nameOf: (uid: string | null | undefined) => string | null
@@ -59,6 +62,8 @@ export default function CardSaid({
   extras?: ReactNode
   /** who "@" offers: the people on this card (card-people-core, 14 Sep 2026) */
   mentionable?: CardPerson[]
+  /** the card the rows are on — given, each comment carries its reactions (22 Oct 2026) */
+  itemId?: string
 }) {
   const hint = isManager
     ? (toClient ? 'They see this on their portal — no email is sent' : 'A note for the team — @name to tag someone')
@@ -84,6 +89,7 @@ export default function CardSaid({
               {roleOf(c.author_id) === 'client' && <Chip tone="amber" className="px-2 py-0.5">Client</Chip>}
             </p>
             <p className="mt-1 whitespace-pre-wrap">{rest}</p>
+            {itemId && <CommentReactions itemId={itemId} commentId={c.id} reactions={c.reactions} meId={meId} nameOf={uid => nameOf(uid)} />}
           </div>
         )
       })}

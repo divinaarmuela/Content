@@ -1003,6 +1003,7 @@ export interface ItemComment {
   video_timestamp_sec: number | null
   assigned_to: string | null
   resolved: boolean
+  reactions: unknown | null
   video_file_id: string | null
   video_file_name: string | null
 }
@@ -1864,7 +1865,7 @@ export const TABLE_COLUMNS = {
   intake_forms: ['id', 'created_at', 'client_id', 'template_key', 'definition', 'token', 'status', 'answers', 'send_copy_to_client', 'sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['id', 'notify_emails', 'updated_at', 'updated_by'],
   intake_templates: ['key', 'definition', 'updated_at', 'updated_by', 'id'],
-  item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'video_file_id', 'video_file_name'],
+  item_comments: ['id', 'created_at', 'item_id', 'parent_id', 'author_id', 'visibility', 'body', 'video_timestamp_sec', 'assigned_to', 'resolved', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['id', 'created_at', 'updated_at', 'slug', 'title', 'standfirst', 'category', 'cover_url', 'read_mins', 'published_at', 'featured', 'sections', 'sort_order', 'published'],
   leads: ['source', 'id', 'created_at', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['id', 'client_id', 'access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
@@ -1970,7 +1971,7 @@ export const NULLABLE_COLUMNS = {
   intake_forms: ['sent_at', 'first_opened_at', 'submitted_at', 'reopened_at', 'created_by', 'title', 'show_on_portal', 'notify_emails'],
   intake_settings: ['updated_by'],
   intake_templates: ['updated_by'],
-  item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'video_file_id', 'video_file_name'],
+  item_comments: ['parent_id', 'author_id', 'video_timestamp_sec', 'assigned_to', 'reactions', 'video_file_id', 'video_file_name'],
   journal_posts: ['published_at'],
   leads: ['source', 'fname', 'lname', 'email', 'phone', 'biz', 'model', 'need', 'budget', 'timeline', 'stage', 'stage_entered_at', 'owner_id', 'tier', 'source_tag', 'partner', 'next_action', 'next_action_at', 'qualifiers', 'exit_ticks', 'call_at', 'proposal_sent_at', 'walkthrough_at', 'signed_at', 'deposit_at', 'vs_delivered_at', 'objection', 'deal_value', 'not_now_at', 'reopen_at', 'touches', 'pipeline_notes'],
   linktree_connections: ['access_token_enc', 'refresh_token_enc', 'expires_at', 'profile_username', 'profile_url', 'profile_name', 'connected_by', 'connected_at', 'updated_at', 'last_error'],
@@ -2083,7 +2084,7 @@ export const JSON_COLUMNS = {
   intake_forms: ['definition', 'answers'],
   intake_settings: [],
   intake_templates: ['definition'],
-  item_comments: [],
+  item_comments: ['reactions'],
   journal_posts: ['sections'],
   leads: [],
   linktree_connections: [],

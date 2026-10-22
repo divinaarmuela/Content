@@ -930,6 +930,7 @@ export default function PostApprovalDetail({ id, onClose }: { id: string; onClos
       {/* ── 5. what was said — the same section the Editor drawer draws ── */}
       <CardSaid
         rows={said as never}
+        itemId={id}
         nameOf={nameOf} roleOf={roleOf} meId={me?.id}
         when={iso => new Date(iso).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
         isManager={isManager} clientName={client?.name} readsClient={readsClient}

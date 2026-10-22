@@ -24,6 +24,8 @@ import {
   activeCommentId, clipPlace, clipPlaceWords, commentsOnClip, formatStamp, markersFor, reviewPath,
 } from '../../../../../lib/video-review-core'
 import Chip from '../../../../ui/Chip'
+import CommentReactions from '../../../../board/CommentReactions'
+import { useRole } from '../../../../useRole'
 
 /**
  * A CLIP'S OWN REVIEW PAGE (the owner, 15 Sep 2026: "once a video is clicked
@@ -115,6 +117,7 @@ export default function VideoReviewPage() {
   const byItem = useMemo(() => ({ item_id: id }), [id])
   const { rows: allComments } = useTable<ItemComment>('item_comments', { by: byItem })
   const { rows: team } = useTable<TeamUser>('team_users')
+  const { me } = useRole()
   const nameOf = (uid: string | null | undefined) => {
     const u = team.find(t => t.id === uid)
     return u ? personLabel(u.name, u.email) : 'Someone'
@@ -295,6 +298,7 @@ export default function VideoReviewPage() {
                     {c.created_at && <span className="text-[12px] text-muted-foreground">{formatInZone(String(c.created_at), DEFAULT_TZ, 'full') ?? ''}</span>}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+                  <CommentReactions itemId={id} commentId={c.id} reactions={(c as { reactions?: unknown }).reactions} meId={me?.id} nameOf={uid => nameOf(uid)} />
                 </li>
               ))}
             </ul>

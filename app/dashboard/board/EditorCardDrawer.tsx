@@ -915,6 +915,7 @@ export default function EditorCardDrawer({ id, onClose, hideFolderFiles = false 
       <section className="border-b border-border" aria-label="What was said">
         <CardSaid
           rows={cardThread as never}
+          itemId={item.id}
           nameOf={nameOf} roleOf={uid => team.find(u => u.id === uid)?.role ?? null} meId={me?.id}
           when={iso => formatInZone(iso, zone, 'short') ?? ''}
           isManager={isManager} clientName={client?.name} readsClient={seesClientWords(me?.role ?? null)}
